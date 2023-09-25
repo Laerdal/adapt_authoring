@@ -145,6 +145,25 @@ function publishCourse(courseId, mode, request, response, next) {
         callback(null);
       });
     },
+    function (callback) {
+      // Check if the Authoring Tool environment allows for plugins to run scripts
+      // e.g. "*" for all plugins, or "adapt-plugin1, adapt-plugin2" for specific plugins
+      const scriptSafe = configuration.getConfig('scriptSafe');
+      
+      if(!scriptSafe){
+        return callback(null);
+      }
+      
+      logger.log(
+        'info',
+        'Adding scriptSafe plugins from config: ' + scriptSafe
+      );
+      
+      outputJson.config.build = outputJson.config?.build || {};
+      outputJson.config.build.scriptSafe = scriptSafe;
+
+      callback(null);
+    },
     function(callback) {
       self.writeCourseJSON(outputJson, path.join(BUILD_FOLDER, Constants.Folders.Course), function(err) {
         if (err) {
