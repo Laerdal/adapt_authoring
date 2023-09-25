@@ -24,6 +24,10 @@ define(function(require){
         this.listenTo(this, 'remove', this.remove);
         this.listenTo(this.model, 'destroy', this.remove);
         this.listenTo(this.model, 'change:_isDeleted', this.onReRender);
+        
+        // Set the extension of the file, so it can be used in the template
+        const filename = this.model.get('filename');
+        this.model.set('assetExt', filename.split('.').pop()); // e.g. 'jpg', 'svg', 'mp4'
     },
 
     onReRender: function() {
