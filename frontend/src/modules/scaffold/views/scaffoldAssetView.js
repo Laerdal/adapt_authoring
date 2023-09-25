@@ -53,6 +53,7 @@ define([
     renderData: function(id) {
       var inputType = this.schema.inputType;
       var dataUrl = Helpers.isAssetExternal(this.value) ? this.value : '';
+      var assetExt = this.value.split('.').pop(); // e.g. 'jpg', 'svg', 'mp4'
 
       this.assetType = typeof inputType === 'string' ?
         inputType.replace(/Asset|:/g, '') :
@@ -62,7 +63,8 @@ define([
         value: this.value,
         type: this.assetType,
         url: id ? 'api/asset/serve/' + id : dataUrl,
-        thumbUrl: id ? 'api/asset/thumb/' + id : dataUrl
+        thumbUrl: id ? 'api/asset/thumb/' + id : dataUrl,
+        assetExt: assetExt
       }));
     },
 

@@ -3,7 +3,7 @@
 
   {{#ifValueEquals type 'image'}}
     {{#if thumbUrl}}
-      <img class="scaffold-asset-preview" src="{{thumbUrl}}"/>
+      <img class="scaffold-asset-preview" src="{{#ifValueEquals assetExt 'svg'}}{{url}}{{else}}{{thumbUrl}}{{/ifValueEquals}}"/>
     {{else}}
       <a class="scaffold-asset-preview" title="{{t 'app.nothumbnailforimage'}}" href="{{url}}" target="_blank">
         <i class="fa fa-file-image-o fa-large"></i>
