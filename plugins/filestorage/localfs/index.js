@@ -10,6 +10,7 @@ const fs = require('fs-extra');
 const path = require('path');
 const ffprobe = require('ffprobe');
 const util = require('util');
+const AdmZip = require('adm-zip');
 
 ffmpeg.setFfmpegPath(ffmpegStatic.path);
 
@@ -240,6 +241,14 @@ LocalFileStorage.prototype.processFileUpload = function (file, newPath, options,
 
           return nextFunc();
         },
+        // Handle unzipping of .h5p assets
+        function (nextFunc) {
+          if (data.path.toLowerCase().match(/.h5p$/i)) {
+            self.unzipH5PAssetToPublicAssets(newPath);
+          }
+
+          return nextFunc();
+        },
         function (nextFunc) {
           return cb(null, data);
         }
@@ -463,6 +472,49 @@ LocalFileStorage.prototype.inspectFile = function (filePath, fileType, next) {
     }
     return next(null, data);
   });
+};
+
+LocalFileStorage.prototype.unzipH5PAssetToPublicAssets = function (filePath) {
+  try {
+    const h5pFolder = path.basename(filePath.replace(/\.h5p$/, ''));
+    const zip = new AdmZip(filePath);
+    // extract to folder (same name as file without extension)
+    const destFolder = path.join('public', 'assets', h5pFolder);
+    zip.extractAllTo(destFolder, true);
+    logger.log('info', `Extracted H5P asset to: ${destFolder}`);
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+LocalFileStorage.prototype.zipH5PAsset = function (h5pFolder, filePath = '') {
+  try {
+    if (!filePath) {
+      filePath = `${h5pFolder}.h5p`;
+    }
+    const zip = new AdmZip();
+    zip.addLocalFolder(h5pFolder);
+    zip.writeZip(filePath);
+    logger.log('info', `Zipped H5P asset to: ${filePath}`);
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+LocalFileStorage.prototype.checkH5PAssetExistsUnzipped = function (assetPathSrc) {
+  try {
+    const folderName = path.basename(assetPathSrc.replace(/\.h5p$/, ''));
+    const pathToCheck = path.join('public','assets', folderName);
+    const unzippedAssetExists = fs.existsSync(pathToCheck);
+
+    if (!unzippedAssetExists) {
+      logger.log('info', `Could not find unzipped H5P asset: ${assetPathSrc}`);
+      this.unzipH5PAssetToPublicAssets(assetPathSrc);
+    }
+    return pathToCheck;
+  } catch (error) {
+    console.log(error);
+  }
 };
 
 /**

@@ -22,6 +22,7 @@
   "dependencies": {
     "@babel/core": "^7.19.6",
     "@babel/preset-env": "^7.19.4",
+    "adm-zip": "^0.5.10",
     "archiver": "^3.1.1",
     "async": "^3.2.3",
     "bcrypt-nodejs": "0.0.3",
