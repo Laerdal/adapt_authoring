@@ -128,7 +128,8 @@ define([
       title: getTitle(),
       titleHTML: field.titleHTML,
       type: getType(),
-      validators: getValidators()
+      validators: getValidators(),
+      extra: field.extra
     };
 
     if (_.isObject(inputType)) {

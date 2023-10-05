@@ -22,7 +22,8 @@ define([
     },
 
     postRender: function() {
-      this.$el.spectrum({
+
+      const options = {
         color: this.value,
         showAlpha: true,
         showInitial: true,
@@ -42,7 +43,17 @@ define([
         hide: function(colour) {
           Origin.contentPane.enableScroll();
         }
-      });
+      }
+
+      if(this.schema && this.schema.extra && this.schema.extra.palette) {
+        options.palette = this.schema.extra.palette;
+        options.localStorageKey = null;
+        options.showPaletteOnly = true;
+        options.showSelectionPalette = false;
+        options.togglePaletteOnly = true
+      }
+
+      this.$el.spectrum(options);
       // remove class beacuse we aren't using the clear button
       $('.sp-container').removeClass('sp-clear-enabled');
     },
