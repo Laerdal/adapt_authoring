@@ -1,6 +1,6 @@
 @darkBorderColour: #dcdcdc;
 @lightBorderColour: #cccccc;
-@paletteBackgroundColour: #eff7f9;
+@paletteBackgroundColour: #ffffff;
 
 .scaffold-colour-picker {
   & + .sp-replacer,
@@ -19,14 +19,13 @@
 body .sp-container {
   border-color: @darkBorderColour;
   .sp-palette {
-    max-width: 90px;
     .sp-thumb-el {
-      border-radius: 11px;
+      border-radius: 50%;
       border-color: @paletteBackgroundColour;
       box-sizing: border-box;
       overflow: hidden;
-      width: 20px;
-      height: 20px;
+      width: 24px;
+      height: 24px;
       margin: 4px;
       &:hover {
         transform: scale(1.2);
