@@ -5,6 +5,7 @@ define(function(require){
   var Handlebars = require('handlebars');
   var OriginView = require('core/views/originView');
   var Origin = require('core/origin');
+  var Helpers = require('core/helpers');
 
   var AssetItemView = OriginView.extend({
 
@@ -27,7 +28,7 @@ define(function(require){
         
         // Set the extension of the file, so it can be used in the template
         const filename = this.model.get('filename');
-        this.model.set('assetExt', filename.split('.').pop()); // e.g. 'jpg', 'svg', 'mp4'
+        this.model.set('assetExt', Helpers.getFileExtension(filename));
     },
 
     onReRender: function() {
