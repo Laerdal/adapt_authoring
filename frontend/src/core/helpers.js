@@ -196,6 +196,23 @@ define(function(require){
       return isMultiPart ? block.fn(this) : block.inverse(this);
     },
 
+    getFileExtension(filename) {  
+  
+      if (!filename || typeof filename !== 'string') return "";  
+      
+      // Split the filename by dot into an array
+      var filenameParts = filename.split('.');  
+      
+      // If the array has only one element, there's no extension  
+      if (filenameParts.length === 1) return "";  
+      
+      // Pop the last element from the array, which is the file extension  
+      var extension = filenameParts.pop();  
+      
+      // Return the extension e.g. "jpg", "svg", "mp4"
+      return extension.toLowerCase();
+    },
+        
     copyStringToClipboard: function(data) {
       var textArea = document.createElement("textarea");
 

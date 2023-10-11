@@ -53,8 +53,8 @@ define([
     renderData: function(id) {
       var inputType = this.schema.inputType;
       var dataUrl = Helpers.isAssetExternal(this.value) ? this.value : '';
-      var assetExt = this.value.split('.').pop(); // e.g. 'jpg', 'svg', 'mp4'
-
+      var assetExt = Helpers.getFileExtension(this.value);
+   
       this.assetType = typeof inputType === 'string' ?
         inputType.replace(/Asset|:/g, '') :
         inputType.media;
