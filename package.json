@@ -17,7 +17,8 @@
   },
   "scripts": {
     "test": "grunt test",
-    "create-migration": "npx migrate-mongo create -f conf/migrations.js"
+    "create-migration": "npx migrate-mongo create -f conf/migrations.js",
+    "postinstall": "node ./installPlugins.js"
   },
   "dependencies": {
     "@babel/core": "^7.19.6",
