@@ -66,7 +66,7 @@ Example of conf/config.json with three custom plugins:
     },
     // This plugin is disabled
     "name-of-plugin-3": {
-      "isEnabled": true,
+      "isEnabled": false,
       "frontend": null,
       "backend": {
         "path": "/home/user/my-custom-plugins/plugin-3/plugin-3-backend",
