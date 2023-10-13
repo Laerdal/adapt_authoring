@@ -3,35 +3,47 @@ const fs = require('fs-extra');
 const path = require('path');
 const util = require('util');
 const exec = util.promisify(require('child_process').exec);
-const config = require('./conf/config.json');
 
 let frontendPlugins = [];
 let backendPlugins = [];
+let config;
 
 async function setupPlugins() {
-  
-  console.log(chalk.bgCyan('\n🔌 (Step 1/6) Checking plugins config'));
-  checkConfig();
-  
+  await checkConfig();
+
+  console.log(chalk.bgCyan('\n🔌 (Step 1/6) Getting plugin configs'));
+  await getPluginConfigs();
+
   console.log(chalk.bgCyan('\n🔌 (Step 2/6) Cleanup frontend'));
   await cleanUpFrontend();
-  
+
   console.log(chalk.bgCyan('\n🔌 (Step 3/6) Cleanup backend'));
   await cleanUpBackend();
-  
+
   console.log(chalk.bgCyan('\n🔌 (Step 4/6) Copy frontend plugins'));
   await copyFrontendPlugins();
 
   console.log(chalk.bgCyan('\n🔌 (Step 5/6) Copy backend plugins'));
   await copyBackendPlugins();
 
-  console.log(chalk.bgCyan('\n🔌 (Step 6/6) Installing backend plugin dependencies'));
+  console.log(
+    chalk.bgCyan('\n🔌 (Step 6/6) Installing backend plugin dependencies')
+  );
   await installBackendPlugins();
 
   console.log(chalk.bgCyan('\n🔌 Done '));
 }
 
-function checkConfig() {
+async function checkConfig() {
+  try {
+    config = await fs.readJson(path.join('conf', 'config.json'));
+  } catch (error) {
+    // no config.json found, could be a fresh install
+    process.exit(1);
+  }
+}
+
+async function getPluginConfigs() {
   const pluginsConfig = config?.plugins;
   if (!pluginsConfig) {
     console.log(chalk.yellow('No plugins config found in config.json'));
@@ -40,10 +52,12 @@ function checkConfig() {
 
   for (const [pluginName, configValues] of Object.entries(pluginsConfig)) {
     if (!configValues?.isEnabled) {
-      console.log(`Plugin ${chalk.yellow(pluginName)} is not enabled. Skipping...`);
+      console.log(
+        `Plugin ${chalk.yellow(pluginName)} is not enabled. Skipping...`
+      );
       continue;
     }
-    
+
     console.log(`👀 Checking config for plugin: ${chalk.blue(pluginName)}`);
 
     // Add frontend plugins
@@ -62,7 +76,7 @@ async function cleanUpFrontend() {
   // remove all plugins from frontend/src/plugins
   const pluginsDir = path.join(__dirname, 'frontend', 'src', 'plugins');
   await fs.remove(pluginsDir);
-  console.log(`🗑 Removed all frontend plugins from ${chalk.blue( pluginsDir)}`);
+  console.log(`🗑 Removed all frontend plugins from ${chalk.blue(pluginsDir)}`);
 }
 
 async function cleanUpBackend() {
@@ -86,7 +100,9 @@ async function copyFrontendPlugins() {
         pluginName
       );
       await fs.copy(pluginDir, dest);
-      console.log(`Copied frontend ${chalk.blue(pluginName)} to ${chalk.blue(dest)}`);
+      console.log(
+        `Copied frontend ${chalk.blue(pluginName)} to ${chalk.blue(dest)}`
+      );
     })
   );
 }
@@ -107,7 +123,9 @@ async function copyBackendPlugins() {
       const dest = path.join(__dirname, 'plugins', config.dest, pluginName);
       await fs.ensureDir(dest);
       await fs.copy(pluginDir, dest);
-      console.log(`Copied backend plugin ${chalk.blue(pluginName)} to ${chalk.blue(dest)}`);
+      console.log(
+        `Copied backend plugin ${chalk.blue(pluginName)} to ${chalk.blue(dest)}`
+      );
     })
   );
 }
