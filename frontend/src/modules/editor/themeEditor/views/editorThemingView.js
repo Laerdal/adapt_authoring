@@ -213,17 +213,36 @@ define(function(require) {
         return;
       }
       var inputType = fieldView.schema.inputType.type || fieldView.schema.inputType;
+
+      // Colour picker
       if (inputType === 'ColourPicker') {
         fieldView.setValue(value);
-      } else if (inputType.indexOf('Asset') > -1) {
+        return
+      }
+
+      // Assets
+      if (inputType.indexOf('Asset') > -1) {
         fieldView.setValue(value);
         fieldView.render();
         $('div[data-editor-id*="' + key + '"]').append(fieldView.editor.$el);
-      } else if (inputType === "List"){
-        fieldView.setValue(value);
-      }else {
-        fieldView.editor.$el.val(value.toString())
+        return;
       }
+      
+      // Lists / arrays
+      if (inputType === "List"){
+        fieldView.setValue(value);
+        return;
+      }
+
+      // Checkbox
+      if (inputType === "Checkbox"){
+        fieldView.setValue(value);
+        return;
+      }
+  
+      // Default
+      fieldView.editor.$el.val(value.toString())
+      
     },
 
     showPresetEdit: function(event) {
