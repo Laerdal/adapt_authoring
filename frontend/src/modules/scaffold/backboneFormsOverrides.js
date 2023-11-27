@@ -69,7 +69,8 @@ define([
     textAreaRender.call(this);
 
     _.defer(function() {
-      this.editor = CKEDITOR.replace(this.$el[0], {
+      this.editor = CKEDITOR.replace(this.$el[0], {      
+	      delayDetached: true,
         dataIndentationChars: '',
         disableNativeSpellChecker: false,
         enterMode: CKEDITOR[Origin.constants.ckEditorEnterMode],
