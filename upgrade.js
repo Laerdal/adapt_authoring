@@ -77,6 +77,16 @@ function getUserInput() {
       default: ''
     }
   ];
+
+  var frameworkProperties = [
+    {
+      name: 'skipFrameworkPluginUpdate',
+      type: 'confirm',
+      message: 'Skip framework plugin update?',
+      default: false
+    }
+  ];
+
   if (IS_INTERACTIVE) {
     console.log(`\nThis script will update the ${app.polyglot.t('app.productname')} and/or Adapt Framework. Would you like to continue?`);
   }
@@ -100,9 +110,15 @@ function getUserInput() {
         if(!result.authoringToolGitTag && !result.frameworkGitTag) {
           return installHelpers.exit(1, 'Cannot update sofware if no revisions are specified.');
         }
-        doUpdate({
+        const updateData = {
           adapt_authoring: result.authoringToolGitTag,
           adapt_framework: result.frameworkGitTag
+        };
+
+        // check if the user wants to skip framework plugin updates
+        installHelpers.getInput(frameworkProperties, argv, function(result) {
+          updateData.skipFrameworkPluginUpdate = !installHelpers.inputHelpers.isFalsy(result.skipFrameworkPluginUpdate);
+          doUpdate(updateData);
         });
       });
     });
@@ -156,7 +172,8 @@ function doUpdate(data) {
       installHelpers.updateFramework({
         repository: configuration.getConfig('frameworkRepository'),
         revision: data.adapt_framework,
-        directory: dir
+        directory: dir,
+        skipFrameworkPluginUpdate: data.skipFrameworkPluginUpdate
       }, function(error) {
         if(error) {
           console.log(`Failed to upgrade ${dir.replace(configuration.serverRoot, '')} to ${data.adapt_framework}`);
