@@ -68,7 +68,7 @@ define([
   Backbone.Form.editors.TextArea.prototype.render = function() {
     textAreaRender.call(this);
 
-    _.defer(function() {
+    _.delay(function() {
       this.editor = CKEDITOR.replace(this.$el[0], {      
 	      delayDetached: true,
         dataIndentationChars: '',
@@ -113,7 +113,7 @@ define([
           { name: 'others', items: [ '-' ] }
         ]
       });
-    }.bind(this));
+    }.bind(this), 100);
 
     return this;
   };
