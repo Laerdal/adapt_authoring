@@ -69,6 +69,7 @@ define([
     textAreaRender.call(this);
 
     _.defer(function() {
+      setTimeout(function() {
       this.editor = CKEDITOR.replace(this.$el[0], {      
 	      delayDetached: true,
         dataIndentationChars: '',
@@ -113,6 +114,7 @@ define([
           { name: 'others', items: [ '-' ] }
         ]
       });
+    }.bind(this), 100);
     }.bind(this));
 
     return this;
