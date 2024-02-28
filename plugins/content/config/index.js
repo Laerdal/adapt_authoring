@@ -82,6 +82,12 @@ function initialize () {
           _isEnabled : false,
           _shouldSupportLegacyBrowsers : true,
           _isTextProcessorEnabled: false
+        },
+        screenSize: {
+          small: 0,
+          medium: 720,
+          large: 960,
+          xlarge: 1280
         }
       };
 
