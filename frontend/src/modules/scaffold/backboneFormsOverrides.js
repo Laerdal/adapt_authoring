@@ -202,6 +202,38 @@ define([
     return _.isEmpty(errors) ? null : errors;
   };
 
+ // Limit the characters allowed in text input fields.
+ Backbone.Form.editors.Text.prototype.events = {
+  'keypress': function (event) {
+    if (event.charCode === 0) {
+      return;
+    }
+    // If the input is a text input field named 'courseid', limit its length to 30 characters
+    if (this.$el[0].name === 'courseid' || this.$el[0].name === 'groupid') {
+
+      // Get the whole new value so that we can prevent things like double decimals points etc.
+      let newVal = this.$el.val()
+      if (event.charCode != undefined) {
+        newVal = newVal + String.fromCharCode(event.charCode);
+      }
+      // how to restrict special characters in text input fields and how show in the popup message
+
+      let regex = new RegExp("^[a-zA-Z0-9-_]+$");
+      let key = String.fromCharCode(!event.charCode ? event.which : event.charCode);
+      if (!regex.test(key)) {
+        event.preventDefault();
+       Origin.Notify.alert({ type: 'error', text: 'Special characters are not allowed' });
+      }
+
+      if (newVal.length > 30) {
+        // If the input exceeds 30 characters, prevent the character from being typed
+        event && event.preventDefault();
+        Origin.Notify.alert({ type: 'error', text: 'Exceed the character limit' });
+      }
+    }
+  }
+};
+
   // allow hyphen to be typed in number fields
   Backbone.Form.editors.Number.prototype.onKeyPress = function(event) {
     var self = this,
