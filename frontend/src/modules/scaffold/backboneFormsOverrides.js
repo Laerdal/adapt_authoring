@@ -203,38 +203,66 @@ define([
 
     return _.isEmpty(errors) ? null : errors;
   };
+  
+  // Limit the characters allowed in text input fields and validate the version ID to follow the 1.0.0 format.
+  Backbone.Form.editors.Text.prototype.events = {
+    'keypress': function (event) {
+      if (event.charCode === 0) {
+        return;
+      }
+      // If the input is a text field labeled 'courseid and 'groupid'', restrict its length to 30 characters.
+      if (this.$el[0].name === 'courseid' || this.$el[0].name === 'groupid') {
+   
+        // Get the whole new value so that we can prevent things like double decimals points etc.
+        let newVal = this.$el.val()
+        if (event.charCode != undefined) {
+          newVal = newVal + String.fromCharCode(event.charCode);
+        }
+        // how to restrict special characters in text input fields and how show in the popup message
+   
+        let regex = new RegExp("^[a-zA-Z0-9-_]+$");
+        let key = String.fromCharCode(!event.charCode ? event.which : event.charCode);
+        if (!regex.test(key)) {
+          event.preventDefault();
+         Origin.Notify.alert({ type: 'error', text: 'Special characters are not allowed' });
+        }
+   
+        if (newVal.length > 30) {
+          // If the input exceeds 30 characters, prevent the character from being typed
+          event && event.preventDefault();
+          Origin.Notify.alert({ type: 'error', text: 'Exceed the character limit' });
+        }
+      }
+    },
+    'keyup': function () {
+      if (this.$el[0].name === 'version') {
+        let versionRegex = new RegExp("^[0-9]+\\.[0-9]+\\.[0-9]+$");
+        let currentVersion = this.$el.val()
+        if (!versionRegex.test(currentVersion)) {
+          let errorMessage = this.$el[0].parentNode.querySelector('.error-message');
+          if (!errorMessage) {
+            errorMessage = document.createElement('div');
+            errorMessage.className = 'error-message';
+            errorMessage.textContent = 'Please input the version number in the format 1.0.0';
 
- // Limit the characters allowed in text input fields.
- Backbone.Form.editors.Text.prototype.events = {
-  'keypress': function (event) {
-    if (event.charCode === 0) {
-      return;
+            // Style the error message
+            errorMessage.style.color = '#dc3449';
+            errorMessage.style.fontSize = '0.75rem';
+            errorMessage.style.marginTop = '5px';
+
+            // Append the error message below the input field
+            this.$el[0].parentNode.appendChild(errorMessage);
+          }
+        } else {
+          // Remove the error message if the input is valid
+          const errorMessage = this.$el[0].parentNode.querySelector('.error-message');
+          if (errorMessage) {
+            errorMessage.remove();
+          }
+        }
+      }
     }
-    // If the input is a text input field named 'courseid', limit its length to 30 characters
-    if (this.$el[0].name === 'courseid' || this.$el[0].name === 'groupid') {
-
-      // Get the whole new value so that we can prevent things like double decimals points etc.
-      let newVal = this.$el.val()
-      if (event.charCode != undefined) {
-        newVal = newVal + String.fromCharCode(event.charCode);
-      }
-      // how to restrict special characters in text input fields and how show in the popup message
-
-      let regex = new RegExp("^[a-zA-Z0-9-_]+$");
-      let key = String.fromCharCode(!event.charCode ? event.which : event.charCode);
-      if (!regex.test(key)) {
-        event.preventDefault();
-       Origin.Notify.alert({ type: 'error', text: 'Special characters are not allowed' });
-      }
-
-      if (newVal.length > 30) {
-        // If the input exceeds 30 characters, prevent the character from being typed
-        event && event.preventDefault();
-        Origin.Notify.alert({ type: 'error', text: 'Exceed the character limit' });
-      }
-    }
-  }
-};
+  };
 
   // allow hyphen to be typed in number fields
   Backbone.Form.editors.Number.prototype.onKeyPress = function(event) {
