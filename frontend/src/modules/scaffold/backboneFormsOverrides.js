@@ -10,6 +10,8 @@ define([
   var textInitialize = Backbone.Form.editors.Text.prototype.initialize;
   var selectInitialize = Backbone.Form.editors.Select.prototype.initialize;
   var selectRender = Backbone.Form.editors.Select.prototype.render;
+  var checkboxInitialize = Backbone.Form.editors.Checkbox.prototype.initialize;
+  var checkboxRender = Backbone.Form.editors.Checkbox.prototype.render;
   var textAreaRender = Backbone.Form.editors.TextArea.prototype.render;
   var textAreaSetValue = Backbone.Form.editors.TextArea.prototype.setValue;
 
@@ -202,6 +204,38 @@ define([
     return _.isEmpty(errors) ? null : errors;
   };
 
+ // Limit the characters allowed in text input fields.
+ Backbone.Form.editors.Text.prototype.events = {
+  'keypress': function (event) {
+    if (event.charCode === 0) {
+      return;
+    }
+    // If the input is a text input field named 'courseid', limit its length to 30 characters
+    if (this.$el[0].name === 'courseid' || this.$el[0].name === 'groupid') {
+
+      // Get the whole new value so that we can prevent things like double decimals points etc.
+      let newVal = this.$el.val()
+      if (event.charCode != undefined) {
+        newVal = newVal + String.fromCharCode(event.charCode);
+      }
+      // how to restrict special characters in text input fields and how show in the popup message
+
+      let regex = new RegExp("^[a-zA-Z0-9-_]+$");
+      let key = String.fromCharCode(!event.charCode ? event.which : event.charCode);
+      if (!regex.test(key)) {
+        event.preventDefault();
+       Origin.Notify.alert({ type: 'error', text: 'Special characters are not allowed' });
+      }
+
+      if (newVal.length > 30) {
+        // If the input exceeds 30 characters, prevent the character from being typed
+        event && event.preventDefault();
+        Origin.Notify.alert({ type: 'error', text: 'Exceed the character limit' });
+      }
+    }
+  }
+};
+
   // allow hyphen to be typed in number fields
   Backbone.Form.editors.Number.prototype.onKeyPress = function(event) {
     var self = this,
@@ -248,7 +282,21 @@ define([
     return this;
   };
 
-  // If a radio or select input has the data-is-conditional attribute, then show/hide the relevant fields
+  Backbone.Form.editors.Checkbox.prototype.initialize = function (options) {
+    checkboxInitialize.call(this, options);
+    this.on('change', updateConditionalView, this);
+  };
+
+  Backbone.Form.editors.Checkbox.prototype.render = function() {
+    checkboxRender.call(this);
+
+    // Update view after the checkbox has been rendered
+    _.defer(updateConditionalView.bind(this));
+
+    return this;
+  };
+
+  // If a radio, select, or checkbox input has the data-is-conditional attribute, then show/hide the relevant fields
   function updateConditionalView() {
 
     const editorAttrs = this.schema.editorAttrs;
@@ -256,8 +304,12 @@ define([
   
     if (editorAttrs['data-is-conditional']) {
       const currentOption = this.getValue();
-      $(`[data-depends-on=${this.key}]`).toggle(false);
-      $(`[data-depends-on=${this.key}][data-option-match=${currentOption}]`).toggle(true);
+      if (this instanceof Backbone.Form.editors.Checkbox) {
+        $(`[data-depends-on=${this.key}]`).toggle(currentOption);
+      } else {
+        $(`[data-depends-on=${this.key}]`).toggle(false);
+        $(`[data-depends-on=${this.key}][data-option-match=${currentOption}]`).toggle(true);
+      }
     }
   }
 });
