@@ -285,7 +285,7 @@ function validateCourse(data, cb) {
   if (typeof contentObjects === 'undefined') {
     let courseString = app.polyglot.t('app.course');
     errors += app.polyglot.t('app.doesnotcontain', {
-      type: courseString[0].toUpperCase() + courseString.slice(1),
+      type: capitalizeFirstLetter(courseString),
       title: data.course[0].title,
       childType: app.polyglot.t('app.page', 0)
     }) + '\n';
@@ -300,8 +300,11 @@ function validateCourse(data, cb) {
     data.component
   ];
 
-  for (let i = 0, j = contentHierarchy.length - 1; i < j; i++) {
-    errors += iterateThroughChildren(contentHierarchy[i], contentHierarchy[i + 1]);
+  for (let i = 0; i < contentHierarchy.length - 1; i++) {
+    const parents = contentHierarchy[i];
+    const children = contentHierarchy[i + 1];
+    const grandParents = i > 0 ? contentHierarchy[i - 1] : undefined;
+    errors += iterateThroughChildren(parents, children, grandParents);
   }
 
   if (errors.length !== 0) return cb(errors, false);
@@ -309,36 +312,58 @@ function validateCourse(data, cb) {
   return cb(null, true);
 }
 
-function iterateThroughChildren(parents, children) {
+function iterateThroughChildren(parents, children, grandParents) {
   let errors = '';
   if (typeof parents === 'undefined') return errors;
 
-  const appendError = (parentType, parentTitle, childType) => {
+  const appendError = (parentType, parentTitle, grandParentTitle, grandParentType, childType) => {
     errors += app.polyglot.t('app.doesnotcontain', {
-      type: parentType[0].toUpperCase() + parentType.slice(1),
-      title: parentTitle,
+      type: `page----->${grandParentType}----->${parentType}--->`,
+      title: `${grandParentTitle}----->${parentTitle}`,
       childType: childType
     }) + '\n';
   };
 
   parents.forEach(parent => {
-    let parentType = app.polyglot.t('app.' + parent._type, 1);
+    const parentType = app.polyglot.t(`app.${parent._type}`, 1);
     let childType = app.polyglot.t('app.children');
+    const grandParentTitle = grandParents ? findParentTitle(grandParents, parent._parentId) : 'No grandparent';
+    const grandParentType = grandParents ? findParentType(grandParents, parent._parentId) : 'No grandparent';
 
     if (typeof children === 'undefined') {
-      appendError(parentType, parent.title, childType);
+      appendError(parentType, parent.title, grandParentTitle, grandParentType, childType);
       return;
     }
 
-    if (children[0] && children[0]._type) childType = app.polyglot.t('app.' + children[0]._type, 0);
-    let found = children.find(child => JSON.stringify(child._parentId) === JSON.stringify(parent._id));
+    if (children[0] && children[0]._type) {
+      childType = app.polyglot.t(`app.${children[0]._type}`, 0);
+    }
+
+    const found = children.find(child => JSON.stringify(child._parentId) === JSON.stringify(parent._id));
 
     if (typeof found === 'undefined') {
-      appendError(parentType, parent.title, childType);
+      appendError(parentType, parent.title, grandParentTitle, grandParentType, childType);
     }
   });
+
   return errors;
 }
+
+function findParentTitle(parents, parentId) {
+  const parent = parents.find(parent => JSON.stringify(parent._id) === JSON.stringify(parentId));
+  return parent ? parent.title : 'No parent';
+}
+
+function findParentType(parents, parentId) {
+  const parent = parents.find(parent => JSON.stringify(parent._id) === JSON.stringify(parentId));
+  return parent ? app.polyglot.t(`app.${parent._type}`, 1) : 'No parent';
+}
+
+function capitalizeFirstLetter(string) {
+  return string.charAt(0).toUpperCase() + string.slice(1);
+}
+
+
 
 function ImportError(message, httpStatus) {
   this.message = message || "Course import failed";
