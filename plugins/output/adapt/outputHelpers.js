@@ -317,9 +317,10 @@ function iterateThroughChildren(parents, children, grandParents) {
   if (typeof parents === 'undefined') return errors;
 
   const appendError = (parentType, parentTitle, grandParentTitle, grandParentType, childType) => {
+    const error = `${grandParentTitle}----->${parentTitle}`;
     errors += app.polyglot.t('app.doesnotcontain', {
-      type: `page----->${grandParentType}----->${parentType}--->`,
-      title: `${grandParentTitle}----->${parentTitle}`,
+      type: parentType,
+      title: `${error}`,
       childType: childType
     }) + '\n';
   };
