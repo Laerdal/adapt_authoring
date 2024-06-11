@@ -319,7 +319,7 @@ function iterateThroughChildren(parents, children, grandParents) {
   const appendError = (parentType, parentTitle, grandParentTitle, grandParentType, childType) => {
     const error = `${grandParentTitle}----->${parentTitle}`;
     errors += app.polyglot.t('app.doesnotcontain', {
-      type: parentType,
+      type: capitalizeFirstLetter(parentType) + ' Error:',
       title: `${error}`,
       childType: childType
     }) + '\n';
