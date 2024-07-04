@@ -75,6 +75,7 @@ define([
 	      delayDetached: true,
         dataIndentationChars: '',
         disableNativeSpellChecker: false,
+        versionCheck:false,
         enterMode: CKEDITOR[Origin.constants.ckEditorEnterMode],
         entities: false,
         allowedContent: true,
