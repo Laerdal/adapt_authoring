@@ -58,7 +58,7 @@ define(function(require) {
   }
 
   function openWikiLink(page) {
-    var WIKI_URL = 'https://github.com/adaptlearning/adapt_authoring/wiki/';
-    window.open(WIKI_URL + (page || ''));
+    var WIKI_URL = 'https://cdn-esim.contentservice.net/adapt-dev/adapt_platform_v5/courses/help-and-how-to_v5/latest/index.html';
+    window.open(WIKI_URL);
   }
 });
