@@ -415,5 +415,12 @@
   "app.incompatibleframework": "This plugin is incompatible with version %{framework} of the Adapt framework.",
   "app.targetattributeexists": "There is a plugin already installed with a target attribute of '%{targetAttribute}'.",
   "app.versionexists": "You already have this version of the plugin installed.",
-  "app.unknownuser": "Unknown User"
+  "app.unknownuser": "Unknown User",
+  "app.savetemplate": "Save Template",
+  "app.deleteTempelate": "Delete %{type}",
+  "app.confirmdeletetemplate": "Are you sure you want to delete this %{type}?",
+  "app.confirmdeletetemplatewarning": "<b>IMPORTANT</b>: This will delete all the information in this %{type}.",
+  "app.addtemplate": "Add Template",
+  "app.pleaseselecttemplate": "Please select a template",
+  "app.typetofiltertemplates": "Search by Title, Type or Tags"
 }
