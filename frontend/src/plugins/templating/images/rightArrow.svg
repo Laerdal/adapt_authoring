@@ -1,9 +1,0 @@
-<svg version="1.2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 16" width="10" height="16">
-	<title>leftArrow-svg</title>
-	<style>
-		.s0 { fill: #666666 } 
-	</style>
-	<g>
-		<path fill-rule="evenodd" class="s0" d="m0.8 15.7c-0.4-0.4-0.4-1 0-1.4l6.3-6.3-6.3-6.3c-0.4-0.4-0.4-1 0-1.4 0.4-0.4 1-0.4 1.4 0l7 7c0.4 0.4 0.4 1 0 1.4l-7 7c-0.4 0.4-1 0.4-1.4 0z"/>
-	</g>
-</svg>
