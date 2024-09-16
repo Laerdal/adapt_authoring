@@ -20,6 +20,7 @@ var contentmanager = require('../../../lib/contentmanager'),
     database = require('../../../lib/database'),
     helpers = require('../../../lib/helpers'),
     usermanager = require('../../../lib/usermanager');
+    const { getDB, closeDB } = require('./dbIndex');
 
 
 function CourseContent () {
@@ -32,6 +33,10 @@ var DASHBOARD_COURSE_FIELDS = [
     'updatedAt', 'updatedBy', 'createdAt', 'createdBy', 'tags', '_shareWithUsers'
 ];
 
+var metadata = {
+  idMap: {},
+};
+var courseId;
 function doQuery(req, res, andOptions, next) {
   if(!next) {
     next = andOptions;
@@ -77,6 +82,7 @@ function doQuery(req, res, andOptions, next) {
 function initialize () {
   var self = this;
   var app = origin();
+
   app.once('serverStarted', function(server) {
     // force search to use only courses created by current user
     rest.get('/my/course', (req, res, next) => doQuery(req, res, [{ createdBy: req.user._id }], next));
@@ -90,23 +96,33 @@ function initialize () {
      *
      * @fires ~courseDuplicated
      */
-    // add course duplicate route - @TODO - Restrict access to this!
+
     rest.get('/duplicatecourse/:id', function (req, res, next) {
       duplicate({_id: req.params.id}, function (error, newCourse) {
         if (error) {
           res.statusCode = 400;
           return res.json({success: false, message: error.message});
         }
-        /**
-         * @event courseDuplicated
-         * @type object
-         */
+    
+        // Emit courseDuplicated event
         app.emit('courseDuplicated', newCourse);
-        res.statusCode = 200;
-        return res.json({success: true, newCourseId: newCourse._id});
+    
+        // Call referenceId to update StartId and BranchId after duplicate finishes
+        referenceId(newCourse._id, function (refError) {
+          if (refError) {
+            res.statusCode = 500;
+            return res.json({success: false, message: 'Error updating references: ' + refError.message});
+          }
+    
+          // Send success response if everything is completed
+          res.statusCode = 200;
+          return res.json({success: true, newCourseId: newCourse._id});
+        });
       });
     });
   });
+    
+ 
 
   app.contentmanager.addContentHook('update', 'course', {when:'pre'}, function (data, next) {
     if (data[1].hasOwnProperty('themeSettings') || data[1].hasOwnProperty('customStyle')) {
@@ -371,6 +387,7 @@ function duplicate (data, cb) {
         }
 
         var newCourseId = newCourse._id;
+        courseId = newCourseId;
         var parentIdMap = [];
 
         database.getDatabase(function (error, db) {
@@ -413,6 +430,7 @@ function duplicate (data, cb) {
                     return next(error);
                   }
                   parentIdMap[oldId] = newContent._id;
+                  metadata.idMap[oldId] = newContent._id;
                   next();
                 });
 
@@ -476,6 +494,209 @@ function duplicate (data, cb) {
     }
   });
 };
+async function referenceId(courseId, cb) {
+  let db;
+  try {
+    db = await getDB(); // Retrieve the database connection
+
+    // Retrieve the course by its ID
+    const course = await db.collection('courses').findOne({ _id: courseId });
+    if (!course) throw new Error('Course not found');
+
+    // Retrieve components associated with the course
+    const components = await db.collection('components').find({ _courseId: courseId }).toArray();
+    if (!components || components.length === 0) throw new Error('Components not found');
+
+    // Retrieve blocks associated with the course
+    const blocks = await db.collection('blocks').find({ _courseId: courseId }).toArray();
+    if (!blocks || blocks.length === 0) throw new Error('Blocks not found');
+
+    const articles = await db.collection('articles').find({ _courseId: courseId }).toArray();
+    if (!articles || articles.length === 0) throw new Error('Articles not found');
+
+    // update the configObject with the new footer custom id
+    const configObject = await db.collection('contentobjects').find({ _courseId: courseId }).toArray();
+    if (!configObject) throw new Error('ConfigObject not found');
+
+    // Update course start IDs
+    await updateCourseStartId(db, course);
+
+    // Update components with new view IDs
+    await updateComponentCollection(db, components);
+
+    // Update blocks with new branching properties
+    await updateBlocksCollection(db, blocks);
+
+    // update article with new branching properties
+    await updateArticleCollection(db, articles);
+
+    // Update the configObject with the new footer custom id
+    await updateContentObject(db, configObject);
+
+  } catch (error) {
+    console.error('Error during reference ID processing:', error);
+  } finally {
+    // Ensure the database connection is closed
+    if (db?.client?.topology && !db.client.topology.isDestroyed()) {
+      await closeDB();
+    }
+  }
+   // call back to the course duplicate route
+   cb(null);
+}
+
+// Function to update the course's start IDs in the database
+  async function updateCourseStartId(db, course) {
+    const updatedCourse = updateStartIds(course);
+
+    try {
+      // Update the course's _start._startIds in the database
+      await db.collection('courses').updateOne(
+        { _id: course._id },
+        { $set: { '_start._startIds': updatedCourse._start._startIds } }
+      );
+      console.log('Course _start._startIds updated successfully');
+    } catch (err) {
+      throw new Error('Error updating the course start IDs: ' + err.message);
+    }
+  }
+
+  // Function to update the component records with new properties
+  async function updateComponentCollection(db, components) {
+    // Update _viewId in the _additionalMaterial._items array
+    await Promise.all(
+      components.map(async (record) => {
+        const itemsArray = record?._extensions?._additionalMaterial?._items;
+        if (!itemsArray?.length) return; // Skip if no items to update
+
+        itemsArray.forEach((item) => {
+          if (item._viewType === 'modal' && item._viewTypeModal?._viewId) {
+            const viewId = metadata.idMap[item._viewTypeModal._viewId];
+            item._viewTypeModal._viewId = viewId || item._viewTypeModal._viewId;
+          }
+        });
+
+        await db.collection('components').updateOne(
+          { _id: record._id },
+          { $set: { '_extensions._additionalMaterial._items': itemsArray } }
+        );
+      })
+    );
+
+    // Update _routeToPageReview in properties._bands._review
+    await Promise.all(
+      components.map(async (record) => {
+        if (record._component === 'assessmentResultsTotal') {
+          const properties = record.properties;
+          const bands = properties?._bands;
+
+          if (!bands?.length) return; // Skip if no bands to update
+
+          bands.forEach((item) => {
+            // Update _routeToPage for _retry
+            if (item?._retry && item?._retry?._routeToPage) {
+              const routeToPageRetry = metadata.idMap[item._retry._routeToPage];
+              item._retry._routeToPage = routeToPageRetry || item._retry._routeToPage;
+            }
+            // Update _routeToPageReview for _review
+            if (item._review && item?._review?._routeToPageReview) {
+              const routeToPageReview = metadata.idMap[item._review._routeToPageReview];
+              item._review._routeToPageReview = routeToPageReview || item._review._routeToPageReview;
+            }
+          });
+
+          await db.collection('components').updateOne(
+            { _id: record._id },
+            { $set: { 'properties._bands': bands } } // Corrected the reference from itemsArray to bands
+          );
+        }
+      })
+    );
+  }
+
+
+  // Function to update the blocks with new branching properties
+  async function updateBlocksCollection(db, blocks) {
+    return Promise.all(
+      blocks.map(async (record) => {
+        const branching = record._extensions?._branching;
+        if (branching) {
+          const correct = metadata.idMap[branching._correct];
+          const partlyCorrect = metadata.idMap[branching._partlyCorrect];
+          const incorrect = metadata.idMap[branching._incorrect];
+
+          await db.collection('blocks').updateOne(
+            { _id: record._id },
+            {
+              $set: {
+                '_extensions._branching._correct': correct || branching._correct,
+                '_extensions._branching._partlyCorrect': partlyCorrect || branching._partlyCorrect,
+                '_extensions._branching._incorrect': incorrect || branching._incorrect,
+              },
+            }
+          );
+        }
+      })
+    );
+  }
+
+  // Function to update the article records with new branching properties
+  async function updateArticleCollection(db, articles) {
+    return Promise.all(
+      articles.map(async (record) => {
+        const branching = record._extensions?._branching;
+        if (branching) {
+          const start = metadata.idMap[branching._start];
+
+          await db.collection('articles').updateOne(
+            { _id: record._id },
+            {
+              $set: {
+                '_extensions._branching._start': start || branching._start,
+              },
+            }
+          );
+        }
+      })
+    );
+  }
+
+// Function to update the content object with the new footer custom id
+async function updateContentObject(db, configObject) {
+  return Promise.all(
+      configObject.map(async (record) => {
+          const customIdPath = record?._extensions?._navigationFooter?._buttons?._custom?._id;
+          
+          if (customIdPath) {
+              const newFooterId = metadata.idMap[customIdPath];
+              if (newFooterId) {
+                  await db.collection('contentobjects').updateOne(
+                      { _id: record._id },
+                      { $set: { '_extensions._navigationFooter._buttons._custom._id': newFooterId } }
+                  );
+              }
+          }
+      })
+  );
+}
+
+  // Function to update the start IDs in the course object
+  function updateStartIds(course) {
+    const idMap = metadata.idMap;
+
+    if (!idMap || typeof idMap !== 'object') {
+      throw new Error('Invalid idMap. Ensure idMap is properly populated.');
+    }
+    if (!course._start || !Array.isArray(course._start._startIds)) {
+      throw new Error('Invalid course data. Ensure _start and _startIds are correctly defined.');
+    }
+    course._start._startIds = course._start._startIds.map(start => ({
+      ...start,
+      _id: idMap[start._id] || start._id, // Replace the old _id with the new one from idMap, if available
+    }));
+
+    return course;
+  }
 
 /**
  * Sort contentObjects into correct creation order.
