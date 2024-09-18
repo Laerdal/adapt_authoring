@@ -418,9 +418,9 @@
   "app.unknownuser": "Unknown User",
   "app.savetemplate": "Save Template",
   "app.deleteTempelate": "Delete Template",
-  "app.confirmdeletetemplate": "Are you sure you want to delete this Template?",
+  "app.confirmdeletetemplate": "Are you sure you want to delete this template?",
   "app.confirmdeletetemplatewarning": "<b>IMPORTANT</b>: This will delete the template from the list but will not affect the course from where the template is saved.",
   "app.addtemplate": "Add template",
   "app.pleaseselecttemplate": "Please select a template",
-  "app.typetofiltertemplates": "Search by Title Name"
+  "app.typetofiltertemplates": "Search"
 }
