@@ -406,6 +406,13 @@ function ImportSource(req, done) {
           // Update components with new view IDs
           await updateComponentCollection(db, components);
 
+          // Update blocks with new branching properties with contrib
+          await updateBlocksCollectionContrib(db, blocks);
+
+          // update article with new branching properties with contrib
+          await updateArticleCollectionContrib(db, articles);
+
+
           // Update blocks with new branching properties
           await updateBlocksCollection(db, blocks);
 
@@ -517,6 +524,51 @@ function ImportSource(req, done) {
     );
   }
 
+  // Function to update the blocks with new branching properties
+  async function updateBlocksCollectionContrib(db, blocks) {
+    return Promise.all(
+      blocks.map(async (record) => {
+        const branching = record._extensions?._laerdalBranching;
+        if (branching) {
+          const correct = metadata.idMap[branching._correct];
+          const partlyCorrect = metadata.idMap[branching._partlyCorrect];
+          const incorrect = metadata.idMap[branching._incorrect];
+
+          await db.collection('blocks').updateOne(
+            { _id: record._id },
+            {
+              $set: {
+                '_extensions._laerdalBranching._correct': correct || branching._correct,
+                '_extensions._laerdalBranching._partlyCorrect': partlyCorrect || branching._partlyCorrect,
+                '_extensions._laerdalBranching._incorrect': incorrect || branching._incorrect,
+              },
+            }
+          );
+        }
+      })
+    );
+  }
+
+  // Function to update the article records with new branching properties
+  async function updateArticleCollectionContrib(db, articles) {
+    return Promise.all(
+      articles.map(async (record) => {
+        const branching = record._extensions?._laerdalBranching;
+        if (branching) {
+          const start = metadata.idMap[branching._start];
+
+          await db.collection('articles').updateOne(
+            { _id: record._id },
+            {
+              $set: {
+                '_extensions._laerdalBranching._start': start || branching._start,
+              },
+            }
+          );
+        }
+      })
+    );
+  }
 
   // Function to update the blocks with new branching properties
   async function updateBlocksCollection(db, blocks) {
@@ -564,24 +616,24 @@ function ImportSource(req, done) {
     );
   }
 
-// Function to update the content object with the new footer custom id
-async function updateContentObject(db, configObject) {
-  return Promise.all(
+  // Function to update the content object with the new footer custom id
+  async function updateContentObject(db, configObject) {
+    return Promise.all(
       configObject.map(async (record) => {
-          const customIdPath = record?._extensions?._navigationFooter?._buttons?._custom?._id;
-          
-          if (customIdPath) {
-              const newFooterId = metadata.idMap[customIdPath];
-              if (newFooterId) {
-                  await db.collection('contentobjects').updateOne(
-                      { _id: record._id },
-                      { $set: { '_extensions._navigationFooter._buttons._custom._id': newFooterId } }
-                  );
-              }
+        const customIdPath = record?._extensions?._navigationFooter?._buttons?._custom?._id;
+
+        if (customIdPath) {
+          const newFooterId = metadata.idMap[customIdPath];
+          if (newFooterId) {
+            await db.collection('contentobjects').updateOne(
+              { _id: record._id },
+              { $set: { '_extensions._navigationFooter._buttons._custom._id': newFooterId } }
+            );
           }
+        }
       })
-  );
-}
+    );
+  }
 
   // Function to update the start IDs in the course object
   function updateStartIds(course) {

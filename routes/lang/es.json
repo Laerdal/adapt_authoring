@@ -253,5 +253,12 @@
   "app.timeend": "Tiempo de Fin",
   "app.unlimited": "Ilimitado",
   "app.deletesubscription": "Eliminar Suscripción",
-  "app.confirmdeletesubscription": "¿Está seguro que desea eliminar la suscripción?"
+  "app.confirmdeletesubscription": "¿Está seguro que desea eliminar la suscripción?",
+  "app.savetemplate": "Guardar plantilla",
+  "app.deleteTempelate": "Eliminar plantilla",
+  "app.confirmdeletetemplate": "¿Estás seguro de que deseas eliminar esta plantilla?",
+  "app.confirmdeletetemplatewarning": "<b>IMPORTANTE</b>: Esto eliminará esta plantilla.",
+  "app.addtemplate": "Agregar plantilla",
+  "app.pleaseselecttemplate": "Por favor seleccione una plantilla",
+  "app.typetofiltertemplates": "Buscar por título, tipo o etiquetas"
 }
