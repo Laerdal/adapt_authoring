@@ -412,7 +412,6 @@ function ImportSource(req, done) {
           // update article with new branching properties with contrib
           await updateArticleCollectionContrib(db, articles);
 
-
           // Update blocks with new branching properties
           await updateBlocksCollection(db, blocks);
 
