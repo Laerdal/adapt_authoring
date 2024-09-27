@@ -67,23 +67,40 @@ define([
   };
 
   // render ckeditor in textarea
-  Backbone.Form.editors.TextArea.prototype.render = function() {
+  Backbone.Form.editors.TextArea.prototype.render = function () {
     textAreaRender.call(this);
 
-    _.delay(function() {
-      this.editor = CKEDITOR.replace(this.$el[0], {      
-	      delayDetached: true,
+    function until(conditionFunction) {
+      function poll(resolve) {
+        if (conditionFunction()) {
+          resolve();
+          return;
+        }
+        setTimeout(function () {
+          poll(resolve)
+        }, 10);
+      }
+      return new Promise(poll);
+    }
+    function isAttached($element) {
+      return function () {
+        return Boolean($element.parents('body').length);
+      };
+    }
+
+    until(isAttached(this.$el)).then(function () {
+      this.editor = CKEDITOR.replace(this.$el[0], {
         dataIndentationChars: '',
         disableNativeSpellChecker: false,
-        versionCheck:false,
+        versionCheck: false,
         enterMode: CKEDITOR[Origin.constants.ckEditorEnterMode],
         entities: false,
-        allowedContent: true,
+        extraAllowedContent: Origin.constants.ckEditorExtraAllowedContent,
         on: {
-          change: function() {
+          change: function () {
             this.trigger('change', this);
           }.bind(this),
-          instanceReady: function() {
+          instanceReady: function () {
             var writer = this.dataProcessor.writer;
             var elements = Object.keys(CKEDITOR.dtd.$block);
 
@@ -97,26 +114,26 @@ define([
 
             writer.indentationChars = '';
             writer.lineBreakChars = '';
-            elements.forEach(function(element) { writer.setRules(element, rules); });
+            elements.forEach(function (element) { writer.setRules(element, rules); });
           }
         },
         toolbar: [
-          { name: 'document', groups: [ 'mode', 'document', 'doctools' ], items: [ 'Source', '-', 'ShowBlocks' ] },
-          { name: 'clipboard', groups: [ 'clipboard', 'undo' ], items: [ 'PasteText', 'PasteFromWord', '-', 'Undo', 'Redo' ] },
-          { name: 'editing', groups: [ 'find', 'selection', 'spellchecker' ], items: [ 'Find', 'Replace', '-', 'SelectAll' ] },
-          { name: 'paragraph', groups: [ 'list', 'indent', 'blocks', 'align', 'bidi' ], items: [ 'NumberedList', 'BulletedList', '-', 'Outdent', 'Indent', '-', 'Blockquote', 'CreateDiv' ] },
-          { name: 'direction', items: [ 'BidiLtr', 'BidiRtl' ] },
+          { name: 'document', groups: ['mode', 'document', 'doctools'], items: ['Source', '-', 'ShowBlocks'] },
+          { name: 'clipboard', groups: ['clipboard', 'undo'], items: ['PasteText', 'PasteFromWord', '-', 'Undo', 'Redo'] },
+          { name: 'editing', groups: ['find', 'selection', 'spellchecker'], items: ['Find', 'Replace', '-', 'SelectAll'] },
+          { name: 'paragraph', groups: ['list', 'indent', 'blocks', 'align', 'bidi'], items: ['NumberedList', 'BulletedList', '-', 'Outdent', 'Indent', '-', 'Blockquote', 'CreateDiv'] },
+          { name: 'direction', items: ['BidiLtr', 'BidiRtl'] },
           '/',
-          { name: 'basicstyles', groups: [ 'basicstyles', 'cleanup' ], items: [ 'Bold', 'Italic', 'Underline', 'Strike', 'Subscript', 'Superscript', '-', 'RemoveFormat'] },
-          { name: 'styles', items: [ 'JustifyLeft', 'JustifyCenter', 'JustifyRight', 'JustifyBlock' ] },
-          { name: 'links', items: [ 'Link', 'Unlink' ] },
-          { name: 'colors', items: [ 'TextColor', 'BGColor' ] },
-          { name: 'insert', items: [ 'SpecialChar', 'Table' ] },
+          { name: 'basicstyles', groups: ['basicstyles', 'cleanup'], items: ['Bold', 'Italic', 'Underline', 'Strike', 'Subscript', 'Superscript', '-', 'RemoveFormat'] },
+          { name: 'styles', items: ['JustifyLeft', 'JustifyCenter', 'JustifyRight', 'JustifyBlock'] },
+          { name: 'links', items: ['Link', 'Unlink'] },
+          { name: 'colors', items: ['TextColor', 'BGColor'] },
+          { name: 'insert', items: ['SpecialChar', 'Table'] },
           { name: 'tools', items: [] },
-          { name: 'others', items: [ '-' ] }
+          { name: 'others', items: ['-'] }
         ]
       });
-    }.bind(this), 100);
+    }.bind(this));
 
     return this;
   };
