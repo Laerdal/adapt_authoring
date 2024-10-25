@@ -95,7 +95,7 @@ define([
         versionCheck: false,
         enterMode: CKEDITOR[Origin.constants.ckEditorEnterMode],
         entities: false,
-        extraAllowedContent: Origin.constants.ckEditorExtraAllowedContent,
+        extraAllowedContent: true,
         on: {
           change: function () {
             this.trigger('change', this);
