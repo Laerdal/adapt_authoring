@@ -422,5 +422,6 @@
   "app.confirmdeletetemplatewarning": "<b>IMPORTANT</b>: This will delete the template from the list but will not affect the course(s) where the template is used.",
   "app.addtemplate": "Add template",
   "app.pleaseselecttemplate": "Please select a template",
-  "app.typetofiltertemplates": "Search"
+  "app.typetofiltertemplates": "Search",
+  "app.addfull": "Add"
 }

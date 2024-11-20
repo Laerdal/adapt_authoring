@@ -39,8 +39,8 @@ define(function(require) {
       var isSameModel = view && (view.model.get('_id')) === (this.contextView.model && this.contextView.model.get('_id'));
       var isSameView = view.cid === this.contextView.cid; // to make sure we don't break listeners
       // new view, update the menu items
+      this.setMenu(view, $(e.currentTarget));
       if(!isSameType || !isSameModel || !isSameView) {
-        this.setMenu(view, $(e.currentTarget));
         return this.showMenu();
       }
       (this._isVisible) ? this.hideMenu() : this.showMenu();
@@ -51,12 +51,29 @@ define(function(require) {
       this.type = view.model.get('_type');
 
       this.renderItems();
-
+      // Show the menu
+      this.$el.removeClass('display-none').css('visibility', 'hidden');
+      let dropDownMenuBottom = window.innerHeight - $parent.offset().top;
+      let contextMenuHeight = this.$el.height();
+      this.$el.addClass('display-none').css('visibility', 'visible');
+      // Position the menu
+      if(dropDownMenuBottom < contextMenuHeight) {
+        this.$el.css({
+          position: 'absolute',
+          left: $parent.offset().left + $parent.width() + 10,
+          bottom: dropDownMenuBottom - 10 ,
+          top: 'inherit',
+          height: contextMenuHeight
+        });
+      } else{
       this.$el.css({
         position: 'absolute',
         left: $parent.offset().left + $parent.width() + 10,
-        top: $parent.offset().top - ($parent.height()/2)
+        top: $parent.offset().top - ($parent.height()/2),
+        bottom: 'inherit',
+        height: 'auto'
       });
+    }
     },
 
     showMenu: function() {
