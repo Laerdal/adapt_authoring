@@ -115,7 +115,14 @@ define(function(require){
       return newArticleView;
     },
 
-    addNewArticle: function(event) {
+    addNewArticle: async function(event) {
+      const currentUserRole = await this.getCurrentUserRole();
+      if (currentUserRole === 'Authenticated User') {
+        Origin.Notify.alert({
+          type: 'error',
+          text: Origin.l10n.t('app.permissiondenied')
+        });
+      } else {
       event && event.preventDefault();
       (new ArticleModel()).save({
         _parentId: this.model.get('_id'),
@@ -134,8 +141,14 @@ define(function(require){
           });
         }
       });
+    }
     },
 
+    getCurrentUserRole: async function () {
+      const response = await fetch('/api/user/me');
+      const result = await response.json();
+      return result.rolesAsName[0];
+    },
     loadPageEdit: function(event) {
       event && event.preventDefault();
       var courseId = this.model.get('_courseId');

@@ -9,11 +9,24 @@ define(function(require) {
       'click .editor-page-edit-sidebar-save': 'saveEditing',
       'click .editor-page-edit-sidebar-cancel': 'cancelEditing'
     },
+    getCurrentUserRole: async function () {
+      const response = await fetch('/api/user/me');
+      const result = await response.json();
+      return result.rolesAsName[0];
+    },
 
-    saveEditing: function(event) {
+    saveEditing: async function(event) {
+      const currentUserRole = await this.getCurrentUserRole();
+      if (currentUserRole === 'Authenticated User') {
+        Origin.Notify.alert({
+          type: 'error',
+          text: Origin.l10n.t('app.permissiondenied')
+        });
+      } else {
       event && event.preventDefault();
       this.updateButton('.editor-page-edit-sidebar-save', Origin.l10n.t('app.saving'))
       Origin.trigger('editorPageEditSidebar:views:save');
+      }
     },
 
     cancelEditing: function(event) {
