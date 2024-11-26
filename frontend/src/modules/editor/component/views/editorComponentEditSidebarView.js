@@ -21,7 +21,7 @@ define(function(require) {
       if (currentUserRole === 'Authenticated User') {
         Origin.Notify.alert({
           type: 'error',
-          text: Origin.l10n.t('app.permissiondenied')
+          text: 'Your user role does not allow editing or deleting courses'
         });
       } else {
       event.preventDefault();
