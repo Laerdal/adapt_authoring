@@ -67,12 +67,34 @@ define(function(require) {
       this.$('.editor-menu-layer-inner').height(windowHeight-(offsetTop+controlsHeight));
     },
 
-    addNewMenu: function(event) {
+    addNewMenu: async function(event) {
+      const currentUserRole = await this.getCurrentUserRole();
+      if (currentUserRole === 'Authenticated User') {
+        Origin.Notify.alert({
+          type: 'error',
+          text: 'Your user role does not allow editing or deleting courses'
+        });
+      } else {
       this.addNewMenuItem(event, 'menu');
+      }
     },
 
-    addNewPage: function(event) {
+    getCurrentUserRole: async function () {
+      const response = await fetch('/api/user/me');
+      const result = await response.json();
+      return result.rolesAsName[0];
+    },
+
+    addNewPage: async function(event) {
+      const currentUserRole = await this.getCurrentUserRole();
+      if (currentUserRole === 'Authenticated User') {
+        Origin.Notify.alert({
+          type: 'error',
+          text: 'Your user role does not allow editing or deleting courses'
+        });
+      } else {
       this.addNewMenuItem(event, 'page');
+      }
     },
 
     /**

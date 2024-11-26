@@ -106,7 +106,14 @@ define(function(require){
       this.$('.article-blocks').append(new EditorPasteZoneView({ model: blockModel }).$el);
     },
 
-    addBlock: function(event) {
+    addBlock: async function(event) {
+      const currentUserRole = await this.getCurrentUserRole();
+      if (currentUserRole === 'Authenticated User') {
+        Origin.Notify.alert({
+          type: 'error',
+          text: 'Your user role does not allow editing or deleting courses'
+        });
+      } else {
       event && event.preventDefault();
       var model = new BlockModel();
       model.save({
@@ -134,9 +141,24 @@ define(function(require){
           Origin.Notify.alert({ type: 'error', text: Origin.l10n.t('app.erroraddingblock') });
         }
       });
+    }
     },
 
-    deleteArticlePrompt: function(event) {
+    getCurrentUserRole: async function () {
+      const response = await fetch('/api/user/me');
+      const result = await response.json();
+      return result.rolesAsName[0];
+    },
+
+    deleteArticlePrompt: async function(event) {
+
+      const currentUserRole = await this.getCurrentUserRole();
+      if (currentUserRole === 'Authenticated User') {
+        Origin.Notify.alert({
+          type: 'error',
+          text: 'Your user role does not allow editing or deleting courses'
+        });
+      } else {
       event && event.preventDefault();
 
       Origin.Notify.confirm({
@@ -145,6 +167,7 @@ define(function(require){
         text: Origin.l10n.t('app.confirmdeletearticle') + '<br />' + '<br />' + Origin.l10n.t('app.confirmdeletearticlewarning'),
         callback: _.bind(this.deleteArticleConfirm, this)
       });
+    }
 
     },
 
@@ -166,10 +189,12 @@ define(function(require){
     },
 
     loadArticleEdit: function (event) {
+ 
       var courseId = Origin.editor.data.course.get('_id');
       var type = this.model.get('_type');
       var id = this.model.get('_id');
       Origin.router.navigateTo('editor/' + courseId + '/' + type + '/' + id + '/edit');
+      
     },
 
     setupDragDrop: function() {

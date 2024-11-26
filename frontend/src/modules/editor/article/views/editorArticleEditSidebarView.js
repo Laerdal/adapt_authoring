@@ -14,10 +14,24 @@ define(function(require) {
 
     },
 
-    saveEditing: function(event) {
+    getCurrentUserRole: async function () {
+      const response = await fetch('/api/user/me');
+      const result = await response.json();
+      return result.rolesAsName[0];
+    },
+
+    saveEditing: async function(event) {
+      const currentUserRole = await this.getCurrentUserRole();
+      if (currentUserRole === 'Authenticated User') {
+        Origin.Notify.alert({
+          type: 'error',
+          text: 'Your user role does not allow editing or deleting courses'
+        });
+      } else {
       event && event.preventDefault();
       this.updateButton('.editor-article-edit-sidebar-save', Origin.l10n.t('app.saving'));
       Origin.trigger('editorArticleEditSidebar:views:save');
+      }
     },
 
     cancelEditing: function(event) {

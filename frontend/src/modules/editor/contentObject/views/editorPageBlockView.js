@@ -121,7 +121,21 @@ define(function(require){
       return [];
     },
 
-    deleteBlockPrompt: function(event) {
+    
+    getCurrentUserRole: async function () {
+      const response = await fetch('/api/user/me');
+      const result = await response.json();
+      return result.rolesAsName[0];
+    },
+
+    deleteBlockPrompt: async function(event) {
+      const currentUserRole = await this.getCurrentUserRole();
+      if (currentUserRole === 'Authenticated User') {
+        Origin.Notify.alert({
+          type: 'error',
+          text: 'Your user role does not allow editing or deleting courses'
+        });
+      } else {
       event && event.preventDefault();
 
       Origin.Notify.confirm({
@@ -132,6 +146,7 @@ define(function(require){
           if (confirmed) this.deleteBlock();
         }, this)
       });
+    }
     },
 
     deleteBlock: function(event) {
@@ -242,7 +257,14 @@ define(function(require){
       Origin.router.navigateTo('editor/' + courseId + '/' + type + '/' + id + '/edit');
     },
 
-    showComponentList: function(event) {
+    showComponentList: async function(event) {
+          const currentUserRole = await this.getCurrentUserRole();
+      if (currentUserRole === 'Authenticated User') {
+        Origin.Notify.alert({
+          type: 'error',
+          text: 'Your user role does not allow editing or deleting courses'
+        });
+      } else {
       event.preventDefault();
       // If adding a new component
       // get current layoutOptions
@@ -261,6 +283,7 @@ define(function(require){
         $parentElement: this.$el,
         parentView: this
       }).$el);
+    }
     },
 
     setupPasteZones: function() {
