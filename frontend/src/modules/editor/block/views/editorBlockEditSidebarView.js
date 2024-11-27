@@ -22,6 +22,7 @@ define(function(require) {
         Origin.Notify.alert({
           type: 'error',
           text: 'You do not have permission to edit or delete the courses'
+
         });
       } else {
       event && event.preventDefault();
