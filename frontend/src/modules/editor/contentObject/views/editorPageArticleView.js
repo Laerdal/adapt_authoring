@@ -111,7 +111,7 @@ define(function(require){
       if (currentUserRole === 'Authenticated User') {
         Origin.Notify.alert({
           type: 'error',
-          text: 'Your user role does not allow editing or deleting courses'
+          text: 'You do not have permission to edit or delete the courses'
         });
       } else {
       event && event.preventDefault();
@@ -156,7 +156,7 @@ define(function(require){
       if (currentUserRole === 'Authenticated User') {
         Origin.Notify.alert({
           type: 'error',
-          text: 'Your user role does not allow editing or deleting courses'
+          text: 'You do not have permission to edit or delete the courses'
         });
       } else {
       event && event.preventDefault();
