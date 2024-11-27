@@ -41,17 +41,33 @@ define(function(require){
       }, this));
     },
 
-    deleteComponentPrompt: function(event) {
-      event && event.preventDefault();
+    getCurrentUserRole: async function () {
+      const response = await fetch('/api/user/me');
+      const result = await response.json();
+      return result.rolesAsName[0];
+    },
 
-      Origin.Notify.confirm({
-        type: 'warning',
-        title: Origin.l10n.t('app.deletecomponent'),
-        text: Origin.l10n.t('app.confirmdeletecomponent') + '<br />' + '<br />' + Origin.l10n.t('app.confirmdeletecomponentwarning'),
-        callback: _.bind(function(confirmed) {
-          if(confirmed) this.deleteComponent();
-        }, this)
-      });
+    deleteComponentPrompt: async function(event) {
+      const currentUserRole = await this.getCurrentUserRole();
+      // if the user is authenticated should not be able to delete components, show alert permission denied
+      if (currentUserRole === 'Authenticated User') {
+        Origin.Notify.alert({
+          type: 'error',
+          text: 'You do not have permission to edit or delete the courses'
+        });
+      } else {
+        event && event.preventDefault();
+
+        Origin.Notify.confirm({
+          type: 'warning',
+          title: Origin.l10n.t('app.deletecomponent'),
+          text: Origin.l10n.t('app.confirmdeletecomponent') + '<br />' + '<br />' + Origin.l10n.t('app.confirmdeletecomponentwarning'),
+          callback: _.bind(function(confirmed) {
+            if(confirmed) this.deleteComponent();
+          }, this)
+        });
+      }
+
     },
 
     deleteComponent: function() {

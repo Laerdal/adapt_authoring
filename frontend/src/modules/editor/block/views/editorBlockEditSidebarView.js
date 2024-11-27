@@ -10,10 +10,25 @@ define(function(require) {
       'click .editor-block-edit-sidebar-cancel': 'cancelEditing'
     },
 
-    saveEditing: function(event) {
+    getCurrentUserRole: async function () {
+      const response = await fetch('/api/user/me');
+      const result = await response.json();
+      return result.rolesAsName[0];
+    },
+
+    saveEditing: async function(event) {
+      const currentUserRole = await this.getCurrentUserRole();
+      if (currentUserRole === 'Authenticated User') {
+        Origin.Notify.alert({
+          type: 'error',
+          text: 'You do not have permission to edit or delete the courses'
+
+        });
+      } else {
       event && event.preventDefault();
       this.updateButton('.editor-block-edit-sidebar-save', Origin.l10n.t('app.saving'));
       Origin.trigger('editorBlockEditSidebar:views:save');
+      }
     },
 
     cancelEditing: function(event) {
