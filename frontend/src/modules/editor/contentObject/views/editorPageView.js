@@ -144,6 +144,11 @@ define(function(require){
     }
     },
 
+    getCurrentUserRole: async function () {
+      const response = await fetch('/api/user/me');
+      const result = await response.json();
+      return result.rolesAsName[0];
+    },
     loadPageEdit: function(event) {
       event && event.preventDefault();
       var courseId = this.model.get('_courseId');

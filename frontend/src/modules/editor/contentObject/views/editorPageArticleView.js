@@ -146,7 +146,6 @@ define(function(require){
 
 
     deleteArticlePrompt: async function(event) {
-
       const currentUserRole = await Origin.getCurrentUserRole();
       if (currentUserRole === 'Authenticated User') {
         Origin.Notify.alert({

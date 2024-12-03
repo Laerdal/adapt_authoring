@@ -10,8 +10,7 @@ define(function(require) {
       'click .editor-component-edit-sidebar-cancel': 'cancelEditing'
     },
 
-
-    saveEditing: async function(event) {
+   saveEditing: async function(event) {
       const currentUserRole = await Origin.getCurrentUserRole();
       if (currentUserRole === 'Authenticated User') {
         Origin.Notify.alert({

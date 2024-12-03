@@ -10,8 +10,6 @@ define(function(require) {
       'click .editor-block-edit-sidebar-cancel': 'cancelEditing'
     },
 
-
-
     saveEditing: async function(event) {
       const currentUserRole = await Origin.getCurrentUserRole();
       if (currentUserRole === 'Authenticated User') {

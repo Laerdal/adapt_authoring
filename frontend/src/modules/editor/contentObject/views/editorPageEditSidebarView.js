@@ -9,7 +9,11 @@ define(function(require) {
       'click .editor-page-edit-sidebar-save': 'saveEditing',
       'click .editor-page-edit-sidebar-cancel': 'cancelEditing'
     },
-
+    getCurrentUserRole: async function () {
+      const response = await fetch('/api/user/me');
+      const result = await response.json();
+      return result.rolesAsName[0];
+    },
 
     saveEditing: async function(event) {
       const currentUserRole = await Origin.getCurrentUserRole();
