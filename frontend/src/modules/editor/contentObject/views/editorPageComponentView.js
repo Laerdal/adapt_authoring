@@ -41,14 +41,10 @@ define(function(require){
       }, this));
     },
 
-    getCurrentUserRole: async function () {
-      const response = await fetch('/api/user/me');
-      const result = await response.json();
-      return result.rolesAsName[0];
-    },
+
 
     deleteComponentPrompt: async function(event) {
-      const currentUserRole = await this.getCurrentUserRole();
+      const currentUserRole = await Origin.getCurrentUserRole();
       // if the user is authenticated should not be able to delete components, show alert permission denied
       if (currentUserRole === 'Authenticated User') {
         Origin.Notify.alert({
@@ -67,7 +63,6 @@ define(function(require){
           }, this)
         });
       }
-
     },
 
     deleteComponent: function() {

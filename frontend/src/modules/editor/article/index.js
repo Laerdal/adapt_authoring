@@ -7,6 +7,19 @@ define(function(require) {
   var EditorArticleEditSidebarView = require('./views/editorArticleEditSidebarView');
   var EditorArticleEditView = require('./views/editorArticleEditView');
 
+  async function getCurrentUserRole() {
+    try {
+      const response = await fetch('/api/user/me');
+      const result = await response.json();
+      return result.rolesAsName[0]; // Assuming the role is the first item in rolesAsName
+    } catch (error) {
+      console.error('Error fetching user role:', error);
+      throw new Error('Unable to fetch user role');
+    }
+  }
+  
+  Origin.getCurrentUserRole = getCurrentUserRole;
+
   Origin.on('editor:article', function(data) {
     if(data.action !== 'edit') {
       return;
