@@ -68,7 +68,7 @@ define(function(require) {
     },
 
     addNewMenu: async function(event) {
-      const currentUserRole = await this.getCurrentUserRole();
+      const currentUserRole = await Origin.getCurrentUserRole();
       if (currentUserRole === 'Authenticated User') {
         Origin.Notify.alert({
           type: 'error',
@@ -79,14 +79,10 @@ define(function(require) {
       }
     },
 
-    getCurrentUserRole: async function () {
-      const response = await fetch('/api/user/me');
-      const result = await response.json();
-      return result.rolesAsName[0];
-    },
 
     addNewPage: async function(event) {
-      const currentUserRole = await this.getCurrentUserRole();
+      const currentUserRole = await Origin.getCurrentUserRole();
+
       if (currentUserRole === 'Authenticated User') {
         Origin.Notify.alert({
           type: 'error',

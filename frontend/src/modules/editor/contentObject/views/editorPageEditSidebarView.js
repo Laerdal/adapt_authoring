@@ -16,7 +16,7 @@ define(function(require) {
     },
 
     saveEditing: async function(event) {
-      const currentUserRole = await this.getCurrentUserRole();
+      const currentUserRole = await Origin.getCurrentUserRole();
       if (currentUserRole === 'Authenticated User') {
         Origin.Notify.alert({
           type: 'error',
