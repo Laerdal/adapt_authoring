@@ -569,7 +569,6 @@ function ImportSource(req, done) {
     );
   }
 
-
   // Function to update the blocks with new branching properties
   async function updateBlocksCollection(db, blocks) {
     return Promise.all(

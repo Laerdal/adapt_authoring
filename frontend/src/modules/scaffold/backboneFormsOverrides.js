@@ -67,7 +67,7 @@ define([
   };
 
   // render ckeditor in textarea
-  Backbone.Form.editors.TextArea.prototype.render = function() {
+  Backbone.Form.editors.TextArea.prototype.render = function () {
     textAreaRender.call(this);
 
     function until(conditionFunction) {
@@ -76,14 +76,16 @@ define([
           resolve();
           return;
         }
-        setTimeout(function() {
+        
+        setTimeout(function () {
+
           poll(resolve)
         }, 10);
       }
       return new Promise(poll);
     }
     function isAttached($element) {
-      return function() {
+      return function () {
         return Boolean($element.parents('body').length);
       };
     }
@@ -106,6 +108,7 @@ define([
       return CKEDITOR.create(this.$el[0], {
         dataIndentationChars: '',
         disableNativeSpellChecker: false,
+        versionCheck: false,
         enterMode: CKEDITOR[Origin.constants.ckEditorEnterMode],
         entities: false,
         htmlSupport: {
@@ -113,11 +116,12 @@ define([
           allow: convertStringsToRegExDeep((Origin.constants.ckEditorHtmlSupport && Origin.constants.ckEditorHtmlSupport.allow) || []),
           disallow: convertStringsToRegExDeep((Origin.constants.ckEditorHtmlSupport && Origin.constants.ckEditorHtmlSupport.disallow) || [])
         },
+
         on: {
-          change: function() {
+          change: function () {
             this.trigger('change', this);
           }.bind(this),
-          instanceReady: function() {
+          instanceReady: function () {
             var writer = this.dataProcessor.writer;
             var elements = Object.keys(CKEDITOR.dtd.$block);
 
@@ -131,7 +135,7 @@ define([
 
             writer.indentationChars = '';
             writer.lineBreakChars = '';
-            elements.forEach(function(element) { writer.setRules(element, rules); });
+            elements.forEach(function (element) { writer.setRules(element, rules); });
           }
         },
         plugins: window.CKEDITOR.pluginsConfig,
@@ -178,6 +182,7 @@ define([
         CKEDITOR.instances[this.editor.id] = this.editor
       })
     });
+
     return this;
   };
 
