@@ -10,10 +10,18 @@ define(function(require) {
       'click .editor-component-edit-sidebar-cancel': 'cancelEditing'
     },
 
-    saveEditing: function(event) {
+   saveEditing: async function(event) {
+      const currentUserRole = await Origin.getCurrentUserRole();
+      if (currentUserRole === 'Authenticated User') {
+        Origin.Notify.alert({
+          type: 'error',
+          text: 'You do not have permission to edit or delete the courses'
+        });
+      } else {
       event.preventDefault();
       this.updateButton('.editor-component-edit-sidebar-save', Origin.l10n.t('app.saving'));
       Origin.trigger('editorComponentEditSidebar:views:save');
+      }
     },
 
     cancelEditing: function(event) {

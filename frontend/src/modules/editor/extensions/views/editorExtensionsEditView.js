@@ -33,7 +33,6 @@ define(function(require) {
       this.setupExtensions(function() {
         _this.postRender()
       });
-      Origin.Notify.alert({ type: 'info', text: '<p style="text-align:left">To streamline our extensions, we will soon disable some that are no longer needed. Below is a list of the extensions being replaced, along with their alternatives. Please note that this will not affect existing courses.</p><br/> <ul style="text-align:left"><li>Laerdal Branching → Branching + Trickle</li><li>Laerdal Spoor → Spoor</li><li>Inline Feedback → Tutor with inline option</li></ul>' });
     },
 
     setupExtensions: function(callback) {

@@ -5,12 +5,54 @@ define(function(require) {
   var LoginView = require('./views/loginView');
   var UserProfileView = require('./views/userProfileView');
   var UserProfileSidebarView = require('./views/userProfileSidebarView');
-  var UserProfileModel = require('./models/userProfileModel');
-
+  var UserProfileModel = require('./models/userProfileModel');  
   var ForgotPasswordView = require('./views/forgotPasswordView');
   var ResetPasswordView = require('./views/resetPasswordView');
   var UserPasswordResetModel = require('./models/userPasswordResetModel');
 
+  var inactivityTimer;
+  var idleTimeLimit = (Origin.constants.maxAge ?  Origin.constants.maxAge : 3600000); // 1 hrs of inactivity before logout or 1 hour by default - if maxAge is not defined.
+
+  // Function to handle user activity and reset inactivity timer
+  function resetInactivityTimer() {
+    if (inactivityTimer) {
+      clearTimeout(inactivityTimer);
+    }
+    inactivityTimer = setTimeout(logoutUser, idleTimeLimit); // Log out after 1 hour of inactivity
+  }
+
+  // Function to log out the user
+  function logoutUser() {
+    console.log("User logged out due to inactivity");
+    Origin.Notify.alert({
+      type: 'error',
+      text: Origin.l10n.t('app.errorsessionexpired')
+    });  
+    Origin.sessionModel.logout();
+  }
+
+  // Listen for various user interactions to reset the inactivity timer
+  document.addEventListener('mousemove', resetInactivityTimer);
+  document.addEventListener('mousedown', resetInactivityTimer);
+  document.addEventListener('scroll', resetInactivityTimer);
+
+  window.addEventListener('scroll', resetInactivityTimer);
+  document.addEventListener('keydown', resetInactivityTimer);
+  window.addEventListener('resize', resetInactivityTimer);
+  
+  window.addEventListener('click', resetInactivityTimer);
+  document.addEventListener('click', resetInactivityTimer);
+  
+  document.addEventListener('touchstart', resetInactivityTimer);
+  document.addEventListener('pointerdown', resetInactivityTimer);
+   
+  document.addEventListener('focus', resetInactivityTimer, true); // Capture the event on the document level
+  document.addEventListener('visibilitychange', resetInactivityTimer);
+
+  // Initializing the inactivity timer when the module loads
+  resetInactivityTimer();
+
+  // Handling navigation actions
   Origin.on('navigation:user:logout', function() {
     Origin.router.navigateTo('user/logout');
   });
@@ -47,7 +89,6 @@ define(function(require) {
         currentView = UserProfileView;
         break;
     }
-
     if (currentView) {
       switch (location) {
         case 'profile':

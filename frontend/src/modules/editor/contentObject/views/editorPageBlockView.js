@@ -121,7 +121,14 @@ define(function(require){
       return [];
     },
 
-    deleteBlockPrompt: function(event) {
+    deleteBlockPrompt: async function(event) {
+      const currentUserRole = await Origin.getCurrentUserRole();
+      if (currentUserRole === 'Authenticated User') {
+        Origin.Notify.alert({
+          type: 'error',
+          text: 'You do not have permission to edit or delete the courses'
+        });
+      } else {
       event && event.preventDefault();
 
       Origin.Notify.confirm({
@@ -132,6 +139,7 @@ define(function(require){
           if (confirmed) this.deleteBlock();
         }, this)
       });
+    }
     },
 
     deleteBlock: function(event) {
@@ -242,7 +250,15 @@ define(function(require){
       Origin.router.navigateTo('editor/' + courseId + '/' + type + '/' + id + '/edit');
     },
 
-    showComponentList: function(event) {
+    showComponentList: async function(event) {
+      const currentUserRole = await Origin.getCurrentUserRole();
+
+      if (currentUserRole === 'Authenticated User') {
+        Origin.Notify.alert({
+          type: 'error',
+          text: 'You do not have permission to edit or delete the courses'
+        });
+      } else {
       event.preventDefault();
       // If adding a new component
       // get current layoutOptions
@@ -261,6 +277,7 @@ define(function(require){
         $parentElement: this.$el,
         parentView: this
       }).$el);
+    }
     },
 
     setupPasteZones: function() {

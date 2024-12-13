@@ -75,7 +75,15 @@ define(function(require){
       Origin.router.navigateTo('editor/' + courseId + '/' + type + '/' + menuItemId + '/edit');
     },
 
-    deleteItemPrompt: function(event) {
+    deleteItemPrompt: async function(event) {
+      const currentUserRole = await Origin.getCurrentUserRole();
+
+      if (currentUserRole === 'Authenticated User') {
+        Origin.Notify.alert({
+          type: 'error',
+          text: 'You do not have permission to edit or delete the courses'
+        });
+      } else {
       event && event.preventDefault();
 
       this.listenToOnce(Origin, 'editorView:removeItem:'+ this.model.get('_id'), this.deleteItem);
@@ -91,6 +99,7 @@ define(function(require){
           self.onConfirmRemovePopup(isConfirmed);
         }
       });
+    }
     },
 
     onConfirmRemovePopup: function(isConfirmed) {

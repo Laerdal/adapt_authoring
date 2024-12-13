@@ -14,10 +14,18 @@ define(function(require) {
 
     },
 
-    saveEditing: function(event) {
+    saveEditing: async function(event) {
+      const currentUserRole = await Origin.getCurrentUserRole();
+      if (currentUserRole === 'Authenticated User') {
+        Origin.Notify.alert({
+          type: 'error',
+          text: 'You do not have permission to edit or delete the courses'
+        });
+      } else {
       event && event.preventDefault();
       this.updateButton('.editor-article-edit-sidebar-save', Origin.l10n.t('app.saving'));
       Origin.trigger('editorArticleEditSidebar:views:save');
+      }
     },
 
     cancelEditing: function(event) {

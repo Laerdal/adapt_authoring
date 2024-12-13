@@ -67,12 +67,30 @@ define(function(require) {
       this.$('.editor-menu-layer-inner').height(windowHeight-(offsetTop+controlsHeight));
     },
 
-    addNewMenu: function(event) {
+    addNewMenu: async function(event) {
+      const currentUserRole = await Origin.getCurrentUserRole();
+      if (currentUserRole === 'Authenticated User') {
+        Origin.Notify.alert({
+          type: 'error',
+          text: 'You do not have permission to edit or delete the courses'
+        });
+      } else {
       this.addNewMenuItem(event, 'menu');
+      }
     },
 
-    addNewPage: function(event) {
+
+    addNewPage: async function(event) {
+      const currentUserRole = await Origin.getCurrentUserRole();
+
+      if (currentUserRole === 'Authenticated User') {
+        Origin.Notify.alert({
+          type: 'error',
+          text: 'You do not have permission to edit or delete the courses'
+        });
+      } else {
       this.addNewMenuItem(event, 'page');
+      }
     },
 
     /**
