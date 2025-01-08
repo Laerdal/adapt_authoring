@@ -82,7 +82,6 @@ define(function(require) {
 
     addNewPage: async function(event) {
       const currentUserRole = await Origin.getCurrentUserRole();
-
       if (currentUserRole === 'Authenticated User') {
         Origin.Notify.alert({
           type: 'error',
