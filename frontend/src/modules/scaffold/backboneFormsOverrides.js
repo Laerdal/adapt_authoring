@@ -104,21 +104,32 @@ define([
 
     until(isAttached(this.$el)).then(() => {
       return CKEDITOR.create(this.$el[0], {
-        dataIndentationChars: '',
+        dataIndentationChars: "",
         disableNativeSpellChecker: false,
-        versionCheck:false,
+        versionCheck: false,
         enterMode: CKEDITOR[Origin.constants.ckEditorEnterMode],
         entities: false,
+        // htmlSupport: {
+        //   // Convert all allow/disallow strings to regexp, as config is json only
+        //   allow: convertStringsToRegExDeep((Origin.constants.ckEditorHtmlSupport && Origin.constants.ckEditorHtmlSupport.allow) || []),
+        //   //disallow: convertStringsToRegExDeep((Origin.constants.ckEditorHtmlSupport && Origin.constants.ckEditorHtmlSupport.disallow) || [])
+        // },
         htmlSupport: {
-          // Convert all allow/disallow strings to regexp, as config is json only
-          allow: convertStringsToRegExDeep((Origin.constants.ckEditorHtmlSupport && Origin.constants.ckEditorHtmlSupport.allow) || []),
-          disallow: convertStringsToRegExDeep((Origin.constants.ckEditorHtmlSupport && Origin.constants.ckEditorHtmlSupport.disallow) || [])
+          allow: [
+            {
+              name: /.*/,
+              attributes: true,
+              classes: true,
+              style: true,
+              styles: true,
+            },
+          ],
         },
         on: {
-          change: function() {
-            this.trigger('change', this);
+          change: function () {
+            this.trigger("change", this);
           }.bind(this),
-          instanceReady: function() {
+          instanceReady: function () {
             var writer = this.dataProcessor.writer;
             var elements = Object.keys(CKEDITOR.dtd.$block);
 
@@ -127,57 +138,59 @@ define([
               breakBeforeOpen: false,
               breakAfterOpen: false,
               breakBeforeClose: false,
-              breakAfterClose: false
+              breakAfterClose: false,
             };
 
-            writer.indentationChars = '';
-            writer.lineBreakChars = '';
-            elements.forEach(function(element) { writer.setRules(element, rules); });
-          }
+            writer.indentationChars = "";
+            writer.lineBreakChars = "";
+            elements.forEach(function (element) {
+              writer.setRules(element, rules);
+            });
+          },
         },
         plugins: window.CKEDITOR.pluginsConfig,
         toolbar: {
           items: [
-            'sourceEditing',
-            'showBlocks',
-            'undo',
-            'redo',
-            '|',
-            'findAndReplace',
-            'selectAll',
-            '|',
-            'numberedList',
-            'bulletedList',
-            'blockQuote',
-            'indent',
-            'outdent',
-            '|',
-            'bold',
-            'italic',
-            'underline',
-            'strikethrough',
-            'subscript',
-            'superscript',
-            'alignment',
-            'removeFormat',
-            '|',
-            'link',
-            'fontColor',
-            'fontBackgroundColor',
-            '|',
-            'specialCharacters',
-            'insertTable'
+            "sourceEditing",
+            "showBlocks",
+            "undo",
+            "redo",
+            "|",
+            "findAndReplace",
+            "selectAll",
+            "|",
+            "numberedList",
+            "bulletedList",
+            "blockQuote",
+            "indent",
+            "outdent",
+            "|",
+            "bold",
+            "italic",
+            "underline",
+            "strikethrough",
+            "subscript",
+            "superscript",
+            "alignment",
+            "removeFormat",
+            "|",
+            "link",
+            "fontColor",
+            "fontBackgroundColor",
+            "|",
+            "specialCharacters",
+            "insertTable",
           ],
-          shouldNotGroupWhenFull: true
-        }
-      }).then(editor => {
-        this.editor = editor
-        CKEDITOR.instances = CKEDITOR.instances || []
+          shouldNotGroupWhenFull: true,
+        },
+      }).then((editor) => {
+        this.editor = editor;
+        CKEDITOR.instances = CKEDITOR.instances || [];
         CKEDITOR.instances.length = CKEDITOR.instances.length || 0;
-        this.editor.id = CKEDITOR.instances.length
+        this.editor.id = CKEDITOR.instances.length;
         CKEDITOR.instances.length++;
-        CKEDITOR.instances[this.editor.id] = this.editor
-      })
+        CKEDITOR.instances[this.editor.id] = this.editor;
+      });
     });
     return this;
   };
