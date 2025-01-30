@@ -106,7 +106,7 @@ define([
       return CKEDITOR.create(this.$el[0], {
         dataIndentationChars: "",
         disableNativeSpellChecker: false,
-        versionCheck: false,
+        versionCheck:false,
         enterMode: CKEDITOR[Origin.constants.ckEditorEnterMode],
         entities: false,
         // htmlSupport: {
@@ -129,7 +129,7 @@ define([
           change: function () {
             this.trigger("change", this);
           }.bind(this),
-          instanceReady: function () {
+          instanceReady: function() {
             var writer = this.dataProcessor.writer;
             var elements = Object.keys(CKEDITOR.dtd.$block);
 
