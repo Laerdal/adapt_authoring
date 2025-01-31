@@ -75,7 +75,6 @@ define(function(require){
       Origin.router.navigateTo('editor/' + courseId + '/' + type + '/' + menuItemId + '/edit');
     },
 
-
     deleteItemPrompt: async function(event) {
       const currentUserRole = await Origin.getCurrentUserRole();
 

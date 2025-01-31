@@ -121,7 +121,6 @@ define(function(require){
       return [];
     },
 
-    
     deleteBlockPrompt: async function(event) {
       const currentUserRole = await Origin.getCurrentUserRole();
       if (currentUserRole === 'Authenticated User') {
