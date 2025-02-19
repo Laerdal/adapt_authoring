@@ -682,13 +682,36 @@ function ImportSource(req, done) {
       */
       if (type === 'course') {
         data = _.extend(data, { tags: formTags });
+        
+        // Define potential file paths to check
+        const filePaths = [
+          path.join(COURSE_ROOT_FOLDER, Constants.Folders.Source, Constants.Folders.Theme, plugindata.theme[0]._theme, Constants.Folders.Less, Constants.Filenames.CustomStyle),
+          path.join(COURSE_ROOT_FOLDER, Constants.Folders.Source, Constants.Folders.Theme, plugindata.theme[0]._theme, Constants.Folders.Less, '2-customStyles.less'),
+          path.join(COURSE_ROOT_FOLDER, Constants.Folders.Source, Constants.Folders.Theme, plugindata.theme[0]._theme, Constants.Folders.Less, 'zzzzz', '2-customStyles.less'),
+        ];
+      
+        // Check files sequentially
         try {
-          var contents = await fs.readFile(path.join(COURSE_ROOT_FOLDER, Constants.Folders.Source, Constants.Folders.Theme, plugindata.theme[0]._theme, 'less', Constants.Filenames.CustomStyle), 'utf8');
-          data = _.extend(data, { customStyle: contents.toString() });
-        } catch (e) {
-          if (e.code !== 'ENOENT') {
-            return reject(e);
+          let contents = '';
+          for (const filePath of filePaths) {
+            try {
+              contents = await fs.readFile(filePath, 'utf8');
+              if (contents && contents.trim().length > 0) {
+                break; // Found non-empty content
+              }
+            } catch (readError) {
+              if (readError.code !== 'ENOENT') {
+                throw readError; // Re-throw if not a file-not-found error
+              }
+              continue; // Try next file if current doesn't exist
+            }
           }
+          
+          if (contents && contents.trim().length > 0) {
+            data = _.extend(data, { customStyle: contents.toString() });
+          }
+        } catch (e) {
+          return reject(e);
         }
       }
       else if (type === 'config') {
