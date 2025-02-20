@@ -11,7 +11,7 @@ define(function (require) {
     });
 
     function openSupportLink() {
-        let SUPPORT_URL = 'https://laerdal.atlassian.net/jira/servicedesk/projects/AS/queues/custom/10';
+        let SUPPORT_URL = 'https://laerdal.atlassian.net/servicedesk/customer/portal/2';
         window.open(SUPPORT_URL);
     }
 });
