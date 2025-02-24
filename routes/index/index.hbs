@@ -6,7 +6,8 @@
     <link rel="stylesheet" href="css/adapt.css" />
     <link rel="stylesheet" href="font-awesome-4.5.0/css/font-awesome.min.css">
     <script type="text/javascript" src="modernizr.js"></script>
-		<link rel="stylesheet" href="https://cdn.ckeditor.com/ckeditor5/42.0.0/ckeditor5.css">
+		<script src="//cdn.ckeditor.com/4.17.0/full-all/ckeditor.js"></script>
+    <script type="text/javascript" src="https://laerdal-sandbox-335.atlassian.net/s/d41d8cd98f00b204e9800998ecf8427e-T/g2slup/b/0/c95134bc67d3a521bb3f4331beb9b804/_/download/batch/com.atlassian.jira.collector.plugin.jira-issue-collector-plugin:issuecollector/com.atlassian.jira.collector.plugin.jira-issue-collector-plugin:issuecollector.js?locale=en-US&collectorId=8f91a523"></script>
     {{#if isProduction}}
       <script type="text/javascript" src="require.js" data-main="js/origin.js{{#if dateStampAsString}}?{{dateStampAsString}}{{/if}}"></script>
     {{else}}
@@ -27,6 +28,11 @@
     <script async src='//www.google-analytics.com/analytics.js'></script>
     <!-- End Google Analytics -->
     {{/if}}
+    <style>
+      a#atlwdg-trigger {
+        left: calc(100% - 18px);
+      }
+    </style>
   </head>
   <body>
     <div id="app" class="app container">
