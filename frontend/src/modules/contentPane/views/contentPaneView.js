@@ -61,6 +61,9 @@ define(function(require) {
     resize: function() {
       var windowHeight = $(window).height();
       this.$el.height(windowHeight - this.$el.offset().top);
+      let headerHeight = $('.navigation').height() + $('.location-title').height();
+      (windowHeight <= this.el.scrollHeight + headerHeight) ? $('html').addClass('feedbackScrollPosition') : $('html').removeClass('feedbackScrollPosition');
+    
     },
 
     onScroll: function(e) {

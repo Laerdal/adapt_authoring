@@ -283,12 +283,18 @@ define(function(require){
 
     collapseAllArticles: function() {
       if (this.model.get('_isCollapsed') === true) return; 
-      this.model.set('_isCollapsed', true);
+      this.model.set('_isCollapsed', true);      
+      let windowHeight = $(window).height();
+      let headerHeight = $('.navigation').height() + $('.location-title').height();
+      (windowHeight <= this.el.scrollHeight + Math.round(headerHeight)) ? $('html').addClass('feedbackScrollPosition') : $('html').removeClass('feedbackScrollPosition');
     },
 
     expandAllArticles: function() {
       if (this.model.get('_isCollapsed') === false) return; 
       this.model.set('_isCollapsed', false);
+      let windowHeight = $(window).height();
+      let headerHeight = $('.navigation').height() + $('.location-title').height();
+      (windowHeight <= $('.contentPane').height() + Math.ceil(headerHeight)) ? $('html').addClass('feedbackScrollPosition') : $('html').removeClass('feedbackScrollPosition');
     },
 
     collapseArticle: function() {
