@@ -284,17 +284,13 @@ define(function(require){
     collapseAllArticles: function() {
       if (this.model.get('_isCollapsed') === true) return; 
       this.model.set('_isCollapsed', true);      
-      let windowHeight = $(window).height();
-      let headerHeight = $('.navigation').height() + $('.location-title').height();
-      (windowHeight <= this.el.scrollHeight + Math.round(headerHeight)) ? $('html').addClass('feedbackScrollPosition') : $('html').removeClass('feedbackScrollPosition');
+      this.checkScrollbarVisibility();
     },
 
     expandAllArticles: function() {
       if (this.model.get('_isCollapsed') === false) return; 
       this.model.set('_isCollapsed', false);
-      let windowHeight = $(window).height();
-      let headerHeight = $('.navigation').height() + $('.location-title').height();
-      (windowHeight <= $('.contentPane').height() + Math.ceil(headerHeight)) ? $('html').addClass('feedbackScrollPosition') : $('html').removeClass('feedbackScrollPosition');
+      this.checkScrollbarVisibility();
     },
 
     collapseArticle: function() {
@@ -307,6 +303,15 @@ define(function(require){
         duration = 0;
       }
       this.$('.article-content').velocity(shouldCollapse ? 'slideUp' : 'slideDown', duration);
+    },
+
+    checkScrollbarVisibility: function() {
+      setTimeout(() => {
+        const $container = $('.contentPane');
+        const hasScrollbar = $container[0].scrollHeight > $container[0].clientHeight;
+        hasScrollbar ? $('html').addClass('feedbackScrollPosition') : $('html').removeClass('feedbackScrollPosition');
+        console.log('Articles collapsed - Scrollbar visible:', hasScrollbar);
+      }, 250);
     }
 
   }, {
