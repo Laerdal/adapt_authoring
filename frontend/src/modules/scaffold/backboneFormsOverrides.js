@@ -102,6 +102,209 @@ define([
       return arr.map((value, index) => processEntry([index, value])[1])
     }
 
+    function AiAgentPlugin(editor) {
+
+  const balloon = editor.plugins.get('ContextualBalloon');
+
+  // DOM panel
+  const panelElement = document.createElement('div');
+  panelElement.classList.add('ai-agent-popup-panel');
+  panelElement.innerHTML = `
+    <div class="AiAgent">
+      <span id="closePopup">×</span>    
+      <label><svg viewBox="0 0 512 512" width="25px" height="25px" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" fill="#000000"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <title></title> <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd"> <g id="icon" fill="#000000" transform="translate(64.000000, 64.000000)"> <path d="M320,64 L320,320 L64,320 L64,64 L320,64 Z M171.749388,128 L146.817842,128 L99.4840387,256 L121.976629,256 L130.913039,230.977 L187.575039,230.977 L196.319607,256 L220.167172,256 L171.749388,128 Z M260.093778,128 L237.691519,128 L237.691519,256 L260.093778,256 L260.093778,128 Z M159.094727,149.47526 L181.409039,213.333 L137.135039,213.333 L159.094727,149.47526 Z M341.333333,256 L384,256 L384,298.666667 L341.333333,298.666667 L341.333333,256 Z M85.3333333,341.333333 L128,341.333333 L128,384 L85.3333333,384 L85.3333333,341.333333 Z M170.666667,341.333333 L213.333333,341.333333 L213.333333,384 L170.666667,384 L170.666667,341.333333 Z M85.3333333,0 L128,0 L128,42.6666667 L85.3333333,42.6666667 L85.3333333,0 Z M256,341.333333 L298.666667,341.333333 L298.666667,384 L256,384 L256,341.333333 Z M170.666667,0 L213.333333,0 L213.333333,42.6666667 L170.666667,42.6666667 L170.666667,0 Z M256,0 L298.666667,0 L298.666667,42.6666667 L256,42.6666667 L256,0 Z M341.333333,170.666667 L384,170.666667 L384,213.333333 L341.333333,213.333333 L341.333333,170.666667 Z M0,256 L42.6666667,256 L42.6666667,298.666667 L0,298.666667 L0,256 Z M341.333333,85.3333333 L384,85.3333333 L384,128 L341.333333,128 L341.333333,85.3333333 Z M0,170.666667 L42.6666667,170.666667 L42.6666667,213.333333 L0,213.333333 L0,170.666667 Z M0,85.3333333 L42.6666667,85.3333333 L42.6666667,128 L0,128 L0,85.3333333 Z" id="Combined-Shape"> </path> </g> </g> </g></svg> AI Assistant</label><br>
+      <textarea id="assistantTextArea" placeholder="Ask AI to edit or generate"></textarea>
+      <div id="loadingMsg"></div>
+      <div class='generatedResponse'></div>
+      <div>
+      <button class="btnAiAgent buttonSend" id="assistantSubmitBtn">Submit</button>
+      <button class="btnAiAgent buttonInsert" disabled id="assistantInsertBtn">Insert</button>
+      </div>
+    </div>
+  `;
+
+  const assistantTextArea = panelElement.querySelector('#assistantTextArea');
+  panelElement.querySelector('#closePopup').onclick = () => {
+    if (balloon.hasView(popupView)) {
+      balloon.remove(popupView);
+    }
+  };
+    
+  const closePopup = () => {
+    if (balloon.hasView(popupView)) {
+      balloon.remove(popupView);
+    }
+    assistantTextArea.disabled = false;
+    document.removeEventListener('mousedown', outsideClickHandler);
+  };
+
+    // Outside click to close
+  const outsideClickHandler = (event) => {
+    const balloonEl = balloon.view.element;
+    // Ensure balloon element and event target exist
+    if (!balloonEl || !balloonEl.contains(event.target)) {
+      closePopup();
+    }
+  };
+
+  document.addEventListener('mousedown', outsideClickHandler);
+
+  const popupView = {
+    element: panelElement,
+    render() {},
+    destroy() {}
+  };
+
+  editor.ui.componentFactory.add('customPopup', locale => {
+    const undoView = editor.ui.componentFactory.create('undo');
+    const ButtonView = undoView.constructor;
+
+    const button = new ButtonView(locale);
+    button.set({
+      label: 'AI Assistant',
+      icon: '<svg viewBox="0 0 512 512" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" fill="#000000"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <title></title> <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd"> <g id="icon" fill="#000000" transform="translate(64.000000, 64.000000)"> <path d="M320,64 L320,320 L64,320 L64,64 L320,64 Z M171.749388,128 L146.817842,128 L99.4840387,256 L121.976629,256 L130.913039,230.977 L187.575039,230.977 L196.319607,256 L220.167172,256 L171.749388,128 Z M260.093778,128 L237.691519,128 L237.691519,256 L260.093778,256 L260.093778,128 Z M159.094727,149.47526 L181.409039,213.333 L137.135039,213.333 L159.094727,149.47526 Z M341.333333,256 L384,256 L384,298.666667 L341.333333,298.666667 L341.333333,256 Z M85.3333333,341.333333 L128,341.333333 L128,384 L85.3333333,384 L85.3333333,341.333333 Z M170.666667,341.333333 L213.333333,341.333333 L213.333333,384 L170.666667,384 L170.666667,341.333333 Z M85.3333333,0 L128,0 L128,42.6666667 L85.3333333,42.6666667 L85.3333333,0 Z M256,341.333333 L298.666667,341.333333 L298.666667,384 L256,384 L256,341.333333 Z M170.666667,0 L213.333333,0 L213.333333,42.6666667 L170.666667,42.6666667 L170.666667,0 Z M256,0 L298.666667,0 L298.666667,42.6666667 L256,42.6666667 L256,0 Z M341.333333,170.666667 L384,170.666667 L384,213.333333 L341.333333,213.333333 L341.333333,170.666667 Z M0,256 L42.6666667,256 L42.6666667,298.666667 L0,298.666667 L0,256 Z M341.333333,85.3333333 L384,85.3333333 L384,128 L341.333333,128 L341.333333,85.3333333 Z M0,170.666667 L42.6666667,170.666667 L42.6666667,213.333333 L0,213.333333 L0,170.666667 Z M0,85.3333333 L42.6666667,85.3333333 L42.6666667,128 L0,128 L0,85.3333333 Z" id="Combined-Shape"> </path> </g> </g> </g></svg>',
+      tooltip: true,
+      class: 'ai-button',
+    });
+
+    button.on('execute', () => {
+      if (!balloon.hasView(popupView)) {
+        balloon.add({
+          view: popupView,
+          position: {
+            target: editor.ui.view.editable.element
+          }
+        });
+
+        setTimeout(() => {
+          const assistantInput = panelElement.querySelector('#assistantTextArea');
+          const assistantSubmitBtn = panelElement.querySelector('#assistantSubmitBtn');
+          const assistantInsertBtn = panelElement.querySelector('#assistantInsertBtn');
+          const loading = panelElement.querySelector('#loadingMsg');
+          const generateResponse = panelElement.querySelector('.generatedResponse');
+          let aiTitle = panelElement.querySelector('.aiTitle');
+
+          // ✅ Reset popup content each time it's opened
+          assistantInput.value = '';
+          loadingMsg.innerText = '';
+          loadingMsg.style.display = 'none';
+          generateResponse.innerHTML = '';
+          generateResponse.style.display = 'none';
+          if (aiTitle) {
+            aiTitle.style.display = 'none';
+          }
+          assistantSubmitBtn.disabled = false;
+          assistantInsertBtn.disabled = true;
+          
+
+          // Event listener for Send
+          if (!assistantSubmitBtn._listenerAttached) {
+            assistantSubmitBtn.addEventListener('click', async () => {
+            const prompt = assistantInput.value.trim();
+            if (!prompt) return;
+
+            // Show loading message
+            loadingMsg.innerText = 'Loading response from ChatGPT...';
+            loadingMsg.style.display = 'block';
+          // Disable the send button while waiting for response
+            assistantSubmitBtn.disabled = true;
+            // Hide the response initially
+            generateResponse.style.display = 'none';
+            generateResponse.innerHTML = '';
+
+            try {
+              const response = await fetch('https://swedencentral.api.cognitive.microsoft.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer BFnqoouwofssKH9XwH88loeWMiKzi6TuCCZ4sbyE1xJV0tGKwPhRJQQJ99BBACfhMk5XJ3w3AAAAACOGeO4c'
+                  },
+                body: JSON.stringify({
+                  messages: [{ role: 'user', content: prompt }]
+                })
+              });
+
+              const result = await response.json();
+              const reply = result.choices[0].message.content;
+              const formattedHTML = simpleMarkdownToHTML(reply);
+
+              // Show the response
+              let titleResponse = `<h1 class='aiTitle'>AI Response</h1>`;
+              if (!generateResponse.previousElementSibling || generateResponse.previousElementSibling.tagName !== 'H1') {
+                generateResponse.insertAdjacentHTML('beforebegin', titleResponse);
+              }
+              generateResponse.innerHTML = formattedHTML;
+              generateResponse.style.display = 'block';
+              assistantInput.disabled = true;
+              let aiTitleResponse = panelElement.querySelector('.aiTitle');
+              if (aiTitleResponse) {
+                aiTitleResponse.style.display = 'block';
+              }
+
+              // Hide the loading message
+              loadingMsg.style.display = 'none';
+              assistantInsertBtn.disabled = false;
+              // Bind insert action
+              assistantInsertBtn.onclick = () => {
+              if (!formattedHTML) return;
+              try {
+                editor.model.change(() => {
+                  const viewFragment = editor.data.processor.toView(formattedHTML);
+                  const modelFragment = editor.data.toModel(viewFragment);
+                  editor.model.insertContent(modelFragment);
+                });
+
+                closePopup();
+              } catch (err) {
+                console.error('Error inserting HTML content into CKEditor:', err);
+              }
+            };
+            } catch (err) {
+              console.error('ChatGPT error:', err);
+              loadingMsg.innerText = 'Error fetching response.';
+            }
+          });
+          assistantSubmitBtn._listenerAttached = true;
+          }
+
+          document.addEventListener('mousedown', outsideClickHandler);
+        }, 0);
+      } else {
+        balloon.remove(popupView);
+        closePopup();
+      }
+    });
+
+    return button;
+  });
+
+
+}
+
+function simpleMarkdownToHTML(markdown) {
+  let html = markdown;
+
+  // Convert ### Headings
+  html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+
+  // Convert bold text
+  html = html.replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>');
+
+  // Convert numbered lists (1., 2., etc.)
+  html = html.replace(/^\d+\.\s+(.*)/gim, '<li>$1</li>');
+  html = html.replace(/(<li>.*<\/li>)/gim, '<ol>$1</ol>'); // wrap in <ol>
+
+  // Convert unordered lists (- item)
+  html = html.replace(/^- (.*)/gim, '<li>$1</li>');
+  html = html.replace(/(<li>.*<\/li>)/gim, '<ul>$1</ul>'); // wrap in <ul>
+
+  // Convert line breaks
+  html = html.replace(/\n/g, '<br>');
+
+  return html.trim();
+}
+
+
     until(isAttached(this.$el)).then(() => {
       return CKEDITOR.create(this.$el[0], {
         dataIndentationChars: "",
@@ -109,6 +312,7 @@ define([
         versionCheck:false,
         enterMode: CKEDITOR[Origin.constants.ckEditorEnterMode],
         entities: false,
+        extraPlugins: [ AiAgentPlugin ],
         // htmlSupport: {
         //   // Convert all allow/disallow strings to regexp, as config is json only
         //   allow: convertStringsToRegExDeep((Origin.constants.ckEditorHtmlSupport && Origin.constants.ckEditorHtmlSupport.allow) || []),
@@ -180,7 +384,7 @@ define([
             "|",
             "specialCharacters",
             "insertTable",
-            "insertTableLayout",
+            "insertTableLayout","|", "aiAgent", "|", "customPopup"
           ],
           shouldNotGroupWhenFull: true,
         },
