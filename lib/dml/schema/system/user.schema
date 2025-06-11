@@ -46,8 +46,27 @@
       "required": true,
       "default": 0
     },
-     "metadata": {
+    "metadata": {
       "type" : "object"
+    },
+    "sessions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "sessionStartTime": {
+          "type": "string",
+          "format": "date-time"
+          },
+          "sessionEndTime": {
+          "type": "string",
+          "format": "date-time"
+          },
+          "sessionDuration": {
+          "type": "number"
+          }
+        }
+      }
     }
   }
 }
