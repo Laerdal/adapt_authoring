@@ -18,7 +18,8 @@ define(['require', 'backbone', 'core/origin'], function(require, Backbone, Origi
       var postData = {
         email: username,
         password: password,
-        shouldPersist: shouldPersist
+        shouldPersist: shouldPersist,
+        sessionStartTime: new Date().toISOString()
       };
       $.post('api/login', postData, _.bind(function (jqXHR, textStatus, errorThrown) {
         this.set({
@@ -36,7 +37,11 @@ define(['require', 'backbone', 'core/origin'], function(require, Backbone, Origi
     },
 
     logout: function () {
-      $.post('api/logout', _.bind(function() {
+      var postData = {
+        email: this.get('email'),
+        sessionEndTime: new Date().toISOString()
+      };
+      $.post('api/logout', postData, _.bind(function() {
         // revert to the defaults
         this.set(this.defaults);
         Origin.trigger('login:changed');
