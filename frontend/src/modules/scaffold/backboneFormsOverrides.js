@@ -196,8 +196,8 @@ define([
       async function launchAIAssistant(editor, selectedText, promptInstruction) {
         if (!editor.ui.componentFactory.has('AIAssistant')) return;
         
-        // const command = editor.ui.componentFactory.create('AIAssistant');
-        // command.fire('execute');
+        const command = editor.ui.componentFactory.create('AIAssistant');
+        command.fire('execute');
         
         setTimeout(async () => {
           const panelElement = document.querySelector('.ai-agent-popup-panel');
@@ -251,7 +251,7 @@ define([
           elements.loading.style.display = 'none';
           
           // Setup button handlers
-          // setupButtonHandler(elements, editor, response, promptInstruction, selectedText);
+          setupButtonHandler(elements, editor, response, promptInstruction, selectedText);
         }, 100);
       }
       
@@ -942,7 +942,7 @@ define([
             "|",
             "specialCharacters",
             "insertTable",
-            "insertTableLayout","|", "aiAgent", "|", "customPopup"
+            "insertTableLayout","|", "AIPreDefinedPromptsOption", "|", "AIAssistant"
           ],
           shouldNotGroupWhenFull: true,
         },
