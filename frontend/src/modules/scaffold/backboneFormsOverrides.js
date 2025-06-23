@@ -102,206 +102,761 @@ define([
       return arr.map((value, index) => processEntry([index, value])[1])
     }
 
-    function AiAgentPlugin(editor) {
+    // AI Command predefined prompts
+    function AiPreDefinedPromptsPlugin(editor) {
+      const balloon = editor.plugins.get('ContextualBalloon');
+      
+      // DOM panel
+      const panelElement = document.createElement('div');
+      panelElement.classList.add('ai-agent-popup-select');
+            
+      // Initialize panel HTML
+      panelElement.innerHTML = `
+        <div class="AiAgent">
+          <select class="ai-select-prompt" id="aiSelectPrompt">
+            <option value="select">Select a prompt</option>
+            <option value="ImproveWriting">Improve Writing</option>
+            <option value="makeShorter">Make shorter</option>
+            <option value="makeLonger">Make longer</option>
+            <option value="spellChecker">Spell Checker</option>
+          </select>
+        </div>
+      `;
+      
+      // Define close popup functionality
+      const closePopup = () => {
+        if (balloon.hasView(popupView)) {
+          balloon.remove(popupView);
+          document.removeEventListener('mousedown', outsideClickHandler);
+          
+          // Reset select element to default
+          const selectElement = panelElement.querySelector('#aiSelectPrompt');
+          if (selectElement) selectElement.value = 'select';
+        }
+      };
+      
+      // Outside click handler
+      const outsideClickHandler = (event) => {
+        if (balloon.view.element && !balloon.view.element.contains(event.target)) {
+          closePopup();
+        }
+      };
 
-  const balloon = editor.plugins.get('ContextualBalloon');
+      // Define popup view
+      const popupView = {
+        element: panelElement,
+        render() {
+          panelElement.querySelector('#aiSelectPrompt').onchange = async (event) => {
+            const selectedPrompt = event.target.value;
+            if (selectedPrompt !== 'select') {
+              await AIPreDefinedPrompt(selectedPrompt, balloon, editor);
+              closePopup();
+            }
+          };
+        },
+        destroy() {}
+      };      
+      
+      // Handle predefined prompts
+      async function AIPreDefinedPrompt(promptType, balloon, editor) {
+        const selection = window.getSelection();
+        let selectedText = selection.toString();
+        // Check if the selection is empty and use the current cursor position
+        if(selectedText == '' || selectedText == null) {
+            // Get the cursor position information
+            const selectionCursor = editor.model.document.selection;
+            const cursorPosition = selectionCursor.getLastPosition();
+            let cursorLine = null;
+            const viewPosition = editor.editing.mapper.toViewPosition(cursorPosition);
+            const domPosition = editor.editing.view.domConverter.viewPositionToDom(viewPosition);
+            if (domPosition && domPosition.parent) {
+              cursorLine = domPosition.parent;
+            }
 
-  // DOM panel
-  const panelElement = document.createElement('div');
-  panelElement.classList.add('ai-agent-popup-panel');
-  panelElement.innerHTML = `
-    <div class="AiAgent">
-      <span id="closePopup">×</span>    
-      <label><svg viewBox="0 0 512 512" width="25px" height="25px" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" fill="#000000"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <title></title> <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd"> <g id="icon" fill="#000000" transform="translate(64.000000, 64.000000)"> <path d="M320,64 L320,320 L64,320 L64,64 L320,64 Z M171.749388,128 L146.817842,128 L99.4840387,256 L121.976629,256 L130.913039,230.977 L187.575039,230.977 L196.319607,256 L220.167172,256 L171.749388,128 Z M260.093778,128 L237.691519,128 L237.691519,256 L260.093778,256 L260.093778,128 Z M159.094727,149.47526 L181.409039,213.333 L137.135039,213.333 L159.094727,149.47526 Z M341.333333,256 L384,256 L384,298.666667 L341.333333,298.666667 L341.333333,256 Z M85.3333333,341.333333 L128,341.333333 L128,384 L85.3333333,384 L85.3333333,341.333333 Z M170.666667,341.333333 L213.333333,341.333333 L213.333333,384 L170.666667,384 L170.666667,341.333333 Z M85.3333333,0 L128,0 L128,42.6666667 L85.3333333,42.6666667 L85.3333333,0 Z M256,341.333333 L298.666667,341.333333 L298.666667,384 L256,384 L256,341.333333 Z M170.666667,0 L213.333333,0 L213.333333,42.6666667 L170.666667,42.6666667 L170.666667,0 Z M256,0 L298.666667,0 L298.666667,42.6666667 L256,42.6666667 L256,0 Z M341.333333,170.666667 L384,170.666667 L384,213.333333 L341.333333,213.333333 L341.333333,170.666667 Z M0,256 L42.6666667,256 L42.6666667,298.666667 L0,298.666667 L0,256 Z M341.333333,85.3333333 L384,85.3333333 L384,128 L341.333333,128 L341.333333,85.3333333 Z M0,170.666667 L42.6666667,170.666667 L42.6666667,213.333333 L0,213.333333 L0,170.666667 Z M0,85.3333333 L42.6666667,85.3333333 L42.6666667,128 L0,128 L0,85.3333333 Z" id="Combined-Shape"> </path> </g> </g> </g></svg> AI Assistant</label><br>
-      <textarea id="assistantTextArea" placeholder="Ask AI to edit or generate"></textarea>
-      <div id="loadingMsg"></div>
-      <div class='generatedResponse'></div>
-      <div>
-      <button class="btnAiAgent buttonSend" id="assistantSubmitBtn">Submit</button>
-      <button class="btnAiAgent buttonInsert" disabled id="assistantInsertBtn">Insert</button>
-      </div>
-    </div>
-  `;
+            // Check if we have either selected text or a cursor position
+            if ((!selectedText || selectedText.trim() === '') && cursorLine) {
+              // If no selection but we have a cursor line, get text from current paragraph/element
+              const currentLineText = cursorLine.textContent || '';
+              if (currentLineText.trim() !== '') {
+                // Use the current line text instead                
+                selectedText = currentLineText;
+              }
+            }
+          }
+        
+        if (!selectedText) return;
+        
+        const promptInstruction = apiConfig.prompts[promptType] || apiConfig.prompts.spellChecker;
+        
+        // Launch AI Assistant with the selected prompt
+        await launchAIAssistant(editor, selectedText, promptInstruction);
+      }
+      
+      // Launch AI Assistant
+      async function launchAIAssistant(editor, selectedText, promptInstruction) {
+        if (!editor.ui.componentFactory.has('AIAssistant')) return;
+        
+        const command = editor.ui.componentFactory.create('AIAssistant');
+        command.fire('execute');
+        
+        setTimeout(async () => {
+          const panelElement = document.querySelector('.ai-agent-popup-panel');
+          if (!panelElement) return;
+          
+          const elements = {
+            input: panelElement.querySelector('#assistantTextArea'),
+            submitBtn: panelElement.querySelector('#assistantSubmitBtn'),
+            insertBtn: panelElement.querySelector('#assistantInsertBtn'),
+            replaceBtn: panelElement.querySelector('#assistantReplaceBtn'),
+            tryAgainBtn: panelElement.querySelector('#assistantTryAgainBtn'),
+            loading: panelElement.querySelector('#loadingMsg'),
+            response: panelElement.querySelector('.generatedResponse')
+          };
+          
+          // Show loading state
+          elements.input.value = '';
+          elements.input.disabled = true;
+          elements.loading.innerText = 'Loading response from ChatGPT...';
+          elements.loading.style.display = 'block';
+          elements.submitBtn.style.display = 'none';
+          // Only show .aiTitle if it exists, otherwise do nothing
+          var $aiTitle = $('.aiTitle');
+          if ($aiTitle.length) {
+            $aiTitle.hide();
+          }
+          // Get AI response
+          const response = await getAIAssistantResponse(selectedText, promptInstruction);
+          
+          // Process and display response
+          const formattedHTML = simpleMarkdownToHTML(response);
+          elements.response.style.display = 'block';
+          elements.insertBtn.disabled = false;          
+          elements.replaceBtn.disabled = false;
+          elements.tryAgainBtn.disabled = false;
+          elements.insertBtn.style.display = 'inline-block';
+          elements.tryAgainBtn.style.display = 'inline-block';
+          elements.replaceBtn.style.display = 'inline-block';
 
-  const assistantTextArea = panelElement.querySelector('#assistantTextArea');
-  panelElement.querySelector('#closePopup').onclick = () => {
-    if (balloon.hasView(popupView)) {
-      balloon.remove(popupView);
-    }
-  };
-    
-  const closePopup = () => {
-    if (balloon.hasView(popupView)) {
-      balloon.remove(popupView);
-    }
-    assistantTextArea.disabled = false;
-    document.removeEventListener('mousedown', outsideClickHandler);
-  };
-
-    // Outside click to close
-  const outsideClickHandler = (event) => {
-    const balloonEl = balloon.view.element;
-    // Ensure balloon element and event target exist
-    if (!balloonEl || !balloonEl.contains(event.target)) {
-      closePopup();
-    }
-  };
-
-  document.addEventListener('mousedown', outsideClickHandler);
-
-  const popupView = {
-    element: panelElement,
-    render() {},
-    destroy() {}
-  };
-
-  editor.ui.componentFactory.add('customPopup', locale => {
-    const undoView = editor.ui.componentFactory.create('undo');
-    const ButtonView = undoView.constructor;
-
-    const button = new ButtonView(locale);
-    button.set({
-      label: 'AI Assistant',
-      icon: '<svg viewBox="0 0 512 512" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" fill="#000000"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <title></title> <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd"> <g id="icon" fill="#000000" transform="translate(64.000000, 64.000000)"> <path d="M320,64 L320,320 L64,320 L64,64 L320,64 Z M171.749388,128 L146.817842,128 L99.4840387,256 L121.976629,256 L130.913039,230.977 L187.575039,230.977 L196.319607,256 L220.167172,256 L171.749388,128 Z M260.093778,128 L237.691519,128 L237.691519,256 L260.093778,256 L260.093778,128 Z M159.094727,149.47526 L181.409039,213.333 L137.135039,213.333 L159.094727,149.47526 Z M341.333333,256 L384,256 L384,298.666667 L341.333333,298.666667 L341.333333,256 Z M85.3333333,341.333333 L128,341.333333 L128,384 L85.3333333,384 L85.3333333,341.333333 Z M170.666667,341.333333 L213.333333,341.333333 L213.333333,384 L170.666667,384 L170.666667,341.333333 Z M85.3333333,0 L128,0 L128,42.6666667 L85.3333333,42.6666667 L85.3333333,0 Z M256,341.333333 L298.666667,341.333333 L298.666667,384 L256,384 L256,341.333333 Z M170.666667,0 L213.333333,0 L213.333333,42.6666667 L170.666667,42.6666667 L170.666667,0 Z M256,0 L298.666667,0 L298.666667,42.6666667 L256,42.6666667 L256,0 Z M341.333333,170.666667 L384,170.666667 L384,213.333333 L341.333333,213.333333 L341.333333,170.666667 Z M0,256 L42.6666667,256 L42.6666667,298.666667 L0,298.666667 L0,256 Z M341.333333,85.3333333 L384,85.3333333 L384,128 L341.333333,128 L341.333333,85.3333333 Z M0,170.666667 L42.6666667,170.666667 L42.6666667,213.333333 L0,213.333333 L0,170.666667 Z M0,85.3333333 L42.6666667,85.3333333 L42.6666667,128 L0,128 L0,85.3333333 Z" id="Combined-Shape"> </path> </g> </g> </g></svg>',
-      tooltip: true,
-      class: 'ai-button',
-    });
-
-    button.on('execute', () => {
-      if (!balloon.hasView(popupView)) {
-        balloon.add({
-          view: popupView,
-          position: {
-            target: editor.ui.view.editable.element
+          // Add title
+            // Remove any existing .aiTitle before adding a new one
+            const prevTitle = elements.response.previousElementSibling;
+            if (prevTitle && prevTitle.classList && prevTitle.classList.contains('aiTitle')) {
+              prevTitle.remove();
+            }
+            elements.response.insertAdjacentHTML('beforebegin', '<h1 class="aiTitle">AI Response</h1>');
+          
+          // Display formatted response
+          $('.aiTitle').show();
+          elements.response.innerHTML = formattedHTML;
+          elements.loading.style.display = 'none';
+          
+          // Setup button handlers
+          setupButtonHandler(elements, editor, response, promptInstruction, selectedText);
+        }, 100);
+      }
+      
+      
+      // Set up event listeners for editor content changes
+      editor.model.document.on('change:data', () => toggleAiButtonState(editor));
+      editor.on('ready', () => toggleAiButtonState(editor));
+      setTimeout(() => toggleAiButtonState(editor), 100);
+      
+      // Register toolbar button
+      editor.ui.componentFactory.add('AIPreDefinedPromptsOption', locale => {
+        const undoView = editor.ui.componentFactory.create('undo');
+        const ButtonView = undoView.constructor;
+        
+        const button = new ButtonView(locale);
+        button.set({
+          label: 'AI Commands',
+          icon: '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="256" height="256" viewBox="0 0 256 256" xml:space="preserve"><g style="stroke: none; stroke-width: 0; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 10; fill: none; fill-rule: nonzero; opacity: 1;" transform="translate(1.4065934065933874 254.59340659340654) rotate(-90) scale(2.81 2.81)"><path d="M 70.15 34.112 c -1.88 -1.88 -2.35 -4.751 -1.167 -7.132 l 4.892 -9.845 c 0.089 -0.179 0.054 -0.395 -0.088 -0.537 c -0.142 -0.142 -0.357 -0.177 -0.537 -0.088 l -9.845 4.892 c -2.381 1.183 -5.252 0.714 -7.132 -1.167 l -7.558 -7.558 c -0.142 -0.142 -0.36 -0.177 -0.54 -0.086 c -0.18 0.091 -0.281 0.287 -0.25 0.486 l 1.615 10.611 c 0.4 2.629 -0.923 5.219 -3.287 6.436 l -9.621 4.952 c -0.178 0.092 -0.277 0.287 -0.247 0.484 c 0.03 0.199 0.183 0.355 0.381 0.389 l 10.763 1.868 c 0.173 0.03 0.336 0.085 0.503 0.128 L 1.299 84.676 c -1.218 1.218 -1.218 3.192 0 4.41 C 1.908 89.695 2.706 90 3.504 90 s 1.596 -0.305 2.205 -0.914 l 46.732 -46.732 c 0.044 0.168 0.098 0.33 0.128 0.503 l 1.867 10.763 c 0.017 0.097 0.063 0.184 0.13 0.25 c 0.069 0.069 0.158 0.116 0.259 0.131 c 0.198 0.031 0.393 -0.069 0.484 -0.247 l 4.952 -9.621 c 1.217 -2.364 3.807 -3.687 6.436 -3.287 l 10.611 1.615 c 0.2 0.03 0.396 -0.071 0.487 -0.251 c 0.091 -0.18 0.056 -0.398 -0.086 -0.54 L 70.15 34.112 z" style="stroke: none; stroke-width: 1; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 10; fill: rgb(0,0,0); fill-rule: nonzero; opacity: 1;" transform=" matrix(1 0 0 1 0 0) " stroke-linecap="round"/><path d="M 89.311 27.791 c -0.742 -1.666 -2.694 -2.414 -4.359 -1.672 l -8.68 3.867 c 0 0 9.208 2.348 9.208 2.348 C 88.033 33.072 90.488 30.219 89.311 27.791 z" style="stroke: none; stroke-width: 1; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 10; fill: rgb(0,0,0); fill-rule: nonzero; opacity: 1;" transform=" matrix(1 0 0 1 0 0) " stroke-linecap="round"/><path d="M 59.629 13.344 l 3.867 -8.68 c 1.158 -2.392 -1.24 -5.294 -3.832 -4.542 c -1.767 0.451 -2.834 2.248 -2.383 4.015 L 59.629 13.344 z" style="stroke: none; stroke-width: 1; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 10; fill: rgb(0,0,0); fill-rule: nonzero; opacity: 1;" transform=" matrix(1 0 0 1 0 0) " stroke-linecap="round"/><path d="M 66.317 46.626 c 0 0 -0.113 9.722 -0.113 9.722 c -0.113 2.627 3.178 4.34 5.262 2.677 c 1.457 -1.088 1.756 -3.151 0.668 -4.608 L 66.317 46.626 z" style="stroke: none; stroke-width: 1; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 10; fill: rgb(0,0,0); fill-rule: nonzero; opacity: 1;" transform=" matrix(1 0 0 1 0 0) " stroke-linecap="round"/><path d="M 32.517 22.662 l 9.722 -0.113 c 0 0 -7.791 -5.817 -7.791 -5.817 c -2.056 -1.638 -5.379 0.012 -5.262 2.676 C 29.208 21.226 30.699 22.683 32.517 22.662 z" style="stroke: none; stroke-width: 1; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 10; fill: rgb(0,0,0); fill-rule: nonzero; opacity: 1;" transform=" matrix(1 0 0 1 0 0) " stroke-linecap="round"/></g></svg>',
+          tooltip: true,
+          class: 'ai-predefined-button'
+        });
+        
+        button.on('execute', () => {
+          if (!balloon.hasView(popupView)) {
+            balloon.add({
+              view: popupView,
+              position: {
+                target: editor.ui.view.editable.element
+              }
+            });
+            document.addEventListener('mousedown', outsideClickHandler);
+          } else {
+            closePopup();
           }
         });
+        
+        return button;
+      });
+   
+    }
 
-        setTimeout(() => {
-          const assistantInput = panelElement.querySelector('#assistantTextArea');
-          const assistantSubmitBtn = panelElement.querySelector('#assistantSubmitBtn');
-          const assistantInsertBtn = panelElement.querySelector('#assistantInsertBtn');
-          const loading = panelElement.querySelector('#loadingMsg');
-          const generateResponse = panelElement.querySelector('.generatedResponse');
-          let aiTitle = panelElement.querySelector('.aiTitle');
+    
+      // Check if editor is empty
+      function isCKEditorEmpty(editor) {
+        const data = editor.getData().replace(/\s/g, '');
+        const emptyPatterns = ['', '<p></p>', '<p>&nbsp;</p>', '<p><br></p>', '<div></div>', '<div>&nbsp;</div>', '<div><br></div>'];
+        return !data || emptyPatterns.includes(data) || data.replace(/<p>(&nbsp;|<br>|)<\/p>/g, '').length === 0;
+      }
+      
+      // Toggle AI button state based on editor content
+      function toggleAiButtonState(editor) {
+        const aiButton = document.querySelector('.ai-predefined-button');
+        if (aiButton) {
+          aiButton.classList.toggle('ck-disabled', isCKEditorEmpty(editor));
+        }
+      }
 
-          // ✅ Reset popup content each time it's opened
-          assistantInput.value = '';
-          loadingMsg.innerText = '';
-          loadingMsg.style.display = 'none';
-          generateResponse.innerHTML = '';
-          generateResponse.style.display = 'none';
-          if (aiTitle) {
-            aiTitle.style.display = 'none';
-          }
-          assistantSubmitBtn.disabled = false;
-          assistantInsertBtn.disabled = true;
-          
-
-          // Event listener for Send
-          if (!assistantSubmitBtn._listenerAttached) {
-            assistantSubmitBtn.addEventListener('click', async () => {
-            const prompt = assistantInput.value.trim();
-            if (!prompt) return;
-
-            // Show loading message
-            loadingMsg.innerText = 'Loading response from ChatGPT...';
-            loadingMsg.style.display = 'block';
-          // Disable the send button while waiting for response
-            assistantSubmitBtn.disabled = true;
-            // Hide the response initially
-            generateResponse.style.display = 'none';
-            generateResponse.innerHTML = '';
-
-            try {
-              const response = await fetch('https://swedencentral.api.cognitive.microsoft.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2025-01-01-preview', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': 'Bearer BFnqoouwofssKH9XwH88loeWMiKzi6TuCCZ4sbyE1xJV0tGKwPhRJQQJ99BBACfhMk5XJ3w3AAAAACOGeO4c'
-                  },
-                body: JSON.stringify({
-                  messages: [{ role: 'user', content: prompt }]
-                })
-              });
-
-              const result = await response.json();
-              const reply = result.choices[0].message.content;
-              const formattedHTML = simpleMarkdownToHTML(reply);
-
-              // Show the response
-              let titleResponse = `<h1 class='aiTitle'>AI Response</h1>`;
-              if (!generateResponse.previousElementSibling || generateResponse.previousElementSibling.tagName !== 'H1') {
-                generateResponse.insertAdjacentHTML('beforebegin', titleResponse);
-              }
-              generateResponse.innerHTML = formattedHTML;
-              generateResponse.style.display = 'block';
-              assistantInput.disabled = true;
-              let aiTitleResponse = panelElement.querySelector('.aiTitle');
-              if (aiTitleResponse) {
-                aiTitleResponse.style.display = 'block';
-              }
-
-              // Hide the loading message
-              loadingMsg.style.display = 'none';
-              assistantInsertBtn.disabled = false;
-              // Bind insert action
-              assistantInsertBtn.onclick = () => {
-              if (!formattedHTML) return;
-              try {
-                editor.model.change(() => {
-                  const viewFragment = editor.data.processor.toView(formattedHTML);
-                  const modelFragment = editor.data.toModel(viewFragment);
-                  editor.model.insertContent(modelFragment);
-                });
-
-                closePopup();
-              } catch (err) {
-                console.error('Error inserting HTML content into CKEditor:', err);
-              }
-            };
-            } catch (err) {
-              console.error('ChatGPT error:', err);
-              loadingMsg.innerText = 'Error fetching response.';
+    // AI Agent Plugin
+    function AiAgentPlugin(editor, promptResponse) {
+      const balloon = editor.plugins.get('ContextualBalloon');
+      
+      // Create panel element
+      const panelElement = document.createElement('div');
+      panelElement.classList.add('ai-agent-popup-panel');
+      
+      // Initialize panel HTML
+      panelElement.innerHTML = `
+        <div class="AiAgent">
+          <span id="closePopup">×</span>    
+          <label><svg viewBox="0 0 512 512" width="25px" height="25px" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" fill="#000000"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <title></title> <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd"> <g id="icon" fill="#000000" transform="translate(32.000000, 32.000000)"> <path d="M320,64 L320,320 L64,320 L64,64 L320,64 Z M171.749388,128 L146.817842,128 L99.4840387,256 L121.976629,256 L130.913039,230.977 L187.575039,230.977 L196.319607,256 L220.167172,256 L171.749388,128 Z M260.093778,128 L237.691519,128 L237.691519,256 L260.093778,256 L260.093778,128 Z M159.094727,149.47526 L181.409039,213.333 L137.135039,213.333 L159.094727,149.47526 Z M341.333333,256 L384,256 L384,298.666667 L341.333333,298.666667 L341.333333,256 Z M85.3333333,341.333333 L128,341.333333 L128,384 L85.3333333,384 L85.3333333,341.333333 Z M170.666667,341.333333 L213.333333,341.333333 L213.333333,384 L170.666667,384 L170.666667,341.333333 Z M85.3333333,0 L128,0 L128,42.6666667 L85.3333333,42.6666667 L85.3333333,0 Z M256,341.333333 L298.666667,341.333333 L298.666667,384 L256,384 L256,341.333333 Z M170.666667,0 L213.333333,0 L213.333333,42.6666667 L170.666667,42.6666667 L170.666667,0 Z M256,0 L298.666667,0 L298.666667,42.6666667 L256,42.6666667 L256,0 Z M341.333333,170.666667 L384,170.666667 L384,213.333333 L341.333333,213.333333 L341.333333,170.666667 Z M0,256 L42.6666667,256 L42.6666667,298.666667 L0,298.666667 L0,256 Z M341.333333,85.3333333 L384,85.3333333 L384,128 L341.333333,128 L341.333333,85.3333333 Z M0,170.666667 L42.6666667,170.666667 L42.6666667,213.333333 L0,213.333333 L0,170.666667 Z M0,85.3333333 L42.6666667,85.3333333 L42.6666667,128 L0,128 L0,85.3333333 Z" id="Combined-Shape"> </path> </g> </g> </g></svg> AI Assistant</label><br>
+          <textarea id="assistantTextArea" placeholder="Ask AI to edit or generate"></textarea>
+          <div id="loadingMsg"></div>
+          <div class='generatedResponse'></div>
+          <div class="aiButtons">
+            <button class="btnAiAgent buttonSend" id="assistantSubmitBtn">Submit</button>
+            <button class="btnAiAgent buttonInsert" disabled id="assistantInsertBtn">Insert</button>
+            <button class="btnAiAgent buttonReplace" disabled id="assistantReplaceBtn">Replace</button>
+            <button class="btnAiAgent buttonTryAgain" disabled id="assistantTryAgainBtn">Try Again</button>
+          </div>
+        </div>
+      `;
+      
+      // Close popup functionality
+      const closePopup = () => {
+        if (balloon.hasView(popupView)) {
+          balloon.remove(popupView);
+        }
+        
+        // Clean up selection markers
+        document.querySelectorAll('.ai-selected-text').forEach(el => {
+          el.classList.remove('ai-selected-text');
+          if (el.tagName.toLowerCase() === 'span') {
+            const content = el.textContent;
+            const parent = el.parentNode;
+            if (parent) {
+              const textNode = document.createTextNode(content);
+              parent.replaceChild(textNode, el);
             }
-          });
-          assistantSubmitBtn._listenerAttached = true;
           }
+        });
+        
+        // Reset state
+        panelElement.querySelector('#assistantTextArea').disabled = false;
+        document.removeEventListener('mousedown', outsideClickHandler);
+      };
+      
+      // Close button handler
+      panelElement.querySelector('#closePopup').onclick = closePopup;
+      
+      // Outside click handler
+      const outsideClickHandler = (event) => {
+        const balloonEl = balloon.view.element;
+        if (balloonEl && !balloonEl.contains(event.target)) {
+          closePopup();
+        }
+      };
 
+      // Define popup view
+      const popupView = {
+        element: panelElement,
+        render() {},
+        destroy() {}
+      };
+
+      editor.closePopup = closePopup;
+
+      // Register toolbar button
+      editor.ui.componentFactory.add('AIAssistant', locale => {
+        const undoView = editor.ui.componentFactory.create('undo');
+        const ButtonView = undoView.constructor;
+        
+        const button = new ButtonView(locale);
+        button.set({
+          label: 'AI Assistant',
+          icon: '<svg viewBox="0 0 512 512" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" fill="#000000"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <title></title> <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd"> <g id="icon" fill="#000000" transform="translate(32.000000, 32.000000)"> <path d="M320,64 L320,320 L64,320 L64,64 L320,64 Z M171.749388,128 L146.817842,128 L99.4840387,256 L121.976629,256 L130.913039,230.977 L187.575039,230.977 L196.319607,256 L220.167172,256 L171.749388,128 Z M260.093778,128 L237.691519,128 L237.691519,256 L260.093778,256 L260.093778,128 Z M159.094727,149.47526 L181.409039,213.333 L137.135039,213.333 L159.094727,149.47526 Z M341.333333,256 L384,256 L384,298.666667 L341.333333,298.666667 L341.333333,256 Z M85.3333333,341.333333 L128,341.333333 L128,384 L85.3333333,384 L85.3333333,341.333333 Z M170.666667,341.333333 L213.333333,341.333333 L213.333333,384 L170.666667,384 L170.666667,341.333333 Z M85.3333333,0 L128,0 L128,42.6666667 L85.3333333,42.6666667 L85.3333333,0 Z M256,341.333333 L298.666667,341.333333 L298.666667,384 L256,384 L256,341.333333 Z M170.666667,0 L213.333333,0 L213.333333,42.6666667 L170.666667,42.6666667 L170.666667,0 Z M256,0 L298.666667,0 L298.666667,42.6666667 L256,42.6666667 L256,0 Z M341.333333,170.666667 L384,170.666667 L384,213.333333 L341.333333,213.333333 L341.333333,170.666667 Z M0,256 L42.6666667,256 L42.6666667,298.666667 L0,298.666667 L0,256 Z M341.333333,85.3333333 L384,85.3333333 L384,128 L341.333333,128 L341.333333,85.3333333 Z M0,170.666667 L42.6666667,170.666667 L42.6666667,213.333333 L0,213.333333 L0,170.666667 Z M0,85.3333333 L42.6666667,85.3333333 L42.6666667,128 L0,128 L0,85.3333333 Z" id="Combined-Shape"> </path> </g> </g> </g></svg>',
+          tooltip: true,
+          class: 'ai-button',
+        });
+        
+        button.on('execute', () => {
+          if (!balloon.hasView(popupView)) {
+            // Show popup
+            balloon.add({
+              view: popupView,
+              position: {
+                target: editor.ui.view.editable.element
+              }
+            });
+            
+            // Get selected text
+            const selection = window.getSelection();
+            const selectedText = selection.toString();
+            
+            // Initialize popup with selected text
+            initializePopup(editor, selectedText);
+            
+          } else {
+            // Close popup
+            closePopup();
+          }
+        });
+        
+        return button;
+      });
+      
+      // Initialize popup with selected text
+      function initializePopup(editor, selectedText) {
+        // Handle selection
+        if (selectedText) {          
+          // Mark selection in the editor
+          editor.model.change(writer => {
+            const selection = editor.model.document.selection;
+            const range = selection.getFirstRange();
+           
+            // Process the selection range
+            const ranges = Array.from(selection.getRanges());
+
+            // Iterate through each range in the selection
+            for (const range of ranges) {
+              if (range.isCollapsed) continue; // Skip empty selections
+
+              // Get the positions for applying the wrapper
+              const startPosition = range.start;
+              const endPosition = range.end;
+              
+              // Create a range for the wrapper to be applied to
+              const wrapRange = writer.createRange(startPosition, endPosition);
+              
+              // Apply a marker to the selected text
+              const markerId = `selected-${Date.now()}`;
+              writer.addMarker(markerId, {
+                range: wrapRange,
+                usingOperation: true,
+                affectsData: true
+              });
+              
+              // Convert the marker to a span with the ai-selected-text class in the view
+              editor.conversion.for('editingDowncast').markerToHighlight({
+                model: markerId,
+                view: {
+                  classes: 'ai-selected-text',
+                  priority: 10
+                }
+              });
+              
+              editor.conversion.for('dataDowncast').markerToElement({
+                model: markerId,
+                view: {
+                  name: 'span',
+                  classes: 'ai-selected-text'
+                }
+              });
+            }
+            
+          });
+        }
+        
+        // Set up UI handlers
+        setTimeout(() => {
+          setupUIHandlers(editor, selectedText);
           document.addEventListener('mousedown', outsideClickHandler);
         }, 0);
-      } else {
-        balloon.remove(popupView);
-        closePopup();
       }
-    });
+      
+      // Set up UI handlers
+      function setupUIHandlers(editor, selectedText) {
 
-    return button;
-  });
+        const elements = {
+          input: panelElement.querySelector('#assistantTextArea'),
+          submitBtn: panelElement.querySelector('#assistantSubmitBtn'),
+          insertBtn: panelElement.querySelector('#assistantInsertBtn'),
+          replaceBtn: panelElement.querySelector('#assistantReplaceBtn'),
+          tryAgainBtn: panelElement.querySelector('#assistantTryAgainBtn'),
+          loading: panelElement.querySelector('#loadingMsg'),
+          response: panelElement.querySelector('.generatedResponse')
+        };
+        
+        // Reset popup content
+        elements.input.value = '';
+        elements.loading.innerText = '';
+        elements.loading.style.display = 'none';
+        elements.response.innerHTML = '';
+        elements.response.style.display = 'none';
+        
+        elements.submitBtn.style.display = 'inline-block';
+        elements.submitBtn.disabled = false;
+        elements.insertBtn.disabled = true;        
+        elements.replaceBtn.disabled = true;
+        elements.tryAgainBtn.disabled = true;
+        
+        // Submit handler function
+        const submitHandler = async () => {
+          const prompt = elements.input.value.trim();
+          if (!prompt || elements.submitBtn.disabled) return;
+          
+          // Show loading state
+          elements.loading.innerText = 'Loading response from ChatGPT...';
+          elements.loading.style.display = 'block';
+          elements.submitBtn.disabled = true;
+          elements.response.style.display = 'none';
+          
+          try {
+            // Get selected text
+            const selectedElements = document.querySelectorAll('.ai-selected-text');
+            const selection = window.getSelection();
+            const selectedText = selection.toString();
+            
+            // Collect all HTML content from selectedElements
+            let selectedTextValue = '';
+            if (selectedElements.length > 0) {
+              selectedTextValue = Array.from(selectedElements).map(el => el.innerHTML).join('\n');
+            }
 
+             var $aiTitle = $('.aiTitle');
+            if ($aiTitle.length) {
+              $aiTitle.hide();
+            }
+            
+            // Get AI response
+            const response = await getAIAssistantResponse(
+              selectedText || selectedTextValue, 
+              prompt
+            );
+            
+            // Format and display response
+            const formattedHTML = simpleMarkdownToHTML(response);
+            
+            // Add title
+            // Remove any existing .aiTitle before adding a new one
+            const prevTitle = elements.response.previousElementSibling;
+            if (prevTitle && prevTitle.classList && prevTitle.classList.contains('aiTitle')) {
+              prevTitle.remove();
+            }
+            elements.response.insertAdjacentHTML('beforebegin', '<h1 class="aiTitle">AI Response</h1>');
+            
+            // Show response
+            elements.response.innerHTML = formattedHTML;
+            elements.response.style.display = 'block';
+            $('.aiTitle').show();
+            elements.input.disabled = true;
+            elements.loading.style.display = 'none';
+            elements.insertBtn.disabled = false;
+            elements.replaceBtn.disabled = isCKEditorEmpty(editor) ? true : false;
+            elements.tryAgainBtn.disabled = false;
+            elements.replaceBtn.style.display = 'inline-block';
+            elements.tryAgainBtn.style.display = 'inline-block';
+            
+            // Set up button handlers
+            // setupResponseButtons(elements, editor, response, prompt, selectedText || selectedTextValue);
+            
+          setupButtonHandler(elements, editor, response, prompt, selectedText || selectedTextValue);
+          } catch (err) {
+            console.error('ChatGPT error:', err);
+            elements.loading.innerText = 'Error fetching response. Please try again.';
+          }
+        };
+        
+        // Add submit button click handler
+        if (!elements.submitBtn._listenerAttached) {
+          elements.submitBtn.addEventListener('click', submitHandler);
+          
+          // Add keyboard handler for Enter key
+          elements.input.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter' && !event.shiftKey && !elements.submitBtn.disabled) {
+              event.preventDefault();
+              submitHandler();
+            }
+          });
+          
+          elements.submitBtn._listenerAttached = true;
+        }
+      }
 
-}
+    }
+    // Set up response action buttons
+      function setupButtonHandler(elements, editor, response, prompt, selectedText) {
+        // Insert action
+        elements.insertBtn.onclick = () => {
+          if (!response) return;
+          try {
+            editor.model.change(() => {
+            //  // Get the newly generated response content
+                // Insert the AI response at the current selection/cursor position, preserving existing content
+                const selection = editor.model.document.selection;
+                const position = selection.getLastPosition();
 
-function simpleMarkdownToHTML(markdown) {
-  let html = markdown;
+                // Convert the AI response (markdown) to HTML, then to a CKEditor model fragment
+                const htmlResponse = simpleMarkdownToHTML(response);
+                const viewFragment = editor.data.processor.toView(htmlResponse);
+                const modelFragment = editor.data.toModel(viewFragment);
 
-  // Convert ### Headings
-  html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+                // Insert the model fragment at the current position
+                editor.model.insertContent(modelFragment, position);
+              // Clean up any selection markers
+              cleanupSelectionMarkers(editor);
+            });            
+          editor.closePopup();
+          } catch (err) {
+            console.error('Error inserting content:', err);
+          }
+        };
+        
+        // Replace action
+        elements.replaceBtn.onclick = () => {
+          if (!selectedText || !response) return;
+          
+          try {
+            editor.model.change(writer => {
+              // Find selected elements
+              const selectedElements = document.querySelectorAll('.ai-selected-text');
 
-  // Convert bold text
-  html = html.replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>');
+              if(selectedText == '' || selectedText == null) {
+              // Get the cursor position information
+              const selectionCursor = editor.model.document.selection;
+              const cursorPosition = selectionCursor.getLastPosition();
+              let cursorLine = null;
+              const viewPosition = editor.editing.mapper.toViewPosition(cursorPosition);
+              const domPosition = editor.editing.view.domConverter.viewPositionToDom(viewPosition);
+              if (domPosition && domPosition.parent) {
+                cursorLine = domPosition.parent;
+              }
 
-  // Convert numbered lists (1., 2., etc.)
-  html = html.replace(/^\d+\.\s+(.*)/gim, '<li>$1</li>');
-  html = html.replace(/(<li>.*<\/li>)/gim, '<ol>$1</ol>'); // wrap in <ol>
+              // Check if we have either selected text or a cursor position
+              if ((!selectedText || selectedText.trim() === '') && cursorLine) {
+                // If no selection but we have a cursor line, get text from current paragraph/element
+                const currentLineText = cursorLine.textContent || '';
+                if (currentLineText.trim() !== '') {
+                  // Use the current line text instead                
+                  selectedText = currentLineText;
+                }
+              }
+            }
+              
+              if (selectedElements.length > 0) {
+                // Get current selection
+                const selection = editor.model.document.selection;
 
-  // Convert unordered lists (- item)
-  html = html.replace(/^- (.*)/gim, '<li>$1</li>');
-  html = html.replace(/(<li>.*<\/li>)/gim, '<ul>$1</ul>'); // wrap in <ul>
+                // Delete the selected content and get the resulting position
+                const range = selection.getFirstRange();
+                let insertPosition = range.start;
 
-  // Convert line breaks
-  html = html.replace(/\n/g, '<br>');
+                // Delete the selected content
+                editor.model.deleteContent(selection);
 
-  return html.trim();
+                // Insert the AI response at the original selection start position
+                // Use editor.data.processor.toView and editor.data.toModel to preserve HTML formatting
+                const htmlResponse = simpleMarkdownToHTML(response);
+                const viewFragment = editor.data.processor.toView(htmlResponse);
+                const modelFragment = editor.data.toModel(viewFragment);
+                editor.model.insertContent(modelFragment, insertPosition);
+                
+                // Clean up selection markers
+                cleanupSelectionMarkers(editor);
+              } else {
+
+                 // Replace the selected text with the AI response
+                const selection = editor.model.document.selection;
+
+                // Delete the selected content and get the resulting position
+                const range = selection.getFirstRange();
+                let insertPosition = range.start;
+
+                // Delete the selected content
+                editor.model.deleteContent(selection);
+
+                // Insert the AI response at the original selection start position
+                const viewFragment = editor.data.processor.toView(simpleMarkdownToHTML(response));
+                const modelFragment = editor.data.toModel(viewFragment);
+                editor.model.insertContent(modelFragment, insertPosition);
+                
+                // Clean up selection markers
+                cleanupSelectionMarkers(editor);
+              }
+            });
+            
+            editor.closePopup();
+          } catch (err) {
+            console.error('Error replacing content:', err);
+          }
+        };
+        
+        // Try again action
+        elements.tryAgainBtn.onclick = async (e) => {
+          e.preventDefault();
+          
+          const text = elements.input.value.trim();
+          if (!text) return;
+          var $aiTitle = $('.aiTitle');
+          if ($aiTitle.length) {
+            $aiTitle.hide();
+          }
+          // Show loading state
+          elements.loading.innerText = 'Loading response from ChatGPT...';
+          elements.loading.style.display = 'block';
+          elements.response.style.display = 'none';
+          
+          const selectedElements = document.querySelectorAll('.ai-selected-text');
+            
+            // Collect all HTML content from selectedElements
+            let selectedTextValue = '';
+            if (selectedElements.length > 0) {
+              selectedTextValue = Array.from(selectedElements).map(el => el.innerHTML).join('\n');
+            }
+          
+          // Get new response
+          try {
+            const newResponse = await getAIAssistantResponse((text == prompt) ? selectedTextValue : text, prompt);
+            $aiTitle.show();
+            // Display new response
+            elements.response.innerHTML = simpleMarkdownToHTML(newResponse);
+            response = newResponse; // Update response variable
+            elements.response.style.display = 'block';
+            elements.loading.style.display = 'none';
+          } catch (err) {
+            console.error('Error getting new response:', err);
+            elements.loading.innerText = 'Error fetching response. Please try again.';
+          }
+        };
+      }
+
+      // Clean up selection markers
+      function cleanupSelectionMarkers(editor) {
+        try {
+          // Remove selection markers from editor content
+          const editorContent = editor.getData();
+          const cleanContent = editorContent.replace(/<span class="ai-selected-text">.*?<\/span>/g, '');
+          editor.setData(cleanContent);
+          
+          // Clean up DOM elements
+          document.querySelectorAll('.ai-selected-text').forEach(element => {
+            if (element && element.parentNode) {
+              element.parentNode.removeChild(element);
+            }
+          });
+        } catch (err) {
+          console.error('Error cleaning up selection markers:', err);
+        }
+      }
+      
+    // Configuration file for API related details
+    const apiConfig = {
+      openai: {
+        endpoint: 'https://swedencentral.api.cognitive.microsoft.com/openai/deployments/gpt-4o-mini/chat/completions',
+        apiVersion: '2025-01-01-preview',
+        apiKey: 'BFnqoouwofssKH9XwH88loeWMiKzi6TuCCZ4sbyE1xJV0tGKwPhRJQQJ99BBACfhMk5XJ3w3AAAAACOGeO4c',
+        model: 'gpt-4o-mini'
+      },
+      prompts: {
+        ImproveWriting: 'Improve the writing quality of this text, maintaining exactly the same meaning and content.',
+        makeShorter: 'Make this text shorter while preserving its complete meaning.',
+        makeLonger: 'Make this text longer with relevant details while preserving its core meaning.',
+        spellChecker: 'Check and correct spelling and grammar without changing the meaning. Return only the corrected text.'
+      }
+    };
+
+    
+     // API call function
+    getAIAssistantResponse = async (selectText, promptInstruction) => {
+      try {
+        const response = await fetch(`${apiConfig.openai.endpoint}?api-version=${apiConfig.openai.apiVersion}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${apiConfig.openai.apiKey}`
+          },
+          body: JSON.stringify({
+            messages: [{
+              role: 'user',
+              content: selectText ? `${selectText}\n\nInstruction: ${promptInstruction}` : promptInstruction
+            }]
+          })
+        });
+
+        const result = await response.json();
+        return result.choices[0].message.content;
+      } catch (error) {
+        console.error('Error fetching AI response:', error);
+        return 'Error fetching response. Please try again.';
+      }
+    };
+
+    function simpleMarkdownToHTML(markdown) {
+  // Your custom markdownToHTML function
+    markdown = markdown.replace(/\r\n/g, "\n");
+
+    // Escape HTML - This part is crucial for security and correct rendering within HTML
+    let html = markdown
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+    // Convert headings
+    html = html.replace(/^###### (.*)$/gm, "<h6>$1</h6>");
+    html = html.replace(/^##### (.*)$/gm, "<h5>$1</h5>");
+    html = html.replace(/^#### (.*)$/gm, "<h4>$1</h4>");
+    html = html.replace(/^### (.*)$/gm, "<h3>$1</h3>");
+    html = html.replace(/^## (.*)$/gm, "<h2>$1</h2>");
+    html = html.replace(/^# (.*)$/gm, "<h1>$1</h1>");
+
+    // Convert horizontal rules
+    html = html.replace(/^\s*([-*_]){3,}\s*$/gm, "<hr>");
+
+    // Convert blockquotes
+    html = html.replace(/^> (.*)$/gm, "<blockquote>$1</blockquote>");
+
+    // Convert bold + italic
+    html = html.replace(/\*\*\*([^\*]+)\*\*\*/g, "<strong><em>$1</em></strong>");
+    // Convert bold
+    html = html.replace(/\*\*([^\*]+)\*\*/g, "<strong>$1</strong>");
+    html = html.replace(/__([^_]+)__/g, "<strong>$1</strong>");
+    html = html.replace(/<strong>(.*?)<\/strong>/g, '<strong>$1</strong>');
+    // Convert italic
+    html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    html = html.replace(/_([^_]+)_/g, "<em>$1</em>");
+
+    // Convert inline code
+    html = html.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+
+    // Convert unordered lists
+    // This is a simplified regex; real-world Markdown parsers for lists are more complex to handle nesting properly.
+    html = html.replace(/(^|\n)[ ]*[-*] (.+)/g, "$1<li>$2</li>");
+    html = html.replace(/(<li>[\s\S]*?<\/li>)/g, "<ul>$1</ul>");
+
+    // Convert ordered lists
+    // Simplified regex; real-world Markdown parsers for lists are more complex to handle nesting properly.
+    html = html.replace(/(^|\n)[ ]*\d+\.\s+(.+)/g, "$1<li>$2</li>");
+    html = html.replace(/(<li>[\s\S]*?<\/li>)/g, "<ol>$1</ol>");
+
+    // Convert links
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+
+    // Convert images
+    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img alt="$1" src="$2">');
+
+    // Convert paragraphs (lines separated by double newlines)
+    // This part needs careful handling with CKEditor's block elements.
+    // CKEditor's internal model often expects paragraphs to be explicitly marked.
+    // The following simple replace can break if used naively without understanding CKEditor's schema.
+    html = html.replace(/\n{2,}/g, "</p><p>");
+    html = "<p>" + html + "</p>";
+
+    // Clean up nested lists - this is a very basic cleanup.
+    html = html.replace(/<\/(ul|ol)>\s*<\1>/g, "");
+
+    return html;
 }
 
 
@@ -312,7 +867,7 @@ function simpleMarkdownToHTML(markdown) {
         versionCheck:false,
         enterMode: CKEDITOR[Origin.constants.ckEditorEnterMode],
         entities: false,
-        extraPlugins: [ AiAgentPlugin ],
+        extraPlugins: [ AiAgentPlugin, AiPreDefinedPromptsPlugin ],
         // htmlSupport: {
         //   // Convert all allow/disallow strings to regexp, as config is json only
         //   allow: convertStringsToRegExDeep((Origin.constants.ckEditorHtmlSupport && Origin.constants.ckEditorHtmlSupport.allow) || []),
@@ -384,7 +939,7 @@ function simpleMarkdownToHTML(markdown) {
             "|",
             "specialCharacters",
             "insertTable",
-            "insertTableLayout","|", "aiAgent", "|", "customPopup"
+            "insertTableLayout","|", "AIPreDefinedPromptsOption", "|", "AIAssistant"
           ],
           shouldNotGroupWhenFull: true,
         },
