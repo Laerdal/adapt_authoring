@@ -616,8 +616,6 @@ define([
         
         // Replace action
         elements.replaceBtn.onclick = () => {
-          
-          console.log('Replace button clicked 1');
           if (!selectedText || !response) return;
           
           try {
@@ -648,7 +646,6 @@ define([
             }
               
               if (selectedElements.length > 0) {
-                console.log('Replace button clicked 11');
                 // Get current selection
                 const selection = editor.model.document.selection;
 
