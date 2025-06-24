@@ -220,7 +220,7 @@ define([
           elements.loading.style.display = 'block';
           elements.submitBtn.style.display = 'none';
           // Only show .aiTitle if it exists, otherwise do nothing
-          var $aiTitle = $('.aiTitle');
+          let $aiTitle = $('.aiTitle');
           if ($aiTitle.length) {
             $aiTitle.hide();
           }
@@ -234,7 +234,7 @@ define([
           elements.replaceBtn.disabled = false;
           elements.tryAgainBtn.disabled = false;
           elements.insertBtn.style.display = 'inline-block';
-          elements.tryAgainBtn.style.display = 'inline-block';
+          elements.tryAgainBtn.style.display = 'none';
           elements.replaceBtn.style.display = 'inline-block';
 
           // Add title
@@ -686,7 +686,7 @@ define([
                 cleanupSelectionMarkers(editor);
               }
             });
-            
+
             editor.closePopup();
           } catch (err) {
             console.error('Error replacing content:', err);
@@ -699,7 +699,7 @@ define([
           
           const text = elements.input.value.trim();
           if (!text) return;
-          var $aiTitle = $('.aiTitle');
+          let $aiTitle = $('.aiTitle');
           if ($aiTitle.length) {
             $aiTitle.hide();
           }
@@ -795,69 +795,96 @@ define([
 
     function simpleMarkdownToHTML(markdown) {
   // Your custom markdownToHTML function
-    markdown = markdown.replace(/\r\n/g, "\n");
+     markdown = markdown.replace(/\r\n/g, "\n");
+        // Decode known HTML entities before escaping
+        markdown = markdown
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&amp;/g, "&")
+          .replace(/&nbsp;|&amp;nbsp;/g, "\u00A0");
 
-    // Escape HTML - This part is crucial for security and correct rendering within HTML
-    let html = markdown
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
+        // Escape HTML to prevent XSS
+        let html = markdown
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
 
-    // Convert headings
-    html = html.replace(/^###### (.*)$/gm, "<h6>$1</h6>");
-    html = html.replace(/^##### (.*)$/gm, "<h5>$1</h5>");
-    html = html.replace(/^#### (.*)$/gm, "<h4>$1</h4>");
-    html = html.replace(/^### (.*)$/gm, "<h3>$1</h3>");
-    html = html.replace(/^## (.*)$/gm, "<h2>$1</h2>");
-    html = html.replace(/^# (.*)$/gm, "<h1>$1</h1>");
+          
+        // One to six stars for headings
+        html = html.replace(/^(\*{6}) (.*)$/gm, "<h6>$2</h6>");
+        html = html.replace(/^(\*{5}) (.*)$/gm, "<h5>$2</h5>");
+        html = html.replace(/^(\*{4}) (.*)$/gm, "<h4>$2</h4>");
+        html = html.replace(/^(\*{3}) (.*)$/gm, "<h3>$2</h3>");
+        html = html.replace(/^(\*{2}) (.*)$/gm, "<h2>$2</h2>");
+        html = html.replace(/^(\*) (.*)$/gm, "<h1>$2</h1>");
 
-    // Convert horizontal rules
-    html = html.replace(/^\s*([-*_]){3,}\s*$/gm, "<hr>");
+        // Allow inline HTML tags (only safe ones)
+        const allowInlineTags = ["b", "i", "u", "small", "mark", "div", "span", "caption"];
+        allowInlineTags.forEach(tag => {
+          const regex = new RegExp(`&lt;(${tag}[^&]*)&gt;([\\s\\S]*?)&lt;\\/${tag}&gt;`, 'gi');
+          html = html.replace(regex, '<$1>$2</' + tag + '>');
+        });
 
-    // Convert blockquotes
-    html = html.replace(/^> (.*)$/gm, "<blockquote>$1</blockquote>");
+        // Headings
+        html = html.replace(/^###### (.*)$/gm, "<h6>$1</h6>")
+                  .replace(/^##### (.*)$/gm, "<h5>$1</h5>")
+                  .replace(/^#### (.*)$/gm, "<h4>$1</h4>")
+                  .replace(/^### (.*)$/gm, "<h3>$1</h3>")
+                  .replace(/^## (.*)$/gm, "<h2>$1</h2>")
+                  .replace(/^# (.*)$/gm, "<h1>$1</h1>");
 
-    // Convert bold + italic
-    html = html.replace(/\*\*\*([^\*]+)\*\*\*/g, "<strong><em>$1</em></strong>");
-    // Convert bold
-    html = html.replace(/\*\*([^\*]+)\*\*/g, "<strong>$1</strong>");
-    html = html.replace(/__([^_]+)__/g, "<strong>$1</strong>");
-    html = html.replace(/<strong>(.*?)<\/strong>/g, '<strong>$1</strong>');
-    // Convert italic
-    html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
-    html = html.replace(/_([^_]+)_/g, "<em>$1</em>");
+        // Horizontal rule
+        html = html.replace(/^\s*([-*_]){3,}\s*$/gm, "<hr>");
 
-    // Convert inline code
-    html = html.replace(/`([^`\n]+)`/g, "<code>$1</code>");
+        // Blockquotes
+        html = html.replace(/^> (.*)$/gm, "<blockquote>$1</blockquote>");
 
-    // Convert unordered lists
-    // This is a simplified regex; real-world Markdown parsers for lists are more complex to handle nesting properly.
-    html = html.replace(/(^|\n)[ ]*[-*] (.+)/g, "$1<li>$2</li>");
-    html = html.replace(/(<li>[\s\S]*?<\/li>)/g, "<ul>$1</ul>");
+        // Bold and italic
+        html = html.replace(/\*\*\*([\s\S]+?)\*\*\*/g, "<strong><em>$1</em></strong>");
+        html = html.replace(/\*\*([\s\S]+?)\*\*/g, "<strong>$1</strong>");
+        html = html.replace(/__([\s\S]+?)__/g, "<strong>$1</strong>");  
+        html = html.replace(/<strong>(.*?)<\/strong>/g, '<span style="font-weight:bold;">$1</span>');
+          html = html.replace(/&lt;strong&gt;(.*?)&lt;\/strong&gt;/g, '<span style="font-weight:bold;">$1</span>');
+        html = html.replace(/\*([\s\S]+?)\*/g, "<em>$1</em>");
+        html = html.replace(/_([\s\S]+?)_/g, "<em>$1</em>");
 
-    // Convert ordered lists
-    // Simplified regex; real-world Markdown parsers for lists are more complex to handle nesting properly.
-    html = html.replace(/(^|\n)[ ]*\d+\.\s+(.+)/g, "$1<li>$2</li>");
-    html = html.replace(/(<li>[\s\S]*?<\/li>)/g, "<ol>$1</ol>");
+        // Inline code
+        html = html.replace(/`([^`\n]+)`/g, "<code>$1</code>");
 
-    // Convert links
-    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+        // Images
+        html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img alt="$1" src="$2">');
 
-    // Convert images
-    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img alt="$1" src="$2">');
+        // Links
+        html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
 
-    // Convert paragraphs (lines separated by double newlines)
-    // This part needs careful handling with CKEditor's block elements.
-    // CKEditor's internal model often expects paragraphs to be explicitly marked.
-    // The following simple replace can break if used naively without understanding CKEditor's schema.
-    html = html.replace(/\n{2,}/g, "</p><p>");
-    html = "<p>" + html + "</p>";
+        // Unordered list
+        html = html.replace(/(?:^|\n)(?:\s*[-*] .+(?:\n|$))+?/g, match => {
+          const items = match.trim().split(/\n/).map(item => item.replace(/^\s*[-*] (.+)/, "<li>$1</li>")).join('');
+          return `<ul>${items}</ul>`;
+        });
 
-    // Clean up nested lists - this is a very basic cleanup.
-    html = html.replace(/<\/(ul|ol)>\s*<\1>/g, "");
+        // Ordered list
+        html = html.replace(/(?:^|\n)(?:\s*\d+\. .+(?:\n|$))+?/g, match => {
+          const items = match.trim().split(/\n/).map(item => item.replace(/^\s*\d+\. (.+)/, "<li>$1</li>")).join('');
+          return `<ol>${items}</ol>`;
+        });
 
-    return html;
-}
+        // Simple table support (GFM style)
+        html = html.replace(/(?:^|\n)(<caption>.*<\/caption>\n)?\|(.+\|)+\n\|([ :-]+)\|+\n((\|.*\|\n)*)/g, (match, cap, head, sep, rows) => {
+          const headers = head.split('|').filter(Boolean).map(h => `<th>${h.trim()}</th>`).join('');
+          const bodyRows = rows.trim().split('\n').map(row =>
+            '<tr>' + row.split('|').filter(Boolean).map(cell => `<td>${cell.trim()}</td>`).join('') + '</tr>'
+          ).join('');
+          return `<table>${cap || ''}<thead><tr>${headers}</tr></thead><tbody>${bodyRows}</tbody></table>`;
+        });
+
+        // Paragraphs: wrap only text that isn't already inside block elements
+        html = html.replace(/(?:\n\s*\n)+/g, "</p><p>");
+        html = "<p>" + html + "</p>";
+        html = html.replace(/<p>(\s*<(h\d|ul|ol|blockquote|hr|img|pre|code|table|div|span)[\s\S]*?<\/\2>)\s*<\/p>/g, "$1");
+
+        return html;
+      }
 
 
     until(isAttached(this.$el)).then(() => {
