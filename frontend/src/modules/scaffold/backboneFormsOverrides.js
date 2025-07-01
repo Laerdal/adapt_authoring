@@ -664,7 +664,6 @@ define([
         
         // Replace action
         elements.replaceBtn.onclick = () => {
-          console.log('Replace button clicked');
           if (!response) return;
           
           try {
