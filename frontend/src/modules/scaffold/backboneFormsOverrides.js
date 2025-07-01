@@ -723,7 +723,9 @@ define([
                 }
                 
               } else if (actualSelectedText) {
-                console.log('Replacing text at cursor position');
+                if (process.env.NODE_ENV !== 'production') {
+                  console.log('Replacing text at cursor position');
+                }
                 
                 // No selection but we have text to replace - find and replace at cursor
                 const position = selection.getLastPosition();
