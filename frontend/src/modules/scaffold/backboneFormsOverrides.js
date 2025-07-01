@@ -693,7 +693,6 @@ define([
               const selection = editor.model.document.selection;
               
               if (selectedElements.length > 0 || !selection.isCollapsed) {
-                console.log('Replacing selected content');
                 
                 // If we have a selection (either marked elements or current selection)
                 if (selection.isCollapsed && selectedElements.length > 0) {
