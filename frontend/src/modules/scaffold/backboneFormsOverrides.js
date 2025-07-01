@@ -1,7 +1,8 @@
 define([
   'core/origin',
-  'backbone-forms'
-], function(Origin, BackboneForms) {
+  'backbone-forms',
+  'libraries/marked.min.js'
+], function(Origin, BackboneForms, marked) {
 
   var templates = Handlebars.templates;
   var fieldTemplate = templates.field;
@@ -102,6 +103,7 @@ define([
       return arr.map((value, index) => processEntry([index, value])[1])
     }
 
+   
     // AI Command predefined prompts
     function AiPreDefinedPromptsPlugin(editor) {
       const balloon = editor.plugins.get('ContextualBalloon');
@@ -232,7 +234,6 @@ define([
           elements.response.style.display = 'block';
           elements.insertBtn.disabled = false;          
           elements.replaceBtn.disabled = false;
-          elements.tryAgainBtn.disabled = false;
           elements.insertBtn.style.display = 'inline-block';
           elements.tryAgainBtn.style.display = 'none';
           elements.replaceBtn.style.display = 'inline-block';
@@ -279,7 +280,19 @@ define([
             balloon.add({
               view: popupView,
               position: {
-                target: editor.ui.view.editable.element
+                target: () => {
+                  // Find the AI Assistant button element
+                  const aiButton = document.querySelector('.ai-predefined-button');
+                  return aiButton || editor.ui.view.editable.element;
+                },
+                positions: [
+                  // Position below the AI Assistant button
+                  (targetRect, balloonRect) => ({
+                    top: targetRect.bottom + 25,
+                    left: targetRect.left,
+                    name: 'below'
+                  })
+                ]
               }
             });
             document.addEventListener('mousedown', outsideClickHandler);
@@ -397,7 +410,19 @@ define([
             balloon.add({
               view: popupView,
               position: {
-                target: editor.ui.view.editable.element
+                target: () => {
+                  // Find the AI Assistant button element
+                  const aiButton = document.querySelector('.ai-button');
+                  return aiButton || editor.ui.view.editable.element;
+                },
+                positions: [
+                  // Position below the AI Assistant button
+                  (targetRect, balloonRect) => ({
+                    top: targetRect.bottom + 25,
+                    left: targetRect.left,
+                    name: 'below'
+                  })
+                ]
               }
             });
             
@@ -525,7 +550,7 @@ define([
               selectedTextValue = Array.from(selectedElements).map(el => el.innerHTML).join('\n');
             }
 
-             var $aiTitle = $('.aiTitle');
+            let $aiTitle = $('.aiTitle');
             if ($aiTitle.length) {
               $aiTitle.hide();
             }
@@ -608,7 +633,30 @@ define([
               // Clean up any selection markers
               cleanupSelectionMarkers(editor);
             });            
-          editor.closePopup();
+            
+            // Clear any remaining selected text immediately
+            document.querySelectorAll('.ai-selected-text').forEach(el => {
+              if (el.parentNode) {
+                // Replace the span with its text content
+                el.parentNode.replaceChild(document.createTextNode(el.textContent), el);
+              }
+            });
+            
+            // Clear selection in the editor immediately
+            editor.model.change(writer => {
+              const root = editor.model.document.getRoot();
+              if (root.childCount > 0) {
+                const firstChild = root.getChild(0);
+                if (firstChild && firstChild.childCount > 0) {
+                  writer.setSelection(writer.createPositionAt(firstChild, 0));
+                } else {
+                  writer.setSelection(writer.createPositionAt(root, 0));
+                }
+              }
+            });
+            
+            editor.closePopup();
+            
           } catch (err) {
             console.error('Error inserting content:', err);
           }
@@ -616,78 +664,128 @@ define([
         
         // Replace action
         elements.replaceBtn.onclick = () => {
-          if (!selectedText || !response) return;
+          console.log('Replace button clicked');
+          if (!response) return;
           
           try {
             editor.model.change(writer => {
               // Find selected elements
               const selectedElements = document.querySelectorAll('.ai-selected-text');
-
-              if(selectedText == '' || selectedText == null) {
-              // Get the cursor position information
-              const selectionCursor = editor.model.document.selection;
-              const cursorPosition = selectionCursor.getLastPosition();
-              let cursorLine = null;
-              const viewPosition = editor.editing.mapper.toViewPosition(cursorPosition);
-              const domPosition = editor.editing.view.domConverter.viewPositionToDom(viewPosition);
-              if (domPosition && domPosition.parent) {
-                cursorLine = domPosition.parent;
-              }
-
-              // Check if we have either selected text or a cursor position
-              if ((!selectedText || selectedText.trim() === '') && cursorLine) {
-                // If no selection but we have a cursor line, get text from current paragraph/element
-                const currentLineText = cursorLine.textContent || '';
-                if (currentLineText.trim() !== '') {
-                  // Use the current line text instead                
-                  selectedText = currentLineText;
+              
+              // Handle case where selectedText is empty or null
+              let actualSelectedText = selectedText;
+              if (!actualSelectedText || actualSelectedText.trim() === '') {
+                // Get the cursor position information
+                const selectionCursor = editor.model.document.selection;
+                const cursorPosition = selectionCursor.getLastPosition();
+                const viewPosition = editor.editing.mapper.toViewPosition(cursorPosition);
+                const domPosition = editor.editing.view.domConverter.viewPositionToDom(viewPosition);
+                
+                if (domPosition && domPosition.parent) {
+                  // Get text from current paragraph/element
+                  const currentLineText = domPosition.parent.textContent || '';
+                  if (currentLineText.trim() !== '') {
+                    actualSelectedText = currentLineText;
+                  }
                 }
               }
-            }
               
-              if (selectedElements.length > 0) {
-                // Get current selection
-                const selection = editor.model.document.selection;
-
-                // Delete the selected content and get the resulting position
-                const range = selection.getFirstRange();
-                let insertPosition = range.start;
-
-                // Delete the selected content
-                editor.model.deleteContent(selection);
-
-                // Insert the AI response at the original selection start position
-                // Use editor.data.processor.toView and editor.data.toModel to preserve HTML formatting
-                const htmlResponse = simpleMarkdownToHTML(response);
-                const viewFragment = editor.data.processor.toView(htmlResponse);
-                const modelFragment = editor.data.toModel(viewFragment);
-                editor.model.insertContent(modelFragment, insertPosition);
+              // Get current selection from the editor
+              const selection = editor.model.document.selection;
+              
+              if (selectedElements.length > 0 || !selection.isCollapsed) {
+                console.log('Replacing selected content');
                 
-                // Clean up selection markers
-                cleanupSelectionMarkers(editor);
-              } else {
-
-                 // Replace the selected text with the AI response
-                const selection = editor.model.document.selection;
-
-                // Delete the selected content and get the resulting position
-                const range = selection.getFirstRange();
-                let insertPosition = range.start;
-
-                // Delete the selected content
-                editor.model.deleteContent(selection);
-
-                // Insert the AI response at the original selection start position
-                const viewFragment = editor.data.processor.toView(simpleMarkdownToHTML(response));
-                const modelFragment = editor.data.toModel(viewFragment);
-                editor.model.insertContent(modelFragment, insertPosition);
+                // If we have a selection (either marked elements or current selection)
+                if (selection.isCollapsed && selectedElements.length > 0) {
+                  // Handle marked elements - find and select them in the model
+                  const ranges = [];
+                  for (const marker of editor.model.markers) {
+                    if (marker.name && marker.name.startsWith('selected-')) {
+                      ranges.push(marker.getRange());
+                    }
+                  }
+                  
+                  if (ranges.length > 0) {
+                    // Select all marked ranges
+                    writer.setSelection(ranges);
+                  }
+                }
                 
-                // Clean up selection markers
-                cleanupSelectionMarkers(editor);
+                // Delete the selected content
+                const deleteSelection = editor.model.document.selection;
+                if (!deleteSelection.isCollapsed) {
+                  editor.model.deleteContent(deleteSelection);
+                  
+                  // Insert the AI response at the current position
+                  const htmlResponse = simpleMarkdownToHTML(response);
+                  const viewFragment = editor.data.processor.toView(htmlResponse);
+                  const modelFragment = editor.data.toModel(viewFragment);
+                  editor.model.insertContent(modelFragment);
+                }
+                
+              } else if (actualSelectedText) {
+                console.log('Replacing text at cursor position');
+                
+                // No selection but we have text to replace - find and replace at cursor
+                const position = selection.getLastPosition();
+                const parent = position.parent;
+                
+                if (parent && parent.is('element', 'paragraph')) {
+                  // Get the text content of the current paragraph
+                  const textNode = parent.getChild(0);
+                  if (textNode && textNode.is('$text')) {
+                    const fullText = textNode.data;
+                    const textToReplace = actualSelectedText.trim();
+                    
+                    // Find the text to replace in the paragraph
+                    const replaceIndex = fullText.indexOf(textToReplace);
+                    if (replaceIndex !== -1) {
+                      // Create range for the text to replace
+                      const startPos = writer.createPositionAt(parent, replaceIndex);
+                      const endPos = writer.createPositionAt(parent, replaceIndex + textToReplace.length);
+                      const replaceRange = writer.createRange(startPos, endPos);
+                      
+                      // Delete the old text
+                      writer.remove(replaceRange);
+                      
+                      // Insert the AI response
+                      const htmlResponse = simpleMarkdownToHTML(response);
+                      const viewFragment = editor.data.processor.toView(htmlResponse);
+                      const modelFragment = editor.data.toModel(viewFragment);
+                      editor.model.insertContent(modelFragment, startPos);
+                    }
+                  }
+                }
+              }
+              
+              // Clean up selection markers
+              cleanupSelectionMarkers(editor);
+            });
+            
+            // Clear any remaining selected text immediately
+            document.querySelectorAll('.ai-selected-text').forEach(el => {
+              if (el.parentNode) {
+                // Replace the span with its text content
+                el.parentNode.replaceChild(document.createTextNode(el.textContent), el);
               }
             });
-
+            
+            // Clear selection in the editor immediately
+            editor.model.change(writer => {
+              const root = editor.model.document.getRoot();
+              if (root.childCount > 0) {
+                const firstChild = root.getChild(0);
+                if (firstChild && firstChild.childCount > 0) {
+                  writer.setSelection(writer.createPositionAt(firstChild, 0));
+                } else {
+                  writer.setSelection(writer.createPositionAt(root, 0));
+                }
+              }
+            });
+            
             editor.closePopup();
+            
           } catch (err) {
             console.error('Error replacing content:', err);
           }
@@ -735,17 +833,36 @@ define([
       // Clean up selection markers
       function cleanupSelectionMarkers(editor) {
         try {
-          // Remove selection markers from editor content
-          const editorContent = editor.getData();
-          const cleanContent = editorContent.replace(/<span class="ai-selected-text">.*?<\/span>/g, '');
-          editor.setData(cleanContent);
+          // Remove markers from the model first
+          const markersToRemove = [];
+          for (const marker of editor.model.markers) {
+            if (marker.name && marker.name.startsWith('selected-')) {
+              markersToRemove.push(marker.name);
+            }
+          }
           
+          // Remove markers using writer
+          editor.model.change(writer => {
+            markersToRemove.forEach(markerName => {
+              writer.removeMarker(markerName);
+            });
+          });
+
           // Clean up DOM elements
           document.querySelectorAll('.ai-selected-text').forEach(element => {
             if (element && element.parentNode) {
-              element.parentNode.removeChild(element);
+              // Replace the element with its text content to preserve formatting context
+              const textContent = element.textContent;
+              const textNode = document.createTextNode(textContent);
+              element.parentNode.replaceChild(textNode, element);
             }
           });
+          
+          // Force editor to refresh view
+          editor.editing.view.change(writer => {
+            writer.removeClass('ai-selected-text', editor.editing.view.document.getRoot());
+          });
+          
         } catch (err) {
           console.error('Error cleaning up selection markers:', err);
         }
@@ -766,10 +883,13 @@ define([
         spellChecker: 'Check and correct spelling and grammar without changing the meaning. Return only the corrected text.'
       }
     };
-
     
      // API call function
     getAIAssistantResponse = async (selectText, promptInstruction) => {
+      if (typeof configData !== 'undefined' && typeof aiconfigJson !== 'undefined' && aiconfigJson.AiEnv) {
+        configData.AiEnv = aiconfigJson.AiEnv;
+        console.log('configData.AiEnv:', configData.AiEnv);
+      }
       try {
         const response = await fetch(`${apiConfig.openai.endpoint}?api-version=${apiConfig.openai.apiVersion}`, {
           method: 'POST',
@@ -794,97 +914,10 @@ define([
     };
 
     function simpleMarkdownToHTML(markdown) {
-  // Your custom markdownToHTML function
-     markdown = markdown.replace(/\r\n/g, "\n");
-        // Decode known HTML entities before escaping
-        markdown = markdown
-          .replace(/&lt;/g, "<")
-          .replace(/&gt;/g, ">")
-          .replace(/&amp;/g, "&")
-          .replace(/&nbsp;|&amp;nbsp;/g, "\u00A0");
-
-        // Escape HTML to prevent XSS
-        let html = markdown
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;");
-
-          
-        // One to six stars for headings
-        html = html.replace(/^(\*{6}) (.*)$/gm, "<h6>$2</h6>");
-        html = html.replace(/^(\*{5}) (.*)$/gm, "<h5>$2</h5>");
-        html = html.replace(/^(\*{4}) (.*)$/gm, "<h4>$2</h4>");
-        html = html.replace(/^(\*{3}) (.*)$/gm, "<h3>$2</h3>");
-        html = html.replace(/^(\*{2}) (.*)$/gm, "<h2>$2</h2>");
-        html = html.replace(/^(\*) (.*)$/gm, "<h1>$2</h1>");
-
-        // Allow inline HTML tags (only safe ones)
-        const allowInlineTags = ["b", "i", "u", "small", "mark", "div", "span", "caption"];
-        allowInlineTags.forEach(tag => {
-          const regex = new RegExp(`&lt;(${tag}[^&]*)&gt;([\\s\\S]*?)&lt;\\/${tag}&gt;`, 'gi');
-          html = html.replace(regex, '<$1>$2</' + tag + '>');
-        });
-
-        // Headings
-        html = html.replace(/^###### (.*)$/gm, "<h6>$1</h6>")
-                  .replace(/^##### (.*)$/gm, "<h5>$1</h5>")
-                  .replace(/^#### (.*)$/gm, "<h4>$1</h4>")
-                  .replace(/^### (.*)$/gm, "<h3>$1</h3>")
-                  .replace(/^## (.*)$/gm, "<h2>$1</h2>")
-                  .replace(/^# (.*)$/gm, "<h1>$1</h1>");
-
-        // Horizontal rule
-        html = html.replace(/^\s*([-*_]){3,}\s*$/gm, "<hr>");
-
-        // Blockquotes
-        html = html.replace(/^> (.*)$/gm, "<blockquote>$1</blockquote>");
-
-        // Bold and italic
-        html = html.replace(/\*\*\*([\s\S]+?)\*\*\*/g, "<strong><em>$1</em></strong>");
-        html = html.replace(/\*\*([\s\S]+?)\*\*/g, "<strong>$1</strong>");
-        html = html.replace(/__([\s\S]+?)__/g, "<strong>$1</strong>");  
-        html = html.replace(/<strong>(.*?)<\/strong>/g, '<span style="font-weight:bold;">$1</span>');
-          html = html.replace(/&lt;strong&gt;(.*?)&lt;\/strong&gt;/g, '<span style="font-weight:bold;">$1</span>');
-        html = html.replace(/\*([\s\S]+?)\*/g, "<em>$1</em>");
-        html = html.replace(/_([\s\S]+?)_/g, "<em>$1</em>");
-
-        // Inline code
-        html = html.replace(/`([^`\n]+)`/g, "<code>$1</code>");
-
-        // Images
-        html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img alt="$1" src="$2">');
-
-        // Links
-        html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
-
-        // Unordered list
-        html = html.replace(/(?:^|\n)(?:\s*[-*] .+(?:\n|$))+?/g, match => {
-          const items = match.trim().split(/\n/).map(item => item.replace(/^\s*[-*] (.+)/, "<li>$1</li>")).join('');
-          return `<ul>${items}</ul>`;
-        });
-
-        // Ordered list
-        html = html.replace(/(?:^|\n)(?:\s*\d+\. .+(?:\n|$))+?/g, match => {
-          const items = match.trim().split(/\n/).map(item => item.replace(/^\s*\d+\. (.+)/, "<li>$1</li>")).join('');
-          return `<ol>${items}</ol>`;
-        });
-
-        // Simple table support (GFM style)
-        html = html.replace(/(?:^|\n)(<caption>.*<\/caption>\n)?\|(.+\|)+\n\|([ :-]+)\|+\n((\|.*\|\n)*)/g, (match, cap, head, sep, rows) => {
-          const headers = head.split('|').filter(Boolean).map(h => `<th>${h.trim()}</th>`).join('');
-          const bodyRows = rows.trim().split('\n').map(row =>
-            '<tr>' + row.split('|').filter(Boolean).map(cell => `<td>${cell.trim()}</td>`).join('') + '</tr>'
-          ).join('');
-          return `<table>${cap || ''}<thead><tr>${headers}</tr></thead><tbody>${bodyRows}</tbody></table>`;
-        });
-
-        // Paragraphs: wrap only text that isn't already inside block elements
-        html = html.replace(/(?:\n\s*\n)+/g, "</p><p>");
-        html = "<p>" + html + "</p>";
-        html = html.replace(/<p>(\s*<(h\d|ul|ol|blockquote|hr|img|pre|code|table|div|span)[\s\S]*?<\/\2>)\s*<\/p>/g, "$1");
-
-        return html;
-      }
+      let markDownToHtml = marked.parse(markdown);
+      console.log(markDownToHtml);
+      return markDownToHtml;
+    }
 
 
     until(isAttached(this.$el)).then(() => {
