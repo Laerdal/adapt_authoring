@@ -915,7 +915,6 @@ define([
 
     function simpleMarkdownToHTML(markdown) {
       let markDownToHtml = marked.parse(markdown);
-      console.log(markDownToHtml);
       return markDownToHtml;
     }
 
