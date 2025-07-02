@@ -579,7 +579,7 @@ define([
             elements.input.disabled = true;
             elements.loading.style.display = 'none';
             elements.insertBtn.disabled = false;
-            elements.replaceBtn.disabled = isCKEditorEmpty(editor) ? true : false;
+            elements.replaceBtn.disabled = !!((isCKEditorEmpty(editor) || selectedTextValue == ''));
             elements.tryAgainBtn.disabled = false;
             elements.replaceBtn.style.display = 'inline-block';
             elements.tryAgainBtn.style.display = 'inline-block';
@@ -885,7 +885,7 @@ define([
     };
     
      // API call function
-    getAIAssistantResponse = async (selectText, promptInstruction) => {
+    let getAIAssistantResponse = async (selectText, promptInstruction) => {
       if (typeof configData !== 'undefined' && typeof aiconfigJson !== 'undefined' && aiconfigJson.AiEnv) {
         configData.AiEnv = aiconfigJson.AiEnv;
         console.log('configData.AiEnv:', configData.AiEnv);
