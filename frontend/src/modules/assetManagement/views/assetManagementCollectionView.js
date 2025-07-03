@@ -148,7 +148,7 @@ define(function(require){
       // Clear the asset container
       this.$('.asset-management-collection-inner').empty();
       // Reset the 'no assets' message
-      $('.asset-management-no-assets').addClass('display-none');
+      this.$('.asset-management-no-assets').addClass('display-none');
     },
 
     clearFilters: function() {
