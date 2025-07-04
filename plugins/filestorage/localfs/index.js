@@ -363,18 +363,21 @@ LocalFileStorage.prototype.copyAsset = function(asset, sourceTenantName, destina
  */
 
 LocalFileStorage.prototype.createThumbnail = function (filePath, fileType, options, next) {
+  var self = this;
   var fileFormat = fileType.split('/')[1];
   fileType = fileType.split('/')[0];
   // also check fileType is supported
   if(!isThumbnailTypeSupported(fileType, fileFormat)) {
     return next(null, false);
   }
-  var self = this;
-  var thumbExt = ('image' === fileType) ? path.extname(filePath) : '.gif';
-  var imgThumbPath = path.join(path.dirname(filePath), path.basename(filePath)) + '_thumb' + thumbExt;
-
-  var ff = new ffmpeg({ source: filePath }).output(imgThumbPath);
-
+  
+  // Create thumbnail path
+  var imgThumbPath = filePath + '_thumb.' + (fileType === 'video' ? 'gif' : fileFormat);
+  
+  // Initialize ffmpeg instance
+  var ff = ffmpeg(filePath).output(imgThumbPath);
+  
+  // For video files, creates an animated GIF thumbnail
   if ('video' === fileType) {
     // pixel format for gifs (only needed with ffmpeg older versions eg 1.2)
     ff.outputOptions('-pix_fmt rgb24');

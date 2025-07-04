@@ -56,22 +56,46 @@ define(function(require) {
             return this;
         },
 
-        postRender: function() {},
+        postRender: function() {
+            // Don't automatically select "All" filter - let the collection view handle initial state
+        },
 
         onFilterButtonClicked: function(event) {
-            $currentTarget = $(event.currentTarget);
+            var $currentTarget = $(event.currentTarget);
             var filterType = $currentTarget.attr('data-filter-type');
 
+            // Handle "All" filter specially - it clears all other filters
+            if (filterType === 'all') {
+                // Clear all other filter buttons
+                this.$('.asset-management-modal-filter-button').removeClass('selected');
+                this.$('.asset-management-modal-filter-button .fa-toggle-on').removeClass('fa-toggle-on').addClass('fa-toggle-off');
+                
+                // Set "All" as selected
+                $currentTarget.addClass('selected');
+                $currentTarget.find('.fa-toggle-off').removeClass('fa-toggle-off').addClass('fa-toggle-on');
+                
+                // Clear all filters
+                Origin.trigger('assetManagement:sidebarFilter:clear');
+                return;
+            }
+
+            // For specific filters, use the same logic as sidebar view
             // If this filter is already selected - remove filter
             // else add the filter
             if ($currentTarget.hasClass('selected')) {
                 $currentTarget.removeClass('selected');
+                $currentTarget.find('.fa-toggle-on').removeClass('fa-toggle-on').addClass('fa-toggle-off');
                 Origin.trigger('assetManagement:sidebarFilter:remove', filterType);
             } else {
+                // When adding a specific filter, remove "All" selection
+                this.$('.asset-management-modal-filter-button[data-filter-type="all"]').removeClass('selected');
+                this.$('.asset-management-modal-filter-button[data-filter-type="all"] .fa-toggle-on').removeClass('fa-toggle-on').addClass('fa-toggle-off');
+                
+                // Add the specific filter
                 $currentTarget.addClass('selected');
+                $currentTarget.find('.fa-toggle-off').removeClass('fa-toggle-off').addClass('fa-toggle-on');
                 Origin.trigger('assetManagement:sidebarFilter:add', filterType);
             }
-
         },
 
         onSearchKeyDown: function(event, filter) {
@@ -91,7 +115,7 @@ define(function(require) {
 
         onClearSearchClicked: function(event) {
             event && event.preventDefault();
-            this.$('.asset-management-modal-filter-search').val('').trigger('keydown', [true]);
+            this.$('.asset-management-modal-filter-search').val('').trigger('keyup');
         },
 
         onAddTagClicked: function(event) {

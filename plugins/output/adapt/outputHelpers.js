@@ -131,7 +131,7 @@ function importAsset(fileMetadata, metadata, assetImported) {
       if (metadata.assetNameMap) {
         metadata.assetNameMap[results[0]._id] = results[0].filename;
       }
-      return assetImported();
+      return assetImported(null, results[0]);
     }
 
     var hash = crypto.createHash('sha1');
@@ -171,7 +171,9 @@ function importAsset(fileMetadata, metadata, assetImported) {
 
           origin.assetmanager.createAsset(asset, function onAssetCreated(createError, assetRec) {
             if (createError) {
-              storage.deleteFile(storedFile.path, assetImported);
+              storage.deleteFile(storedFile.path, function() {
+                assetImported(createError);
+              });
               return;
             }
             // store that asset was imported (used in cleanup if error)
@@ -183,7 +185,7 @@ function importAsset(fileMetadata, metadata, assetImported) {
             if (metadata.assetNameMap) {
               metadata.assetNameMap[assetRec._id] = assetRec.filename;
             }
-            assetImported();
+            assetImported(null, assetRec);
           });
         });
       });
