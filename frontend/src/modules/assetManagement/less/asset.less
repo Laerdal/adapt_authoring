@@ -182,38 +182,21 @@
 
 .asset-management-modal-filters {
     float: left;
-    width: 70%;
-    display: inline-block;
-    text-align: left;
-    
+    width: 50%;
+    display:inline-block;
+    text-align:left;
     input {
-        border-radius: 0px;
+        border-radius:0px;
         width: 200px;
         border: none;
         border-radius: 3px;
         background: #627178;
         color: @white;
-        display: inline-block;
-        margin-right: 10px;
-        vertical-align: middle;
-        
-        &::placeholder {
-            color: #bbb;
-        }
     }
-    
-    .sidebar-inline-input-button,
-    .asset-management-modal-filter-button {
-        vertical-align: middle;
-        margin-right: 5px;
-    }
-    
     .modal & button {
-        margin-left: -4px;
-        color: #9cabc4;
-        transition: color 0.3s;
-        vertical-align: middle;
-        
+        margin-left:-4px;
+        color:#9cabc4;
+        transition:color 0.3s;
         &:hover {
             color: @white;
         }
@@ -245,57 +228,5 @@
     color: @primary-color;
     &:hover {
         color: darken(@primary-color, 5%);
-    }
-}
-
-// Modal filter toggle buttons styling - inline with search
-.asset-management-modal-filter-button {
-    display: inline-block;
-    margin-right: 5px;
-    padding: 6px 12px;
-    font-size: 12px;
-    line-height: 1.4;
-    background: transparent;
-    border: 1px solid #9cabc4;
-    border-radius: 3px;
-    color: #9cabc4;
-    cursor: pointer;
-    transition: all 0.3s;
-    vertical-align: middle;
-    
-    &:hover {
-        background: rgba(156, 171, 196, 0.1);
-        border-color: #9cabc4;
-        color: @white;
-    }
-    
-    &.selected {
-        background-color: #337ab7 !important;
-        border-color: #337ab7 !important;
-        color: @white !important;
-        
-        i {
-            color: @white !important;
-        }
-        
-        &:hover {
-            background-color: #286090 !important;
-            border-color: #286090 !important;
-        }
-    }
-    
-    // Toggle icon styling
-    .fa-toggle-off,
-    .fa-toggle-on {
-        font-size: 14px;
-        margin-right: 5px;
-    }
-    
-    .fa-toggle-on {
-        color: #337ab7;
-    }
-    
-    &.selected .fa-toggle-on {
-        color: @white;
     }
 }

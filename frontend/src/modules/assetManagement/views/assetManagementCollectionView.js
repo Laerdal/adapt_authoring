@@ -38,7 +38,6 @@ define(function(require){
       this.listenTo(Origin, {
         'assetManagement:sidebarFilter:add': this.addFilter,
         'assetManagement:sidebarFilter:remove': this.removeFilter,
-        'assetManagement:sidebarFilter:clear': this.clearFilters,
         'assetManagement:sidebarView:filter': this.filterBySearchInput,
         'assetManagement:assetManagementSidebarView:filterByTags': this.filterByTags,
         'assetManagement:collection:refresh': this.resetCollection
@@ -77,28 +76,12 @@ define(function(require){
       }
       this.isCollectionFetching = true;
 
-      // Build search object correctly
-      var searchObj = {};
-      
-      // Add text search if exists
-      if (this.search.title || this.search.description) {
-        searchObj.title = this.search.title;
-        searchObj.description = this.search.description;
-      }
-      
-      // Add asset type filter if exists
-      if (this.filters.length > 0) {
-        searchObj.assetType = { $in: this.filters };
-      }
-      
-      // Add tags filter if exists
-      if (this.tags.length > 0) {
-        searchObj.tags = { $all: this.tags };
-      }
-
       this.collection.fetch({
         data: {
-          search: searchObj,
+          search: _.extend(this.search, {
+            tags: { $all: this.tags },
+            assetType: { $in: this.filters }
+          }),
           operators : {
             skip: this.fetchCount,
             limit: this.pageSize,
@@ -141,28 +124,13 @@ define(function(require){
     */
 
     filterCollection: function() {
-      this.resetCollection();
-    },
-
-    clearAssetItems: function() {
-      // Clear the asset container
-      this.$('.asset-management-collection-inner').empty();
-      // Reset the 'no assets' message
-      this.$('.asset-management-no-assets').addClass('display-none');
-    },
-
-    clearFilters: function() {
-      this.filters = [];
-      this.search = {};
-      this.tags = [];
-      this.filterCollection();
+      this.resetCollection(null, false);
+      this.search.assetType = this.filters.length ? { $in: this.filters } : null;
+      this.fetchCollection();
     },
 
     addFilter: function(filterType) {
-      // Use checkbox behavior - add to filters array if not already present
-      if (!_.contains(this.filters, filterType)) {
-        this.filters.push(filterType);
-      }
+      this.filters.push(filterType);
       this.filterCollection();
     },
 
@@ -173,24 +141,18 @@ define(function(require){
     },
 
     filterBySearchInput: function (filterText) {
-      
-      if (filterText && filterText.trim() !== '') {
-        var pattern = '.*' + filterText.toLowerCase() + '.*';
-        this.search.title = pattern;
-        this.search.description = pattern;
-      } else {
-        // Clear search if empty
-        delete this.search.title;
-        delete this.search.description;
-      }
-      
-      this.resetCollection();
-      $(".asset-management-modal-filter-search").focus();
+      this.resetCollection(null, false);
+      var pattern = '.*' + filterText.toLowerCase() + '.*';
+      this.search = { title: pattern, description: pattern };
+      this.fetchCollection();
+
+      $(".asset-management-modal-filter-search" ).focus();
     },
 
     filterByTags: function(tags) {
+      this.resetCollection(null, false);
       this.tags = _.pluck(tags, 'id');
-      this.resetCollection();
+      this.fetchCollection();
     },
 
     /**
