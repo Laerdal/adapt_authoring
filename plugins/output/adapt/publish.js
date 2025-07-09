@@ -143,12 +143,36 @@ function publishCourse(courseId, mode, request, response, next) {
         // Store the JSON with the new paths to assets
         // Remove _enabledExtensions["preview-edit"] and _previewEdit from the published course, if they are present.
         if (mode === Constants.Modes.Publish) {
-          if (modifiedJson.config._enabledExtensions?.['preview-edit']) {
-            delete modifiedJson.config._enabledExtensions['preview-edit'];
+          // Function to recursively remove preview-edit references
+          function removePreviewEditReferences(obj) {
+            if (typeof obj !== 'object' || obj === null) return;
+
+            // Remove preview-edit from enabled extensions
+            if (obj._enabledExtensions && obj._enabledExtensions['preview-edit']) {
+              delete obj._enabledExtensions['preview-edit'];
+              console.log('Removed preview-edit from _enabledExtensions');
+            }
+
+            // Remove preview-edit configuration
+            if (obj._previewEdit) {
+              delete obj._previewEdit;
+              console.log('Removed _previewEdit configuration');
+            }
+
+            // Recursively check nested objects and arrays
+            for (const key in obj) {
+              if (obj.hasOwnProperty(key)) {
+                if (Array.isArray(obj[key])) {
+                  obj[key].forEach(item => removePreviewEditReferences(item));
+                } else if (typeof obj[key] === 'object') {
+                  removePreviewEditReferences(obj[key]);
+                }
+              }
+            }
           }
-          if (modifiedJson.config._previewEdit) {
-            delete modifiedJson.config._previewEdit;
-          }
+
+          // Apply the cleanup to the entire modifiedJson object
+          removePreviewEditReferences(modifiedJson);
         }
         outputJson = modifiedJson;
         callback(null);
