@@ -141,6 +141,15 @@ function publishCourse(courseId, mode, request, response, next) {
           return callback(err);
         }
         // Store the JSON with the new paths to assets
+        // Remove _enabledExtensions["preview-edit"] and _previewEdit from the published course, if they are present.
+        if (mode === Constants.Modes.Publish) {
+          if (modifiedJson.config._enabledExtensions?.['preview-edit']) {
+            delete modifiedJson.config._enabledExtensions['preview-edit'];
+          }
+          if (modifiedJson.config._previewEdit) {
+            delete modifiedJson.config._previewEdit;
+          }
+        }
         outputJson = modifiedJson;
         callback(null);
       });

@@ -180,8 +180,28 @@ define([
             "|",
             "specialCharacters",
             "insertTable",
+            "insertTableLayout",
           ],
           shouldNotGroupWhenFull: true,
+        },
+        table: {
+          contentToolbar: ['tableColumn', 'tableRow', 'mergeTableCells', 'tableProperties']
+        },
+        link: {
+          // Allow target="_blank" and rel attributes on links
+          addTargetToExternalLinks: true,
+          defaultProtocol: 'https://',
+          // Enable all link decorators
+          decorators: {
+            openInNewTab: {
+              mode: 'manual',
+              label: 'Open in a new tab',
+              attributes: {
+                target: '_blank',
+                rel: 'noopener noreferrer'
+              }
+            },
+          }
         },
       }).then((editor) => {
         this.editor = editor;
