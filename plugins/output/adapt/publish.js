@@ -150,13 +150,11 @@ function publishCourse(courseId, mode, request, response, next) {
             // Remove preview-edit from enabled extensions
             if (obj._enabledExtensions && obj._enabledExtensions['preview-edit']) {
               delete obj._enabledExtensions['preview-edit'];
-              console.log('Removed preview-edit from _enabledExtensions');
             }
 
             // Remove preview-edit configuration
             if (obj._previewEdit) {
               delete obj._previewEdit;
-              console.log('Removed _previewEdit configuration');
             }
 
             // Recursively check nested objects and arrays
