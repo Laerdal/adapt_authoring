@@ -165,10 +165,17 @@ function ImportSource(req, done) {
           if (error) {
             return doneAsset(error);
           }
+          
+          // Skip directories - only process files
+          var fileStat = fs.statSync(assetPath);
+          if (fileStat.isDirectory()) {
+            logger.log('info', 'Skipping directory: ' + assetPath);
+            return doneAsset();
+          }
+          
           var assetName = path.basename(assetPath);
           var assetExt = path.extname(assetPath);
           var assetId = path.basename(assetPath);
-          var fileStat = fs.statSync(assetPath);
           var assetTitle = assetName;
           var assetDescription = assetName;
           var assetJson = assetsJson[assetName];
@@ -195,7 +202,9 @@ function ImportSource(req, done) {
             createdBy: app.usermanager.getCurrentUser()._id
           };
 
-          if (!assetJson) return helpers.importAsset(fileMeta, metadata, doneAsset);
+          if (!assetJson) return helpers.importAsset(fileMeta, metadata, function(err, assetRec) {
+            doneAsset(err);
+          });
 
           addAssetTags(assetJson, function (error, assetTags) {
             const warn = (error) => logger.log('warn', `Failed to create asset tag ${error}`);
@@ -203,7 +212,9 @@ function ImportSource(req, done) {
             fileMeta.title = assetJson.title;
             fileMeta.description = assetJson.description;
             fileMeta.tags = assetTags;
-            helpers.importAsset(fileMeta, metadata, doneAsset);
+            helpers.importAsset(fileMeta, metadata, function(err, assetRec) {
+              doneAsset(err);
+            });
           });
         }, doneAssetFolder);
       });
@@ -427,6 +438,217 @@ function ImportSource(req, done) {
           // Ensure the database connection is closed
           if (db?.client?.topology && !db.client.topology.isDestroyed()) {
             await closeDB();
+          }
+        }
+      },
+
+      // Function to set course thumbnail from imported thumbnail files
+      function setCourseHeroImage(cb) {
+        try {
+          const thumbnailDir = path.join(COURSE_ROOT_FOLDER, Constants.Folders.Source, Constants.Folders.Course, COURSE_LANG, 'assets', 'thumb');
+          
+          if (!fs.existsSync(thumbnailDir)) {
+            logger.log('info', 'No thumbnail directory found during import');
+            return cb();
+          }
+
+          const thumbnailFiles = fs.readdirSync(thumbnailDir);
+          
+          if (thumbnailFiles.length === 0) {
+            logger.log('info', 'No thumbnail files found during import');
+            return cb();
+          }
+
+          // Find the first thumbnail file (typically there should be only one)
+          const thumbnailFile = thumbnailFiles[0];
+          logger.log('info', `Processing course thumbnail: ${thumbnailFile}`);
+          
+          // Extract original filename without _thumb suffix
+          let originalFileName = thumbnailFile;
+          const thumbSuffix = '_thumb';
+          
+          // Handle cases like: "filename.ext_thumb.ext" -> "filename.ext"
+          if (originalFileName.includes(thumbSuffix)) {
+            const thumbIndex = originalFileName.indexOf(thumbSuffix);
+            if (thumbIndex > -1) {
+              // Get the part before _thumb
+              const beforeThumb = originalFileName.substring(0, thumbIndex);
+              // Check if there's a file extension before _thumb
+              if (beforeThumb.includes('.')) {
+                originalFileName = beforeThumb;
+              } else {
+                // Fallback: remove _thumb and everything after it
+                originalFileName = beforeThumb;
+              }
+            }
+          }
+          
+          logger.log('info', `Looking for asset with original filename: ${originalFileName}`);
+          
+          // Search for the original asset by filename
+          app.assetmanager.retrieveAsset({ filename: originalFileName }, function(error, assets) {
+            if (error) {
+              logger.log('warn', `Error retrieving asset by filename: ${error.message}`);
+              return cb();
+            }
+            
+            if (assets && assets.length > 0) {
+              const matchingAsset = assets[0];
+              logger.log('info', `Found matching asset: ${matchingAsset._id} -> ${matchingAsset.filename}`);
+              
+              // Update the course with heroImage
+              updateCourseHeroImage(matchingAsset._id, cb);
+            } else {
+              logger.log('info', `No direct match found for: ${originalFileName}, searching in metadata...`);
+              
+              // Fallback 1: search in metadata.assetNameMap for any asset that could match
+              let matchingAssetId = null;
+              for (const [assetId, assetName] of Object.entries(metadata.assetNameMap)) {
+                if (assetName === originalFileName) {
+                  matchingAssetId = assetId;
+                  logger.log('info', `Found matching asset in metadata: ${assetId} -> ${assetName}`);
+                  break;
+                }
+              }
+              
+              if (matchingAssetId) {
+                updateCourseHeroImage(matchingAssetId, cb);
+              } else {
+                // Fallback 2: Search all assets by title or description that might match
+                logger.log('info', 'Searching all assets for potential matches...');
+                app.assetmanager.retrieveAsset({}, function(allAssetsError, allAssets) {
+                  if (allAssetsError || !allAssets || allAssets.length === 0) {
+                    logger.log('info', `No assets found in database. Creating new asset from thumbnail.`);
+                    return createAssetFromThumbnail(thumbnailDir, thumbnailFile, originalFileName, cb);
+                  }
+                  
+                  // Look for assets whose title, filename, or path might match
+                  const potentialMatches = allAssets.filter(asset => {
+                    return asset.title === originalFileName || 
+                           asset.filename === originalFileName ||
+                           asset.path.includes(originalFileName) ||
+                           (asset.title && asset.title.includes(originalFileName.split('.')[0]));
+                  });
+                  
+                  if (potentialMatches.length > 0) {
+                    const bestMatch = potentialMatches[0];
+                    logger.log('info', `Found potential matching asset: ${bestMatch._id} -> ${bestMatch.filename} (title: ${bestMatch.title})`);
+                    updateCourseHeroImage(bestMatch._id, cb);
+                  } else {
+                    logger.log('info', `No matching asset found for thumbnail: ${thumbnailFile}. Creating new asset from thumbnail.`);
+                    createAssetFromThumbnail(thumbnailDir, thumbnailFile, originalFileName, cb);
+                  }
+                });
+              }
+            }
+          });
+          
+        } catch (thumbnailError) {
+          logger.log('warn', `Error processing course thumbnail: ${thumbnailError.message}`);
+          cb();
+        }
+        
+        function updateCourseHeroImage(assetId, callback) {
+          if (!courseId) {
+            logger.log('warn', 'No courseId available to set heroImage');
+            return callback();
+          }
+          
+          // Convert ObjectId to string if needed
+          const assetIdStr = assetId && assetId.toString ? assetId.toString() : assetId;
+          
+          // Validate that assetId is a proper ObjectId
+          if (!assetIdStr || typeof assetIdStr !== 'string' || !/^[a-f\d]{24}$/i.test(assetIdStr)) {
+            logger.log('warn', 'Invalid assetId provided to updateCourseHeroImage: ' + assetIdStr + ' (type: ' + typeof assetId + ')');
+            return callback();
+          }
+          
+          app.contentmanager.getContentPlugin('course', function(error, plugin) {
+            if (error) {
+              logger.log('warn', `Error getting course plugin: ${error.message}`);
+              return callback();
+            }
+            
+            plugin.update({ _id: courseId }, { heroImage: assetIdStr }, function(updateError) {
+              if (updateError) {
+                logger.log('warn', `Error updating course heroImage: ${updateError.message}`);
+              } else {
+                logger.log('info', `Successfully set course hero image to asset: ${assetIdStr}`);
+              }
+              callback();
+            });
+          });
+        }
+        
+        function createAssetFromThumbnail(thumbnailDir, thumbnailFile, originalFileName, callback) {
+          try {
+            const thumbnailPath = path.join(thumbnailDir, thumbnailFile);
+            
+            if (!fs.existsSync(thumbnailPath)) {
+              logger.log('warn', `Thumbnail file not found: ${thumbnailPath}`);
+              return callback();
+            }
+            
+            // Test if file is readable
+            try {
+              fs.accessSync(thumbnailPath, fs.constants.R_OK);
+              logger.log('info', `Thumbnail file is readable: ${thumbnailPath}`);
+            } catch (accessError) {
+              logger.log('warn', `Thumbnail file not readable: ${thumbnailPath}, error: ${accessError.message}`);
+              return callback();
+            }
+            
+            // Get file stats
+            const fileStat = fs.statSync(thumbnailPath);
+            const fileType = mime.getType(thumbnailFile) || 'image/gif'; // Default to gif for thumbnails
+            
+            logger.log('info', `Creating new asset from thumbnail: ${thumbnailFile}`);
+            logger.log('info', `Thumbnail path: ${thumbnailPath}`);
+            logger.log('info', `File type: ${fileType}, Size: ${fileStat.size}`);
+            
+            // Create asset metadata without tags to avoid validation issues
+            const fileMeta = {
+              oldId: thumbnailFile,
+              title: `Thumbnail - ${originalFileName}`,
+              type: fileType,
+              size: fileStat.size,
+              filename: thumbnailFile,
+              description: `Auto-imported thumbnail for ${originalFileName}`,
+              path: thumbnailPath,
+              tags: [], // Empty tags array to avoid validation issues
+              repository: configuration.getConfig('filestorage') || 'localfs',
+              createdBy: app.usermanager.getCurrentUser()._id
+            };
+            
+            logger.log('info', `Asset metadata created for ${thumbnailFile}:`);
+            logger.log('info', `- Title: ${fileMeta.title}`);
+            logger.log('info', `- Type: ${fileMeta.type}`);
+            logger.log('info', `- Size: ${fileMeta.size}`);
+            logger.log('info', `- Repository: ${fileMeta.repository}`);
+            
+            // Use the existing helpers.importAsset function to create the asset
+            helpers.importAsset(fileMeta, metadata, function(importError, assetRecord) {
+              if (importError) {
+                logger.log('warn', `Error creating asset from thumbnail: ${importError.message || importError}`);
+                logger.log('warn', `Full error:`, importError);
+                return callback();
+              }
+              
+              if (assetRecord && assetRecord._id) {
+                logger.log('info', `Successfully created asset from thumbnail: ${assetRecord._id} -> ${assetRecord.filename}`);
+                // Add to metadata mapping for future reference
+                metadata.assetNameMap[assetRecord._id] = assetRecord.filename;
+                updateCourseHeroImage(assetRecord._id, callback);
+              } else {
+                logger.log('warn', `Failed to create asset from thumbnail: ${thumbnailFile} - No asset record returned`);
+                callback();
+              }
+            });
+            
+          } catch (error) {
+            logger.log('warn', `Error processing thumbnail file ${thumbnailFile}: ${error.message}`);
+            logger.log('warn', `Full error:`, error);
+            callback();
           }
         }
       },

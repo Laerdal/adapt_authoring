@@ -166,12 +166,32 @@ function ImportSourceCheck(req, done) {
       }],
       checkAssetFolders: ['checkContentJson', function(results, cb) {
         if (!cleanFormAssetDirs.length) {
-          importInfo['assetFolders'] = Constants.Folders.ImportAssets;
-          return cb();
+          // Use default asset folders, but filter to only include those that actually exist
+          var defaultAssetFolders = Constants.Folders.ImportAssets;
+          importInfo['assetFolders'] = [];
+          
+          for (var i = 0; i < defaultAssetFolders.length; i++) {
+            var assetFolder = defaultAssetFolders[i];
+            var assetFolderPath = path.join(COURSE_JSON_PATH, COURSE_LANG, assetFolder);
+            if (fs.existsSync(assetFolderPath)) {
+              importInfo['assetFolders'].push(assetFolder);
+              logger.log('info', 'Found asset folder: ' + assetFolder);
+            }
+          }
+        } else {
+          importInfo['assetFolders'] = cleanFormAssetDirs;
         }
+        
+        // Check if thumbnail directory exists (for information only, don't add to assetFolders)
+        var thumbDir = 'assets/thumb';
+        var thumbDirPath = path.join(COURSE_JSON_PATH, COURSE_LANG, thumbDir);
+        if (fs.existsSync(thumbDirPath)) {
+          logger.log('info', 'Found thumbnail directory (will be processed separately): ' + thumbDir);
+        }
+        
+        // Final validation: ensure all specified folders exist
         var assetFolderError = false;
         var missingFolders = [];
-        importInfo['assetFolders'] = cleanFormAssetDirs;
         for (var i = 0, j = importInfo['assetFolders'].length; i < j; ++i) {
           var assetFolder = importInfo.assetFolders[i];
           var assetFolderPath = path.join(COURSE_JSON_PATH , COURSE_LANG, assetFolder);
@@ -180,11 +200,14 @@ function ImportSourceCheck(req, done) {
             missingFolders.push(assetFolder);
           }
         }
-        // if a user input folder is missing log error and abort early
-        if (assetFolderError) {
+        
+        // Only error if user-specified folders are missing (not default ones)
+        if (assetFolderError && cleanFormAssetDirs.length > 0) {
           var folderError = 'Cannot find asset folder/s ' + missingFolders.toString() + ' in framework import.';
           return cb(folderError);
         }
+        
+        logger.log('info', 'Asset folders to process: ' + importInfo['assetFolders'].join(', '));
         cb();
       }],
       checkPlugins: ['checkAssetFolders', function(results, cb) {
