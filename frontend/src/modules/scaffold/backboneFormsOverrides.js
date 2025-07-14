@@ -876,10 +876,10 @@ define([
     // Configuration file for API related details
     const apiConfig = {
       openai: {
-        endpoint: Origin.constants.openaiEndpoint,
-        apiVersion: Origin.constants.openaiApiVersion,
-        apiKey: Origin.constants.openaiApiKey,
-        model: Origin.constants.openaiModel
+        endpoint: 'https://p-ais-ne-ais-adapt.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions',
+        apiVersion: '2025-01-01-preview',
+        apiKey: Origin.constants.ckEditorAIApiKey,
+        model: 'gpt-4o-mini'
       },
       prompts: {
         ImproveWriting: 'Improve the writing quality of this text, maintaining exactly the same meaning and content.',
@@ -903,14 +903,28 @@ define([
             'Authorization': `Bearer ${apiConfig.openai.apiKey}`
           },
           body: JSON.stringify({
+            model: apiConfig.openai.model,
             messages: [{
               role: 'user',
               content: selectText ? `${selectText}\n\nInstruction: ${promptInstruction}` : promptInstruction
             }]
           })
         });
-
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
         const result = await response.json();
+        
+        if (!result || !result.choices || !Array.isArray(result.choices) || result.choices.length === 0) {
+          throw new Error('Invalid API response structure');
+        }
+        
+        if (!result.choices[0].message || !result.choices[0].message.content) {
+          throw new Error('No content in API response');
+        }
+        
         return result.choices[0].message.content;
       } catch (error) {
         console.error('Error fetching AI response:', error);
