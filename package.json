@@ -35,6 +35,7 @@
     "connect-mongodb-session": "^2.4.1",
     "consolidate": "^0.15.1",
     "cookie-parser": "^1.4.6",
+    "dotenv": "^16.6.1",
     "email-templates": "^8.1.0",
     "errorhandler": "^1.5.1",
     "express": "^4.18.2",
