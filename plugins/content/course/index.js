@@ -281,6 +281,16 @@ CourseContent.prototype.create = function (data, next) {
   var user = usermanager.getCurrentUser();
   var tenantId = user.tenant && user.tenant._id;
 
+  // Initialize previewTiming for new courses
+  if (!data.previewTiming) {
+    data.previewTiming = {
+      lastPreviewTime: 0,
+      totalPreviews: 0,
+      averagePreviewTime: 0,
+      lastPreviewDate: null
+    };
+  }
+
   ContentPlugin.prototype.create.call(self, data, function (err, doc) {
     if (err) {
       logger.log('error', err);
