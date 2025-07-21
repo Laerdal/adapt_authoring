@@ -878,10 +878,10 @@ define([
     // Configuration file for API related details
     const apiConfig = {
       openai: {
-        endpoint: Origin.constants.ckEditorAIEndPoint,
-        apiVersion: Origin.constants.ckEditorAIAPIVersion,
+        endpoint: 'https://p-ais-ne-ais-adapt.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions',
+        apiVersion: '2025-01-01-preview',
         apiKey: Origin.constants.ckEditorAIApiKey,
-        model: Origin.constants.ckEditorAIAPIModel
+        model: 'gpt-4o-mini'
       },
       prompts: {
         ImproveWriting: 'Improve the writing quality of this text, maintaining exactly the same meaning and content.',
