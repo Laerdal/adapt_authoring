@@ -102,7 +102,6 @@ define([
       }
       return arr.map((value, index) => processEntry([index, value])[1])
     }
-
    
     // AI Command predefined prompts
     function AiPreDefinedPromptsPlugin(editor) {
@@ -938,9 +937,6 @@ define([
       let markDownToHtml = marked.parse(markdown);
       return markDownToHtml;
     }
-
-
-
 
     until(isAttached(this.$el)).then(() => {
       return CKEDITOR.create(this.$el[0], {
