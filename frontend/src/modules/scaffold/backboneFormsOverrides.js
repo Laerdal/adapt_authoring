@@ -943,6 +943,7 @@ define([
 
 
     until(isAttached(this.$el)).then(() => {
+      let ckEditorAIAssistantEnable = (Origin && Origin.constants && Origin.constants.ckEditorAIApiKey) ? true : false;
       return CKEDITOR.create(this.$el[0], {
         dataIndentationChars: "",
         disableNativeSpellChecker: false,
@@ -1021,7 +1022,8 @@ define([
             "|",
             "specialCharacters",
             "insertTable",
-            "insertTableLayout","|", "AIPreDefinedPromptsOption", "|", "AIAssistant"
+            "insertTableLayout", 
+            ...(ckEditorAIAssistantEnable ? ["|", "AIPreDefinedPromptsOption", "|", "AIAssistant"] : [])
           ],
           shouldNotGroupWhenFull: true,
         },
