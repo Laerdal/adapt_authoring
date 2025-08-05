@@ -7,3 +7,149 @@
     }
   }
 }
+button.ai-button {
+    padding: 0 !important;
+    margin: 0 !important;
+    svg{
+      font-size: 15px !important;
+      path{
+        transform: translate(12%, 12%)!important;
+      }
+    }
+}
+.ai-agent-popup-panel {
+  background: #fff !important;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-shadow: 0px 0px 6px 2px rgba(0,0,0,.15);
+  z-index: 99999;
+  width: 400px! important;
+  margin-top: -18px !important;
+
+  textarea {
+      border: 1px #ccc solid !important;
+      margin: 10px 0 !important;
+      padding: 5px !important;
+      height: 60px !important;
+      width: 100% !important;
+      &[disabled] {
+        background: #efefef;
+      }
+  }
+  label {
+      width: 100% !important;
+      font-size: 14px !important;
+      font-weight: bold !important;
+  }
+  svg {
+      margin-right: 2px !important;
+      font-size: 10px !important;
+  }
+  h1 {
+      font-weight: bold !important;
+      font-size: 14px !important;
+  }
+  .aiTitle{
+    display: none;
+  }
+}
+.AiAgent{
+  position: relative !important;
+  padding:10px !important; width:100% !important;
+}
+#loadingMsg{
+  font-size:12px; color:#555; padding-bottom: 5px;  
+  display: none;
+}
+#closePopup{
+  position:absolute; top:5px; right:10px; cursor:pointer; font-size: 22px;
+}
+.btnAiAgent{
+  margin-top: 8px;
+      background: #2aa3ce !important;
+    padding: 1px 5px !important;
+    cursor: pointer !important;
+    border-radius: 3px;
+    color: #fff !important;
+    margin-right: 5px !important;
+    &[disabled] {
+    background: #ccc !important;
+    color: #666 !important;
+    cursor: not-allowed !important;
+}
+&[disabled]:hover {
+    background: #ccc !important;
+    color: #666 !important;
+    cursor: not-allowed !important;
+}
+}
+
+.generatedResponse{
+  display: none;
+  white-space: normal !important;  
+  max-height: 150px !important;
+  height: 100% !important;
+    overflow-y: auto;
+    border: 1px #ccc solid !important;
+    padding: 10px !important;
+    margin-bottom: 10px !important;
+    
+   li{    
+  white-space: normal !important;
+  margin-left: 15px !important;
+  }
+  
+
+ h3 {
+    font-weight: 700 !important;
+}
+ strong {
+    font-weight: bolder !important;
+}
+}
+ .location-login a#atlwdg-trigger {
+    left: 100%!important;
+  }
+  a#atlwdg-trigger {
+    left: 100%;
+    background-color: #2aa3ce;
+  }
+  .feedbackScrollPosition a#atlwdg-trigger {
+    left: calc(100% - 16px);
+  }
+  .ai-selected-text{
+    background: #e9e9e9 !important;
+  }
+
+  .ai-agent-popup-select {
+  background: #fff !important;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  box-shadow: 0px 0px 6px 2px rgba(0,0,0,.15);
+  z-index: 99999;
+  margin-top: -18px !important;
+  .AiAgent{
+    padding: 0 !important;
+  }
+  }
+  .ai-predefined-button.ck-disabled {
+    pointer-events: none;
+}
+.aiButtons{
+  display: flex;
+}
+.ck-balloon-panel_visible{
+  .ai-select-prompt{
+    padding: 10px!important;
+  }
+}
+.ck-content li{
+  margin-left: 20px !important;
+}
+
+.ck-balloon-panel_below.ck-balloon-panel_visible {
+  border: 0 !important;
+}
+.ck.ck-balloon-panel.ck-balloon-panel_with-arrow:after {
+    border: 0;
+}
