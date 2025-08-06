@@ -281,6 +281,16 @@ CourseContent.prototype.create = function (data, next) {
   var user = usermanager.getCurrentUser();
   var tenantId = user.tenant && user.tenant._id;
 
+  // Initialize previewTiming for new courses
+  if (!data.previewTiming) {
+    data.previewTiming = {
+      lastPreviewTime: 0,
+      totalPreviews: 0,
+      averagePreviewTime: 0,
+      lastPreviewDate: null
+    };
+  }
+
   ContentPlugin.prototype.create.call(self, data, function (err, doc) {
     if (err) {
       logger.log('error', err);
@@ -675,6 +685,13 @@ async function updateBlocksCollection(db, blocks) {
         const correct = metadata.idMap[branching._correct];
         const partlyCorrect = metadata.idMap[branching._partlyCorrect];
         const incorrect = metadata.idMap[branching._incorrect];
+        
+        const attemptBands = branching._attemptBands?.map((band) => ({
+          _attempts: band._attempts,
+          _correct: metadata.idMap[band._correct] || band._correct,
+          _partlyCorrect: metadata.idMap[band._partlyCorrect] || band._partlyCorrect,
+          _incorrect: metadata.idMap[band._incorrect] || band._incorrect,
+        })) || [];
 
         await db.collection('blocks').updateOne(
           { _id: record._id },
@@ -683,6 +700,7 @@ async function updateBlocksCollection(db, blocks) {
               '_extensions._branching._correct': correct || branching._correct,
               '_extensions._branching._partlyCorrect': partlyCorrect || branching._partlyCorrect,
               '_extensions._branching._incorrect': incorrect || branching._incorrect,
+              '_extensions._branching._attemptBands': attemptBands,
             },
           }
         );

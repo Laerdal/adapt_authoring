@@ -143,7 +143,6 @@ function publishCourse(courseId, mode, request, response, next) {
         // Store the JSON with the new paths to assets
         // Remove _enabledExtensions["preview-edit"] and _previewEdit from the published course, if they are present.
         if (mode === Constants.Modes.Publish) {
-          
           // Function to recursively remove preview-edit references
           function removePreviewEditReferences(obj) {
             if (typeof obj !== 'object' || obj === null) return;
