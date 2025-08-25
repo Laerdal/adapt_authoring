@@ -1022,13 +1022,45 @@ define([
             "|",
             "specialCharacters",
             "insertTable",
-            "insertTableLayout", 
+            "insertTableLayout",
+            "uploadImage",
+            "|", 
             ...(ckEditorAIAssistantEnable ? ["|", "AIPreDefinedPromptsOption", "|", "AIAssistant"] : [])
           ],
           shouldNotGroupWhenFull: true,
         },
         table: {
-          contentToolbar: ['tableColumn', 'tableRow', 'mergeTableCells', 'tableProperties']
+          contentToolbar: ['tableColumn', 'tableRow', 'mergeTableCells', 'tableProperties', 'tableCellProperties', 'toggleTableCaption'],
+          tableCaptionPosition: 'top'
+        },
+        image: {
+          toolbar: [
+            'imageStyle:inline',
+            'imageStyle:block',
+            'imageStyle:side',
+            '|',
+            'toggleImageCaption',
+            'imageTextAlternative',
+            '|',
+            'resizeImage'
+          ],
+          resizeOptions: [
+            {
+              name: 'resizeImage:original',
+              label: 'Original',
+              value: null
+            },
+            {
+              name: 'resizeImage:50',
+              label: '50%',
+              value: '50'
+            },
+            {
+              name: 'resizeImage:75',
+              label: '75%',
+              value: '75'
+            }
+          ]
         },
         link: {
           // Allow target="_blank" and rel attributes on links
