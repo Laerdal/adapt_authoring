@@ -1031,14 +1031,10 @@ define([
         },
         table: {
           contentToolbar: ['tableColumn', 'tableRow', 'mergeTableCells', 'tableProperties', 'tableCellProperties', 'toggleTableCaption'],
-          tableCaptionPosition: 'top'
         },
+        tableCaptionPosition: 'bottom',
         image: {
           toolbar: [
-            'imageStyle:inline',
-            'imageStyle:block',
-            'imageStyle:side',
-            '|',
             'toggleImageCaption',
             'imageTextAlternative',
             '|',
