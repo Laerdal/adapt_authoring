@@ -28,20 +28,9 @@ define(function(require) {
     data.allTenants.url = 'api/tenant';
     data.allTenants.fetch();
 
-    Origin.on('constants:loaded', function() {
-        if (!Origin.constants.userManagementBypassEnabled) {
-          Origin.globalMenu.addItem({
-            "location": "global",
-            "text": Origin.l10n.t('app.usermanagement'),
-            "icon": "fa-users",
-            "sortOrder": 3,
-            "callbackEvent": "userManagement:open"
-          });
-        }
-      });
-
-      // If constants are already loaded, check immediately
-      if (Origin.constants && !Origin.constants.userManagementBypassEnabled) {
+    // Function to add user management menu item
+    var addUserManagementMenuItem = function() {
+      if (!Origin.constants.userManagementBypassEnabled) {
         Origin.globalMenu.addItem({
           "location": "global",
           "text": Origin.l10n.t('app.usermanagement'),
@@ -50,6 +39,14 @@ define(function(require) {
           "callbackEvent": "userManagement:open"
         });
       }
+    };
+
+    Origin.on('constants:loaded', addUserManagementMenuItem);
+
+    // If constants are already loaded, check immediately
+    if (Origin.constants) {
+      addUserManagementMenuItem();
+    }
   	}else {
       isReady = true;
     }
