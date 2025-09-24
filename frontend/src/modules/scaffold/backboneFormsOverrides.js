@@ -295,12 +295,6 @@ define([
         }, 100);
       }
       
-      
-      // Set up event listeners for editor content changes
-      editor.model.document.on('change:data', () => toggleAiButtonState(editor));
-      editor.on('ready', () => toggleAiButtonState(editor));
-      setTimeout(() => toggleAiButtonState(editor), 100);
-      
       // Register toolbar button
       editor.ui.componentFactory.add('AIPreDefinedPromptsOption', locale => {
         const undoView = editor.ui.componentFactory.create('undo');
@@ -353,15 +347,6 @@ define([
         const data = editor.getData().replace(/\s/g, '');
         const emptyPatterns = ['', '<p></p>', '<p>&nbsp;</p>', '<p><br></p>', '<div></div>', '<div>&nbsp;</div>', '<div><br></div>'];
         return !data || emptyPatterns.includes(data) || data.replace(/<p>(&nbsp;|<br>|)<\/p>/g, '').length === 0;
-      }
-      
-      // Toggle AI button state based on editor content
-      function toggleAiButtonState(editor) {
-        const editorElement = editor.ui.view.element;
-        const aiButton = editorElement.querySelector('.ai-predefined-button');
-        if (aiButton) {
-          aiButton.classList.toggle('ck-disabled', isCKEditorEmpty(editor));
-        }
       }
 
     // AI Agent Plugin
