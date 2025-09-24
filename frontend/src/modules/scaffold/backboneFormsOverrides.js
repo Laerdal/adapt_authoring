@@ -118,10 +118,10 @@ define([
           <select class="ai-select-prompt" id="aiSelectPrompt">
             <option value="select">Select a prompt</option>
             <option value="ImproveWriting">Improve Writing</option>
-            <option value="makeShorter">Make shorter</option>
-            <option value="makeLonger">Make longer</option>
+            <option value="makeShorter">Make Shorter</option>
+            <option value="makeLonger">Make Longer</option>
             <option value="spellChecker">Spell Checker</option>
-            <option value="generateAI">Generate AI</option>
+            <option value="generateAI">Generate Content</option>
           </select>
         </div>
       `;
