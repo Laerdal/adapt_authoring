@@ -17,23 +17,40 @@ define(function(require) {
   Origin.on('origin:dataReady login:changed', function() {
     Origin.permissions.addRoute('userManagement', data.featurePermissions);
 
+    // Only add the global menu item if userManagementBypassEnabled is not true
+    // AND if the user has the required permissions
   	if (Origin.permissions.hasPermissions(data.featurePermissions)) {
-      data.allRoles.on('sync', onDataFetched);
-      data.allRoles.url = 'api/role';
-      data.allRoles.fetch();
+          data.allRoles.on('sync', onDataFetched);
+    data.allRoles.url = 'api/role';
+    data.allRoles.fetch();
 
-      data.allTenants.on('sync', onDataFetched);
-      data.allTenants.url = 'api/tenant';
-      data.allTenants.fetch();
+    data.allTenants.on('sync', onDataFetched);
+    data.allTenants.url = 'api/tenant';
+    data.allTenants.fetch();
 
-  		Origin.globalMenu.addItem({
-        "location": "global",
-        "text": Origin.l10n.t('app.usermanagement'),
-        "icon": "fa-users",
-        "sortOrder": 3,
-        "callbackEvent": "userManagement:open"
+    Origin.on('constants:loaded', function() {
+        if (!Origin.constants.userManagementBypassEnabled) {
+          Origin.globalMenu.addItem({
+            "location": "global",
+            "text": Origin.l10n.t('app.usermanagement'),
+            "icon": "fa-users",
+            "sortOrder": 3,
+            "callbackEvent": "userManagement:open"
+          });
+        }
       });
-  	} else {
+
+      // If constants are already loaded, check immediately
+      if (Origin.constants && !Origin.constants.userManagementBypassEnabled) {
+        Origin.globalMenu.addItem({
+          "location": "global",
+          "text": Origin.l10n.t('app.usermanagement'),
+          "icon": "fa-users",
+          "sortOrder": 3,
+          "callbackEvent": "userManagement:open"
+        });
+      }
+  	}else {
       isReady = true;
     }
   });
