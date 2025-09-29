@@ -116,12 +116,12 @@ define([
       panelElement.innerHTML = `
         <div class="AiAgent">
           <select class="ai-select-prompt" id="aiSelectPrompt">
-            <option value="select">Select a prompt</option>
+            <option value="select" selected disabled hidden>Select a prompt</option>            
+            <option value="generateAI">Generate Content</option>
             <option value="ImproveWriting">Improve Writing</option>
             <option value="makeShorter">Make Shorter</option>
             <option value="makeLonger">Make Longer</option>
             <option value="spellChecker">Spell Checker</option>
-            <option value="generateAI">Generate Content</option>
           </select>
         </div>
       `;
