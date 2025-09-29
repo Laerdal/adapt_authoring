@@ -791,7 +791,6 @@ function ImportSource(req, done) {
     );
   }
 
-
   // Function to update the blocks with new branching properties
   async function updateBlocksCollection(db, blocks) {
     return Promise.all(
@@ -941,6 +940,7 @@ function ImportSource(req, done) {
           if (contents && contents.trim().length > 0) {
             data = _.extend(data, { customStyle: contents.toString() });
           }
+
         } catch (e) {
           return reject(e);
         }

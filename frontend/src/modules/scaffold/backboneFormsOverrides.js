@@ -68,7 +68,7 @@ define([
   };
 
   // render ckeditor in textarea
-  Backbone.Form.editors.TextArea.prototype.render = function() {
+  Backbone.Form.editors.TextArea.prototype.render = function () {
     textAreaRender.call(this);
 
     function until(conditionFunction) {
@@ -971,7 +971,7 @@ define([
           change: function () {
             this.trigger("change", this);
           }.bind(this),
-          instanceReady: function() {
+          instanceReady: function () {
             var writer = this.dataProcessor.writer;
             var elements = Object.keys(CKEDITOR.dtd.$block);
 
