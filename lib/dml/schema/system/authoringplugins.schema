@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "type": "object",
+  "properties": {
+    "pluginType": {
+      "type": "string"
+    },
+    "pluginUsage": {
+      "type": "number"
+    },
+    "featureUsage": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "number"
+      }
+    }
+  },
+  "required": ["pluginType", "pluginUsage", "featureUsage"],
+  "additionalProperties": false
+}

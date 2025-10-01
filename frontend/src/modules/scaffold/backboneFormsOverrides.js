@@ -116,10 +116,11 @@ define([
       panelElement.innerHTML = `
         <div class="AiAgent">
           <select class="ai-select-prompt" id="aiSelectPrompt">
-            <option value="select">Select a prompt</option>
+            <option value="select" selected disabled hidden>Select a prompt</option>            
+            <option value="generateAI">Generate Content</option>
             <option value="ImproveWriting">Improve Writing</option>
-            <option value="makeShorter">Make shorter</option>
-            <option value="makeLonger">Make longer</option>
+            <option value="makeShorter">Make Shorter</option>
+            <option value="makeLonger">Make Longer</option>
             <option value="spellChecker">Spell Checker</option>
           </select>
         </div>
@@ -150,6 +151,44 @@ define([
         render() {
           panelElement.querySelector('#aiSelectPrompt').onchange = async (event) => {
             const selectedPrompt = event.target.value;
+            if (selectedPrompt === 'generateAI') {
+              // Find and trigger the AI Assistant button for this editor
+              const editorElement = editor.ui.view.element;
+              const aiButton = editorElement.querySelector('.ai-button');
+              if (aiButton) {
+                aiButton.click();
+              }
+              closePopup();
+              return;
+            }
+            if (selectedPrompt !== 'select') {
+              await AIPreDefinedPrompt(selectedPrompt, balloon, editor);
+              closePopup();
+            }
+          };
+          panelElement.querySelector('#aiSelectPrompt').onchange = async (event) => {
+            const selectedPrompt = event.target.value;
+
+            // If user picked "Generate AI", open the AIAssistant popup programmatically.
+            // This avoids needing the visible toolbar button DOM element.
+            if (selectedPrompt === 'generateAI') {
+              const selection = window.getSelection();
+              const selectedText = selection ? selection.toString() : '';
+
+              // If the AIAssistant component is available, create and execute it.
+              // Otherwise fallback to trying to open via launchAIAssistant.
+              if (editor.ui && editor.ui.componentFactory && editor.ui.componentFactory.has && editor.ui.componentFactory.has('AIAssistant')) {
+                const command = editor.ui.componentFactory.create('AIAssistant');
+                command.fire('execute');
+              } else {
+                // Fallback: use launchAIAssistant (already defined in this plugin)
+                await launchAIAssistant(editor, selectedText, '');
+              }
+
+              closePopup();
+              return;
+            }
+
             if (selectedPrompt !== 'select') {
               await AIPreDefinedPrompt(selectedPrompt, balloon, editor);
               closePopup();
@@ -218,7 +257,7 @@ define([
           // Show loading state
           elements.input.value = '';
           elements.input.disabled = true;
-          elements.loading.innerText = 'Loading response from ChatGPT...';
+          elements.loading.innerText = 'Loading response from Samaritan...';
           elements.loading.style.display = 'block';
           elements.submitBtn.style.display = 'none';
           // Only show .aiTitle if it exists, otherwise do nothing
@@ -256,12 +295,6 @@ define([
         }, 100);
       }
       
-      
-      // Set up event listeners for editor content changes
-      editor.model.document.on('change:data', () => toggleAiButtonState(editor));
-      editor.on('ready', () => toggleAiButtonState(editor));
-      setTimeout(() => toggleAiButtonState(editor), 100);
-      
       // Register toolbar button
       editor.ui.componentFactory.add('AIPreDefinedPromptsOption', locale => {
         const undoView = editor.ui.componentFactory.create('undo');
@@ -269,8 +302,8 @@ define([
         
         const button = new ButtonView(locale);
         button.set({
-          label: 'AI Commands',
-          icon: '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="256" height="256" viewBox="0 0 256 256" xml:space="preserve"><g style="stroke: none; stroke-width: 0; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 10; fill: none; fill-rule: nonzero; opacity: 1;" transform="translate(1.4065934065933874 254.59340659340654) rotate(-90) scale(2.81 2.81)"><path d="M 70.15 34.112 c -1.88 -1.88 -2.35 -4.751 -1.167 -7.132 l 4.892 -9.845 c 0.089 -0.179 0.054 -0.395 -0.088 -0.537 c -0.142 -0.142 -0.357 -0.177 -0.537 -0.088 l -9.845 4.892 c -2.381 1.183 -5.252 0.714 -7.132 -1.167 l -7.558 -7.558 c -0.142 -0.142 -0.36 -0.177 -0.54 -0.086 c -0.18 0.091 -0.281 0.287 -0.25 0.486 l 1.615 10.611 c 0.4 2.629 -0.923 5.219 -3.287 6.436 l -9.621 4.952 c -0.178 0.092 -0.277 0.287 -0.247 0.484 c 0.03 0.199 0.183 0.355 0.381 0.389 l 10.763 1.868 c 0.173 0.03 0.336 0.085 0.503 0.128 L 1.299 84.676 c -1.218 1.218 -1.218 3.192 0 4.41 C 1.908 89.695 2.706 90 3.504 90 s 1.596 -0.305 2.205 -0.914 l 46.732 -46.732 c 0.044 0.168 0.098 0.33 0.128 0.503 l 1.867 10.763 c 0.017 0.097 0.063 0.184 0.13 0.25 c 0.069 0.069 0.158 0.116 0.259 0.131 c 0.198 0.031 0.393 -0.069 0.484 -0.247 l 4.952 -9.621 c 1.217 -2.364 3.807 -3.687 6.436 -3.287 l 10.611 1.615 c 0.2 0.03 0.396 -0.071 0.487 -0.251 c 0.091 -0.18 0.056 -0.398 -0.086 -0.54 L 70.15 34.112 z" style="stroke: none; stroke-width: 1; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 10; fill: rgb(0,0,0); fill-rule: nonzero; opacity: 1;" transform=" matrix(1 0 0 1 0 0) " stroke-linecap="round"/><path d="M 89.311 27.791 c -0.742 -1.666 -2.694 -2.414 -4.359 -1.672 l -8.68 3.867 c 0 0 9.208 2.348 9.208 2.348 C 88.033 33.072 90.488 30.219 89.311 27.791 z" style="stroke: none; stroke-width: 1; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 10; fill: rgb(0,0,0); fill-rule: nonzero; opacity: 1;" transform=" matrix(1 0 0 1 0 0) " stroke-linecap="round"/><path d="M 59.629 13.344 l 3.867 -8.68 c 1.158 -2.392 -1.24 -5.294 -3.832 -4.542 c -1.767 0.451 -2.834 2.248 -2.383 4.015 L 59.629 13.344 z" style="stroke: none; stroke-width: 1; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 10; fill: rgb(0,0,0); fill-rule: nonzero; opacity: 1;" transform=" matrix(1 0 0 1 0 0) " stroke-linecap="round"/><path d="M 66.317 46.626 c 0 0 -0.113 9.722 -0.113 9.722 c -0.113 2.627 3.178 4.34 5.262 2.677 c 1.457 -1.088 1.756 -3.151 0.668 -4.608 L 66.317 46.626 z" style="stroke: none; stroke-width: 1; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 10; fill: rgb(0,0,0); fill-rule: nonzero; opacity: 1;" transform=" matrix(1 0 0 1 0 0) " stroke-linecap="round"/><path d="M 32.517 22.662 l 9.722 -0.113 c 0 0 -7.791 -5.817 -7.791 -5.817 c -2.056 -1.638 -5.379 0.012 -5.262 2.676 C 29.208 21.226 30.699 22.683 32.517 22.662 z" style="stroke: none; stroke-width: 1; stroke-dasharray: none; stroke-linecap: butt; stroke-linejoin: miter; stroke-miterlimit: 10; fill: rgb(0,0,0); fill-rule: nonzero; opacity: 1;" transform=" matrix(1 0 0 1 0 0) " stroke-linecap="round"/></g></svg>',
+          label: 'Samaritan Laerdal AI Assistant',
+          icon: '<svg viewBox="0 0 54 48" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M21 5.8244L23.1215 3.70303C27.4172 -0.59274 34.3821 -0.59274 38.6778 3.70303C42.9736 7.99879 42.9736 14.9636 38.6778 19.2594L33.8384 24.0988L33.7354 24.2015C33.7329 24.2041 33.7303 24.2066 33.7278 24.2092L23.421 34.516C22.0839 35.8531 19.9159 35.8531 18.5788 34.516L3.32223 19.2594C-0.973539 14.9636 -0.973539 7.99879 3.32223 3.70303C7.618 -0.59274 14.5828 -0.592741 18.8786 3.70303L21 5.8244ZM22.0068 33.1018C21.4507 33.6578 20.5491 33.6578 19.993 33.1018L4.73644 17.8452C1.22172 14.3304 1.22172 8.63196 4.73644 5.11724C8.25116 1.60252 13.9496 1.60252 17.4644 5.11724L19.5857 7.23857L16.7572 10.0669C14.414 12.4101 14.414 16.209 16.7572 18.5522C19.1003 20.8953 22.8993 20.8953 25.2424 18.5522L26.6567 17.1381C28.2188 15.576 30.7515 15.576 32.3136 17.1381C33.8743 18.6988 33.8757 21.2283 32.3178 22.7907C32.3164 22.7921 32.315 22.7935 32.3136 22.7949L22.0068 33.1018ZM37.2636 17.8452L35.4759 19.6328C35.3972 18.2103 34.8145 16.8105 33.7278 15.7239C31.3847 13.3807 27.5856 13.3806 25.2425 15.7238L23.8282 17.138C22.2661 18.7001 19.7335 18.7001 18.1714 17.138C16.6093 15.5759 16.6093 13.0432 18.1714 11.4811L24.5357 5.11724C28.0504 1.60252 33.7489 1.60252 37.2636 5.11724C40.7783 8.63196 40.7783 14.3304 37.2636 17.8452Z"/></svg>',
           tooltip: true,
           tooltipPosition: 'n',
           class: 'ai-predefined-button'
@@ -315,15 +348,6 @@ define([
         const emptyPatterns = ['', '<p></p>', '<p>&nbsp;</p>', '<p><br></p>', '<div></div>', '<div>&nbsp;</div>', '<div><br></div>'];
         return !data || emptyPatterns.includes(data) || data.replace(/<p>(&nbsp;|<br>|)<\/p>/g, '').length === 0;
       }
-      
-      // Toggle AI button state based on editor content
-      function toggleAiButtonState(editor) {
-        const editorElement = editor.ui.view.element;
-        const aiButton = editorElement.querySelector('.ai-predefined-button');
-        if (aiButton) {
-          aiButton.classList.toggle('ck-disabled', isCKEditorEmpty(editor));
-        }
-      }
 
     // AI Agent Plugin
     function AiAgentPlugin(editor, promptResponse) {
@@ -337,8 +361,9 @@ define([
       panelElement.innerHTML = `
         <div class="AiAgent">
           <span id="closePopup">×</span>    
-          <label><svg viewBox="0 0 512 512" width="25px" height="25px" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" fill="#000000"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <title></title> <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd"> <g id="icon" fill="#000000" transform="translate(32.000000, 32.000000)"> <path d="M320,64 L320,320 L64,320 L64,64 L320,64 Z M171.749388,128 L146.817842,128 L99.4840387,256 L121.976629,256 L130.913039,230.977 L187.575039,230.977 L196.319607,256 L220.167172,256 L171.749388,128 Z M260.093778,128 L237.691519,128 L237.691519,256 L260.093778,256 L260.093778,128 Z M159.094727,149.47526 L181.409039,213.333 L137.135039,213.333 L159.094727,149.47526 Z M341.333333,256 L384,256 L384,298.666667 L341.333333,298.666667 L341.333333,256 Z M85.3333333,341.333333 L128,341.333333 L128,384 L85.3333333,384 L85.3333333,341.333333 Z M170.666667,341.333333 L213.333333,341.333333 L213.333333,384 L170.666667,384 L170.666667,341.333333 Z M85.3333333,0 L128,0 L128,42.6666667 L85.3333333,42.6666667 L85.3333333,0 Z M256,341.333333 L298.666667,341.333333 L298.666667,384 L256,384 L256,341.333333 Z M170.666667,0 L213.333333,0 L213.333333,42.6666667 L170.666667,42.6666667 L170.666667,0 Z M256,0 L298.666667,0 L298.666667,42.6666667 L256,42.6666667 L256,0 Z M341.333333,170.666667 L384,170.666667 L384,213.333333 L341.333333,213.333333 L341.333333,170.666667 Z M0,256 L42.6666667,256 L42.6666667,298.666667 L0,298.666667 L0,256 Z M341.333333,85.3333333 L384,85.3333333 L384,128 L341.333333,128 L341.333333,85.3333333 Z M0,170.666667 L42.6666667,170.666667 L42.6666667,213.333333 L0,213.333333 L0,170.666667 Z M0,85.3333333 L42.6666667,85.3333333 L42.6666667,128 L0,128 L0,85.3333333 Z" id="Combined-Shape"> </path> </g> </g> </g></svg> AI Assistant</label><br>
-          <textarea id="assistantTextArea" placeholder="Ask AI to edit or generate"></textarea>
+          <label><svg width="22" height="18" viewBox="0 0 42 36" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M21 5.8244L23.1215 3.70303C27.4172 -0.59274 34.3821 -0.59274 38.6778 3.70303C42.9736 7.99879 42.9736 14.9636 38.6778 19.2594L33.8384 24.0988L33.7354 24.2015C33.7329 24.2041 33.7303 24.2066 33.7278 24.2092L23.421 34.516C22.0839 35.8531 19.9159 35.8531 18.5788 34.516L3.32223 19.2594C-0.973539 14.9636 -0.973539 7.99879 3.32223 3.70303C7.618 -0.59274 14.5828 -0.592741 18.8786 3.70303L21 5.8244ZM22.0068 33.1018C21.4507 33.6578 20.5491 33.6578 19.993 33.1018L4.73644 17.8452C1.22172 14.3304 1.22172 8.63196 4.73644 5.11724C8.25116 1.60252 13.9496 1.60252 17.4644 5.11724L19.5857 7.23857L16.7572 10.0669C14.414 12.4101 14.414 16.209 16.7572 18.5522C19.1003 20.8953 22.8993 20.8953 25.2424 18.5522L26.6567 17.1381C28.2188 15.576 30.7515 15.576 32.3136 17.1381C33.8743 18.6988 33.8757 21.2283 32.3178 22.7907C32.3164 22.7921 32.315 22.7935 32.3136 22.7949L22.0068 33.1018ZM37.2636 17.8452L35.4759 19.6328C35.3972 18.2103 34.8145 16.8105 33.7278 15.7239C31.3847 13.3807 27.5856 13.3806 25.2425 15.7238L23.8282 17.138C22.2661 18.7001 19.7335 18.7001 18.1714 17.138C16.6093 15.5759 16.6093 13.0432 18.1714 11.4811L24.5357 5.11724C28.0504 1.60252 33.7489 1.60252 37.2636 5.11724C40.7783 8.63196 40.7783 14.3304 37.2636 17.8452Z" fill="#1A1A1A"/></svg>
+Samaritan Laerdal AI Assistant</label><br>
+          <textarea id="assistantTextArea" placeholder="Ask Samaritan to edit or generate"></textarea>
           <div id="loadingMsg"></div>
           <div class='generatedResponse'></div>
           <div class="aiButtons">
@@ -417,10 +442,14 @@ define([
               view: popupView,
               position: {
                 target: () => {
-                  // Find the AI Assistant button element for THIS specific editor
+                  // Prioritize the AI Commands button for positioning (since AIAssistant icon may be hidden)
                   const editorElement = editor.ui.view.element;
-                  const aiButton = editorElement.querySelector('.ai-button');
-                  return aiButton || editor.ui.view.editable.element;
+                  let targetButton = editorElement.querySelector('.ai-predefined-button');
+                  // Fallback to AI Assistant button if present, then editable area
+                  if (!targetButton) {
+                    targetButton = editorElement.querySelector('.ai-button');
+                  }
+                  return targetButton || editor.ui.view.editable.element;
                 },
                 positions: [
                   // Position below the AI Assistant button
@@ -540,7 +569,7 @@ define([
           if (!prompt || elements.submitBtn.disabled) return;
           
           // Show loading state
-          elements.loading.innerText = 'Loading response from ChatGPT...';
+          elements.loading.innerText = 'Loading response from Samaritan...';
           elements.loading.style.display = 'block';
           elements.submitBtn.disabled = true;
           elements.response.style.display = 'none';
@@ -582,7 +611,6 @@ define([
             // Show response
             elements.response.innerHTML = formattedHTML;
             elements.response.style.display = 'block';
-            $('.aiTitle').show();
             elements.input.disabled = true;
             elements.loading.style.display = 'none';
             elements.insertBtn.disabled = false;
@@ -596,7 +624,7 @@ define([
             
           setupButtonHandler(elements, editor, response, prompt, selectedText || selectedTextValue);
           } catch (err) {
-            console.error('ChatGPT error:', err);
+            console.error('AI Assistant error:', err);
             elements.loading.innerText = 'Error fetching response. Please try again.';
           }
         };
@@ -809,7 +837,7 @@ define([
             $aiTitle.hide();
           }
           // Show loading state
-          elements.loading.innerText = 'Loading response from ChatGPT...';
+          elements.loading.innerText = 'Loading response from Samaritan...';
           elements.loading.style.display = 'block';
           elements.response.style.display = 'none';
           
@@ -1024,8 +1052,8 @@ define([
             "insertTable",
             "insertTableLayout",
             "uploadImage",
-            "|", 
-            ...(ckEditorAIAssistantEnable ? ["|", "AIPreDefinedPromptsOption", "|", "AIAssistant"] : [])
+            "|",
+            ...(ckEditorAIAssistantEnable ? ["|", "AIPreDefinedPromptsOption"] : [])
           ],
           shouldNotGroupWhenFull: true,
         },
