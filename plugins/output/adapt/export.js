@@ -21,10 +21,124 @@ let COURSE_ID;
 let OPTIONS = {
   forceRebuild: true
 };
+let metadata = {};
+
+/**
+ * Helper function to check if a value is a valid MongoDB ObjectId
+ */
+function isValidObjectId(id) {
+  if (!id || typeof id !== 'string') {
+    return false;
+  }
+  // Check if it's a 24-character hex string (MongoDB ObjectId format)
+  return /^[a-f\d]{24}$/i.test(id);
+}
+
+function copyCourseThumbnail(results, done) {
+  const database = require('../../../lib/database');
+  
+  database.getDatabase(function(error, db) {
+    if (error) return done(error);
+    
+    db.retrieve('course', { _id: COURSE_ID }, function(error, courses) {
+      if (error || !courses || !courses.length) {
+        logger.log('warn', 'Failed to retrieve course for thumbnail export');
+        return done();
+      }
+      
+      const course = courses[0];
+      if (!course.heroImage) {
+        return done();
+      }
+
+      // Validate ObjectId before attempting to retrieve asset
+      if (!isValidObjectId(course.heroImage)) {
+        logger.log('warn', `Invalid ObjectId for hero image: ${course.heroImage}`);
+        return done();
+      }
+
+      // Retrieve the asset details for the hero image
+      db.retrieve('asset', { _id: course.heroImage }, function(error, assets) {
+        if (error || !assets || !assets.length) {
+          logger.log('warn', `Failed to retrieve hero image asset: ${course.heroImage}`);
+          return done();
+        }
+
+        const asset = assets[0];
+        
+        // Get the correct storage repository
+        filestorage.getStorage(asset.repository, function(error, storage) {
+          if (error) {
+            logger.log('warn', `Failed to retrieve storage repository: ${error.message}`);
+            return done();
+          }
+
+          // Get the course language from the built course
+          const courseSrcDir = path.join(EXPORT_DIR, Constants.Folders.Source, Constants.Folders.Course);
+          
+          // Find the language directory (usually 'en' or other language code)
+          fs.readdir(courseSrcDir, function(readDirError, files) {
+            if (readDirError) {
+              logger.log('warn', `Failed to read course directory: ${readDirError.message}`);
+              return done();
+            }
+            
+            // Find the first directory (language folder)
+            let languageDir = null;
+            for (const file of files) {
+              const filePath = path.join(courseSrcDir, file);
+              if (fs.statSync(filePath).isDirectory()) {
+                languageDir = file;
+                break;
+              }
+            }
+            
+            if (!languageDir) {
+              logger.log('warn', 'No language directory found in course');
+              return done();
+            }
+            
+            // Create destination directory under the course language directory
+            const thumbnailDir = path.join(courseSrcDir, languageDir, 'assets', 'thumb');
+            fs.ensureDir(thumbnailDir, function(error) {
+              if (error) return done(error);
+
+              // Get the source thumbnail path from storage
+              const srcPath = storage.resolvePath(asset.thumbnailPath || asset.path);
+              const destPath = path.join(thumbnailDir, path.basename(asset.thumbnailPath || asset.path));
+
+              // Copy the thumbnail
+              fs.copy(srcPath, destPath, function(error) {
+                if (error) {
+                  logger.log('warn', `Failed to copy course thumbnail: ${error.message}`);
+                  return done(error);
+                }
+                // Store metadata about the hero image (metadata is now guaranteed to exist)
+                metadata.heroImage = {
+                  assetId: asset._id,
+                  fileName: path.basename(asset.thumbnailPath || asset.path)
+                };
+                logger.log('info', `Successfully copied course thumbnail to: ${destPath}`);
+                done();
+              });
+            });
+          });
+        });
+      });
+    });
+  });
+}
 
 function exportCourse(pCourseId, request, response, next, options = {}) {
   self = this;
   const currentUser = usermanager.getCurrentUser();
+
+  // Reset metadata for new export
+  metadata = {
+    assets: {},
+    pluginIncludes: [],
+    heroImage: null
+  };
 
   TENANT_ID = currentUser.tenant._id;
   COURSE_ID = pCourseId;
@@ -38,7 +152,9 @@ function exportCourse(pCourseId, request, response, next, options = {}) {
     copyFrameworkFiles: ['generateLatestBuild', copyFrameworkFiles],
     writeThemeVariables: ['copyFrameworkFiles', writeThemeVariables],
     writeCustomStyle: ['writeThemeVariables', writeCustomStyle],
-    copyCourseFiles: ['generateLatestBuild', copyCourseFiles]
+    copyCourseFiles: ['generateLatestBuild', copyCourseFiles],
+    copyThumbnail: ['copyCourseFiles', copyCourseThumbnail]
+    //copyAssets:['copyCourseFiles', copyAssets]
   }, async.apply(zipExport, next));
 }
 
