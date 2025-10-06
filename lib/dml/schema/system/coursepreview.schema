@@ -1,0 +1,53 @@
+{
+  "type": "object",
+  "$schema": "http://json-schema.org/draft-04/schema",
+  "id": "http://jsonschema.net",
+  "$ref": "http://localhost/system/tenantObject.schema",
+  "properties": {
+    "courseId": {
+      "type": "string",
+      "required": true,
+      "index": {
+        "unique": true
+      }
+    },
+    "courseName": {
+      "type": "string",
+      "required": true
+    },
+    "displayTitle": {
+      "type": "string",
+      "required": true
+    },
+    "lastPreviewTime": {
+      "type": "number",
+      "default": 0
+    },
+    "totalPreviews": {
+      "type": "number",
+      "default": 0
+    },
+    "averagePreviewTime": {
+      "type": "number",
+      "default": 0
+    },
+    "totalPreviewTime": {
+      "type": "number",
+      "default": 0
+    },
+    "lastPreviewDate": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "lastUpdated": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false,
+  "required": ["courseId", "courseName", "displayTitle"]
+}
