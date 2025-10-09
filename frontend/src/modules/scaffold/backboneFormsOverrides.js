@@ -905,8 +905,7 @@ function xmlToHtmlPlugin(editor) {
         closePopup(panelElement, outsideClickHandler);
       panelElement.querySelector('#xmlCancelBtn').onclick = () =>
         closePopup(panelElement, outsideClickHandler);
-
-       panelElement.querySelector('#xmlSubmitBtn').onclick = () => {
+      panelElement.querySelector('#xmlSubmitBtn').onclick = () => {
         const xmlContent = panelElement.querySelector('#xmlInputArea').value.trim();
 
         // Clear any previous inline error
@@ -948,8 +947,6 @@ function xmlToHtmlPlugin(editor) {
           closePopup(panelElement, outsideClickHandler);
         } catch (error) {
           // Log for debugging but surface message inline under textarea and keep popup open
-            console.error('Error processing XML:', error);
-
           // Extract short parser message without line/column or rendering junk
           function extractShortXmlError(err) {
             let msg = err && err.message ? err.message : String(err);
