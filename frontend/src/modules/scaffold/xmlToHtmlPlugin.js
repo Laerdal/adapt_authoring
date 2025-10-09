@@ -1,6 +1,4 @@
-define([
-  'core/origin'
-], function(Origin) {
+define([], function() {
   
   // XML to HTML Conversion Plugin with XSLT support
   function xmlToHtmlPlugin(editor) {
