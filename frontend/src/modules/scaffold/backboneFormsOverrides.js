@@ -1,8 +1,9 @@
 define([
   'core/origin',
   'backbone-forms',
-  'libraries/marked.min.js'
-], function(Origin, BackboneForms, marked) {
+  'libraries/marked.min.js',
+  './xmlToHtmlPlugin'
+], function(Origin, BackboneForms, marked, xmlToHtmlPlugin) {
 
   var templates = Handlebars.templates;
   var fieldTemplate = templates.field;
@@ -644,8 +645,8 @@ Samaritan Laerdal AI Assistant</label><br>
           elements.submitBtn._listenerAttached = true;
         }
       }
-
     }
+
     // Set up response action buttons
       function setupButtonHandler(elements, editor, response, prompt, selectedText) {
         // Insert action
@@ -978,7 +979,7 @@ Samaritan Laerdal AI Assistant</label><br>
         versionCheck:false,
         enterMode: CKEDITOR[Origin.constants.ckEditorEnterMode],
         entities: false,
-        extraPlugins: [ AiAgentPlugin, AiPreDefinedPromptsPlugin ],
+        extraPlugins: [ AiAgentPlugin, AiPreDefinedPromptsPlugin, xmlToHtmlPlugin ],
         // htmlSupport: {
         //   // Convert all allow/disallow strings to regexp, as config is json only
         //   allow: convertStringsToRegExDeep((Origin.constants.ckEditorHtmlSupport && Origin.constants.ckEditorHtmlSupport.allow) || []),
@@ -1053,6 +1054,7 @@ Samaritan Laerdal AI Assistant</label><br>
             "insertTableLayout",
             "uploadImage",
             "|",
+            "xmlToHtmlConversion",
             ...(ckEditorAIAssistantEnable ? ["|", "AIPreDefinedPromptsOption"] : [])
           ],
           shouldNotGroupWhenFull: true,
