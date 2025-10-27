@@ -281,16 +281,10 @@ Samaritan assistant</label><br>
               } else if(selectedTextCursor.trim() !== '') {
                 cursorLine = selectedTextCursor;
               }
-              console.log(selectedTextCursor);
-              console.log(selectedText);
-              console.log(cursorLine);
               
               $('.generatedResponse').html(cursorLine).attr('disabled', true).css('background', '#FAFAFA');
               
             } else {
-              console.log(selectedTextCursor);
-              console.log('selectedText');
-              console.log(selectedText);
               $('.generatedResponse').html(selectedText).attr('disabled', true).css('background', '#FAFAFA');
             }        
 
