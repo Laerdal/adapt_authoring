@@ -9,9 +9,12 @@
 }
 button.ai-button, button.ai-predefined-button {
     padding: 0 !important;
-    margin: 0 !important;
+    margin: 0 !important;    
     svg{
-      font-size: 15px !important;
+      font-size: 55px !important;
+      height: 33px !important;      
+      margin-left: -6px !important;
+
       path{
         transform: translate(12%, 12%)!important;
       }
@@ -20,30 +23,60 @@ button.ai-button, button.ai-predefined-button {
 .ai-agent-popup-panel {
   background: #fff !important;
   border: 1px solid #ccc;
-  border-radius: 6px;
+  border-radius: 8px;
   box-shadow: 0px 0px 6px 2px rgba(0,0,0,.15);
   z-index: 99999;
-  width: 400px! important;
+  width: 490px! important;
   margin-top: -18px !important;
-
+  background: linear-gradient(90deg, #AF50AF, #5F73BA) !important;
+  padding: 1px 0px 1px 1px !important;
+  
+.custom-prompt-section{
+  position: relative !important;
+}
+.ck-balloon-panel.ai-assistant-balloon{
+  box-shadow: inherit !important;
+}
+button#assistantSubmitBtn{
+  position: absolute;
+  right: 1px;
+  top: 16px;
+  background: #E5E5E5 !important;
+  height: 38px !important;
+  width: 38px !important;
+  border-radius: 9999px;
+  padding: 0 7px !important;
+  &:hover {
+    background: linear-gradient(90deg, #AF50AF, #5F73BA) !important;
+    color: #ffffff !important;
+  }
+ }
   textarea {
-      border: 1px #ccc solid !important;
+      border: 1px #949494 solid !important;
       margin: 10px 0 !important;
-      padding: 5px !important;
-      height: 60px !important;
+      padding: 14px 55px 14px 16px !important;
       width: 100% !important;
+      min-height: 48px !important;
+      height: 50px !important;
+      border-radius: 9999px;
+      font-size: 16px !important;
+      line-height: 20px !important;
+      resize: none;
       &[disabled] {
         background: #efefef;
       }
   }
   label {
       width: 100% !important;
-      font-size: 14px !important;
-      font-weight: bold !important;
+      font-size: 20px !important;
+      font-weight: bold !important;    
+      margin: 4px 0 12px 0 !important;
+      display: inline-block;
   }
   svg {
       margin-right: 2px !important;
       font-size: 10px !important;
+      cursor: pointer !important;
   }
   h1 {
       font-weight: bold !important;
@@ -55,23 +88,34 @@ button.ai-button, button.ai-predefined-button {
 }
 .AiAgent{
   position: relative !important;
-  padding:10px !important; width:100% !important;
+  padding:10px 24px!important; 
+  width: calc(100% - 1.5px) !important;
+  margin: 1px 0 !important;
+  background: #ffffff !important;
+  border-radius: 8px;
+  white-space: normal !important;
 }
 #loadingMsg{
   font-size:12px; color:#555; padding-bottom: 5px;  
   display: none;
 }
 #closePopup{
-  position:absolute; top:5px; right:10px; cursor:pointer; font-size: 22px;
+  position:absolute; top:5px; right:24px; cursor:pointer; font-size: 28px; color: #666666;
+}
+button#assistantTryAgainBtn {
+    background: transparent !important;
+    padding-left: 8px !important;
 }
 .btnAiAgent{
   margin-top: 8px;
       background: #2aa3ce !important;
-    padding: 1px 5px !important;
+    padding: 8px 16px !important;
     cursor: pointer !important;
     border-radius: 3px;
     color: #fff !important;
     margin-right: 5px !important;
+    font-size: 14px !important;
+    font-weight: bold !important;
     &[disabled] {
     background: #ccc !important;
     color: #666 !important;
@@ -85,14 +129,20 @@ button.ai-button, button.ai-predefined-button {
 }
 
 .generatedResponse{
-  display: none;
   white-space: normal !important;  
   max-height: 150px !important;
   height: 100% !important;
-    overflow-y: auto;
-    border: 1px #ccc solid !important;
-    padding: 10px !important;
-    margin-bottom: 10px !important;
+  overflow-y: auto;
+  padding: 10px 10px 10px 10px !important;
+  margin-bottom: 10px !important;
+  min-height: 100px;
+  background-color: #FAFAFA!important;
+  white-space: normal !important;
+  border-radius: 4px;
+
+  *{
+    white-space: normal !important;    
+  }
     
    li{    
   white-space: normal !important;
@@ -106,6 +156,57 @@ button.ai-button, button.ai-predefined-button {
  strong {
     font-weight: bolder !important;
 }
+
+  /* Custom scrollbar with spacing */
+  &::-webkit-scrollbar {
+    width: 10px !important;
+    margin-left: 8px !important;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: #ffffff !important; 
+    margin-right: 4px !important;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #215369 !important;
+    border-radius: 9999px;
+    border: 3px solid #FAFAFA !important;
+    background-clip: padding-box !important;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: #215369 !important;
+    border: 3px solid #FAFAFA !important;
+    background-clip: padding-box !important;
+  }
+
+  &::-webkit-scrollbar-thumb:active {
+    background: #215369 !important;
+    border: 3px solid #FAFAFA !important;
+    background-clip: padding-box !important;
+  }
+
+  /* ✅ Completely remove scrollbar arrows/buttons */
+  &::-webkit-scrollbar-button:single-button {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
+  }
+
+  &::-webkit-scrollbar-button:decrement,
+  &::-webkit-scrollbar-button:increment {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
+  }
+}
+span.help-assistant {
+    position: absolute !important;
+    right: 50px !important;
+    top: 17px;
 }
  .location-login a#atlwdg-trigger {
     left: 100%!important;
@@ -135,9 +236,185 @@ button.ai-button, button.ai-predefined-button {
   .ai-predefined-button.ck-disabled {
     pointer-events: none;
 }
-.aiButtons{
+.aiButtons {
   display: flex;
+  margin: 8px 0 !important;
+  justify-content: end;
+  button.buttonDismiss {
+    color: #276D8B !important;
+    background: transparent !important;
+  }
+  button.buttonReplace{
+    position: relative;
+    display: inline-block;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    font-weight: bold;
+    font-size: 18px;
+    padding: 0 !important;
+    background:
+    linear-gradient(90deg, #AF50AF, #5F73BA) !important;  /* Inner background */
+    -webkit-background-clip: padding-box, border-box;
+  background-clip: padding-box, border-box;
+  color: transparent; /* hide solid text color */
+  background-image: linear-gradient(90deg, #AF50AF, #5F73BA);
+  -webkit-background-clip: text;
+  span {
+    display: block;
+    background: #fff;
+    color: #5F73BA; /* readable text color */
+    font-weight: bold;
+    font-size: 14px;
+    border-radius: 6px; /* slightly smaller than outer radius */
+    padding: 8px 12px;
+    text-align: center;
+    line-height: 22px;
 }
+  }
+  button.buttonInsert{
+    border-radius: 8px ;
+    background: linear-gradient(90deg, #AF50AF, #5F73BA) !important;
+    color: #ffffff !important;
+  }
+  button.btnAiAgent[disabled]{
+    background: #ccc !important;
+    color: #B3B3B3 !important;
+    cursor: not-allowed !important;
+    border-radius: 8px;
+    &.buttonTryAgain{
+      background: transparent !important;
+  }
+  &.buttonInsert{
+    background: #E5E5E5 !important;
+  }
+  &.buttonReplace{
+    background: transparent !important;
+    border: 2px solid #E5E5E5 !important;
+    span {
+      color: #B3B3B3 !important
+    }
+  }
+  &.buttonDismiss{
+    color: #B3B3B3 !important;
+    background: transparent !important;
+  }
+}
+}
+button.buttonTryAgain {
+    margin-right: auto !important;
+}
+.ai-button {
+    // width: 116px !important;
+    background: transparent !important;
+}
+
+// AI Agent Predefined Prompts Inline Styles
+.ai-predefined-prompts-section {
+  margin-bottom: 16px ;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.prompts-title, .custom-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 8px 0;
+}
+
+.ai-prompt-buttons-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 0 !important;
+}
+
+.ai-prompt-btn-inline {
+  background: #f8f9fa;
+  border: 2px solid #cccccc !important;
+  border-radius: 9999px !important;
+  padding: 8px 10px !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  color: #666666 !important;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  line-height: 12px !important;
+
+  &:hover {
+    border-color: #215369 !important;
+    background: #F1FBFE !important;
+    font-size: 14px !important;
+    color: #215369 !important;
+    line-height: 12px !important;
+  }
+
+  &:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  }
+
+  &:focus {
+    outline: 2px solid #007bff;
+    outline-offset: 2px;
+  }
+}
+
+.custom-prompt-section {
+  margin-bottom: 16px;
+}
+
+
+.ai-agent-popup-panel,
+.generatedResponse,
+#assistantTextArea,
+.AiAgent {
+  // scrollbar-width: thin;
+  /* For WebKit browsers (Chrome, Edge, Safari) */
+  &::-webkit-scrollbar {
+    width: 4px;
+    height: 8px;
+    margin-left: 5px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: #FAFAFA; 
+    border-radius: 9999px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #215369;
+    border-radius: 9999px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: #215369;
+  }
+
+  &::-webkit-scrollbar-thumb:active {
+    background: #215369;
+  }
+
+  /* ✅ Completely remove scrollbar arrows/buttons */
+  &::-webkit-scrollbar-button:single-button {
+    display: none;
+    width: 0;
+    height: 0;
+    background: transparent;
+  }
+
+  /* Some browsers require hiding these too */
+  &::-webkit-scrollbar-button:decrement,
+  &::-webkit-scrollbar-button:increment {
+    display: none;
+    width: 0;
+    height: 0;
+    background: transparent;
+  }
+}
+
 .ck-balloon-panel_visible{
   .ai-select-prompt{
     padding: 10px!important;
@@ -252,6 +529,7 @@ button.ai-button, button.ai-predefined-button {
 button.xml-to-html-button {
     padding: 0 !important;
     margin: 0 !important;
+    padding-right: 3px !important;
     svg {
       font-size: 0.75rem !important;
       margin: 0 0.1875rem !important;
