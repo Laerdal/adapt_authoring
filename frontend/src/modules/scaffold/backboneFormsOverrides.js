@@ -123,6 +123,7 @@ define([
       panelElement.innerHTML = `
         <div class="AiAgent">
           <span id="closePopup">×</span>    
+          <span class='help-assistant' title="Click for assistance"><svg width="20" height="20" viewBox="0 0 22 22" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 16C12 16.5523 11.5523 17 11 17C10.4477 17 10 16.5523 10 16C10 15.4477 10.4477 15 11 15C11.5523 15 12 15.4477 12 16Z" fill="#666666"/><path d="M9.5 8.5C9.5 7.67157 10.1716 7 11 7C11.8284 7 12.5 7.67157 12.5 8.5C12.5 8.90672 12.3394 9.27391 12.0761 9.54503C11.9995 9.62385 11.9122 9.71095 11.8184 9.80462C11.5072 10.1151 11.1239 10.4977 10.8189 10.8896C10.4067 11.4192 10 12.1264 10 13C10 13.5523 10.4477 14 11 14C11.5523 14 12 13.5523 12 13C12 12.769 12.1052 12.4932 12.3972 12.118C12.6184 11.8338 12.8705 11.5819 13.1583 11.2943C13.2702 11.1826 13.3877 11.0652 13.5106 10.9386C14.122 10.3093 14.5 9.44778 14.5 8.5C14.5 6.567 12.933 5 11 5C9.067 5 7.5 6.567 7.5 8.5C7.5 9.05228 7.94772 9.5 8.5 9.5C9.05229 9.5 9.5 9.05228 9.5 8.5Z" fill="#666666"/><path d="M11 22C17.0751 22 22 17.0751 22 11C22 4.92487 17.0751 0 11 0C4.92487 0 0 4.92487 0 11C0 17.0751 4.92487 22 11 22ZM11 20C6.02944 20 2 15.9706 2 11C2 6.02944 6.02944 2 11 2C15.9706 2 20 6.02944 20 11C20 15.9706 15.9706 20 11 20Z" fill="#666666"/></svg></span>
           <label><svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12.3738 13.5212C13.2868 14.4083 14.7461 14.4003 15.6493 13.4972L16.4742 12.6722C17.8411 11.3054 20.0572 11.3054 21.424 12.6723C22.0579 13.3062 22.3978 14.1227 22.4438 14.9525L23.4866 13.9097C25.5368 11.8594 25.5368 8.53533 23.4866 6.48508C21.4363 4.43482 18.1122 4.43482 16.0619 6.48508L12.3226 10.2246C11.4462 11.1296 11.4471 12.569 12.3255 13.4728L12.3738 13.5212Z" fill="#DBC6EC"/><path d="M20.5833 13.4817L20.6145 13.5129C21.5094 14.4245 21.505 15.8884 20.6014 16.7946L20.599 16.7971L14.5867 22.8094C14.2623 23.1338 13.7364 23.1338 13.412 22.8094L4.5123 13.9097C2.46205 11.8594 2.46205 8.53533 4.5123 6.48508C6.56255 4.43482 9.88667 4.43482 11.9369 6.48508L13.1744 7.72252L11.5244 9.37238C10.1576 10.7392 10.1576 12.9553 11.5244 14.3221C12.8912 15.689 15.1073 15.689 16.4741 14.3221L17.2991 13.4972C18.2052 12.5912 19.6709 12.586 20.5833 13.4817Z" fill="#EFDFFC"/><path fill-rule="evenodd" clip-rule="evenodd" d="M14 6.89757L15.2375 5.6601C17.7434 3.15423 21.8062 3.15423 24.3121 5.6601C26.818 8.16596 26.818 12.2288 24.3121 14.7346L21.4891 17.5576L21.429 17.6176C21.4275 17.619 21.4261 17.6205 21.4246 17.622L15.4123 23.6343C14.6323 24.4143 13.3677 24.4143 12.5877 23.6343L3.68799 14.7346C1.18213 12.2288 1.18213 8.16596 3.68799 5.6601C6.19386 3.15424 10.2567 3.15423 12.7625 5.6601L14 6.89757ZM14.5873 22.8094C14.2629 23.1337 13.737 23.1337 13.4126 22.8094L4.51295 13.9097C2.4627 11.8594 2.4627 8.53531 4.51295 6.48506C6.5632 4.4348 9.88732 4.4348 11.9376 6.48506L13.175 7.7225L11.525 9.37236C10.1582 10.7392 10.1582 12.9553 11.525 14.3221C12.8919 15.6889 15.1079 15.6889 16.4748 14.3221L17.2998 13.4972C18.211 12.586 19.6884 12.586 20.5996 13.4972C21.51 14.4076 21.5108 15.8832 20.6021 16.7946C20.6013 16.7954 20.6004 16.7962 20.5996 16.797L14.5873 22.8094ZM23.4871 13.9097L22.4443 14.9525C22.3984 14.1227 22.0585 13.3062 21.4246 12.6723C20.0577 11.3054 17.8416 11.3054 16.4748 12.6722L15.6498 13.4971C14.7386 14.4084 13.2612 14.4084 12.35 13.4971C11.4388 12.5859 11.4388 11.1085 12.35 10.1973L16.0625 6.48506C18.1128 4.4348 21.4369 4.4348 23.4871 6.48506C25.5374 8.53531 25.5374 11.8594 23.4871 13.9097Z" fill="#1A1A1A"/></svg>
 Samaritan assistant</label><br>
 
@@ -150,7 +151,7 @@ Samaritan assistant</label><br>
 
 </button>
             <button class="btnAiAgent buttonDismiss" disabled id="assistantDismissBtn">Dismiss</button>
-            <button class="btnAiAgent buttonReplace" disabled id="assistantReplaceBtn">Replace</button>
+            <button class="btnAiAgent buttonReplace" disabled id="assistantReplaceBtn"> <span>Replace</span></button>
             <button class="btnAiAgent buttonInsert" disabled id="assistantInsertBtn">Insert</button>
           </div>
         </div>
@@ -241,6 +242,11 @@ Samaritan assistant</label><br>
                 ]
               }
             });
+
+            // Add custom class to the balloon panel
+            if (balloon.view && balloon.view.element) {
+              balloon.view.element.classList.add('ai-assistant-balloon');
+            }
 
            
             // Get selected text
@@ -366,6 +372,7 @@ Samaritan assistant</label><br>
           submitBtn: panelElement.querySelector('#assistantSubmitBtn'),
           insertBtn: panelElement.querySelector('#assistantInsertBtn'),
           replaceBtn: panelElement.querySelector('#assistantReplaceBtn'),
+          dismissBtn: panelElement.querySelector('#assistantDismissBtn'),
           tryAgainBtn: panelElement.querySelector('#assistantTryAgainBtn'),
           loading: panelElement.querySelector('#loadingMsg'),
           response: panelElement.querySelector('.generatedResponse')
@@ -380,6 +387,7 @@ Samaritan assistant</label><br>
         elements.submitBtn.disabled = false;
         elements.insertBtn.disabled = true;        
         elements.replaceBtn.disabled = true;
+        elements.dismissBtn.disabled = true;
         elements.tryAgainBtn.disabled = true;
         
         // Add event handlers for predefined prompt buttons
@@ -445,7 +453,7 @@ Samaritan assistant</label><br>
           // Show loading state
           elements.loading.innerText = 'Loading response from Samaritan...';
           elements.loading.style.display = 'block';
-          elements.response.style.display = 'none';
+          // elements.response.style.display = 'none';
                     
           try {
             // Get AI response using the predefined prompt
@@ -463,9 +471,11 @@ Samaritan assistant</label><br>
             elements.loading.style.display = 'none';
             elements.insertBtn.disabled = false;
             elements.replaceBtn.disabled = false;
+            elements.dismissBtn.disabled = false;
             elements.tryAgainBtn.disabled = false;
             elements.replaceBtn.style.display = 'inline-block';
             elements.tryAgainBtn.style.display = 'inline-block';
+            elements.dismissBtn.style.display = 'inline-block';
             
             
             
@@ -486,7 +496,7 @@ Samaritan assistant</label><br>
           // Show loading state
           elements.loading.innerText = 'Loading response from Samaritan...';
           elements.loading.style.display = 'block';
-          elements.response.style.display = 'none';
+          // elements.response.style.display = 'none';
           
           try {
             // Get selected text
@@ -516,11 +526,16 @@ Samaritan assistant</label><br>
             elements.response.style.display = 'block';
             elements.loading.style.display = 'none';
             elements.insertBtn.disabled = false;
-            elements.replaceBtn.disabled = !!((isCKEditorEmpty(editor) || selectedTextValue == ''));
+            // elements.replaceBtn.disabled = !!((isCKEditorEmpty(editor) || selectedTextValue == ''));
             elements.tryAgainBtn.disabled = false;
+            elements.dismissBtn.disabled = false;
+            elements.replaceBtn.disabled = false;
             elements.replaceBtn.style.display = 'inline-block';
             elements.tryAgainBtn.style.display = 'inline-block';
-            
+            elements.dismissBtn.style.display = 'inline-block';
+
+            $('.generatedResponse').css('background', 'linear-gradient(90deg, #FBDBFB 0%, #E0E6FA 100%)');
+            $('#assistantTextArea').val('');
             // Set up button handlers
             // setupResponseButtons(elements, editor, response, prompt, selectedText || selectedTextValue);
             
@@ -741,7 +756,7 @@ Samaritan assistant</label><br>
           // Show loading state
           elements.loading.innerText = 'Loading response from Samaritan...';
           elements.loading.style.display = 'block';
-          elements.response.style.display = 'none';
+          // elements.response.style.display = 'none';
           
           const selectedElements = document.querySelectorAll('.ai-selected-text');
             
@@ -764,6 +779,12 @@ Samaritan assistant</label><br>
             console.error('Error getting new response:', err);
             elements.loading.innerText = 'Error fetching response. Please try again.';
           }
+        };
+
+        // Dismiss action
+        elements.dismissBtn.onclick = () => {
+          if (!response) return;
+          
         };
       }
 
