@@ -82,15 +82,82 @@ define([], function() {
       </a>
     </xsl:template>
 
-    <!-- Tables -->
-    <xsl:template match="db:table">
-      <table><xsl:apply-templates/></table>
+    <!-- Enhanced Tables with comprehensive attribute support -->
+    <xsl:template match="db:table | db:informaltable">
+      <table>
+        <xsl:if test="@frame">
+          <xsl:attribute name="class">frame-<xsl:value-of select="@frame"/></xsl:attribute>
+        </xsl:if>
+        <xsl:apply-templates select="db:title | db:tgroup | db:thead | db:tbody | db:tfoot | db:tr"/>
+      </table>
     </xsl:template>
-    <xsl:template match="db:tgroup"><xsl:apply-templates/></xsl:template>
-    <xsl:template match="db:thead"><thead><xsl:apply-templates/></thead></xsl:template>
-    <xsl:template match="db:tbody"><tbody><xsl:apply-templates/></tbody></xsl:template>
-    <xsl:template match="db:row"><tr><xsl:apply-templates/></tr></xsl:template>
-    <xsl:template match="db:entry"><td><xsl:apply-templates/></td></xsl:template>
+    
+    <xsl:template match="db:table/db:title">
+      <caption><xsl:apply-templates/></caption>
+    </xsl:template>
+    
+    <xsl:template match="db:tgroup">
+      <xsl:apply-templates select="db:colspec | db:thead | db:tbody | db:tfoot"/>
+    </xsl:template>
+    
+    <xsl:template match="db:colspec">
+      <col>
+        <xsl:if test="@colwidth">
+          <xsl:attribute name="width"><xsl:value-of select="@colwidth"/></xsl:attribute>
+        </xsl:if>
+        <xsl:if test="@align">
+          <xsl:attribute name="align"><xsl:value-of select="@align"/></xsl:attribute>
+        </xsl:if>
+      </col>
+    </xsl:template>
+    
+    <xsl:template match="db:thead">
+      <thead><xsl:apply-templates select="db:row"/></thead>
+    </xsl:template>
+    
+    <xsl:template match="db:tbody">
+      <tbody><xsl:apply-templates select="db:row"/></tbody>
+    </xsl:template>
+    
+    <xsl:template match="db:tfoot">
+      <tfoot><xsl:apply-templates select="db:row"/></tfoot>
+    </xsl:template>
+    
+    <xsl:template match="db:row">
+      <tr>
+        <xsl:if test="@role">
+          <xsl:attribute name="class"><xsl:value-of select="@role"/></xsl:attribute>
+        </xsl:if>
+        <xsl:apply-templates select="db:entry"/>
+      </tr>
+    </xsl:template>
+    
+    <xsl:template match="db:entry">
+      <xsl:variable name="element-name">
+        <xsl:choose>
+          <xsl:when test="ancestor::db:thead">th</xsl:when>
+          <xsl:otherwise>td</xsl:otherwise>
+        </xsl:choose>
+      </xsl:variable>
+      
+      <xsl:element name="{$element-name}">
+        <xsl:if test="@namest and @nameend">
+          <xsl:attribute name="colspan">
+            <xsl:value-of select="count(ancestor::db:tgroup/db:colspec[@colname=current()/@namest]/following-sibling::db:colspec[@colname=current()/@nameend or position() &lt; count(ancestor::db:tgroup/db:colspec[@colname=current()/@nameend]/preceding-sibling::db:colspec) + 1]) + 1"/>
+          </xsl:attribute>
+        </xsl:if>
+        <xsl:if test="@morerows">
+          <xsl:attribute name="rowspan"><xsl:value-of select="@morerows + 1"/></xsl:attribute>
+        </xsl:if>
+        <xsl:if test="@align">
+          <xsl:attribute name="align"><xsl:value-of select="@align"/></xsl:attribute>
+        </xsl:if>
+        <xsl:if test="@valign">
+          <xsl:attribute name="valign"><xsl:value-of select="@valign"/></xsl:attribute>
+        </xsl:if>
+        <xsl:apply-templates/>
+      </xsl:element>
+    </xsl:template>
 
     <!-- Default -->
     <xsl:template match="*">
@@ -117,14 +184,26 @@ define([], function() {
           .replace(/'/g, '&#39;');
       }
 
-      // Generic serializer: converts any XML node to a readable HTML representation.
+      // Generic serializer: converts any XML node to a readable HTML representation with table support.
       function serializeNode(node) {
         if (!node) return '';
         switch (node.nodeType) {
           case Node.DOCUMENT_NODE:
             return Array.from(node.childNodes).map(serializeNode).join('');
           case Node.ELEMENT_NODE: {
-            const tag = node.localName || node.nodeName;
+            const tag = node.localName || node.nodeName.toLowerCase();
+            
+            // Priority 1: Check for data-centric structures (like catalog/book pattern)
+            const dataCentricInfo = detectDataCentricStructure(node);
+            if (dataCentricInfo.isDataCentric) {
+              return buildDataCentricTable(node, dataCentricInfo);
+            }
+            
+            // Priority 2: Enhanced table structure detection and conversion
+            if (isTableElement(tag)) {
+              return convertToHtmlTable(node);
+            }
+            
             const attrs = Array.from(node.attributes || []).map(a => `<span class="xml-attr"><strong>${escapeHtml(a.name)}</strong>="${escapeHtml(a.value)}"</span>`).join(' ');
             const children = Array.from(node.childNodes).map(serializeNode).join('');
             // Normalize empty text-only nodes
@@ -145,6 +224,458 @@ define([], function() {
         }
       }
 
+      // Configurable table-like tag detection with comprehensive patterns
+      const TABLE_DETECTION_CONFIG = {
+        // Container/Parent tags that might hold tabular data
+        containerTags: [
+          'catalog', 'records', 'data', 'list', 'items', 'collection', 'dataset',
+          'table', 'grid', 'matrix', 'array', 'rows', 'entities', 'objects',
+          'results', 'entries', 'products', 'books', 'users', 'customers'
+        ],
+        // Row/Record tags that represent individual data items
+        rowTags: [
+          'item', 'record', 'row', 'entry', 'entity', 'object', 'element',
+          'book', 'product', 'user', 'customer', 'person', 'order', 'result',
+          'tr', 'data-row', 'line', 'member', 'node'
+        ],
+        // Cell/Field tags that represent individual data points
+        cellTags: [
+          'cell', 'data', 'column', 'field', 'value', 'property', 'attribute',
+          'td', 'th', 'col', 'content', 'text', 'info'
+        ],
+        // Header tags that represent table headers
+        headerTags: [
+          'header', 'headers', 'thead', 'head', 'title', 'caption', 'label'
+        ]
+      };
+
+      // Helper function to detect table-like elements
+      function isTableElement(tagName) {
+        const tag = tagName.toLowerCase();
+        return Object.values(TABLE_DETECTION_CONFIG).some(tagArray => 
+          tagArray.includes(tag)
+        );
+      }
+
+      // Advanced data-centric XML structure detection
+      function detectDataCentricStructure(node) {
+        const tag = (node.localName || node.nodeName).toLowerCase();
+        const children = Array.from(node.children || []);
+        
+        // Check if this is a container with repeated child elements (data-centric pattern)
+        if (children.length > 0) {
+          const childTags = children.map(child => (child.localName || child.nodeName).toLowerCase());
+          const uniqueTags = [...new Set(childTags)];
+          
+          // If we have multiple children with the same tag name, this looks like tabular data
+          if (uniqueTags.length === 1 && children.length > 1) {
+            const sampleChild = children[0];
+            const grandChildren = Array.from(sampleChild.children || []);
+            
+            // Check if child elements have consistent structure (same sub-elements)
+            if (grandChildren.length > 0) {
+              const hasConsistentStructure = children.every(child => {
+                const childElementNames = Array.from(child.children || [])
+                  .map(grandChild => (grandChild.localName || grandChild.nodeName).toLowerCase());
+                return childElementNames.length === grandChildren.length;
+              });
+              
+              if (hasConsistentStructure) {
+                return {
+                  isDataCentric: true,
+                  containerTag: tag,
+                  rowTag: uniqueTags[0],
+                  rowElements: children,
+                  sampleStructure: grandChildren.map(gc => (gc.localName || gc.nodeName).toLowerCase())
+                };
+              }
+            }
+          }
+          
+          // Check for known container patterns
+          if (TABLE_DETECTION_CONFIG.containerTags.includes(tag)) {
+            const rowLikeChildren = children.filter(child => {
+              const childTag = (child.localName || child.nodeName).toLowerCase();
+              return TABLE_DETECTION_CONFIG.rowTags.includes(childTag);
+            });
+            
+            if (rowLikeChildren.length > 0) {
+              return {
+                isDataCentric: true,
+                containerTag: tag,
+                rowTag: (rowLikeChildren[0].localName || rowLikeChildren[0].nodeName).toLowerCase(),
+                rowElements: rowLikeChildren,
+                sampleStructure: rowLikeChildren[0].children ? 
+                  Array.from(rowLikeChildren[0].children).map(c => (c.localName || c.nodeName).toLowerCase()) : []
+              };
+            }
+          }
+        }
+        
+        return { isDataCentric: false };
+      }
+
+      // Enhanced table converter for generic XML structures
+      function convertToHtmlTable(node) {
+        const tag = node.localName || node.nodeName.toLowerCase();
+        
+        // Direct HTML table elements - preserve structure
+        if (['table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th'].includes(tag)) {
+          return convertDirectTableElement(node);
+        }
+        
+        // Generic table-like structures
+        if (tag === 'table' || hasTableStructure(node)) {
+          return buildHtmlTable(node);
+        }
+        
+        // Row-like elements
+        if (['row', 'record', 'tr'].includes(tag)) {
+          return buildTableRow(node);
+        }
+        
+        // Cell-like elements
+        if (['cell', 'data', 'column', 'td', 'th'].includes(tag)) {
+          return buildTableCell(node);
+        }
+        
+        return `<div class="xml-table" data-tag="${escapeHtml(tag)}">${Array.from(node.childNodes).map(serializeNode).join('')}</div>`;
+      }
+
+      // Convert direct HTML table elements with attribute preservation
+      function convertDirectTableElement(node) {
+        const tag = node.localName || node.nodeName.toLowerCase();
+        const attributes = Array.from(node.attributes || [])
+          .map(attr => `${attr.name}="${escapeHtml(attr.value)}"`)
+          .join(' ');
+        
+        const children = Array.from(node.childNodes)
+          .map(child => child.nodeType === Node.ELEMENT_NODE ? convertToHtmlTable(child) : 
+                       child.nodeType === Node.TEXT_NODE && child.nodeValue.trim() ? 
+                       escapeHtml(child.nodeValue) : '')
+          .filter(Boolean)
+          .join('');
+        
+        return `<${tag}${attributes ? ' ' + attributes : ''}>${children}</${tag}>`;
+      }
+
+      // Check if a node has table-like structure (contains rows/records)
+      function hasTableStructure(node) {
+        const children = Array.from(node.children || []);
+        if (children.length === 0) return false;
+        
+        // Check for explicit row-like elements
+        const rowLikeElements = children.filter(child => {
+          const tag = (child.localName || child.nodeName).toLowerCase();
+          return TABLE_DETECTION_CONFIG.rowTags.includes(tag);
+        });
+        
+        // High confidence if most children are row-like elements
+        if (rowLikeElements.length > 0 && rowLikeElements.length / children.length > 0.7) {
+          return true;
+        }
+        
+        // Medium confidence if we have some consistent structure
+        const childTags = children.map(child => (child.localName || child.nodeName).toLowerCase());
+        const uniqueTags = [...new Set(childTags)];
+        
+        // If all children have the same tag and there are multiple, likely tabular
+        if (uniqueTags.length === 1 && children.length > 1) {
+          return true;
+        }
+        
+        // Low confidence fallback - check if children have similar internal structure
+        if (children.length > 1) {
+          const firstChildElements = children[0].children ? 
+            Array.from(children[0].children).map(c => (c.localName || c.nodeName).toLowerCase()) : [];
+          
+          if (firstChildElements.length > 0) {
+            const structuralSimilarity = children.filter(child => {
+              const childElements = child.children ? 
+                Array.from(child.children).map(c => (c.localName || c.nodeName).toLowerCase()) : [];
+              return childElements.length === firstChildElements.length;
+            }).length;
+            
+            return structuralSimilarity / children.length > 0.6;
+          }
+        }
+        
+        return false;
+      }
+
+      // Build complete HTML table from generic XML structure
+      function buildHtmlTable(node) {
+        const children = Array.from(node.children || []);
+        if (children.length === 0) return '';
+        
+        let tableContent = '';
+        
+        // Look for header-like elements
+        const headers = children.filter(child => {
+          const tag = (child.localName || child.nodeName).toLowerCase();
+          return TABLE_DETECTION_CONFIG.headerTags.includes(tag);
+        });
+        
+        // Look for body/row elements using enhanced detection
+        const rows = children.filter(child => {
+          const tag = (child.localName || child.nodeName).toLowerCase();
+          return TABLE_DETECTION_CONFIG.rowTags.includes(tag) || 
+                 (!headers.some(h => h === child) && child.children && child.children.length > 0);
+        });
+        
+        // Build table header if found
+        if (headers.length > 0) {
+          tableContent += '<thead>';
+          headers.forEach(header => {
+            tableContent += buildTableRow(header, true);
+          });
+          tableContent += '</thead>';
+        } else if (rows.length > 0) {
+          // Generate header from first row's structure if no explicit headers
+          const firstRow = rows[0];
+          if (firstRow && firstRow.children && firstRow.children.length > 0) {
+            tableContent += '<thead><tr>';
+            
+            // Include attributes as header columns
+            if (firstRow.attributes && firstRow.attributes.length > 0) {
+              Array.from(firstRow.attributes).forEach(attr => {
+                tableContent += `<th>${escapeHtml(attr.name)}</th>`;
+              });
+            }
+            
+            // Include child elements as header columns
+            Array.from(firstRow.children).forEach(child => {
+              const elementName = (child.localName || child.nodeName).toLowerCase();
+              tableContent += `<th>${escapeHtml(elementName)}</th>`;
+            });
+            
+            tableContent += '</tr></thead>';
+          }
+        }
+        
+        // Build table body
+        if (rows.length > 0) {
+          tableContent += '<tbody>';
+          rows.forEach(row => {
+            tableContent += buildAdvancedTableRow(row);
+          });
+          tableContent += '</tbody>';
+        }
+        
+        // If no clear structure, treat all children as rows
+        if (!headers.length && !rows.length && children.length > 0) {
+          tableContent += '<tbody>';
+          children.forEach(child => {
+            tableContent += buildAdvancedTableRow(child);
+          });
+          tableContent += '</tbody>';
+        }
+        
+        return `<table class="xml-generated-table">${tableContent}</table>`;
+      }
+
+      // Enhanced table row builder that handles attributes and elements
+      function buildAdvancedTableRow(node) {
+        let rowContent = '';
+        
+        // Add attributes as cells first
+        if (node.attributes && node.attributes.length > 0) {
+          Array.from(node.attributes).forEach(attr => {
+            rowContent += `<td>${escapeHtml(attr.value)}</td>`;
+          });
+        }
+        
+        // Add child elements as cells
+        if (node.children && node.children.length > 0) {
+          Array.from(node.children).forEach(child => {
+            const content = child.children && child.children.length > 0 ? 
+              Array.from(child.childNodes).map(serializeNode).join('') :
+              escapeHtml(getTextContent(child));
+            rowContent += `<td>${content}</td>`;
+          });
+        } else {
+          // If no children, use the node's text content
+          const textContent = getTextContent(node);
+          if (textContent.trim()) {
+            rowContent += `<td>${escapeHtml(textContent)}</td>`;
+          }
+        }
+        
+        return `<tr>${rowContent}</tr>`;
+      }
+
+      // Build table row from XML element
+      function buildTableRow(node, isHeader = false) {
+        const children = Array.from(node.children || []);
+        const cellTag = isHeader ? 'th' : 'td';
+        
+        // If node has cell-like children, use them
+        const cells = children.filter(child => {
+          const tag = (child.localName || child.nodeName).toLowerCase();
+          return ['cell', 'data', 'column', 'td', 'th', 'field', 'value'].includes(tag);
+        });
+        
+        let rowContent = '';
+        
+        if (cells.length > 0) {
+          cells.forEach(cell => {
+            rowContent += buildTableCell(cell, cellTag);
+          });
+        } else if (children.length > 0) {
+          // Treat all children as cells
+          children.forEach(child => {
+            rowContent += buildTableCell(child, cellTag);
+          });
+        } else {
+          // No children, use text content
+          const textContent = getTextContent(node);
+          if (textContent.trim()) {
+            rowContent += `<${cellTag}>${escapeHtml(textContent)}</${cellTag}>`;
+          }
+        }
+        
+        return `<tr>${rowContent}</tr>`;
+      }
+
+      // Build table cell from XML element
+      function buildTableCell(node, cellTag = 'td') {
+        const attributes = [];
+        
+        // Handle colspan and rowspan attributes
+        if (node.hasAttribute && node.hasAttribute('colspan')) {
+          attributes.push(`colspan="${escapeHtml(node.getAttribute('colspan'))}"`);
+        }
+        if (node.hasAttribute && node.hasAttribute('rowspan')) {
+          attributes.push(`rowspan="${escapeHtml(node.getAttribute('rowspan'))}"`);
+        }
+        if (node.hasAttribute && node.hasAttribute('span')) {
+          attributes.push(`colspan="${escapeHtml(node.getAttribute('span'))}"`);
+        }
+        
+        const attrString = attributes.length > 0 ? ' ' + attributes.join(' ') : '';
+        const content = node.children && node.children.length > 0 ? 
+          Array.from(node.childNodes).map(serializeNode).join('') :
+          escapeHtml(getTextContent(node));
+        
+        return `<${cellTag}${attrString}>${content}</${cellTag}>`;
+      }
+
+      // Helper to get text content from node
+      function getTextContent(node) {
+        if (node.textContent !== undefined) {
+          return node.textContent;
+        }
+        if (node.nodeValue) {
+          return node.nodeValue;
+        }
+        let text = '';
+        for (let child of node.childNodes || []) {
+          if (child.nodeType === Node.TEXT_NODE) {
+            text += child.nodeValue || '';
+          }
+        }
+        return text;
+      }
+
+      // Build comprehensive HTML table from data-centric XML structures
+      function buildDataCentricTable(containerNode, dataCentricInfo) {
+        const { rowElements, sampleStructure } = dataCentricInfo;
+        
+        if (rowElements.length === 0) return '';
+        
+        // Analyze all row elements to build comprehensive column structure
+        const allColumns = new Set();
+        const attributeColumns = new Set();
+        
+        // First pass: collect all possible column names from child elements and attributes
+        rowElements.forEach(rowElement => {
+          // Add attributes as columns
+          if (rowElement.attributes) {
+            Array.from(rowElement.attributes).forEach(attr => {
+              attributeColumns.add(attr.name);
+              allColumns.add(`@${attr.name}`); // Prefix attributes with @
+            });
+          }
+          
+          // Add child element names as columns
+          if (rowElement.children) {
+            Array.from(rowElement.children).forEach(child => {
+              const elementName = (child.localName || child.nodeName).toLowerCase();
+              allColumns.add(elementName);
+            });
+          }
+        });
+        
+        // Convert to sorted array for consistent column order (attributes first, then elements)
+        const columnHeaders = [
+          ...Array.from(attributeColumns).sort().map(attr => `@${attr}`),
+          ...Array.from(allColumns).filter(col => !col.startsWith('@')).sort()
+        ];
+        
+        let tableHtml = '<table class="xml-data-centric-table">';
+        
+        // Build table header
+        if (columnHeaders.length > 0) {
+          tableHtml += '<thead><tr>';
+          columnHeaders.forEach(header => {
+            const displayName = header.startsWith('@') ? 
+              header.substring(1) : // Remove @ prefix for display
+              header;
+            tableHtml += `<th>${escapeHtml(displayName)}</th>`;
+          });
+          tableHtml += '</tr></thead>';
+        }
+        
+        // Build table body
+        tableHtml += '<tbody>';
+        rowElements.forEach(rowElement => {
+          tableHtml += '<tr>';
+          
+          columnHeaders.forEach(columnName => {
+            let cellContent = '';
+            
+            if (columnName.startsWith('@')) {
+              // Handle attribute columns
+              const attrName = columnName.substring(1);
+              const attrValue = rowElement.getAttribute ? rowElement.getAttribute(attrName) : '';
+              cellContent = attrValue || '';
+            } else {
+              // Handle element columns
+              const childElement = Array.from(rowElement.children || [])
+                .find(child => (child.localName || child.nodeName).toLowerCase() === columnName);
+              
+              if (childElement) {
+                // Check if element has children (complex content) or just text
+                if (childElement.children && childElement.children.length > 0) {
+                  // Complex content - serialize recursively
+                  cellContent = Array.from(childElement.childNodes)
+                    .map(child => {
+                      if (child.nodeType === Node.ELEMENT_NODE) {
+                        return serializeNode(child);
+                      } else if (child.nodeType === Node.TEXT_NODE && child.nodeValue.trim()) {
+                        return escapeHtml(child.nodeValue);
+                      }
+                      return '';
+                    })
+                    .filter(Boolean)
+                    .join('');
+                } else {
+                  // Simple text content
+                  cellContent = escapeHtml(getTextContent(childElement));
+                }
+              }
+            }
+            
+            tableHtml += `<td>${cellContent}</td>`;
+          });
+          
+          tableHtml += '</tr>';
+        });
+        tableHtml += '</tbody></table>';
+        
+        return tableHtml;
+      }
+
       try {
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(xmlString.trim(), 'application/xml');
@@ -159,6 +690,13 @@ define([], function() {
         const looksLikeDocBook =
           (ns && ns.indexOf('docbook') !== -1) ||
           /^(article|section|chapter|book|bookinfo)$/i.test(localName);
+
+        // Enhanced table detection for any XML structure
+        const explicitTableElements = xmlDoc.querySelector('table, thead, tbody, tr, td, th') !== null;
+        const genericTableElements = xmlDoc.querySelector('row, cell, record, data, column, item, entry') !== null;
+        const dataCentricElements = xmlDoc.querySelector('catalog, records, list, items, collection') !== null;
+        
+        const hasTableElements = explicitTableElements || genericTableElements || dataCentricElements;
 
         if (looksLikeDocBook) {
           // Use existing XSLT stylesheet (xsltStylesheet defined above in file)
@@ -204,8 +742,10 @@ define([], function() {
         }
 
         // Generic fallback: produce readable HTML for any XML
+        // If XML contains table elements, add table-specific CSS classes
         const html = serializeNode(xmlDoc);
-        return `<div class="generic-xml">${html}</div>`;
+        const containerClass = hasTableElements ? 'generic-xml has-tables' : 'generic-xml';
+        return `<div class="${containerClass}">${html}</div>`;
       } catch (error) {
         console.error('XSLT / XML transformation error:', error);
         throw error;
