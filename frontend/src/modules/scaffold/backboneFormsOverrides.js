@@ -276,11 +276,14 @@ Samaritan Assistance</label><br>
             
               <div class="info-row">
                 
-                <strong>Learn more about Samaritan</strong>
+                <strong><a href='https://life.laerdal.com/5d20fd236/p/920ebb-samaritan/b/080590' target="_blank" rel="noopener noreferrer">Learn more about Samaritan</a> 
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M20 10C19.4477 10 19 9.5523 19 9.00001V6.41441L12.7717 12.6428C12.3553 13.0591 11.7011 13.0801 11.3106 12.6896C10.9201 12.299 10.9411 11.6449 11.3574 11.2285L17.586 5.00001L15 5.00001C14.4477 5.00001 14 4.5523 14 4.00001C14 3.44773 14.4477 3.00001 15 3.00001L19.9953 3.00001L20 3C20.2527 3 20.4835 3.09373 20.6596 3.24833C20.6759 3.26254 20.6918 3.27739 20.7073 3.2929C20.7235 3.30911 20.739 3.32577 20.7538 3.34285C20.9071 3.51859 21 3.74845 21 4V9.00001C21 9.5523 20.5523 10 20 10Z" fill="#3294BA"/>
+<path d="M5 6.00001C5 5.44773 5.44772 5.00001 6 5.00001H10C10.5523 5.00001 11 4.5523 11 4.00001C11 3.44773 10.5523 3.00001 10 3.00001H6C4.34315 3.00001 3 4.34316 3 6.00001V18C3 19.6569 4.34315 21 6 21H18C19.6569 21 21 19.6569 21 18V14C21 13.4477 20.5523 13 20 13C19.4477 13 19 13.4477 19 14V18C19 18.5523 18.5523 19 18 19H6C5.44772 19 5 18.5523 5 18V6.00001Z" fill="#3294BA"/>
+</svg>
+</strong>
 
-                <a href="#" 
-                 target="_blank" class="help-link"
-                 rel="noopener noreferrer">
+                <a class="help-link">
                 Close
               </a>
               </div>
@@ -329,7 +332,9 @@ Samaritan Assistance</label><br>
         }
         const closeBtnBottom = helpPopupElement.querySelector('.help-link');
         if (closeBtnBottom) {
-          closeBtnBottom.onclick = closeHelpPopup;
+          // closeBtnBottom.onclick = closeHelpPopup;
+            closeBtnBottom.onclick = closeHelpPopup;
+            
         }
         
         // Outside click handler for help popup - close when clicking backdrop
@@ -429,12 +434,14 @@ Samaritan Assistance</label><br>
                   return targetButton || editor.ui.view.editable.element;
                 },
                 positions: [
-                  // Position below the AI Assistant button - ALWAYS below, never above
+                  // Position below the AI Assistant button with dynamic adjustment
                   (targetRect, balloonRect) => {
                     const viewportWidth = window.innerWidth;
+                    const viewportHeight = window.innerHeight;
                     const balloonWidth = balloonRect.width;
+                    const balloonHeight = balloonRect.height;
                     
-                    // Always position below the button
+                    // Calculate initial position
                     let top = targetRect.bottom + 25;
                     let left = targetRect.left;
                     
@@ -461,7 +468,18 @@ Samaritan Assistance</label><br>
                       if (left < 20) left = 20;
                     }
                     
-                    // ALWAYS return position below - do not reposition above
+                    // Adjust vertical position if balloon extends beyond bottom
+                    if (top + balloonHeight > viewportHeight - 20) {
+                      // Try positioning above the button instead
+                      const topPosition = targetRect.top - balloonHeight - 10;
+                      if (topPosition > 20) {
+                        top = topPosition;
+                      } else {
+                        // If not enough space above, position at top of viewport
+                        top = 20;
+                      }
+                    }
+                    
                     return {
                       top: top,
                       left: left,

@@ -110,6 +110,24 @@ span.help-assistant {
       font-size: 18px;
       display: block;
       display: inline;
+      a{
+        background: transparent;
+        color: #3294BA;
+        padding: 0;
+        font-weight: 500;
+        margin: 0;
+        display: inline-block;
+        vertical-align: middle;
+        &:hover {
+          background: transparent;
+          color: #3294BA;
+          transform: inherit;
+          box-shadow: 0 0px 0px rgba(50, 148, 186, 0.3);
+        }
+      }      
+        svg{
+          vertical-align: middle;
+        }
     }
 
     a {
@@ -129,6 +147,11 @@ span.help-assistant {
         box-shadow: 0 2px 8px rgba(50, 148, 186, 0.3);
       }
     }
+  }
+
+  .help-link:hover {
+      transform: inherit !important;
+      box-shadow: 0 0px 0px rgba(50, 148, 186, 0.3) !important;
   }
 
   // Custom scrollbar
