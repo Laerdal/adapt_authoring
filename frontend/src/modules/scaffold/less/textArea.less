@@ -224,7 +224,7 @@ span.help-assistant {
     right: 50px !important;
     top: 17px;
     &:hover {
-    background: transparent !important;
+     background: transparent !important;
     }
 }
  .location-login a#atlwdg-trigger {
@@ -314,8 +314,8 @@ span.help-assistant {
     color: #B3B3B3 !important;
     background: transparent !important;
   }
-  &.buttonTryAgain svg {
-      cursor: not-allowed;
+  &.buttonTryAgain svg{   
+      cursor: not-allowed ;
   }
 }
 }
@@ -448,21 +448,23 @@ button.buttonTryAgain {
   box-shadow: inherit !important;
 }
 
-// Force AI Agent balloon to always appear below the icon
+// Fix AI Agent popup to stay at bottom while scrolling
 .ck-balloon-panel.ai-assistant-balloon,
 .ck-balloon-panel.ai-agent-balloon-parent {
-  // Prevent CKEditor from auto-repositioning above
-  &.ck-balloon-panel_arrow_n,
-  &.ck-balloon-panel_arrow_nw,
-  &.ck-balloon-panel_arrow_ne {
-    display: none !important; // Hide when trying to position above
+  position: fixed !important;
+  bottom: 20px !important;
+  top: auto !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  
+  @media (max-width: 768px) {
+    bottom: 10px !important;
+    left: 50% !important;
   }
   
-  // Ensure it always uses below positioning
-  &.ck-balloon-panel_arrow_s,
-  &.ck-balloon-panel_arrow_sw,
-  &.ck-balloon-panel_arrow_se {
-    display: block !important;
+  @media (max-width: 540px) {
+    bottom: 5px !important;
+    left: 50% !important;
   }
 }
 
