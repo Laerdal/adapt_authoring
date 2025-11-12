@@ -14,10 +14,10 @@ define([], function() {
 
     <xsl:output method="html" encoding="UTF-8" indent="yes"/>
 
-    <!-- Root: support article or section -->
+    <!-- Root: support article, section, or standalone table -->
     <xsl:template match="/">
       <div class="docbook-content">
-        <xsl:apply-templates select="db:article | db:section"/>
+        <xsl:apply-templates select="db:article | db:section | db:table | table"/>
       </div>
     </xsl:template>
 
@@ -82,15 +82,108 @@ define([], function() {
       </a>
     </xsl:template>
 
-    <!-- Tables -->
-    <xsl:template match="db:table">
-      <table><xsl:apply-templates/></table>
+    <!-- Enhanced Tables with comprehensive attribute support -->
+    <!-- Support both namespaced (db:table) and non-namespaced (table) elements -->
+    <xsl:template match="db:table | db:informaltable | table | informaltable">
+      <table>
+        <xsl:if test="@frame">
+          <xsl:attribute name="class">frame-<xsl:value-of select="@frame"/></xsl:attribute>
+        </xsl:if>
+        <xsl:apply-templates select="db:title | title | db:tgroup | tgroup | db:thead | thead | db:tbody | tbody | db:tfoot | tfoot | db:tr | tr"/>
+      </table>
     </xsl:template>
-    <xsl:template match="db:tgroup"><xsl:apply-templates/></xsl:template>
-    <xsl:template match="db:thead"><thead><xsl:apply-templates/></thead></xsl:template>
-    <xsl:template match="db:tbody"><tbody><xsl:apply-templates/></tbody></xsl:template>
-    <xsl:template match="db:row"><tr><xsl:apply-templates/></tr></xsl:template>
-    <xsl:template match="db:entry"><td><xsl:apply-templates/></td></xsl:template>
+    
+    <xsl:template match="db:table/db:title | table/title">
+      <caption><xsl:apply-templates/></caption>
+    </xsl:template>
+    
+    <xsl:template match="db:tgroup | tgroup">
+      <xsl:apply-templates select="db:colspec | colspec | db:thead | thead | db:tbody | tbody | db:tfoot | tfoot"/>
+    </xsl:template>
+    
+    <xsl:template match="db:colspec | colspec">
+      <col>
+        <xsl:if test="@colwidth">
+          <xsl:attribute name="width"><xsl:value-of select="@colwidth"/></xsl:attribute>
+        </xsl:if>
+        <xsl:if test="@align">
+          <xsl:attribute name="align"><xsl:value-of select="@align"/></xsl:attribute>
+        </xsl:if>
+      </col>
+    </xsl:template>
+    
+    <xsl:template match="db:thead | thead">
+      <thead><xsl:apply-templates select="db:row | row"/></thead>
+    </xsl:template>
+    
+    <xsl:template match="db:tbody | tbody">
+      <tbody><xsl:apply-templates select="db:row | row"/></tbody>
+    </xsl:template>
+    
+    <xsl:template match="db:tfoot | tfoot">
+      <tfoot><xsl:apply-templates select="db:row | row"/></tfoot>
+    </xsl:template>
+    
+    <xsl:template match="db:row | row">
+      <tr>
+        <xsl:if test="@role">
+          <xsl:attribute name="class"><xsl:value-of select="@role"/></xsl:attribute>
+        </xsl:if>
+        <xsl:apply-templates select="db:entry | entry"/>
+      </tr>
+    </xsl:template>
+    
+    <xsl:template match="db:entry | entry">
+      <xsl:variable name="element-name">
+        <xsl:choose>
+          <xsl:when test="ancestor::db:thead or ancestor::thead">th</xsl:when>
+          <xsl:otherwise>td</xsl:otherwise>
+        </xsl:choose>
+      </xsl:variable>
+      
+      <xsl:element name="{$element-name}">
+        <!-- Handle namest/nameend for colspan -->
+        <xsl:if test="@namest and @nameend">
+          <xsl:variable name="start-col" select="@namest"/>
+          <xsl:variable name="end-col" select="@nameend"/>
+          <xsl:variable name="tgroup" select="ancestor::db:tgroup | ancestor::tgroup"/>
+          <xsl:variable name="colspecs" select="$tgroup/db:colspec | $tgroup/colspec"/>
+          
+          <!-- Calculate colspan by counting columns between namest and nameend -->
+          <xsl:variable name="start-pos">
+            <xsl:for-each select="$colspecs">
+              <xsl:if test="@colname = $start-col">
+                <xsl:value-of select="position()"/>
+              </xsl:if>
+            </xsl:for-each>
+          </xsl:variable>
+          <xsl:variable name="end-pos">
+            <xsl:for-each select="$colspecs">
+              <xsl:if test="@colname = $end-col">
+                <xsl:value-of select="position()"/>
+              </xsl:if>
+            </xsl:for-each>
+          </xsl:variable>
+          
+          <xsl:if test="$start-pos != '' and $end-pos != ''">
+            <xsl:attribute name="colspan">
+              <xsl:value-of select="number($end-pos) - number($start-pos) + 1"/>
+            </xsl:attribute>
+          </xsl:if>
+        </xsl:if>
+        
+        <xsl:if test="@morerows">
+          <xsl:attribute name="rowspan"><xsl:value-of select="@morerows + 1"/></xsl:attribute>
+        </xsl:if>
+        <xsl:if test="@align">
+          <xsl:attribute name="align"><xsl:value-of select="@align"/></xsl:attribute>
+        </xsl:if>
+        <xsl:if test="@valign">
+          <xsl:attribute name="valign"><xsl:value-of select="@valign"/></xsl:attribute>
+        </xsl:if>
+        <xsl:apply-templates/>
+      </xsl:element>
+    </xsl:template>
 
     <!-- Default -->
     <xsl:template match="*">
@@ -117,16 +210,32 @@ define([], function() {
           .replace(/'/g, '&#39;');
       }
 
-      // Generic serializer: converts any XML node to a readable HTML representation.
-      function serializeNode(node) {
+      // Generic serializer: converts any XML node to a readable HTML representation with table support.
+      // isDocBook flag prevents data-centric detection from interfering with DocBook table handling
+      function serializeNode(node, isDocBook = false) {
         if (!node) return '';
         switch (node.nodeType) {
           case Node.DOCUMENT_NODE:
-            return Array.from(node.childNodes).map(serializeNode).join('');
+            return Array.from(node.childNodes).map(child => serializeNode(child, isDocBook)).join('');
           case Node.ELEMENT_NODE: {
-            const tag = node.localName || node.nodeName;
+            const tag = getTagName(node);
+            
+            // Priority 1: Check for data-centric structures (only for non-DocBook XML)
+            // This prevents interference with Paligo-generated DocBook table structures
+            if (!isDocBook) {
+              const dataCentricInfo = detectDataCentricStructure(node);
+              if (dataCentricInfo.isDataCentric) {
+                return buildDataCentricTable(node, dataCentricInfo, isDocBook);
+              }
+            }
+            
+            // Priority 2: Enhanced table structure detection and conversion
+            if (isTableElement(tag)) {
+              return convertToHtmlTable(node, isDocBook);
+            }
+            
             const attrs = Array.from(node.attributes || []).map(a => `<span class="xml-attr"><strong>${escapeHtml(a.name)}</strong>="${escapeHtml(a.value)}"</span>`).join(' ');
-            const children = Array.from(node.childNodes).map(serializeNode).join('');
+            const children = Array.from(node.childNodes).map(child => serializeNode(child, isDocBook)).join('');
             // Normalize empty text-only nodes
             const hasVisibleText = children.replace(/\s+/g, '') !== '';
             return `<div class="xml-node" data-tag="${escapeHtml(tag)}">${attrs ? `<div class="xml-attrs">${attrs}</div>` : ''}${hasVisibleText ? `<div class="xml-children">${children}</div>` : ''}</div>`;
@@ -145,6 +254,475 @@ define([], function() {
         }
       }
 
+      // Helper function to normalize tag name extraction
+      function getTagName(node) {
+        return (node.localName || node.nodeName).toLowerCase();
+      }
+
+      // Configurable table-like tag detection with comprehensive patterns
+      const TABLE_DETECTION_CONFIG = {
+        // Container/Parent tags that might hold tabular data
+        containerTags: [
+          'catalog', 'records', 'data', 'list', 'items', 'collection', 'dataset',
+          'table', 'grid', 'matrix', 'array', 'rows', 'entities', 'objects',
+          'results', 'entries', 'products', 'books', 'users', 'customers'
+        ],
+        // Row/Record tags that represent individual data items
+        rowTags: [
+          'item', 'record', 'row', 'entry', 'entity', 'object', 'element',
+          'book', 'product', 'user', 'customer', 'person', 'order', 'result',
+          'tr', 'data-row', 'line', 'member', 'node'
+        ],
+        // Cell/Field tags that represent individual data points
+        cellTags: [
+          'cell', 'data', 'column', 'field', 'value', 'property', 'attribute',
+          'td', 'th', 'col', 'content', 'text', 'info'
+        ],
+        // Header tags that represent table headers
+        headerTags: [
+          'header', 'headers', 'thead', 'head', 'title', 'caption', 'label'
+        ]
+      };
+
+      // Helper function to detect table-like elements
+      function isTableElement(tagName) {
+        const tag = tagName.toLowerCase();
+        return Object.values(TABLE_DETECTION_CONFIG).some(tagArray => 
+          tagArray.includes(tag)
+        );
+      }
+
+      // Advanced data-centric XML structure detection
+      function detectDataCentricStructure(node) {
+        const tag = getTagName(node);
+        const children = Array.from(node.children || []);
+        
+        // Early exit: DocBook table elements should not be treated as data-centric
+        // This protects Paligo-generated tables from being misidentified
+        if (['table', 'tgroup', 'thead', 'tbody', 'tfoot'].includes(tag)) {
+          return { isDataCentric: false };
+        }
+        
+        // Check if this is a container with repeated child elements (data-centric pattern)
+        if (children.length > 0) {
+          const childTags = children.map(child => getTagName(child));
+          const uniqueTags = [...new Set(childTags)];
+          
+          // If we have multiple children with the same tag name, this looks like tabular data
+          if (uniqueTags.length === 1 && children.length > 1) {
+            const sampleChild = children[0];
+            const grandChildren = Array.from(sampleChild.children || []);
+            
+            // Additional check: avoid treating DocBook <row> elements as data-centric
+            const childTag = uniqueTags[0];
+            if (childTag === 'row' && tag === 'tbody') {
+              return { isDataCentric: false };
+            }
+            
+            // Check if child elements have consistent structure (same sub-elements)
+            if (grandChildren.length > 0) {
+              const hasConsistentStructure = children.every(child => {
+                const childElementNames = Array.from(child.children || [])
+                  .map(grandChild => getTagName(grandChild));
+                return childElementNames.length === grandChildren.length;
+              });
+              
+              if (hasConsistentStructure) {
+                return {
+                  isDataCentric: true,
+                  containerTag: tag,
+                  rowTag: uniqueTags[0],
+                  rowElements: children,
+                  sampleStructure: grandChildren.map(gc => getTagName(gc))
+                };
+              }
+            }
+          }
+          
+          // Check for known container patterns
+          if (TABLE_DETECTION_CONFIG.containerTags.includes(tag)) {
+            const rowLikeChildren = children.filter(child => {
+              const childTag = getTagName(child);
+              return TABLE_DETECTION_CONFIG.rowTags.includes(childTag);
+            });
+            
+            if (rowLikeChildren.length > 0) {
+              return {
+                isDataCentric: true,
+                containerTag: tag,
+                rowTag: getTagName(rowLikeChildren[0]),
+                rowElements: rowLikeChildren,
+                sampleStructure: rowLikeChildren[0].children ? 
+                  Array.from(rowLikeChildren[0].children).map(c => getTagName(c)) : []
+              };
+            }
+          }
+        }
+        
+        return { isDataCentric: false };
+      }
+
+      // Enhanced table converter for generic XML structures
+      function convertToHtmlTable(node, isDocBook = false) {
+        const tag = getTagName(node);
+        
+        // Direct HTML table elements - preserve structure
+        if (['table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th'].includes(tag)) {
+          return convertDirectTableElement(node, isDocBook);
+        }
+        
+        // Generic table-like structures
+        if (tag === 'table' || hasTableStructure(node)) {
+          return buildHtmlTable(node, isDocBook);
+        }
+        
+        // Row-like elements
+        if (['row', 'record', 'tr'].includes(tag)) {
+          return buildTableRow(node, false, isDocBook);
+        }
+        
+        // Cell-like elements
+        if (['cell', 'data', 'column', 'td', 'th'].includes(tag)) {
+          return buildTableCell(node, 'td', isDocBook);
+        }
+        
+        return `<div class="xml-table" data-tag="${escapeHtml(tag)}">${Array.from(node.childNodes).map(child => serializeNode(child, isDocBook)).join('')}</div>`;
+      }
+
+      // Convert direct HTML table elements with attribute preservation
+      function convertDirectTableElement(node, isDocBook = false) {
+        const tag = getTagName(node);
+        const attributes = Array.from(node.attributes || [])
+          .map(attr => `${attr.name}="${escapeHtml(attr.value)}"`)
+          .join(' ');
+        
+        const children = Array.from(node.childNodes)
+          .map(child => child.nodeType === Node.ELEMENT_NODE ? convertToHtmlTable(child, isDocBook) : 
+                       child.nodeType === Node.TEXT_NODE && child.nodeValue.trim() ? 
+                       escapeHtml(child.nodeValue) : '')
+          .filter(Boolean)
+          .join('');
+        
+        return `<${tag}${attributes ? ' ' + attributes : ''}>${children}</${tag}>`;
+      }
+
+      // Check if a node has table-like structure (contains rows/records)
+      function hasTableStructure(node) {
+        const children = Array.from(node.children || []);
+        if (children.length === 0) return false;
+        
+        // Check for explicit row-like elements
+        const rowLikeElements = children.filter(child => {
+          const tag = getTagName(child);
+          return TABLE_DETECTION_CONFIG.rowTags.includes(tag);
+        });
+        
+        // High confidence if most children are row-like elements
+        if (rowLikeElements.length > 0 && rowLikeElements.length / children.length > 0.7) {
+          return true;
+        }
+        
+        // Medium confidence if we have some consistent structure
+        const childTags = children.map(child => getTagName(child));
+        const uniqueTags = [...new Set(childTags)];
+        
+        // If all children have the same tag and there are multiple, likely tabular
+        if (uniqueTags.length === 1 && children.length > 1) {
+          return true;
+        }
+        
+        // Low confidence fallback - check if children have similar internal structure
+        if (children.length > 1) {
+          const firstChildElements = children[0].children ? 
+            Array.from(children[0].children).map(c => getTagName(c)) : [];
+          
+          if (firstChildElements.length > 0) {
+            const structuralSimilarity = children.filter(child => {
+              const childElements = child.children ? 
+                Array.from(child.children).map(c => getTagName(c)) : [];
+              return childElements.length === firstChildElements.length;
+            }).length;
+            
+            return structuralSimilarity / children.length > 0.6;
+          }
+        }
+        
+        return false;
+      }
+
+      // Build complete HTML table from generic XML structure
+      function buildHtmlTable(node, isDocBook = false) {
+        const children = Array.from(node.children || []);
+        if (children.length === 0) return '';
+        
+        let tableContent = '';
+        
+        // Look for header-like elements
+        const headers = children.filter(child => {
+          const tag = getTagName(child);
+          return TABLE_DETECTION_CONFIG.headerTags.includes(tag);
+        });
+        
+        // Look for body/row elements using enhanced detection
+        const rows = children.filter(child => {
+          const tag = getTagName(child);
+          return TABLE_DETECTION_CONFIG.rowTags.includes(tag) || 
+                 (!headers.some(h => h === child) && child.children && child.children.length > 0);
+        });
+        
+        // Build table header if found
+        if (headers.length > 0) {
+          tableContent += '<thead>';
+          headers.forEach(header => {
+            tableContent += buildTableRow(header, true, isDocBook);
+          });
+          tableContent += '</thead>';
+        } else if (rows.length > 0) {
+          // Generate header from first row's structure if no explicit headers
+          const firstRow = rows[0];
+          if (firstRow && firstRow.children && firstRow.children.length > 0) {
+            tableContent += '<thead><tr>';
+            
+            // Include attributes as header columns
+            if (firstRow.attributes && firstRow.attributes.length > 0) {
+              Array.from(firstRow.attributes).forEach(attr => {
+                tableContent += `<th>${escapeHtml(attr.name)}</th>`;
+              });
+            }
+            
+            // Include child elements as header columns
+            Array.from(firstRow.children).forEach(child => {
+              const elementName = getTagName(child);
+              tableContent += `<th>${escapeHtml(elementName)}</th>`;
+            });
+            
+            tableContent += '</tr></thead>';
+          }
+        }
+        
+        // Build table body
+        if (rows.length > 0) {
+          tableContent += '<tbody>';
+          rows.forEach(row => {
+            tableContent += buildAdvancedTableRow(row, isDocBook);
+          });
+          tableContent += '</tbody>';
+        }
+        
+        // If no clear structure, treat all children as rows
+        if (!headers.length && !rows.length && children.length > 0) {
+          tableContent += '<tbody>';
+          children.forEach(child => {
+            tableContent += buildAdvancedTableRow(child, isDocBook);
+          });
+          tableContent += '</tbody>';
+        }
+        
+        return `<table class="xml-generated-table">${tableContent}</table>`;
+      }
+
+      // Enhanced table row builder that handles attributes and elements
+      function buildAdvancedTableRow(node, isDocBook = false) {
+        let rowContent = '';
+        
+        // Add attributes as cells first
+        if (node.attributes && node.attributes.length > 0) {
+          Array.from(node.attributes).forEach(attr => {
+            rowContent += `<td>${escapeHtml(attr.value)}</td>`;
+          });
+        }
+        
+        // Add child elements as cells
+        if (node.children && node.children.length > 0) {
+          Array.from(node.children).forEach(child => {
+            const content = child.children && child.children.length > 0 ? 
+              Array.from(child.childNodes).map(c => serializeNode(c, isDocBook)).join('') :
+              escapeHtml(getTextContent(child));
+            rowContent += `<td>${content}</td>`;
+          });
+        } else {
+          // If no children, use the node's text content
+          const textContent = getTextContent(node);
+          if (textContent.trim()) {
+            rowContent += `<td>${escapeHtml(textContent)}</td>`;
+          }
+        }
+        
+        return `<tr>${rowContent}</tr>`;
+      }
+
+      // Build table row from XML element
+      function buildTableRow(node, isHeader = false, isDocBook = false) {
+        const children = Array.from(node.children || []);
+        const cellTag = isHeader ? 'th' : 'td';
+        
+        // If node has cell-like children, use them
+        const cells = children.filter(child => {
+          const tag = getTagName(child);
+          return ['cell', 'data', 'column', 'td', 'th', 'field', 'value'].includes(tag);
+        });
+        
+        let rowContent = '';
+        
+        if (cells.length > 0) {
+          cells.forEach(cell => {
+            rowContent += buildTableCell(cell, cellTag, isDocBook);
+          });
+        } else if (children.length > 0) {
+          // Treat all children as cells
+          children.forEach(child => {
+            rowContent += buildTableCell(child, cellTag, isDocBook);
+          });
+        } else {
+          // No children, use text content
+          const textContent = getTextContent(node);
+          if (textContent.trim()) {
+            rowContent += `<${cellTag}>${escapeHtml(textContent)}</${cellTag}>`;
+          }
+        }
+        
+        return `<tr>${rowContent}</tr>`;
+      }
+
+      // Build table cell from XML element
+      function buildTableCell(node, cellTag = 'td', isDocBook = false) {
+        const attributes = [];
+        
+        // Handle colspan and rowspan attributes
+        if (node.hasAttribute && node.hasAttribute('colspan')) {
+          attributes.push(`colspan="${escapeHtml(node.getAttribute('colspan'))}"`);
+        }
+        if (node.hasAttribute && node.hasAttribute('rowspan')) {
+          attributes.push(`rowspan="${escapeHtml(node.getAttribute('rowspan'))}"`);
+        }
+        if (node.hasAttribute && node.hasAttribute('span')) {
+          attributes.push(`colspan="${escapeHtml(node.getAttribute('span'))}"`);
+        }
+        
+        const attrString = attributes.length > 0 ? ' ' + attributes.join(' ') : '';
+        const content = node.children && node.children.length > 0 ? 
+          Array.from(node.childNodes).map(c => serializeNode(c, isDocBook)).join('') :
+          escapeHtml(getTextContent(node));
+        
+        return `<${cellTag}${attrString}>${content}</${cellTag}>`;
+      }
+
+      // Helper to get text content from node
+      function getTextContent(node) {
+        if (node.textContent !== undefined) {
+          return node.textContent;
+        }
+        if (node.nodeValue) {
+          return node.nodeValue;
+        }
+        let text = '';
+        for (let child of node.childNodes || []) {
+          if (child.nodeType === Node.TEXT_NODE) {
+            text += child.nodeValue || '';
+          }
+        }
+        return text;
+      }
+
+      // Build comprehensive HTML table from data-centric XML structures
+      function buildDataCentricTable(containerNode, dataCentricInfo, isDocBook = false) {
+        const { rowElements } = dataCentricInfo;
+        
+        if (rowElements.length === 0) return '';
+        
+        // Analyze all row elements to build comprehensive column structure
+        const allColumns = new Set();
+        const attributeColumns = new Set();
+        
+        // First pass: collect all possible column names from child elements and attributes
+        rowElements.forEach(rowElement => {
+          // Add attributes as columns
+          if (rowElement.attributes) {
+            Array.from(rowElement.attributes).forEach(attr => {
+              attributeColumns.add(attr.name);
+              allColumns.add(`@${attr.name}`); // Prefix attributes with @
+            });
+          }
+          
+          // Add child element names as columns
+          if (rowElement.children) {
+            Array.from(rowElement.children).forEach(child => {
+              const elementName = getTagName(child);
+              allColumns.add(elementName);
+            });
+          }
+        });
+        
+        // Convert to sorted array for consistent column order (attributes first, then elements)
+        const columnHeaders = [
+          ...Array.from(attributeColumns).sort().map(attr => `@${attr}`),
+          ...Array.from(allColumns).filter(col => !col.startsWith('@')).sort()
+        ];
+        
+        let tableHtml = '<table class="xml-data-centric-table">';
+        
+        // Build table header
+        if (columnHeaders.length > 0) {
+          tableHtml += '<thead><tr>';
+          columnHeaders.forEach(header => {
+            const displayName = header.startsWith('@') ? 
+              header.substring(1) : // Remove @ prefix for display
+              header;
+            tableHtml += `<th>${escapeHtml(displayName)}</th>`;
+          });
+          tableHtml += '</tr></thead>';
+        }
+        
+        // Build table body
+        tableHtml += '<tbody>';
+        rowElements.forEach(rowElement => {
+          tableHtml += '<tr>';
+          
+          columnHeaders.forEach(columnName => {
+            let cellContent = '';
+            
+            if (columnName.startsWith('@')) {
+              // Handle attribute columns
+              const attrName = columnName.substring(1);
+              const attrValue = rowElement.getAttribute ? rowElement.getAttribute(attrName) : '';
+              cellContent = attrValue || '';
+            } else {
+              // Handle element columns
+              const childElement = Array.from(rowElement.children || [])
+                .find(child => getTagName(child) === columnName);
+              
+              if (childElement) {
+                // Check if element has children (complex content) or just text
+                if (childElement.children && childElement.children.length > 0) {
+                  // Complex content - serialize recursively
+                  cellContent = Array.from(childElement.childNodes)
+                    .map(child => {
+                      if (child.nodeType === Node.ELEMENT_NODE) {
+                        return serializeNode(child, isDocBook);
+                      } else if (child.nodeType === Node.TEXT_NODE && child.nodeValue.trim()) {
+                        return escapeHtml(child.nodeValue);
+                      }
+                      return '';
+                    })
+                    .filter(Boolean)
+                    .join('');
+                } else {
+                  // Simple text content
+                  cellContent = escapeHtml(getTextContent(childElement));
+                }
+              }
+            }
+            
+            tableHtml += `<td>${cellContent}</td>`;
+          });
+          
+          tableHtml += '</tr>';
+        });
+        tableHtml += '</tbody></table>';
+        
+        return tableHtml;
+      }
+
       try {
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(xmlString.trim(), 'application/xml');
@@ -156,12 +734,25 @@ define([], function() {
         const ns = root && root.namespaceURI;
         const localName = root && (root.localName || root.nodeName.toLowerCase());
 
-        const looksLikeDocBook =
-          (ns && ns.indexOf('docbook') !== -1) ||
-          /^(article|section|chapter|book|bookinfo)$/i.test(localName);
+        // Enhanced DocBook detection:
+        // 1. Check namespace for DocBook
+        // 2. Check if root is a known DocBook element
+        // 3. Check if root is a table with DocBook structure (tgroup, colspec, etc.)
+        const hasDocBookNamespace = ns && ns.indexOf('docbook') !== -1;
+        const hasDocBookRootElement = /^(article|section|chapter|book|bookinfo)$/i.test(localName);
+        const hasDocBookTableStructure = localName === 'table' && 
+          (xmlDoc.querySelector('tgroup, colspec, thead, tbody') !== null);
+        
+        const looksLikeDocBook = hasDocBookNamespace || hasDocBookRootElement || hasDocBookTableStructure;
+
+        // Enhanced table detection for any XML structure - combined into single selector for performance
+        const hasTableElements = xmlDoc.querySelector(
+          'table, thead, tbody, tr, td, th, row, cell, record, data, column, item, entry, ' +
+          'catalog, records, list, items, collection'
+        ) !== null;
 
         if (looksLikeDocBook) {
-          // Use existing XSLT stylesheet (xsltStylesheet defined above in file)
+          // Use existing XSLT stylesheet for DocBook XML (Paligo-generated tables)
           try {
             const xsltParser = new DOMParser();
             const xsltDoc = xsltParser.parseFromString(xsltStylesheet, 'application/xml');
@@ -196,16 +787,18 @@ define([], function() {
             if (resultHtml && resultHtml.trim()) {
               return resultHtml.replace(/xmlns(:\w+)?="[^"]*"/g, '').replace(/<\?xml[^>]*\?>/g, '').trim();
             }
-            // otherwise continue to generic fallback
+            // otherwise continue to generic fallback with isDocBook flag
           } catch (err) {
             console.warn('DocBook XSLT path failed, falling back to generic XML serializer:', err);
-            // fallthrough to generic serializer
+            // fallthrough to generic serializer with isDocBook flag
           }
         }
 
         // Generic fallback: produce readable HTML for any XML
-        const html = serializeNode(xmlDoc);
-        return `<div class="generic-xml">${html}</div>`;
+        // Pass isDocBook flag to prevent data-centric interference with DocBook tables
+        const html = serializeNode(xmlDoc, looksLikeDocBook);
+        const containerClass = hasTableElements ? 'generic-xml has-tables' : 'generic-xml';
+        return `<div class="${containerClass}">${html}</div>`;
       } catch (error) {
         console.error('XSLT / XML transformation error:', error);
         throw error;
