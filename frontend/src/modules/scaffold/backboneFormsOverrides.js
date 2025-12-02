@@ -829,7 +829,6 @@ Samaritan Assistance</label><br>
           
           // Add keyboard handler for Enter key
           elements.input.addEventListener('keypress', (event) => {
-            // if($(event.target).val().length == 0) { $('buttonSend').addClass('active') } else { $('buttonSend').removeClass('active') }
             if (event.key === 'Enter' && !event.shiftKey && !elements.submitBtn.disabled) {
               event.preventDefault();
               submitHandler();
