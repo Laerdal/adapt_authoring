@@ -111,6 +111,19 @@ define([
         return !data || emptyPatterns.includes(data) || data.replace(/<p>(&nbsp;|<br>|)<\/p>/g, '').length === 0;
       }
 
+    // Get full plain text content from the editor (strip HTML safely)
+    function getEditorPlainText(editor) {
+      try {
+        const html = (typeof editor.getData === 'function') ? editor.getData() : '';
+        const tmp = document.createElement('div');
+        tmp.innerHTML = html || '';
+        return (tmp.textContent || tmp.innerText || '').trim();
+      } catch (e) {
+        console.error('getEditorPlainText error', e);
+        return '';
+      }
+    }
+
     // AI Agent Plugin
     function AiAgentPlugin(editor, promptResponse) {
       const balloon = editor.plugins.get('ContextualBalloon');
@@ -140,7 +153,7 @@ Samaritan Assistance</label><br>
             
           <div class="custom-prompt-section">
             <textarea id="assistantTextArea" placeholder="Ask Samaritan to edit or generate from scratch..."></textarea>            
-            <button class="btnAiAgent buttonSend" id="assistantSubmitBtn"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5.26349 6.91891C5.04205 5.36781 6.6102 4.17583 8.04572 4.80367L20.3065 10.1679L20.452 10.2373C21.903 11.0064 21.8543 13.1548 20.3065 13.832L8.04572 19.1963C6.61011 19.8242 5.04188 18.6323 5.26349 17.081L5.99005 12L5.26349 6.91891ZM7.86701 11H9.99982C10.5521 11 10.9998 11.4477 10.9998 12C10.9998 12.5522 10.5521 13 9.99982 13H7.86701L7.24396 17.3642L19.5047 12L7.24396 6.63571L7.86701 11Z" fill="#B3B3B3"></path></svg></button>
+            <button class="btnAiAgent buttonSend" id="assistantSubmitBtn"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5.26349 6.91891C5.04205 5.36781 6.6102 4.17583 8.04572 4.80367L20.3065 10.1679L20.452 10.2373C21.903 11.0064 21.8543 13.1548 20.3065 13.832L8.04572 19.1963C6.61011 19.8242 5.04188 18.6323 5.26349 17.081L5.99005 12L5.26349 6.91891ZM7.86701 11H9.99982C10.5521 11 10.9998 11.4477 10.9998 12C10.9998 12.5522 10.5521 13 9.99982 13H7.86701L7.24396 17.3642L19.5047 12L7.24396 6.63571L7.86701 11Z" fill="#ffffff"></path></svg></button>
           </div>
           <div class="aiButtons">
             <button class="btnAiAgent buttonTryAgain" disabled id="assistantTryAgainBtn">
@@ -512,25 +525,36 @@ Samaritan Assistance</label><br>
             }
             
             if (selectedText.trim() === '') {
-            // Initialize popup with selected text
-              const selectionCursor = editor.model.document.selection;
-              const cursorPosition = selectionCursor.getLastPosition();
-              let cursorLine = null;
-              const viewPosition = editor.editing.mapper.toViewPosition(cursorPosition);
-              const domPosition = editor.editing.view.domConverter.viewPositionToDom(viewPosition);
-              
-              if (domPosition && domPosition.parent) {
-                cursorLine = domPosition.parent;
-              }
+              // No selection: select the entire editor content for "select all" behavior
+              try {
+                editor.model.change(writer => {
+                  const root = editor.model.document.getRoot();
+                  const start = writer.createPositionAt(root, 0);
+                  const end = writer.createPositionAt(root, 'end');
+                  writer.setSelection(writer.createRange(start, end));
+                });
 
-              if (!cursorLine) {
-                cursorLine = selectedTextCursor;
-              } else if(selectedTextCursor.trim() !== '') {
-                cursorLine = selectedTextCursor;
+                // Prefer full HTML for display to preserve formatting
+                const fullHtml = (typeof editor.getData === 'function') ? editor.getData() : '';
+                if (fullHtml && fullHtml.trim() !== '') {
+                  $('.generatedResponse').html(fullHtml).attr('disabled', true).css('background', '#FAFAFA');
+                } else {
+                  // Fallback to plain text from model selection
+                  const sel = editor.model.document.selection;
+                  let fullSelectedText = '';
+                  for (let range of sel.getRanges()) {
+                    for (let item of range.getItems()) {
+                      if (item.is('textProxy')) {
+                        fullSelectedText += item.data;
+                      }
+                    }
+                  }
+                  $('.generatedResponse').text(fullSelectedText).attr('disabled', true).css('background', '#FAFAFA');
+                }
+              } catch (err) {
+                console.error('Error selecting full editor content:', err);
+                $('.generatedResponse').text(selectedTextCursor || '').attr('disabled', true).css('background', '#FAFAFA');
               }
-              
-              $('.generatedResponse').html(cursorLine).attr('disabled', true).css('background', '#FAFAFA');
-              
             } else {
               $('.generatedResponse').html(selectedText).attr('disabled', true).css('background', '#FAFAFA');
             }        
@@ -669,24 +693,9 @@ Samaritan Assistance</label><br>
           
           // Check if the selection is empty and use the current cursor position
           if (!selectedText || selectedText.trim() === '') {
-            const selectionCursor = editor.model.document.selection;
-            const cursorPosition = selectionCursor.getLastPosition();
-            let cursorLine = null;
-            const viewPosition = editor.editing.mapper.toViewPosition(cursorPosition);
-            const domPosition = editor.editing.view.domConverter.viewPositionToDom(viewPosition);
-            
-            if (domPosition && domPosition.parent) {
-              cursorLine = domPosition.parent;
-            }
-
-            // Check if we have either selected text or a cursor position
-            if ((!selectedText || selectedText.trim() === '') && cursorLine) {
-              // If no selection but we have a cursor line, get text from current paragraph/element
-              const currentLineText = cursorLine.textContent || '';
-              if (currentLineText.trim() !== '') {
-                selectedText = currentLineText;
-              }
-            }
+            // Use entire editor text when nothing is selected
+            const fullText = getEditorPlainText(editor);
+            if (fullText) selectedText = fullText;
           } else {
             let selectionCursor = editor.model.document.selection;
             let selectedTextCursor = '';
@@ -808,6 +817,15 @@ Samaritan Assistance</label><br>
         // Add submit button click handler
         if (!elements.submitBtn._listenerAttached) {
           elements.submitBtn.addEventListener('click', submitHandler);
+
+          elements.input.addEventListener('input', (event) => {
+            const length = $(event.target).val().length;
+            if (length !== 0) {
+                $('.buttonSend').addClass('active');
+            } else {
+                $('.buttonSend').removeClass('active');
+            }
+          });
           
           // Add keyboard handler for Enter key
           elements.input.addEventListener('keypress', (event) => {
@@ -885,19 +903,9 @@ Samaritan Assistance</label><br>
               // Handle case where selectedText is empty or null
               let actualSelectedText = selectedText;
               if (!actualSelectedText || actualSelectedText.trim() === '') {
-                // Get the cursor position information
-                const selectionCursor = editor.model.document.selection;
-                const cursorPosition = selectionCursor.getLastPosition();
-                const viewPosition = editor.editing.mapper.toViewPosition(cursorPosition);
-                const domPosition = editor.editing.view.domConverter.viewPositionToDom(viewPosition);
-                
-                if (domPosition && domPosition.parent) {
-                  // Get text from current paragraph/element
-                  const currentLineText = domPosition.parent.textContent || '';
-                  if (currentLineText.trim() !== '') {
-                    actualSelectedText = currentLineText;
-                  }
-                }
+                // Use full editor text if nothing is selected (user requested whole textarea)
+                const fullText = getEditorPlainText(editor);
+                if (fullText) actualSelectedText = fullText;
               }
               
               // Get current selection from the editor
