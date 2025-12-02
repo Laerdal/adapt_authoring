@@ -820,7 +820,7 @@ Samaritan Assistance</label><br>
 
           elements.input.addEventListener('input', (event) => {
             const length = $(event.target).val().length;
-            if (length != 0) {
+            if (length !== 0) {
                 $('.buttonSend').addClass('active');
             } else {
                 $('.buttonSend').removeClass('active');
