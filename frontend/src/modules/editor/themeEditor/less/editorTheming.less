@@ -71,3 +71,382 @@
     }
   }
 }
+
+// ========================================
+// Simplified Theme Editor - Accordion Styles (Light Theme)
+// ========================================
+
+.simplified-theme-editor {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 20px;
+  
+  .theme-editor-header {
+    background: #fff;
+    color: #333;
+    padding: 24px 28px;
+    border-radius: 8px;
+    margin-bottom: 24px;
+    border: 1px solid #e8e8e8;
+    
+    .header-icon {
+      display: inline-block;
+      width: 48px;
+      height: 48px;
+      background: #4ecdc4;
+      border-radius: 50%;
+      text-align: center;
+      line-height: 48px;
+      font-size: 22px;
+      margin-bottom: 12px;
+      color: white;
+    }
+    
+    h2 {
+      margin: 0 0 8px 0;
+      font-size: 20px;
+      font-weight: 600;
+      color: #1a1a1a;
+    }
+    
+    > p {
+      margin: 0 0 16px 0;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #666;
+    }
+    
+    .theme-tip {
+      background: #FFFBEB;
+      padding: 12px 16px;
+      border-radius: 6px;
+      border: 1px solid #FEE685;
+      font-size: 13px;
+      color: #973C00;
+      
+      i {
+        margin-right: 8px;
+        color: #ffc107;
+      }
+      
+      strong {
+        font-weight: 600;
+        color: #856404;
+      }
+    }
+  }
+}
+
+.theme-accordion-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.theme-section-accordion {
+  background: white;
+  border: 1px solid #e8e8e8;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+    border-color: #d0d0d0;
+  }
+  
+  .accordion-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 22px;
+    cursor: pointer;
+    background: white;
+    transition: all 0.2s ease;
+    user-select: none;
+    border-bottom: 1px solid transparent;
+    
+    &:hover {
+      background: #fafbfc;
+    }
+    
+    &.open {
+      background: white;
+      border-bottom: 1px solid #e8e8e8;
+      
+      .chevron {
+        transform: rotate(180deg);
+      }
+    }
+    
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex: 1;
+      
+      .icon {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 20px;
+        flex-shrink: 0;
+      }
+      
+      .section-info {
+        flex: 1;
+        
+        .section-title {
+          margin: 0 0 3px 0;
+          font-size: 15px;
+          font-weight: 600;
+          color: #1a1a1a;
+        }
+        
+        .section-subtitle {
+          margin: 0;
+          font-size: 13px;
+          color: #757575;
+          line-height: 1.4;
+        }
+      }
+    }
+    
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      
+      .status-badge {
+        padding: 5px 12px;
+        border-radius: 14px;
+        font-size: 11px;
+        font-weight: 500;
+        background: #f3e5f5;
+        color: #7b1fa2;
+      }
+      
+      .chevron {
+        color: #bbb;
+        font-size: 16px;
+        transition: transform 0.3s ease;
+        margin-left: 8px;
+      }
+    }
+  }
+  
+  .accordion-content {
+    overflow: hidden;
+    transition: max-height 0.4s ease, opacity 0.3s ease;
+    
+    &.collapsed {
+      max-height: 0;
+      opacity: 0;
+    }
+    
+    &.expanded {
+      max-height: 5000px;
+      opacity: 1;
+    }
+    
+    .content-inner {
+      padding: 24px;
+      background: #fafbfc;
+      
+      .section-properties {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        
+        .field {
+          margin-bottom: 0;
+          
+          label {
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 6px;
+            display: block;
+            font-size: 13px;
+          }
+          
+          input[type="text"],
+          input[type="number"],
+          select,
+          textarea {
+            width: 100%;
+            padding: 9px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            background: white;
+            transition: all 0.2s ease;
+            
+            &:focus {
+              outline: none;
+              border-color: #4ecdc4;
+              box-shadow: 0 0 0 3px rgba(78, 205, 196, 0.1);
+            }
+          }
+          
+          .field-help {
+            font-size: 12px;
+            color: #757575;
+            margin-top: 5px;
+            line-height: 1.4;
+          }
+        }
+      }
+    }
+  }
+  
+  // Section-specific icon colors
+  &[data-section="_course"] .icon {
+    background: #ff6b6b;
+  }
+  
+  &[data-section="_global"] .icon {
+    background: #4ecdc4;
+  }
+  
+  &[data-section="_blockStyles"] .icon {
+    background: #5b8dee;
+  }
+  
+  &[data-section="_components"] .icon {
+    background: #a855f7;
+  }
+  
+  &[data-section="_nav"] .icon {
+    background: #51cf66;
+  }
+  
+  &[data-section="_menu"] .icon {
+    background: #ff9f43;
+  }
+  
+  &[data-section="_validation"] .icon {
+    background: #ee5a6f;
+  }
+  
+  &[data-section*="overlay"] .icon {
+    background: #9775fa;
+  }
+}
+
+// Color picker specific styles in accordion
+.theme-section-accordion {
+  .colour-picker-container {
+    display: inline-block;
+    position: relative;
+    
+    input[type="text"] {
+      padding-left: 45px;
+    }
+    
+    .colour-picker-swatch {
+      position: absolute;
+      left: 8px;
+      top: 8px;
+      width: 28px;
+      height: 28px;
+      border-radius: 4px;
+      border: 2px solid #e0e0e0;
+      cursor: pointer;
+    }
+  }
+}
+
+// Responsive adjustments
+@media (max-width: 768px) {
+  .simplified-theme-editor {
+    padding: 12px;
+  }
+  
+  .theme-section-accordion {
+    border-radius: 8px;
+    
+    .accordion-header {
+      padding: 14px 16px;
+      
+      .header-left {
+        gap: 10px;
+        
+        .icon {
+          width: 38px;
+          height: 38px;
+          font-size: 18px;
+        }
+        
+        .section-info {
+          .section-title {
+            font-size: 14px;
+          }
+          
+          .section-subtitle {
+            font-size: 12px;
+          }
+        }
+      }
+      
+      .header-right {
+        .status-badge {
+          display: none;
+        }
+      }
+    }
+    
+    .accordion-content {
+      .content-inner {
+        padding: 16px;
+      }
+    }
+  }
+  
+  .simplified-theme-editor {
+    .theme-editor-header {
+      padding: 16px 20px;
+      
+      h2 {
+        font-size: 20px;
+      }
+    }
+  }
+}
+
+
+// Flat section styles (no accordion wrapper)
+.theme-flat-section {
+  margin-bottom: 24px;
+  background: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  padding: 20px;
+
+  .flat-section-header {
+    margin-bottom: 16px;
+    
+    .section-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #333;
+      margin: 0 0 8px 0;
+    }
+    
+    .section-subtitle {
+      font-size: 14px;
+      color: #666;
+      margin: 0;
+    }
+  }
+  
+  .flat-section-content {
+    .section-properties {
+      // Form fields will be rendered here
+    }
+  }
+}
+

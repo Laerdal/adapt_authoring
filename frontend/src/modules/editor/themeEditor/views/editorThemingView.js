@@ -21,7 +21,8 @@ define(function(require) {
       'change .theme select': 'onThemeChanged',
       'change .preset select': 'onPresetChanged',
       'change .form-container form': 'onFieldChanged',
-      'click button.edit': 'showPresetEdit'
+      'click button.edit': 'showPresetEdit',
+      'click .accordion-header': 'onAccordionToggle'  // NEW: Accordion toggle
     },
 
     initialize: function() {
@@ -84,7 +85,14 @@ define(function(require) {
       }
 
       if (this.form) {
-        this.$('.form-container').html(this.form.el);
+        // NEW: Check if theme has accordion sections
+        var themeProperties = selectedTheme.get('properties');
+        if (this.hasAccordionSections(themeProperties)) {
+          this.renderAccordionForm();
+        } else {
+          // Original behavior
+          this.$('.form-container').html(this.form.el);
+        }
       }
 
       this.$el.find('fieldset:not(:has(>.field))').addClass('empty-fieldset');
@@ -98,6 +106,293 @@ define(function(require) {
       }
       _.defer(function() { this.restoreFormSettings(toRestore); }.bind(this));
     },
+
+    // NEW: Check if theme has accordion sections
+    hasAccordionSections: function(themeProperties) {
+      if (!themeProperties || !themeProperties.variables) return false;
+      
+      for (var key in themeProperties.variables) {
+        var section = themeProperties.variables[key];
+        if (section && section.type === 'object' && section._accordion) {
+          return true;
+        }
+      }
+      return false;
+    },
+
+    // NEW: Render form using accordion structure
+    renderAccordionForm: function() {
+      var selectedTheme = this.getSelectedTheme();
+      var themeProperties = selectedTheme.get('properties');
+      var allSections = this.getAccordionSections(themeProperties);
+
+      
+
+      // Separate flat sections from accordion sections
+
+      var flatSections = allSections.filter(function(s) { return s.data._accordion && s.data._accordion.renderFlat; });
+
+      var accordionSections = allSections.filter(function(s) { return !s.data._accordion || !s.data._accordion.renderFlat; });
+      
+      var accordionHtml = '<div class="simplified-theme-editor">';
+      accordionHtml += '<div class="theme-editor-header">';
+      accordionHtml += '<div class="header-icon"><i class="fa fa-paint-brush"></i></div>';
+      accordionHtml += '<h2>Simplified Theme Editor</h2>';
+      accordionHtml += '<p>Start with global colors that automatically generate hover, focus, and disabled states. Use Advanced Mode to fine-tune specific elements if needed.</p>';
+      accordionHtml += '<div class="theme-tip">';
+      accordionHtml += '<i class="fa fa-info-circle"></i>';
+      accordionHtml += '<strong>Tip:</strong> Your global theme colors will cascade down to all components. Only override specific sections if you need different styling.';
+      accordionHtml += '</div>';
+      accordionHtml += '</div>';
+
+      // Render flat sections first
+      flatSections.forEach(function(section) {
+        accordionHtml += this.renderFlatSection(section.key, section.data);
+      }.bind(this));
+      accordionHtml += '<div class="theme-accordion-container">';
+      
+      accordionSections.forEach(function(section) {
+        accordionHtml += this.renderAccordionSection(section.key, section.data);
+      }.bind(this));
+      
+      accordionHtml += '</div></div>';
+      
+      this.$('.form-container').html(accordionHtml);
+      this.renderAccordionFields();
+      this.initializeAccordions();
+    },
+
+    // NEW: Get sections sorted by priority
+    getAccordionSections: function(themeProperties) {
+      var sections = [];
+      var variables = themeProperties.variables;
+      
+      for (var key in variables) {
+        var section = variables[key];
+        if (section && section.type === 'object' && section._accordion) {
+          sections.push({
+            key: key,
+            data: section,
+            priority: section._accordion.priority || 999
+          });
+        }
+      }
+      
+      // Sort by priority
+      sections.sort(function(a, b) {
+        return a.priority - b.priority;
+      });
+      
+      return sections;
+    },
+
+    // NEW: Render flat section (without accordion wrapper)
+    renderFlatSection: function(sectionKey, section) {
+      var sectionHtml = '<div class="theme-flat-section" data-section="' + sectionKey + '">';
+      sectionHtml += '<div class="flat-section-header">';
+      sectionHtml += '<h3 class="section-title">' + (section.title || sectionKey) + '</h3>';
+      if (section.help) {
+        sectionHtml += '<p class="section-subtitle">' + section.help + '</p>';
+      }
+      sectionHtml += '</div>';
+      sectionHtml += '<div class="flat-section-content">';
+      sectionHtml += '<div class="section-properties" data-section="' + sectionKey + '"></div>';
+      sectionHtml += '</div>';
+      sectionHtml += '</div>';
+      return sectionHtml;
+    },
+
+    // NEW: Render individual accordion section
+    renderAccordionSection: function(sectionKey, section) {
+      var accordion = section._accordion || {};
+      var isOpen = accordion.defaultOpen || false;
+      var priority = accordion.priority || 999;
+      var icon = accordion.icon || 'default';
+      var status = accordion.status || '';
+      
+      var sectionHtml = '<div class="theme-section-accordion" data-section="' + sectionKey + '" data-priority="' + priority + '">';
+      
+      // Header
+      sectionHtml += '<div class="accordion-header' + (isOpen ? ' open' : '') + '" data-section="' + sectionKey + '">';
+      sectionHtml += '<div class="header-left">';
+      sectionHtml += '<i class="icon fa fa-' + this.getIconClass(icon) + '"></i>';
+      sectionHtml += '<div class="section-info">';
+      sectionHtml += '<h3 class="section-title">' + (section.title || sectionKey) + '</h3>';
+      if (section.help) {
+        sectionHtml += '<p class="section-subtitle">' + section.help + '</p>';
+      }
+      sectionHtml += '</div>';
+      sectionHtml += '</div>';
+      sectionHtml += '<div class="header-right">';
+      if (status) {
+        sectionHtml += '<span class="status-badge status-' + status.toLowerCase().replace(/[^a-z]/g, '-') + '">' + status + '</span>';
+      }
+      sectionHtml += '<i class="chevron fa fa-chevron-down"></i>';
+      sectionHtml += '</div>';
+      sectionHtml += '</div>';
+      
+      // Content
+      sectionHtml += '<div class="accordion-content' + (isOpen ? ' expanded' : ' collapsed') + '">';
+      sectionHtml += '<div class="content-inner">';
+      sectionHtml += '<div class="section-properties" data-section="' + sectionKey + '"></div>';
+      sectionHtml += '</div>';
+      sectionHtml += '</div>';
+      
+      sectionHtml += '</div>';
+      
+      return sectionHtml;
+    },
+
+    // NEW: Map icon names to Font Awesome classes
+    getIconClass: function(iconName) {
+      var iconMap = {
+        'global': 'globe',
+        'pages': 'file-text-o',
+        'components': 'cube',
+        'navigation': 'compass',
+        'menu': 'bars',
+        'progress': 'chart-line',
+        'feedback': 'comment',
+        'overlay': 'window-maximize',
+        'settings': 'cog',
+        'default': 'folder'
+      };
+      
+      return iconMap[iconName] || iconMap['default'];
+    },
+
+    // NEW: Initialize accordion functionality
+    initializeAccordions: function() {
+      var self = this;
+      
+      // Restore saved accordion states
+      this.$('.theme-section-accordion').each(function() {
+        var sectionKey = $(this).data('section');
+        var savedState = localStorage.getItem('accordion-' + sectionKey);
+        if (savedState !== null) {
+          var shouldBeOpen = savedState === 'true';
+          var header = $(this).find('.accordion-header');
+          var content = $(this).find('.accordion-content');
+          
+          if (shouldBeOpen) {
+            header.addClass('open');
+            content.addClass('expanded').removeClass('collapsed');
+          } else {
+            header.removeClass('open');
+            content.addClass('collapsed').removeClass('expanded');
+          }
+        }
+      });
+    },
+
+    // NEW: Render form fields into their respective accordion sections
+    renderAccordionFields: function() {
+      var self = this;
+      var selectedTheme = this.getSelectedTheme();
+      var themeProperties = selectedTheme.get('properties');
+      
+      if (!this.form || !this.form.fields) return;
+      
+      // Group fields by section
+      var fieldsBySection = {};
+      var unmatchedFields = [];
+      
+      for (var fieldKey in this.form.fields) {
+        var field = this.form.fields[fieldKey];
+        var sectionKey = this.findFieldSection(fieldKey, themeProperties.variables);
+        
+        if (sectionKey) {
+          if (!fieldsBySection[sectionKey]) {
+            fieldsBySection[sectionKey] = [];
+          }
+          fieldsBySection[sectionKey].push({ key: fieldKey, field: field });
+        } else {
+          // Collect unmatched fields with their keys for debugging
+          unmatchedFields.push({ key: fieldKey, field: field });
+        }
+      }
+      
+      // Log unmatched fields for debugging
+      if (unmatchedFields.length > 0) {
+        console.log('Unmatched theme fields:', unmatchedFields.map(function(item) { return item.key; }));
+      }
+      
+      // Render fields into their accordion sections
+      for (var sectionKey in fieldsBySection) {
+        var $sectionContainer = this.$('.section-properties[data-section="' + sectionKey + '"]');
+        var fields = fieldsBySection[sectionKey];
+        
+        fields.forEach(function(item) {
+          if (item.field && item.field.el) {
+            $sectionContainer.append(item.field.el);
+          }
+        });
+      }
+      
+      // Render unmatched fields in a separate section at the bottom
+      if (unmatchedFields.length > 0) {
+        var $container = this.$('.theme-accordion-container');
+        var unmatchedHtml = '<div class="theme-section-accordion unmatched-fields" data-section="_unmatched">';
+        unmatchedHtml += '<div class="accordion-header open" data-section="_unmatched">';
+        unmatchedHtml += '<div class="header-left">';
+        unmatchedHtml += '<i class="icon fa fa-exclamation-triangle"></i>';
+        unmatchedHtml += '<div class="section-info">';
+        unmatchedHtml += '<h3 class="section-title">Additional Settings</h3>';
+        unmatchedHtml += '<p class="section-subtitle">Settings not categorized in sections above</p>';
+        unmatchedHtml += '</div>';
+        unmatchedHtml += '</div>';
+        unmatchedHtml += '<div class="header-right">';
+        unmatchedHtml += '<i class="chevron fa fa-chevron-down"></i>';
+        unmatchedHtml += '</div>';
+        unmatchedHtml += '</div>';
+        unmatchedHtml += '<div class="accordion-content expanded">';
+        unmatchedHtml += '<div class="content-inner">';
+        unmatchedHtml += '<div class="section-properties" data-section="_unmatched"></div>';
+        unmatchedHtml += '</div>';
+        unmatchedHtml += '</div>';
+        unmatchedHtml += '</div>';
+        
+        $container.append(unmatchedHtml);
+        
+        var $unmatchedContainer = this.$('.section-properties[data-section="_unmatched"]');
+        unmatchedFields.forEach(function(item) {
+          if (item.field && item.field.el) {
+            $unmatchedContainer.append(item.field.el);
+          }
+        });
+      }
+    },
+
+    // NEW: Find which section a field belongs to
+    findFieldSection: function(fieldKey, variables) {
+      for (var sectionKey in variables) {
+        var section = variables[sectionKey];
+        if (section && section.type === 'object' && section.properties) {
+          if (section.properties[fieldKey]) {
+            return sectionKey;
+          }
+        }
+      }
+      return null;
+    },
+
+    // NEW: Handle accordion header clicks
+    onAccordionToggle: function(event) {
+      var $header = $(event.currentTarget);
+      var $section = $header.closest('.theme-section-accordion');
+      var $content = $section.find('.accordion-content');
+      var sectionKey = $section.data('section');
+      
+      // Toggle open/closed
+      $header.toggleClass('open');
+      $content.toggleClass('expanded collapsed');
+      
+      // Save state to localStorage
+      var isOpen = $header.hasClass('open');
+      localStorage.setItem('accordion-' + sectionKey, isOpen);
+    },
+
+    // ORIGINAL METHODS BELOW (unchanged)
 
     removeForm: function() {
       this.$('.form-container').empty();
@@ -151,7 +446,6 @@ define(function(require) {
 
       // disable if no options
       select.attr('disabled', this.themes.models.length === 0);
-
       // restore the previous value
       if (oldVal) return select.val(oldVal);
 
@@ -213,7 +507,6 @@ define(function(require) {
         return;
       }
       var inputType = fieldView.schema.inputType.type || fieldView.schema.inputType;
-
       // Colour picker
       if (inputType === 'ColourPicker') {
         fieldView.setValue(value);
@@ -227,7 +520,7 @@ define(function(require) {
         $('div[data-editor-id*="' + key + '"]').append(fieldView.editor.$el);
         return;
       }
-      
+
       // Lists / arrays
       if (inputType === "List"){
         fieldView.setValue(value);
@@ -242,7 +535,7 @@ define(function(require) {
   
       // Default
       fieldView.editor.$el.val(value.toString())
-      
+
     },
 
     showPresetEdit: function(event) {
@@ -272,11 +565,6 @@ define(function(require) {
       });
     },
 
-    /**
-    * Data persistence
-    */
-
-    // checks form for errors, returns boolean
     validateForm: function() {
       var selectedTheme = this.getSelectedTheme();
 
@@ -340,9 +628,8 @@ define(function(require) {
       var selectedPreset = this.getSelectedPreset(false);
       var selectedPresetId = null;
       if (selectedPreset) selectedPresetId = selectedPreset.get('_id');
-
       $.post('api/themepreset/' + selectedPresetId + '/makeitso/' + this.model.get('_courseId'))
-      .error(this.onSaveError.bind(this))
+        .error(this.onSaveError.bind(this))
       .done(callback.bind(this));
     },
 
@@ -365,9 +652,9 @@ define(function(require) {
       for (var key in properties) {
         // Check for nested properties
         if (typeof properties[key].properties !== 'undefined') {
-            data[key] = {};
+          data[key] = {};
             for (var innerKey in properties[key].properties) {
-            data[key][innerKey] = attributes[innerKey];
+              data[key][innerKey] = attributes[innerKey];
           }
         } else {
           data[key] = attributes[key];
@@ -394,7 +681,6 @@ define(function(require) {
       return this.themes.findWhere({ 'name': this.model.get('_theme') });
     },
 
-    // param used to only return the val() (and ignore model data)
     getSelectedPreset: function(includeCached) {
       var storedId = this.getPresetSelection();
       var presetId = $('select#preset', this.$el).val();
@@ -464,8 +750,6 @@ define(function(require) {
 
     updateRestorePresetButton: function(shouldShow) {
       if (typeof shouldShow === 'undefined') {
-        // If flag was not passed in then compare default settings with current settings
-        // and show restore button if there are differences
         var currentSettings = this.flattenNestedProperties(this.getCurrentSettings());
         var preset = this.getSelectedPreset();
         var baseSettings = this.flattenNestedProperties((preset) ? preset.get('properties') : this.getDefaultThemeSettings());
@@ -482,10 +766,6 @@ define(function(require) {
     setPresetSelection: function(id) {
       this.settings.presetSelection = id;
     },
-
-    /**
-    * Event handling
-    */
 
     onEditPreset: function(data) {
       var model = this.presets.findWhere({ displayName: data.oldValue });
@@ -585,4 +865,7 @@ define(function(require) {
   });
 
   return ThemingView;
+
 });
+
+
