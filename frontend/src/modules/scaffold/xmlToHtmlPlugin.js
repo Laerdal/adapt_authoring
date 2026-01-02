@@ -530,10 +530,10 @@ define([], function() {
       </aside>
     </xsl:template>
 
-    <xsl:template match="db:footnote">
+    <xsl:template match="db:footnote | footnote">
       <sup class="footnote">
         <xsl:text>[</xsl:text>
-        <xsl:number level="any" count="db:footnote"/>
+        <xsl:number level="any" count="db:footnote | footnote"/>
         <xsl:text>]</xsl:text>
       </sup>
     </xsl:template>
