@@ -558,6 +558,26 @@ define([], function() {
       <dd class="glossdef"><xsl:apply-templates/></dd>
     </xsl:template>
 
+    <!-- Non-namespaced glossary elements for Paligo compatibility -->
+    <xsl:template match="glossary">
+      <div class="glossary">
+        <xsl:apply-templates/>
+      </div>
+    </xsl:template>
+
+    <xsl:template match="glossentry">
+      <div class="glossentry">
+        <xsl:apply-templates/>
+      </div>
+    </xsl:template>
+
+    <xsl:template match="glossterm">
+      <dt class="glossterm"><xsl:apply-templates/></dt>
+    </xsl:template>
+
+    <xsl:template match="glossdef">
+      <dd class="glossdef"><xsl:apply-templates/></dd>
+    </xsl:template>
     <xsl:template match="db:index | db:indexterm">
       <!-- Index elements typically not rendered in HTML -->
     </xsl:template>
