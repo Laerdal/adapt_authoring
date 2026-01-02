@@ -500,7 +500,7 @@ define([], function() {
       <span class="surname"><xsl:apply-templates/></span>
     </xsl:template>
 
-    <xsl:template match="db:email">
+    <xsl:template match="db:email | email">
       <a href="mailto:{.}"><xsl:apply-templates/></a>
     </xsl:template>
 
