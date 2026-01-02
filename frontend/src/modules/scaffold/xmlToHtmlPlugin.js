@@ -292,7 +292,18 @@ define([], function() {
     </xsl:template>
 
     <xsl:template match="db:anchor | anchor">
-      <a id="{@xml:id}"></a>
+      <a>
+        <xsl:attribute name="id">
+          <xsl:choose>
+            <xsl:when test="@xml:id">
+              <xsl:value-of select="@xml:id"/>
+            </xsl:when>
+            <xsl:when test="@id">
+              <xsl:value-of select="@id"/>
+            </xsl:when>
+          </xsl:choose>
+        </xsl:attribute>
+      </a>
     </xsl:template>
 
     <!-- ========== CODE & PROGRAM LISTINGS ========== -->
