@@ -224,10 +224,20 @@ define([], function() {
 
     <!-- Keyboard combinations -->
     <xsl:template match="db:keycombo">
+      <xsl:variable name="sep">
+        <xsl:choose>
+          <xsl:when test="@separator">
+            <xsl:value-of select="@separator"/>
+          </xsl:when>
+          <xsl:otherwise>+</xsl:otherwise>
+        </xsl:choose>
+      </xsl:variable>
       <kbd>
         <xsl:for-each select="*">
           <xsl:apply-templates select="."/>
-          <xsl:if test="position() != last()">+</xsl:if>
+          <xsl:if test="position() != last()">
+            <xsl:value-of select="$sep"/>
+          </xsl:if>
         </xsl:for-each>
       </kbd>
     </xsl:template>
