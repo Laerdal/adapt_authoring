@@ -265,7 +265,12 @@ define([], function() {
 
     <xsl:template match="db:xref | xref">
       <a href="#{@linkend}">
+        <xsl:variable name="endtermId" select="@endterm"/>
+        <xsl:variable name="endtermNode" select="//*[@xml:id=$endtermId or @id=$endtermId][1]"/>
         <xsl:choose>
+          <xsl:when test="$endtermNode">
+            <xsl:apply-templates select="$endtermNode"/>
+          </xsl:when>
           <xsl:when test="@endterm">
             <xsl:value-of select="@endterm"/>
           </xsl:when>
