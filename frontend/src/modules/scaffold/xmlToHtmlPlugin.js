@@ -4,7 +4,7 @@ define([], function() {
   function xmlToHtmlPlugin(editor) {
     const balloon = editor.plugins.get('ContextualBalloon');
 
-    // XSLT Stylesheet for Paligo DocBook → HTML Conversion
+    // Comprehensive XSLT Stylesheet for DocBook → HTML Conversion
     const xsltStylesheet = `<?xml version="1.0" encoding="UTF-8"?>
   <xsl:stylesheet version="1.0"
       xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
@@ -14,52 +14,170 @@ define([], function() {
 
     <xsl:output method="html" encoding="UTF-8" indent="yes"/>
 
-    <!-- Root: support article, section, or standalone table -->
+    <!-- ========== ROOT & DOCUMENT STRUCTURE ========== -->
     <xsl:template match="/">
       <div class="docbook-content">
-        <xsl:apply-templates select="db:article | db:section | db:table | table"/>
+        <xsl:apply-templates/>
       </div>
     </xsl:template>
 
-    <!-- Section -->
-    <xsl:template match="db:section">
-      <section>
+    <!-- Document Root Elements -->
+    <xsl:template match="db:article | db:book | db:chapter | article | book | chapter">
+      <article class="docbook-{local-name()}">
+        <xsl:apply-templates/>
+      </article>
+    </xsl:template>
+
+    <!-- Sections -->
+    <xsl:template match="db:section | db:sect1 | db:sect2 | db:sect3 | db:sect4 | db:sect5 | section | sect1 | sect2 | sect3 | sect4 | sect5">
+      <section class="docbook-section">
         <xsl:apply-templates/>
       </section>
     </xsl:template>
 
-    <!-- Title -->
-    <xsl:template match="db:title">
-      <h2><xsl:apply-templates/></h2>
+    <!-- ========== TITLES & HEADINGS ========== -->
+    <xsl:template match="db:title | title">
+      <xsl:variable name="level">
+        <xsl:choose>
+          <xsl:when test="parent::db:article or parent::db:book or parent::article or parent::book">h1</xsl:when>
+          <xsl:when test="parent::db:chapter or parent::db:sect1 or parent::chapter or parent::sect1">h2</xsl:when>
+          <xsl:when test="parent::db:sect2 or parent::sect2">h3</xsl:when>
+          <xsl:when test="parent::db:sect3 or parent::sect3">h4</xsl:when>
+          <xsl:when test="parent::db:sect4 or parent::sect4">h5</xsl:when>
+          <xsl:when test="parent::db:sect5 or parent::sect5">h6</xsl:when>
+          <xsl:when test="parent::db:section or parent::section">h2</xsl:when>
+          <xsl:otherwise>h2</xsl:otherwise>
+        </xsl:choose>
+      </xsl:variable>
+      <xsl:element name="{$level}">
+        <xsl:apply-templates/>
+      </xsl:element>
     </xsl:template>
 
+    <xsl:template match="db:subtitle | subtitle">
+      <p class="subtitle"><xsl:apply-templates/></p>
+    </xsl:template>
+
+    <xsl:template match="db:titleabbrev | titleabbrev">
+      <span class="title-abbrev"><xsl:apply-templates/></span>
+    </xsl:template>
+
+    <!-- ========== BLOCK ELEMENTS ========== -->
     <!-- Paragraphs -->
-    <xsl:template match="db:para | db:simpara">
+    <xsl:template match="db:para | db:simpara | para | simpara">
       <p><xsl:apply-templates/></p>
     </xsl:template>
 
-    <!-- Procedure / Steps -->
-    <xsl:template match="db:procedure">
-      <ol class="procedure">
-        <xsl:apply-templates select="db:step"/>
+    <!-- Blockquote -->
+    <xsl:template match="db:blockquote | blockquote">
+      <blockquote>
+        <xsl:apply-templates/>
+      </blockquote>
+    </xsl:template>
+
+    <!-- Note, Warning, Caution, Important, Tip -->
+    <xsl:template match="db:note | db:warning | db:caution | db:important | db:tip | note | warning | caution | important | tip">
+      <div class="admonition admonition-{local-name()}">
+        <xsl:if test="db:title or title">
+          <p class="admonition-title"><xsl:value-of select="db:title | title"/></p>
+        </xsl:if>
+        <xsl:apply-templates select="*[not(self::db:title) and not(self::title)]"/>
+      </div>
+    </xsl:template>
+
+    <!-- Example -->
+    <xsl:template match="db:example | db:informalexample | example | informalexample">
+      <div class="example">
+        <xsl:apply-templates/>
+      </div>
+    </xsl:template>
+
+    <!-- Figure -->
+    <xsl:template match="db:figure | db:informalfigure | figure | informalfigure">
+      <figure>
+        <xsl:apply-templates/>
+      </figure>
+    </xsl:template>
+
+    <!-- ========== LISTS ========== -->
+    <!-- Itemized List (Unordered) -->
+    <xsl:template match="db:itemizedlist | itemizedlist">
+      <ul>
+        <xsl:if test="@spacing='compact'">
+          <xsl:attribute name="class">compact</xsl:attribute>
+        </xsl:if>
+        <xsl:apply-templates select="db:listitem | listitem"/>
+      </ul>
+    </xsl:template>
+
+    <!-- Ordered List -->
+    <xsl:template match="db:orderedlist | orderedlist">
+      <ol>
+        <xsl:if test="@numeration">
+          <xsl:attribute name="type">
+            <xsl:choose>
+              <xsl:when test="@numeration='arabic'">1</xsl:when>
+              <xsl:when test="@numeration='loweralpha'">a</xsl:when>
+              <xsl:when test="@numeration='upperalpha'">A</xsl:when>
+              <xsl:when test="@numeration='lowerroman'">i</xsl:when>
+              <xsl:when test="@numeration='upperroman'">I</xsl:when>
+            </xsl:choose>
+          </xsl:attribute>
+        </xsl:if>
+        <xsl:apply-templates select="db:listitem | listitem"/>
       </ol>
     </xsl:template>
 
-    <xsl:template match="db:step">
-      <li class="step"><xsl:apply-templates/></li>
+    <!-- Variable List (Definition List) -->
+    <xsl:template match="db:variablelist | variablelist">
+      <dl>
+        <xsl:apply-templates/>
+      </dl>
     </xsl:template>
 
-    <!-- Lists -->
-    <xsl:template match="db:itemizedlist">
-      <ul><xsl:apply-templates/></ul>
+    <xsl:template match="db:varlistentry | varlistentry">
+      <xsl:apply-templates/>
     </xsl:template>
 
-    <xsl:template match="db:listitem">
+    <xsl:template match="db:term | term">
+      <dt><xsl:apply-templates/></dt>
+    </xsl:template>
+
+    <xsl:template match="db:listitem | listitem">
       <li><xsl:apply-templates/></li>
     </xsl:template>
 
-    <!-- Emphasis -->
-    <xsl:template match="db:emphasis">
+    <!-- Simple List -->
+    <xsl:template match="db:simplelist | simplelist">
+      <ul class="simple-list">
+        <xsl:apply-templates/>
+      </ul>
+    </xsl:template>
+
+    <xsl:template match="db:member | member">
+      <li><xsl:apply-templates/></li>
+    </xsl:template>
+
+    <!-- ========== PROCEDURES & STEPS ========== -->
+    <xsl:template match="db:procedure | procedure">
+      <ol class="procedure">
+        <xsl:apply-templates/>
+      </ol>
+    </xsl:template>
+
+    <xsl:template match="db:step | step">
+      <li class="step"><xsl:apply-templates/></li>
+    </xsl:template>
+
+    <xsl:template match="db:substeps | substeps">
+      <ol class="substeps">
+        <xsl:apply-templates/>
+      </ol>
+    </xsl:template>
+
+    <!-- ========== INLINE ELEMENTS ========== -->
+    <!-- Emphasis and formatting -->
+    <xsl:template match="db:emphasis | emphasis">
       <xsl:choose>
         <xsl:when test="@role='bold' or @role='strong'">
           <strong><xsl:apply-templates/></strong>
@@ -70,26 +188,207 @@ define([], function() {
       </xsl:choose>
     </xsl:template>
 
-    <!-- Inline code -->
-    <xsl:template match="db:command | db:filename | db:literal | db:keycap">
+    <xsl:template match="db:phrase | phrase">
+      <span>
+        <xsl:if test="@role">
+          <xsl:attribute name="class"><xsl:value-of select="@role"/></xsl:attribute>
+        </xsl:if>
+        <xsl:apply-templates/>
+      </span>
+    </xsl:template>
+
+    <xsl:template match="db:quote | quote">
+      <q><xsl:apply-templates/></q>
+    </xsl:template>
+
+    <xsl:template match="db:subscript | subscript">
+      <sub><xsl:apply-templates/></sub>
+    </xsl:template>
+
+    <xsl:template match="db:superscript | superscript">
+      <sup><xsl:apply-templates/></sup>
+    </xsl:template>
+
+    <!-- Technical and Computer Elements -->
+    <xsl:template match="db:command | db:filename | db:literal | db:keycap | db:computeroutput | db:userinput | db:option | db:parameter | db:varname | db:constant | db:function | db:code">
       <code><xsl:apply-templates/></code>
     </xsl:template>
 
-    <!-- Links -->
-    <xsl:template match="db:link">
-      <a href="{@xl:href}">
+    <xsl:template match="db:application | db:package">
+      <span class="application"><xsl:apply-templates/></span>
+    </xsl:template>
+
+    <xsl:template match="db:guibutton | db:guimenu | db:guimenuitem | db:guilabel">
+      <strong class="gui-element"><xsl:apply-templates/></strong>
+    </xsl:template>
+
+    <!-- Keyboard combinations -->
+    <xsl:template match="db:keycombo">
+      <xsl:variable name="sep">
+        <xsl:choose>
+          <xsl:when test="@separator">
+            <xsl:value-of select="@separator"/>
+          </xsl:when>
+          <xsl:otherwise>+</xsl:otherwise>
+        </xsl:choose>
+      </xsl:variable>
+      <kbd>
+        <xsl:for-each select="*">
+          <xsl:apply-templates select="."/>
+          <xsl:if test="position() != last()">
+            <xsl:value-of select="$sep"/>
+          </xsl:if>
+        </xsl:for-each>
+      </kbd>
+    </xsl:template>
+
+    <!-- ========== LINKS & CROSS-REFERENCES ========== -->
+    <xsl:template match="db:link | link">
+      <a>
+        <xsl:choose>
+          <xsl:when test="@xl:href">
+            <xsl:attribute name="href"><xsl:value-of select="@xl:href"/></xsl:attribute>
+          </xsl:when>
+          <xsl:when test="@xlink:href">
+            <xsl:attribute name="href"><xsl:value-of select="@xlink:href"/></xsl:attribute>
+          </xsl:when>
+          <xsl:when test="@linkend">
+            <xsl:attribute name="href">#<xsl:value-of select="@linkend"/></xsl:attribute>
+          </xsl:when>
+        </xsl:choose>
         <xsl:apply-templates/>
       </a>
     </xsl:template>
 
-    <!-- Enhanced Tables with comprehensive attribute support -->
-    <!-- Support both namespaced (db:table) and non-namespaced (table) elements -->
+    <xsl:template match="db:ulink | ulink">
+      <a href="{@url}">
+        <xsl:choose>
+          <xsl:when test="text()">
+            <xsl:apply-templates/>
+          </xsl:when>
+          <xsl:otherwise>
+            <xsl:value-of select="@url"/>
+          </xsl:otherwise>
+        </xsl:choose>
+      </a>
+    </xsl:template>
+
+    <xsl:template match="db:xref | xref">
+      <a href="#{@linkend}">
+        <xsl:variable name="endtermId" select="@endterm"/>
+        <xsl:variable name="endtermNode" select="//*[@xml:id=$endtermId or @id=$endtermId][1]"/>
+        <xsl:choose>
+          <xsl:when test="$endtermNode">
+            <xsl:apply-templates select="$endtermNode"/>
+          </xsl:when>
+          <xsl:when test="@endterm">
+            <xsl:value-of select="@endterm"/>
+          </xsl:when>
+          <xsl:otherwise>
+            <xsl:text>[Link]</xsl:text>
+          </xsl:otherwise>
+        </xsl:choose>
+      </a>
+    </xsl:template>
+
+    <xsl:template match="db:anchor | anchor">
+      <a>
+        <xsl:attribute name="id">
+          <xsl:choose>
+            <xsl:when test="@xml:id">
+              <xsl:value-of select="@xml:id"/>
+            </xsl:when>
+            <xsl:when test="@id">
+              <xsl:value-of select="@id"/>
+            </xsl:when>
+          </xsl:choose>
+        </xsl:attribute>
+      </a>
+    </xsl:template>
+
+    <!-- ========== CODE & PROGRAM LISTINGS ========== -->
+    <xsl:template match="db:programlisting | db:screen | db:literallayout">
+      <pre>
+        <xsl:if test="@language">
+          <xsl:attribute name="class">language-<xsl:value-of select="@language"/></xsl:attribute>
+        </xsl:if>
+        <code><xsl:apply-templates/></code>
+      </pre>
+    </xsl:template>
+
+    <xsl:template match="db:synopsis">
+      <pre class="synopsis"><code><xsl:apply-templates/></code></pre>
+    </xsl:template>
+
+    <!-- ========== MEDIA OBJECTS ========== -->
+    <xsl:template match="db:mediaobject | db:inlinemediaobject">
+      <xsl:apply-templates select="db:imageobject | db:videoobject | db:audioobject"/>
+      <xsl:apply-templates select="db:caption"/>
+    </xsl:template>
+
+    <xsl:template match="db:imageobject">
+      <xsl:apply-templates select="db:imagedata"/>
+    </xsl:template>
+
+    <xsl:template match="db:imagedata">
+      <img>
+        <xsl:if test="@fileref">
+          <xsl:attribute name="src"><xsl:value-of select="@fileref"/></xsl:attribute>
+        </xsl:if>
+        <xsl:if test="@width">
+          <xsl:attribute name="width"><xsl:value-of select="@width"/></xsl:attribute>
+        </xsl:if>
+        <xsl:if test="@depth">
+          <xsl:attribute name="height"><xsl:value-of select="@depth"/></xsl:attribute>
+        </xsl:if>
+        <xsl:if test="@align">
+          <xsl:attribute name="align"><xsl:value-of select="@align"/></xsl:attribute>
+        </xsl:if>
+        <xsl:attribute name="alt">
+          <xsl:choose>
+            <xsl:when test="../db:textobject/db:phrase">
+              <xsl:value-of select="../db:textobject/db:phrase"/>
+            </xsl:when>
+            <xsl:otherwise>Image</xsl:otherwise>
+          </xsl:choose>
+        </xsl:attribute>
+      </img>
+    </xsl:template>
+
+    <xsl:template match="db:caption">
+      <figcaption><xsl:apply-templates/></figcaption>
+    </xsl:template>
+
+    <xsl:template match="db:videoobject">
+      <video controls="controls">
+        <xsl:if test="db:videodata/@fileref">
+          <xsl:attribute name="src"><xsl:value-of select="db:videodata/@fileref"/></xsl:attribute>
+        </xsl:if>
+        <xsl:if test="db:videodata/@width">
+          <xsl:attribute name="width"><xsl:value-of select="db:videodata/@width"/></xsl:attribute>
+        </xsl:if>
+        <xsl:if test="db:videodata/@depth">
+          <xsl:attribute name="height"><xsl:value-of select="db:videodata/@depth"/></xsl:attribute>
+        </xsl:if>
+      </video>
+    </xsl:template>
+
+    <xsl:template match="db:audioobject">
+      <audio controls="controls">
+        <xsl:if test="db:audiodata/@fileref">
+          <xsl:attribute name="src"><xsl:value-of select="db:audiodata/@fileref"/></xsl:attribute>
+        </xsl:if>
+      </audio>
+    </xsl:template>
+
+    <!-- ========== TABLES ========== -->
     <xsl:template match="db:table | db:informaltable | table | informaltable">
       <table>
         <xsl:if test="@frame">
           <xsl:attribute name="class">frame-<xsl:value-of select="@frame"/></xsl:attribute>
         </xsl:if>
-        <xsl:apply-templates select="db:title | title | db:tgroup | tgroup | db:thead | thead | db:tbody | tbody | db:tfoot | tfoot | db:tr | tr"/>
+        <xsl:apply-templates select="db:title | title"/>
+        <xsl:apply-templates select="db:tgroup | tgroup | db:thead | thead | db:tbody | tbody | db:tfoot | tfoot | db:tr | tr"/>
       </table>
     </xsl:template>
     
@@ -98,7 +397,10 @@ define([], function() {
     </xsl:template>
     
     <xsl:template match="db:tgroup | tgroup">
-      <xsl:apply-templates select="db:colspec | colspec | db:thead | thead | db:tbody | tbody | db:tfoot | tfoot"/>
+      <xsl:apply-templates select="db:colspec | colspec"/>
+      <xsl:apply-templates select="db:thead | thead"/>
+      <xsl:apply-templates select="db:tbody | tbody"/>
+      <xsl:apply-templates select="db:tfoot | tfoot"/>
     </xsl:template>
     
     <xsl:template match="db:colspec | colspec">
@@ -149,7 +451,6 @@ define([], function() {
           <xsl:variable name="tgroup" select="ancestor::db:tgroup | ancestor::tgroup"/>
           <xsl:variable name="colspecs" select="$tgroup/db:colspec | $tgroup/colspec"/>
           
-          <!-- Calculate colspan by counting columns between namest and nameend -->
           <xsl:variable name="start-pos">
             <xsl:for-each select="$colspecs">
               <xsl:if test="@colname = $start-col">
@@ -185,9 +486,169 @@ define([], function() {
       </xsl:element>
     </xsl:template>
 
-    <!-- Default -->
+    <!-- HTML Tables (CALS tables) -->
+    <xsl:template match="db:tr | tr">
+      <tr><xsl:apply-templates/></tr>
+    </xsl:template>
+
+    <xsl:template match="db:td | td">
+      <td>
+        <xsl:copy-of select="@*"/>
+        <xsl:apply-templates/>
+      </td>
+    </xsl:template>
+
+    <xsl:template match="db:th | th">
+      <th>
+        <xsl:copy-of select="@*"/>
+        <xsl:apply-templates/>
+      </th>
+    </xsl:template>
+
+    <!-- ========== METADATA & INFO ========== -->
+    <xsl:template match="db:info | db:articleinfo | db:bookinfo">
+      <div class="docbook-info">
+        <xsl:apply-templates/>
+      </div>
+    </xsl:template>
+
+    <xsl:template match="db:author | db:editor">
+      <div class="author">
+        <xsl:apply-templates/>
+      </div>
+    </xsl:template>
+
+    <xsl:template match="db:firstname">
+      <span class="firstname"><xsl:apply-templates/></span>
+    </xsl:template>
+
+    <xsl:template match="db:surname">
+      <span class="surname"><xsl:apply-templates/></span>
+    </xsl:template>
+
+    <xsl:template match="db:email | email">
+      <a href="mailto:{.}"><xsl:apply-templates/></a>
+    </xsl:template>
+
+    <xsl:template match="db:date | db:pubdate">
+      <time><xsl:apply-templates/></time>
+    </xsl:template>
+
+    <xsl:template match="db:abstract">
+      <div class="abstract">
+        <xsl:apply-templates/>
+      </div>
+    </xsl:template>
+
+    <xsl:template match="db:copyright">
+      <p class="copyright">
+        <xsl:text>© </xsl:text>
+        <xsl:value-of select="db:year"/>
+        <xsl:text> </xsl:text>
+        <xsl:value-of select="db:holder"/>
+      </p>
+    </xsl:template>
+
+    <!-- ========== SPECIAL ELEMENTS ========== -->
+    <xsl:template match="db:sidebar">
+      <aside class="sidebar">
+        <xsl:apply-templates/>
+      </aside>
+    </xsl:template>
+
+    <xsl:template match="db:footnote | footnote">
+      <sup class="footnote">
+        <xsl:text>[</xsl:text>
+        <xsl:number level="any" count="db:footnote | footnote"/>
+        <xsl:text>]</xsl:text>
+      </sup>
+    </xsl:template>
+
+    <xsl:template match="db:glossary">
+      <div class="glossary">
+        <xsl:apply-templates/>
+      </div>
+    </xsl:template>
+
+    <xsl:template match="db:glossentry">
+      <div class="glossentry">
+        <xsl:apply-templates/>
+      </div>
+    </xsl:template>
+
+    <xsl:template match="db:glossterm">
+      <dt class="glossterm"><xsl:apply-templates/></dt>
+    </xsl:template>
+
+    <xsl:template match="db:glossdef">
+      <dd class="glossdef"><xsl:apply-templates/></dd>
+    </xsl:template>
+
+    <!-- Non-namespaced glossary elements for Paligo compatibility -->
+    <xsl:template match="glossary">
+      <div class="glossary">
+        <xsl:apply-templates/>
+      </div>
+    </xsl:template>
+
+    <xsl:template match="glossentry">
+      <div class="glossentry">
+        <xsl:apply-templates/>
+      </div>
+    </xsl:template>
+
+    <xsl:template match="glossterm">
+      <dt class="glossterm"><xsl:apply-templates/></dt>
+    </xsl:template>
+
+    <xsl:template match="glossdef">
+      <dd class="glossdef"><xsl:apply-templates/></dd>
+    </xsl:template>
+    <xsl:template match="db:index | db:indexterm">
+      <!-- Index elements typically not rendered in HTML -->
+    </xsl:template>
+
+    <xsl:template match="db:revhistory">
+      <div class="revhistory">
+        <h3>Revision History</h3>
+        <xsl:apply-templates/>
+      </div>
+    </xsl:template>
+
+    <xsl:template match="db:revision">
+      <div class="revision">
+        <xsl:apply-templates/>
+      </div>
+    </xsl:template>
+
+    <xsl:template match="db:revnumber">
+      <span class="revnumber">Version <xsl:apply-templates/></span>
+    </xsl:template>
+
+    <xsl:template match="db:revremark">
+      <p class="revremark"><xsl:apply-templates/></p>
+    </xsl:template>
+
+    <!-- Line breaks -->
+    <xsl:template match="db:br">
+      <br/>
+    </xsl:template>
+
+    <!-- Horizontal rule -->
+    <xsl:template match="db:hr">
+      <hr/>
+    </xsl:template>
+
+    <!-- ========== DEFAULT FALLBACK ========== -->
     <xsl:template match="*">
-      <div data-tag="{local-name()}"><xsl:apply-templates/></div>
+      <div data-tag="{local-name()}">
+        <xsl:apply-templates/>
+      </div>
+    </xsl:template>
+
+    <!-- Text nodes -->
+    <xsl:template match="text()">
+      <xsl:value-of select="."/>
     </xsl:template>
 
   </xsl:stylesheet>`;
