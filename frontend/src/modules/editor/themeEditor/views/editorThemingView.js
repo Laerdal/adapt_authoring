@@ -134,17 +134,18 @@ define(function(require) {
 
       var accordionSections = allSections.filter(function(s) { return !s.data._accordion || !s.data._accordion.renderFlat; });
       
-      var accordionHtml = '<div class="simplified-theme-editor">';
+      // Start main content column
+      var accordionHtml = '<div class="theme-editor-main">';
+      accordionHtml += '<div class="simplified-theme-editor">';
       accordionHtml += '<div class="theme-editor-header">';
       accordionHtml += '<div class="header-icon"><i class="fa fa-paint-brush"></i></div>';
-      accordionHtml += '<h2>Simplified Theme Editor</h2>';
+      accordionHtml += '<h2 class="theme-editor-heading">Simplified Theme Editor</h2>';
       accordionHtml += '<p>Start with global colors that automatically generate hover, focus, and disabled states. Use Advanced Mode to fine-tune specific elements if needed.</p>';
       accordionHtml += '<div class="theme-tip">';
-      accordionHtml += '<i class="fa fa-info-circle"></i>';
       accordionHtml += '<strong>Tip:</strong> Your global theme colors will cascade down to all components. Only override specific sections if you need different styling.';
       accordionHtml += '</div>';
       accordionHtml += '</div>';
-
+      
       // Render flat sections first
       flatSections.forEach(function(section) {
         accordionHtml += this.renderFlatSection(section.key, section.data);
@@ -155,7 +156,14 @@ define(function(require) {
         accordionHtml += this.renderAccordionSection(section.key, section.data);
       }.bind(this));
       
-      accordionHtml += '</div></div>';
+      accordionHtml += '</div></div>'; // Close accordion-container and simplified-theme-editor
+      accordionHtml += '</div>'; // Close theme-editor-main
+
+      // Add sidebar with preview
+      accordionHtml += '<div class="theme-editor-sidebar">';
+      accordionHtml += this.renderColorPreview();
+      accordionHtml += '</div>'; // Close theme-editor-sidebar
+
       
       this.$('.form-container').html(accordionHtml);
       this.renderAccordionFields();
@@ -184,6 +192,69 @@ define(function(require) {
       });
       
       return sections;
+    },
+
+
+// NEW: Render color preview
+    renderColorPreview: function() {
+      var previewHtml = '<div class="theme-color-preview">';
+      previewHtml += '<h3 class="preview-title">Live Preview</h3>';
+      
+      previewHtml += '<div class="preview-container">';
+      previewHtml += '<div class="preview-page" data-preview="page">';
+      previewHtml += '<span class="preview-hierarchy-label">Page</span>';
+      
+      // Progress bar (linked to primary brand color) - Page level progress
+      previewHtml += '<div class="preview-progress-bar" data-preview="progress-bar">';
+      previewHtml += '<div class="preview-progress-fill"></div>';
+      previewHtml += '</div>';
+      
+      previewHtml += '<h4 class="preview-page-title">Page title</h4>';
+      
+      previewHtml += '<div class="preview-article" data-preview="article">';
+      // previewHtml += '<span class="preview-hierarchy-label">Article</span>';
+      previewHtml += '<h5 class="preview-article-title">Article title</h5>';
+      
+      previewHtml += '<div class="preview-block" data-preview="block">';
+      // previewHtml += '<span class="preview-hierarchy-label">Block</span>';
+      previewHtml += '<h6 class="preview-block-title">Block title</h6>';
+      
+      previewHtml += '<div class="preview-component" data-preview="component">';
+      // previewHtml += '<span class="preview-hierarchy-label">Component</span>';
+      previewHtml += '<h6 class="preview-component-title">Component title</h6>';
+      previewHtml += '<p class="preview-instruction" data-preview="instruction">Select the correct answer from the options below:</p>';
+      
+      previewHtml += '<div class="preview-items">';
+      previewHtml += '<label class="preview-checkbox">';
+      previewHtml += '<div class="checkbox-state-container">';
+      previewHtml += '<span class="checkbox-icon-wrapper">';
+      previewHtml += '<span class="checkbox-icon is-checkbox checked"></span>';
+      previewHtml += '</span>';
+      previewHtml += '</div>';
+      previewHtml += '<span class="checkbox-text">Correct answer option</span>';
+      previewHtml += '</label>';
+      previewHtml += '<label class="preview-checkbox">';
+      previewHtml += '<div class="checkbox-state-container">';
+      previewHtml += '<span class="checkbox-icon-wrapper">';
+      previewHtml += '<span class="checkbox-icon is-checkbox"></span>';
+      previewHtml += '</span>';
+      previewHtml += '</div>';
+      previewHtml += '<span class="checkbox-text">Incorrect answer option</span>';
+      previewHtml += '</label>';
+      previewHtml += '</div>';
+      
+      previewHtml += '<div class="preview-buttons">';
+      previewHtml += '<button class="preview-btn preview-btn-secondary" data-preview="secondary-btn">Previous</button>';
+      previewHtml += '<button class="preview-btn preview-btn-primary" data-preview="primary-btn">Next</button>';
+      previewHtml += '</div>';
+      
+      previewHtml += '</div>';
+      previewHtml += '</div>';
+      previewHtml += '</div>';
+      previewHtml += '</div>';
+      previewHtml += '</div>';
+      previewHtml += '</div>';
+      return previewHtml;
     },
 
     // NEW: Render flat section (without accordion wrapper)
@@ -281,8 +352,253 @@ define(function(require) {
             header.removeClass('open');
             content.addClass('collapsed').removeClass('expanded');
           }
+        }      });
+
+      // Add color picker listeners after accordions are initialized
+      this.attachColorPreviewListeners();
+    },
+
+    // NEW: Color manipulation helpers for preview
+    darkenColor: function(hex, percent) {
+      // Convert hex to RGB
+      var rgb = parseInt(hex.slice(1), 16);
+      var r = (rgb >> 16) & 0xff;
+      var g = (rgb >> 8) & 0xff;
+      var b = rgb & 0xff;
+      
+      // Darken by reducing each channel
+      r = Math.max(0, Math.floor(r * (1 - percent / 100)));
+      g = Math.max(0, Math.floor(g * (1 - percent / 100)));
+      b = Math.max(0, Math.floor(b * (1 - percent / 100)));
+      
+      // Convert back to hex
+      return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    },
+
+    // NEW: Attach color picker change listeners
+    attachColorPreviewListeners: function() {
+      var self = this;
+      
+      // Wait for form fields to be rendered
+      setTimeout(function() {
+        // Map schema properties to preview elements
+        var colorMap = {
+          'page-bg-color': '.preview-page',
+          'article-bg-color': '.preview-article',
+          'block-bg-color': '.preview-block',
+          'component-bg-color': '.preview-component',
+          'btn-color': '.preview-btn-primary',
+          'btn-color-inverted': '.preview-btn-primary',
+          'item-color': '.preview-btn-secondary',
+          // Brand color cascades
+          '_primaryBrandColor': 'PRIMARY_CASCADE',
+          '_secondaryBrandColor': 'SECONDARY_CASCADE',
+          '_accentBrandColor': 'ACCENT_CASCADE'
+        };
+
+        // Listen to all color picker changes - multiple event types for better coverage
+        self.$('.form-container').on('input change keyup', 'input[type="text"], input[data-type="ColourPicker"]', function(e) {
+          var $input = $(e.target);
+          var fieldName = $input.attr('name');
+          var colorValue = $input.val();
+
+          // Check if this field affects the preview
+          if (colorMap[fieldName]) {
+            if (colorMap[fieldName].indexOf('CASCADE') > -1) {
+              self.applyCascadeColors(fieldName, colorValue);
+            } else {
+              self.updatePreviewColor(colorMap[fieldName], colorValue, fieldName);
+            }
+          }
+        });
+
+        // Also listen to changes on color picker wrappers
+        self.$('.form-container').on('change', '.field-colourpicker input, .colourpicker input', function(e) {
+          var $input = $(e.target);
+          var fieldName = $input.attr('name') || $input.closest('.field').find('input[name]').attr('name');
+          var colorValue = $input.val();
+
+          if (colorMap[fieldName]) {
+            if (colorMap[fieldName].indexOf('CASCADE') > -1) {
+              self.applyCascadeColors(fieldName, colorValue);
+            } else {
+              self.updatePreviewColor(colorMap[fieldName], colorValue, fieldName);
+            }
+          }
+        });
+
+        // Listen to spectrum colorpicker events if using spectrum plugin
+        self.$('.form-container').on('move.spectrum', 'input[type="text"]', function(e, color) {
+          var $input = $(e.target);
+          var fieldName = $input.attr('name');
+          var colorValue = color ? color.toHexString() : $input.val();
+
+          if (colorMap[fieldName]) {
+            if (colorMap[fieldName].indexOf('CASCADE') > -1) {
+              self.applyCascadeColors(fieldName, colorValue);
+            } else {
+              self.updatePreviewColor(colorMap[fieldName], colorValue, fieldName);
+            }
+          }
+        });
+
+        // Initialize preview with current values
+        for (var fieldName in colorMap) {
+          var $input = self.$('input[name="' + fieldName + '"]');
+          if ($input.length && $input.val()) {
+            if (colorMap[fieldName].indexOf('CASCADE') > -1) {
+              self.applyCascadeColors(fieldName, $input.val());
+            } else {
+              self.updatePreviewColor(colorMap[fieldName], $input.val(), fieldName);
+            }
+          }
         }
-      });
+
+        // Fallback: Poll for color changes every 300ms
+        self.colorPreviewInterval = setInterval(function() {
+          for (var fieldName in colorMap) {
+            var $input = self.$('input[name="' + fieldName + '"]');
+            if ($input.length) {
+              var currentValue = $input.val();
+              var lastValue = $input.data('last-preview-value');
+              
+              if (currentValue && currentValue !== lastValue) {
+                if (colorMap[fieldName].indexOf('CASCADE') > -1) {
+                  self.applyCascadeColors(fieldName, currentValue);
+                } else {
+                  self.updatePreviewColor(colorMap[fieldName], currentValue, fieldName);
+                }
+                $input.data('last-preview-value', currentValue);
+              }
+            }
+          }
+        }, 300);
+      }, 500);
+    },
+
+    // NEW: Apply cascade colors for brand colors
+    // Helper function to darken a color by percentage
+    darkenColor: function(color, percentage) {
+      var rgb = this.hexToRgb(color);
+      if (!rgb) return color;
+      
+      var factor = 1 - (percentage / 100);
+      var r = Math.round(rgb.r * factor);
+      var g = Math.round(rgb.g * factor);
+      var b = Math.round(rgb.b * factor);
+      
+      return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    },
+    
+    // Helper function to mix two colors (for generating tints/shades)
+    mixColors: function(color1, color2, percentage) {
+      // Convert hex to RGB
+      var c1 = this.hexToRgb(color1);
+      var c2 = this.hexToRgb(color2);
+      
+      if (!c1 || !c2) return color2;
+      
+      // Mix colors based on percentage (percentage of color1)
+      var p = percentage / 100;
+      var r = Math.round(c1.r * p + c2.r * (1 - p));
+      var g = Math.round(c1.g * p + c2.g * (1 - p));
+      var b = Math.round(c1.b * p + c2.b * (1 - p));
+      
+      // Convert back to hex
+      return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    },
+    
+    // Helper function to convert hex to RGB
+    hexToRgb: function(hex) {
+      // Remove # if present
+      hex = hex.replace(/^#/, '');
+      
+      // Parse hex values
+      if (hex.length === 3) {
+        hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+      }
+      
+      var num = parseInt(hex, 16);
+      return {
+        r: (num >> 16) & 255,
+        g: (num >> 8) & 255,
+        b: num & 255
+      };
+    },
+    
+    applyCascadeColors: function(fieldName, color) {
+      if (!color || color === '') return;
+      
+      // Normalize hex color (remove # if present, then add it back)
+      if (color.indexOf('#') !== 0) {
+        color = '#' + color;
+      }
+      
+      switch(fieldName) {
+        case '_primaryBrandColor':
+          // Primary affects progress bar and buttons (both primary and secondary)
+          // Progress bar: fill color
+          this.$('.preview-progress-fill').css('background-color', color);
+          // Primary button: background color
+          this.$('.preview-btn-primary').css('background-color', color);
+          // Secondary button: border color (keeps light background, uses primary for border)
+          this.$('.preview-btn-secondary').css({
+            'border-color': color,
+            'border': '2px solid ' + color,
+            'color': color
+          });
+          break;
+          
+        case '_secondaryBrandColor':
+          // Secondary affects items (MCQs, accordions, checkboxes, etc.)
+          // Mimic actual MCQ styling: darker shade for state container, lighter tint for item background
+          
+          // State container (left side) - use the actual color (item-color-inverted)
+          this.$('.checkbox-state-container').css('background-color', color);
+          
+          // Checkbox icon border and fill colors
+          this.$('.checkbox-icon').css({
+            'border-color': 'rgba(255, 255, 255, 0.6)',
+            'color': '#ffffff'
+          });
+          
+          // Checked checkbox - fill with white
+          this.$('.checkbox-icon.checked').css('background-color', '#ffffff');
+          
+          // Item background (text area) - use lighter tint (item-color)
+          // Generate lighter tint by mixing with white (95% white = very light tint)
+          var lightTint = this.mixColors('#ffffff', color, 95);
+          this.$('.preview-checkbox').css('background-color', lightTint);
+          
+          // Hover state for state container - use darker tint
+          var hoverTint = this.mixColors('#ffffff', color, 0); // Slightly darker
+          var darkerTint = this.darkenColor(color, 15);
+          // Store as CSS variable or data attribute for future use
+          break;
+          
+        case '_accentBrandColor':
+          // Accent affects table alternating rows (not in preview)
+          // Could add visual indicator later
+          break;
+      }
+    },
+
+    // NEW: Update preview element color
+    updatePreviewColor: function(selector, color, fieldName) {
+      var $element = this.$(selector);
+      if (!$element.length || !color) return;
+
+      // Apply color based on field type
+      if (fieldName.indexOf('-inverted') > -1) {
+        // Inverted colors are text colors
+        $element.css('color', color);
+      } else if (fieldName.indexOf('btn-') === 0 || fieldName.indexOf('item-') === 0) {
+        // Button and item colors are backgrounds
+        $element.css('background-color', color);
+      } else {
+        // Default to background color
+        $element.css('background-color', color);
+      }
     },
 
     // NEW: Render form fields into their respective accordion sections

@@ -19,31 +19,39 @@
     text-align: center;
     max-width: 800px;
   }
+
   .header {
     .form-container-style;
+
     .description {
       padding-bottom: 15px;
     }
+
     .tip {
       padding-top: 35px;
     }
   }
+
   .title {
     font-size: 16px;
     font-weight: @font-weight-bold;
     margin-bottom: 30px;
   }
+
   button {
     margin-right: 5px;
   }
+
   .theme-selector {
     .tile {
       label {
         font-weight: @font-weight-bold;
         padding-right: 5px;
       }
+
       padding-right: 15px;
       display: inline-block;
+
       select {
         min-width: 150px;
       }
@@ -54,6 +62,7 @@
         width: 180px;
       }
     }
+
     .edit.btn.secondary {
       display: inline-block;
       padding: 7px;
@@ -73,65 +82,96 @@
 }
 
 // ========================================
-// Simplified Theme Editor - Accordion Styles (Light Theme)
+// Simplified Theme Editor - Modern Clean Design
 // ========================================
 
 .simplified-theme-editor {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 20px;
-  
+  max-width: 800px;
+  padding: 16px 24px;
+
   .theme-editor-header {
     background: #fff;
-    color: #333;
-    padding: 24px 28px;
-    border-radius: 8px;
+    padding: 28px 32px;
+    border-radius: 14px;
     margin-bottom: 24px;
-    border: 1px solid #e8e8e8;
-    
-    .header-icon {
-      display: inline-block;
-      width: 48px;
-      height: 48px;
-      background: #4ecdc4;
-      border-radius: 50%;
-      text-align: center;
-      line-height: 48px;
-      font-size: 22px;
-      margin-bottom: 12px;
-      color: white;
-    }
-    
-    h2 {
-      margin: 0 0 8px 0;
-      font-size: 20px;
-      font-weight: 600;
-      color: #1a1a1a;
-    }
-    
-    > p {
-      margin: 0 0 16px 0;
+    border: 1px solid rgba(0, 221, 149, 0.20);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+
+    p {
+      color: #4A5565;
       font-size: 14px;
-      line-height: 1.6;
-      color: #666;
+      font-style: normal;
+      font-weight: 400;
+      line-height: 24px;
+      letter-spacing: -0.312px;
     }
-    
-    .theme-tip {
-      background: #FFFBEB;
-      padding: 12px 16px;
-      border-radius: 6px;
-      border: 1px solid #FEE685;
-      font-size: 13px;
-      color: #973C00;
-      
-      i {
-        margin-right: 8px;
-        color: #ffc107;
+
+    .header-icon {
+      display: none;
+    }
+
+    .theme-editor-heading {
+      color: #0A0A0A;
+      font-size: 18px;
+      font-style: normal;
+      font-weight: 600;
+      line-height: 28px;
+      letter-spacing: -0.439px;
+    }
+
+    .header-content {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+
+      .header-icon {
+        flex-shrink: 0;
+        width: 40px;
+        height: 40px;
+        background: #10b981;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        color: white;
       }
-      
+
+      .header-text {
+        flex: 1;
+
+        h2 {
+          margin: 0 0 8px 0;
+          font-size: 18px;
+          font-weight: 600;
+          color: #111827;
+          letter-spacing: -0.01em;
+        }
+
+        >p {
+          margin: 0;
+          font-size: 14px;
+          line-height: 1.6;
+          color: #6b7280;
+        }
+      }
+    }
+
+    .theme-tip {
+      padding: 14px 18px;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #92400e;
+      border-radius: 10px;
+      border: 1px solid #FEE685;
+      background: #FFFBEB;
+
       strong {
         font-weight: 600;
-        color: #856404;
+        color: #78350f;
+        margin-right: 4px;
       }
     }
   }
@@ -146,15 +186,15 @@
 .theme-section-accordion {
   background: white;
   border: 1px solid #e8e8e8;
-  border-radius: 12px;
+  border-radius: 14px;
   overflow: hidden;
   transition: all 0.2s ease;
-  
+
   &:hover {
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
     border-color: #d0d0d0;
   }
-  
+
   .accordion-header {
     display: flex;
     justify-content: space-between;
@@ -165,26 +205,26 @@
     transition: all 0.2s ease;
     user-select: none;
     border-bottom: 1px solid transparent;
-    
+
     &:hover {
       background: #fafbfc;
     }
-    
+
     &.open {
       background: white;
       border-bottom: 1px solid #e8e8e8;
-      
+
       .chevron {
         transform: rotate(180deg);
       }
     }
-    
+
     .header-left {
       display: flex;
       align-items: center;
       gap: 14px;
       flex: 1;
-      
+
       .icon {
         width: 44px;
         height: 44px;
@@ -196,17 +236,17 @@
         font-size: 20px;
         flex-shrink: 0;
       }
-      
+
       .section-info {
         flex: 1;
-        
+
         .section-title {
           margin: 0 0 3px 0;
           font-size: 15px;
           font-weight: 600;
           color: #1a1a1a;
         }
-        
+
         .section-subtitle {
           margin: 0;
           font-size: 13px;
@@ -215,12 +255,12 @@
         }
       }
     }
-    
+
     .header-right {
       display: flex;
       align-items: center;
       gap: 10px;
-      
+
       .status-badge {
         padding: 5px 12px;
         border-radius: 14px;
@@ -229,7 +269,7 @@
         background: #f3e5f5;
         color: #7b1fa2;
       }
-      
+
       .chevron {
         color: #bbb;
         font-size: 16px;
@@ -238,41 +278,42 @@
       }
     }
   }
-  
+
   .accordion-content {
     overflow: hidden;
     transition: max-height 0.4s ease, opacity 0.3s ease;
-    
+
     &.collapsed {
       max-height: 0;
       opacity: 0;
     }
-    
+
     &.expanded {
       max-height: 5000px;
       opacity: 1;
     }
-    
+
     .content-inner {
       padding: 24px;
       background: #fafbfc;
-      
+
       .section-properties {
         display: flex;
-        flex-direction: column;
+        flex-wrap: wrap;
         gap: 18px;
-        
+
         .field {
           margin-bottom: 0;
-          
+          flex-basis: calc(50% - 10px);
+          box-sizing: border-box;
+
           label {
             font-weight: 500;
             color: #333;
             margin-bottom: 6px;
-            display: block;
             font-size: 13px;
           }
-          
+
           input[type="text"],
           input[type="number"],
           select,
@@ -284,54 +325,67 @@
             font-size: 14px;
             background: white;
             transition: all 0.2s ease;
-            
+
             &:focus {
               outline: none;
               border-color: #4ecdc4;
               box-shadow: 0 0 0 3px rgba(78, 205, 196, 0.1);
             }
           }
-          
+
           .field-help {
             font-size: 12px;
             color: #757575;
             margin-top: 5px;
             line-height: 1.4;
           }
+
+          // Full-width fields for long labels
+          &.field-display-marking-for-not-final-attempts,
+          &.field-display-marking-for-unanswered-correct-responses,
+          &.field-hide-feedback-on-first-attempt-on-assessments,
+          &.field-hide-partially-correct-feedback-on-the-question-and-result-page {
+            flex-basis: 100%;
+          }
         }
+
       }
     }
   }
-  
+
   // Section-specific icon colors
   &[data-section="_course"] .icon {
     background: #ff6b6b;
   }
-  
+
   &[data-section="_global"] .icon {
     background: #4ecdc4;
   }
-  
-  &[data-section="_blockStyles"] .icon {
+
+  &[data-section="_brandColors"] .icon {
+    background: #2c03c0;
+  }
+
+  &[data-section="_blocks"] .icon {
     background: #5b8dee;
   }
-  
+
   &[data-section="_components"] .icon {
     background: #a855f7;
   }
-  
+
   &[data-section="_nav"] .icon {
     background: #51cf66;
   }
-  
+
   &[data-section="_menu"] .icon {
     background: #ff9f43;
   }
-  
+
   &[data-section="_validation"] .icon {
     background: #ee5a6f;
   }
-  
+
   &[data-section*="overlay"] .icon {
     background: #9775fa;
   }
@@ -342,11 +396,11 @@
   .colour-picker-container {
     display: inline-block;
     position: relative;
-    
+
     input[type="text"] {
       padding-left: 45px;
     }
-    
+
     .colour-picker-swatch {
       position: absolute;
       left: 8px;
@@ -365,51 +419,51 @@
   .simplified-theme-editor {
     padding: 12px;
   }
-  
+
   .theme-section-accordion {
     border-radius: 8px;
-    
+
     .accordion-header {
       padding: 14px 16px;
-      
+
       .header-left {
         gap: 10px;
-        
+
         .icon {
           width: 38px;
           height: 38px;
           font-size: 18px;
         }
-        
+
         .section-info {
           .section-title {
             font-size: 14px;
           }
-          
+
           .section-subtitle {
             font-size: 12px;
           }
         }
       }
-      
+
       .header-right {
         .status-badge {
           display: none;
         }
       }
     }
-    
+
     .accordion-content {
       .content-inner {
         padding: 16px;
       }
     }
   }
-  
+
   .simplified-theme-editor {
     .theme-editor-header {
       padding: 16px 20px;
-      
+
       h2 {
         font-size: 20px;
       }
@@ -418,35 +472,342 @@
 }
 
 
+
+// Two-column layout for theme editor
+.theming .form-container {
+  display: flex;
+  flex-direction: row;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.theme-editor-sidebar {
+  position: sticky;
+  top: 10px;
+  max-height: calc(100vh - 100px);
+  overflow-y: auto;
+  padding: 16px 0;
+}
+
 // Flat section styles (no accordion wrapper)
 .theme-flat-section {
   margin-bottom: 24px;
-  background: #f9f9f9;
-  border: 1px solid #e0e0e0;
-  border-radius: 4px;
-  padding: 20px;
+  background: #fff;
+  border: 1px solid #E5E7EB;
+  border-radius: 14px;
+  padding: 24px;
 
   .flat-section-header {
     margin-bottom: 16px;
-    
+
     .section-title {
       font-size: 18px;
       font-weight: 600;
       color: #333;
       margin: 0 0 8px 0;
     }
-    
+
     .section-subtitle {
       font-size: 14px;
       color: #666;
       margin: 0;
     }
   }
-  
+
   .flat-section-content {
     .section-properties {
-      // Form fields will be rendered here
+      .field {
+        padding-left: 0;
+      }
     }
   }
 }
 
+
+
+
+
+
+// Color preview styles
+.theme-color-preview {
+  margin-bottom: 24px;
+  background: #fff;
+  border: 1px solid #E5E7EB;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+
+  .preview-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1f2937;
+    margin: 0 0 16px 0;
+    border-bottom: 2px solid #e5e7eb;
+    padding-bottom: 12px;
+  }
+
+  // Progress bar at the top
+  .preview-progress-bar {
+    width: 100%;
+    height: 6px;
+    background-color: #e5e7eb;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 20px;
+
+    .preview-progress-fill {
+      height: 100%;
+      width: 65%; // Static progress display
+      background-color: #2e7fa1; // Default primary color
+      transition: background-color 0.3s ease;
+    }
+  }
+
+  .preview-container {
+    border: 2px dashed #cbd5e0;
+    border-radius: 8px;
+    padding: 8px;
+    background: #f9fafb;
+  }
+
+  .preview-page {
+    background-color: #f3f4f6;
+    padding: 16px;
+    padding-top: 28px;
+    border-radius: 8px;
+    position: relative;
+    min-height: auto;
+
+    .preview-hierarchy-label {
+      position: absolute;
+      top: 6px;
+      left: 12px;
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      opacity: 0.7;
+      color: #6b7280;
+    }
+
+    .preview-page-title {
+      margin: 0 0 12px 0;
+      font-size: 15px;
+      font-weight: 700;
+      color: #1f2937;
+    }
+  }
+
+  .preview-article {
+    background-color: #dbeafe;
+    padding: 16px;
+    padding-top: 26px;
+    border-radius: 6px;
+    margin-top: 10px;
+    position: relative;
+    min-height: auto;
+
+    .preview-hierarchy-label {
+      position: absolute;
+      top: 6px;
+      left: 12px;
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      opacity: 0.7;
+      color: #6b7280;
+    }
+
+    .preview-article-title {
+      margin: 0 0 10px 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: #1e40af;
+    }
+  }
+
+  .preview-block {
+    background-color: #9fc9dd;
+    padding: 14px;
+    padding-top: 24px;
+    border-radius: 6px;
+    margin-top: 10px;
+    position: relative;
+    min-height: auto;
+
+    .preview-hierarchy-label {
+      position: absolute;
+      top: 6px;
+      left: 12px;
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      opacity: 0.7;
+      color: #374151;
+    }
+
+    .preview-block-title {
+      margin: 0 0 10px 0;
+      font-size: 13px;
+      font-weight: 600;
+      color: #0c4a6e;
+    }
+  }
+
+  .preview-component {
+    background-color: #ffffff;
+    padding: 18px;
+    padding-top: 30px;
+    border-radius: 6px;
+    border: 1px solid #e5e7eb;
+    margin-top: 10px;
+    position: relative;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+
+    .preview-hierarchy-label {
+      color: #6b7280;
+    }
+
+    .preview-component-title {
+      margin: 0 0 8px 0;
+      font-size: 13px;
+      font-weight: 600;
+      color: #374151;
+    }
+
+    .preview-instruction {
+      margin: 0 0 14px 0;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #4b5563;
+      font-style: italic;
+    }
+  }
+
+  .preview-items {
+    margin-bottom: 20px;
+  }
+
+  .preview-checkbox {
+    display: flex;
+    align-items: stretch;
+    margin-bottom: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    background-color: #edfcfb; // Default light teal (will be overridden by JS)
+    border-radius: 8px;
+    border: 1px solid transparent;
+    overflow: hidden;
+    transition: all 0.2s ease;
+
+    &:hover {
+      opacity: 0.95; // Subtle hover effect (background color managed by JS)
+    }
+
+    // Checkbox container (mimics mcq-item__state-container)
+    .checkbox-state-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 48px;
+      min-width: 48px;
+      background-color: #23716d;
+      border-top-left-radius: 8px;
+      border-bottom-left-radius: 8px;
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    &:hover .checkbox-state-container {
+      background-color: #1d5e5b;
+    }
+
+    .checkbox-icon-wrapper {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+    }
+
+    // Custom checkbox icon (mimics mcq-item__answer-icon)
+    .checkbox-icon {
+      width: 20px;
+      height: 20px;
+      border: 2px solid rgba(255, 255, 255, 0.6);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+      position: relative;
+      background-color: transparent;
+
+      &.checked {
+        background-color: #ffffff;
+        border-color: #ffffff;
+
+        // Checkmark using pseudo-element
+        &::after {
+          content: '';
+          position: absolute;
+          width: 5px;
+          height: 10px;
+          border: solid #23716d;
+          border-width: 0 2px 2px 0;
+          transform: rotate(45deg);
+          top: 2px;
+          left: 6px;
+        }
+      }
+    }
+
+    .checkbox-text {
+      padding: 12px 16px;
+      color: #374151;
+      font-weight: 500;
+      flex: 1;
+    }
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  .preview-buttons {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 16px;
+  }
+
+  .preview-btn {
+    padding: 8px 18px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+
+    &:hover {
+      opacity: 0.9;
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+  }
+
+  .preview-btn-primary {
+    background-color: #2e7fa1;
+    color: #ffffff;
+  }
+
+  .preview-btn-secondary {
+    background-color: transparent !important;
+    border: 2px solid #2e7fa1;
+    color: #2e7fa1!important;
+  }
+}
