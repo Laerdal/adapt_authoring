@@ -1180,6 +1180,18 @@ define(function(require) {
     template: 'editorTheming'
   });
 
+  // Try to load custom extension if available
+  try {
+    var customExtension = require('./editorThemingView.custom');
+    if (typeof customExtension === 'function') {
+      // Apply custom extension to ThemingView
+      ThemingView = customExtension(ThemingView);
+    }
+  } catch(e) {
+    // Custom extension not found or error loading, continue with original
+    console.log('Custom theming extension not loaded:', e.message);
+  }
+
   return ThemingView;
 
 });
