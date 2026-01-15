@@ -129,7 +129,8 @@ define([
       titleHTML: field.titleHTML,
       type: getType(),
       validators: getValidators(),
-      extra: field.extra
+      extra: field.extra,
+      linkedProperties: field.linkedProperties
     };
 
     if (_.isObject(inputType)) {
