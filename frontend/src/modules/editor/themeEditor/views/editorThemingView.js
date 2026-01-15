@@ -1,6 +1,7 @@
 // LICENCE https://github.com/adaptlearning/adapt_authoring/blob/master/LICENSE
 define(function(require) {
   var Backbone = require('backbone');
+  var Handlebars = require('handlebars');
   var EditorOriginView = require('../../global/views/editorOriginView');
   var Helpers = require('core/helpers');
   var Origin = require('core/origin');
@@ -22,7 +23,10 @@ define(function(require) {
       'change .preset select': 'onPresetChanged',
       'change .form-container form': 'onFieldChanged',
       'click button.edit': 'showPresetEdit',
-      'click .accordion-header': 'onAccordionToggle'  // NEW: Accordion toggle
+      'click .accordion-header': 'onAccordionToggle',  // NEW: Accordion toggle
+      'click .preview-enlarge-btn': 'openPreviewModal',  // NEW: Open preview modal
+      'click .preview-modal-close': 'closePreviewModal',  // NEW: Close preview modal
+      'click .preview-modal-overlay': 'closePreviewModal'  // NEW: Close on overlay click
     },
 
     initialize: function() {
@@ -197,64 +201,8 @@ define(function(require) {
 
 // NEW: Render color preview
     renderColorPreview: function() {
-      var previewHtml = '<div class="theme-color-preview">';
-      previewHtml += '<h3 class="preview-title">Live Preview</h3>';
-      
-      previewHtml += '<div class="preview-container">';
-      previewHtml += '<div class="preview-page" data-preview="page">';
-      previewHtml += '<span class="preview-hierarchy-label">Page</span>';
-      
-      // Progress bar (linked to primary brand color) - Page level progress
-      previewHtml += '<div class="preview-progress-bar" data-preview="progress-bar">';
-      previewHtml += '<div class="preview-progress-fill"></div>';
-      previewHtml += '</div>';
-      
-      previewHtml += '<h4 class="preview-page-title">Page title</h4>';
-      
-      previewHtml += '<div class="preview-article" data-preview="article">';
-      // previewHtml += '<span class="preview-hierarchy-label">Article</span>';
-      previewHtml += '<h5 class="preview-article-title">Article title</h5>';
-      
-      previewHtml += '<div class="preview-block" data-preview="block">';
-      // previewHtml += '<span class="preview-hierarchy-label">Block</span>';
-      previewHtml += '<h6 class="preview-block-title">Block title</h6>';
-      
-      previewHtml += '<div class="preview-component" data-preview="component">';
-      // previewHtml += '<span class="preview-hierarchy-label">Component</span>';
-      previewHtml += '<h6 class="preview-component-title">Component title</h6>';
-      previewHtml += '<p class="preview-instruction" data-preview="instruction">Select the correct answer from the options below:</p>';
-      
-      previewHtml += '<div class="preview-items">';
-      previewHtml += '<label class="preview-checkbox">';
-      previewHtml += '<div class="checkbox-state-container">';
-      previewHtml += '<span class="checkbox-icon-wrapper">';
-      previewHtml += '<span class="checkbox-icon is-checkbox checked"></span>';
-      previewHtml += '</span>';
-      previewHtml += '</div>';
-      previewHtml += '<span class="checkbox-text">Correct answer option</span>';
-      previewHtml += '</label>';
-      previewHtml += '<label class="preview-checkbox">';
-      previewHtml += '<div class="checkbox-state-container">';
-      previewHtml += '<span class="checkbox-icon-wrapper">';
-      previewHtml += '<span class="checkbox-icon is-checkbox"></span>';
-      previewHtml += '</span>';
-      previewHtml += '</div>';
-      previewHtml += '<span class="checkbox-text">Incorrect answer option</span>';
-      previewHtml += '</label>';
-      previewHtml += '</div>';
-      
-      previewHtml += '<div class="preview-buttons">';
-      previewHtml += '<button class="preview-btn preview-btn-secondary" data-preview="secondary-btn">Previous</button>';
-      previewHtml += '<button class="preview-btn preview-btn-primary" data-preview="primary-btn">Next</button>';
-      previewHtml += '</div>';
-      
-      previewHtml += '</div>';
-      previewHtml += '</div>';
-      previewHtml += '</div>';
-      previewHtml += '</div>';
-      previewHtml += '</div>';
-      previewHtml += '</div>';
-      return previewHtml;
+      var template = Handlebars.templates['editorThemingPreview'];
+      return template();
     },
 
     // NEW: Render flat section (without accordion wrapper)
@@ -352,7 +300,8 @@ define(function(require) {
             header.removeClass('open');
             content.addClass('collapsed').removeClass('expanded');
           }
-        }      });
+        }
+      });
 
       // Add color picker listeners after accordions are initialized
       this.attachColorPreviewListeners();
@@ -390,10 +339,20 @@ define(function(require) {
           'btn-color': '.preview-btn-primary',
           'btn-color-inverted': '.preview-btn-primary',
           'item-color': '.preview-btn-secondary',
+          // Text color properties
+          'font-color': '.preview-component-body-text',
+          'heading-color': 'HEADING_CASCADE',
+          'instruction-color': '.preview-instruction',
           // Brand color cascades
           '_primaryBrandColor': 'PRIMARY_CASCADE',
           '_secondaryBrandColor': 'SECONDARY_CASCADE',
           '_accentBrandColor': 'ACCENT_CASCADE'
+        };
+
+        // Font map for font-family properties
+        var fontMap = {
+          'heading-font-family': 'HEADING_FONT_CASCADE',
+          'paragraph-font-family': 'PARAGRAPH_FONT_CASCADE'
         };
 
         // Listen to all color picker changes - multiple event types for better coverage
@@ -454,6 +413,14 @@ define(function(require) {
           }
         }
 
+        // Initialize font preview with current values
+        for (var fieldName in fontMap) {
+          var $select = self.$('select[name="' + fieldName + '"]');
+          if ($select.length && $select.val()) {
+            self.applyFontCascade(fieldName, $select.val());
+          }
+        }
+
         // Fallback: Poll for color changes every 300ms
         self.colorPreviewInterval = setInterval(function() {
           for (var fieldName in colorMap) {
@@ -469,6 +436,20 @@ define(function(require) {
                   self.updatePreviewColor(colorMap[fieldName], currentValue, fieldName);
                 }
                 $input.data('last-preview-value', currentValue);
+              }
+            }
+          }
+
+          // Poll for font changes
+          for (var fieldName in fontMap) {
+            var $select = self.$('select[name="' + fieldName + '"]');
+            if ($select.length) {
+              var currentValue = $select.val();
+              var lastValue = $select.data('last-preview-value');
+              
+              if (currentValue && currentValue !== lastValue) {
+                self.applyFontCascade(fieldName, currentValue);
+                $select.data('last-preview-value', currentValue);
               }
             }
           }
@@ -535,6 +516,11 @@ define(function(require) {
       }
       
       switch(fieldName) {
+         case 'heading-color':
+          // Apply to all heading elements in preview
+          this.$('.preview-page-title, .preview-article-title, .preview-block-title, .preview-component-title').css('color', color);
+          break;
+          
         case '_primaryBrandColor':
           // Primary affects progress bar and buttons (both primary and secondary)
           // Progress bar: fill color
@@ -592,6 +578,9 @@ define(function(require) {
       if (fieldName.indexOf('-inverted') > -1) {
         // Inverted colors are text colors
         $element.css('color', color);
+        } else if (fieldName === 'font-color' || fieldName === 'instruction-color') {
+        // Font and instruction colors are text colors
+        $element.css('color', color);
       } else if (fieldName.indexOf('btn-') === 0 || fieldName.indexOf('item-') === 0) {
         // Button and item colors are backgrounds
         $element.css('background-color', color);
@@ -599,6 +588,44 @@ define(function(require) {
         // Default to background color
         $element.css('background-color', color);
       }
+    },
+
+    // NEW: Apply font cascade to preview elements
+    applyFontCascade: function(fieldName, fontValue) {
+      if (!fontValue || fontValue === '') return;
+
+      var fontFamily = this.getFontFamilyForValue(fontValue);
+      if (!fontFamily) return;
+
+      switch(fieldName) {
+        case 'heading-font-family':
+          // Apply to all heading elements in preview
+          this.$('.preview-page-title, .preview-article-title, .preview-block-title, .preview-component-title').css('font-family', fontFamily);
+          break;
+
+        case 'paragraph-font-family':
+          // Apply to all paragraph/body text elements in preview
+          this.$('.preview-component-body-text, .preview-instruction, .checkbox-text, .preview-btn').css('font-family', fontFamily);
+          break;
+      }
+    },
+
+    // NEW: Get font-family CSS value for a font value
+    getFontFamilyForValue: function(value) {
+      var fontFamilyMap = {
+        'Lato': "'Lato', sans-serif",
+        'Georgia': "'Georgia', serif",
+        'Helvetica Neue': "'Helvetica Neue', sans-serif",
+        'Inter': "'Inter', sans-serif",
+        'Merriweather': "'Merriweather', serif",
+        'Montserrat': "'Montserrat', sans-serif",
+        'Open Sans': "'Open Sans', sans-serif",
+        'Poppins': "'Poppins', sans-serif",
+        'Roboto': "'Roboto', sans-serif",
+        'Source Sans Pro': "'Source Sans Pro', sans-serif"
+      };
+
+      return fontFamilyMap[value] || null;
     },
 
     // NEW: Render form fields into their respective accordion sections
@@ -1175,6 +1202,60 @@ define(function(require) {
     onSaveSuccess: function() {
       Origin.trigger('editingOverlay:views:hide');
       Origin.trigger('editor:refreshData', this.navigateBack.bind(this), this);
+    },
+
+    // NEW: Open preview modal
+    openPreviewModal: function(e) {
+      e.preventDefault();
+      var self = this;
+      var $modal = this.$('.preview-modal');
+      var $modalBody = $modal.find('.preview-modal-body');
+      var $preview = this.$('.theme-color-preview');
+      
+      // Move the preview into modal (not clone, to preserve all styles and avoid duplication)
+      $preview.data('original-parent', $preview.parent());
+      $modalBody.append($preview);
+      
+      // Add modal-active class to preview for any modal-specific styling
+      $preview.addClass('preview-in-modal');
+      
+      // Show modal with fade-in effect
+      $modal.fadeIn(200);
+      
+      // Add body class to prevent scrolling
+      $('body').addClass('preview-modal-open');
+      
+      // Bind ESC key to close modal
+      $(document).on('keydown.previewModal', function(e) {
+        if (e.keyCode === 27) { // ESC key
+          self.closePreviewModal(e);
+        }
+      });
+    },
+
+    // NEW: Close preview modal
+    closePreviewModal: function(e) {
+      e.preventDefault();
+      var $modal = this.$('.preview-modal');
+      var $preview = this.$('.theme-color-preview');
+      var $originalParent = $preview.data('original-parent');
+      
+      // Move preview back to its original location
+      if ($originalParent && $originalParent.length) {
+        $originalParent.append($preview);
+      }
+      
+      // Remove modal-active class
+      $preview.removeClass('preview-in-modal');
+      
+      // Hide modal with fade-out effect
+      $modal.fadeOut(200);
+      
+      // Remove body class
+      $('body').removeClass('preview-modal-open');
+      
+      // Unbind ESC key handler
+      $(document).off('keydown.previewModal');
     }
   }, {
     template: 'editorTheming'
