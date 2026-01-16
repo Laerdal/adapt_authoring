@@ -43,14 +43,14 @@ define([
         hide: function(colour) {
           Origin.contentPane.enableScroll();
         }
-      }
+      };
 
       if(this.schema && this.schema.extra && this.schema.extra.palette) {
         options.palette = this.schema.extra.palette;
         options.localStorageKey = null;
         options.showPaletteOnly = true;
         options.showSelectionPalette = false;
-        options.togglePaletteOnly = true
+        options.togglePaletteOnly = true;
       }
 
       this.$el.spectrum(options);
