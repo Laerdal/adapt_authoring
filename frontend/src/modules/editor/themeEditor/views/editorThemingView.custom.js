@@ -16,18 +16,6 @@ define(function(require) {
     // Extend the existing ThemingView
     return ThemingView.extend({
       
-      // Add events for color picker handling
-      events: function() {
-        // Get original events
-        var originalEvents = ThemingView.prototype.events || {};
-        
-        // Add our custom events
-        return _.extend({}, originalEvents, {
-          'change .form-container input[data-type="ColourPicker"]': 'onColorPickerChanged',
-          'change .form-container .scaffold-colour-picker': 'onColorPickerChanged'
-        });
-      },
-      
       // Override postRender to add font preview setup
       postRender: function() {
         // Call original method first
@@ -67,18 +55,13 @@ define(function(require) {
         return result;
       },
       
-      // Override onFieldChanged to update font preview when fonts change and handle linked properties
-      onFieldChanged: function(e) {
+      // Override onFieldChanged to update font preview when fonts change
+      onFieldChanged: function() {
         // Call original method first
         var result = originalOnFieldChanged.apply(this, arguments);
         
         // Update font preview for any changed font selects
         this.updateFontPreviewOnChange();
-        
-        // Handle linked properties
-        if (e && e.target) {
-          this.handleLinkedProperties(e.target);
-        }
         
         return result;
       },
@@ -174,164 +157,6 @@ define(function(require) {
         _.defer(function() {
           self.applyFontPreviewToSelects();
         });
-      },
-      
-      // NEW: Handle color picker changes specifically for linked properties
-      onColorPickerChanged: function(e) {
-        // Handle linked properties for color pickers specifically
-        if (e && e.target) {
-          this.handleLinkedProperties(e.target);
-        }
-      },
-      
-      /**
-       * Handle linked properties feature - automatically update linked fields when a field with 
-       * linkedProperties is changed. This is a one-way relationship (parent -> children only).
-       * 
-       * To use this feature, add a 'linkedProperties' array to your schema property definition:
-       * 
-       * "_primaryBrandColor": {
-       *   "linkedProperties": [
-       *     "_nav.nav-progress",
-       *     "anotherProperty"
-       *   ]
-       * }
-       * 
-       * When _primaryBrandColor changes, it will automatically update _nav.nav-progress and anotherProperty.
-       * Users can still manually override the linked properties without affecting the parent.
-       */
-      handleLinkedProperties: function(changedElement) {
-        // Prevent infinite loops when updating linked properties
-        if ($(changedElement).data('updating-linked-property')) {
-          return;
-        }
-        
-        if (!this.form || !this.form.model || !this.form.model.schema) {
-          return;
-        }
-        
-        var fieldName = changedElement.name || $(changedElement).attr('name');
-        var fieldSchema = this.form.model.schema[fieldName];
-        
-        if (!fieldSchema) {
-          return;
-        }
-        
-        // Check for linkedProperties in both extra and top-level
-        var linkedProperties = fieldSchema.linkedProperties || 
-                              (fieldSchema.extra && fieldSchema.extra.linkedProperties);
-        
-        if (!linkedProperties || linkedProperties.length === 0) {
-          return;
-        }
-        
-        var changedValue = this.getFieldValue(changedElement);
-        
-        // Update each linked property
-        for (var i = 0; i < linkedProperties.length; i++) {
-          this.updateLinkedProperty(linkedProperties[i], changedValue);
-        }
-      },
-      
-      getFieldValue: function(element) {
-        var $element = $(element);
-        
-        // Handle different input types
-        if (element.type === 'checkbox') {
-          return element.checked;
-        } else if ($element.hasClass('scaffold-colour-picker') || $element.attr('data-type') === 'ColourPicker') {
-          // For color picker, get the actual color value
-          return $element.val();
-        } else {
-          return $element.val();
-        }
-      },
-      
-      updateLinkedProperty: function(propertyPath, value) {
-        var $linkedField = this.findLinkedField(propertyPath);
-        
-        if ($linkedField.length === 0) {
-          return;
-        }
-        
-        // Update the field value
-        if ($linkedField.hasClass('scaffold-colour-picker') || $linkedField.attr('data-type') === 'ColourPicker') {
-          // For color picker fields, use spectrum API
-          if ($linkedField.spectrum) {
-            $linkedField.spectrum('set', value);
-          } else {
-            $linkedField.val(value);
-          }
-        } else if ($linkedField.attr('type') === 'checkbox') {
-          $linkedField.prop('checked', value);
-        } else {
-          $linkedField.val(value);
-        }
-        
-        // Trigger change event to ensure proper form handling (but avoid infinite loops)
-        if (!$linkedField.data('updating-linked-property')) {
-          $linkedField.data('updating-linked-property', true);
-          $linkedField.trigger('change');
-          setTimeout(function() {
-            $linkedField.removeData('updating-linked-property');
-          }, 100);
-        }
-      },
-      
-      findLinkedField: function(propertyPath) {
-        // Handle dot notation like "_nav.nav-progress"
-        var pathParts = propertyPath.split('.');
-        var $field;
-        
-        if (pathParts.length === 1) {
-          // Simple field name - try multiple selectors
-          var simpleFieldName = pathParts[0];
-          $field = this.$('.form-container [name="' + simpleFieldName + '"]');
-          
-          if ($field.length === 0) {
-            // Try with data-name attribute
-            $field = this.$('.form-container [data-name="' + simpleFieldName + '"]');
-          }
-        } else {
-          // Nested property - handle cases like "_nav.nav-progress" 
-          var parentField = pathParts[0];
-          var childField = pathParts[1];
-          
-          // Try multiple approaches to find the nested field
-          // 1. Direct child field name
-          $field = this.$('.form-container [name="' + childField + '"]');
-          
-          // 2. If not found, try within the parent fieldset/section
-          if ($field.length === 0) {
-            // Look for accordion with matching data-group
-            var $parentSection = this.$('.accordion-item[data-group="' + parentField + '"]');
-            
-            if ($parentSection.length > 0) {
-              $field = $parentSection.find('[name="' + childField + '"]');
-            }
-          }
-          
-          // 3. Try full path as field name
-          if ($field.length === 0) {
-            $field = this.$('.form-container [name="' + propertyPath + '"]');
-          }
-          
-          // 4. Try without the leading underscore in child field
-          if ($field.length === 0 && childField.startsWith('_')) {
-            var childWithoutUnderscore = childField.substring(1);
-            $field = this.$('.form-container [name="' + childWithoutUnderscore + '"]');
-          }
-          
-          // 5. Try looking by partial class name or data attributes
-          if ($field.length === 0) {
-            $field = this.$('.form-container input').filter(function() {
-              var name = $(this).attr('name') || '';
-              return name.indexOf(childField) > -1;
-            });
-          }
-        }
-        
-        return $field;
       }
       
     });
