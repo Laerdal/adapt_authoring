@@ -9,12 +9,13 @@ define([
   './views/scaffoldAssetItemView',
   './views/scaffoldCodeEditorView',
   './views/scaffoldColourPickerView',
+  './views/scaffoldColourPickerView.custom',
   './views/scaffoldDisplayTitleView',
   './views/scaffoldItemsModalView',
   './views/scaffoldListView',
   './views/scaffoldTagsView',
   './views/scaffoldUsersView'
-], function(Origin, Helpers, Schemas, BackboneForms, BackboneFormsLists, Overrides, ScaffoldAssetView, ScaffoldAssetItemView, ScaffoldCodeEditorView, ScaffoldColourPickerView, ScaffoldDisplayTitleView, ScaffoldItemsModalView, ScaffoldListView, ScaffoldTagsView, ScaffoldUsersView) {
+], function(Origin, Helpers, Schemas, BackboneForms, BackboneFormsLists, Overrides, ScaffoldAssetView, ScaffoldAssetItemView, ScaffoldCodeEditorView, ScaffoldColourPickerView, ScaffoldColourPickerViewCustom, ScaffoldDisplayTitleView, ScaffoldItemsModalView, ScaffoldListView, ScaffoldTagsView, ScaffoldUsersView) {
 
   var Scaffold = {};
   var alternativeModel;
@@ -129,7 +130,8 @@ define([
       titleHTML: field.titleHTML,
       type: getType(),
       validators: getValidators(),
-      extra: field.extra
+      extra: field.extra,
+      linkedProperties: field.linkedProperties  // Add linkedProperties support
     };
 
     if (_.isObject(inputType)) {

@@ -12,9 +12,21 @@ define(function(require) {
     var originalRenderForm = ThemingView.prototype.renderForm;
     var originalRestoreFormSettings = ThemingView.prototype.restoreFormSettings;
     var originalOnFieldChanged = ThemingView.prototype.onFieldChanged;
+    var originalInitialize = ThemingView.prototype.initialize;
     
     // Extend the existing ThemingView
     return ThemingView.extend({
+      
+      // Override initialize to add linkedProperties event listener
+      initialize: function() {
+        // Call original method first
+        var result = originalInitialize.apply(this, arguments);
+        
+        // Add linkedProperties event listener
+        this.listenTo(Origin, 'scaffold:linkedPropertyChanged', this.onLinkedPropertyChanged);
+        
+        return result;
+      },
       
       // Override postRender to add font preview setup
       postRender: function() {
@@ -55,13 +67,23 @@ define(function(require) {
         return result;
       },
       
-      // Override onFieldChanged to update font preview when fonts change
-      onFieldChanged: function() {
+      // Override onFieldChanged to update font preview when fonts change and handle linkedProperties
+      onFieldChanged: function(event) {
         // Call original method first
         var result = originalOnFieldChanged.apply(this, arguments);
         
         // Update font preview for any changed font selects
         this.updateFontPreviewOnChange();
+        
+        // Handle linkedProperties if this field has them
+        if (event && event.target) {
+          var $target = $(event.target);
+          var fieldName = $target.attr('name');
+          
+          if (fieldName && this.form) {
+            this.handleLinkedPropertiesUpdate($target, fieldName);
+          }
+        }
         
         return result;
       },
@@ -157,6 +179,84 @@ define(function(require) {
         _.defer(function() {
           self.applyFontPreviewToSelects();
         });
+      },
+
+      // LinkedProperties: Handle linkedProperties changes from scaffold fields (like ColourPicker)
+      onLinkedPropertyChanged: function(data) {
+        if (!data || !data.linkedProperties || !this.form) {
+          return;
+        }
+
+        var newValue = data.newValue;
+        var linkedProperties = data.linkedProperties;
+        
+        // Update each linked property
+        for (var i = 0; i < linkedProperties.length; i++) {
+          this.updateLinkedProperty(linkedProperties[i], newValue);
+        }
+      },
+
+      // LinkedProperties: Update a specific linked property with new value
+      updateLinkedProperty: function(propertyPath, newValue) {
+        if (!propertyPath || newValue === undefined) {
+          return;
+        }
+
+        // Handle nested property paths like "_nav.nav-progress"
+        var targetFieldName;
+        if (propertyPath.includes('.')) {
+          // For nested paths like "_nav.nav-progress", extract the field name
+          var pathParts = propertyPath.split('.');
+          targetFieldName = pathParts[pathParts.length - 1]; // Get "nav-progress" from "_nav.nav-progress"
+        } else {
+          targetFieldName = propertyPath;
+        }
+        
+        // Try exact match first
+        var $targetField = this.$('input[name="' + targetFieldName + '"], select[name="' + targetFieldName + '"]');
+        
+        if ($targetField.length > 0) {
+          $targetField.each(function(index, element) {
+            var $elem = $(element);
+
+            // Check if it's a spectrum color picker
+            if ($elem.hasClass('scaffold-colour-picker') && $elem.spectrum) {
+              $elem.spectrum('set', newValue);
+            } else {
+              // For regular inputs/selects
+              $elem.val(newValue).trigger('change');
+            }
+          });
+          
+          // Also update the form model if available
+          if (this.form && this.form.model) {
+            this.form.model.set(targetFieldName, newValue);
+          }
+        }
+      },
+
+      // LinkedProperties: Handle linkedProperties for regular form field changes (not from scaffold events)
+      handleLinkedPropertiesUpdate: function($target, fieldName) {
+        // Get field schema to check for linkedProperties
+        var fieldSchema = this.getFieldSchema(fieldName);
+        
+        if (fieldSchema && fieldSchema.linkedProperties && fieldSchema.linkedProperties.length > 0) {
+          var newValue = $target.val();
+          
+          // Update each linked property
+          for (var i = 0; i < fieldSchema.linkedProperties.length; i++) {
+            this.updateLinkedProperty(fieldSchema.linkedProperties[i], newValue);
+          }
+        }
+      },
+
+      // LinkedProperties: Get schema definition for a specific field
+      getFieldSchema: function(fieldName) {
+        if (!this.form || !this.form.schema) {
+          return null;
+        }
+        
+        return this.form.schema[fieldName] || null;
       }
       
     });
