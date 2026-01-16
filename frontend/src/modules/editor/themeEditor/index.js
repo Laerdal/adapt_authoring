@@ -3,8 +3,12 @@ define(function(require) {
   var Origin = require('core/origin');
   var EditorConfigModel = require('core/models/configModel');
   var EditorThemingView = require('./views/editorThemingView.js');
+  var EditorThemingViewCustom = require('./views/editorThemingView.custom.js');
   var EditorThemingSidebarView = require('./views/editorThemingSidebarView.js');
   var ROUTE = 'selecttheme';
+
+  // Apply custom extensions to the ThemingView
+  var ExtendedThemingView = EditorThemingViewCustom(EditorThemingView);
 
   Origin.on('editorCommon:theme', function() {
     Origin.router.navigate('#/editor/' + Origin.editor.data.course.get('_id') + '/' + ROUTE, { trigger: true });
@@ -16,7 +20,7 @@ define(function(require) {
       configModel.fetch({
         success: function() {
           Origin.sidebar.addView(new EditorThemingSidebarView().$el);
-          Origin.contentPane.setView(EditorThemingView, { model: configModel });
+          Origin.contentPane.setView(ExtendedThemingView, { model: configModel });
         }
       });
     }
