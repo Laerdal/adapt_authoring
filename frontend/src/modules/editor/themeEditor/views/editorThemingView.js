@@ -26,7 +26,8 @@ define(function(require) {
       'click .accordion-header': 'onAccordionToggle',  // NEW: Accordion toggle
       'click .preview-enlarge-btn': 'openPreviewModal',  // NEW: Open preview modal
       'click .preview-modal-close': 'closePreviewModal',  // NEW: Close preview modal
-      'click .preview-modal-overlay': 'closePreviewModal'  // NEW: Close on overlay click
+      'click .preview-modal-overlay': 'closePreviewModal',  // NEW: Close on overlay click
+      'click .preview-high-contrast-btn': 'toggleHighContrast'  // NEW: High contrast toggle (implemented in custom file)
     },
 
     initialize: function() {
@@ -144,10 +145,7 @@ define(function(require) {
       accordionHtml += '<div class="theme-editor-header">';
       accordionHtml += '<div class="header-icon"><i class="fa fa-paint-brush"></i></div>';
       accordionHtml += '<h2 class="theme-editor-heading">Simplified Theme Editor</h2>';
-      accordionHtml += '<p>Start with global colors that automatically generate hover, focus, and disabled states. Use Advanced Mode to fine-tune specific elements if needed.</p>';
-      accordionHtml += '<div class="theme-tip">';
-      accordionHtml += '<strong>Tip:</strong> Your global theme colors will cascade down to all components. Only override specific sections if you need different styling.';
-      accordionHtml += '</div>';
+      accordionHtml += '<p>Start with global colours that automatically generate hover, focus, and disabled states. Use Advanced Mode to fine-tune specific elements if needed.</p>';
       accordionHtml += '</div>';
       
       // Render flat sections first
@@ -325,83 +323,109 @@ define(function(require) {
     },
 
     // NEW: Attach color picker change listeners
+    // NEW: Attach color picker change listeners
+    // NOTE: Custom enhancements (dual field names, link field, nav header) are in editorThemingView.custom.js
+    // The custom file provides: getCustomColorMap(), applyCascadeColorsCustom()
     attachColorPreviewListeners: function() {
       var self = this;
       
-      // Wait for form fields to be rendered
-      setTimeout(function() {
-        // Map schema properties to preview elements
-        var colorMap = {
-          'page-bg-color': '.preview-page',
-          'article-bg-color': '.preview-article',
-          'block-bg-color': '.preview-block',
-          'component-bg-color': '.preview-component',
-          'btn-color': '.preview-btn-primary',
-          'btn-color-inverted': '.preview-btn-primary',
-          'item-color': '.preview-btn-secondary',
-          // Text color properties
-          'font-color': '.preview-component-body-text',
-          'heading-color': 'HEADING_CASCADE',
-          'instruction-color': '.preview-instruction',
-          // Brand color cascades
-          '_primaryBrandColor': 'PRIMARY_CASCADE',
-          '_secondaryBrandColor': 'SECONDARY_CASCADE',
-          '_accentBrandColor': 'ACCENT_CASCADE'
-        };
+      console.log('attachColorPreviewListeners called - using event delegation');
+      
+      // Get colorMap from custom file if available, otherwise use basic map
+      var colorMap = this.getCustomColorMap ? this.getCustomColorMap() : {
+        'page': '.preview-page',
+        'article': '.preview-article',
+        'block': '.preview-block',
+        'component': '.preview-component',
+        'btn-color': '.preview-btn-primary',
+        'btn-color-inverted': '.preview-btn-primary',
+        'item-color': '.preview-btn-secondary',
+        'font-color': '.preview-component-body-text',
+        'heading-color': 'HEADING_CASCADE',
+        'instruction-color': '.preview-instruction',
+        'nav': 'NAV_CASCADE',
+        'nav-inverted': 'NAV_INVERTED_CASCADE',
+        '_primaryBrandColor': 'PRIMARY_CASCADE',
+        '_secondaryBrandColor': 'SECONDARY_CASCADE',
+        '_accentBrandColor': 'ACCENT_CASCADE'
+      };
 
-        // Font map for font-family properties
-        var fontMap = {
-          'heading-font-family': 'HEADING_FONT_CASCADE',
-          'paragraph-font-family': 'PARAGRAPH_FONT_CASCADE'
-        };
-
-        // Listen to all color picker changes - multiple event types for better coverage
-        self.$('.form-container').on('input change keyup', 'input[type="text"], input[data-type="ColourPicker"]', function(e) {
-          var $input = $(e.target);
-          var fieldName = $input.attr('name');
-          var colorValue = $input.val();
-
-          // Check if this field affects the preview
-          if (colorMap[fieldName]) {
-            if (colorMap[fieldName].indexOf('CASCADE') > -1) {
-              self.applyCascadeColors(fieldName, colorValue);
+      // Font map for font-family properties
+      var fontMap = {
+        'heading-font-family': 'HEADING_FONT_CASCADE',
+        'paragraph-font-family': 'PARAGRAPH_FONT_CASCADE'
+      };
+      
+      // Handler function for color changes
+      var handleColorChange = function(fieldName, colorValue, source) {
+        console.log('handleColorChange called - Source:', source, 'Field:', fieldName, 'Value:', colorValue);
+        
+        // Check if this field affects the preview
+        if (colorMap[fieldName]) {
+          if (colorMap[fieldName].indexOf('CASCADE') > -1) {
+            // Use custom cascade method if available, otherwise use default
+            if (self.applyCascadeColorsCustom) {
+              self.applyCascadeColorsCustom(fieldName, colorValue);
             } else {
-              self.updatePreviewColor(colorMap[fieldName], colorValue, fieldName);
-            }
-          }
-        });
-
-        // Also listen to changes on color picker wrappers
-        self.$('.form-container').on('change', '.field-colourpicker input, .colourpicker input', function(e) {
-          var $input = $(e.target);
-          var fieldName = $input.attr('name') || $input.closest('.field').find('input[name]').attr('name');
-          var colorValue = $input.val();
-
-          if (colorMap[fieldName]) {
-            if (colorMap[fieldName].indexOf('CASCADE') > -1) {
               self.applyCascadeColors(fieldName, colorValue);
-            } else {
-              self.updatePreviewColor(colorMap[fieldName], colorValue, fieldName);
             }
+          } else {
+            // Update preview color
+            self.updatePreviewColor(colorMap[fieldName], colorValue, fieldName);
           }
-        });
+        }
+        
+        // Update accessibility display for this field (if method exists from custom file)
+        if (self.updateAccessibilityDisplay) {
+          self.updateAccessibilityDisplay(fieldName, colorValue);
+        }
+        
+        // If this is a background color, update all other fields' accessibility displays
+        if (self.updateAllAccessibilityDisplays && 
+            (fieldName === 'page' || fieldName === 'article' || fieldName === 'block' || fieldName === 'component' ||
+             fieldName === 'page-bg-color' || fieldName === 'article-bg-color' || 
+             fieldName === 'block-bg-color' || fieldName === 'component-bg-color')) {
+          self.updateAllAccessibilityDisplays();
+        }
+      };
 
-        // Listen to spectrum colorpicker events if using spectrum plugin
-        self.$('.form-container').on('move.spectrum', 'input[type="text"]', function(e, color) {
-          var $input = $(e.target);
-          var fieldName = $input.attr('name');
-          var colorValue = color ? color.toHexString() : $input.val();
+      // Use jQuery document-level delegation for maximum compatibility
+      $(document).on('input.themeEditor change.themeEditor keyup.themeEditor', 'input[type="text"]', function(e) {
+        var $input = $(this);
+        // Only process if this input is within our view
+        if (!self.$el.find($input).length) return;
+        
+        var fieldName = $input.attr('name');
+        var colorValue = $input.val();
+        
+        console.log('Document listener fired - Event:', e.type, 'Field:', fieldName, 'Value:', colorValue);
+        
+        if (fieldName && colorValue) {
+          handleColorChange(fieldName, colorValue, 'document-' + e.type);
+        }
+      });
 
-          if (colorMap[fieldName]) {
-            if (colorMap[fieldName].indexOf('CASCADE') > -1) {
-              self.applyCascadeColors(fieldName, colorValue);
-            } else {
-              self.updatePreviewColor(colorMap[fieldName], colorValue, fieldName);
-            }
-          }
-        });
+      // Listen to spectrum colorpicker events at document level
+      $(document).on('move.spectrum', function(e, color) {
+        var $input = $(e.target);
+        // Only process if this input is within our view
+        if (!self.$el.find($input).length) return;
+        
+        var fieldName = $input.attr('name');
+        var colorValue = color ? color.toHexString() : $input.val();
+        
+        console.log('Spectrum listener fired - Field:', fieldName, 'Value:', colorValue);
+        
+        if (fieldName && colorValue) {
+          handleColorChange(fieldName, colorValue, 'spectrum');
+        }
+      });
 
-        // Initialize preview with current values
+      // Initialize preview with current values when fields become available
+      var initializePreview = function() {
+        console.log('Initializing preview and accessibility displays');
+        
+        // Initialize color preview with current values
         for (var fieldName in colorMap) {
           var $input = self.$('input[name="' + fieldName + '"]');
           if ($input.length && $input.val()) {
@@ -420,6 +444,14 @@ define(function(require) {
             self.applyFontCascade(fieldName, $select.val());
           }
         }
+        
+        // Initialize accessibility displays for all color fields
+        setTimeout(function() {
+          console.log('Calling updateAllAccessibilityDisplays from init');
+          if (self.updateAllAccessibilityDisplays) {
+            self.updateAllAccessibilityDisplays();
+          }
+        }, 100);
 
         // Fallback: Poll for color changes every 300ms
         self.colorPreviewInterval = setInterval(function() {
@@ -436,6 +468,9 @@ define(function(require) {
                   self.updatePreviewColor(colorMap[fieldName], currentValue, fieldName);
                 }
                 $input.data('last-preview-value', currentValue);
+                
+                // Also update accessibility on poll
+                handleColorChange(fieldName, currentValue, 'poll');
               }
             }
           }
@@ -454,7 +489,15 @@ define(function(require) {
             }
           }
         }, 300);
-      }, 500);
+      };
+      
+      // Initialize after a delay to allow first accordion to render
+      setTimeout(initializePreview, 1000);
+      
+      // NOTE: Accessibility checking is extended via editorThemingView.custom.js
+      // The custom file adds these methods: getRelativeLuminance, calculateContrastRatio,
+      // updateAccessibilityDisplay, updateAllAccessibilityDisplays, handleColorChangeWithAccessibility
+      // They are called above in handleColorChange via method inheritance
     },
 
     // NEW: Apply cascade colors for brand colors
@@ -533,6 +576,8 @@ define(function(require) {
             'border': '2px solid ' + color,
             'color': color
           });
+          // Links: use primary color
+          this.$('.preview-link a').css('color', color);
           break;
           
         case '_secondaryBrandColor':
@@ -578,8 +623,8 @@ define(function(require) {
       if (fieldName.indexOf('-inverted') > -1) {
         // Inverted colors are text colors
         $element.css('color', color);
-        } else if (fieldName === 'font-color' || fieldName === 'instruction-color') {
-        // Font and instruction colors are text colors
+        } else if (fieldName === 'font-color' || fieldName === 'instruction-color' || fieldName === 'link') {
+        // Font, instruction, and link colors are text colors only
         $element.css('color', color);
       } else if (fieldName.indexOf('btn-') === 0 || fieldName.indexOf('item-') === 0) {
         // Button and item colors are backgrounds

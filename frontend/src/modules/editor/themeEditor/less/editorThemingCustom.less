@@ -338,7 +338,7 @@
     margin: 0;
   }
 
-  // Preview header bar with enlarge button
+  // Preview header bar with controls
   .preview-header-bar {
     display: flex;
     justify-content: space-between;
@@ -346,6 +346,46 @@
     margin-bottom: 16px;
     border-bottom: 2px solid #e5e7eb;
     padding-bottom: 12px;
+  }
+
+  .preview-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .preview-high-contrast-btn,
+  .preview-enlarge-btn {
+    background: #f3f4f6;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    padding: 6px 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: #374151;
+    font-size: 14px;
+
+    &:hover {
+      background: #e5e7eb;
+      border-color: #9ca3af;
+    }
+
+    i {
+      pointer-events: none;
+    }
+  }
+
+  .preview-high-contrast-btn {
+    &[data-contrast-active="true"] {
+      background: #1f2937;
+      color: #fff;
+      border-color: #1f2937;
+
+      &:hover {
+        background: #111827;
+        border-color: #111827;
+      }
+    }
   }
 
   // Progress bar at the top
@@ -385,6 +425,10 @@
       justify-content: space-between;
       margin-bottom: 12px;
       gap: 12px;
+      background-color: #FFFFFF;
+      padding: 12px;
+      border-radius: 6px;
+      transition: background-color 0.3s ease;
     }
 
     .preview-header-left {
@@ -413,6 +457,9 @@
       font-size: 15px;
       font-weight: 700;
       color: #1f1f1f;
+      flex: 1;
+    }
+    .preview-breadcrumb {
       flex: 1;
     }
   }
@@ -472,6 +519,11 @@
     }
     
     .preview-component-body-text {
+      margin: 0.275rem 0;
+      font-size: 13px;
+    }
+
+    .preview-link {
       margin: 0.275rem 0;
       font-size: 13px;
     }
@@ -766,6 +818,247 @@ body.preview-modal-open {
 }
 
 // ========================================
+// High Contrast Mode
+// ========================================
+
+.theme-color-preview.high-contrast-mode {
+  // Overall container
+  background: #000 !important;
+  border-color: #fff !important;
+
+  .preview-title {
+    color: #fff !important;
+  }
+
+  .preview-header-bar {
+    border-bottom-color: #fff !important;
+  }
+
+  .preview-container {
+    background: #000 !important;
+    border-color: #fff !important;
+  }
+
+  // Page background
+  .preview-page {
+    background-color: #000 !important;
+    color: #fff !important;
+  }
+
+  // Page header
+  .preview-page-header {
+    background-color: #000 !important;
+    border-bottom: 0 !important;
+    padding-bottom: 8px;
+  }
+
+  .preview-page-title {
+    color: #fff !important;
+  }
+
+  .preview-icon {
+    background: #000 !important;
+    border-color: #fff !important;
+    color: #fff !important;
+    
+    i {
+      color: #fff !important;
+    }
+  }
+
+  // Progress bar
+  .preview-progress-bar {
+    background-color: #444 !important;
+
+    .preview-progress-fill {
+      background-color: transparent !important; // High contrast yellow
+      border: 1px solid #fff !important;
+      border-radius: 8px;
+    }
+  }
+
+  // Article
+  .preview-article {
+    background-color: #000 !important;
+    color: #fff !important;
+    border-color: #fff !important;
+  }
+
+  .preview-article-title {
+    color: #fff !important;
+  }
+
+  // Block
+  .preview-block {
+    background-color: #000 !important;
+    border-color: #fff !important;
+  }
+
+  .preview-block-title {
+    color: #fff !important;
+  }
+
+  // Component - ALL text should be white
+  .preview-component {
+    background-color: #000 !important;
+    border: 2px solid #fff !important;
+    color: #fff !important;
+  }
+
+  .preview-component-title {
+    color: #fff !important;
+  }
+
+  .preview-component-body-text {
+    color: #fff !important;
+  }
+
+  .preview-instruction {
+    color: #fff !important;
+  }
+
+  // Links in high contrast mode
+  .preview-link a {
+    color: #9bd3ea !important; // High contrast blue
+    text-decoration: underline;
+
+    &:hover {
+      color: #fff !important;
+    }
+  }
+
+  // Force all text inside component to be white
+  .preview-component,
+  .preview-component * {
+    color: #fff !important;
+  }
+
+  // Override specific elements
+  .preview-component h1,
+  .preview-component h2,
+  .preview-component h3,
+  .preview-component h4,
+  .preview-component h5,
+  .preview-component h6,
+  .preview-component p,
+  .preview-component span,
+  .preview-component div {
+    color: #fff !important;
+  }
+
+  // Checkboxes/Items - make text explicitly white
+  .preview-checkbox {
+    background-color: #000 !important;
+    border: 2px solid #fff !important;
+    color: #fff !important;
+
+    &:hover {
+      background-color: #333 !important;
+    }
+
+    * {
+      color: #fff !important;
+    }
+
+    .checkbox-state-container {
+      background-color: #000 !important;
+      border-right: 0 !important;
+    }
+
+    .checkbox-text {
+      color: #fff !important;
+    }
+
+    .checkbox-icon {
+      border-color: #fff !important;
+
+      &.checked {
+        background-color: #fff !important;
+        
+        &::after {
+          border-color: #000 !important;
+        }
+      }
+    }
+  }
+
+  // Buttons - High visibility
+  .preview-btn {
+    border: 2px solid #fff !important;
+    font-weight: 600;
+  }
+
+  .preview-btn-primary {
+    background-color: #fff !important; // High contrast yellow
+    color: #000 !important;
+    border-color: #fff !important;
+
+    &:hover {
+      background-color: #fff !important;
+      color: #000 !important;
+      border-color: #fff !important;
+    }
+  }
+
+  .preview-btn-secondary {
+    background-color: #000 !important;
+    color: #fff !important;
+    border-color: #fff !important;
+
+    &:hover {
+      background-color: #333 !important;
+      color: #fff !important;
+    }
+  }
+
+  // Links (if any)
+  a {
+    color: #fff !important;
+    text-decoration: underline;
+
+    &:hover {
+      color: #fff !important;
+    }
+  }
+
+  // Hierarchy labels - all white
+  .preview-hierarchy-label {
+    color: #fff !important;
+  }
+
+  // Make sure question text and all labels are white
+  .preview-items,
+  .preview-items *,
+  .preview-buttons,
+  .preview-buttons * {
+    color: inherit !important;
+  }
+
+  // Force white on all headings
+  h1, h2, h3, h4, h5, h6 {
+    color: #fff !important;
+  }
+
+  // Force white on all paragraphs and spans
+  p, span, div, label {
+    color: #fff !important;
+  }
+
+  // Submit and Next button text should be black (on yellow background)
+  .preview-btn-primary,
+  .submit-btn {
+    color: #000 !important;
+  }
+
+  // Previous button should be white (on black background)
+  .preview-btn-secondary {
+    color: #fff !important;
+  }
+}
+
+
+
+// ========================================
 // Responsive Adjustments
 // ========================================
 
@@ -820,6 +1113,120 @@ body.preview-modal-open {
 
       h2 {
         font-size: 20px;
+      }
+    }
+  }
+}
+
+// Accessibility Results Display
+.accessibility-results {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 4px;
+  padding: 12px;
+  background-color: #ffffff;
+  border-radius: 4px;
+  border: 1px solid #d1d5db;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  font-size: 13px;
+  line-height: 1.6;
+  z-index: 1000;
+  max-height: 200px;
+  overflow-y: auto;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.2s ease, visibility 0.2s ease;
+  
+  .contrast-test {
+    display: flex;
+    align-items: center;
+    padding: 4px 0;
+    
+    &.pass {
+      .status-badge {
+        color: #00875a;
+        font-weight: 600;
+      }
+    }
+    
+    &.fail {
+      .status-badge {
+        color: #de350b;
+        font-weight: 600;
+      }
+    }
+    
+    .test-label {
+      min-width: 160px;
+      color: #42526e;
+      font-weight: 500;
+    }
+    
+    .contrast-ratio {
+      margin-left: auto;
+      margin-right: 8px;
+      color: #172b4d;
+      font-weight: 600;
+      font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+    }
+    
+    .status-badge {
+      font-size: 12px;
+      letter-spacing: 0.5px;
+    }
+  }
+}
+
+// Make sure the field container has position relative for absolute positioning
+.field {
+  position: relative;
+  
+  // Show accessibility results on hover or when color picker is active
+  &:hover .accessibility-results {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+  
+  // Also show when input or any child is focused
+  &:focus-within .accessibility-results {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+  }
+}
+
+// Also allow hovering over the results themselves
+.accessibility-results:hover {
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
+
+// High contrast mode overrides for accessibility display
+.high-contrast-mode {
+  .accessibility-results {
+    background-color: #000;
+    border-color: #fff;
+    
+    .test-label {
+      color: #fff;
+    }
+    
+    .contrast-ratio {
+      color: #fff;
+    }
+    
+    .contrast-test {
+      &.pass .status-badge {
+        color: #00ff00;
+      }
+      
+      &.fail .status-badge {
+        color: #ff0000;
       }
     }
   }
