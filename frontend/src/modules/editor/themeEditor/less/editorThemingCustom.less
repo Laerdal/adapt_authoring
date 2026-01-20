@@ -395,7 +395,7 @@
     background-color: #e5e7eb;
     border-radius: 3px;
     overflow: hidden;
-    margin-bottom: 20px;
+    margin-bottom: 10px;
 
     .preview-progress-fill {
       height: 100%;
@@ -423,7 +423,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 12px;
+      margin-bottom: 0px;
       gap: 12px;
       background-color: #FFFFFF;
       padding: 12px;
@@ -445,13 +445,14 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      
+
       i {
         font-size: 15px;
         color: #555;
         line-height: 1;
       }
     }
+
     .preview-page-title {
       margin: 0;
       font-size: 15px;
@@ -459,6 +460,7 @@
       color: #1f1f1f;
       flex: 1;
     }
+
     .preview-breadcrumb {
       flex: 1;
     }
@@ -468,6 +470,7 @@
     background-color: #ffffff;
     border: 1px solid #cccccc;
     padding: 18px;
+    padding-top: 12px;
     border-radius: 6px;
     margin-top: 10px;
     position: relative;
@@ -485,6 +488,7 @@
     background-color: #ffffff;
     border: 1px solid #9fc9dd;
     padding: 18px;
+    padding-top: 12px;
     border-radius: 6px;
     margin-top: 10px;
     position: relative;
@@ -502,6 +506,7 @@
     background-color: #ffffff;
     border: 1px solid #cccccc;
     padding: 18px;
+    padding-top: 12px;
     border-radius: 6px;
     margin-top: 10px;
     position: relative;
@@ -517,7 +522,7 @@
       font-weight: 600;
       color: #1f1f1f;
     }
-    
+
     .preview-component-body-text {
       margin: 0.275rem 0;
       font-size: 13px;
@@ -633,7 +638,7 @@
     justify-content: flex-end;
     margin-top: 16px;
   }
-  
+
   .submit-btn {
     margin-top: 0.5rem;
   }
@@ -802,8 +807,9 @@
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     max-width: 800px;
     margin: 0 auto;
-    
+
     &.preview-in-modal {
+
       // Hide the enlarge button when preview is in modal
       .preview-enlarge-btn {
         display: none;
@@ -860,7 +866,7 @@ body.preview-modal-open {
     background: #000 !important;
     border-color: #fff !important;
     color: #fff !important;
-    
+
     i {
       color: #fff !important;
     }
@@ -974,7 +980,7 @@ body.preview-modal-open {
 
       &.checked {
         background-color: #fff !important;
-        
+
         &::after {
           border-color: #000 !important;
         }
@@ -1035,12 +1041,20 @@ body.preview-modal-open {
   }
 
   // Force white on all headings
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     color: #fff !important;
   }
 
   // Force white on all paragraphs and spans
-  p, span, div, label {
+  p,
+  span,
+  div,
+  label {
     color: #fff !important;
   }
 
@@ -1120,6 +1134,7 @@ body.preview-modal-open {
 
 // Accessibility Results Display
 .accessibility-results {
+  display: none; // TODO: hidden until fixed
   position: absolute;
   top: 100%;
   left: 0;
@@ -1139,32 +1154,32 @@ body.preview-modal-open {
   visibility: hidden;
   pointer-events: none;
   transition: opacity 0.2s ease, visibility 0.2s ease;
-  
+
   .contrast-test {
     display: flex;
     align-items: center;
     padding: 4px 0;
-    
+
     &.pass {
       .status-badge {
         color: #00875a;
         font-weight: 600;
       }
     }
-    
+
     &.fail {
       .status-badge {
         color: #de350b;
         font-weight: 600;
       }
     }
-    
+
     .test-label {
       min-width: 160px;
       color: #42526e;
       font-weight: 500;
     }
-    
+
     .contrast-ratio {
       margin-left: auto;
       margin-right: 8px;
@@ -1172,7 +1187,7 @@ body.preview-modal-open {
       font-weight: 600;
       font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
     }
-    
+
     .status-badge {
       font-size: 12px;
       letter-spacing: 0.5px;
@@ -1183,14 +1198,14 @@ body.preview-modal-open {
 // Make sure the field container has position relative for absolute positioning
 .field {
   position: relative;
-  
+
   // Show accessibility results on hover or when color picker is active
   &:hover .accessibility-results {
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
   }
-  
+
   // Also show when input or any child is focused
   &:focus-within .accessibility-results {
     opacity: 1;
@@ -1211,23 +1226,34 @@ body.preview-modal-open {
   .accessibility-results {
     background-color: #000;
     border-color: #fff;
-    
+
     .test-label {
       color: #fff;
     }
-    
+
     .contrast-ratio {
       color: #fff;
     }
-    
+
     .contrast-test {
       &.pass .status-badge {
         color: #00ff00;
       }
-      
+
       &.fail .status-badge {
         color: #ff0000;
       }
     }
   }
+}
+
+span.preview-info {
+  z-index: 9;
+  background: #FFFBEB;
+  color: #973C00;
+  padding: 0.3rem;
+  position: relative;
+  border-radius: 8px;
+  border: 1px solid #FEE685;
+  display: inline-block;
 }

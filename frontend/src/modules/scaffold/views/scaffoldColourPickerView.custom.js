@@ -45,6 +45,8 @@ define([
         },
         change: function(color) {
           self.handleLinkedPropertiesChange();
+          // Toggle reset button visibility based on whether value equals default
+          self.updateDefaultValueClass();
         }
       };
 
@@ -57,12 +59,36 @@ define([
       }
 
       this.$el.spectrum(options);
-      $('.sp-container').removeClass('sp-clear-enabled');
+      
+      // Set initial is-default-value class state
+      this.updateDefaultValueClass();
+    },
+    
+    updateDefaultValueClass: function() {
+      // Toggle the is-default-value class based on whether current value equals default
+      if (this.defaultValue !== undefined) {
+        var currentValue = this.getValue();
+        var isDefaultValue = _.isEqual(currentValue, this.defaultValue);
+        this.$el.closest('.field').toggleClass('is-default-value', isDefaultValue);
+      }
     },
 
     setValue: function(value) {
       // Call parent setValue
       ScaffoldColourPickerView.prototype.setValue.apply(this, arguments);
+      
+      // Update is-default-value class after programmatic value change
+      this.updateDefaultValueClass();
+      
+      // Manually trigger preview update by directly calling the Origin event
+      // This bypasses the spectrum event which has the wrong cached color
+      var fieldName = this.key;
+      var colorValue = this.getValue() || '';
+      Origin.trigger('editor:colorChanged', {
+        fieldName: fieldName,
+        colorValue: colorValue
+      });
+      
       // Also trigger linkedProperties change when value is set programmatically
       this.handleLinkedPropertiesChange();
     },

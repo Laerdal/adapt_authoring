@@ -145,7 +145,7 @@ define(function(require) {
       accordionHtml += '<div class="theme-editor-header">';
       accordionHtml += '<div class="header-icon"><i class="fa fa-paint-brush"></i></div>';
       accordionHtml += '<h2 class="theme-editor-heading">Simplified Theme Editor</h2>';
-      accordionHtml += '<p>Start with global colours that automatically generate hover, focus, and disabled states. Use Advanced Mode to fine-tune specific elements if needed.</p>';
+      accordionHtml += '<p>Apply global styles and preview your course design in real time.</p>';
       accordionHtml += '</div>';
       
       // Render flat sections first
@@ -329,7 +329,6 @@ define(function(require) {
     attachColorPreviewListeners: function() {
       var self = this;
       
-      console.log('attachColorPreviewListeners called - using event delegation');
       
       // Get colorMap from custom file if available, otherwise use basic map
       var colorMap = this.getCustomColorMap ? this.getCustomColorMap() : {
@@ -358,7 +357,6 @@ define(function(require) {
       
       // Handler function for color changes
       var handleColorChange = function(fieldName, colorValue, source) {
-        console.log('handleColorChange called - Source:', source, 'Field:', fieldName, 'Value:', colorValue);
         
         // Check if this field affects the preview
         if (colorMap[fieldName]) {
@@ -398,9 +396,8 @@ define(function(require) {
         var fieldName = $input.attr('name');
         var colorValue = $input.val();
         
-        console.log('Document listener fired - Event:', e.type, 'Field:', fieldName, 'Value:', colorValue);
-        
-        if (fieldName && colorValue) {
+        // Allow empty color values (for resetting to transparent)
+        if (fieldName !== undefined && fieldName !== null && fieldName !== '') {
           handleColorChange(fieldName, colorValue, 'document-' + e.type);
         }
       });
@@ -414,16 +411,20 @@ define(function(require) {
         var fieldName = $input.attr('name');
         var colorValue = color ? color.toHexString() : $input.val();
         
-        console.log('Spectrum listener fired - Field:', fieldName, 'Value:', colorValue);
-        
         if (fieldName && colorValue) {
           handleColorChange(fieldName, colorValue, 'spectrum');
         }
       });
 
+      // Listen to custom Origin event for direct color changes (e.g., from reset button)
+      this.listenTo(Origin, 'editor:colorChanged', function(data) {
+        if (data && data.fieldName) {
+          handleColorChange(data.fieldName, data.colorValue, 'direct');
+        }
+      });
+
       // Initialize preview with current values when fields become available
       var initializePreview = function() {
-        console.log('Initializing preview and accessibility displays');
         
         // Initialize color preview with current values
         for (var fieldName in colorMap) {
@@ -617,7 +618,17 @@ define(function(require) {
     // NEW: Update preview element color
     updatePreviewColor: function(selector, color, fieldName) {
       var $element = this.$(selector);
-      if (!$element.length || !color) return;
+      if (!$element.length) return;
+
+      // If color is empty/transparent, remove the style to reset to default
+      if (!color || color === '') {
+        if (fieldName.indexOf('-inverted') > -1 || fieldName === 'font-color' || fieldName === 'instruction-color' || fieldName === 'link') {
+          $element.css('color', '');
+        } else {
+          $element.css('background-color', '');
+        }
+        return;
+      }
 
       // Apply color based on field type
       if (fieldName.indexOf('-inverted') > -1) {
@@ -711,8 +722,14 @@ define(function(require) {
         var fields = fieldsBySection[sectionKey];
         
         fields.forEach(function(item) {
-          if (item.field && item.field.el) {
-            $sectionContainer.append(item.field.el);
+          if (item.field) {
+            // Render the field if not already rendered
+            if (!item.field.$el) {
+              item.field.render();
+            }
+            
+            // Append the complete field element (includes label, reset button, help, and editor)
+            $sectionContainer.append(item.field.$el);
           }
         });
       }
@@ -744,8 +761,13 @@ define(function(require) {
         
         var $unmatchedContainer = this.$('.section-properties[data-section="_unmatched"]');
         unmatchedFields.forEach(function(item) {
-          if (item.field && item.field.el) {
-            $unmatchedContainer.append(item.field.el);
+          if (item.field) {
+            // Render the field if not already rendered
+            if (!item.field.$el) {
+              item.field.render();
+            }
+            // Append the complete field element
+            $unmatchedContainer.append(item.field.$el);
           }
         });
       }
