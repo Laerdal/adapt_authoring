@@ -23,9 +23,41 @@ button.ai-button, button.ai-predefined-button {
   border-radius: 6px;
   box-shadow: 0px 0px 6px 2px rgba(0,0,0,.15);
   z-index: 99999;
-  width: 400px! important;
-  margin-top: -18px !important;
-
+  width: 490px! important;
+  margin-top: -24px !important;
+  background: linear-gradient(90deg, #AF50AF, #5F73BA) !important;
+  padding: 1px 0px 1px 1px !important;
+  
+.custom-prompt-section{
+  position: relative !important;
+}
+.ck-balloon-panel.ai-assistant-balloon{
+  box-shadow: inherit !important;
+  max-width: calc(100vw - 40px) !important;
+  
+  // Ensure balloon stays within viewport
+  @media (max-width: 768px) {
+    max-width: calc(100vw - 30px) !important;
+  }
+  
+  @media (max-width: 540px) {
+    max-width: calc(100vw - 20px) !important;
+  }
+}
+button#assistantSubmitBtn{
+  position: absolute;
+  right: 1px;
+  top: 16px;
+  background: #E5E5E5 !important;
+  height: 38px !important;
+  width: 38px !important;
+  border-radius: 9999px;
+  padding: 0 7px !important;
+  &:hover, &.active {
+    background: linear-gradient(90deg, #AF50AF, #5F73BA) !important;
+    color: #ffffff !important;
+  }
+ }
   textarea {
       border: 1px #ccc solid !important;
       margin: 10px 0 !important;

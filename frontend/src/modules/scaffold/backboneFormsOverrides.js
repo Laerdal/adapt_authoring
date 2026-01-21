@@ -349,6 +349,19 @@ define([
         return !data || emptyPatterns.includes(data) || data.replace(/<p>(&nbsp;|<br>|)<\/p>/g, '').length === 0;
       }
 
+    // Get full plain text content from the editor (strip HTML safely)
+    function getEditorPlainText(editor) {
+      try {
+        const html = (typeof editor.getData === 'function') ? editor.getData() : '';
+        const tmp = document.createElement('div');
+        tmp.innerHTML = html || '';
+        return (tmp.textContent || tmp.innerText || '').trim();
+      } catch (e) {
+        console.error('getEditorPlainText error', e);
+        return '';
+      }
+    }
+
     // AI Agent Plugin
     function AiAgentPlugin(editor, promptResponse) {
       const balloon = editor.plugins.get('ContextualBalloon');
@@ -365,7 +378,19 @@ define([
 Samaritan Laerdal AI Assistant</label><br>
           <textarea id="assistantTextArea" placeholder="Ask Samaritan to edit or generate"></textarea>
           <div id="loadingMsg"></div>
-          <div class='generatedResponse'></div>
+          <div class="ai-predefined-prompts-section">
+            <div class="ai-prompt-buttons-inline">
+              <button class="ai-prompt-btn-inline" data-prompt="ImproveWriting">Improve wording</button>
+              <button class="ai-prompt-btn-inline" data-prompt="makeShorter">Shorten</button>
+              <button class="ai-prompt-btn-inline" data-prompt="makeLonger">Prolong</button>
+              <button class="ai-prompt-btn-inline" data-prompt="spellChecker">Correct spelling</button>
+            </div>
+          </div>        
+            
+          <div class="custom-prompt-section">
+            <textarea id="assistantTextArea" placeholder="Ask Samaritan to edit or generate from scratch..."></textarea>            
+            <button class="btnAiAgent buttonSend" id="assistantSubmitBtn"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5.26349 6.91891C5.04205 5.36781 6.6102 4.17583 8.04572 4.80367L20.3065 10.1679L20.452 10.2373C21.903 11.0064 21.8543 13.1548 20.3065 13.832L8.04572 19.1963C6.61011 19.8242 5.04188 18.6323 5.26349 17.081L5.99005 12L5.26349 6.91891ZM7.86701 11H9.99982C10.5521 11 10.9998 11.4477 10.9998 12C10.9998 12.5522 10.5521 13 9.99982 13H7.86701L7.24396 17.3642L19.5047 12L7.24396 6.63571L7.86701 11Z" fill="#ffffff"></path></svg></button>
+          </div>
           <div class="aiButtons">
             <button class="btnAiAgent buttonSend" id="assistantSubmitBtn">Submit</button>
             <button class="btnAiAgent buttonInsert" disabled id="assistantInsertBtn">Insert</button>
@@ -466,7 +491,41 @@ Samaritan Laerdal AI Assistant</label><br>
             const selection = window.getSelection();
             const selectedText = selection.toString();
             
-            // Initialize popup with selected text
+            if (selectedText.trim() === '') {
+              // No selection: select the entire editor content for "select all" behavior
+              try {
+                editor.model.change(writer => {
+                  const root = editor.model.document.getRoot();
+                  const start = writer.createPositionAt(root, 0);
+                  const end = writer.createPositionAt(root, 'end');
+                  writer.setSelection(writer.createRange(start, end));
+                });
+
+                // Prefer full HTML for display to preserve formatting
+                const fullHtml = (typeof editor.getData === 'function') ? editor.getData() : '';
+                if (fullHtml && fullHtml.trim() !== '') {
+                  $('.generatedResponse').html(fullHtml).attr('disabled', true).css('background', '#FAFAFA');
+                } else {
+                  // Fallback to plain text from model selection
+                  const sel = editor.model.document.selection;
+                  let fullSelectedText = '';
+                  for (let range of sel.getRanges()) {
+                    for (let item of range.getItems()) {
+                      if (item.is('textProxy')) {
+                        fullSelectedText += item.data;
+                      }
+                    }
+                  }
+                  $('.generatedResponse').text(fullSelectedText).attr('disabled', true).css('background', '#FAFAFA');
+                }
+              } catch (err) {
+                console.error('Error selecting full editor content:', err);
+                $('.generatedResponse').text(selectedTextCursor || '').attr('disabled', true).css('background', '#FAFAFA');
+              }
+            } else {
+              $('.generatedResponse').html(selectedText).attr('disabled', true).css('background', '#FAFAFA');
+            }        
+
             initializePopup(editor, selectedText);
             
           } else {
@@ -563,6 +622,89 @@ Samaritan Laerdal AI Assistant</label><br>
         elements.replaceBtn.disabled = true;
         elements.tryAgainBtn.disabled = true;
         
+        // Add event handlers for predefined prompt buttons
+        const promptButtons = panelElement.querySelectorAll('.ai-prompt-btn-inline');
+        promptButtons.forEach(button => {
+          button.onclick = async (event) => {
+            const selectedPrompt = event.target.getAttribute('data-prompt');
+            // For other predefined prompts, execute them directly
+            if (selectedPrompt) {
+              await executePredefinedPrompt(selectedPrompt, elements, editor);
+            }
+          };
+        });
+
+        // Execute predefined prompt function
+        const executePredefinedPrompt = async (promptType, elements, editor) => {
+          // Get selected text or current line text (same logic as AiPreDefinedPromptsPlugin)
+          const selection = window.getSelection();
+          let selectedText = selection.toString();
+          
+          // Check if the selection is empty and use the current cursor position
+          if (!selectedText || selectedText.trim() === '') {
+            // Use entire editor text when nothing is selected
+            const fullText = getEditorPlainText(editor);
+            if (fullText) selectedText = fullText;
+          } else {
+            let selectionCursor = editor.model.document.selection;
+            let selectedTextCursor = '';
+
+            for (let range of selectionCursor.getRanges()) {
+              for (let item of range.getItems()) {
+                if (item.is('textProxy')) {
+                  selectedTextCursor += item.data;
+                }
+              }
+            }
+            selectedText = selectedTextCursor;
+          }
+          
+          if (!selectedText) {
+            alert('Please select some text or place the cursor on text to use this feature.');
+            return;
+          }
+          
+          // Get the predefined prompt instruction
+          const promptInstruction = apiConfig.prompts[promptType] || apiConfig.prompts.spellChecker;
+          
+          // Show loading state
+          elements.loading.innerHTML = 'Loading response from Samaritan <span class="dots"></span>';
+          elements.loading.style.display = 'block';
+          // elements.response.style.display = 'none';
+                    
+          try {
+            // Get AI response using the predefined prompt
+            const response = await getAIAssistantResponse(selectedText, promptInstruction);
+            
+            // Format and display response
+            const formattedHTML = simpleMarkdownToHTML(response);
+            
+          
+            // Show response
+            elements.response.innerHTML = formattedHTML;
+            elements.response.style.background = 'linear-gradient(90deg, #FBDBFB 0%, #E0E6FA 100%)';
+            elements.response.style.border = '0px !important';
+            elements.response.style.display = 'block';
+            elements.loading.style.display = 'none';
+            elements.insertBtn.disabled = false;
+            elements.replaceBtn.disabled = false;
+            elements.dismissBtn.disabled = false;
+            elements.tryAgainBtn.disabled = false;
+            elements.replaceBtn.style.display = 'inline-block';
+            elements.tryAgainBtn.style.display = 'inline-block';
+            elements.dismissBtn.style.display = 'inline-block';
+            
+            
+            
+            // Set up button handlers
+            setupButtonHandler(elements, editor, response, promptInstruction, selectedText);
+            
+          } catch (err) {
+            console.error('AI Assistant error:', err);
+            elements.loading.innerText = 'Error fetching response. Please try again.';
+          }
+        };
+
         // Submit handler function
         const submitHandler = async () => {
           const prompt = elements.input.value.trim();
@@ -632,6 +774,15 @@ Samaritan Laerdal AI Assistant</label><br>
         // Add submit button click handler
         if (!elements.submitBtn._listenerAttached) {
           elements.submitBtn.addEventListener('click', submitHandler);
+
+          elements.input.addEventListener('input', (event) => {
+            const length = $(event.target).val().length;
+            if (length !== 0) {
+                $('.buttonSend').addClass('active');
+            } else {
+                $('.buttonSend').removeClass('active');
+            }
+          });
           
           // Add keyboard handler for Enter key
           elements.input.addEventListener('keypress', (event) => {
@@ -709,19 +860,9 @@ Samaritan Laerdal AI Assistant</label><br>
               // Handle case where selectedText is empty or null
               let actualSelectedText = selectedText;
               if (!actualSelectedText || actualSelectedText.trim() === '') {
-                // Get the cursor position information
-                const selectionCursor = editor.model.document.selection;
-                const cursorPosition = selectionCursor.getLastPosition();
-                const viewPosition = editor.editing.mapper.toViewPosition(cursorPosition);
-                const domPosition = editor.editing.view.domConverter.viewPositionToDom(viewPosition);
-                
-                if (domPosition && domPosition.parent) {
-                  // Get text from current paragraph/element
-                  const currentLineText = domPosition.parent.textContent || '';
-                  if (currentLineText.trim() !== '') {
-                    actualSelectedText = currentLineText;
-                  }
-                }
+                // Use full editor text if nothing is selected (user requested whole textarea)
+                const fullText = getEditorPlainText(editor);
+                if (fullText) actualSelectedText = fullText;
               }
               
               // Get current selection from the editor
