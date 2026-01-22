@@ -132,17 +132,19 @@ LocalAuth.prototype.authenticate = function (req, res, next) {
             if (error) {
               return next(error);
             }
-            if (req.body.shouldPersist && req.body.shouldPersist == 'true') {
-              // Session is persisted for 2 weeks if the user has set 'Remember me'
-              req.session.cookie.maxAge = 14 * 24 * 3600000;
-            } else {
-              req.session.cookie.expires = false;
+            if (req.session && req.session.cookie) {
+              if (req.body.shouldPersist && req.body.shouldPersist == 'true') {
+                // Session is persisted for 2 weeks if the user has set 'Remember me'
+                req.session.cookie.maxAge = 14 * 24 * 3600000;
+              } else {
+                req.session.cookie.expires = false;
+              }
             }
             return res.status(200).json({
               id: user._id,
               email: user.email,
               tenantId: user._tenantId,
-              tenantName: req.session.passport.user.tenant.name,
+              tenantName: (req.session.passport && req.session.passport.user && req.session.passport.user.tenant) ? req.session.passport.user.tenant.name : '',
               permissions: userPermissions
             });
           });

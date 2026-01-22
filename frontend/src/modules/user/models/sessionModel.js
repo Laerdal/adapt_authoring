@@ -8,18 +8,20 @@ define(['require', 'backbone', 'core/origin'], function(require, Backbone, Origi
       email: '',
       isAuthenticated: false,
       permissions: [],
-      otherLoginLinks: []
+      otherLoginLinks: [],
+      sessionStartTime: null
     },
 
     initialize: function() {
     },
 
     login: function (username, password, shouldPersist) {
+      var sessionStartTime = new Date().toISOString();
       var postData = {
         email: username,
         password: password,
         shouldPersist: shouldPersist,
-        sessionStartTime: new Date().toISOString()
+        sessionStartTime: sessionStartTime
       };
       $.post('api/login', postData, _.bind(function (jqXHR, textStatus, errorThrown) {
         this.set({
@@ -27,7 +29,8 @@ define(['require', 'backbone', 'core/origin'], function(require, Backbone, Origi
           tenantId: jqXHR.tenantId,
           email: jqXHR.email,
           isAuthenticated: true,
-          permissions: jqXHR.permissions
+          permissions: jqXHR.permissions,
+          sessionStartTime: sessionStartTime
         });
         Origin.trigger('login:changed');
         Origin.trigger('schemas:loadData', Origin.router.navigateToHome);
@@ -39,6 +42,7 @@ define(['require', 'backbone', 'core/origin'], function(require, Backbone, Origi
     logout: function () {
       var postData = {
         email: this.get('email'),
+        sessionStartTime: this.get('sessionStartTime'),
         sessionEndTime: new Date().toISOString()
       };
       $.post('api/logout', postData, _.bind(function() {
