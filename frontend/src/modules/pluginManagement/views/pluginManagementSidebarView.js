@@ -9,8 +9,8 @@ define(function(require) {
       'click .pluginManagement-sidebar-extensions': 'onManageExtensionsClicked',
       'click .pluginManagement-sidebar-themes': 'onManageThemesClicked',
       'click .pluginManagement-sidebar-components': 'onManageComponentsClicked',
-      'click .pluginManagement-sidebar-menus': 'onManageMenusClicked',
-      'click .pluginManagement-sidebar-getPlugins': 'onGetPluginsClicked'
+      'click .pluginManagement-sidebar-menus': 'onManageMenusClicked'
+      // 'click .pluginManagement-sidebar-getPlugins': 'onGetPluginsClicked' // Hidden for all users
     },
 
     onAddNewPluginClicked: function () {
@@ -33,9 +33,11 @@ define(function(require) {
       this.managePluginType('menu');
     },
 
+    /* Hidden for all users
     onGetPluginsClicked: function () {
       window.open("https://www.adaptlearning.org/index.php/plugin-browser/", '_blank');
     },
+    */
 
     managePluginType: function (pluginType) {
       Origin.router.navigateTo('pluginManagement/' + pluginType);

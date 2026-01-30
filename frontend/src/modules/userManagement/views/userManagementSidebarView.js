@@ -23,7 +23,9 @@ define([
 
     addUser: function(event) {
       event && event.preventDefault();
-      Origin.router.navigateTo('userManagement/addUser');
+      var isEditUsersMode = this.model.get('globalData').isEditUsersMode;
+      var route = isEditUsersMode ? 'userManagement/editUsers/addUser' : 'userManagement/addUser';
+      Origin.router.navigateTo(route);
     }
 
   }, {
