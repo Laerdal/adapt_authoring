@@ -3,6 +3,8 @@ const archiver = require('archiver');
 const async = require('async');
 const exec = require('child_process').exec;
 const fs = require('fs-extra');
+const https = require('https');
+const http = require('http');
 const path = require('path');
 const semver = require('semver');
 // internal
@@ -47,6 +49,106 @@ function publishCourse(courseId, mode, request, response, next) {
 
     return stdout.substring(indexStart, indexEnd !== -1 ? indexEnd : stdout.length);
   }
+
+  /**
+   * Register deployment URL with Azure Function
+   */
+  const registerDeploymentUrl = (url, callback) => {
+    // Read Azure Function URL from configuration
+    const azureFunctionUrl = configuration.getConfig('azureFunctionUrl');
+
+    if (!azureFunctionUrl) {
+      logger.log(
+        'warn',
+        'Azure Function URL not configured, skipping deployment URL registration'
+      );
+      return callback(null);
+    }
+
+    const urlObj = new URL(azureFunctionUrl);
+    const isHttps = urlObj.protocol === 'https:';
+    const httpModule = isHttps ? https : http;
+
+    const postData = JSON.stringify({
+      deploymentURL: url
+    });
+
+    const options = {
+      hostname: urlObj.hostname,
+      port: urlObj.port || (isHttps ? 443 : 80),
+      path: urlObj.pathname + urlObj.search,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData)
+      }
+    };
+
+    logger.log(
+      'info',
+      'Registering deployment URL with Azure Function: ' + url
+    );
+
+    const req = httpModule.request(options, (res) => {
+      let data = '';
+
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+
+      res.on('end', () => {
+        let response;
+
+        // ✅ SAFE JSON PARSING (key fix)
+        try {
+          response = data ? JSON.parse(data) : {};
+        } catch (err) {
+          logger.log(
+            'error',
+            'Error parsing Azure Function response: ' + err.message
+          );
+          return callback(null); // publish must continue
+        }
+
+        if (res.statusCode === 200 || res.statusCode === 201) {
+          logger.log(
+            'info',
+            response.message || 'Deployment URL processed'
+          );
+
+          if (response.alreadyExists === true) {
+            logger.log(
+              'info',
+              'Deployment URL already exists in CORS whitelist'
+            );
+          } else if (response.alreadyExists === false) {
+            logger.log(
+              'info',
+              'Deployment URL successfully added to CORS whitelist'
+            );
+          }
+        } else {
+          logger.log(
+            'warn',
+            response.error || data || 'Failed to register deployment URL'
+          );
+        }
+
+        callback(null);
+      });
+    });
+
+    req.on('error', (err) => {
+      logger.log(
+        'error',
+        'Error calling Azure Function: ' + err.message
+      );
+      callback(null); // publish must continue
+    });
+
+    req.write(postData);
+    req.end();
+  };
 
   async.waterfall([
     // get an object with all the course data
@@ -306,6 +408,36 @@ function publishCourse(courseId, mode, request, response, next) {
       archive.pipe(output);
       archive.glob('**/*', { cwd: path.join(BUILD_FOLDER) });
       archive.finalize();
+    },
+    // fetch and register deployment URLs
+    function(callback) {
+      try {
+        const items = outputJson?.config?._uesAnalytics?._items;
+        if (Array.isArray(items)) {
+          // Get all unique deployment URLs
+          const deploymentURLs = items
+            .filter(item => item?._deploymentURL)
+            .map(item => item._deploymentURL)
+            .filter((url, index, self) => self.indexOf(url) === index); // Remove duplicates
+          
+          if (deploymentURLs.length > 0) {
+            logger.log('info', 'Found ' + deploymentURLs.length + ' deployment URL(s): ' + deploymentURLs.join(', '));
+            resultObject.deploymentURLs = deploymentURLs;
+            
+            // Register all deployment URLs
+            async.each(deploymentURLs, registerDeploymentUrl, callback);
+          } else {
+            logger.log('info', 'No deployment URL found in eventStoreAnalytics items');
+            callback(null);
+          }
+        } else {
+          logger.log('info', '_eventStoreAnalytics._items is missing or not an array');
+          callback(null);
+        }
+      } catch (err) {
+        logger.log('error', 'Error fetching deployment URLs: ' + err.message);
+        callback(err);
+      }
     }
   ], function(err) {
     if (err) {
