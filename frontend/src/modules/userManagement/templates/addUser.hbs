@@ -21,7 +21,11 @@
       <div class="form-group">
           <label>{{t 'app.password'}} <span class="req">*</span></label>
           <div class="field-error display-none" data-error="">{{t 'app.validationrequired'}}</div>
+          {{#if globalData.userManagementBypassEnabled}}
+          <input type="password" name="password" autocomplete="off" value="Adapt@1234" readonly title="Default password: Adapt@1234">
+          {{else}}
           <input type="password" name="password" autocomplete="off">
+          {{/if}}
       </div>
       <div class="form-group">
         <label>{{t 'app.tenant'}}</label>

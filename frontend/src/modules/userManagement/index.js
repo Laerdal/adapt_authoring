@@ -11,7 +11,36 @@ define(function(require) {
   var data = {
     featurePermissions: ["*/*:create","*/*:read","*/*:update","*/*:delete"],
     allRoles: new Backbone.Collection(),
-    allTenants: new Backbone.Collection()
+    allTenants: new Backbone.Collection(),
+    userManagementBypassEnabled: false
+  };
+
+  // Helper function to check if user is Super Admin
+  var isSuperAdmin = function() {
+    if (!Origin.sessionModel) {
+      return false;
+    }
+    
+    // Check by permissions - Super Admin has full permissions on all resources
+    var permissions = Origin.sessionModel.get('permissions');
+    if (permissions && permissions.length > 0) {
+      var hasSuperAdminPermission = permissions.some(function(perm) {
+        // Check if permission is a string or object
+        if (typeof perm === 'string') {
+          return perm === 'urn:x-adapt:*/*' || perm.indexOf('*/*') !== -1;
+        } else if (perm && perm.resource) {
+          return perm.resource === 'urn:x-adapt:*/*' || perm.resource.indexOf('*/*') !== -1;
+        }
+        return false;
+      });
+      
+      if (hasSuperAdminPermission) {
+        return true;
+      }
+    }
+    
+    // Not a Super Admin
+    return false;
   };
 
   Origin.on('origin:dataReady login:changed', function() {
@@ -30,21 +59,21 @@ define(function(require) {
 
     // Function to add user management menu item
     var addUserManagementMenuItem = function() {
-      if (!Origin.constants.userManagementBypassEnabled) {
-        Origin.globalMenu.addItem({
-          "location": "global",
-          "text": Origin.l10n.t('app.usermanagement'),
-          "icon": "fa-users",
-          "sortOrder": 3,
-          "callbackEvent": "userManagement:open"
-        });
-      }
+      data.userManagementBypassEnabled = Origin.constants.userManagementBypassEnabled || false;
+      Origin.globalMenu.addItem({
+        "location": "global",
+        "text": Origin.l10n.t('app.usermanagement'),
+        "icon": "fa-users",
+        "sortOrder": 3,
+        "callbackEvent": "userManagement:open"
+      });
     };
 
     Origin.on('constants:loaded', addUserManagementMenuItem);
 
     // If constants are already loaded, check immediately
     if (Origin.constants) {
+      data.userManagementBypassEnabled = Origin.constants.userManagementBypassEnabled || false;
       addUserManagementMenuItem();
     }
   	}else {
@@ -66,9 +95,69 @@ define(function(require) {
   });
 
   var onRoute = function(location, subLocation, action) {
+    // First check: verify user has base userManagement permissions
+    // If not, block access to ALL userManagement routes
+    if (!Origin.permissions.hasPermissions(data.featurePermissions)) {
+      Origin.Notify.alert({
+        type: 'error',
+        title: Origin.l10n.t('app.errorpagenoaccesstitle'),
+        text: Origin.l10n.t('app.errorpagenoaccess'),
+        confirmButtonText: Origin.l10n.t('app.ok'),
+        callback: function() {
+          Origin.router.navigateTo('dashboard');
+        }
+      });
+      return;
+    }
+    
+    // Check if accessing editUsers route
+    var isEditUsersRoute = (location && location === 'editUsers');
+    
+    // If editUsers route, verify user has Super Admin role
+    if (isEditUsersRoute) {
+      if (!isSuperAdmin()) {
+        // Show access denied notification with translations
+        Origin.Notify.alert({
+          type: 'error',
+          title: Origin.l10n.t('app.errorpagenoaccesstitle'),
+          text: Origin.l10n.t('app.errorpagenoaccess'),
+          confirmButtonText: Origin.l10n.t('app.ok'),
+          callback: function() {
+            Origin.router.navigateTo('dashboard');
+          }
+        });
+        return;
+      }
+    }
+    
+    // Handle editUsers with subLocation (e.g., editUsers/addUser)
+    if (isEditUsersRoute && subLocation === 'addUser') {
+      location = 'addUser';
+      isEditUsersRoute = true;
+    }
+
     if (location && location === 'addUser') {
+      // Check if user can add users - only allowed in editUsers mode when bypass is enabled
+      if (data.userManagementBypassEnabled && !isEditUsersRoute) {
+        // Show access denied notification with translations
+        Origin.Notify.alert({
+          type: 'error',
+          title: Origin.l10n.t('app.errorpagenoaccesstitle'),
+          text: Origin.l10n.t('app.errorpagenoaccess'),
+          confirmButtonText: Origin.l10n.t('app.ok'),
+          callback: function() {
+            Origin.router.navigateTo('dashboard');
+          }
+        });
+        return;
+      }
+      
+      var addUserData = _.extend({}, data, {
+        isEditUsersMode: isEditUsersRoute
+      });
+      
       Origin.contentPane.setView(AddUserView, {
-        model: new Backbone.Model({ globalData: data })
+        model: new Backbone.Model({ globalData: addUserData })
       });
       Origin.sidebar.addView(new AddUserSidebarView().$el);
 
@@ -76,7 +165,13 @@ define(function(require) {
     }
 
     var userCollection = new UserCollection();
-    var globalModel = new Backbone.Model({ globalData: data })
+    
+    // Clone data and add edit users mode flag
+    var routeData = _.extend({}, data, {
+      isEditUsersMode: isEditUsersRoute
+    });
+    
+    var globalModel = new Backbone.Model({ globalData: routeData })
 
     userCollection.once('sync', function() {
       Origin.contentPane.setView(UserManagementView, {
