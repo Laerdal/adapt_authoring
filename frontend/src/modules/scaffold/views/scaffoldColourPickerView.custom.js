@@ -68,9 +68,33 @@ define([
       // Toggle the is-default-value class based on whether current value equals default
       if (this.defaultValue !== undefined) {
         var currentValue = this.getValue();
-        var isDefaultValue = _.isEqual(currentValue, this.defaultValue);
+        var defaultValue = this.defaultValue;
+        
+        // Normalize both values for comparison (trim spaces, lowercase, handle transparent)
+        var normalizedCurrent = this.normalizeColorValue(currentValue);
+        var normalizedDefault = this.normalizeColorValue(defaultValue);
+        
+        var isDefaultValue = normalizedCurrent === normalizedDefault;
         this.$el.closest('.field').toggleClass('is-default-value', isDefaultValue);
       }
+    },
+    
+    normalizeColorValue: function(value) {
+      // Normalize color values for consistent comparison
+      if (!value) return '';
+      
+      // Convert to string and trim whitespace
+      var normalized = String(value).trim().toLowerCase();
+      
+      // Handle empty/transparent values
+      if (normalized === '' || normalized === 'transparent' || normalized === 'rgba(0, 0, 0, 0)') {
+        return '';
+      }
+      
+      // Remove all whitespace from color values
+      normalized = normalized.replace(/\s+/g, '');
+      
+      return normalized;
     },
 
     setValue: function(value) {

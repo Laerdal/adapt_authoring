@@ -268,7 +268,7 @@ define(function(require) {
         'components': 'cube',
         'navigation': 'compass',
         'menu': 'bars',
-        'progress': 'chart-line',
+        'progress': 'line-chart',
         'feedback': 'comment',
         'overlay': 'window-maximize',
         'settings': 'cog',
