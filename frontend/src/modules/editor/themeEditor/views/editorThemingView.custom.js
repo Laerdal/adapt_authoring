@@ -460,9 +460,14 @@ define(function(require) {
       },
 
       // LinkedProperties: Update a specific linked property with new value
-      updateLinkedProperty: function(propertyPath, newValue) {
+      updateLinkedProperty: function(propertyPath, newValue, visitedFields) {
         if (!propertyPath || newValue === undefined) {
           return;
+        }
+
+        // Initialize visitedFields set to prevent circular references
+        if (!visitedFields) {
+          visitedFields = new Set();
         }
 
         // Handle nested property paths like "_nav.nav-progress"
@@ -474,11 +479,20 @@ define(function(require) {
         } else {
           targetFieldName = propertyPath;
         }
+
+        // Check if we've already visited this field to prevent infinite loops
+        if (visitedFields.has(targetFieldName)) {
+          return;
+        }
+        
+        // Mark this field as visited
+        visitedFields.add(targetFieldName);
         
         // Try exact match first
         var $targetField = this.$('input[name="' + targetFieldName + '"], select[name="' + targetFieldName + '"]');
         
         if ($targetField.length > 0) {
+          var self = this;
           $targetField.each(function(index, element) {
             var $elem = $(element);
 
@@ -494,6 +508,15 @@ define(function(require) {
           // Also update the form model if available
           if (this.form && this.form.model) {
             this.form.model.set(targetFieldName, newValue);
+          }
+
+          // RECURSIVE PROPAGATION: Check if this linked field also has linkedProperties
+          var targetFieldSchema = this.getFieldSchema(targetFieldName);
+          if (targetFieldSchema && targetFieldSchema.linkedProperties && targetFieldSchema.linkedProperties.length > 0) {
+            // Recursively update the grandchildren properties
+            for (var i = 0; i < targetFieldSchema.linkedProperties.length; i++) {
+              this.updateLinkedProperty(targetFieldSchema.linkedProperties[i], newValue, visitedFields);
+            }
           }
         }
       },
