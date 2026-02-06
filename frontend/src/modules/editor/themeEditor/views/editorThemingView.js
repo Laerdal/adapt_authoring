@@ -1,6 +1,7 @@
 // LICENCE https://github.com/adaptlearning/adapt_authoring/blob/master/LICENSE
 define(function(require) {
   var Backbone = require('backbone');
+  var Handlebars = require('handlebars');
   var EditorOriginView = require('../../global/views/editorOriginView');
   var Helpers = require('core/helpers');
   var Origin = require('core/origin');
@@ -21,7 +22,12 @@ define(function(require) {
       'change .theme select': 'onThemeChanged',
       'change .preset select': 'onPresetChanged',
       'change .form-container form': 'onFieldChanged',
-      'click button.edit': 'showPresetEdit'
+      'click button.edit': 'showPresetEdit',
+      'click .accordion-header': 'onAccordionToggle',  // NEW: Accordion toggle
+      'click .preview-enlarge-btn': 'openPreviewModal',  // NEW: Open preview modal
+      'click .preview-modal-close': 'closePreviewModal',  // NEW: Close preview modal
+      'click .preview-modal-overlay': 'closePreviewModal',  // NEW: Close on overlay click
+      'click .preview-high-contrast-btn': 'toggleHighContrast'  // NEW: High contrast toggle (implemented in custom file)
     },
 
     initialize: function() {
@@ -84,7 +90,14 @@ define(function(require) {
       }
 
       if (this.form) {
-        this.$('.form-container').html(this.form.el);
+        // NEW: Check if theme has accordion sections
+        var themeProperties = selectedTheme.get('properties');
+        if (this.hasAccordionSections(themeProperties)) {
+          this.renderAccordionForm();
+        } else {
+          // Original behavior
+          this.$('.form-container').html(this.form.el);
+        }
       }
 
       this.$el.find('fieldset:not(:has(>.field))').addClass('empty-fieldset');
@@ -98,6 +111,698 @@ define(function(require) {
       }
       _.defer(function() { this.restoreFormSettings(toRestore); }.bind(this));
     },
+
+    // NEW: Check if theme has accordion sections
+    hasAccordionSections: function(themeProperties) {
+      if (!themeProperties || !themeProperties.variables) return false;
+      
+      for (var key in themeProperties.variables) {
+        var section = themeProperties.variables[key];
+        if (section && section.type === 'object' && section._accordion) {
+          return true;
+        }
+      }
+      return false;
+    },
+
+    // NEW: Render form using accordion structure
+    renderAccordionForm: function() {
+      var selectedTheme = this.getSelectedTheme();
+      var themeProperties = selectedTheme.get('properties');
+      var allSections = this.getAccordionSections(themeProperties);
+
+      
+
+      // Separate flat sections from accordion sections
+
+      var flatSections = allSections.filter(function(s) { return s.data._accordion && s.data._accordion.renderFlat; });
+
+      var accordionSections = allSections.filter(function(s) { return !s.data._accordion || !s.data._accordion.renderFlat; });
+      
+      // Start main content column
+      var accordionHtml = '<div class="theme-editor-main">';
+      accordionHtml += '<div class="simplified-theme-editor">';
+      accordionHtml += '<div class="theme-editor-header">';
+      accordionHtml += '<div class="header-icon"><i class="fa fa-paint-brush"></i></div>';
+      accordionHtml += '<h2 class="theme-editor-heading">Simplified Theme Editor</h2>';
+      accordionHtml += '<p>Apply global styles and preview your course design in real time.</p>';
+      accordionHtml += '</div>';
+      
+      // Render flat sections first
+      flatSections.forEach(function(section) {
+        accordionHtml += this.renderFlatSection(section.key, section.data);
+      }.bind(this));
+      accordionHtml += '<div class="theme-accordion-container">';
+      
+      accordionSections.forEach(function(section) {
+        accordionHtml += this.renderAccordionSection(section.key, section.data);
+      }.bind(this));
+      
+      accordionHtml += '</div></div>'; // Close accordion-container and simplified-theme-editor
+      accordionHtml += '</div>'; // Close theme-editor-main
+
+      // Add sidebar with preview
+      accordionHtml += '<div class="theme-editor-sidebar">';
+      accordionHtml += this.renderColorPreview();
+      accordionHtml += '</div>'; // Close theme-editor-sidebar
+
+      
+      this.$('.form-container').html(accordionHtml);
+      this.renderAccordionFields();
+      this.initializeAccordions();
+    },
+
+    // NEW: Get sections sorted by priority
+    getAccordionSections: function(themeProperties) {
+      var sections = [];
+      var variables = themeProperties.variables;
+      
+      for (var key in variables) {
+        var section = variables[key];
+        if (section && section.type === 'object' && section._accordion) {
+          sections.push({
+            key: key,
+            data: section,
+            priority: section._accordion.priority || 999
+          });
+        }
+      }
+      
+      // Sort by priority
+      sections.sort(function(a, b) {
+        return a.priority - b.priority;
+      });
+      
+      return sections;
+    },
+
+
+// NEW: Render color preview
+    renderColorPreview: function() {
+      var template = Handlebars.templates['editorThemingPreview'];
+      return template();
+    },
+
+    // NEW: Render flat section (without accordion wrapper)
+    renderFlatSection: function(sectionKey, section) {
+      var sectionHtml = '<div class="theme-flat-section" data-section="' + sectionKey + '">';
+      sectionHtml += '<div class="flat-section-header">';
+      sectionHtml += '<h3 class="section-title">' + (section.title || sectionKey) + '</h3>';
+      if (section.help) {
+        sectionHtml += '<p class="section-subtitle">' + section.help + '</p>';
+      }
+      sectionHtml += '</div>';
+      sectionHtml += '<div class="flat-section-content">';
+      sectionHtml += '<div class="section-properties" data-section="' + sectionKey + '"></div>';
+      sectionHtml += '</div>';
+      sectionHtml += '</div>';
+      return sectionHtml;
+    },
+
+    // NEW: Render individual accordion section
+    renderAccordionSection: function(sectionKey, section) {
+      var accordion = section._accordion || {};
+      var isOpen = accordion.defaultOpen || false;
+      var priority = accordion.priority || 999;
+      var icon = accordion.icon || 'default';
+      var status = accordion.status || '';
+      
+      var sectionHtml = '<div class="theme-section-accordion" data-section="' + sectionKey + '" data-priority="' + priority + '">';
+      
+      // Header
+      sectionHtml += '<div class="accordion-header' + (isOpen ? ' open' : '') + '" data-section="' + sectionKey + '">';
+      sectionHtml += '<div class="header-left">';
+      sectionHtml += '<i class="icon fa fa-' + this.getIconClass(icon) + '"></i>';
+      sectionHtml += '<div class="section-info">';
+      sectionHtml += '<h3 class="section-title">' + (section.title || sectionKey) + '</h3>';
+      if (section.help) {
+        sectionHtml += '<p class="section-subtitle">' + section.help + '</p>';
+      }
+      sectionHtml += '</div>';
+      sectionHtml += '</div>';
+      sectionHtml += '<div class="header-right">';
+      if (status) {
+        sectionHtml += '<span class="status-badge status-' + status.toLowerCase().replace(/[^a-z]/g, '-') + '">' + status + '</span>';
+      }
+      sectionHtml += '<i class="chevron fa fa-chevron-down"></i>';
+      sectionHtml += '</div>';
+      sectionHtml += '</div>';
+      
+      // Content
+      sectionHtml += '<div class="accordion-content' + (isOpen ? ' expanded' : ' collapsed') + '">';
+      sectionHtml += '<div class="content-inner">';
+      sectionHtml += '<div class="section-properties" data-section="' + sectionKey + '"></div>';
+      sectionHtml += '</div>';
+      sectionHtml += '</div>';
+      
+      sectionHtml += '</div>';
+      
+      return sectionHtml;
+    },
+
+    // NEW: Map icon names to Font Awesome classes
+    getIconClass: function(iconName) {
+      var iconMap = {
+        'global': 'globe',
+        'pages': 'file-text-o',
+        'components': 'cube',
+        'navigation': 'compass',
+        'menu': 'bars',
+        'progress': 'line-chart',
+        'feedback': 'comment',
+        'overlay': 'window-maximize',
+        'settings': 'cog',
+        'default': 'folder'
+      };
+      
+      return iconMap[iconName] || iconMap['default'];
+    },
+
+    // NEW: Initialize accordion functionality
+    initializeAccordions: function() {
+      var self = this;
+      
+      // Restore saved accordion states
+      this.$('.theme-section-accordion').each(function() {
+        var sectionKey = $(this).data('section');
+        var savedState = localStorage.getItem('accordion-' + sectionKey);
+        if (savedState !== null) {
+          var shouldBeOpen = savedState === 'true';
+          var header = $(this).find('.accordion-header');
+          var content = $(this).find('.accordion-content');
+          
+          if (shouldBeOpen) {
+            header.addClass('open');
+            content.addClass('expanded').removeClass('collapsed');
+          } else {
+            header.removeClass('open');
+            content.addClass('collapsed').removeClass('expanded');
+          }
+        }
+      });
+
+      // Add color picker listeners after accordions are initialized
+      this.attachColorPreviewListeners();
+    },
+
+    // NEW: Color manipulation helpers for preview
+    darkenColor: function(hex, percent) {
+      // Convert hex to RGB
+      var rgb = parseInt(hex.slice(1), 16);
+      var r = (rgb >> 16) & 0xff;
+      var g = (rgb >> 8) & 0xff;
+      var b = rgb & 0xff;
+      
+      // Darken by reducing each channel
+      r = Math.max(0, Math.floor(r * (1 - percent / 100)));
+      g = Math.max(0, Math.floor(g * (1 - percent / 100)));
+      b = Math.max(0, Math.floor(b * (1 - percent / 100)));
+      
+      // Convert back to hex
+      return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    },
+
+    // NEW: Attach color picker change listeners
+    // NEW: Attach color picker change listeners
+    // NOTE: Custom enhancements (dual field names, link field, nav header) are in editorThemingView.custom.js
+    // The custom file provides: getCustomColorMap(), applyCascadeColorsCustom()
+    attachColorPreviewListeners: function() {
+      var self = this;
+      
+      
+      // Get colorMap from custom file if available, otherwise use basic map
+      var colorMap = this.getCustomColorMap ? this.getCustomColorMap() : {
+        'page': '.preview-page',
+        'article': '.preview-article',
+        'block': '.preview-block',
+        'component': '.preview-component',
+        'btn-color': '.preview-btn-primary',
+        'btn-color-inverted': '.preview-btn-primary',
+        'item-color': '.preview-btn-secondary',
+        'font-color': '.preview-component-body-text',
+        'heading-color': 'HEADING_CASCADE',
+        'instruction-color': '.preview-instruction',
+        'nav': 'NAV_CASCADE',
+        'nav-inverted': 'NAV_INVERTED_CASCADE',
+        '_primaryBrandColor': 'PRIMARY_CASCADE',
+        '_secondaryBrandColor': 'SECONDARY_CASCADE',
+        '_accentBrandColor': 'ACCENT_CASCADE'
+      };
+
+      // Font map for font-family properties
+      var fontMap = {
+        'heading-font-family': 'HEADING_FONT_CASCADE',
+        'paragraph-font-family': 'PARAGRAPH_FONT_CASCADE'
+      };
+      
+      // Handler function for color changes
+      var handleColorChange = function(fieldName, colorValue, source) {
+        
+        // Check if this field affects the preview
+        if (colorMap[fieldName]) {
+          if (colorMap[fieldName].indexOf('CASCADE') > -1) {
+            // Use custom cascade method if available, otherwise use default
+            if (self.applyCascadeColorsCustom) {
+              self.applyCascadeColorsCustom(fieldName, colorValue);
+            } else {
+              self.applyCascadeColors(fieldName, colorValue);
+            }
+          } else {
+            // Update preview color
+            self.updatePreviewColor(colorMap[fieldName], colorValue, fieldName);
+          }
+        }
+        
+        // Update accessibility display for this field (if method exists from custom file)
+        if (self.updateAccessibilityDisplay) {
+          self.updateAccessibilityDisplay(fieldName, colorValue);
+        }
+        
+        // If this is a background color, update all other fields' accessibility displays
+        if (self.updateAllAccessibilityDisplays && 
+            (fieldName === 'page' || fieldName === 'article' || fieldName === 'block' || fieldName === 'component' ||
+             fieldName === 'page-bg-color' || fieldName === 'article-bg-color' || 
+             fieldName === 'block-bg-color' || fieldName === 'component-bg-color')) {
+          self.updateAllAccessibilityDisplays();
+        }
+      };
+
+      // Use jQuery document-level delegation for maximum compatibility
+      $(document).on('input.themeEditor change.themeEditor keyup.themeEditor', 'input[type="text"]', function(e) {
+        var $input = $(this);
+        // Only process if this input is within our view
+        if (!self.$el.find($input).length) return;
+        
+        var fieldName = $input.attr('name');
+        var colorValue = $input.val();
+        
+        // Allow empty color values (for resetting to transparent)
+        if (fieldName !== undefined && fieldName !== null && fieldName !== '') {
+          handleColorChange(fieldName, colorValue, 'document-' + e.type);
+        }
+      });
+
+      // Listen to spectrum colorpicker events at document level
+      $(document).on('move.spectrum', function(e, color) {
+        var $input = $(e.target);
+        // Only process if this input is within our view
+        if (!self.$el.find($input).length) return;
+        
+        var fieldName = $input.attr('name');
+        var colorValue = color ? color.toHexString() : $input.val();
+        
+        if (fieldName && colorValue) {
+          handleColorChange(fieldName, colorValue, 'spectrum');
+        }
+      });
+
+      // Listen to custom Origin event for direct color changes (e.g., from reset button)
+      this.listenTo(Origin, 'editor:colorChanged', function(data) {
+        if (data && data.fieldName) {
+          handleColorChange(data.fieldName, data.colorValue, 'direct');
+        }
+      });
+
+      // Initialize preview with current values when fields become available
+      var initializePreview = function() {
+        
+        // Initialize color preview with current values
+        for (var fieldName in colorMap) {
+          var $input = self.$('input[name="' + fieldName + '"]');
+          if ($input.length && $input.val()) {
+            if (colorMap[fieldName].indexOf('CASCADE') > -1) {
+              self.applyCascadeColors(fieldName, $input.val());
+            } else {
+              self.updatePreviewColor(colorMap[fieldName], $input.val(), fieldName);
+            }
+          }
+        }
+
+        // Initialize font preview with current values
+        for (var fieldName in fontMap) {
+          var $select = self.$('select[name="' + fieldName + '"]');
+          if ($select.length && $select.val()) {
+            self.applyFontCascade(fieldName, $select.val());
+          }
+        }
+        
+        // Initialize accessibility displays for all color fields
+        setTimeout(function() {
+          console.log('Calling updateAllAccessibilityDisplays from init');
+          if (self.updateAllAccessibilityDisplays) {
+            self.updateAllAccessibilityDisplays();
+          }
+        }, 100);
+
+        // Fallback: Poll for color changes every 300ms
+        self.colorPreviewInterval = setInterval(function() {
+          for (var fieldName in colorMap) {
+            var $input = self.$('input[name="' + fieldName + '"]');
+            if ($input.length) {
+              var currentValue = $input.val();
+              var lastValue = $input.data('last-preview-value');
+              
+              if (currentValue && currentValue !== lastValue) {
+                if (colorMap[fieldName].indexOf('CASCADE') > -1) {
+                  self.applyCascadeColors(fieldName, currentValue);
+                } else {
+                  self.updatePreviewColor(colorMap[fieldName], currentValue, fieldName);
+                }
+                $input.data('last-preview-value', currentValue);
+                
+                // Also update accessibility on poll
+                handleColorChange(fieldName, currentValue, 'poll');
+              }
+            }
+          }
+
+          // Poll for font changes
+          for (var fieldName in fontMap) {
+            var $select = self.$('select[name="' + fieldName + '"]');
+            if ($select.length) {
+              var currentValue = $select.val();
+              var lastValue = $select.data('last-preview-value');
+              
+              if (currentValue && currentValue !== lastValue) {
+                self.applyFontCascade(fieldName, currentValue);
+                $select.data('last-preview-value', currentValue);
+              }
+            }
+          }
+        }, 300);
+      };
+      
+      // Initialize after a delay to allow first accordion to render
+      setTimeout(initializePreview, 1000);
+      
+      // NOTE: Accessibility checking is extended via editorThemingView.custom.js
+      // The custom file adds these methods: getRelativeLuminance, calculateContrastRatio,
+      // updateAccessibilityDisplay, updateAllAccessibilityDisplays, handleColorChangeWithAccessibility
+      // They are called above in handleColorChange via method inheritance
+    },
+
+    // NEW: Apply cascade colors for brand colors
+    // Helper function to darken a color by percentage
+    darkenColor: function(color, percentage) {
+      var rgb = this.hexToRgb(color);
+      if (!rgb) return color;
+      
+      var factor = 1 - (percentage / 100);
+      var r = Math.round(rgb.r * factor);
+      var g = Math.round(rgb.g * factor);
+      var b = Math.round(rgb.b * factor);
+      
+      return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    },
+    
+    // Helper function to mix two colors (for generating tints/shades)
+    mixColors: function(color1, color2, percentage) {
+      // Convert hex to RGB
+      var c1 = this.hexToRgb(color1);
+      var c2 = this.hexToRgb(color2);
+      
+      if (!c1 || !c2) return color2;
+      
+      // Mix colors based on percentage (percentage of color1)
+      var p = percentage / 100;
+      var r = Math.round(c1.r * p + c2.r * (1 - p));
+      var g = Math.round(c1.g * p + c2.g * (1 - p));
+      var b = Math.round(c1.b * p + c2.b * (1 - p));
+      
+      // Convert back to hex
+      return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    },
+    
+    // Helper function to convert hex to RGB
+    hexToRgb: function(hex) {
+      // Remove # if present
+      hex = hex.replace(/^#/, '');
+      
+      // Parse hex values
+      if (hex.length === 3) {
+        hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+      }
+      
+      var num = parseInt(hex, 16);
+      return {
+        r: (num >> 16) & 255,
+        g: (num >> 8) & 255,
+        b: num & 255
+      };
+    },
+    
+    applyCascadeColors: function(fieldName, color) {
+      if (!color || color === '') return;
+      
+      // Normalize hex color (remove # if present, then add it back)
+      if (color.indexOf('#') !== 0) {
+        color = '#' + color;
+      }
+      
+      switch(fieldName) {
+         case 'heading-color':
+          // Apply to all heading elements in preview
+          this.$('.preview-page-title, .preview-article-title, .preview-block-title, .preview-component-title').css('color', color);
+          break;
+          
+        case '_primaryBrandColor':
+          // Primary affects progress bar and buttons (both primary and secondary)
+          // Progress bar: fill color
+          this.$('.preview-progress-fill').css('background-color', color);
+          // Primary button: background color
+          this.$('.preview-btn-primary').css('background-color', color);
+          // Secondary button: border color (keeps light background, uses primary for border)
+          this.$('.preview-btn-secondary').css({
+            'border-color': color,
+            'border': '2px solid ' + color,
+            'color': color
+          });
+          // Links: use primary color
+          this.$('.preview-link a').css('color', color);
+          break;
+          
+        case '_secondaryBrandColor':
+          // Secondary affects items (MCQs, accordions, checkboxes, etc.)
+          // Mimic actual MCQ styling: darker shade for state container, lighter tint for item background
+          
+          // State container (left side) - use the actual color (item-color-inverted)
+          this.$('.checkbox-state-container').css('background-color', color);
+          
+          // Checkbox icon border and fill colors
+          this.$('.checkbox-icon').css({
+            'border-color': 'rgba(255, 255, 255, 0.6)',
+            'color': '#ffffff'
+          });
+          
+          // Checked checkbox - fill with white
+          this.$('.checkbox-icon.checked').css('background-color', '#ffffff');
+          
+          // Item background (text area) - use lighter tint (item-color)
+          // Generate lighter tint by mixing with white (95% white = very light tint)
+          var lightTint = this.mixColors('#ffffff', color, 95);
+          this.$('.preview-checkbox').css('background-color', lightTint);
+          
+          // Hover state for state container - use darker tint
+          var hoverTint = this.mixColors('#ffffff', color, 0); // Slightly darker
+          var darkerTint = this.darkenColor(color, 15);
+          // Store as CSS variable or data attribute for future use
+          break;
+          
+        case '_accentBrandColor':
+          // Accent affects table alternating rows (not in preview)
+          // Could add visual indicator later
+          break;
+      }
+    },
+
+    // NEW: Update preview element color
+    updatePreviewColor: function(selector, color, fieldName) {
+      var $element = this.$(selector);
+      if (!$element.length) return;
+
+      // If color is empty/transparent, remove the style to reset to default
+      if (!color || color === '') {
+        if (fieldName.indexOf('-inverted') > -1 || fieldName === 'font-color' || fieldName === 'instruction-color' || fieldName === 'link') {
+          $element.css('color', '');
+        } else {
+          $element.css('background-color', '');
+        }
+        return;
+      }
+
+      // Apply color based on field type
+      if (fieldName.indexOf('-inverted') > -1) {
+        // Inverted colors are text colors
+        $element.css('color', color);
+        } else if (fieldName === 'font-color' || fieldName === 'instruction-color' || fieldName === 'link') {
+        // Font, instruction, and link colors are text colors only
+        $element.css('color', color);
+      } else if (fieldName.indexOf('btn-') === 0 || fieldName.indexOf('item-') === 0) {
+        // Button and item colors are backgrounds
+        $element.css('background-color', color);
+      } else {
+        // Default to background color
+        $element.css('background-color', color);
+      }
+    },
+
+    // NEW: Apply font cascade to preview elements
+    applyFontCascade: function(fieldName, fontValue) {
+      if (!fontValue || fontValue === '') return;
+
+      var fontFamily = this.getFontFamilyForValue(fontValue);
+      if (!fontFamily) return;
+
+      switch(fieldName) {
+        case 'heading-font-family':
+          // Apply to all heading elements in preview
+          this.$('.preview-page-title, .preview-article-title, .preview-block-title, .preview-component-title').css('font-family', fontFamily);
+          break;
+
+        case 'paragraph-font-family':
+          // Apply to all paragraph/body text elements in preview
+          this.$('.preview-component-body-text, .preview-instruction, .checkbox-text, .preview-btn').css('font-family', fontFamily);
+          break;
+      }
+    },
+
+    // NEW: Get font-family CSS value for a font value
+    getFontFamilyForValue: function(value) {
+      var fontFamilyMap = {
+        'Lato': "'Lato', sans-serif",
+        'Georgia': "'Georgia', serif",
+        'Helvetica Neue': "'Helvetica Neue', sans-serif",
+        'Inter': "'Inter', sans-serif",
+        'Merriweather': "'Merriweather', serif",
+        'Montserrat': "'Montserrat', sans-serif",
+        'Open Sans': "'Open Sans', sans-serif",
+        'Poppins': "'Poppins', sans-serif",
+        'Roboto': "'Roboto', sans-serif",
+        'Source Sans Pro': "'Source Sans Pro', sans-serif"
+      };
+
+      return fontFamilyMap[value] || null;
+    },
+
+    // NEW: Render form fields into their respective accordion sections
+    renderAccordionFields: function() {
+      var self = this;
+      var selectedTheme = this.getSelectedTheme();
+      var themeProperties = selectedTheme.get('properties');
+      
+      if (!this.form || !this.form.fields) return;
+      
+      // Group fields by section
+      var fieldsBySection = {};
+      var unmatchedFields = [];
+      
+      for (var fieldKey in this.form.fields) {
+        var field = this.form.fields[fieldKey];
+        var sectionKey = this.findFieldSection(fieldKey, themeProperties.variables);
+        
+        if (sectionKey) {
+          if (!fieldsBySection[sectionKey]) {
+            fieldsBySection[sectionKey] = [];
+          }
+          fieldsBySection[sectionKey].push({ key: fieldKey, field: field });
+        } else {
+          // Collect unmatched fields with their keys for debugging
+          unmatchedFields.push({ key: fieldKey, field: field });
+        }
+      }
+      
+      // Log unmatched fields for debugging
+      if (unmatchedFields.length > 0) {
+        console.log('Unmatched theme fields:', unmatchedFields.map(function(item) { return item.key; }));
+      }
+      
+      // Render fields into their accordion sections
+      for (var sectionKey in fieldsBySection) {
+        var $sectionContainer = this.$('.section-properties[data-section="' + sectionKey + '"]');
+        var fields = fieldsBySection[sectionKey];
+        
+        fields.forEach(function(item) {
+          if (item.field) {
+            // Render the field if not already rendered
+            if (!item.field.$el) {
+              item.field.render();
+            }
+            
+            // Append the complete field element (includes label, reset button, help, and editor)
+            $sectionContainer.append(item.field.$el);
+          }
+        });
+      }
+      
+      // Render unmatched fields in a separate section at the bottom
+      if (unmatchedFields.length > 0) {
+        var $container = this.$('.theme-accordion-container');
+        var unmatchedHtml = '<div class="theme-section-accordion unmatched-fields" data-section="_unmatched">';
+        unmatchedHtml += '<div class="accordion-header open" data-section="_unmatched">';
+        unmatchedHtml += '<div class="header-left">';
+        unmatchedHtml += '<i class="icon fa fa-exclamation-triangle"></i>';
+        unmatchedHtml += '<div class="section-info">';
+        unmatchedHtml += '<h3 class="section-title">Additional Settings</h3>';
+        unmatchedHtml += '<p class="section-subtitle">Settings not categorized in sections above</p>';
+        unmatchedHtml += '</div>';
+        unmatchedHtml += '</div>';
+        unmatchedHtml += '<div class="header-right">';
+        unmatchedHtml += '<i class="chevron fa fa-chevron-down"></i>';
+        unmatchedHtml += '</div>';
+        unmatchedHtml += '</div>';
+        unmatchedHtml += '<div class="accordion-content expanded">';
+        unmatchedHtml += '<div class="content-inner">';
+        unmatchedHtml += '<div class="section-properties" data-section="_unmatched"></div>';
+        unmatchedHtml += '</div>';
+        unmatchedHtml += '</div>';
+        unmatchedHtml += '</div>';
+        
+        $container.append(unmatchedHtml);
+        
+        var $unmatchedContainer = this.$('.section-properties[data-section="_unmatched"]');
+        unmatchedFields.forEach(function(item) {
+          if (item.field) {
+            // Render the field if not already rendered
+            if (!item.field.$el) {
+              item.field.render();
+            }
+            // Append the complete field element
+            $unmatchedContainer.append(item.field.$el);
+          }
+        });
+      }
+    },
+
+    // NEW: Find which section a field belongs to
+    findFieldSection: function(fieldKey, variables) {
+      for (var sectionKey in variables) {
+        var section = variables[sectionKey];
+        if (section && section.type === 'object' && section.properties) {
+          if (section.properties[fieldKey]) {
+            return sectionKey;
+          }
+        }
+      }
+      return null;
+    },
+
+    // NEW: Handle accordion header clicks
+    onAccordionToggle: function(event) {
+      var $header = $(event.currentTarget);
+      var $section = $header.closest('.theme-section-accordion');
+      var $content = $section.find('.accordion-content');
+      var sectionKey = $section.data('section');
+      
+      // Toggle open/closed
+      $header.toggleClass('open');
+      $content.toggleClass('expanded collapsed');
+      
+      // Save state to localStorage
+      var isOpen = $header.hasClass('open');
+      localStorage.setItem('accordion-' + sectionKey, isOpen);
+    },
+
+    // ORIGINAL METHODS BELOW (unchanged)
 
     removeForm: function() {
       this.$('.form-container').empty();
@@ -151,7 +856,6 @@ define(function(require) {
 
       // disable if no options
       select.attr('disabled', this.themes.models.length === 0);
-
       // restore the previous value
       if (oldVal) return select.val(oldVal);
 
@@ -213,7 +917,6 @@ define(function(require) {
         return;
       }
       var inputType = fieldView.schema.inputType.type || fieldView.schema.inputType;
-
       // Colour picker
       if (inputType === 'ColourPicker') {
         fieldView.setValue(value);
@@ -227,7 +930,7 @@ define(function(require) {
         $('div[data-editor-id*="' + key + '"]').append(fieldView.editor.$el);
         return;
       }
-      
+
       // Lists / arrays
       if (inputType === "List"){
         fieldView.setValue(value);
@@ -242,7 +945,7 @@ define(function(require) {
   
       // Default
       fieldView.editor.$el.val(value.toString())
-      
+
     },
 
     showPresetEdit: function(event) {
@@ -272,11 +975,6 @@ define(function(require) {
       });
     },
 
-    /**
-    * Data persistence
-    */
-
-    // checks form for errors, returns boolean
     validateForm: function() {
       var selectedTheme = this.getSelectedTheme();
 
@@ -340,9 +1038,8 @@ define(function(require) {
       var selectedPreset = this.getSelectedPreset(false);
       var selectedPresetId = null;
       if (selectedPreset) selectedPresetId = selectedPreset.get('_id');
-
       $.post('api/themepreset/' + selectedPresetId + '/makeitso/' + this.model.get('_courseId'))
-      .error(this.onSaveError.bind(this))
+        .error(this.onSaveError.bind(this))
       .done(callback.bind(this));
     },
 
@@ -365,9 +1062,9 @@ define(function(require) {
       for (var key in properties) {
         // Check for nested properties
         if (typeof properties[key].properties !== 'undefined') {
-            data[key] = {};
+          data[key] = {};
             for (var innerKey in properties[key].properties) {
-            data[key][innerKey] = attributes[innerKey];
+              data[key][innerKey] = attributes[innerKey];
           }
         } else {
           data[key] = attributes[key];
@@ -394,7 +1091,6 @@ define(function(require) {
       return this.themes.findWhere({ 'name': this.model.get('_theme') });
     },
 
-    // param used to only return the val() (and ignore model data)
     getSelectedPreset: function(includeCached) {
       var storedId = this.getPresetSelection();
       var presetId = $('select#preset', this.$el).val();
@@ -464,8 +1160,6 @@ define(function(require) {
 
     updateRestorePresetButton: function(shouldShow) {
       if (typeof shouldShow === 'undefined') {
-        // If flag was not passed in then compare default settings with current settings
-        // and show restore button if there are differences
         var currentSettings = this.flattenNestedProperties(this.getCurrentSettings());
         var preset = this.getSelectedPreset();
         var baseSettings = this.flattenNestedProperties((preset) ? preset.get('properties') : this.getDefaultThemeSettings());
@@ -482,10 +1176,6 @@ define(function(require) {
     setPresetSelection: function(id) {
       this.settings.presetSelection = id;
     },
-
-    /**
-    * Event handling
-    */
 
     onEditPreset: function(data) {
       var model = this.presets.findWhere({ displayName: data.oldValue });
@@ -579,10 +1269,79 @@ define(function(require) {
     onSaveSuccess: function() {
       Origin.trigger('editingOverlay:views:hide');
       Origin.trigger('editor:refreshData', this.navigateBack.bind(this), this);
+    },
+
+    // NEW: Open preview modal
+    openPreviewModal: function(e) {
+      e.preventDefault();
+      var self = this;
+      var $modal = this.$('.preview-modal');
+      var $modalBody = $modal.find('.preview-modal-body');
+      var $preview = this.$('.theme-color-preview');
+      
+      // Move the preview into modal (not clone, to preserve all styles and avoid duplication)
+      $preview.data('original-parent', $preview.parent());
+      $modalBody.append($preview);
+      
+      // Add modal-active class to preview for any modal-specific styling
+      $preview.addClass('preview-in-modal');
+      
+      // Show modal with fade-in effect
+      $modal.fadeIn(200);
+      
+      // Add body class to prevent scrolling
+      $('body').addClass('preview-modal-open');
+      
+      // Bind ESC key to close modal
+      $(document).on('keydown.previewModal', function(e) {
+        if (e.keyCode === 27) { // ESC key
+          self.closePreviewModal(e);
+        }
+      });
+    },
+
+    // NEW: Close preview modal
+    closePreviewModal: function(e) {
+      e.preventDefault();
+      var $modal = this.$('.preview-modal');
+      var $preview = this.$('.theme-color-preview');
+      var $originalParent = $preview.data('original-parent');
+      
+      // Move preview back to its original location
+      if ($originalParent && $originalParent.length) {
+        $originalParent.append($preview);
+      }
+      
+      // Remove modal-active class
+      $preview.removeClass('preview-in-modal');
+      
+      // Hide modal with fade-out effect
+      $modal.fadeOut(200);
+      
+      // Remove body class
+      $('body').removeClass('preview-modal-open');
+      
+      // Unbind ESC key handler
+      $(document).off('keydown.previewModal');
     }
   }, {
     template: 'editorTheming'
   });
 
+  // Try to load custom extension if available
+  try {
+    var customExtension = require('./editorThemingView.custom');
+    if (typeof customExtension === 'function') {
+      // Apply custom extension to ThemingView
+      ThemingView = customExtension(ThemingView);
+    }
+  } catch(e) {
+    // Custom extension not found or error loading, continue with original
+    console.log('Custom theming extension not loaded:', e.message);
+  }
+
   return ThemingView;
+
 });
+
+

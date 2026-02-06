@@ -1,0 +1,97 @@
+<div class="theme-color-preview">
+  <div class="preview-header-bar">
+    <h3 class="preview-title">⚡Live Preview</h3>
+    <div class="preview-controls">
+      <button class="preview-high-contrast-btn" title="Toggle High Contrast Mode" data-contrast-active="false">
+        <i class="fa fa-moon-o"></i>
+      </button>
+    <button class="preview-enlarge-btn" title="Enlarge preview">
+      <i class="fa fa-expand"></i>
+    </button>
+  </div>
+   </div>
+  
+  <div class="preview-container">
+    <div class="preview-page" data-preview="page">
+      
+      <div class="preview-page-header">
+        <div class="preview-header-left">
+          <div class="preview-icon preview-back-btn">
+            <i class="fa fa-chevron-left"></i>
+          </div>
+          <div class="preview-icon preview-hamburger">
+            <i class="fa fa-bars"></i >
+          </div>
+        </div>
+        <span class="preview-breadcrumb">New Course Title / New Menu/Page Title</span>
+        <div class="preview-icon preview-search">
+          <i class="fa fa-search"></i >
+        </div>
+      </div>
+
+      {{! Progress bar (linked to primary brand color) - Page level progress }}
+      <div class="preview-progress-bar" data-preview="progress-bar">
+        <div class="preview-progress-fill"></div>
+      </div>
+      
+      <h4 class="preview-page-title">New Menu/Page Title</h4>
+      
+      <div class="preview-article" data-preview="article">
+        <h5 class="preview-article-title">New Article Title</h5>
+        
+        <div class="preview-block" data-preview="block">
+          <h6 class="preview-block-title">New Block Title</h6>
+          
+          <div class="preview-component" data-preview="component">
+            <h6 class="preview-component-title">New Component Title</h6>
+            <p class="preview-component-body-text" data-preview="instruction">Body text</p>
+            <p class="preview-link"> <a href="#">This is a sample link</a></p>
+            <p class="preview-instruction" data-preview="instruction">Choose one option then select Submit.</p>
+            
+            <div class="preview-items">
+              <label class="preview-checkbox">
+                <div class="checkbox-state-container">
+                  <span class="checkbox-icon-wrapper">
+                    <span class="checkbox-icon is-checkbox checked"></span>
+                  </span>
+                </div>
+                <span class="checkbox-text">Correct</span>
+              </label>
+              <label class="preview-checkbox">
+                <div class="checkbox-state-container">
+                  <span class="checkbox-icon-wrapper">
+                    <span class="checkbox-icon is-checkbox"></span>
+                  </span>
+                </div>
+                <span class="checkbox-text">Incorrect</span>
+              </label>
+              <button class="preview-btn preview-btn-primary submit-btn" data-preview="primary-btn">Submit</button>
+            </div>
+            
+            <div class="preview-buttons">
+              <button class="preview-btn preview-btn-secondary" data-preview="secondary-btn">Previous</button>
+              <button class="preview-btn preview-btn-primary" data-preview="primary-btn">Next</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <span class="preview-info"><strong>Info:</strong> Preview colours may vary slightly between the live preview and final rendering when background colours are used. Text colours are adjusted during course preview to ensure proper contrast and accessibility compliance.</span>
+  </div>
+</div>
+
+{{! Modal for enlarged preview }}
+<div class="preview-modal" style="display: none;">
+  <div class="preview-modal-overlay"></div>
+  <div class="preview-modal-content">
+    <div class="preview-modal-header">
+      <h3 class="preview-modal-title">Quick Preview</h3>
+      <button class="preview-modal-close" title="Close">
+        <i class="fa fa-times"></i>
+      </button>
+    </div>
+    <div class="preview-modal-body">
+      {{! Preview content will be cloned here }}
+    </div>
+  </div>
+</div>
