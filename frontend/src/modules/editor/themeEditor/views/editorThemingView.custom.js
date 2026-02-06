@@ -229,27 +229,20 @@ define(function(require) {
         var self = this;
         
         // Skip if color is not valid
-        if (!color || color === '') return;
+        if (!color || color === '') {
+          return;
+        }
         
         // Normalize color (add # if missing)
         if (color && color.indexOf('#') !== 0) {
           color = '#' + color;
         }
         
-        // Get background colors to test against
-        var backgrounds = {
-          'Page Background': this.$('input[name="page-bg-color"]').val() || this.$('input[name="page"]').val(),
-          'Article Background': this.$('input[name="article-bg-color"]').val() || this.$('input[name="article"]').val(),
-          'Block Background': this.$('input[name="block-bg-color"]').val() || this.$('input[name="block"]').val(),
-          'Component Background': this.$('input[name="component-bg-color"]').val() || this.$('input[name="component"]').val()
-        };
+        // Determine if this is a background or font color field, and get relevant test pairs
+        var testsToRun = this.getAccessibilityTestPairs(fieldName, color);
         
-        // Normalize background colors
-        for (var bgName in backgrounds) {
-          var bgColor = backgrounds[bgName];
-          if (bgColor && bgColor.indexOf('#') !== 0) {
-            backgrounds[bgName] = '#' + bgColor;
-          }
+        if (testsToRun.length === 0) {
+          return;
         }
         
         // Find the field container
@@ -261,21 +254,23 @@ define(function(require) {
           $field = this.$('[data-editor-id]').has('input[name="' + fieldName + '"]').first();
         }
         
-        if (!$field.length) return;
+        if (!$field.length) {
+          return;
+        }
         
         // Remove existing accessibility display
         $field.find('.accessibility-results').remove();
         
         // Create results HTML
         var resultsHtml = '<div class="accessibility-results">';
-        var hasAnyBackground = false;
+        var hasAnyTest = false;
         
-        for (var bgName in backgrounds) {
-          var bgColor = backgrounds[bgName];
-          if (!bgColor || bgColor === '') continue;
+        for (var i = 0; i < testsToRun.length; i++) {
+          var test = testsToRun[i];
+          if (!test.color1 || !test.color2 || test.color1 === '' || test.color2 === '') continue;
           
-          hasAnyBackground = true;
-          var ratio = self.calculateContrastRatio(color, bgColor);
+          hasAnyTest = true;
+          var ratio = self.calculateContrastRatio(test.color1, test.color2);
           
           if (ratio !== null) {
             var passes = ratio >= 4.5;
@@ -283,7 +278,7 @@ define(function(require) {
             var statusIcon = passes ? '✓' : '✗';
             
             resultsHtml += '<div class="contrast-test ' + statusClass + '">';
-            resultsHtml += '<span class="test-label">' + bgName + ':</span> ';
+            resultsHtml += '<span class="test-label">' + test.label + ':</span> ';
             resultsHtml += '<span class="contrast-ratio">' + ratio.toFixed(2) + ':1</span> ';
             resultsHtml += '<span class="status-badge">(AA ' + statusIcon + ')</span>';
             resultsHtml += '</div>';
@@ -292,9 +287,434 @@ define(function(require) {
         
         resultsHtml += '</div>';
         
-        if (hasAnyBackground) {
+        if (hasAnyTest) {
+          // Remove any existing results for this field
+          $field.find('.accessibility-results').remove();
+          
+          // Append to field (will use fixed positioning via JS)
           $field.append(resultsHtml);
+          var $results = $field.find('.accessibility-results');
+          
+          // Add fixed positioning class and setup positioning
+          $results.addClass('accessibility-results--portal');
+          this.setupPortalPositioning($results, $field);
         }
+      },
+      
+      // Setup portal-style positioning (stays within field DOM but uses fixed positioning)
+      setupPortalPositioning: function($results, $field) {
+        if (!$results.length) return;
+        
+        var updatePosition = function() {
+          
+          // Find the best element to position near - look for visible color swatch/button
+          var $target = null;
+          
+          // Try different selectors in order of preference
+          var selectors = [
+            'button.btn-color', // Color picker button
+            '.input-group-addon', // Bootstrap addon
+            'span[style*="background"]', // Inline styled color swatch
+            '.color-preview', // Custom color preview
+            'input[type="text"]', // Text input
+            'input' // Any input
+          ];
+          
+          for (var i = 0; i < selectors.length; i++) {
+            $target = $field.find(selectors[i]).first();
+            if ($target.length && $target[0].getBoundingClientRect().width > 0) {
+              break;
+            }
+          }
+          
+          // Last resort: use the field label or field itself
+          if (!$target || !$target.length || $target[0].getBoundingClientRect().width === 0) {
+            $target = $field.find('label').first();
+            if (!$target.length) {
+              $target = $field;
+            }
+          }
+          
+          var targetRect = $target[0].getBoundingClientRect();
+          var viewportHeight = window.innerHeight;
+          var viewportWidth = window.innerWidth;
+          
+          // Get results dimensions
+          var resultsHeight = $results.outerHeight();
+          var resultsWidth = Math.min(Math.max(targetRect.width, 280), 340);
+          
+          // Calculate position - always position below with significant offset to avoid blocking picker
+          var topPos = targetRect.bottom + 50; // 50px gap below to ensure no overlap
+          var leftPos = targetRect.left;
+          
+          // Check if fits below
+          if (topPos + resultsHeight > viewportHeight - 10) {
+            // Doesn't fit below, try above with significant offset
+            var topAbove = targetRect.top - resultsHeight - 50;
+            if (topAbove > 10) {
+              topPos = topAbove;
+            } else {
+              // Try to the right if neither above nor below fits
+              topPos = targetRect.top;
+              leftPos = targetRect.right + 50;
+              
+              // If doesn't fit right either, force position below anyway (best option)
+              if (leftPos + resultsWidth > viewportWidth - 10) {
+                topPos = targetRect.bottom + 50;
+                leftPos = targetRect.left;
+                
+                // Allow scrolling if needed rather than overlap
+                if (topPos + resultsHeight > viewportHeight) {
+                  topPos = Math.max(targetRect.bottom + 50, 10);
+                }
+              }
+            }
+          }
+          
+          // Final adjustment for horizontal overflow
+          if (leftPos + resultsWidth > viewportWidth - 10) {
+            leftPos = Math.max(10, viewportWidth - resultsWidth - 10);
+          }
+          
+          // Apply fixed positioning
+          $results.css({
+            position: 'fixed',
+            left: leftPos + 'px',
+            top: topPos + 'px',
+            width: resultsWidth + 'px',
+            zIndex: 999999
+          });
+        };
+        
+        // Update position on field hover
+        $field.on('mouseenter.accessibility', updatePosition);
+        
+        // Hide results when color picker is clicked/opened
+        $field.on('click.accessibility', 'input, button, .input-group-addon', function() {
+          $results.css({
+            opacity: 0,
+            visibility: 'hidden',
+            pointerEvents: 'none'
+          });
+        });
+        
+        // Hide when spectrum color picker opens
+        $field.find('input').on('show.spectrum', function() {
+          $results.css({
+            opacity: 0,
+            visibility: 'hidden',
+            pointerEvents: 'none'
+          });
+        });
+        
+        // Show again when spectrum closes (optional - remove if you don't want this)
+        $field.find('input').on('hide.spectrum', function() {
+          // Results will show again on next hover due to CSS
+        });
+        
+        // Also update on scroll/resize
+        $(window).on('scroll.accessibility resize.accessibility', updatePosition);
+        
+        // Initial position
+        updatePosition();
+      },
+      
+      // Get relevant accessibility test pairs based on field type
+      getAccessibilityTestPairs: function(fieldName, color) {
+        var self = this;
+        var tests = [];
+        
+        // Normalize color
+        var normalizedColor = color;
+        if (normalizedColor && normalizedColor.indexOf('#') !== 0) {
+          normalizedColor = '#' + normalizedColor;
+        }
+        
+        // Helper to get and normalize a color value
+        var getColor = function(name) {
+          var val = self.$('input[name="' + name + '"]').val();
+          if (!val) return null;
+          return val.indexOf('#') === 0 ? val : '#' + val;
+        };
+        
+        // Helper to capitalize section name for labels
+        var capitalize = function(str) {
+          return str.charAt(0).toUpperCase() + str.slice(1);
+        };
+        
+        // Special case mappings for specific fields
+        var specialCases = {
+          // Navigation
+          'nav': function() {
+            var navForeground = getColor('nav-foreground') || getColor('nav-font-color');
+            if (navForeground) {
+              tests.push({ label: 'Navigation Background vs Foreground', color1: normalizedColor, color2: navForeground });
+            }
+          },
+          'nav-progress': function() {
+            var pageBg = getColor('page-bg-color') || getColor('page');
+            if (pageBg) {
+              tests.push({ label: 'Navigation Progress vs Page Background', color1: normalizedColor, color2: pageBg });
+            }
+          },
+          
+          // Menu
+          'menu-header-background-color': function() {
+            var menuForeground = getColor('menu-foreground') || getColor('menu-font-color');
+            if (menuForeground) {
+              tests.push({ label: 'Menu Header Background vs Foreground', color1: normalizedColor, color2: menuForeground });
+            }
+          },
+          'menu-item': function() {
+            // Test against menu-specific foreground
+            var menuForeground = getColor('menu-foreground') || getColor('menu-font-color');
+            if (menuForeground) {
+              tests.push({ label: 'Menu Item vs Menu Foreground', color1: normalizedColor, color2: menuForeground });
+            }
+            
+            // Test against global font color
+            var fontColor = getColor('font-color');
+            if (fontColor) {
+              tests.push({ label: 'Menu Item vs Font Colour', color1: normalizedColor, color2: fontColor });
+            }
+            
+            // Test against menu header background
+            var menuHeaderBg = getColor('menu-header-background-color');
+            if (menuHeaderBg) {
+              tests.push({ label: 'Menu Item vs Menu Header Background', color1: normalizedColor, color2: menuHeaderBg });
+            }
+          },
+          'menu-item-progress': function() {
+            // Test against menu item background
+            var menuItemBg = getColor('menu-item');
+            if (menuItemBg) {
+              tests.push({ label: 'Menu Item Progress vs Menu Item', color1: normalizedColor, color2: menuItemBg });
+            }
+            
+            // Test against menu-specific foreground
+            var menuForeground = getColor('menu-foreground') || getColor('menu-font-color');
+            if (menuForeground) {
+              tests.push({ label: 'Menu Item Progress vs Menu Foreground', color1: normalizedColor, color2: menuForeground });
+            }
+          },
+          
+          // Validation - TEMPORARILY DISABLED
+          // 'validation-success': function() {
+          //   var foreground = getColor('font-color');
+          //   if (foreground) {
+          //     tests.push({ label: 'Validation Success vs Foreground', color1: normalizedColor, color2: foreground });
+          //   }
+          // },
+          // 'validation-error': function() {
+          //   var foreground = getColor('font-color');
+          //   if (foreground) {
+          //     tests.push({ label: 'Validation Error vs Foreground', color1: normalizedColor, color2: foreground });
+          //   }
+          // },
+          
+          // Progress
+          'progress-fill': function() {
+            var componentBg = getColor('component-bg-color') || getColor('component');
+            if (componentBg) {
+              tests.push({ label: 'Progress Fill vs Component Background', color1: normalizedColor, color2: componentBg });
+            }
+          },
+          'progress-background': function() {
+            var componentBg = getColor('component-bg-color') || getColor('component');
+            if (componentBg) {
+              tests.push({ label: 'Progress Background vs Component Background', color1: normalizedColor, color2: componentBg });
+            }
+          },
+          'progress-border': function() {
+            var progressBg = getColor('progress-background');
+            if (progressBg) {
+              tests.push({ label: 'Progress Border vs Progress Background', color1: normalizedColor, color2: progressBg });
+            }
+          },
+          
+          // Notify
+          'notify': function() {
+            var notifyForeground = getColor('notify-foreground') || getColor('notify-font-color') || getColor('font-color');
+            if (notifyForeground) {
+              tests.push({ label: 'Notify Background vs Foreground', color1: normalizedColor, color2: notifyForeground });
+            }
+          },
+          
+          // Drawer
+          'drawer': function() {
+            var drawerForeground = getColor('drawer-foreground') || getColor('drawer-font-color') || getColor('font-color');
+            if (drawerForeground) {
+              tests.push({ label: 'Drawer Background vs Foreground', color1: normalizedColor, color2: drawerForeground });
+            }
+          }
+        };
+        
+        // Check if this field has a special case handler
+        if (specialCases[fieldName]) {
+          specialCases[fieldName]();
+          if (tests.length > 0) return tests; // Return early if special case handled it
+        }
+        
+        // Detect if this is a background color field
+        var isBackgroundField = fieldName.indexOf('-bg-color') > -1 || 
+                               fieldName.indexOf('background') > -1 ||
+                               ['page', 'article', 'block', 'component'].indexOf(fieldName) > -1;
+        
+        // Detect if this is a font/text color field
+        var isFontField = fieldName.indexOf('-font-color') > -1 || 
+                         fieldName.indexOf('font-color') > -1 ||
+                         fieldName.indexOf('heading-color') > -1 ||
+                         fieldName.indexOf('instruction-color') > -1 ||
+                         fieldName.indexOf('link') > -1 ||
+                         fieldName.indexOf('text') > -1;
+        
+        // Extract section name from field name (e.g., "nav-bg-color" -> "nav", "drawer-font-color" -> "drawer")
+        var getSectionName = function(field) {
+          // Handle special cases first
+          if (field === 'page' || field === 'article' || field === 'block' || field === 'component') {
+            return field;
+          }
+          
+          // Extract section from pattern like "section-bg-color" or "section-font-color"
+          var matches = field.match(/^([a-z]+)(?:-bg-color|-background|-font-color|-text|-heading-color)?$/);
+          return matches ? matches[1] : null;
+        };
+        
+        var currentSection = getSectionName(fieldName);
+        
+        // If this is a background color field
+        if (isBackgroundField && currentSection) {
+          // For main background fields (page, article, block, component), test against multiple text colors
+          var isMainBackground = ['page', 'article', 'block', 'component'].indexOf(currentSection) > -1;
+          
+          if (isMainBackground) {
+            // Test against body text color
+            var fontColor = getColor('font-color');
+            if (fontColor) {
+              tests.push({ 
+                label: 'Body Text on ' + capitalize(currentSection) + ' Background', 
+                color1: normalizedColor, 
+                color2: fontColor 
+              });
+            }
+            
+            // Test against heading color
+            var headingColor = getColor('heading-color');
+            if (headingColor) {
+              tests.push({ 
+                label: 'Heading Text on ' + capitalize(currentSection) + ' Background', 
+                color1: normalizedColor, 
+                color2: headingColor 
+              });
+            }
+            
+            // Test against instruction color
+            var instructionColor = getColor('instruction-color');
+            if (instructionColor) {
+              tests.push({ 
+                label: 'Instruction Text on ' + capitalize(currentSection) + ' Background', 
+                color1: normalizedColor, 
+                color2: instructionColor 
+              });
+            }
+          } else {
+            // For other section-specific backgrounds, just test against their font color
+            var fontFields = [
+              currentSection + '-font-color',
+              currentSection + '-text',
+              currentSection + '-heading-color',
+              'font-color'  // fallback to global font color
+            ];
+            
+            for (var i = 0; i < fontFields.length; i++) {
+              var sectionFontColor = getColor(fontFields[i]);
+              if (sectionFontColor) {
+                var label = capitalize(currentSection) + ' Text on ' + capitalize(currentSection) + ' Background';
+                tests.push({ label: label, color1: normalizedColor, color2: sectionFontColor });
+                break; // Only use the first matching font color
+              }
+            }
+          }
+        }
+        
+        // If this is a font/text color field
+        else if (isFontField) {
+          // Special case for link color - check against page, article, block, and component backgrounds
+          if (fieldName.indexOf('link') > -1) {
+            // Test against page background
+            var pageBg = getColor('page-bg-color') || getColor('page');
+            if (pageBg) {
+              tests.push({ 
+                label: 'Link Text on Page Background', 
+                color1: normalizedColor, 
+                color2: pageBg 
+              });
+            }
+            
+            // Test against article background
+            var articleBg = getColor('article-bg-color') || getColor('article');
+            if (articleBg) {
+              tests.push({ 
+                label: 'Link Text on Article Background', 
+                color1: normalizedColor, 
+                color2: articleBg 
+              });
+            }
+            
+            // Test against block background
+            var blockBg = getColor('block-bg-color') || getColor('block');
+            if (blockBg) {
+              tests.push({ 
+                label: 'Link Text on Block Background', 
+                color1: normalizedColor, 
+                color2: blockBg 
+              });
+            }
+            
+            // Test against component background
+            var componentBg = getColor('component-bg-color') || getColor('component');
+            if (componentBg) {
+              tests.push({ 
+                label: 'Link Text on Component Background', 
+                color1: normalizedColor, 
+                color2: componentBg 
+              });
+            }
+          }
+          // Check if it's a global font color (affects multiple sections)
+          else if (fieldName === 'font-color' || 
+                   fieldName === 'heading-color' || 
+                   fieldName === 'instruction-color') {
+            // Test against all major background colors
+            var globalBgSections = ['page', 'article', 'block', 'component'];
+            for (var j = 0; j < globalBgSections.length; j++) {
+              var section = globalBgSections[j];
+              var bgColor = getColor(section + '-bg-color') || getColor(section);
+              if (bgColor) {
+                var globalLabel = 'Text on ' + capitalize(section) + ' Background';
+                tests.push({ label: globalLabel, color1: normalizedColor, color2: bgColor });
+              }
+            }
+          } else if (currentSection) {
+            // Section-specific font color - check against its own background
+            var bgFields = [
+              currentSection + '-bg-color',
+              currentSection + '-background',
+              currentSection
+            ];
+            
+            for (var k = 0; k < bgFields.length; k++) {
+              var sectionBgColor = getColor(bgFields[k]);
+              if (sectionBgColor) {
+                var sectionLabel = capitalize(currentSection) + ' Text on ' + capitalize(currentSection) + ' Background';
+                tests.push({ label: sectionLabel, color1: normalizedColor, color2: sectionBgColor });
+                break; // Only use the first matching background color
+              }
+            }
+          }
+        }
+        
+        return tests;
       },
       
       // Update all accessibility displays
@@ -328,11 +748,18 @@ define(function(require) {
         // Update accessibility display
         self.updateAccessibilityDisplay(fieldName, colorValue);
         
-        // If background color changed, update all displays
-        if (fieldName === 'page' || fieldName === 'article' || fieldName === 'block' || fieldName === 'component' ||
-            fieldName === 'page-bg-color' || fieldName === 'article-bg-color' || 
-            fieldName === 'block-bg-color' || fieldName === 'component-bg-color') {
-          self.updateAllAccessibilityDisplays();
+        // If any background or global font color changed, update all displays
+        var isBackgroundOrGlobalFont = fieldName.indexOf('-bg-color') > -1 || 
+                                       fieldName.indexOf('background') > -1 ||
+                                       fieldName === 'page' || fieldName === 'article' || 
+                                       fieldName === 'block' || fieldName === 'component' ||
+                                       fieldName === 'font-color' || fieldName === 'heading-color' || 
+                                       fieldName === 'instruction-color';
+        
+        if (isBackgroundOrGlobalFont) {
+          setTimeout(function() {
+            self.updateAllAccessibilityDisplays();
+          }, 100);
         }
       },
       
@@ -465,7 +892,7 @@ define(function(require) {
           return;
         }
 
-        // Initialize visitedFields set to prevent circular references
+         // Initialize visitedFields set to prevent circular references
         if (!visitedFields) {
           visitedFields = new Set();
         }
@@ -509,8 +936,7 @@ define(function(require) {
           if (this.form && this.form.model) {
             this.form.model.set(targetFieldName, newValue);
           }
-
-          // RECURSIVE PROPAGATION: Check if this linked field also has linkedProperties
+           // RECURSIVE PROPAGATION: Check if this linked field also has linkedProperties
           var targetFieldSchema = this.getFieldSchema(targetFieldName);
           if (targetFieldSchema && targetFieldSchema.linkedProperties && targetFieldSchema.linkedProperties.length > 0) {
             // Recursively update the grandchildren properties
@@ -543,6 +969,16 @@ define(function(require) {
         }
         
         return this.form.schema[fieldName] || null;
+      },
+      
+      // Cleanup accessibility results on view removal
+      remove: function() {
+        // Clean up event handlers
+        $(window).off('.accessibility');
+        this.$('.field').off('.accessibility');
+        
+        // Call parent remove
+        return Backbone.View.prototype.remove.apply(this, arguments);
       }
       
     });

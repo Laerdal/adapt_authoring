@@ -1069,6 +1069,18 @@ body.preview-modal-open {
   .preview-btn-secondary {
     color: #fff !important;
   }
+
+  // Info text box
+  .preview-info,
+  span.preview-info {
+    background: #000 !important;
+    color: #fff !important;
+    border-color: #fff !important;
+
+    strong {
+      color: #fff !important;
+    }
+  }
 }
 
 
@@ -1135,11 +1147,7 @@ body.preview-modal-open {
 
 // Accessibility Results Display
 .accessibility-results {
-  display: none; // TODO: hidden until fixed
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
+  position: fixed; // Positioned by JS to escape accordion overflow
   margin-top: 4px;
   padding: 12px;
   background-color: #ffffff;
@@ -1148,7 +1156,7 @@ body.preview-modal-open {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   font-size: 13px;
   line-height: 1.6;
-  z-index: 1000;
+  z-index: 999999;
   max-height: 200px;
   overflow-y: auto;
   opacity: 0;
