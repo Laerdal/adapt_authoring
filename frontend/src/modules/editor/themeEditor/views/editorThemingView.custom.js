@@ -44,6 +44,9 @@ define(function(require) {
         // Add our custom font preview functionality
         this.setupFontPreview();
         
+        // Add heading size calculator
+        this.setupHeadingSizeCalculator();
+        
         return result;
       },
       
@@ -83,6 +86,9 @@ define(function(require) {
         // Update font preview for any changed font selects
         this.updateFontPreviewOnChange();
         
+        // Update heading size calculations
+        this.updateHeadingSizeCalculations();
+        
         // Handle linkedProperties if this field has them
         if (event && event.target) {
           var $target = $(event.target);
@@ -94,6 +100,119 @@ define(function(require) {
         }
         
         return result;
+      },
+      
+      // ========================================
+      // HEADING SIZE AUTO-CALCULATION
+      // ========================================
+      
+      // Setup heading size calculator
+      setupHeadingSizeCalculator: function() {
+        var self = this;
+        
+        // Listen for changes to page-heading-font-size select
+        this.$el.on('change', 'select[name="page-heading-font-size"]', function() {
+          self.calculateAndDisplayHeadingSizes($(this));
+        });
+        
+        // Apply initial calculation
+        var $select = this.$('select[name="page-heading-font-size"]');
+        if ($select.length) {
+          // Delay to ensure DOM is ready
+          _.defer(function() {
+            self.calculateAndDisplayHeadingSizes($select);
+          });
+        }
+      },
+      
+      // Calculate and display heading sizes based on selected value
+      calculateAndDisplayHeadingSizes: function($select) {
+        var selectedValue = $select.val();
+        
+        if (!selectedValue) return;
+        
+        // Parse the rem value (e.g., "3rem" -> 3)
+        var baseSize = parseFloat(selectedValue);
+        if (isNaN(baseSize)) return;
+        
+        // Define ratios for calculating heading sizes
+        var ratios = {
+          h1: 1,                    // The selected value itself
+          h2: 0.8333333333,         // 83.33% of h1
+          h3: 0.6666666667,         // 66.67% of h1
+          h4: 0.5,                  // 50% of h1
+          h5: 0.4166666667,         // 41.67% of h1
+          p: 0.3333333333           // 33.33% of h1 (paragraph)
+        };
+        
+        // Helper function to format numbers cleanly (remove trailing zeros) and add pixel values
+        var formatSize = function(value) {
+          var formatted = (value).toFixed(2);
+          // Remove trailing zeros and decimal point if not needed
+          formatted = formatted.replace(/\.?0+$/, '');
+          
+          // Convert rem to pixels (1rem = 16px) - rounded for cleaner display
+          var pixels = Math.round(value * 16);
+          
+          return formatted + 'rem (' + pixels + 'px)';
+        };
+        
+        // Calculate sizes
+        var calculatedSizes = {
+          h1: formatSize(baseSize * ratios.h1),
+          h2: formatSize(baseSize * ratios.h2),
+          h3: formatSize(baseSize * ratios.h3),
+          h4: formatSize(baseSize * ratios.h4),
+          h5: formatSize(baseSize * ratios.h5),
+          p: formatSize(baseSize * ratios.p)
+        };
+        
+        // Display the calculated values
+        this.displayHeadingSizeInfo($select, calculatedSizes);
+      },
+      
+      // Display heading size information below the select input
+      displayHeadingSizeInfo: function($select, sizes) {
+        // Find the field container
+        var $field = $select.closest('.field');
+        if (!$field.length) {
+          $field = $select.closest('.field-page-heading-font-size');
+        }
+        if (!$field.length) {
+          $field = $select.parent();
+        }
+        
+        // Remove existing heading size info
+        $field.find('.heading-size-info').remove();
+        
+        // Create info HTML - styled to span full width
+        var infoHtml = '<div class="heading-size-info" style="margin-top: 10px; padding: 8px 10px; background-color: #f0f7ff; border-left: 3px solid #2196F3; font-size: 11px; line-height: 1.5; width: 100%; box-sizing: border-box; clear: both;">';
+        infoHtml += '<div style="font-weight: bold; margin-bottom: 5px; color: #333; font-size: 12px;">Calculated values for Desktop:</div>';
+        infoHtml += '<div style="color: #555;">';
+        infoHtml += '<div><strong>H1 (Page Title):</strong> ' + sizes.h1 + '</div>';
+        infoHtml += '<div><strong>H2:</strong> ' + sizes.h2 + '</div>';
+        infoHtml += '<div><strong>H3:</strong> ' + sizes.h3 + '</div>';
+        infoHtml += '<div><strong>H4:</strong> ' + sizes.h4 + '</div>';
+        infoHtml += '<div><strong>H5:</strong> ' + sizes.h5 + '</div>';
+        infoHtml += '<div><strong>Paragraph:</strong> ' + sizes.p + '</div>';
+        infoHtml += '</div>';
+        infoHtml += '</div>';
+        
+        // Insert AFTER the select input
+        $select.after(infoHtml);
+      },
+      
+      // Update heading size calculations when fields change
+      updateHeadingSizeCalculations: function() {
+        var self = this;
+        
+        // Delay to ensure DOM has updated
+        _.defer(function() {
+          var $select = self.$('select[name="page-heading-font-size"]');
+          if ($select.length && $select.val()) {
+            self.calculateAndDisplayHeadingSizes($select);
+          }
+        });
       },
       
       // NEW: Setup font preview functionality
