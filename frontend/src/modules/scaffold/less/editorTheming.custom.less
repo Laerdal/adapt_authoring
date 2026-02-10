@@ -1,0 +1,98 @@
+// Import Google Fonts for font preview
+@import url('https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700&family=Roboto:wght@300;400;500;700&family=Inter:wght@300;400;500;600;700&family=Merriweather:wght@300;400;700&family=Montserrat:wght@300;400;500;600;700&family=Open+Sans:wght@300;400;500;600;700&family=Poppins:wght@300;400;500;600;700&family=Source+Sans+Pro:wght@300;400;600;700&display=swap');
+
+// Font preview in dropdown options - show each font option in its actual font
+// Define font family variables for easy maintenance
+@font-lato: 'Lato', sans-serif;
+@font-georgia: 'Georgia', serif;
+@font-helvetica-neue: 'Helvetica Neue', sans-serif;
+@font-inter: 'Inter', sans-serif;
+@font-merriweather: 'Merriweather', serif;
+@font-montserrat: 'Montserrat', sans-serif;
+@font-open-sans: 'Open Sans', sans-serif;
+@font-poppins: 'Poppins', sans-serif;
+@font-roboto: 'Roboto', sans-serif;
+@font-source-sans-pro: 'Source Sans Pro', sans-serif;
+
+// Font preview base styling
+@font-preview-size: 14px;
+@font-preview-weight: 400;
+
+// Mixin to generate font preview styles for options
+.font-preview-option(@value, @family) {
+  option[value="@{value}"],
+  &[value="@{value}"] option {
+    font-family: @family !important;
+    font-size: @font-preview-size !important;
+  }
+}
+
+// Mixin to generate font preview styles for select elements
+.font-preview-select(@value, @family, @class) {
+  &[value="@{value}"] {
+    font-family: @family !important;
+  }
+  
+  &.font-@{class} {
+    font-family: @family !important;
+    font-weight: @font-preview-weight !important;
+  }
+}
+
+.font-preview-container {
+  font-family: @font-lato; // Fallback font
+}
+
+// Generate font preview styles for all select elements
+select {
+  .font-preview-option("Lato", @font-lato);
+  .font-preview-option("Georgia", @font-georgia);
+  .font-preview-option("Helvetica Neue", @font-helvetica-neue);
+  .font-preview-option("Inter", @font-inter);
+  .font-preview-option("Merriweather", @font-merriweather);
+  .font-preview-option("Montserrat", @font-montserrat);
+  .font-preview-option("Open Sans", @font-open-sans);
+  .font-preview-option("Poppins", @font-poppins);
+  .font-preview-option("Roboto", @font-roboto);
+  .font-preview-option("Source Sans Pro", @font-source-sans-pro);
+}
+
+// Specific targeting for font family dropdowns with enhanced styling
+select[name*="font-family"],
+select[data-field*="font-family"],
+.field-heading-font-family select,
+.field-paragraph-font-family select,
+select.font-family-field {
+  option {
+    padding: 8px 12px !important;
+    line-height: 1.4 !important;
+  }
+  
+  // Generate preview styles for select elements and JS classes
+  .font-preview-select("Lato", @font-lato, "lato");
+  .font-preview-select("Georgia", @font-georgia, "georgia");
+  .font-preview-select("Helvetica Neue", @font-helvetica-neue, "helvetica-neue");
+  .font-preview-select("Inter", @font-inter, "inter");
+  .font-preview-select("Merriweather", @font-merriweather, "merriweather");
+  .font-preview-select("Montserrat", @font-montserrat, "montserrat");
+  .font-preview-select("Open Sans", @font-open-sans, "open-sans");
+  .font-preview-select("Poppins", @font-poppins, "poppins");
+  .font-preview-select("Roboto", @font-roboto, "roboto");
+  .font-preview-select("Source Sans Pro", @font-source-sans-pro, "source-sans-pro");
+}
+
+// Force font preview in all dropdown states using mixin
+select:focus option,
+select[size] option,
+select[multiple] option {
+  .font-preview-option("Lato", @font-lato);
+  .font-preview-option("Georgia", @font-georgia);
+  .font-preview-option("Helvetica Neue", @font-helvetica-neue);
+  .font-preview-option("Inter", @font-inter);
+  .font-preview-option("Merriweather", @font-merriweather);
+  .font-preview-option("Montserrat", @font-montserrat);
+  .font-preview-option("Open Sans", @font-open-sans);
+  .font-preview-option("Poppins", @font-poppins);
+  .font-preview-option("Roboto", @font-roboto);
+  .font-preview-option("Source Sans Pro", @font-source-sans-pro);
+}
