@@ -140,6 +140,11 @@
           flex-basis: calc(50% - 10px);
           box-sizing: border-box;
 
+          // disable for timebeing as we want to show validation colour fixed
+          &.field-validation-success-colour, &.field-validation-error-colour {
+            pointer-events: none;
+          }
+
           label {
             font-weight: 500;
             color: #333;
