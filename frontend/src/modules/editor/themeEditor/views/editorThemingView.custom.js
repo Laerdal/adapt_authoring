@@ -59,6 +59,8 @@ define(function(require) {
         var self = this;
         _.defer(function() {
           self.applyFontPreviewToSelects();
+          // Also trigger heading size calculation
+          self.updateHeadingSizeCalculations();
         });
         
         return result;
@@ -73,6 +75,8 @@ define(function(require) {
         var self = this;
         _.defer(function() {
           self.applyFontPreviewToSelects();
+          // Also trigger heading size calculation
+          self.updateHeadingSizeCalculations();
         });
         
         return result;
@@ -135,36 +139,47 @@ define(function(require) {
         var baseSize = parseFloat(selectedValue);
         if (isNaN(baseSize)) return;
         
-        // Define ratios for calculating heading sizes
-        var ratios = {
-          h1: 1,                    // The selected value itself
-          h2: 0.8333333333,         // 83.33% of h1
-          h3: 0.6666666667,         // 66.67% of h1
-          h4: 0.5,                  // 50% of h1
-          h5: 0.4166666667,         // 41.67% of h1
-          p: 0.3333333333           // 33.33% of h1 (paragraph)
+        // Convert rem to pixels (1rem = 16px)
+        var h1Pixels = Math.round(baseSize * 16);
+        
+        // Exact size lookup table based on H1 selection (exact values from design table)
+        var sizeTable = {
+          56: { h1: 56, h2: 48, h3: 40, h4: 32, h5: 24, p: 16 },
+          48: { h1: 48, h2: 40, h3: 32, h4: 24, h5: 20, p: 16 },
+          40: { h1: 40, h2: 32, h3: 24, h4: 20, h5: 18, p: 16 },
+          36: { h1: 36, h2: 28, h3: 22, h4: 18, h5: 16, p: 14 }
         };
         
+        // Get exact sizes from table
+        var sizes = sizeTable[h1Pixels];
+        
+        // If exact match not found, use closest value
+        if (!sizes) {
+          var availableSizes = Object.keys(sizeTable).map(Number).sort(function(a, b) { return a - b; });
+          var closestSize = availableSizes.reduce(function(prev, curr) {
+            return (Math.abs(curr - h1Pixels) < Math.abs(prev - h1Pixels) ? curr : prev);
+          });
+          sizes = sizeTable[closestSize];
+        }
+        
         // Helper function to format numbers cleanly (remove trailing zeros) and add pixel values
-        var formatSize = function(value) {
-          var formatted = (value).toFixed(2);
+        var formatSize = function(pixels) {
+          var rem = (pixels / 16);
+          var formatted = rem.toFixed(4); // Use 4 decimal places to preserve exact values like 1.125
           // Remove trailing zeros and decimal point if not needed
           formatted = formatted.replace(/\.?0+$/, '');
-          
-          // Convert rem to pixels (1rem = 16px) - rounded for cleaner display
-          var pixels = Math.round(value * 16);
           
           return formatted + 'rem (' + pixels + 'px)';
         };
         
-        // Calculate sizes
+        // Calculate sizes using exact table values
         var calculatedSizes = {
-          h1: formatSize(baseSize * ratios.h1),
-          h2: formatSize(baseSize * ratios.h2),
-          h3: formatSize(baseSize * ratios.h3),
-          h4: formatSize(baseSize * ratios.h4),
-          h5: formatSize(baseSize * ratios.h5),
-          p: formatSize(baseSize * ratios.p)
+          h1: formatSize(sizes.h1),
+          h2: formatSize(sizes.h2),
+          h3: formatSize(sizes.h3),
+          h4: formatSize(sizes.h4),
+          h5: formatSize(sizes.h5),
+          p: formatSize(sizes.p)
         };
         
         // Display the calculated values
