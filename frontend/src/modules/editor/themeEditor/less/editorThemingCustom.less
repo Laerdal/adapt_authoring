@@ -1076,13 +1076,14 @@ body.preview-modal-open {
   }
 
   // Info text box
-  .preview-info,
-  span.preview-info {
+  .preview-info {
     background: #000 !important;
     color: #fff !important;
     border-color: #fff !important;
 
-    strong {
+    .preview-info-title,
+    .preview-info-subtitle,
+    p {
       color: #fff !important;
     }
   }
@@ -1261,13 +1262,49 @@ body.preview-modal-open {
   }
 }
 
-span.preview-info {
+.preview-info {
   z-index: 9;
   background: #FFFBEB;
   color: #973C00;
-  padding: 0.3rem;
+  padding: 12px 16px;
   position: relative;
   border-radius: 8px;
   border: 1px solid #FEE685;
-  display: inline-block;
+  display: block;
+  margin-top: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+
+  .preview-info-title {
+    margin: 0 0 8px 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: #973C00;
+
+    i {
+      margin-right: 6px;
+    }
+  }
+
+  .preview-info-subtitle {
+    margin: 10px 0 4px 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #7A3000;
+
+    &:first-of-type {
+      margin-top: 0;
+    }
+  }
+
+  p {
+    margin: 0 0 6px 0;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: #973C00;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
 }
