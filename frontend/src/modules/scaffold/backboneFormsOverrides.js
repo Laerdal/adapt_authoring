@@ -22,6 +22,91 @@ define([
   Backbone.Form.Field.prototype.template = fieldTemplate;
   Backbone.Form.NestedField.prototype.template = fieldTemplate;
 
+  // Shared tooltip show/hide functions for mouse and keyboard accessibility
+  var showTooltip = function(e) {
+    var $icon = $(e.currentTarget);
+    var $tooltip = $icon.siblings('.tooltip');
+    if (!$tooltip.length) return;
+
+    // Hide all other visible tooltips first
+    $('.field-help .tooltip').not($tooltip).each(function() {
+      var $t = $(this);
+      clearTimeout($t.data('hideTimeout'));
+      $t.removeData('hideTimeout');
+      $t.css({ top: '', left: '', visibility: 'hidden', opacity: 0, display: 'none' });
+    });
+
+    // Clear any pending hide timeout for this tooltip
+    var pendingTimeout = $tooltip.data('hideTimeout');
+    if (pendingTimeout) {
+      clearTimeout(pendingTimeout);
+      $tooltip.removeData('hideTimeout');
+    }
+
+    // Make tooltip visible but transparent to measure its size
+    $tooltip.css({ visibility: 'hidden', opacity: 0, display: 'block' });
+    var iconRect = $icon[0].getBoundingClientRect();
+    var tooltipWidth = $tooltip.outerWidth();
+    var tooltipHeight = $tooltip.outerHeight();
+
+    var spaceBelow = window.innerHeight - iconRect.bottom;
+    var margin = 8;
+
+    // Vertical: prefer below, use above if not enough space below
+    var top;
+    if (spaceBelow >= tooltipHeight + margin) {
+      top = iconRect.bottom + margin;
+    } else {
+      top = iconRect.top - tooltipHeight - margin;
+    }
+
+    // Horizontal: align left edge to icon, clamp to viewport
+    var left = iconRect.left;
+    if (left + tooltipWidth > window.innerWidth - margin) {
+      left = window.innerWidth - tooltipWidth - margin;
+    }
+    left = Math.max(margin, left);
+
+    // Clamp vertical to viewport
+    top = Math.max(margin, Math.min(top, window.innerHeight - tooltipHeight - margin));
+
+    $tooltip.css({
+      top: top + 'px',
+      left: left + 'px',
+      visibility: 'visible',
+      opacity: 0.9
+    });
+
+    // Dismiss tooltip on window scroll or resize
+    var dismiss = function() {
+      hideTooltip(e);
+    };
+    $(window).off('scroll.tooltip resize.tooltip');
+    $(window).on('scroll.tooltip', dismiss);
+    $(window).on('resize.tooltip', dismiss);
+  };
+
+  var hideTooltip = function(e) {
+    var $icon = $(e.currentTarget);
+    var $tooltip = $icon.siblings('.tooltip');
+    if (!$tooltip.length) return;
+
+    // Clear any existing hide timeout
+    var existingTimeout = $tooltip.data('hideTimeout');
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+    }
+
+    // Fade out: transition opacity first, then hide after animation completes
+    $tooltip.css({ opacity: 0 });
+    var hideTimeout = setTimeout(function() {
+      $tooltip.css({ top: '', left: '', visibility: 'hidden', display: 'none' });
+      $tooltip.removeData('hideTimeout');
+    }, 300);
+    $tooltip.data('hideTimeout', hideTimeout);
+    $(window).off('scroll.tooltip resize.tooltip');
+  };
+
   // add reset to default handler
   Backbone.Form.Field.prototype.events = {
     'click [data-action="default"]': function() {
@@ -30,53 +115,10 @@ define([
 
       return false;
     },
-    'mouseenter .field-help i': function(e) {
-      var $icon = $(e.currentTarget);
-      var $tooltip = $icon.siblings('.tooltip');
-      if (!$tooltip.length) return;
-
-      // Make tooltip visible but transparent to measure its size
-      $tooltip.css({ visibility: 'hidden', opacity: 0, display: 'block' });
-      var iconRect = $icon[0].getBoundingClientRect();
-      var tooltipWidth = $tooltip.outerWidth();
-      var tooltipHeight = $tooltip.outerHeight();
-
-      var spaceAbove = iconRect.top;
-      var spaceBelow = window.innerHeight - iconRect.bottom;
-      var margin = 8;
-
-      // Vertical: prefer below, use above if not enough space below
-      var top;
-      if (spaceBelow >= tooltipHeight + margin) {
-        top = iconRect.bottom + margin;
-      } else {
-        top = iconRect.top - tooltipHeight - margin;
-      }
-
-      // Horizontal: align left edge to icon, clamp to viewport
-      var left = iconRect.left;
-      if (left + tooltipWidth > window.innerWidth - 8) {
-        left = window.innerWidth - tooltipWidth - 8;
-      }
-      left = Math.max(8, left);
-
-      // Clamp vertical to viewport
-      top = Math.max(8, Math.min(top, window.innerHeight - tooltipHeight - 8));
-
-      $tooltip.css({
-        top: top + 'px',
-        left: left + 'px',
-        visibility: 'visible',
-        opacity: 0.9
-      });
-    },
-    'mouseleave .field-help i': function(e) {
-      var $icon = $(e.currentTarget);
-      var $tooltip = $icon.siblings('.tooltip');
-      if ($tooltip.length) {
-        $tooltip.css({ top: '', left: '', visibility: 'hidden', opacity: 0 });
-      }
-    }
+    'mouseenter .field-help i': showTooltip,
+    'mouseleave .field-help i': hideTooltip,
+    'focus .field-help i': showTooltip,
+    'blur .field-help i': hideTooltip
   };
 
   // merge schema into data
