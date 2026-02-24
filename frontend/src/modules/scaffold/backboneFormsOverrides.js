@@ -81,7 +81,7 @@ define([
       var $icon = $(e.currentTarget);
       var $tooltip = $icon.siblings('.tooltip');
       if ($tooltip.length) {
-        $tooltip.css({ top: null, left: null, visibility: 'hidden', opacity: 0 });
+        $tooltip.css({ top: '', left: '', visibility: 'hidden', opacity: 0 });
       }
     }
   };
