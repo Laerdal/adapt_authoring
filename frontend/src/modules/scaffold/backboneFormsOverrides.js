@@ -35,18 +35,32 @@ define([
       var $tooltip = $icon.siblings('.tooltip');
       if (!$tooltip.length) return;
 
-      // Make tooltip measurable without affecting layout: position it off-screen
-      $tooltip.css({
-        position: 'fixed',
-        top: '-9999px',
-        left: '-9999px',
-        visibility: 'hidden',
-        opacity: 0,
-        display: 'block'
-      });
+      // Cache tooltip dimensions to avoid forcing layout on every mouseenter
+      var cachedWidth = $tooltip.data('cachedWidth');
+      var cachedHeight = $tooltip.data('cachedHeight');
+      var tooltipWidth;
+      var tooltipHeight;
+
+      if (cachedWidth != null && cachedHeight != null) {
+        tooltipWidth = cachedWidth;
+        tooltipHeight = cachedHeight;
+      } else {
+        // Make tooltip measurable without affecting layout: position it off-screen
+        $tooltip.css({
+          position: 'fixed',
+          top: '-9999px',
+          left: '-9999px',
+          visibility: 'hidden',
+          opacity: 0,
+          display: 'block'
+        });
+        tooltipWidth = $tooltip.outerWidth();
+        tooltipHeight = $tooltip.outerHeight();
+        $tooltip.data('cachedWidth', tooltipWidth);
+        $tooltip.data('cachedHeight', tooltipHeight);
+      }
+
       var iconRect = $icon[0].getBoundingClientRect();
-      var tooltipWidth = $tooltip.outerWidth();
-      var tooltipHeight = $tooltip.outerHeight();
 
       var spaceAbove = iconRect.top;
       var spaceBelow = window.innerHeight - iconRect.bottom;
@@ -67,8 +81,15 @@ define([
       }
       left = Math.max(tooltipMargin, left);
 
-      // Clamp vertical to viewport
-      top = Math.max(tooltipMargin, Math.min(top, window.innerHeight - tooltipHeight - tooltipMargin));
+      // Clamp vertical to viewport, but avoid overlapping the icon when there is
+      // insufficient space both above and below. In that edge case, prefer
+      // positioning the tooltip below the icon, even if it overflows the viewport.
+      var notEnoughSpaceAboveAndBelow = (spaceBelow < tooltipHeight + tooltipMargin) && (spaceAbove < tooltipHeight + tooltipMargin);
+      if (notEnoughSpaceAboveAndBelow) {
+        top = iconRect.bottom + tooltipMargin;
+      } else {
+        top = Math.max(tooltipMargin, Math.min(top, window.innerHeight - tooltipHeight - tooltipMargin));
+      }
 
       $tooltip.css({
         top: top + 'px',
@@ -76,10 +97,24 @@ define([
         visibility: 'visible',
         opacity: 0.9
       });
+
+      // Hide tooltip if the user scrolls while it is visible
+      var hideOnScroll = function() {
+        if ($tooltip.length) {
+          $tooltip.css({ top: '', left: '', visibility: 'hidden', opacity: 0, display: '' });
+        }
+      };
+      $(window).on('scroll.tooltip', hideOnScroll);
+      $icon.data('hideOnScroll', hideOnScroll);
     },
     'mouseleave .field-help i': function(e) {
       var $icon = $(e.currentTarget);
       var $tooltip = $icon.siblings('.tooltip');
+      var hideOnScroll = $icon.data('hideOnScroll');
+      if (hideOnScroll) {
+        $(window).off('scroll.tooltip', hideOnScroll);
+        $icon.removeData('hideOnScroll');
+      }
       if ($tooltip.length) {
         $tooltip.css({ top: '', left: '', visibility: 'hidden', opacity: 0, display: 'none' });
       }
