@@ -35,8 +35,15 @@ define([
       var $tooltip = $icon.siblings('.tooltip');
       if (!$tooltip.length) return;
 
-      // Make tooltip visible but transparent to measure its size
-      $tooltip.css({ visibility: 'hidden', opacity: 0, display: 'block' });
+      // Make tooltip measurable without affecting layout: position it off-screen
+      $tooltip.css({
+        position: 'absolute',
+        top: '-9999px',
+        left: '-9999px',
+        visibility: 'hidden',
+        opacity: 0,
+        display: 'block'
+      });
       var iconRect = $icon[0].getBoundingClientRect();
       var tooltipWidth = $tooltip.outerWidth();
       var tooltipHeight = $tooltip.outerHeight();
