@@ -29,6 +29,53 @@ define([
       this.editor.trigger('change', this);
 
       return false;
+    },
+    'mouseenter .field-help i': function(e) {
+      var $icon = $(e.currentTarget);
+      var $tooltip = $icon.siblings('.tooltip');
+      if (!$tooltip.length) return;
+
+      // Make tooltip visible but transparent to measure its size
+      $tooltip.css({ visibility: 'hidden', opacity: 0, display: 'block' });
+      var iconRect = $icon[0].getBoundingClientRect();
+      var tooltipWidth = $tooltip.outerWidth();
+      var tooltipHeight = $tooltip.outerHeight();
+
+      var spaceAbove = iconRect.top;
+      var spaceBelow = window.innerHeight - iconRect.bottom;
+      var margin = 8;
+
+      // Vertical: prefer below, use above if not enough space below
+      var top;
+      if (spaceBelow >= tooltipHeight + margin) {
+        top = iconRect.bottom + margin;
+      } else {
+        top = iconRect.top - tooltipHeight - margin;
+      }
+
+      // Horizontal: align left edge to icon, clamp to viewport
+      var left = iconRect.left;
+      if (left + tooltipWidth > window.innerWidth - 8) {
+        left = window.innerWidth - tooltipWidth - 8;
+      }
+      left = Math.max(8, left);
+
+      // Clamp vertical to viewport
+      top = Math.max(8, Math.min(top, window.innerHeight - tooltipHeight - 8));
+
+      $tooltip.css({
+        top: top + 'px',
+        left: left + 'px',
+        visibility: 'visible',
+        opacity: 0.9
+      });
+    },
+    'mouseleave .field-help i': function(e) {
+      var $icon = $(e.currentTarget);
+      var $tooltip = $icon.siblings('.tooltip');
+      if ($tooltip.length) {
+        $tooltip.css({ top: '', left: '', visibility: 'hidden', opacity: 0 });
+      }
     }
   };
 
