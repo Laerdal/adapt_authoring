@@ -35,61 +35,33 @@ define([
       var $tooltip = $icon.siblings('.tooltip');
       if (!$tooltip.length) return;
 
-      // Cache tooltip dimensions to avoid forcing layout on every mouseenter
-      var cachedWidth = $tooltip.data('cachedWidth');
-      var cachedHeight = $tooltip.data('cachedHeight');
-      var tooltipWidth;
-      var tooltipHeight;
-
-      if (cachedWidth != null && cachedHeight != null) {
-        tooltipWidth = cachedWidth;
-        tooltipHeight = cachedHeight;
-      } else {
-        // Make tooltip measurable without affecting layout: position it off-screen
-        $tooltip.css({
-          position: 'fixed',
-          top: '-9999px',
-          left: '-9999px',
-          visibility: 'hidden',
-          opacity: 0,
-          display: 'block'
-        });
-        tooltipWidth = $tooltip.outerWidth();
-        tooltipHeight = $tooltip.outerHeight();
-        $tooltip.data('cachedWidth', tooltipWidth);
-        $tooltip.data('cachedHeight', tooltipHeight);
-      }
-
+      // Make tooltip visible but transparent to measure its size
+      $tooltip.css({ visibility: 'hidden', opacity: 0, display: 'block' });
       var iconRect = $icon[0].getBoundingClientRect();
+      var tooltipWidth = $tooltip.outerWidth();
+      var tooltipHeight = $tooltip.outerHeight();
 
       var spaceAbove = iconRect.top;
       var spaceBelow = window.innerHeight - iconRect.bottom;
-      var tooltipMargin = 8;
+      var margin = 8;
 
       // Vertical: prefer below, use above if not enough space below
       var top;
-      if (spaceBelow >= tooltipHeight + tooltipMargin) {
-        top = iconRect.bottom + tooltipMargin;
+      if (spaceBelow >= tooltipHeight + margin) {
+        top = iconRect.bottom + margin;
       } else {
-        top = iconRect.top - tooltipHeight - tooltipMargin;
+        top = iconRect.top - tooltipHeight - margin;
       }
 
       // Horizontal: align left edge to icon, clamp to viewport
       var left = iconRect.left;
-      if (left + tooltipWidth > window.innerWidth - tooltipMargin) {
-        left = window.innerWidth - tooltipWidth - tooltipMargin;
+      if (left + tooltipWidth > window.innerWidth - 8) {
+        left = window.innerWidth - tooltipWidth - 8;
       }
-      left = Math.max(tooltipMargin, left);
+      left = Math.max(8, left);
 
-      // Clamp vertical to viewport, but avoid overlapping the icon when there is
-      // insufficient space both above and below. In that edge case, prefer
-      // positioning the tooltip below the icon, even if it overflows the viewport.
-      var notEnoughSpaceAboveAndBelow = (spaceBelow < tooltipHeight + tooltipMargin) && (spaceAbove < tooltipHeight + tooltipMargin);
-      if (notEnoughSpaceAboveAndBelow) {
-        top = iconRect.bottom + tooltipMargin;
-      } else {
-        top = Math.max(tooltipMargin, Math.min(top, window.innerHeight - tooltipHeight - tooltipMargin));
-      }
+      // Clamp vertical to viewport
+      top = Math.max(8, Math.min(top, window.innerHeight - tooltipHeight - 8));
 
       $tooltip.css({
         top: top + 'px',
@@ -97,26 +69,12 @@ define([
         visibility: 'visible',
         opacity: 0.9
       });
-
-      // Hide tooltip if the user scrolls while it is visible
-      var hideOnScroll = function() {
-        if ($tooltip.length) {
-          $tooltip.css({ top: '', left: '', visibility: 'hidden', opacity: 0, display: '' });
-        }
-      };
-      $(window).on('scroll.tooltip', hideOnScroll);
-      $icon.data('hideOnScroll', hideOnScroll);
     },
     'mouseleave .field-help i': function(e) {
       var $icon = $(e.currentTarget);
       var $tooltip = $icon.siblings('.tooltip');
-      var hideOnScroll = $icon.data('hideOnScroll');
-      if (hideOnScroll) {
-        $(window).off('scroll.tooltip', hideOnScroll);
-        $icon.removeData('hideOnScroll');
-      }
       if ($tooltip.length) {
-        $tooltip.css({ top: '', left: '', visibility: 'hidden', opacity: 0, display: 'none' });
+        $tooltip.css({ top: '', left: '', visibility: 'hidden', opacity: 0 });
       }
     }
   };
