@@ -81,8 +81,16 @@ define([
       }
       left = Math.max(8, left);
 
-      // Clamp vertical to viewport
-      top = Math.max(8, Math.min(top, window.innerHeight - tooltipHeight - 8));
+      // Clamp vertical to viewport, but avoid overlapping the icon when there is
+      // insufficient space both above and below. In that edge case, prefer
+      // positioning the tooltip below the icon, even if it overflows the viewport.
+      var notEnoughSpaceAboveAndBelow = (spaceBelow < tooltipHeight + margin) && (spaceAbove < tooltipHeight + margin);
+      if (notEnoughSpaceAboveAndBelow) {
+        // Place tooltip just below the icon to maintain a minimum distance.
+        top = iconRect.bottom + margin;
+      } else {
+        top = Math.max(8, Math.min(top, window.innerHeight - tooltipHeight - 8));
+      }
 
       $tooltip.css({
         top: top + 'px',
