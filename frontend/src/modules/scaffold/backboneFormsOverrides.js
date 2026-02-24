@@ -50,25 +50,25 @@ define([
 
       var spaceAbove = iconRect.top;
       var spaceBelow = window.innerHeight - iconRect.bottom;
-      var margin = 8;
+      var tooltipMargin = 8;
 
       // Vertical: prefer below, use above if not enough space below
       var top;
-      if (spaceBelow >= tooltipHeight + margin) {
-        top = iconRect.bottom + margin;
+      if (spaceBelow >= tooltipHeight + tooltipMargin) {
+        top = iconRect.bottom + tooltipMargin;
       } else {
-        top = iconRect.top - tooltipHeight - margin;
+        top = iconRect.top - tooltipHeight - tooltipMargin;
       }
 
       // Horizontal: align left edge to icon, clamp to viewport
       var left = iconRect.left;
-      if (left + tooltipWidth > window.innerWidth - 8) {
-        left = window.innerWidth - tooltipWidth - 8;
+      if (left + tooltipWidth > window.innerWidth - tooltipMargin) {
+        left = window.innerWidth - tooltipWidth - tooltipMargin;
       }
-      left = Math.max(8, left);
+      left = Math.max(tooltipMargin, left);
 
       // Clamp vertical to viewport
-      top = Math.max(8, Math.min(top, window.innerHeight - tooltipHeight - 8));
+      top = Math.max(tooltipMargin, Math.min(top, window.innerHeight - tooltipHeight - tooltipMargin));
 
       $tooltip.css({
         top: top + 'px',
