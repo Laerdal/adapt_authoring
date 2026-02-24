@@ -1,0 +1,42 @@
+/**
+ * Tooltip styles for field help icons (Laerdal customisation – ADAPT-3588)
+ *
+ * Overrides the default position:absolute tooltip with a position:fixed
+ * approach so the tooltip is never clipped by scrollable ancestor containers.
+ * The JavaScript counterpart lives in tooltipOverrides.js.
+ *
+ * This file is kept separate from forms.less so that upstream pulls from the
+ * Adapt community will not overwrite these styles.
+ */
+
+.field-help {
+  i {
+    cursor: pointer;
+  }
+  .tooltip {
+    position: fixed;
+    // z-index hierarchy: tooltip=9998 < help-assistant-backdrop=9999 < AI/XML popups=99999
+    z-index: 9998;
+    max-width: 350px;
+    min-width: 200px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background-color: @tertiary-color;
+    color: @white;
+    opacity: 0;
+    display: none;
+    visibility: visible; // override forms.less visibility:hidden — display:none keeps it hidden
+    text-align: left;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    transition: opacity 0.3s;
+  }
+  // Disable the CSS-driven hover from forms.less — JS handles show/hide.
+  // display:none from the base rule already prevents hover from revealing the tooltip,
+  // so we only need to reset opacity and transition-delay to avoid visual flicker.
+  i:hover + .tooltip {
+    opacity: 0;
+    transition-delay: 0s;
+  }
+}
