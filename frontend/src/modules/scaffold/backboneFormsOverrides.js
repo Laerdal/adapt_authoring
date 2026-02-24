@@ -37,7 +37,7 @@ define([
 
       // Make tooltip measurable without affecting layout: position it off-screen
       $tooltip.css({
-        position: 'absolute',
+        position: 'fixed',
         top: '-9999px',
         left: '-9999px',
         visibility: 'hidden',
@@ -81,7 +81,7 @@ define([
       var $icon = $(e.currentTarget);
       var $tooltip = $icon.siblings('.tooltip');
       if ($tooltip.length) {
-        $tooltip.css({ top: '', left: '', visibility: 'hidden', opacity: 0 });
+        $tooltip.css({ top: '', left: '', visibility: 'hidden', opacity: 0, display: '' });
       }
     }
   };
