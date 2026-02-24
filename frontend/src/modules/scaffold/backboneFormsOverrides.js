@@ -76,10 +76,24 @@ define([
         visibility: 'visible',
         opacity: 0.9
       });
+
+      // Hide tooltip if the user scrolls while it is visible
+      var hideOnScroll = function() {
+        if ($tooltip.length) {
+          $tooltip.css({ top: '', left: '', visibility: 'hidden', opacity: 0, display: '' });
+        }
+      };
+      $(window).on('scroll.tooltip', hideOnScroll);
+      $icon.data('hideOnScroll', hideOnScroll);
     },
     'mouseleave .field-help i': function(e) {
       var $icon = $(e.currentTarget);
       var $tooltip = $icon.siblings('.tooltip');
+      var hideOnScroll = $icon.data('hideOnScroll');
+      if (hideOnScroll) {
+        $(window).off('scroll.tooltip', hideOnScroll);
+        $icon.removeData('hideOnScroll');
+      }
       if ($tooltip.length) {
         $tooltip.css({ top: '', left: '', visibility: 'hidden', opacity: 0, display: '' });
       }
