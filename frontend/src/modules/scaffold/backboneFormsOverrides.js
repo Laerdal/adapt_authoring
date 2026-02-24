@@ -37,7 +37,7 @@ define([
 
       // Make tooltip measurable without affecting layout: position it off-screen
       $tooltip.css({
-        position: 'absolute',
+        position: 'fixed',
         top: '-9999px',
         left: '-9999px',
         visibility: 'hidden',
