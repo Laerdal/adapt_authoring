@@ -22,18 +22,24 @@ define([
   Backbone.Form.Field.prototype.template = fieldTemplate;
   Backbone.Form.NestedField.prototype.template = fieldTemplate;
 
+  // Unique counter for tooltip instance namespacing and ARIA association
+  var tooltipInstanceId = 0;
+
   // Shared tooltip show/hide functions for mouse and keyboard accessibility
   var showTooltip = function(e) {
     var $icon = $(e.currentTarget);
     var $tooltip = $icon.siblings('.tooltip');
     if (!$tooltip.length) return;
 
-    // Hide all other visible tooltips first
-    $('.field-help .tooltip').not($tooltip).each(function() {
+    // Hide all other visible tooltips scoped to the closest form container
+    var $form = $icon.closest('.form-container, form');
+    var $scope = $form.length ? $form : $(document);
+    $scope.find('.field-help .tooltip').not($tooltip).each(function() {
       var $t = $(this);
       clearTimeout($t.data('hideTimeout'));
       $t.removeData('hideTimeout');
-      $t.css({ top: '', left: '', visibility: 'hidden', opacity: 0, display: 'none' });
+      $t.css({ top: '', left: '', visibility: 'hidden', opacity: 0, display: 'none' })
+        .attr('aria-hidden', 'true');
     });
 
     // Clear any pending hide timeout for this tooltip
@@ -41,6 +47,13 @@ define([
     if (pendingTimeout) {
       clearTimeout(pendingTimeout);
       $tooltip.removeData('hideTimeout');
+    }
+
+    // Ensure ARIA association between icon and tooltip
+    if (!$tooltip.attr('id')) {
+      var tooltipId = 'tooltip-' + (++tooltipInstanceId);
+      $tooltip.attr('id', tooltipId);
+      $icon.attr('aria-describedby', tooltipId);
     }
 
     // Make tooltip visible but transparent to measure its size
@@ -75,15 +88,15 @@ define([
       left: left + 'px',
       visibility: 'visible',
       opacity: 0.9
-    });
+    }).attr('aria-hidden', 'false');
 
-    // Dismiss tooltip on window scroll or resize
+    // Dismiss tooltip on window scroll or resize using instance-namespaced events
+    var ns = '.tooltip-' + $tooltip.attr('id');
     var dismiss = function() {
-      hideTooltip(e);
+      dismissTooltip($icon, $tooltip, ns);
     };
-    $(window).off('scroll.tooltip resize.tooltip');
-    $(window).on('scroll.tooltip', dismiss);
-    $(window).on('resize.tooltip', dismiss);
+    $(window).off(ns);
+    $(window).on('scroll' + ns + ' resize' + ns, dismiss);
   };
 
   var hideTooltip = function(e) {
@@ -91,20 +104,27 @@ define([
     var $tooltip = $icon.siblings('.tooltip');
     if (!$tooltip.length) return;
 
+    var ns = '.tooltip-' + ($tooltip.attr('id') || '');
+    dismissTooltip($icon, $tooltip, ns);
+  };
+
+  // Core dismiss logic using direct element references (not event.currentTarget)
+  var dismissTooltip = function($icon, $tooltip, ns) {
     // Clear any existing hide timeout
     var existingTimeout = $tooltip.data('hideTimeout');
     if (existingTimeout) {
       clearTimeout(existingTimeout);
     }
 
-    // Fade out: transition opacity first, then hide after animation completes
+    // Fade out: set opacity to 0, then hide after CSS transition completes
     $tooltip.css({ opacity: 0 });
     var hideTimeout = setTimeout(function() {
-      $tooltip.css({ top: '', left: '', visibility: 'hidden', display: 'none' });
+      $tooltip.css({ top: '', left: '', visibility: 'hidden', display: 'none' })
+        .attr('aria-hidden', 'true');
       $tooltip.removeData('hideTimeout');
     }, 300);
     $tooltip.data('hideTimeout', hideTimeout);
-    $(window).off('scroll.tooltip resize.tooltip');
+    $(window).off(ns);
   };
 
   // add reset to default handler
@@ -118,7 +138,21 @@ define([
     'mouseenter .field-help i': showTooltip,
     'mouseleave .field-help i': hideTooltip,
     'focus .field-help i': showTooltip,
-    'blur .field-help i': hideTooltip
+    'blur .field-help i': hideTooltip,
+    'keydown .field-help i': function(e) {
+      // Activate tooltip on Enter or Space for role="button" accessibility
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        var $icon = $(e.currentTarget);
+        var $tooltip = $icon.siblings('.tooltip');
+        var isVisible = $tooltip.length && $tooltip.css('visibility') === 'visible';
+        if (isVisible) {
+          hideTooltip(e);
+        } else {
+          showTooltip(e);
+        }
+      }
+    }
   };
 
   // merge schema into data
