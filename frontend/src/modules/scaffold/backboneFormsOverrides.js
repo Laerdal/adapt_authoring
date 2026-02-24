@@ -25,21 +25,27 @@ define([
   // Unique counter for tooltip instance namespacing and ARIA association
   var tooltipInstanceId = 0;
 
+  // Viewport edge padding (px) used for tooltip placement clamping
+  var TOOLTIP_VIEWPORT_MARGIN = 8;
+
+  // Duration (ms) matching the CSS opacity transition for fade-out
+  var TOOLTIP_FADE_DURATION = 300;
+
   // Shared tooltip show/hide functions for mouse and keyboard accessibility
   var showTooltip = function(e) {
     var $icon = $(e.currentTarget);
     var $tooltip = $icon.siblings('.tooltip');
     if (!$tooltip.length) return;
 
-    // Hide all other visible tooltips scoped to the closest form container
+    // Dismiss all other visible tooltips scoped to the closest form container,
+    // using dismissTooltip to ensure their window event handlers are cleaned up
     var $form = $icon.closest('.form-container, form');
     var $scope = $form.length ? $form : $(document);
     $scope.find('.field-help .tooltip').not($tooltip).each(function() {
       var $t = $(this);
-      clearTimeout($t.data('hideTimeout'));
-      $t.removeData('hideTimeout');
-      $t.css({ top: '', left: '', visibility: 'hidden', opacity: 0, display: 'none' })
-        .attr('aria-hidden', 'true');
+      var $otherIcon = $t.siblings('i');
+      var otherNs = '.tooltip-' + ($t.attr('id') || '');
+      dismissTooltip($otherIcon, $t, otherNs, true);
     });
 
     // Clear any pending hide timeout for this tooltip
@@ -56,44 +62,42 @@ define([
       $icon.attr('aria-describedby', tooltipId);
     }
 
-    // Make tooltip visible but transparent to measure its size
-    $tooltip.css({ visibility: 'hidden', opacity: 0, display: 'block' });
+    // Make tooltip off-screen but rendered to measure its dimensions
+    $tooltip.css({ display: 'block', opacity: 0 });
     var iconRect = $icon[0].getBoundingClientRect();
     var tooltipWidth = $tooltip.outerWidth();
     var tooltipHeight = $tooltip.outerHeight();
 
     var spaceBelow = window.innerHeight - iconRect.bottom;
-    var margin = 8;
 
     // Vertical: prefer below, use above if not enough space below
     var top;
-    if (spaceBelow >= tooltipHeight + margin) {
-      top = iconRect.bottom + margin;
+    if (spaceBelow >= tooltipHeight + TOOLTIP_VIEWPORT_MARGIN) {
+      top = iconRect.bottom + TOOLTIP_VIEWPORT_MARGIN;
     } else {
-      top = iconRect.top - tooltipHeight - margin;
+      top = iconRect.top - tooltipHeight - TOOLTIP_VIEWPORT_MARGIN;
     }
 
     // Horizontal: align left edge to icon, clamp to viewport
     var left = iconRect.left;
-    if (left + tooltipWidth > window.innerWidth - margin) {
-      left = window.innerWidth - tooltipWidth - margin;
+    if (left + tooltipWidth > window.innerWidth - TOOLTIP_VIEWPORT_MARGIN) {
+      left = window.innerWidth - tooltipWidth - TOOLTIP_VIEWPORT_MARGIN;
     }
-    left = Math.max(margin, left);
+    left = Math.max(TOOLTIP_VIEWPORT_MARGIN, left);
 
     // Clamp vertical to viewport
-    top = Math.max(margin, Math.min(top, window.innerHeight - tooltipHeight - margin));
+    top = Math.max(TOOLTIP_VIEWPORT_MARGIN, Math.min(top, window.innerHeight - tooltipHeight - TOOLTIP_VIEWPORT_MARGIN));
 
     $tooltip.css({
       top: top + 'px',
       left: left + 'px',
-      visibility: 'visible',
       opacity: 0.9
     }).attr('aria-hidden', 'false');
 
     // Dismiss tooltip on window scroll or resize using instance-namespaced events
     var ns = '.tooltip-' + $tooltip.attr('id');
     var dismiss = function() {
-      dismissTooltip($icon, $tooltip, ns);
+      dismissTooltip($icon, $tooltip, ns, false);
     };
     $(window).off(ns);
     $(window).on('scroll' + ns + ' resize' + ns, dismiss);
@@ -105,25 +109,32 @@ define([
     if (!$tooltip.length) return;
 
     var ns = '.tooltip-' + ($tooltip.attr('id') || '');
-    dismissTooltip($icon, $tooltip, ns);
+    dismissTooltip($icon, $tooltip, ns, false);
   };
 
-  // Core dismiss logic using direct element references (not event.currentTarget)
-  var dismissTooltip = function($icon, $tooltip, ns) {
+  // Core dismiss logic using direct element references (not event.currentTarget).
+  // When immediate=true, hides instantly without fade (used when replacing one tooltip with another).
+  var dismissTooltip = function($icon, $tooltip, ns, immediate) {
     // Clear any existing hide timeout
     var existingTimeout = $tooltip.data('hideTimeout');
     if (existingTimeout) {
       clearTimeout(existingTimeout);
+      $tooltip.removeData('hideTimeout');
     }
 
-    // Fade out: set opacity to 0, then hide after CSS transition completes
-    $tooltip.css({ opacity: 0 });
-    var hideTimeout = setTimeout(function() {
-      $tooltip.css({ top: '', left: '', visibility: 'hidden', display: 'none' })
+    if (immediate) {
+      $tooltip.css({ top: '', left: '', opacity: 0, display: 'none' })
         .attr('aria-hidden', 'true');
-      $tooltip.removeData('hideTimeout');
-    }, 300);
-    $tooltip.data('hideTimeout', hideTimeout);
+    } else {
+      // Fade out: set opacity to 0, then remove from layout after transition completes
+      $tooltip.css({ opacity: 0 });
+      var hideTimeout = setTimeout(function() {
+        $tooltip.css({ top: '', left: '', display: 'none' })
+          .attr('aria-hidden', 'true');
+        $tooltip.removeData('hideTimeout');
+      }, TOOLTIP_FADE_DURATION);
+      $tooltip.data('hideTimeout', hideTimeout);
+    }
     $(window).off(ns);
   };
 
@@ -145,7 +156,7 @@ define([
         e.preventDefault();
         var $icon = $(e.currentTarget);
         var $tooltip = $icon.siblings('.tooltip');
-        var isVisible = $tooltip.length && $tooltip.css('visibility') === 'visible';
+        var isVisible = $tooltip.length && $tooltip.css('display') !== 'none';
         if (isVisible) {
           hideTooltip(e);
         } else {
