@@ -35,18 +35,32 @@ define([
       var $tooltip = $icon.siblings('.tooltip');
       if (!$tooltip.length) return;
 
-      // Make tooltip measurable without affecting layout: position it off-screen
-      $tooltip.css({
-        position: 'fixed',
-        top: '-9999px',
-        left: '-9999px',
-        visibility: 'hidden',
-        opacity: 0,
-        display: 'block'
-      });
+      // Cache tooltip dimensions to avoid forcing layout on every mouseenter
+      var cachedWidth = $tooltip.data('cachedWidth');
+      var cachedHeight = $tooltip.data('cachedHeight');
+      var tooltipWidth;
+      var tooltipHeight;
+
+      if (cachedWidth != null && cachedHeight != null) {
+        tooltipWidth = cachedWidth;
+        tooltipHeight = cachedHeight;
+      } else {
+        // Make tooltip measurable without affecting layout: position it off-screen
+        $tooltip.css({
+          position: 'fixed',
+          top: '-9999px',
+          left: '-9999px',
+          visibility: 'hidden',
+          opacity: 0,
+          display: 'block'
+        });
+        tooltipWidth = $tooltip.outerWidth();
+        tooltipHeight = $tooltip.outerHeight();
+        $tooltip.data('cachedWidth', tooltipWidth);
+        $tooltip.data('cachedHeight', tooltipHeight);
+      }
+
       var iconRect = $icon[0].getBoundingClientRect();
-      var tooltipWidth = $tooltip.outerWidth();
-      var tooltipHeight = $tooltip.outerHeight();
 
       var spaceAbove = iconRect.top;
       var spaceBelow = window.innerHeight - iconRect.bottom;
