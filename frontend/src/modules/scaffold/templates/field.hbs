@@ -3,8 +3,8 @@
   <label for="{{editorId}}" title="{{key}}">{{title}}</label>
   {{#if help}}
   <div class="field-help">
-    <i class="fa fa-info-circle"></i>
-    <div class="tooltip">{{help}}</div>
+    <i class="fa fa-info-circle" tabindex="0" role="button" aria-label="Help" aria-expanded="false"></i>
+    <div class="tooltip" role="tooltip" aria-hidden="true">{{help}}</div>
   </div>
   {{/if}}
   <button class="field-default" data-action="default" title="{{t 'app.reset'}}">
