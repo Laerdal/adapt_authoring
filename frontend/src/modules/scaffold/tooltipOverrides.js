@@ -1,14 +1,18 @@
 /**
- * Tooltip overrides for Backbone.Form.Field
+ * Tooltip overrides for Backbone.Form.Field  (ADAPT-3588)
  *
- * This file is a Laerdal customisation that fixes the info-icon tooltip
- * positioning so it no longer gets clipped by scrollable ancestor containers
- * (ADAPT-3588).  It uses position:fixed with JavaScript-based viewport-aware
- * placement, ARIA attributes, keyboard accessibility, and proper cleanup on
- * field removal.
+ * Laerdal customisation – this is the ONLY file that contains the tooltip
+ * event handlers (mouseenter/leave, focus/blur, keydown) and positioning
+ * logic.  backboneFormsOverrides.js is NOT modified for tooltip behaviour;
+ * this module extends the events object that backboneFormsOverrides sets.
  *
- * Keeping this logic in a separate file ensures that upstream pulls from the
- * Adapt community do not overwrite these changes.
+ * Companion CSS lives in less/tooltip.less.
+ *
+ * Uses position:fixed with JavaScript-based viewport-aware placement,
+ * ARIA attributes, keyboard accessibility, and proper cleanup on field
+ * removal.
+ *
+ * Kept separate so upstream Adapt community pulls do not overwrite it.
  */
 define([
   'backbone-forms',
@@ -30,6 +34,23 @@ define([
   var fieldRemove = Backbone.Form.Field.prototype.remove;
 
   // ---- tooltip show / hide / dismiss helpers ----
+
+  /**
+   * Collect every scrollable ancestor between the icon and <html>.
+   * Used to bind scroll-dismiss listeners so that scrolling a container
+   * like .scaffold-items-modal-sidebar also hides the tooltip.
+   */
+  var getScrollableAncestors = function($el) {
+    var ancestors = [];
+    $el.parents().each(function() {
+      var style = window.getComputedStyle(this);
+      var overflow = style.overflowY || style.overflow;
+      if (overflow === 'auto' || overflow === 'scroll') {
+        ancestors.push(this);
+      }
+    });
+    return ancestors;
+  };
 
   var showTooltip = function(e) {
     var $icon = $(e.currentTarget);
@@ -61,8 +82,9 @@ define([
       $icon.attr('aria-describedby', tooltipId);
     }
 
-    // Make tooltip off-screen but rendered to measure its dimensions
-    $tooltip.css({ display: 'block', opacity: 0 });
+    // Make tooltip off-screen but rendered to measure its dimensions.
+    // pointer-events:auto ensures the tooltip can be interacted with when visible.
+    $tooltip.css({ display: 'block', opacity: 0, pointerEvents: 'none' });
     var iconRect = $icon[0].getBoundingClientRect();
     var tooltipWidth = $tooltip.outerWidth();
     var tooltipHeight = $tooltip.outerHeight();
@@ -90,16 +112,23 @@ define([
     $tooltip.css({
       top: top + 'px',
       left: left + 'px',
-      opacity: 0.9
+      opacity: 0.9,
+      pointerEvents: 'auto'
     }).attr('aria-hidden', 'false');
 
-    // Dismiss tooltip on window scroll or resize using instance-namespaced events
+    // Dismiss tooltip on window scroll/resize and on scrollable-ancestor scroll
     var ns = '.tooltip-' + $tooltip.attr('id');
     var dismiss = function() {
       dismissTooltip($icon, $tooltip, ns, false);
     };
     $(window).off(ns);
     $(window).on('scroll' + ns + ' resize' + ns, dismiss);
+
+    // Also bind to every scrollable ancestor (e.g. .scaffold-items-modal-sidebar)
+    var scrollParents = getScrollableAncestors($icon);
+    $tooltip.data('scrollParents', scrollParents);
+    $(scrollParents).off(ns);
+    $(scrollParents).on('scroll' + ns, dismiss);
   };
 
   var hideTooltip = function(e) {
@@ -122,11 +151,12 @@ define([
     }
 
     if (immediate) {
-      $tooltip.css({ top: '', left: '', opacity: 0, display: 'none' })
+      $tooltip.css({ top: '', left: '', opacity: 0, display: 'none', pointerEvents: 'none' })
         .attr('aria-hidden', 'true');
     } else {
-      // Fade out: set opacity to 0, then remove from layout after transition completes
-      $tooltip.css({ opacity: 0 });
+      // Fade out: disable pointer events immediately so the invisible tooltip
+      // cannot block clicks on underlying elements during the animation.
+      $tooltip.css({ opacity: 0, pointerEvents: 'none' });
       var hideTimeout = setTimeout(function() {
         // Guard against element being removed from the DOM during fade
         if (!$.contains(document.documentElement, $tooltip[0])) return;
@@ -136,7 +166,13 @@ define([
       }, TOOLTIP_FADE_DURATION);
       $tooltip.data('hideTimeout', hideTimeout);
     }
+    // Clean up window and scrollable-ancestor listeners
     $(window).off(ns);
+    var scrollParents = $tooltip.data('scrollParents');
+    if (scrollParents) {
+      $(scrollParents).off(ns);
+      $tooltip.removeData('scrollParents');
+    }
   };
 
   // ---- extend Field.prototype.events with tooltip handlers ----
@@ -178,6 +214,11 @@ define([
       }
       var ns = '.tooltip-' + ($t.attr('id') || '');
       $(window).off(ns);
+      var scrollParents = $t.data('scrollParents');
+      if (scrollParents) {
+        $(scrollParents).off(ns);
+        $t.removeData('scrollParents');
+      }
     });
     return fieldRemove.apply(this, arguments);
   };

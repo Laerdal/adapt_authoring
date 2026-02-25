@@ -1,12 +1,12 @@
 /**
  * Tooltip styles for field help icons (Laerdal customisation – ADAPT-3588)
  *
- * Overrides the default position:absolute tooltip with a position:fixed
- * approach so the tooltip is never clipped by scrollable ancestor containers.
- * The JavaScript counterpart lives in tooltipOverrides.js.
+ * Overrides the default position:absolute tooltip (from forms.less) with a
+ * position:fixed approach so it is never clipped by scrollable ancestors.
+ * The JavaScript counterpart lives in tooltipOverrides.js (NOT in
+ * backboneFormsOverrides.js, which remains community-owned).
  *
- * This file is kept separate from forms.less so that upstream pulls from the
- * Adapt community will not overwrite these styles.
+ * Kept separate so upstream Adapt pulls do not overwrite these styles.
  */
 
 .field-help {
