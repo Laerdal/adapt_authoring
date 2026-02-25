@@ -53,7 +53,9 @@ define([
   };
 
   var showTooltip = function(e) {
-    var $icon = $(e.currentTarget);
+    var $target = $(e.currentTarget);
+    // mouseenter fires on .field-help; focus fires on .field-help i
+    var $icon = $target.is('i') ? $target : $target.find('i').first();
     var $tooltip = $icon.siblings('.tooltip');
     if (!$tooltip.length) return;
 
@@ -82,10 +84,16 @@ define([
       $icon.attr('aria-describedby', tooltipId);
     }
 
-    // Make tooltip off-screen but rendered to measure its dimensions.
-    // pointer-events:auto ensures the tooltip can be interacted with when visible.
-    $tooltip.css({ display: 'block', opacity: 0, pointerEvents: 'none' });
+    // Render tooltip hidden for measurement; pointer-events stay disabled (CSS default)
+    $tooltip.css({ display: 'block', opacity: 0 });
     var iconRect = $icon[0].getBoundingClientRect();
+
+    // Ensure the tooltip never exceeds viewport width minus margins
+    var maxAllowedWidth = window.innerWidth - TOOLTIP_VIEWPORT_MARGIN * 2;
+    if ($tooltip.outerWidth() > maxAllowedWidth) {
+      $tooltip.css('max-width', maxAllowedWidth + 'px');
+    }
+
     var tooltipWidth = $tooltip.outerWidth();
     var tooltipHeight = $tooltip.outerHeight();
 
@@ -113,7 +121,7 @@ define([
       top: top + 'px',
       left: left + 'px',
       opacity: 0.9,
-      pointerEvents: 'auto'
+      pointerEvents: 'auto'  // allow hover/interaction while visible
     }).attr('aria-hidden', 'false');
 
     // Dismiss tooltip on window scroll/resize and on scrollable-ancestor scroll
@@ -132,7 +140,8 @@ define([
   };
 
   var hideTooltip = function(e) {
-    var $icon = $(e.currentTarget);
+    var $target = $(e.currentTarget);
+    var $icon = $target.is('i') ? $target : $target.find('i').first();
     var $tooltip = $icon.siblings('.tooltip');
     if (!$tooltip.length) return;
 
@@ -151,16 +160,16 @@ define([
     }
 
     if (immediate) {
-      $tooltip.css({ top: '', left: '', opacity: 0, display: 'none', pointerEvents: 'none' })
+      $tooltip.css({ top: '', left: '', opacity: 0, display: 'none', pointerEvents: '', maxWidth: '' })
         .attr('aria-hidden', 'true');
     } else {
-      // Fade out: disable pointer events immediately so the invisible tooltip
-      // cannot block clicks on underlying elements during the animation.
-      $tooltip.css({ opacity: 0, pointerEvents: 'none' });
+      // Fade out: pointer-events revert to CSS default (none) so the
+      // transparent tooltip cannot block clicks during the animation.
+      $tooltip.css({ opacity: 0, pointerEvents: '' });
       var hideTimeout = setTimeout(function() {
         // Guard against element being removed from the DOM during fade
         if (!$.contains(document.documentElement, $tooltip[0])) return;
-        $tooltip.css({ top: '', left: '', display: 'none' })
+        $tooltip.css({ top: '', left: '', display: 'none', maxWidth: '' })
           .attr('aria-hidden', 'true');
         $tooltip.removeData('hideTimeout');
       }, TOOLTIP_FADE_DURATION);
@@ -180,8 +189,8 @@ define([
   var existingEvents = Backbone.Form.Field.prototype.events || {};
 
   Backbone.Form.Field.prototype.events = _.extend({}, existingEvents, {
-    'mouseenter .field-help i': showTooltip,
-    'mouseleave .field-help i': hideTooltip,
+    'mouseenter .field-help': showTooltip,
+    'mouseleave .field-help': hideTooltip,
     'focus .field-help i': showTooltip,
     'blur .field-help i': hideTooltip,
     'keydown .field-help i': function(e) {

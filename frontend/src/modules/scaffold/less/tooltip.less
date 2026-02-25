@@ -17,8 +17,7 @@
     position: fixed;
     // z-index hierarchy: tooltip=9998 < help-assistant-backdrop=9999 < AI/XML popups=99999
     z-index: 9998;
-    max-width: 350px;
-    min-width: 200px;
+    max-width: ~'min(350px, calc(100vw - 16px))';
     padding: 8px 10px;
     border-radius: 6px;
     background-color: @tertiary-color;
@@ -31,6 +30,7 @@
     overflow-wrap: break-word;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
     transition: opacity 0.3s;
+    pointer-events: none;
   }
   // Disable the CSS-driven hover from forms.less — JS handles show/hide.
   // display:none from the base rule already prevents hover from revealing the tooltip,
