@@ -15,9 +15,12 @@
  * Kept separate so upstream Adapt community pulls do not overwrite it.
  */
 define([
+  'jquery',
+  'underscore',
+  'backbone',
   'backbone-forms',
   './backboneFormsOverrides'
-], function() {
+], function($, _, Backbone) {
 
   // ---- constants ----
 
@@ -26,9 +29,6 @@ define([
 
   // Viewport edge padding (px) used for tooltip placement clamping
   var TOOLTIP_VIEWPORT_MARGIN = 8;
-
-  // Duration (ms) matching the CSS opacity transition for fade-out
-  var TOOLTIP_FADE_DURATION = 300;
 
   // ---- store original remove so we can call it in our override ----
   var fieldRemove = Backbone.Form.Field.prototype.remove;
@@ -78,11 +78,15 @@ define([
     }
 
     // Ensure ARIA association between icon and tooltip
+    // Always set aria-describedby and aria-controls; generate id only if missing
     if (!$tooltip.attr('id')) {
-      var tooltipId = 'tooltip-' + (++tooltipInstanceId);
-      $tooltip.attr('id', tooltipId);
-      $icon.attr('aria-describedby', tooltipId);
+      $tooltip.attr('id', 'tooltip-' + (++tooltipInstanceId));
     }
+    var tooltipId = $tooltip.attr('id');
+    $icon.attr({
+      'aria-describedby': tooltipId,
+      'aria-controls': tooltipId
+    });
 
     // Render tooltip hidden for measurement; pointer-events stay disabled (CSS default)
     $tooltip.css({ display: 'block', opacity: 0 });
@@ -124,6 +128,9 @@ define([
       pointerEvents: 'auto'  // allow hover/interaction while visible
     }).attr('aria-hidden', 'false');
 
+    // Set aria-expanded on icon to reflect tooltip state for assistive tech
+    $icon.attr('aria-expanded', 'true');
+
     // Dismiss tooltip on window scroll/resize and on scrollable-ancestor scroll
     var ns = '.tooltip-' + $tooltip.attr('id');
     var dismiss = function() {
@@ -159,6 +166,9 @@ define([
       $tooltip.removeData('hideTimeout');
     }
 
+    // Reset aria-expanded on icon to reflect tooltip state
+    $icon.attr('aria-expanded', 'false');
+
     if (immediate) {
       $tooltip.css({ top: '', left: '', opacity: 0, display: 'none', pointerEvents: '', maxWidth: '' })
         .attr('aria-hidden', 'true');
@@ -166,13 +176,17 @@ define([
       // Fade out: pointer-events revert to CSS default (none) so the
       // transparent tooltip cannot block clicks during the animation.
       $tooltip.css({ opacity: 0, pointerEvents: '' });
+      
+      // Read fade duration from CSS to avoid hard-coding and maintain single source of truth
+      var transitionDuration = parseFloat(window.getComputedStyle($tooltip[0]).transitionDuration) * 1000 || 300;
+      
       var hideTimeout = setTimeout(function() {
         // Guard against element being removed from the DOM during fade
         if (!$.contains(document.documentElement, $tooltip[0])) return;
         $tooltip.css({ top: '', left: '', display: 'none', maxWidth: '' })
           .attr('aria-hidden', 'true');
         $tooltip.removeData('hideTimeout');
-      }, TOOLTIP_FADE_DURATION);
+      }, transitionDuration);
       $tooltip.data('hideTimeout', hideTimeout);
     }
     // Clean up window and scrollable-ancestor listeners
