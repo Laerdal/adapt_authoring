@@ -297,6 +297,27 @@ function publishCourse(courseId, mode, request, response, next) {
 
       callback(null);
     },
+    function (callback) {
+      // Inject UES Analytics token endpoint from server config
+      // This keeps the token endpoint URL out of source control and course author UI
+      const uesAnalyticsConfig = configuration.getConfig('uesAnalytics');
+      
+      if (!uesAnalyticsConfig || !uesAnalyticsConfig.tokenEndpoint) {
+        return callback(null);
+      }
+      
+      // Only inject if UES analytics is enabled in the course config
+      if (outputJson.config._uesAnalytics && outputJson.config._uesAnalytics._isEnabled) {
+        logger.log(
+          'info',
+          'Injecting UES Analytics token endpoint from server config'
+        );
+        
+        outputJson.config._uesAnalytics._tokenEndpoint = uesAnalyticsConfig.tokenEndpoint;
+      }
+
+      callback(null);
+    },
     function(callback) {
       self.writeCourseJSON(outputJson, path.join(BUILD_FOLDER, Constants.Folders.Course), function(err) {
         if (err) {
