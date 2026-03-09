@@ -1,64 +1,81 @@
 const { MongoClient } = require('mongodb');
-const configuration = require('../../../lib/configuration');
+const path = require('path');
+const fs = require('fs');
 
 let client;
 let selectedDbName;
+let cachedConfig = null;
 
-// Build connection URL from config (called at runtime, not require time)
-function buildConnectionUrl() {
-  // If useConnectionUri is true and dbConnectionUri is provided, use it directly
-  const useConnectionUri = configuration.getConfig('useConnectionUri');
-  const dbConnectionUri = configuration.getConfig('dbConnectionUri');
-  
-  if (useConnectionUri && dbConnectionUri) {
-    return dbConnectionUri;
+// Function to load configuration from config.json
+function loadConfig() {
+  if (cachedConfig) {
+    return cachedConfig;
   }
-  
+  try {
+    const configPath = path.join(__dirname, '../../../conf/config.json');
+    cachedConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    return cachedConfig;
+  } catch (error) {
+    console.error('Error loading config.json:', error.message);
+    throw new Error('Failed to load config.json');
+  }
+}
+
+// Build connection URL from config
+function buildConnectionUrl(config) {
+  // If useConnectionUri is true and dbConnectionUri is provided, use it directly
+  if (config.useConnectionUri && config.dbConnectionUri) {
+    return config.dbConnectionUri;
+  }
+
   // Otherwise build the URL from individual config values
-  const host = configuration.getConfig('dbHost');
-  const port = configuration.getConfig('dbPort') || 27017;
-  const username = configuration.getConfig('dbUser');
-  const password = configuration.getConfig('dbPass');
-  const ssl = configuration.getConfig('ssl') || false;
-  
-  return `mongodb://${username}:${password}@${host}:${port}/?ssl=${ssl}&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false`;
+  const host = config.dbHost;
+  const port = config.dbPort || 27017;
+  const username = config.dbUser;
+  const password = config.dbPass;
+
+  // Build URL with proper query params for DocumentDB/MongoDB
+  return `mongodb://${username}:${password}@${host}:${port}/?ssl=true&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false`;
 }
 
 async function getDB(queries) {
   try {
-    // Get database name from config if not already set
+    const config = loadConfig();
+
+    // Load database name from config if not already selected
     if (!selectedDbName) {
-      selectedDbName = configuration.getConfig('dbName');
-    }
-    
-    if (!selectedDbName) {
-      throw new Error('Database name is required');
+      selectedDbName = config.dbName;
+      if (!selectedDbName) {
+        throw new Error('Database name is required');
+      }
     }
 
     // Build connection URL from config
-    const url = buildConnectionUrl();
-    
-    // Create client with TLS options from config
-    const ssl = configuration.getConfig('ssl') || false;
+    const url = buildConnectionUrl(config);
+
+    // Create client with TLS options - required for AWS DocumentDB
     const clientOptions = {
-      ssl: ssl,
-      tls: ssl,
+      tls: true,
       replicaSet: 'rs0',
       readPreference: 'secondaryPreferred',
       retryWrites: false
     };
-    
-    // Add TLS CA file if configured
-    const sslCA = configuration.getConfig('sslCA');
-    if (sslCA) {
-      clientOptions.tlsCAFile = sslCA;
+
+    // TLS CA file is REQUIRED for DocumentDB connection
+    if (config.sslCA) {
+      clientOptions.tlsCAFile = config.sslCA;
+      console.log(`Using TLS CA file: ${config.sslCA}`);
+    } else {
+      console.warn('Warning: sslCA not configured - DocumentDB connection may fail');
     }
 
     client = new MongoClient(url, clientOptions);
 
     // Use connect method to connect to the server
     await client.connect();
-    
+    console.log('Connected successfully to MongoDB server');
+    console.log(`Using database: ${selectedDbName}`);
+
     return client.db(selectedDbName);
   } catch (error) {
     console.error('Failed to connect to database:', error.message);
@@ -69,6 +86,7 @@ async function getDB(queries) {
 function closeDB() {
   if (client) {
     client.close();
+    console.log('Connection closed.');
   }
 }
 
