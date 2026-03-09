@@ -1,40 +1,36 @@
 const { MongoClient } = require('mongodb');
-const path = require('path');
-const fs = require('fs');
-
-// Load configuration from config.json
-const configPath = path.join(__dirname, '../../../../conf/config.json');
-let config;
-
-try {
-  config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-} catch (error) {
-  console.error('Error loading config.json:', error.message);
-  throw new Error('Failed to load config.json');
-}
+const configuration = require('../../../lib/configuration');
 
 let client;
-let selectedDbName = config.dbName;
+let selectedDbName;
 
-// Build connection URL from config
+// Build connection URL from config (called at runtime, not require time)
 function buildConnectionUrl() {
   // If useConnectionUri is true and dbConnectionUri is provided, use it directly
-  if (config.useConnectionUri && config.dbConnectionUri) {
-    return config.dbConnectionUri;
+  const useConnectionUri = configuration.getConfig('useConnectionUri');
+  const dbConnectionUri = configuration.getConfig('dbConnectionUri');
+  
+  if (useConnectionUri && dbConnectionUri) {
+    return dbConnectionUri;
   }
   
   // Otherwise build the URL from individual config values
-  const host = config.dbHost;
-  const port = config.dbPort || 27017;
-  const username = config.dbUser;
-  const password = config.dbPass;
-  const ssl = config.ssl || false;
+  const host = configuration.getConfig('dbHost');
+  const port = configuration.getConfig('dbPort') || 27017;
+  const username = configuration.getConfig('dbUser');
+  const password = configuration.getConfig('dbPass');
+  const ssl = configuration.getConfig('ssl') || false;
   
   return `mongodb://${username}:${password}@${host}:${port}/?ssl=${ssl}&replicaSet=rs0&readPreference=secondaryPreferred&retryWrites=false`;
 }
 
 async function getDB(queries) {
   try {
+    // Get database name from config if not already set
+    if (!selectedDbName) {
+      selectedDbName = configuration.getConfig('dbName');
+    }
+    
     if (!selectedDbName) {
       throw new Error('Database name is required');
     }
@@ -43,17 +39,19 @@ async function getDB(queries) {
     const url = buildConnectionUrl();
     
     // Create client with TLS options from config
+    const ssl = configuration.getConfig('ssl') || false;
     const clientOptions = {
-      ssl: config.ssl || false,
-      tls: config.ssl || false,
+      ssl: ssl,
+      tls: ssl,
       replicaSet: 'rs0',
       readPreference: 'secondaryPreferred',
       retryWrites: false
     };
     
     // Add TLS CA file if configured
-    if (config.sslCA) {
-      clientOptions.tlsCAFile = config.sslCA;
+    const sslCA = configuration.getConfig('sslCA');
+    if (sslCA) {
+      clientOptions.tlsCAFile = sslCA;
     }
 
     client = new MongoClient(url, clientOptions);
