@@ -2,12 +2,28 @@
 <html lang="en" data-adapt-framework-version="{{adapt_framework}}" data-adapt-authoring-version="{{adapt_authoring}}">
   <head>
     <title>{{productName}}</title>
+    <meta name="description" content="Adapt Authoring Tool - Create responsive e-learning content">
+    
+    <!-- Preconnect to external origins for faster loading -->
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://cdn.ckeditor.com" crossorigin>
+    <link rel="preconnect" href="https://laerdal.atlassian.net" crossorigin>
+    
+    <!-- DNS Prefetch for additional origins -->
+    <link rel="dns-prefetch" href="https://fonts.googleapis.com">
+    
     <link rel="icon" type="image/png" href="css/assets/favicon.png" />
     <link rel="stylesheet" href="css/adapt.css" />
     <link rel="stylesheet" href="font-awesome-4.5.0/css/font-awesome.min.css">
-    <script type="text/javascript" src="modernizr.js"></script>
-		<link rel="stylesheet" href="https://cdn.ckeditor.com/ckeditor5/42.0.0/ckeditor5.css">
-    <script type="text/javascript" src="https://laerdal.atlassian.net/s/d41d8cd98f00b204e9800998ecf8427e-T/xghl7j/b/9/c95134bc67d3a521bb3f4331beb9b804/_/download/batch/com.atlassian.jira.collector.plugin.jira-issue-collector-plugin:issuecollector/com.atlassian.jira.collector.plugin.jira-issue-collector-plugin:issuecollector.js?locale=en-US&collectorId=119dbfe1"></script>
+    <script type="text/javascript" src="modernizr.js" defer></script>
+    
+    <!-- CKEditor CSS: Load async to avoid render blocking -->
+    <link rel="preload" href="https://cdn.ckeditor.com/ckeditor5/42.0.0/ckeditor5.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+    <noscript><link rel="stylesheet" href="https://cdn.ckeditor.com/ckeditor5/42.0.0/ckeditor5.css"></noscript>
+    
+    <!-- JIRA Collector: Defer loading to avoid blocking render -->
+    <script type="text/javascript" src="https://laerdal.atlassian.net/s/d41d8cd98f00b204e9800998ecf8427e-T/xghl7j/b/9/c95134bc67d3a521bb3f4331beb9b804/_/download/batch/com.atlassian.jira.collector.plugin.jira-issue-collector-plugin:issuecollector/com.atlassian.jira.collector.plugin.jira-issue-collector-plugin:issuecollector.js?locale=en-US&collectorId=119dbfe1" defer></script>
+    
     {{#if isProduction}}
       <script type="text/javascript" src="require.js" data-main="js/origin.js{{#if dateStampAsString}}?{{dateStampAsString}}{{/if}}"></script>
     {{else}}
@@ -29,6 +45,12 @@
     <!-- End Google Analytics -->
     {{/if}}
     <style>
+      /* Font display optimization - prevent FOIT (Flash of Invisible Text) */
+      @font-face {
+        font-family: 'FontAwesome';
+        font-display: swap;
+      }
+      
       .location-login a#atlwdg-trigger {
         left: 100%!important;
       }
