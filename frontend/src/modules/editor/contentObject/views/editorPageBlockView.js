@@ -30,20 +30,76 @@ define(function(require){
       this.render();
     },
 
+    /**
+     * Optimized render - uses pre-loaded content from BatchLoader
+     * when available, falling back to individual fetch if not.
+     */
     render: function() {
-      this.model.fetchChildren(_.bind(function(components) {
-        this.children = components;
-        var layouts = this.getAvailableLayouts();
-        // FIXME why do we have two attributes with the same value?
-        this.model.set({ layoutOptions: layouts, dragLayoutOptions: layouts });
+      var self = this;
+      var blockId = this.model.get('_id');
+      
+      // Check if we have pre-loaded components from batch loading
+      var cachedComponents = this._getComponentsFromBatchCache(blockId);
+      
+      if (cachedComponents !== null) {
+        // Use cached components
+        this.children = cachedComponents;
+        this._finishRender();
+      } else {
+        // Fallback to original behavior if batch data not available
+        this.model.fetchChildren(_.bind(function(components) {
+          this.children = components;
+          this._finishRender();
+        }, this));
+      }
+    },
+    
+    /**
+     * Get components for this block from the batch-loaded cache
+     */
+    _getComponentsFromBatchCache: function(blockId) {
+      var batchContent = Origin.editor._batchLoadedContent;
+      if (!batchContent || !batchContent.componentsByParent) {
+        return null;
+      }
+      
+      var blockIdStr = blockId.toString ? blockId.toString() : blockId;
+      var componentsData = batchContent.componentsByParent[blockIdStr];
+      
+      if (componentsData === undefined) {
+        return null; // Not in cache, need to fetch
+      }
+      
+      if (!componentsData || componentsData.length === 0) {
+        return []; // Cached as empty
+      }
+      
+      // Convert to ComponentModel instances if they're raw data
+      var ComponentModel = require('core/models/componentModel');
+      return componentsData.map(function(component) {
+        if (component instanceof ComponentModel) {
+          return component;
+        }
+        return new ComponentModel(component);
+      }).sort(function(a, b) {
+        return (a.get('_sortOrder') || 0) - (b.get('_sortOrder') || 0);
+      });
+    },
+    
+    /**
+     * Complete the render process after components are loaded
+     */
+    _finishRender: function() {
+      var layouts = this.getAvailableLayouts();
+      // FIXME why do we have two attributes with the same value?
+      this.model.set({ layoutOptions: layouts, dragLayoutOptions: layouts });
 
-        EditorOriginView.prototype.render.apply(this);
+      EditorOriginView.prototype.render.apply(this);
 
-        this.addComponentViews();
-        this.setupDragDrop();
+      this.addComponentViews();
+      this.setupDragDrop();
 
-        this.handleAsyncPostRender();
-      }, this));
+      this.handleAsyncPostRender();
     },
 
     animateIn: function() {
@@ -87,8 +143,8 @@ define(function(require){
         'editorView:addComponent:' + id + ' ' +
         'editorView:removeComponent:' + id + ' ' +
         'editorView:moveComponent:' + id
-      ] = this.render;
-      events['editorView:pasted:' + id] = this.onPaste;
+      ] = this.onContentChanged;
+      events['editorView:pasted:' + id] = this.onPasteWithCacheClear;
       this.listenTo(Origin, events);
 
       this.listenTo(this, {
@@ -97,6 +153,27 @@ define(function(require){
         'contextMenu:block:copyID': this.onCopyID,
         'contextMenu:block:delete': this.deleteBlockPrompt
       });
+    },
+    
+    /**
+     * Clear cache and re-render when components change
+     */
+    onContentChanged: function() {
+      // Clear the batch cache since content has changed
+      if (Origin.editor._batchLoadedContent) {
+        Origin.editor._batchLoadedContent = null;
+      }
+      this.render();
+    },
+    
+    /**
+     * Handle paste with cache clear
+     */
+    onPasteWithCacheClear: function() {
+      if (Origin.editor._batchLoadedContent) {
+        Origin.editor._batchLoadedContent = null;
+      }
+      this.onPaste();
     },
 
     postRender: function() {

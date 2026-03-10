@@ -3,6 +3,7 @@ define(function(require){
   var Backbone = require('backbone');
   var Origin = require('core/origin');
   var ArticleModel = require('core/models/articleModel');
+  var BatchLoader = require('core/batchLoader');
   var EditorOriginView = require('../../global/views/editorOriginView');
   var EditorPageArticleView = require('./editorPageArticleView');
   var EditorPasteZoneView = require('../../global/views/editorPasteZoneView');
@@ -11,6 +12,8 @@ define(function(require){
     className: 'page',
     tagName: 'div',
     childrenRenderedCount: 0,
+    // Store pre-loaded content for child views to access
+    _batchLoadedContent: null,
 
     events: _.extend({}, EditorOriginView.prototype.events, {
       'click .add-article': 'addNewArticle',
@@ -26,8 +29,8 @@ define(function(require){
         'editorView:removeSubViews': this.remove,
         'pageView:itemAnimated': this.evaluateChildStatus
       };
-      originEvents['editorView:moveArticle:' + id] = this.render;
-      originEvents['editorView:pasted:' + id] = this.render;
+      originEvents['editorView:moveArticle:' + id] = this.onContentChanged;
+      originEvents['editorView:pasted:' + id] = this.onContentChanged;
       this.listenTo(Origin, originEvents);
 
       Origin.options.addItems([
@@ -58,6 +61,13 @@ define(function(require){
       return returnVal;
     },
 
+    // Clear cache and re-render when content changes
+    onContentChanged: function() {
+      BatchLoader.clearCache(this.model.get('_id'));
+      this._batchLoadedContent = null;
+      this.render();
+    },
+
     evaluateChildStatus: function() {
       this.childrenRenderedCount++;
 
@@ -69,9 +79,16 @@ define(function(require){
       this.setupScrollListener();
     },
 
+    /**
+     * Optimized addArticleViews using batch loading.
+     * Loads all articles, blocks, and components in a single API request
+     * instead of N+1 individual requests.
+     */
     addArticleViews: function() {
+      var self = this;
       this.$('.page-articles').empty();
       Origin.trigger('editorPageView:removePageSubViews');
+      
       // Insert the 'pre' paste zone for articles
       var prePasteArticle = new ArticleModel({
         _parentId: this.model.get('_id'),
@@ -79,15 +96,55 @@ define(function(require){
         _pasteZoneSortOrder: 1
       });
       this.$('.page-articles').append(new EditorPasteZoneView({ model: prePasteArticle }).$el);
-      // Iterate over each article and add it to the page
-      this.model.fetchChildren(_.bind(function(children) {
+      
+      var pageId = this.model.get('_id');
+      
+      // Use batch loader to fetch all content in one request
+      BatchLoader.loadPageContent(pageId, function(err, data) {
+        if (err) {
+          console.error('Failed to batch load page content, falling back to individual requests', err);
+          // Fallback to original behavior if batch loading fails
+          self._loadArticlesLegacy();
+          return;
+        }
+        
+        // Store the pre-loaded content so child views can access it
+        self._batchLoadedContent = data;
+        // Make it available globally for this page load
+        Origin.editor._batchLoadedContent = data;
+        Origin.editor._batchLoadedPageId = pageId;
+        
+        // Calculate total block count for animation tracking
+        Origin.editor.blockCount = data.blocks.length;
+        
+        // Sort articles by _sortOrder and add views
+        var articles = data.articles.sort(function(a, b) {
+          return (a.get('_sortOrder') || 0) - (b.get('_sortOrder') || 0);
+        });
+        
+        for (var i = 0, count = articles.length; i < count; i++) {
+          var article = articles[i];
+          if (article.get('_type') !== 'article') {
+            continue;
+          }
+          self.addArticleView(article);
+        }
+      });
+    },
+
+    /**
+     * Fallback method using the original N+1 request pattern
+     */
+    _loadArticlesLegacy: function() {
+      var self = this;
+      this.model.fetchChildren(function(children) {
         for(var i = 0, count = children.length; i < count; i++) {
           if(children[i].get('_type') !== 'article') {
             continue;
           }
-          this.addArticleView(children[i]);
+          self.addArticleView(children[i]);
         }
-      }, this));
+      });
     },
 
     addArticleView: function(articleModel, scrollIntoView) {
@@ -144,11 +201,7 @@ define(function(require){
     }
     },
 
-    getCurrentUserRole: async function () {
-      const response = await fetch('/api/user/me');
-      const result = await response.json();
-      return result.rolesAsName[0];
-    },
+    // getCurrentUserRole is now cached at Origin.getCurrentUserRole (in templating/index.js)
     loadPageEdit: function(event) {
       event && event.preventDefault();
       var courseId = this.model.get('_courseId');
