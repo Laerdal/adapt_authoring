@@ -15,7 +15,8 @@
     <link rel="icon" type="image/png" href="css/assets/favicon.png" />
     <link rel="stylesheet" href="css/adapt.css" />
     <link rel="stylesheet" href="font-awesome-4.5.0/css/font-awesome.min.css">
-    <script type="text/javascript" src="modernizr.js" defer></script>
+    <!-- Note: modernizr must load synchronously for feature detection before RequireJS -->
+    <script type="text/javascript" src="modernizr.js"></script>
     
     <!-- CKEditor CSS: Load async to avoid render blocking -->
     <link rel="preload" href="https://cdn.ckeditor.com/ckeditor5/42.0.0/ckeditor5.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
