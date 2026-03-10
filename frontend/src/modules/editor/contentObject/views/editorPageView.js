@@ -12,6 +12,8 @@ define(function(require){
     className: 'page',
     tagName: 'div',
     childrenRenderedCount: 0,
+    // Store pre-loaded content for child views to access
+    _batchLoadedContent: null,
 
     events: _.extend({}, EditorOriginView.prototype.events, {
       'click .add-article': 'addNewArticle',
@@ -27,8 +29,8 @@ define(function(require){
         'editorView:removeSubViews': this.remove,
         'pageView:itemAnimated': this.evaluateChildStatus
       };
-      originEvents['editorView:moveArticle:' + id] = this.render;
-      originEvents['editorView:pasted:' + id] = this.render;
+      originEvents['editorView:moveArticle:' + id] = this.onContentChanged;
+      originEvents['editorView:pasted:' + id] = this.onContentChanged;
       this.listenTo(Origin, originEvents);
 
       Origin.options.addItems([
@@ -59,6 +61,13 @@ define(function(require){
       return returnVal;
     },
 
+    // Clear cache and re-render when content changes
+    onContentChanged: function() {
+      BatchLoader.clearCache(this.model.get('_id'));
+      this._batchLoadedContent = null;
+      this.render();
+    },
+
     evaluateChildStatus: function() {
       this.childrenRenderedCount++;
 
@@ -70,9 +79,16 @@ define(function(require){
       this.setupScrollListener();
     },
 
+    /**
+     * Optimized addArticleViews using batch loading.
+     * Loads all articles, blocks, and components in a single API request
+     * instead of N+1 individual requests.
+     */
     addArticleViews: function() {
+      var self = this;
       this.$('.page-articles').empty();
       Origin.trigger('editorPageView:removePageSubViews');
+      
       // Insert the 'pre' paste zone for articles
       var prePasteArticle = new ArticleModel({
         _parentId: this.model.get('_id'),
@@ -194,11 +210,7 @@ define(function(require){
     }
     },
 
-    getCurrentUserRole: async function () {
-      const response = await fetch('/api/user/me');
-      const result = await response.json();
-      return result.rolesAsName[0];
-    },
+    // getCurrentUserRole is now cached at Origin.getCurrentUserRole (in templating/index.js)
     loadPageEdit: function(event) {
       event && event.preventDefault();
       var courseId = this.model.get('_courseId');

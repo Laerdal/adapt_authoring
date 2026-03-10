@@ -68,16 +68,17 @@ function initialize() {
                     parentIds = _.pluck(articles, '_id');
                     // add the contentObject id as parent for assets on articles
                     parentIds.push(itemForDeletion._id);
-                  }
-                  async.each(articles, function(article, cb) {
-                    db.retrieve('block', {_courseId: article._courseId, _parentId: article._id}, function(err, blocks) {
+                    
+                    // OPTIMIZED: Batch fetch all blocks for all articles at once instead of N+1 pattern
+                    var articleIds = articles.map(function(a) { return a._id; });
+                    db.retrieve('block', { _courseId: itemForDeletion._courseId, _parentId: { $in: articleIds } }, function(err, blocks) {
                       if (err) {
-                        return callback(err, 'Unable to retrieve child blocks of article ' + article._id);
+                        return callback(err, 'Unable to retrieve child blocks');
                       }
                       if (blocks && blocks.length !== 0) {
                         parentIds = parentIds.concat(_.pluck(blocks, '_id'));
                       }
-                      if(parentIds.length > 0) {
+                      if (parentIds.length > 0) {
                         criteria.$or = [
                           { _contentTypeParentId: { $in: parentIds } },
                           { _contentTypeId: itemForDeletion._id }
@@ -85,15 +86,12 @@ function initialize() {
                       } else {
                         criteria._contentTypeId = itemForDeletion._id;
                       }
-                      cb();
-                    });
-                  }, function(error) {
-                    if (error) {
-                      callback(error);
-                    } else {
                       callback(null, 'Child content objects added to criteria object');
-                    }
-                  });
+                    });
+                  } else {
+                    criteria._contentTypeId = itemForDeletion._id;
+                    callback(null, 'No articles found');
+                  }
                 });
               },
               function(callback){
