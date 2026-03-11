@@ -50,7 +50,7 @@ define([
 
     // HACK needed to fix reset functionality (see https://github.com/powmedia/backbone-forms/issues/517)
     setValue: function(value) {
-      this.value = value;
+      this.value = value || [];
       // remove previous items, and add new ones
       this.items.forEach(function(item) { item.remove(); });
       this.items = [];
