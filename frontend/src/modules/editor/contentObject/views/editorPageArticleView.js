@@ -1,13 +1,10 @@
 // LICENCE https://github.com/adaptlearning/adapt_authoring/blob/master/LICENSE
-// jqueryUI must be in dependency array to ensure draggable/droppable/sortable are available
-define([
-  'jqueryUI',
-  'core/origin',
-  'core/models/blockModel',
-  '../../global/views/editorOriginView',
-  './editorPageBlockView',
-  '../../global/views/editorPasteZoneView'
-], function(jQueryUI, Origin, BlockModel, EditorOriginView, EditorPageBlockView, EditorPasteZoneView) {
+define(function(require){
+  var Origin = require('core/origin');
+  var BlockModel = require('core/models/blockModel');
+  var EditorOriginView = require('../../global/views/editorOriginView');
+  var EditorPageBlockView = require('./editorPageBlockView');
+  var EditorPasteZoneView = require('../../global/views/editorPasteZoneView');
 
   var EditorPageArticleView = EditorOriginView.extend({
     className: 'article editable article-draggable',
@@ -68,14 +65,8 @@ define([
       });
     },
 
-    /**
-     * Optimized addBlockViews - uses pre-loaded content from BatchLoader
-     * when available, falling back to individual fetch if not.
-     */
     addBlockViews: function() {
-      var self = this;
       this.$('.article-blocks').empty();
-      
       // Insert the 'pre' paste zone for blocks
       var view = new EditorPasteZoneView({
         model: new BlockModel({
@@ -85,56 +76,13 @@ define([
         })
       });
       this.$('.article-blocks').append(view.$el);
-      
-      var articleId = this.model.get('_id');
-      
-      // Check if we have pre-loaded content from batch loading
-      if (Origin.editor._batchLoadedContent && Origin.editor._batchLoadedContent.blocksByParent) {
-        var blocks = this._getBlocksFromBatchCache(articleId);
-        if (blocks) {
-          // Don't add to blockCount since it was already set in EditorPageView
-          for (var i = 0, count = blocks.length; i < count; i++) {
-            this.addBlockView(blocks[i]);
-          }
-          return;
-        }
-      }
-      
-      // Fallback to original behavior if batch data not available
+      // Iterate over each block and add it to the article
       this.model.fetchChildren(_.bind(function(children) {
         Origin.editor.blockCount += children.length;
         for(var i = 0, count = children.length; i < count; i++) {
           this.addBlockView(children[i]);
         }
       }, this));
-    },
-
-    /**
-     * Get blocks for this article from the batch-loaded cache
-     */
-    _getBlocksFromBatchCache: function(articleId) {
-      var batchContent = Origin.editor._batchLoadedContent;
-      if (!batchContent || !batchContent.blocksByParent) {
-        return null;
-      }
-      
-      var articleIdStr = articleId.toString ? articleId.toString() : articleId;
-      var blocksData = batchContent.blocksByParent[articleIdStr];
-      
-      if (!blocksData) {
-        return [];
-      }
-      
-      // Convert to BlockModel instances if they're raw data
-      var BlockModel = require('core/models/blockModel');
-      return blocksData.map(function(block) {
-        if (block instanceof BlockModel) {
-          return block;
-        }
-        return new BlockModel(block);
-      }).sort(function(a, b) {
-        return (a.get('_sortOrder') || 0) - (b.get('_sortOrder') || 0);
-      });
     },
 
     addBlockView: function(blockModel, scrollIntoView) {

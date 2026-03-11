@@ -1,14 +1,11 @@
 // LICENCE https://github.com/adaptlearning/adapt_authoring/blob/master/LICENSE
-// jqueryUI must be in dependency array to ensure sortable/draggable/droppable are available
-define([
-  'jqueryUI',
-  'core/origin',
-  'core/helpers',
-  'core/collections/contentCollection',
-  '../../global/views/editorOriginView',
-  './editorMenuLayerView',
-  './editorMenuItemView'
-], function(jQueryUI, Origin, Helpers, ContentCollection, EditorOriginView, EditorMenuLayerView, EditorMenuItemView) {
+define(function(require){
+  var Origin = require('core/origin');
+  var Helpers = require('core/helpers');
+  var ContentCollection = require('core/collections/contentCollection');
+  var EditorOriginView = require('../../global/views/editorOriginView');
+  var EditorMenuLayerView = require('./editorMenuLayerView');
+  var EditorMenuItemView = require('./editorMenuItemView');
 
   var EditorMenuView = EditorOriginView.extend({
     className: "editor-menu",

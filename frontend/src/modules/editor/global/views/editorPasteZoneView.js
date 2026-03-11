@@ -1,13 +1,10 @@
 // LICENCE https://github.com/adaptlearning/adapt_authoring/blob/master/LICENSE
-// jqueryUI must be in dependency array to ensure droppable is available
-define([
-  'jqueryUI',
-  'backbone',
-  'handlebars',
-  'core/origin',
-  'core/helpers',
-  './editorOriginView'
-], function(jQueryUI, Backbone, Handlebars, Origin, Helpers, EditorOriginView) {
+define(function(require){
+  var Backbone = require('backbone');
+  var Handlebars = require('handlebars');
+  var Origin = require('core/origin');
+  var Helpers = require('core/helpers');
+  var EditorOriginView = require('./editorOriginView');
 
   var EditorPasteZoneView = EditorOriginView.extend({
     className: 'display-none paste-zone',

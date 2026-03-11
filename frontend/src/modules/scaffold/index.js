@@ -132,7 +132,8 @@ define([
       type: getType(),
       validators: getValidators(),
       extra: field.extra,
-      linkedProperties: field.linkedProperties  // Add linkedProperties support
+      options: field.enum || field.options || undefined,
+      linkedProperties: field.linkedProperties  // Add linkedProperties support      
     };
 
     if (_.isObject(inputType)) {
