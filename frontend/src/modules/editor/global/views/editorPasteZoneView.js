@@ -22,6 +22,7 @@ define(function(require){
     postRender: function () {
       var type = this.model.get('_type');
       this.$el.addClass('paste-zone-' + type);
+      if (!$.fn.droppable) return;
       this.$el.droppable({
         accept: '.' + type + '-draggable',
         hoverClass: 'paste-zone-droppable',

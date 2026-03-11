@@ -110,10 +110,13 @@ define([
         view: itemView
       });
 
-      elm.appendTo('.scaffold-asset-item-img-holder').draggable({
-        containment: 'parent',
-        stop: this.onDragStop.bind(this)
-      });
+      elm.appendTo('.scaffold-asset-item-img-holder');
+      if ($.fn.draggable) {
+        elm.draggable({
+          containment: 'parent',
+          stop: this.onDragStop.bind(this)
+        });
+      }
     },
 
     updateDragItem: function(item) {

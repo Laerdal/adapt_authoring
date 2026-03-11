@@ -171,6 +171,7 @@ define(function(require){
      * Configures the JQueryUI sortable() plugin to enable drag and drop
      */
     setupDragDrop: function() {
+      if (!$.fn.sortable) return;
       $(".editor-menu-layer-inner").sortable({
         containment: '.editor-menu',
         appendTo: '.editor-menu',

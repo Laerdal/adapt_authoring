@@ -83,6 +83,7 @@ define(function(require){
     },
 
     setupDragDrop: function() {
+      if (!$.fn.draggable) return;
       var view = this;
       var autoScrollTimer = false;
       var $container = $('.contentPane');

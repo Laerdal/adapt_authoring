@@ -12,7 +12,8 @@ define([
     render: function() {
       var instance = Backbone.Form.editors.__List.prototype.render.apply(this, arguments);
       // set-up drag 'n drop
-      this.$list.sortable({
+      if (this.$list.sortable) {
+        this.$list.sortable({
         placeholder: 'sortable-placeholder',
         containment: '.app-inner',
         update: this.updateItemPositions.bind(this),
@@ -26,6 +27,7 @@ define([
           });
         }
       });
+      }
       return instance;
     },
 
