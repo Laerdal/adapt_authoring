@@ -1,8 +1,6 @@
 var should = require('should');
 
 var origin = require('../');
-var configuration = require('../lib/configuration');
-var path = require('path');
 var tenantmanager = require('../lib/tenantmanager.js');
 
 var testData = require('./testData.json').tenantmanager;

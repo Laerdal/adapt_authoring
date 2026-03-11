@@ -18,10 +18,10 @@ server.get('/poll/:id', function (request, response, next) {
   if (user && pollUrl && id !== 0) {
 
     needle.get(pollUrl + id, {rejectUnauthorized: false}, function(error, res, body) {
-      if (!error && res.statusCode == 200 && body.data.tenantId == user.tenant._id) {
+      if (!error && res.statusCode == 200 && body && body.data && user.tenant && body.data.tenantId == user.tenant._id) {
         return response.json(body);
       } else {
-        logger.log('error', error);
+        if (error) logger.log('error', error);
         response.statusCode = 500;
         return response.end();
       }

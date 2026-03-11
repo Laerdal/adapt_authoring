@@ -2,7 +2,6 @@ var request = require('supertest');
 var should = require('should');
 
 var origin = require('../');
-var logger = require('../lib/logger');
 var permissions = require('../lib/permissions');
 var rest = require('../lib/rest');
 

@@ -33,8 +33,9 @@ server.get('/preview/:tenant/:course/*', (req, res, next) => {
   (file === Constants.Filenames.Main) ? handleIndexFile() : handleNonIndexFile();
 
   function onAuthError() {
-    logger.log('warn', `Preview: user '${user._id}' does not have permission to view course '${courseId}' on tenant '${tenantId}'`);
-    next(new PreviewPermissionError());
+    const userId = user && user._id ? user._id : 'unknown';
+    logger.log('warn', `Preview: user '${userId}' does not have permission to view course '${courseId}' on tenant '${tenantId}'`);
+    return next(new PreviewPermissionError());
   }
 
   function sendFile(filename) {
@@ -56,7 +57,7 @@ server.get('/preview/:tenant/:course/*', (req, res, next) => {
     helpers.hasCoursePermission('*', user._id, tenantId, { _id: courseId }, (error, hasPermission) => {
       if(error) {
         logger.log('error', error);
-        next(new PreviewPermissionError());
+        return next(new PreviewPermissionError());
       }
       if(!hasPermission) { // Remove this course from the cached sessions.
         const position = req.session.previews.indexOf(previewKey);

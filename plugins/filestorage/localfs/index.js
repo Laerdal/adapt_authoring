@@ -450,7 +450,10 @@ LocalFileStorage.prototype.inspectFile = function (filePath, fileType, next) {
 
   // Interrogate the uploaded file
   ffprobe(filePath, { path: ffprobeStatic.path }, function (err, probeData) {
-    if (probeData) {
+    if (err) {
+      logger.log('warn', 'ffprobe error for ' + filePath + ': ' + err.message);
+    }
+    if (probeData && probeData.streams && probeData.streams.length > 0) {
       // Store extra metadata depending on the type of file uploaded
       switch (fileType) {
         case 'image':

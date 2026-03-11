@@ -23,7 +23,11 @@ permissions.ignoreRoute(/^\/export\/?.*$/);
 server.get('/export/:tenant/:course/download.zip', function (req, res, next) {
   var tenantId = req.params.tenant;
   var courseId = req.params.course;
-  var userId = usermanager.getCurrentUser()._id;
+  var currentUser = usermanager.getCurrentUser();
+  if (!currentUser) {
+    return res.status(401).json({ success: false, message: 'Not authenticated' });
+  }
+  var userId = currentUser._id;
   // TODO not good specifying this here AND in plugins/output/adapt/export EXPORT_DIR
   var zipDir = path.join(
     configuration.tempDir,

@@ -22,6 +22,7 @@ ThemePresetContent.prototype.updatePreset = function(presetId, courseId, res, ne
   // save to config
   app.contentmanager.retrieve('config', { _courseId: courseId }, function(err, config) {
     if (err) return next(err);
+    if (!config || !config.length) return next(new Error('Config not found for course ' + courseId));
     var delta = config[0];
     // set or delete themePreset
     if (presetId !== 'null') {

@@ -3,7 +3,6 @@ var path = require('path');
 var should = require('should');
 
 var configuration = require('../lib/configuration');
-var database = require('../lib/database');
 var pluginmanager = require('../lib/pluginmanager');
 
 var testData = require('./testData.json').pluginmanager;

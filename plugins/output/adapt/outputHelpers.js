@@ -32,19 +32,19 @@ function unzip(filePath, unzipPath, done) {
       var dest = path.join(unzipPath, entry.fileName);
       if (/\/$/.test(entry.fileName)) {
         fs.ensureDir(dest, function(err) {
-          if (error) {
-            return done(error);
+          if (err) {
+            return done(err);
           }
           zipfile.readEntry();
         });
       } else {
         zipfile.openReadStream(entry, function(err, readStream) {
-          if (error) {
-            return done(error);
+          if (err) {
+            return done(err);
           }
           fs.ensureDir(path.dirname(dest), function(err) {
-            if (error) {
-              return done(error);
+            if (err) {
+              return done(err);
             }
             readStream.pipe(fs.createWriteStream(dest));
             readStream.on("end", function() {

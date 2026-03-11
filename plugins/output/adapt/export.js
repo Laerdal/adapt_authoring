@@ -204,6 +204,9 @@ function writeThemeVariables(results, variablesWritten) {
     if (error) {
       return variablesWritten(error);
     }
+    if (!data.course || !data.course.length || !data.config || !data.config.length) {
+      return variablesWritten(null);
+    }
     const themeVariables = data.course[0].themeVariables;
     const themeName = data.config[0]._theme;
     const destinationFolder = path.join(EXPORT_DIR, 'src', 'theme', themeName);

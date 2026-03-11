@@ -117,7 +117,13 @@ BowerPlugin.prototype.onDatabaseCreated = function (db, next) {
         return next(err);
       }
 
-      var schema = JSON.parse(data);
+      var schema;
+      try {
+        schema = JSON.parse(data);
+      } catch (e) {
+        logger.log('error', 'failed to parse schema file at ' + schemaPath, e);
+        return next(e);
+      }
       db.addModel(pluginType, schema);
       return next();
     });

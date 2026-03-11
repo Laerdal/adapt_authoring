@@ -1,4 +1,3 @@
-var path = require('path');
 var should = require('should');
 
 var usermanager = require('../lib/usermanager.js');

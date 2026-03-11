@@ -11,7 +11,7 @@ module.exports = {
       ['Tenant Admin', 'Super Admin']
     ];
     await Promise.all(replacements.map(async ([oldName, newName]) => {
-      const [oldRole, newRole] = await Promise.all([ roles.find({ name: oldName }), roles.find({ name: newName }) ]);
+      const [oldRole, newRole] = await Promise.all([ roles.findOne({ name: oldName }), roles.findOne({ name: newName }) ]);
       if(!oldRole) {
         return;
       }

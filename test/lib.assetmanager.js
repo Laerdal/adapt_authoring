@@ -1,10 +1,7 @@
-var async = require('async');
-var fs = require('fs');
 var request = require('supertest');
 var should = require('should');
 
 var origin = require('../');
-var assetmanager = require('../lib/assetmanager');
 
 var testUser = require('./testData.json').testUser;
 var testData = require('./testData.json').assetmanager;

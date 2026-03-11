@@ -225,13 +225,13 @@ LocalAuth.prototype.internalResetPassword = function (user, next) {
   // Hash the password
   auth.hashPassword(user.password, function (error, hash) {
     if (error) {
-      return cb(error);
+      return next(error);
     }
 
     // Update user details with hashed password
     usermanager.updateUser({ _id: user.id }, { password: hash, failedLoginCount: 0 }, function(err) {
-      if (error) {
-        return next(error)
+      if (err) {
+        return next(err)
       }
 
       usermanager.deleteUserPasswordReset({ user: user.id }, function (error, user) {

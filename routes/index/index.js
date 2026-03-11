@@ -32,11 +32,14 @@ server.get('/', async function (req, res, next) {
 async function getVersions() {
   if (Object.keys(_versions).length) return _versions;
 
-  installHelper.getInstalledVersions((error, data) => {
-    if (error) {
-      logger.log('error', error);
-    }
-    _versions = data;
-    return _versions;
+  return new Promise((resolve, reject) => {
+    installHelper.getInstalledVersions((error, data) => {
+      if (error) {
+        logger.log('error', error);
+        return resolve(_versions);
+      }
+      _versions = data || {};
+      resolve(_versions);
+    });
   });
 }

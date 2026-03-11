@@ -4,7 +4,6 @@ var server = module.exports = express();
 var usermanager = require('../../lib/usermanager');
 var configuration = require('../../lib/configuration');
 var Constants = require('../../lib/outputmanager').Constants;
-var configuration = require('../../lib/configuration');
 var fs = require('fs');
 var path = require('path');
 var OutputPlugin = require('../../lib/outputmanager').OutputPlugin;
@@ -21,7 +20,7 @@ server.get('/download/:tenant/:course', function(req, res, next) {
   var currentUser = usermanager.getCurrentUser();
   var mode = this.Constants.Modes.Publish;
 
-  if (currentUser && (currentUser.tenant._id === tenant)) {
+  if (currentUser && currentUser.tenant && (currentUser.tenant._id === tenant)) {
 
     var outputplugin = app.outputmanager.getOutputPlugin(configuration.getConfig('outputPlugin'), function (error, plugin){
 
@@ -56,7 +55,7 @@ server.get('/download/:tenant/:course/:title/download.zip', function (req, res, 
   var zipName = req.params.title;
   var currentUser = usermanager.getCurrentUser();
 
-  if (currentUser && (currentUser.tenant._id == tenantId)) {
+  if (currentUser && currentUser.tenant && (currentUser.tenant._id == tenantId)) {
     fs.stat(downloadZipFilename, function(err, stat) {
       if (err) {
         logger.log('error', 'Error calling fs.stat');
