@@ -19,6 +19,9 @@ jobs:
         with:
           node-version: '18'
 
+      - name: Install Dependencies
+        run: npm install
+
       - name: Install CycloneDX
         run: npm install -g @cyclonedx/cyclonedx-npm
 
