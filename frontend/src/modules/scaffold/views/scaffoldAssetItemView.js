@@ -1,4 +1,6 @@
+// jqueryUI must be in dependency array to ensure draggable is available
 define([
+  'jqueryUI',
   'core/origin',
   'backbone-forms',
   'core/helpers',
@@ -6,7 +8,7 @@ define([
   'core/models/courseAssetModel',
   'modules/assetManagement/views/assetManagementModalView',
   'modules/assetManagement/collections/assetCollection'
-], function(Origin, BackboneForms, Helpers, ScaffoldAssetView, CourseAssetModel, AssetManagementModalView, AssetCollection) {
+], function(jQueryUI, Origin, BackboneForms, Helpers, ScaffoldAssetView, CourseAssetModel, AssetManagementModalView, AssetCollection) {
 
   var ScaffoldAssetItemView = ScaffoldAssetView.extend({
 

@@ -1,10 +1,12 @@
+// jqueryUI must be in dependency array to ensure sortable is available
 define([
+  'jqueryUI',
   'core/origin',
   'core/helpers',
   'core/models/courseAssetModel',
   'backbone-forms',
   'backbone-forms-lists'
-], function(Origin, Helpers, CourseAssetModel, BackboneForms) {
+], function(jQueryUI, Origin, Helpers, CourseAssetModel, BackboneForms) {
 
   var ScaffoldListView = Backbone.Form.editors.List.extend({
     defaultValue: [],

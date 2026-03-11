@@ -1,5 +1,6 @@
 // LICENCE https://github.com/adaptlearning/adapt_authoring/blob/master/LICENSE
-define(function(require){
+// jqueryUI must be in dependency array to ensure sortable/draggable/droppable are available
+define(['require', 'jqueryUI'], function(require){
   var Origin = require('core/origin');
   var Helpers = require('core/helpers');
   var ContentCollection = require('core/collections/contentCollection');
