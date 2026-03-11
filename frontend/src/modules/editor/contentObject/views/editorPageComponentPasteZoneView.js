@@ -20,6 +20,7 @@ define(function(require){
     postRender: function () {
       var view = this;
       this.$el.addClass('paste-zone-component-' + this.model.get('_pasteZoneLayout'));
+      if (!$.fn.droppable) return;
       this.$el.droppable({
         accept: function(el) {
           return el.hasClass('component-draggable') && $(this).css('visibility') == 'visible';
