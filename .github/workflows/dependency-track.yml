@@ -1,0 +1,34 @@
+name: Dependency Track SBOM Upload
+
+on:
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+
+jobs:
+  dependency-track:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install CycloneDX
+        run: npm install -g @cyclonedx/cyclonedx-npm
+
+      - name: Generate SBOM
+        run: cyclonedx-npm --output-file bom.xml
+
+      - name: Upload SBOM to Dependency Track
+        run: |
+          curl -X POST "https://dep-tracker.laerdal.com/api/api/v1/bom" \
+          -H "X-Api-Key: ${{ secrets.DEPENDENCY_TRACK_API_KEY }}" \
+          -H "Content-Type: multipart/form-data" \
+          -F "project=2d939b62-41f9-4b70-9a4e-ac9416fbe4d1" \
+          -F "bom=@bom.xml"
