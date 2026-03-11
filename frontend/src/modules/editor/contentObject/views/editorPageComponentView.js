@@ -1,8 +1,10 @@
 // LICENCE https://github.com/adaptlearning/adapt_authoring/blob/master/LICENSE
 // jqueryUI must be in dependency array to ensure draggable/droppable/sortable are available
-define(['require', 'jqueryUI'], function(require){
-  var Origin = require('core/origin');
-  var EditorOriginView = require('../../global/views/editorOriginView');
+define([
+  'jqueryUI',
+  'core/origin',
+  '../../global/views/editorOriginView'
+], function(jQueryUI, Origin, EditorOriginView) {
 
   var EditorPageComponentView = EditorOriginView.extend({
     className: 'component editable component-draggable',

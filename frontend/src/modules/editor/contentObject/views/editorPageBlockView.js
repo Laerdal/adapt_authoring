@@ -1,13 +1,15 @@
 // LICENCE https://github.com/adaptlearning/adapt_authoring/blob/master/LICENSE
 // jqueryUI must be in dependency array to ensure draggable/droppable/sortable are available
-define(['require', 'jqueryUI'], function(require){
-  var Backbone = require('backbone');
-  var Origin = require('core/origin');
-  var ComponentModel = require('core/models/componentModel');
-  var EditorOriginView = require('../../global/views/editorOriginView');
-  var EditorPageComponentView = require('./editorPageComponentView');
-  var EditorPageComponentPasteZoneView = require('./editorPageComponentPasteZoneView');
-  var EditorPageComponentListView = require('./editorPageComponentListView');
+define([
+  'jqueryUI',
+  'backbone',
+  'core/origin',
+  'core/models/componentModel',
+  '../../global/views/editorOriginView',
+  './editorPageComponentView',
+  './editorPageComponentPasteZoneView',
+  './editorPageComponentListView'
+], function(jQueryUI, Backbone, Origin, ComponentModel, EditorOriginView, EditorPageComponentView, EditorPageComponentPasteZoneView, EditorPageComponentListView) {
 
   var EditorPageBlockView = EditorOriginView.extend({
     className: 'block editable block-draggable page-content-syncing',

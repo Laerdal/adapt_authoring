@@ -1,11 +1,13 @@
 // LICENCE https://github.com/adaptlearning/adapt_authoring/blob/master/LICENSE
 // jqueryUI must be in dependency array to ensure draggable/droppable/sortable are available
-define(['require', 'jqueryUI'], function(require){
-  var Origin = require('core/origin');
-  var BlockModel = require('core/models/blockModel');
-  var EditorOriginView = require('../../global/views/editorOriginView');
-  var EditorPageBlockView = require('./editorPageBlockView');
-  var EditorPasteZoneView = require('../../global/views/editorPasteZoneView');
+define([
+  'jqueryUI',
+  'core/origin',
+  'core/models/blockModel',
+  '../../global/views/editorOriginView',
+  './editorPageBlockView',
+  '../../global/views/editorPasteZoneView'
+], function(jQueryUI, Origin, BlockModel, EditorOriginView, EditorPageBlockView, EditorPasteZoneView) {
 
   var EditorPageArticleView = EditorOriginView.extend({
     className: 'article editable article-draggable',
