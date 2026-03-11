@@ -22,6 +22,7 @@ define([
     },
 
     postRender: function() {
+      if (!$.fn.spectrum) return;
 
       const options = {
         color: this.value,
@@ -57,6 +58,7 @@ define([
     },
 
     getValue: function() {
+      if (!$.fn.spectrum) return this.value || '';
       var colour = this.$el.spectrum('get');
       if (!colour) return '';
 
@@ -64,6 +66,7 @@ define([
     },
 
     setValue: function(value) {
+      if (!$.fn.spectrum) return;
       this.$el.spectrum('set', value);
     },
 
@@ -80,7 +83,7 @@ define([
     },
 
     remove: function() {
-      this.$el.spectrum('destroy');
+      if ($.fn.spectrum) this.$el.spectrum('destroy');
       Backbone.Form.editors.Text.prototype.remove.call(this);
     }
 

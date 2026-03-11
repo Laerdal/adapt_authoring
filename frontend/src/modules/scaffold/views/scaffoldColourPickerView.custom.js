@@ -16,6 +16,7 @@ define([
     }),
 
     postRender: function() {
+      if (!$.fn.spectrum) return;
       // Call parent postRender
       ScaffoldColourPickerView.prototype.postRender.apply(this, arguments);
 
