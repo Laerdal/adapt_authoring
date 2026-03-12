@@ -7,6 +7,7 @@ define(function(require){
   var EditorPageComponentView = require('./editorPageComponentView');
   var EditorPageComponentPasteZoneView = require('./editorPageComponentPasteZoneView');
   var EditorPageComponentListView = require('./editorPageComponentListView');
+  require('jqueryUI');
 
   var EditorPageBlockView = EditorOriginView.extend({
     className: 'block editable block-draggable page-content-syncing',

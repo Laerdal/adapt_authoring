@@ -6,6 +6,7 @@ define(function(require){
   var EditorOriginView = require('../../global/views/editorOriginView');
   var EditorMenuLayerView = require('./editorMenuLayerView');
   var EditorMenuItemView = require('./editorMenuItemView');
+  require('jqueryUI');
 
   var EditorMenuView = EditorOriginView.extend({
     className: "editor-menu",

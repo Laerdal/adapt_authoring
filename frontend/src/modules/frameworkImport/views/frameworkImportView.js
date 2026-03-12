@@ -1,9 +1,5 @@
 // LICENCE https://github.com/adaptlearning/adapt_authoring/blob/master/LICENSE
-define(function(require){
-  var Origin = require('core/origin');
-  var OriginView = require('core/views/originView');
-  var FrameworkImportPluginHeadingView = require('./frameworkImportPluginHeadingView');
-  var FrameworkImportPluginView = require('./frameworkImportPluginView');
+define(['core/origin', 'core/views/originView', './frameworkImportPluginHeadingView', './frameworkImportPluginView', 'jqueryForm', 'jqueryTagsInput'], function(Origin, OriginView, FrameworkImportPluginHeadingView, FrameworkImportPluginView) {
 
   var FrameworkImportView = OriginView.extend({
     tagName: 'div',
@@ -20,13 +16,15 @@ define(function(require){
 
     postRender: function() {
       // tagging
-      this.$('#tags_control').tagsInput({
-        autocomplete_url: 'api/autocomplete/tag',
+      if ($.fn.tagsInput) {
+        this.$('#tags_control').tagsInput({
+          autocomplete_url: 'api/autocomplete/tag',
         onAddTag: this.onAddTag.bind(this),
         onRemoveTag: this.onRemoveTag.bind(this),
-        'minChars' : 3,
-        'maxChars' : 30
-      });
+          'minChars' : 3,
+          'maxChars' : 30
+        });
+      }
       this.setViewToReady();
     },
 
@@ -59,6 +57,7 @@ define(function(require){
       this.$('#tags').val(tags);
 
       // submit form data
+      if (!$.fn.ajaxSubmit) return false;
       this.$('form.frameworkImport').ajaxSubmit({
 
         uploadProgress: function(event, position, total, percentComplete) {
@@ -234,6 +233,7 @@ define(function(require){
     completeImport: function() {
       this.sidebarView.updateButton('.framework-import-sidebar-save-button', Origin.l10n.t('app.importing'));
 
+      if (!$.fn.ajaxSubmit) return;
       this.$('form.frameworkImportDetails').ajaxSubmit({
         error: this.onAjaxError.bind(this),
         success: this.onFormSubmitSuccess.bind(this)

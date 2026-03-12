@@ -5,7 +5,8 @@ define([
   './scaffoldAssetView',
   'core/models/courseAssetModel',
   'modules/assetManagement/views/assetManagementModalView',
-  'modules/assetManagement/collections/assetCollection'
+  'modules/assetManagement/collections/assetCollection',
+  'jqueryUI'
 ], function(Origin, BackboneForms, Helpers, ScaffoldAssetView, CourseAssetModel, AssetManagementModalView, AssetCollection) {
 
   var ScaffoldAssetItemView = ScaffoldAssetView.extend({

@@ -3,7 +3,8 @@ define([
   'core/helpers',
   'core/models/courseAssetModel',
   'backbone-forms',
-  'backbone-forms-lists'
+  'backbone-forms-lists',
+  'jqueryUI'
 ], function(Origin, Helpers, CourseAssetModel, BackboneForms) {
 
   var ScaffoldListView = Backbone.Form.editors.List.extend({

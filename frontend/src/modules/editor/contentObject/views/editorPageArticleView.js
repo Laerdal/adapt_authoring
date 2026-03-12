@@ -5,6 +5,7 @@ define(function(require){
   var EditorOriginView = require('../../global/views/editorOriginView');
   var EditorPageBlockView = require('./editorPageBlockView');
   var EditorPasteZoneView = require('../../global/views/editorPasteZoneView');
+  require('jqueryUI');
 
   var EditorPageArticleView = EditorOriginView.extend({
     className: 'article editable article-draggable',

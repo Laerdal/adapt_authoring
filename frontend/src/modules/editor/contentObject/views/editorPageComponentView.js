@@ -1,6 +1,7 @@
 // LICENCE https://github.com/adaptlearning/adapt_authoring/blob/master/LICENSE
 define(function(require){
   var Origin = require('core/origin');
+  require('jqueryUI');
   var EditorOriginView = require('../../global/views/editorOriginView');
 
   var EditorPageComponentView = EditorOriginView.extend({

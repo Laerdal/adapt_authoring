@@ -3,6 +3,7 @@ define(function(require){
   var Backbone = require('backbone');
   var Handlebars = require('handlebars');
   var Origin = require('core/origin');
+  require('jqueryUI');
   var Helpers = require('core/helpers');
   var EditorOriginView = require('./editorOriginView');
 

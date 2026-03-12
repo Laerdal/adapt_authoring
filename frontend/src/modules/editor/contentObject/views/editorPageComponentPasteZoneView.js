@@ -3,6 +3,7 @@ define(function(require){
   var Backbone = require('backbone');
   var Handlebars = require('handlebars');
   var Origin = require('core/origin');
+  require('jqueryUI');
   var EditorPasteZoneView = require('../../global/views/editorPasteZoneView');
 
   var EditorPageComponentPasteZone = EditorPasteZoneView.extend({

@@ -1,8 +1,5 @@
 // LICENCE https://github.com/adaptlearning/adapt_authoring/blob/master/LICENSE
-define(function(require){
-  var Helpers = require('core/helpers');
-  var Origin = require('core/origin');
-  var OriginView = require('core/views/originView');
+define(['core/helpers', 'core/origin', 'core/views/originView', 'jqueryForm'], function(Helpers, Origin, OriginView) {
 
   var AddUserView = OriginView.extend({
     tagName: 'div',
@@ -51,6 +48,7 @@ define(function(require){
         return;
       }
       // submit form data
+      if (!$.fn.ajaxSubmit) return false;
       this.$('form.addUser').ajaxSubmit({
         error: _.bind(this.onAjaxError, this),
         success: _.bind(this.onFormSubmitSuccess, this)

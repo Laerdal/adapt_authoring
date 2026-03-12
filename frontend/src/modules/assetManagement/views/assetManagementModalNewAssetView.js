@@ -1,7 +1,5 @@
 // LICENCE https://github.com/adaptlearning/adapt_authoring/blob/master/LICENSE
-define(function(require){
-  var OriginView = require('core/views/originView');
-  var Origin = require('core/origin');
+define(['core/views/originView', 'core/origin', 'jqueryForm'], function(OriginView, Origin) {
 
   var AssetManagementNewAssetView = OriginView.extend({
     className: 'asset-management-modal-new-asset',
@@ -129,6 +127,7 @@ define(function(require){
       });
       this.$('#tags').val(tags);
 
+      if (!$.fn.ajaxSubmit) return;
       this.$('.asset-form').ajaxSubmit({
         uploadProgress: function(event, position, total, percentComplete) {
           $(".progress-container").css("visibility", "visible");

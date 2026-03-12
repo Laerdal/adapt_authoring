@@ -1,9 +1,5 @@
 // LICENCE https://github.com/adaptlearning/adapt_authoring/blob/master/LICENSE
-define(function(require){
-  var _ = require('underscore');
-  var Helpers = require('core/helpers');
-  var Origin = require('core/origin');
-  var OriginView = require('core/views/originView');
+define(['underscore', 'core/helpers', 'core/origin', 'core/views/originView', 'jqueryForm'], function(_, Helpers, Origin, OriginView) {
 
   var PluginManagementUploadView = OriginView.extend({
     className: 'pluginManagement-upload-plugin',
@@ -20,6 +16,7 @@ define(function(require){
     uploadFile: function() {
       if(this.validate()) {
         $('.loading').show();
+        if (!$.fn.ajaxSubmit) return false;
         this.$('.plugin-form').ajaxSubmit({
           success: this.onUploadSuccess,
           error: this.onUploadError
