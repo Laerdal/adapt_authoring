@@ -1,4 +1,4 @@
-define([ 'core/origin', 'backbone-forms' ], function(Origin, BackboneForms) {
+define([ 'core/origin', 'backbone-forms', 'selectize' ], function(Origin, BackboneForms) {
   var ScaffoldUsersView = Backbone.Form.editors.Base.extend({
     tagName: 'input',
     className: 'scaffold-users',
@@ -31,6 +31,7 @@ define([ 'core/origin', 'backbone-forms' ], function(Origin, BackboneForms) {
     },
 
     initSelectize: function(users) {
+      if (!$.fn.selectize) return;
       this.setValue(this.value);
 
       var meId = Origin.sessionModel.get('id');

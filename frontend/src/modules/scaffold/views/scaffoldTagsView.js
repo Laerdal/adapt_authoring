@@ -1,4 +1,4 @@
-define([ 'core/origin', 'backbone-forms' ], function(Origin, BackboneForms) {
+define([ 'core/origin', 'backbone-forms', 'selectize' ], function(Origin, BackboneForms) {
 
   var ScaffoldTagsView = Backbone.Form.editors.Base.extend({
 
@@ -20,6 +20,7 @@ define([ 'core/origin', 'backbone-forms' ], function(Origin, BackboneForms) {
     },
 
     postRender: function() {
+      if (!$.fn.selectize) return;
       this.$el.selectize({
         create: true,
         labelField: 'title',

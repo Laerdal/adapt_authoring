@@ -62,6 +62,7 @@ define([
     },
 
     postRender: function() {
+      if (!$.fn.selectize) return;
       this.tenantSelect = this.$('[name="tenantName"]').selectize({
         maxItems: null
       })[0].selectize;

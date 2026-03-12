@@ -31,6 +31,10 @@ define(function(require){
 
     postRender: function() {
       // tagging
+      if (!$.fn.selectize) {
+        this.setViewToReady();
+        return;
+      }
       this.$('#tags_control').selectize({
         create: true,
         labelField: 'title',
