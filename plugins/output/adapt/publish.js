@@ -408,9 +408,10 @@ function publishCourse(courseId, mode, request, response, next) {
         callback(err);
       });
       archive.pipe(output);
-      // Exclude dev-only and unnecessary files to optimize SCORM package size:
+      // Exclude unnecessary files to optimize SCORM package size:
       // - selection.json: IcoMoon project file, not needed at runtime
-      // - react-dom.development.js: only excluded for prod builds (dev builds load it via scriptLoader)
+      // - react-dom.development.js: excluded only for prod builds; dev builds
+      //   (_generateSourcemap === true) need it as scriptLoader loads the dev bundle
       // - .ttf fonts: only needed for legacy browsers (IE9/Android 4.x)
       var ignorePatterns = [
         '**/selection.json',
