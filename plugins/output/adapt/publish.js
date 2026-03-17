@@ -297,27 +297,6 @@ function publishCourse(courseId, mode, request, response, next) {
 
       callback(null);
     },
-    function (callback) {
-      // Inject UES Analytics token endpoint from server config
-      // This keeps the token endpoint URL out of source control and course author UI
-      const uesAnalyticsConfig = configuration.getConfig('uesAnalytics');
-      
-      if (!uesAnalyticsConfig || !uesAnalyticsConfig.tokenEndpoint) {
-        return callback(null);
-      }
-      
-      // Only inject if UES analytics is enabled in the course config
-      if (outputJson.config._uesAnalytics && outputJson.config._uesAnalytics._isEnabled) {
-        logger.log(
-          'info',
-          'Injecting UES Analytics token endpoint from server config'
-        );
-        
-        outputJson.config._uesAnalytics._tokenEndpoint = uesAnalyticsConfig.tokenEndpoint;
-      }
-
-      callback(null);
-    },
     function(callback) {
       self.writeCourseJSON(outputJson, path.join(BUILD_FOLDER, Constants.Folders.Course), function(err) {
         if (err) {
@@ -427,7 +406,18 @@ function publishCourse(courseId, mode, request, response, next) {
         callback(err);
       });
       archive.pipe(output);
-      archive.glob('**/*', { cwd: path.join(BUILD_FOLDER) });
+      // Exclude dev-only and unnecessary files to optimize SCORM package size:
+      // - selection.json: IcoMoon project file, not needed at runtime
+      // - react-dom.development.js: prod builds use react-dom.production.min.js
+      // - .ttf fonts: only needed for legacy browsers (IE9/Android 4.x)
+      archive.glob('**/*', {
+        cwd: path.join(BUILD_FOLDER),
+        ignore: [
+          '**/selection.json',
+          '**/react-dom.development.js',
+          '**/*.ttf'
+        ]
+      });
       archive.finalize();
     },
     // fetch and register deployment URLs
