@@ -24,6 +24,7 @@ function publishCourse(courseId, mode, request, response, next) {
   let tenantId = user.tenant._id;
   let outputJson = {};
   let isRebuildRequired = false;
+  let isProductionBuild = true;
   let themeName;
   let menuName;
   let frameworkVersion;
@@ -364,6 +365,7 @@ function publishCourse(courseId, mode, request, response, next) {
 
       var generateSourcemap = outputJson.config._generateSourcemap;
       var buildMode = generateSourcemap === true ? 'dev' : 'prod';
+      isProductionBuild = buildMode === 'prod';
 
       logger.log('info', 'npx grunt server-build:' + buildMode + ' ' + args.join(' '));
 
@@ -427,7 +429,22 @@ function publishCourse(courseId, mode, request, response, next) {
         callback(err);
       });
       archive.pipe(output);
-      archive.glob('**/*', { cwd: path.join(BUILD_FOLDER) });
+      // Exclude unnecessary files to optimize SCORM package size:
+      // - selection.json: IcoMoon project file, not needed at runtime
+      // - react-dom.development.js: excluded only for prod builds; dev builds
+      //   (_generateSourcemap === true) need it as scriptLoader loads the dev bundle
+      // - .ttf fonts: only needed for legacy browsers (IE9/Android 4.x)
+      var ignorePatterns = [
+        '**/selection.json',
+        '**/*.ttf'
+      ];
+      if (isProductionBuild) {
+        ignorePatterns.push('**/react-dom.development.js');
+      }
+      archive.glob('**/*', {
+        cwd: path.join(BUILD_FOLDER),
+        ignore: ignorePatterns
+      });
       archive.finalize();
     },
     // fetch and register deployment URLs
