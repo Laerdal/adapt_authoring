@@ -406,7 +406,18 @@ function publishCourse(courseId, mode, request, response, next) {
         callback(err);
       });
       archive.pipe(output);
-      archive.glob('**/*', { cwd: path.join(BUILD_FOLDER) });
+      // Exclude dev-only and unnecessary files to optimize SCORM package size:
+      // - selection.json: IcoMoon project file, not needed at runtime
+      // - react-dom.development.js: prod builds use react-dom.production.min.js
+      // - .ttf fonts: only needed for legacy browsers (IE9/Android 4.x)
+      archive.glob('**/*', {
+        cwd: path.join(BUILD_FOLDER),
+        ignore: [
+          '**/selection.json',
+          '**/react-dom.development.js',
+          '**/*.ttf'
+        ]
+      });
       archive.finalize();
     },
     // fetch and register deployment URLs
