@@ -933,7 +933,7 @@ define(function(require) {
 
       // Lists / arrays
       if (inputType === "List"){
-        fieldView.setValue(value);
+        fieldView.setValue(value || []);
         return;
       }
 
