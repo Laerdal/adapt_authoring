@@ -45,13 +45,19 @@ function doQuery(req, res, andOptions, next) {
   const options = Object.assign({}, req.body, req.query);
   options.search = Object.assign({}, req.body.search, req.query.search);
   const search = options.search || {};
+  // Remove collation option for DocumentDB compatibility
+  if (options.operators && options.operators.collation) {
+    delete options.operators.collation;
+  }
+  
   const self = this;
   const orList = [];
   const andList = [];
   async.each(Object.keys(search), function (key, nextKey) {
     // Convert string -> regex, special case $or should be within $and
     if ('string' === typeof search[key] && key !== "$or") {
-      orList.push({ [key]: new RegExp(search[key], 'i') });
+      const regex = new RegExp(search[key], 'i');
+      orList.push({ [key]: regex });
     } else {
       andList.push({ [key]: search[key] });
     }
@@ -65,11 +71,35 @@ function doQuery(req, res, andOptions, next) {
     options.fields = DASHBOARD_COURSE_FIELDS.join(' ');
     options.populate = Object.assign({ 'createdBy': 'email firstName lastName' }, options.populate);
     options.jsonOnly = true;
-
+    
+    // Add a timeout to detect hanging queries
+    const queryTimeout = setTimeout(() => {
+      console.error('*** QUERY TIMEOUT - CourseContent.retrieve is taking too long ***');
+      console.error('This suggests a database connection or query performance issue');
+    }, 5000); // 5 second timeout
+    
     new CourseContent().retrieve(query, options, function (err, results) {
-      if (err) {
-        return res.status(500).json(err);
+      clearTimeout(queryTimeout); // Clear the timeout when callback is reached      
+            
+      if (err) {        
+        // Try to extract meaningful error info
+        let errorMessage = err.message || err.toString() || 'Unknown database error';
+        let errorDetails = {
+          type: typeof err,
+          constructor: err.constructor.name,
+          message: err.message,
+          stack: err.stack,
+          allProperties: Object.getOwnPropertyNames(err)
+        };
+
+        return res.status(500).json({
+          error: 'Database query failed',
+          details: errorMessage,
+          errorInfo: errorDetails,
+          query: query
+        });
       }
+
       return res.status(200).json(results);
     });
   });
@@ -85,7 +115,32 @@ function initialize () {
 
   app.once('serverStarted', function(server) {
     // force search to use only courses created by current user
-    rest.get('/my/course', (req, res, next) => doQuery(req, res, [{ createdBy: req.user._id }], next));
+    rest.get('/my/course', (req, res, next) => {
+      try {
+        if (!req.user || !req.user._id) {
+          return res.status(401).json({ error: 'User not authenticated' });
+        }
+        
+        const userFilter = [{ createdBy: req.user._id }];
+        
+        if (typeof doQuery !== 'function') {
+          return res.status(500).json({ error: 'doQuery function not available' });
+        }        
+        // Simple direct call without .call()
+        doQuery(req, res, userFilter, next);
+      } catch (error) {
+        console.error('=== /my/course ENDPOINT ERROR ===');
+        console.error('Error details:', {
+          message: error.message,
+          stack: error.stack,
+          name: error.name
+        });
+        return res.status(500).json({ 
+          error: 'Internal server error', 
+          details: error.message 
+        });
+      }
+    });
     // Only return courses which have been shared
     rest.get('/shared/course', (req, res, next) => {
       req.body.search = Object.assign({}, req.body.search, { $or: [{ _shareWithUsers: req.user._id }, { _isShared: true }] });
@@ -571,7 +626,6 @@ async function updateCourseStartId(db, course) {
       { _id: course._id },
       { $set: { '_start._startIds': updatedCourse._start._startIds } }
     );
-    console.log('Course _start._startIds updated successfully');
   } catch (err) {
     throw new Error('Error updating the course start IDs: ' + err.message);
   }
