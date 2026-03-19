@@ -116,6 +116,7 @@ define(function(require){
         '</div>'
       );
 
+
       // Fire component prefetch (no-op on error — block views fall back to fetchChildren)
       (new ContentCollection(null, { _type: 'component', _courseId: courseId })).fetch({
         success: function(col) {
