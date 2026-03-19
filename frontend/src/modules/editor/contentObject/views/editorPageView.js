@@ -3,6 +3,7 @@ define(function(require){
   var Backbone = require('backbone');
   var Origin = require('core/origin');
   var ArticleModel = require('core/models/articleModel');
+  var ContentCollection = require('core/collections/contentCollection');
   var EditorOriginView = require('../../global/views/editorOriginView');
   var EditorPageArticleView = require('./editorPageArticleView');
   var EditorPasteZoneView = require('../../global/views/editorPasteZoneView');
@@ -79,21 +80,54 @@ define(function(require){
         _pasteZoneSortOrder: 1
       });
       this.$('.page-articles').append(new EditorPasteZoneView({ model: prePasteArticle }).$el);
-      // Iterate over each article and add it to the page
-      this.model.fetchChildren(_.bind(function(children) {
-        for(var i = 0, count = children.length; i < count; i++) {
-          if(children[i].get('_type') !== 'article') {
-            continue;
-          }
-          this.addArticleView(children[i]);
+
+      // ADAPT-3618: Prefetch ALL components for this course in parallel with the
+      // article fetch. Both requests fire immediately; whichever finishes last
+      // triggers rendering. This eliminates the N+1 pattern where each block
+      // issued its own GET /api/content/component?_parentId=<id> request.
+      var self = this;
+      var courseId = Origin.editor.data.course.get('_id');
+      var componentsDone = false;
+      var articlesDone = false;
+      var componentCache = null;
+      var articleChildren = null;
+
+      function tryRenderArticles() {
+        if (!componentsDone || !articlesDone) return;
+        self._componentCache = componentCache;
+        for (var i = 0, count = articleChildren.length; i < count; i++) {
+          if (articleChildren[i].get('_type') !== 'article') continue;
+          self.addArticleView(articleChildren[i]);
         }
-      }, this));
+      }
+
+      // Fire component prefetch (no-op on error — block views fall back to fetchChildren)
+      (new ContentCollection(null, { _type: 'component', _courseId: courseId })).fetch({
+        success: function(col) {
+          componentCache = _.groupBy(col.models, function(m) {
+            return m.get('_parentId').toString();
+          });
+          componentsDone = true;
+          tryRenderArticles();
+        },
+        error: function() {
+          componentsDone = true;
+          tryRenderArticles();
+        }
+      });
+
+      // Fire article fetch in parallel
+      this.model.fetchChildren(function(children) {
+        articleChildren = children;
+        articlesDone = true;
+        tryRenderArticles();
+      });
     },
 
     addArticleView: function(articleModel, scrollIntoView) {
       scrollIntoView = scrollIntoView || false;
 
-      var newArticleView = new EditorPageArticleView({ model: articleModel });
+      var newArticleView = new EditorPageArticleView({ model: articleModel, componentCache: this._componentCache });
       var sortOrder = articleModel.get('_sortOrder');
       var $articles = this.$('.page-articles .article');
       var index = sortOrder > 0 ? sortOrder-1 : undefined;

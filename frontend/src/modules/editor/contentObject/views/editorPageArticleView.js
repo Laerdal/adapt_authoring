@@ -88,7 +88,7 @@ define(function(require){
     addBlockView: function(blockModel, scrollIntoView) {
       scrollIntoView = scrollIntoView || false;
 
-      var newBlockView = new EditorPageBlockView({ model: blockModel });
+      var newBlockView = new EditorPageBlockView({ model: blockModel, componentCache: this.options.componentCache });
       var $blocks = this.$('.article-blocks .block');
       var sortOrder = blockModel.get('_sortOrder');
       var index = sortOrder > 0 ? sortOrder-1 : undefined;
