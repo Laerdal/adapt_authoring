@@ -1,0 +1,22 @@
+{
+  "_comment": "ADAPT-3614 — Add the 'dbOptions' block below to your conf/config.json to configure the MongoDB connection pool.",
+  "_notes": [
+    "TLS/SSL for DocumentDB does NOT go here — it is already embedded in your dbConnectionUri (?tls=true&tlsCAFile=...).",
+    "These settings control connection pool sizing and timeout behaviour.",
+    "maxPoolSize × number_of_active_tenants = total connections held against DocumentDB.",
+    "Tune maxPoolSize against your DocumentDB instance tier (e.g. db.r5.large supports ~250 connections).",
+    "retryWrites=false must remain in your dbConnectionUri — DocumentDB does not support retryable writes."
+  ],
+  "dbOptions_to_add_to_config.json": {
+    "maxPoolSize": 10,
+    "minPoolSize": 2,
+    "socketTimeoutMS": 30000,
+    "serverSelectionTimeoutMS": 5000,
+    "heartbeatFrequencyMS": 10000
+  },
+  "_dev_server_reference": {
+    "host": "adapt-dev-euw1-db.cluster-cricqsasegck.eu-west-1.docdb.amazonaws.com",
+    "tlsCAFile": "/opt/adapt_support/global-bundle.pem",
+    "tlsAlreadyInUri": true
+  }
+}

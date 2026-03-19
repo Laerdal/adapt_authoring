@@ -337,8 +337,28 @@ function publishCourse(courseId, mode, request, response, next) {
       if (!isRebuildRequired) {
         return callback();
       }
+      // ADAPT-3614: Gate browserslist --update-db to run at most once per day.
+      // Previously this ran on EVERY publish that required a rebuild, making an
+      // outbound npm registry call (100–2000 ms) each time from the EC2 host.
+      // The timestamp file lives alongside the framework build.
+      const browserslistStampFile = path.join(FRAMEWORK_ROOT_FOLDER, '.browserslist-updated');
+      let skipUpdate = false;
+      try {
+        const lastRun = fs.statSync(browserslistStampFile).mtimeMs;
+        skipUpdate = (Date.now() - lastRun) < 24 * 60 * 60 * 1000; // 24 hours
+      } catch (e) { /* file absent — first run */ }
+
+      if (skipUpdate) {
+        logger.log('info', 'Skipping browserslist update (last run < 24h ago)');
+        return callback();
+      }
       logger.log('info', 'Attempting to update browserslist');
-      exec('npx browserslist --update-db', { cwd: FRAMEWORK_ROOT_FOLDER }, e => callback(e));
+      exec('npx browserslist --update-db', { cwd: FRAMEWORK_ROOT_FOLDER }, e => {
+        if (!e) {
+          try { fs.writeFileSync(browserslistStampFile, ''); } catch (_) {}
+        }
+        callback(e);
+      });
     },
     function(callback) {
       if (!isRebuildRequired) {
