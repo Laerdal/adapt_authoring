@@ -481,9 +481,14 @@ function publishCourse(courseId, mode, request, response, next) {
           if (deploymentURLs.length > 0) {
             logger.log('info', 'Found ' + deploymentURLs.length + ' deployment URL(s): ' + deploymentURLs.join(', '));
             resultObject.deploymentURLs = deploymentURLs;
-            
-            // Register all deployment URLs
-            async.each(deploymentURLs, registerDeploymentUrl, callback);
+
+            // Fire-and-forget: register URLs in background, do not block publish completion.
+            // Azure Function cold starts can take 15-25s; preview/publish result is not
+            // dependent on CORS registration completing.
+            callback(null);
+            async.each(deploymentURLs, registerDeploymentUrl, function(err) {
+              if (err) logger.log('warn', 'Background URL registration error: ' + err.message);
+            });
           } else {
             logger.log('info', 'No deployment URL found in eventStoreAnalytics items');
             callback(null);
