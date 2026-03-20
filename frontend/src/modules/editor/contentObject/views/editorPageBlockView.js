@@ -24,9 +24,10 @@ define(function(require){
       'dblclick': 'loadBlockEdit'
     }),
 
-    preRender: function() {
+    preRender: function(options) {
       this.listenToEvents();
       this.model.set('componentTypes', Origin.editor.data.componenttypes.toJSON());
+      this._componentCache = options && options.componentCache;
       this.render();
     },
 
@@ -48,7 +49,7 @@ define(function(require){
       // avoid N individual GET /api/content/component?_parentId=<id> requests.
       // On subsequent renders (component added/moved/removed) the cache is
       // intentionally bypassed so we always get fresh data from the server.
-      var cache = this.options.componentCache;
+      var cache = this._componentCache;
       var blockId = this.model.get('_id') && this.model.get('_id').toString();
       if (cache && !this._initialRenderComplete && blockId && blockId in cache) {
         this._initialRenderComplete = true;
