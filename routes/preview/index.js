@@ -64,6 +64,7 @@ server.get('/preview/:tenant/:course/*', (req, res, next) => {
         return onAuthError();
       }
       req.session.previews.push(previewKey);
+      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
       return sendFile(file);
     });
   }
