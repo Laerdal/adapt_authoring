@@ -94,6 +94,10 @@ define(function(require){
 
       function tryRenderArticles() {
         if (!componentsDone || !articlesDone) return;
+        // Guard: view was removed (user navigated away) before both fetches completed.
+        // Without this, addArticleView appends to a detached DOM node, which causes
+        // React's reconciler to crash with "removeChild: not a child of this node".
+        if (self._isRemoved) return;
         self._componentCache = componentCache;
         for (var i = 0, count = articleChildren.length; i < count; i++) {
           if (articleChildren[i].get('_type') !== 'article') continue;
@@ -237,6 +241,7 @@ define(function(require){
     },
 
     remove: function() {
+      this._isRemoved = true;
       this.removeScrollListener();
       EditorOriginView.prototype.remove.apply(this, arguments);
     }
