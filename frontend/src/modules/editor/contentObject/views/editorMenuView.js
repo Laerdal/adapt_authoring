@@ -51,6 +51,7 @@ define(function(require){
     * Renders all menu layers from the current course to the Origin.editor.currentContentObject
     */
     renderLayers: function() {
+      if (!Origin.editor || !Origin.editor.data || !Origin.editor.data.course) return;
       var selectedModel = Origin.editor.currentContentObject || Origin.editor.data.course;
       this.getItemHeirarchy(selectedModel, function(hierarchy) {
         var ids = [];
@@ -146,7 +147,8 @@ define(function(require){
           hierarchy.push(parent);
           return _getParent(parent, callback);
         }
-        hierarchy.push(Origin.editor.data.course);
+        var course = Origin.editor && Origin.editor.data && Origin.editor.data.course;
+        if (course) hierarchy.push(course);
         callback();
       };
       _getParent(model, function() {
