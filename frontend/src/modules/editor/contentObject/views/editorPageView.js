@@ -98,12 +98,23 @@ define(function(require){
         // Without this, addArticleView appends to a detached DOM node, which causes
         // React's reconciler to crash with "removeChild: not a child of this node".
         if (self._isRemoved) return;
+        self.$('.page-articles-loading').remove();
         self._componentCache = componentCache;
         for (var i = 0, count = articleChildren.length; i < count; i++) {
           if (articleChildren[i].get('_type') !== 'article') continue;
           self.addArticleView(articleChildren[i]);
         }
       }
+
+      // Show loading indicator while both fetches are in-flight
+      self.$('.page-articles').append(
+        '<div class="page-articles-loading">' +
+          '<div class="page-articles-loading-anim">' +
+            '<div class="circle1"></div><div class="circle2"></div><div class="circle3"></div>' +
+          '</div>' +
+          '<p class="page-articles-loading-msg">' + Origin.l10n.t('app.loading') + '</p>' +
+        '</div>'
+      );
 
       // Fire component prefetch (no-op on error — block views fall back to fetchChildren)
       (new ContentCollection(null, { _type: 'component', _courseId: courseId })).fetch({
