@@ -26,13 +26,24 @@ define(function(require){
         _type: 'contentobject',
         _courseId: Origin.editor.data.course.get('_id')
       });
+      this.$('.editor-menu-inner').append(
+        '<div class="editor-menu-loading">' +
+          '<div class="editor-menu-loading-anim">' +
+            '<div class="circle1"></div><div class="circle2"></div><div class="circle3"></div>' +
+          '</div>' +
+        '</div>'
+      );
       this.contentobjects.fetch({
         success: _.bind(function(children) {
+          this.$('.editor-menu-loading').remove();
           this.contentobjects = children;
           this.renderLayers();
           _.defer(this.setViewToReady);
         }, this),
-        error: console.error
+        error: _.bind(function(err) {
+          this.$('.editor-menu-loading').remove();
+          console.error(err);
+        }, this)
       });
     },
 
