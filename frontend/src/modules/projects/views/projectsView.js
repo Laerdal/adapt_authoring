@@ -153,6 +153,10 @@ define(function(require){
 
           this.$('.no-projects').toggleClass('display-none', this.fetchCount > 0);
           if(typeof cb === 'function') cb(collection);
+        }.bind(this),
+        error: function() {
+          this.$('.projects-loading').remove();
+          this.isCollectionFetching = false;
         }.bind(this)
       });
     },

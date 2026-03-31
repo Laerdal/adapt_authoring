@@ -486,6 +486,8 @@ function publishCourse(courseId, mode, request, response, next) {
             // Azure Function cold starts can take 15-25s; preview/publish result is not
             // dependent on CORS registration completing.
             callback(null);
+            // registerDeploymentUrl logs internally and always calls callback(null);
+            // the completion handler is retained for observability if that changes.
             async.each(deploymentURLs, registerDeploymentUrl, function(err) {
               if (err) logger.log('warn', 'Background URL registration error: ' + err.message);
             });
