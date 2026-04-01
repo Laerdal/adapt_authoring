@@ -24,26 +24,43 @@ define(function(require){
       'dblclick': 'loadBlockEdit'
     }),
 
-    preRender: function() {
+    preRender: function(options) {
       this.listenToEvents();
       this.model.set('componentTypes', Origin.editor.data.componenttypes.toJSON());
+      this._componentCache = options && options.componentCache;
       this.render();
     },
 
     render: function() {
-      this.model.fetchChildren(_.bind(function(components) {
-        this.children = components;
-        var layouts = this.getAvailableLayouts();
+      var self = this;
+
+      function renderWithComponents(components) {
+        self.children = components;
+        var layouts = self.getAvailableLayouts();
         // FIXME why do we have two attributes with the same value?
-        this.model.set({ layoutOptions: layouts, dragLayoutOptions: layouts });
+        self.model.set({ layoutOptions: layouts, dragLayoutOptions: layouts });
+        EditorOriginView.prototype.render.apply(self);
+        self.addComponentViews();
+        self.setupDragDrop();
+        self.handleAsyncPostRender();
+      }
 
-        EditorOriginView.prototype.render.apply(this);
+      // ADAPT-3618: Use the page-level component cache on the first render to
+      // avoid N individual GET /api/content/component?_parentId=<id> requests.
+      // On subsequent renders (component added/moved/removed) the cache is
+      // intentionally bypassed so we always get fresh data from the server.
+      var cache = this._componentCache;
+      var blockId = this.model.get('_id') && this.model.get('_id').toString();
+      if (cache && !this._initialRenderComplete && blockId && blockId in cache) {
+        this._initialRenderComplete = true;
+        renderWithComponents(cache[blockId] || []);
+        return;
+      }
 
-        this.addComponentViews();
-        this.setupDragDrop();
-
-        this.handleAsyncPostRender();
-      }, this));
+      this._initialRenderComplete = true;
+      this.model.fetchChildren(function(components) {
+        renderWithComponents(components);
+      });
     },
 
     animateIn: function() {
