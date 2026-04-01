@@ -19,6 +19,7 @@ server.get('/', async function (req, res, next) {
   const trackingId = configuration.getConfig('trackingId') || 'UA-XXXXX-Y';
   const versions = await getVersions();
 
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.render('index', Object.assign({
     isProduction: isProduction,
     dateStampAsString: dateStampAsString,

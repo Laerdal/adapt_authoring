@@ -26,13 +26,24 @@ define(function(require){
         _type: 'contentobject',
         _courseId: Origin.editor.data.course.get('_id')
       });
+      this.$('.editor-menu-inner').append(
+        '<div class="editor-menu-loading">' +
+          '<div class="editor-menu-loading-anim">' +
+            '<div class="circle1"></div><div class="circle2"></div><div class="circle3"></div>' +
+          '</div>' +
+        '</div>'
+      );
       this.contentobjects.fetch({
         success: _.bind(function(children) {
+          this.$('.editor-menu-loading').remove();
           this.contentobjects = children;
           this.renderLayers();
           _.defer(this.setViewToReady);
         }, this),
-        error: console.error
+        error: _.bind(function(err) {
+          this.$('.editor-menu-loading').remove();
+          console.error(err);
+        }, this)
       });
     },
 
@@ -40,6 +51,7 @@ define(function(require){
     * Renders all menu layers from the current course to the Origin.editor.currentContentObject
     */
     renderLayers: function() {
+      if (!Origin.editor || !Origin.editor.data || !Origin.editor.data.course) return;
       var selectedModel = Origin.editor.currentContentObject || Origin.editor.data.course;
       this.getItemHeirarchy(selectedModel, function(hierarchy) {
         var ids = [];
@@ -135,7 +147,8 @@ define(function(require){
           hierarchy.push(parent);
           return _getParent(parent, callback);
         }
-        hierarchy.push(Origin.editor.data.course);
+        var course = Origin.editor && Origin.editor.data && Origin.editor.data.course;
+        if (course) hierarchy.push(course);
         callback();
       };
       _getParent(model, function() {
