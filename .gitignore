@@ -32,3 +32,7 @@ node_modules
 .project
 .vscode
 .env
+
+# Installed external plugins — source lives in adapt-authoring-plugins repo
+/frontend/src/plugins/ai-tutor/
+/plugins/services/ai-tutor/
