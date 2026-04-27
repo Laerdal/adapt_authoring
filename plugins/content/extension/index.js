@@ -370,7 +370,7 @@ function toggleExtensions (courseId, action, extensions, cb) {
         var deprecated = (configuration.getConfig('deprecatedPlugins') || {}).extension || [];
         var blocked = results.filter(function(r) { return deprecated.indexOf(r.name) !== -1; });
         if (blocked.length > 0) {
-          return cb(new Error('Cannot enable deprecated extension(s): ' + blocked.map(function(r) { return r.name; }).join(', ')));
+          return cb(new ContentTypeError('Cannot enable deprecated extension(s): ' + blocked.map(function(r) { return r.name; }).join(', ')));
         }
       }
 
