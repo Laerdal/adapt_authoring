@@ -60,6 +60,7 @@ function ImportSource(req, done) {
   var assetFolders = [];
   var details = {};
   var cleanupDirs = [];
+  var skippedDeprecated = [];
 
   /**
   * Main process
@@ -73,7 +74,7 @@ function ImportSource(req, done) {
     cacheMetadata,
     importContent,
   ], (importErr, result) => { // cleanup should run regardless of import success
-    helpers.cleanUpImport(cleanupDirs, cleanUpErr => done(importErr || cleanUpErr));
+    helpers.cleanUpImport(cleanupDirs, cleanUpErr => done(importErr || cleanUpErr, { deprecatedPlugins: skippedDeprecated }));
   });
 
   function retrieveImportInfo(cb) {
@@ -281,11 +282,18 @@ function ImportSource(req, done) {
     async.series([
       function enableExtensions(cb) {
         var includeExtensions = {};
+        var deprecatedExtensions = (configuration.getConfig('deprecatedPlugins') || {}).extension || [];
         async.eachSeries(plugindata.pluginIncludes, function (pluginData, doneItemIterator) {
           switch (pluginData.type) {
             case 'extension':
               fs.readJson(path.join(pluginData.location, Constants.Filenames.Bower), function (error, extensionJson) {
                 if (error) return cb(error);
+                // Do not re-enable deprecated extensions when importing courses
+                if (deprecatedExtensions.indexOf(extensionJson.name) !== -1) {
+                  logger.log('info', 'Import: skipping deprecated extension ' + extensionJson.name);
+                  skippedDeprecated.push(extensionJson.displayName || extensionJson.name);
+                  return doneItemIterator();
+                }
                 includeExtensions[extensionJson.extension] = metadata.extensionMap[extensionJson.extension];
                 doneItemIterator();
               });
@@ -367,7 +375,11 @@ function ImportSource(req, done) {
         const dbUpdate = promisify(dbInstance.update.bind(dbInstance));
         const courseQuery = await dbRetrieve('course', { _id: courseId });
         const courseGlobals = courseQuery[0]._doc._globals || {};
-        await Promise.all(plugindata.pluginIncludes.map(async ({ type, name }) => {
+        const deprecatedByType = configuration.getConfig('deprecatedPlugins') || {};
+        const safeIncludes = plugindata.pluginIncludes.filter(function(p) {
+          return !(deprecatedByType[p.type] || []).includes(p.name);
+        });
+        await Promise.all(safeIncludes.map(async ({ type, name }) => {
           const pluginQuery = await dbRetrieve(`${type}type`, { name });
           const plugin = pluginQuery[0]._doc;
           const schemaGlobals = plugin.globals;
