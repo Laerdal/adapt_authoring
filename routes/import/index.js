@@ -30,10 +30,14 @@ server.post('/importsource', function (request, response, next) {
       logger.log('error', error);
       return response.status(500).send({ body: error.message });
     }
-    plugin.importsource(request, function (error) {
+    plugin.importsource(request, function (error, importResult) {
       if (!error) {
         logger.log('info', 'Course imported successfully');
-        return response.status(200).send({ body: app.polyglot.t('app.importcoursesuccess') });
+        var res = { body: app.polyglot.t('app.importcoursesuccess') };
+        if (importResult && importResult.deprecatedPlugins && importResult.deprecatedPlugins.length > 0) {
+          res.deprecatedPlugins = importResult.deprecatedPlugins;
+        }
+        return response.status(200).send(res);
       }
 
       if (error instanceof helpers.PartialImportError) {
