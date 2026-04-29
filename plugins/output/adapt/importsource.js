@@ -60,6 +60,7 @@ function ImportSource(req, done) {
   var assetFolders = [];
   var details = {};
   var cleanupDirs = [];
+  var skippedDeprecated = [];
 
   /**
   * Main process
@@ -73,7 +74,7 @@ function ImportSource(req, done) {
     cacheMetadata,
     importContent,
   ], (importErr, result) => { // cleanup should run regardless of import success
-    helpers.cleanUpImport(cleanupDirs, cleanUpErr => done(importErr || cleanUpErr));
+    helpers.cleanUpImport(cleanupDirs, cleanUpErr => done(importErr || cleanUpErr, { deprecatedPlugins: skippedDeprecated }));
   });
 
   function retrieveImportInfo(cb) {
@@ -290,6 +291,7 @@ function ImportSource(req, done) {
                 // Do not re-enable deprecated extensions when importing courses
                 if (deprecatedExtensions.indexOf(extensionJson.name) !== -1) {
                   logger.log('info', 'Import: skipping deprecated extension ' + extensionJson.name);
+                  skippedDeprecated.push(extensionJson.displayName || extensionJson.name);
                   return doneItemIterator();
                 }
                 includeExtensions[extensionJson.extension] = metadata.extensionMap[extensionJson.extension];
