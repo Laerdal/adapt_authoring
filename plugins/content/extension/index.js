@@ -141,7 +141,11 @@ function getEnabledExtensions(courseId, cb) {
       enabledExtensions && Object.keys(enabledExtensions).forEach(function (key) {
         extIds.push(enabledExtensions[key]._id);
       });
-      db.retrieve('extensiontype', { _id: { $in: extIds } }, cb);
+      var deprecated = (configuration.getConfig('deprecatedPlugins') || {}).extension || [];
+      db.retrieve('extensiontype', { _id: { $in: extIds } }, function(err, extResults) {
+        if (err) return cb(err);
+        cb(null, extResults.filter(function(ext) { return deprecated.indexOf(ext.name) === -1; }));
+      });
     });
   });
 }
@@ -359,6 +363,15 @@ function toggleExtensions (courseId, action, extensions, cb) {
     db.retrieve('extensiontype', { _id: { $in: extensions } }, function (err, results) {
       if (err) {
         return cb(err);
+      }
+
+      // Deprecated extensions cannot be re-enabled on any course
+      if (action === 'enable') {
+        var deprecated = (configuration.getConfig('deprecatedPlugins') || {}).extension || [];
+        var blocked = results.filter(function(r) { return deprecated.indexOf(r.name) !== -1; });
+        if (blocked.length > 0) {
+          return cb(new ContentTypeError('Cannot enable deprecated extension(s): ' + blocked.map(function(r) { return r.name; }).join(', ')));
+        }
       }
 
       // Switch to the tenant database
