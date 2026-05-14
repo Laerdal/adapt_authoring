@@ -57,6 +57,22 @@ define([
     });
 
     initialize.call(this, options);
+    
+    // Trigger initial check after a short delay to ensure DOM is ready
+    var self = this;
+    _.defer(function() {
+      if (!self.hasNestedForm && self.defaultValue !== undefined && self.form) {
+        try {
+          var isDefaultValue = _.isEqual(self.getValue(), self.defaultValue);
+          var $field = self.$el.closest('[data-editor-id]');
+          if ($field.length > 0) {
+            $field.toggleClass('is-default-value', isDefaultValue);
+          }
+        } catch (e) {
+          // Ignore errors from editors that aren't fully initialized yet (e.g., color pickers)
+        }
+      }
+    });
   };
 
   // disable automatic completion on text fields if not specified
@@ -66,6 +82,22 @@ define([
     if (!this.$el.attr('autocomplete')) {
       this.$el.attr('autocomplete', 'off');
     }
+    
+    // Ensure DOM change/input events trigger Backbone change events for reset button visibility
+    var self = this;
+    this.$el.on('input change blur', function() {
+      // Trigger Backbone change event
+      self.trigger('change', self);
+      
+      // Also manually update is-default-value class
+      if (self.form && self.id && self.defaultValue !== undefined) {
+        var isDefaultValue = _.isEqual(self.getValue(), self.defaultValue);
+        var $field = self.$el.closest('[data-editor-id]');
+        if ($field.length > 0) {
+          $field.toggleClass('is-default-value', isDefaultValue);
+        }
+      }
+    });
   };
 
   // render ckeditor in textarea
@@ -1491,6 +1523,39 @@ Samaritan Assistance</label><br>
     // Update view after the select has been rendered
     _.defer(updateConditionalView.bind(this));
 
+    // Ensure DOM change events trigger Backbone change events for reset button visibility
+    var self = this;
+    this.$el.on('change', function() {
+      // Trigger Backbone change event
+      self.trigger('change', self);
+      
+      // Also manually update is-default-value class to ensure it updates immediately
+      if (self.form && self.id && self.defaultValue !== undefined) {
+        var currentValue = self.getValue();
+        var isDefaultValue = _.isEqual(currentValue, self.defaultValue);
+        var $field = self.$el.closest('[data-editor-id]');
+        
+        if ($field.length > 0) {
+          $field.toggleClass('is-default-value', isDefaultValue);
+        }
+      }
+    });
+    
+    // Set initial state after render
+    _.defer(function() {
+      if (self.form && self.id && self.defaultValue !== undefined) {
+        try {
+          var isDefaultValue = _.isEqual(self.getValue(), self.defaultValue);
+          var $field = self.$el.closest('[data-editor-id]');
+          if ($field.length > 0) {
+            $field.toggleClass('is-default-value', isDefaultValue);
+          }
+        } catch (e) {
+          // Ignore errors from editors that aren't fully initialized yet
+        }
+      }
+    });
+
     return this;
   };
 
@@ -1504,6 +1569,37 @@ Samaritan Assistance</label><br>
 
     // Update view after the checkbox has been rendered
     _.defer(updateConditionalView.bind(this));
+
+    // Ensure DOM change events trigger Backbone change events for reset button visibility
+    var self = this;
+    this.$el.on('change', function() {
+      // Trigger Backbone change event
+      self.trigger('change', self);
+      
+      // Also manually update is-default-value class
+      if (self.form && self.id && self.defaultValue !== undefined) {
+        var isDefaultValue = _.isEqual(self.getValue(), self.defaultValue);
+        var $field = self.$el.closest('[data-editor-id]');
+        if ($field.length > 0) {
+          $field.toggleClass('is-default-value', isDefaultValue);
+        }
+      }
+    });
+    
+    // Set initial state after render
+    _.defer(function() {
+      if (self.form && self.id && self.defaultValue !== undefined) {
+        try {
+          var isDefaultValue = _.isEqual(self.getValue(), self.defaultValue);
+          var $field = self.$el.closest('[data-editor-id]');
+          if ($field.length > 0) {
+            $field.toggleClass('is-default-value', isDefaultValue);
+          }
+        } catch (e) {
+          // Ignore errors from editors that aren't fully initialized yet
+        }
+      }
+    });
 
     return this;
   };

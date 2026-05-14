@@ -211,29 +211,60 @@ define(function(require){
 
     onChangePasswordClicked: function() {
       var self = this;
-      Origin.Notify.confirm({
-        type: 'input',
-        title: Origin.l10n.t('app.resetpasswordtitle'),
-        text: Origin.l10n.t('app.resetpasswordinstruction', { email: this.model.get('email') }),
-        inputType: 'password',
-        confirmButtonText: 'Save',
-        closeOnConfirm: false,
-        callback: function(newPassword) {
-          if(newPassword === false) return;
-          else if(newPassword === "") return swal.showInputError(Origin.l10n.t('app.invalidempty'));
-          var postData = {
-            "email": self.model.get('email'),
-            "password": newPassword
-          };
-          Helpers.ajax('api/user/resetpassword', postData, 'POST', function() {
-            self.model.fetch();
-            Origin.Notify.alert({
-              type: 'success',
-              text: Origin.l10n.t('app.changepasswordtext', { email: self.model.get('email') })
+      var userManagementBypassEnabled = Origin.constants && Origin.constants.userManagementBypassEnabled;
+      
+      // Check if bypass is enabled
+      if (userManagementBypassEnabled === true) {
+        // Use default password - no user input needed
+        Origin.Notify.confirm({
+          type: 'warning',
+          title: Origin.l10n.t('app.resetpasswordtitle'),
+          text: Origin.l10n.t('app.resetpasswordinstruction', { email: this.model.get('email') }) + '<br><br><strong>Default password: Adapt@1234</strong>',
+          html: true,
+          confirmButtonText: 'Set Default Password',
+          showCancelButton: true,
+          closeOnConfirm: false,
+          callback: function(confirmed) {
+            if(!confirmed) return;
+            var postData = {
+              "email": self.model.get('email'),
+              "password": "Adapt@1234"
+            };
+            Helpers.ajax('api/user/resetpassword', postData, 'POST', function() {
+              self.model.fetch();
+              Origin.Notify.alert({
+                type: 'success',
+                text: Origin.l10n.t('app.changepasswordtext', { email: self.model.get('email') }) + ' (Password: Adapt@1234)'
+              });
             });
-          });
-        }
-      });
+          }
+        });
+      } else {
+        // Normal behavior - ask user for new password
+        Origin.Notify.confirm({
+          type: 'input',
+          title: Origin.l10n.t('app.resetpasswordtitle'),
+          text: Origin.l10n.t('app.resetpasswordinstruction', { email: this.model.get('email') }),
+          inputType: 'password',
+          confirmButtonText: 'Save',
+          closeOnConfirm: false,
+          callback: function(newPassword) {
+            if(newPassword === false) return;
+            else if(newPassword === "") return swal.showInputError(Origin.l10n.t('app.invalidempty'));
+            var postData = {
+              "email": self.model.get('email'),
+              "password": newPassword
+            };
+            Helpers.ajax('api/user/resetpassword', postData, 'POST', function() {
+              self.model.fetch();
+              Origin.Notify.alert({
+                type: 'success',
+                text: Origin.l10n.t('app.changepasswordtext', { email: self.model.get('email') })
+              });
+            });
+          }
+        });
+      }
     },
 
     onDisableClicked: function() {

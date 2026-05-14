@@ -15,6 +15,13 @@ define(function(require){
     },
 
     postRender: function() {
+      // Set default password if userManagementBypassEnabled is true
+      var userManagementBypassEnabled = Origin.constants && Origin.constants.userManagementBypassEnabled;
+      
+      if (userManagementBypassEnabled === true) {
+        this.$('input[name="password"]').val('Adapt@1234');
+      }
+      
       this.setViewToReady();
     },
 

@@ -54,8 +54,6 @@ define([
       }
 
       this.$el.spectrum(options);
-      // remove class beacuse we aren't using the clear button
-      $('.sp-container').removeClass('sp-clear-enabled');
     },
 
     getValue: function() {

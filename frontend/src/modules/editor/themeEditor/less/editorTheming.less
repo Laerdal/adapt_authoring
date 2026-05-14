@@ -19,31 +19,39 @@
     text-align: center;
     max-width: 800px;
   }
+
   .header {
     .form-container-style;
+
     .description {
       padding-bottom: 15px;
     }
+
     .tip {
       padding-top: 35px;
     }
   }
+
   .title {
     font-size: 16px;
     font-weight: @font-weight-bold;
     margin-bottom: 30px;
   }
+
   button {
     margin-right: 5px;
   }
+
   .theme-selector {
     .tile {
       label {
         font-weight: @font-weight-bold;
         padding-right: 5px;
       }
+
       padding-right: 15px;
       display: inline-block;
+
       select {
         min-width: 150px;
       }
@@ -54,6 +62,7 @@
         width: 180px;
       }
     }
+
     .edit.btn.secondary {
       display: inline-block;
       padding: 7px;
@@ -71,3 +80,105 @@
     }
   }
 }
+
+// ========================================
+// Simplified Theme Editor - Modern Clean Design
+// ========================================
+
+.simplified-theme-editor {
+  max-width: 800px;
+  padding: 16px 24px;
+
+  .theme-editor-header {
+    background: #fff;
+    padding: 28px 32px;
+    border-radius: 14px;
+    margin-bottom: 24px;
+    border: 1px solid rgba(0, 221, 149, 0.20);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+
+    p {
+      color: #4A5565;
+      font-size: 14px;
+      font-style: normal;
+      font-weight: 400;
+      line-height: 24px;
+      letter-spacing: -0.312px;
+    }
+
+    .header-icon {
+      display: none;
+    }
+
+    .theme-editor-heading {
+      color: #0A0A0A;
+      font-size: 18px;
+      font-style: normal;
+      font-weight: 600;
+      line-height: 28px;
+      letter-spacing: -0.439px;
+    }
+
+    .header-content {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+
+      .header-icon {
+        flex-shrink: 0;
+        width: 40px;
+        height: 40px;
+        background: #10b981;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        color: white;
+      }
+
+      .header-text {
+        flex: 1;
+
+        h2 {
+          margin: 0 0 8px 0;
+          font-size: 18px;
+          font-weight: 600;
+          color: #111827;
+          letter-spacing: -0.01em;
+        }
+
+        >p {
+          margin: 0;
+          font-size: 14px;
+          line-height: 1.6;
+          color: #6b7280;
+        }
+      }
+    }
+
+    .theme-tip {
+      padding: 14px 18px;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #92400e;
+      border-radius: 10px;
+      border: 1px solid #FEE685;
+      background: #FFFBEB;
+
+      strong {
+        font-weight: 600;
+        color: #78350f;
+        margin-right: 4px;
+      }
+    }
+  }
+}
+
+// ========================================
+// CUSTOM THEME EDITOR ENHANCEMENTS
+// Import custom styles from separate file to prevent community update conflicts
+// ========================================
+@import 'editorThemingCustom.less';

@@ -9,8 +9,7 @@ define(function(require) {
       'click .pluginManagement-sidebar-extensions': 'onManageExtensionsClicked',
       'click .pluginManagement-sidebar-themes': 'onManageThemesClicked',
       'click .pluginManagement-sidebar-components': 'onManageComponentsClicked',
-      'click .pluginManagement-sidebar-menus': 'onManageMenusClicked',
-      'click .pluginManagement-sidebar-getPlugins': 'onGetPluginsClicked'
+      'click .pluginManagement-sidebar-menus': 'onManageMenusClicked'
     },
 
     onAddNewPluginClicked: function () {
@@ -31,10 +30,6 @@ define(function(require) {
 
     onManageMenusClicked: function () {
       this.managePluginType('menu');
-    },
-
-    onGetPluginsClicked: function () {
-      window.open("https://www.adaptlearning.org/index.php/plugin-browser/", '_blank');
     },
 
     managePluginType: function (pluginType) {

@@ -58,7 +58,7 @@ define(function(require) {
   }
 
   function openWikiLink(page) {
-    var WIKI_URL = 'https://cdn-esim.contentservice.net/adapt-lbr/help_how_to/courses/help_course/latest/index.html';
+    var WIKI_URL = 'https://cdn-adapt.contentservice.net/adapt-la/help_how_to/courses/help_course/latest/index.html';
     window.open(WIKI_URL);
   }
 });

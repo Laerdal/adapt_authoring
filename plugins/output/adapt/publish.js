@@ -3,6 +3,8 @@ const archiver = require('archiver');
 const async = require('async');
 const exec = require('child_process').exec;
 const fs = require('fs-extra');
+const https = require('https');
+const http = require('http');
 const path = require('path');
 const semver = require('semver');
 // internal
@@ -22,6 +24,7 @@ function publishCourse(courseId, mode, request, response, next) {
   let tenantId = user.tenant._id;
   let outputJson = {};
   let isRebuildRequired = false;
+  let isProductionBuild = true;
   let themeName;
   let menuName;
   let frameworkVersion;
@@ -47,6 +50,106 @@ function publishCourse(courseId, mode, request, response, next) {
 
     return stdout.substring(indexStart, indexEnd !== -1 ? indexEnd : stdout.length);
   }
+
+  /**
+   * Register deployment URL with Azure Function
+   */
+  const registerDeploymentUrl = (url, callback) => {
+    // Read Azure Function URL from configuration
+    const azureFunctionUrl = configuration.getConfig('azureFunctionUrl');
+
+    if (!azureFunctionUrl) {
+      logger.log(
+        'warn',
+        'Azure Function URL not configured, skipping deployment URL registration'
+      );
+      return callback(null);
+    }
+
+    const urlObj = new URL(azureFunctionUrl);
+    const isHttps = urlObj.protocol === 'https:';
+    const httpModule = isHttps ? https : http;
+
+    const postData = JSON.stringify({
+      deploymentURL: url
+    });
+
+    const options = {
+      hostname: urlObj.hostname,
+      port: urlObj.port || (isHttps ? 443 : 80),
+      path: urlObj.pathname + urlObj.search,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(postData)
+      }
+    };
+
+    logger.log(
+      'info',
+      'Registering deployment URL with Azure Function: ' + url
+    );
+
+    const req = httpModule.request(options, (res) => {
+      let data = '';
+
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+
+      res.on('end', () => {
+        let response;
+
+        // ✅ SAFE JSON PARSING (key fix)
+        try {
+          response = data ? JSON.parse(data) : {};
+        } catch (err) {
+          logger.log(
+            'error',
+            'Error parsing Azure Function response: ' + err.message
+          );
+          return callback(null); // publish must continue
+        }
+
+        if (res.statusCode === 200 || res.statusCode === 201) {
+          logger.log(
+            'info',
+            response.message || 'Deployment URL processed'
+          );
+
+          if (response.alreadyExists === true) {
+            logger.log(
+              'info',
+              'Deployment URL already exists in CORS whitelist'
+            );
+          } else if (response.alreadyExists === false) {
+            logger.log(
+              'info',
+              'Deployment URL successfully added to CORS whitelist'
+            );
+          }
+        } else {
+          logger.log(
+            'warn',
+            response.error || data || 'Failed to register deployment URL'
+          );
+        }
+
+        callback(null);
+      });
+    });
+
+    req.on('error', (err) => {
+      logger.log(
+        'error',
+        'Error calling Azure Function: ' + err.message
+      );
+      callback(null); // publish must continue
+    });
+
+    req.write(postData);
+    req.end();
+  };
 
   async.waterfall([
     // get an object with all the course data
@@ -195,6 +298,27 @@ function publishCourse(courseId, mode, request, response, next) {
 
       callback(null);
     },
+    function (callback) {
+      // Inject UES Analytics token endpoint from server config
+      // This keeps the token endpoint URL out of source control and course author UI
+      const uesAnalyticsConfig = configuration.getConfig('uesAnalytics');
+      
+      if (!uesAnalyticsConfig || !uesAnalyticsConfig.tokenEndpoint) {
+        return callback(null);
+      }
+      
+      // Only inject if UES analytics is enabled in the course config
+      if (outputJson.config._uesAnalytics && outputJson.config._uesAnalytics._isEnabled) {
+        logger.log(
+          'info',
+          'Injecting UES Analytics token endpoint from server config'
+        );
+        
+        outputJson.config._uesAnalytics._tokenEndpoint = uesAnalyticsConfig.tokenEndpoint;
+      }
+
+      callback(null);
+    },
     function(callback) {
       self.writeCourseJSON(outputJson, path.join(BUILD_FOLDER, Constants.Folders.Course), function(err) {
         if (err) {
@@ -213,8 +337,28 @@ function publishCourse(courseId, mode, request, response, next) {
       if (!isRebuildRequired) {
         return callback();
       }
+      // ADAPT-3614: Gate browserslist --update-db to run at most once per day.
+      // Previously this ran on EVERY publish that required a rebuild, making an
+      // outbound npm registry call (100–2000 ms) each time from the EC2 host.
+      // The timestamp file lives alongside the framework build.
+      const browserslistStampFile = path.join(FRAMEWORK_ROOT_FOLDER, '.browserslist-updated');
+      let skipUpdate = false;
+      try {
+        const lastRun = fs.statSync(browserslistStampFile).mtimeMs;
+        skipUpdate = (Date.now() - lastRun) < 24 * 60 * 60 * 1000; // 24 hours
+      } catch (e) { /* file absent — first run */ }
+
+      if (skipUpdate) {
+        logger.log('info', 'Skipping browserslist update (last run < 24h ago)');
+        return callback();
+      }
       logger.log('info', 'Attempting to update browserslist');
-      exec('npx browserslist --update-db', { cwd: FRAMEWORK_ROOT_FOLDER }, e => callback(e));
+      exec('npx browserslist --update-db', { cwd: FRAMEWORK_ROOT_FOLDER }, e => {
+        if (!e) {
+          try { fs.writeFileSync(browserslistStampFile, ''); } catch (_) {}
+        }
+        callback(e);
+      });
     },
     function(callback) {
       if (!isRebuildRequired) {
@@ -241,6 +385,7 @@ function publishCourse(courseId, mode, request, response, next) {
 
       var generateSourcemap = outputJson.config._generateSourcemap;
       var buildMode = generateSourcemap === true ? 'dev' : 'prod';
+      isProductionBuild = buildMode === 'prod';
 
       logger.log('info', 'npx grunt server-build:' + buildMode + ' ' + args.join(' '));
 
@@ -304,8 +449,60 @@ function publishCourse(courseId, mode, request, response, next) {
         callback(err);
       });
       archive.pipe(output);
-      archive.glob('**/*', { cwd: path.join(BUILD_FOLDER) });
+      // Exclude unnecessary files to optimize SCORM package size:
+      // - selection.json: IcoMoon project file, not needed at runtime
+      // - react-dom.development.js: excluded only for prod builds; dev builds
+      //   (_generateSourcemap === true) need it as scriptLoader loads the dev bundle
+      // - .ttf fonts: only needed for legacy browsers (IE9/Android 4.x)
+      var ignorePatterns = [
+        '**/selection.json',
+        '**/*.ttf'
+      ];
+      if (isProductionBuild) {
+        ignorePatterns.push('**/react-dom.development.js');
+      }
+      archive.glob('**/*', {
+        cwd: path.join(BUILD_FOLDER),
+        ignore: ignorePatterns
+      });
       archive.finalize();
+    },
+    // fetch and register deployment URLs
+    function(callback) {
+      try {
+        const items = outputJson?.config?._uesAnalytics?._items;
+        if (Array.isArray(items)) {
+          // Get all unique deployment URLs
+          const deploymentURLs = items
+            .filter(item => item?._deploymentURL)
+            .map(item => item._deploymentURL)
+            .filter((url, index, self) => self.indexOf(url) === index); // Remove duplicates
+          
+          if (deploymentURLs.length > 0) {
+            logger.log('info', 'Found ' + deploymentURLs.length + ' deployment URL(s): ' + deploymentURLs.join(', '));
+            resultObject.deploymentURLs = deploymentURLs;
+
+            // Fire-and-forget: register URLs in background, do not block publish completion.
+            // Azure Function cold starts can take 15-25s; preview/publish result is not
+            // dependent on CORS registration completing.
+            callback(null);
+            // registerDeploymentUrl logs internally and always calls callback(null);
+            // the completion handler is retained for observability if that changes.
+            async.each(deploymentURLs, registerDeploymentUrl, function(err) {
+              if (err) logger.log('warn', 'Background URL registration error: ' + err.message);
+            });
+          } else {
+            logger.log('info', 'No deployment URL found in eventStoreAnalytics items');
+            callback(null);
+          }
+        } else {
+          logger.log('info', '_eventStoreAnalytics._items is missing or not an array');
+          callback(null);
+        }
+      } catch (err) {
+        logger.log('error', 'Error fetching deployment URLs: ' + err.message);
+        callback(err);
+      }
     }
   ], function(err) {
     if (err) {

@@ -126,7 +126,7 @@ define(function(require) {
     },
 
     navigateToLogin: function() {
-      // use Origin.router.navigate in case we don't have a valid 'this' reference
+      // Navigation handled by user module - just route to login
       Origin.router.navigateTo('user/login');
     },
 

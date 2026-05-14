@@ -126,6 +126,13 @@ define(function(require){
         return;
       }
       this.isCollectionFetching = true;
+      this.$('.projects-list').append(
+        '<li class="projects-loading">' +
+          '<div class="projects-loading-anim">' +
+            '<div class="circle1"></div><div class="circle2"></div><div class="circle3"></div>' +
+          '</div>' +
+        '</li>'
+      );
 
       this.collection.fetch({
         data: {
@@ -138,6 +145,7 @@ define(function(require){
           }
         },
         success: function(collection, response) {
+          this.$('.projects-loading').remove();
           this.isCollectionFetching = false;
           this.fetchCount += response.length;
           // stop further fetching if this is the last page
@@ -145,6 +153,10 @@ define(function(require){
 
           this.$('.no-projects').toggleClass('display-none', this.fetchCount > 0);
           if(typeof cb === 'function') cb(collection);
+        }.bind(this),
+        error: function() {
+          this.$('.projects-loading').remove();
+          this.isCollectionFetching = false;
         }.bind(this)
       });
     },

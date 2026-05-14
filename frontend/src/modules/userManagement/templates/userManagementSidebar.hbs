@@ -1,9 +1,18 @@
 <div class="separator"></div>
 <div class="sidebar-item-inner">
+  {{#if globalData.isEditUsersMode}}
   <button class="action-primary add">
     {{t 'app.addnewuser'}}
   </button>
   <div class="separator"></div>
+  {{else}}
+    {{#unless globalData.userManagementBypassEnabled}}
+    <button class="action-primary add">
+      {{t 'app.addnewuser'}}
+    </button>
+    <div class="separator"></div>
+    {{/unless}}
+  {{/if}}
   <div class="sidebar-row sidebar-divide">
       <h3 class="sidebar-divide-inner">
           <i class="fa fa-filter"></i>{{t 'app.assetfilters'}}
