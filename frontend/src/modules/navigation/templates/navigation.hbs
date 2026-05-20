@@ -14,6 +14,11 @@
     {{/if}}
   </div>
   <div class="navigation-right">
+    {{#if inEditor}}
+      <a href="#" class="navigation-item navigation-studio" data-event="studio">
+        <span>Studio</span>
+      </a>
+    {{/if}}
     {{#if isAuthenticated}}
     <a href="#" class="navigation-item navigation-help" data-event="help">
       <span>{{t 'app.help'}}</span>
