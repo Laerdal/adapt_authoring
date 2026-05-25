@@ -223,7 +223,7 @@ function publishCourse(courseId, mode, request, response, next) {
             done(err);
           });
         }
-      ], callback);
+      ], function(err) { callback(err); });
     },
     // sanitizeCourseJSON must run after applyTheme/applyMenu — it converts course and
     // config from arrays to single objects, which would break applyTheme's course[0] reads.
