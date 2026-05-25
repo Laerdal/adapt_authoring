@@ -176,14 +176,28 @@ function publishCourse(courseId, mode, request, response, next) {
         callback(null);
       });
     },
-    // PERF: run sanitize, build-flag check, and framework-version read in parallel —
-    // these three are independent of each other after getCourseJSON completes.
+    // PERF: applyTheme, applyMenu, build-flag check, and framework-version read all run
+    // in parallel. These four are independent of each other and all require outputJson
+    // to still have course/config as arrays (before sanitizeCourseJSON converts them).
     function(callback) {
+      var temporaryThemeFolder = path.join(SRC_FOLDER, Constants.Folders.Theme, customPluginName);
+      var temporaryMenuFolder  = path.join(SRC_FOLDER, Constants.Folders.Menu,  customPluginName);
       async.parallel([
         function(done) {
-          self.sanitizeCourseJSON(mode, outputJson, function(err, data) {
+          self.applyTheme(tenantId, courseId, outputJson, temporaryThemeFolder, function(err, appliedThemeName) {
             if (err) return done(err);
-            outputJson = data;
+            self.writeCustomStyle(tenantId, courseId, temporaryThemeFolder, function(err) {
+              if (err) return done(err);
+              themeName = appliedThemeName;
+              outputJson['config'][0]._theme = themeName;
+              done(null);
+            });
+          });
+        },
+        function(done) {
+          self.applyMenu(tenantId, courseId, outputJson, temporaryMenuFolder, function(err, appliedMenuName) {
+            if (err) return done(err);
+            menuName = appliedMenuName;
             done(null);
           });
         },
@@ -211,30 +225,14 @@ function publishCourse(courseId, mode, request, response, next) {
         }
       ], callback);
     },
-    // PERF: applyTheme and applyMenu write to separate filesystem dirs — safe to parallelise.
+    // sanitizeCourseJSON must run after applyTheme/applyMenu — it converts course and
+    // config from arrays to single objects, which would break applyTheme's course[0] reads.
     function(callback) {
-      var temporaryThemeFolder = path.join(SRC_FOLDER, Constants.Folders.Theme, customPluginName);
-      var temporaryMenuFolder  = path.join(SRC_FOLDER, Constants.Folders.Menu,  customPluginName);
-      async.parallel([
-        function(done) {
-          self.applyTheme(tenantId, courseId, outputJson, temporaryThemeFolder, function(err, appliedThemeName) {
-            if (err) return done(err);
-            self.writeCustomStyle(tenantId, courseId, temporaryThemeFolder, function(err) {
-              if (err) return done(err);
-              themeName = appliedThemeName;
-              outputJson['config'][0]._theme = themeName;
-              done(null);
-            });
-          });
-        },
-        function(done) {
-          self.applyMenu(tenantId, courseId, outputJson, temporaryMenuFolder, function(err, appliedMenuName) {
-            if (err) return done(err);
-            menuName = appliedMenuName;
-            done(null);
-          });
-        }
-      ], callback);
+      self.sanitizeCourseJSON(mode, outputJson, function(err, data) {
+        if (err) return callback(err);
+        outputJson = data;
+        callback(null);
+      });
     },
     // PERF: cache gate — if the course JSON fingerprint matches the last successful build,
     // the built output is still valid; skip all file-writing steps and serve as-is.
