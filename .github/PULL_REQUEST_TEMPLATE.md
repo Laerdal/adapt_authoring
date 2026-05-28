@@ -1,22 +1,64 @@
-## Proposed changes
+## ✅ PR Completion Checklist
 
-Please describe your changes in full here, including steps needed to build/test it. The more useful detail you give, the easier it is for the core team to review and approve :smile:
+* [ ] PR title follows format: `Prefix: ADAPT-XXXX Brief description`
+  > e.g. `Feature: ADAPT-3648 Deprecate legacy plugins` · `Bugfix: ADAPT-2504 Failed import creates rogue course`
+* [ ] JIRA ID linked in the Context section below
+* [ ] Plugin version updated in `bower.json` (if applicable)
+* [ ] `npm run test-e2e-dev-pipeline` executed and passing
+* [ ] No new issues reported by SonarLint (attach screenshot if applicable)
+* [ ] Own diff reviewed before requesting review
+* [ ] At least two reviewers added (Copilot set as default)
 
-If this is a particularly large change, give as much detail as you can about the reasoning behind your solution, and any alternatives you considered.
+---
 
-**Please also include a link to the issue that this addresses (we usually won't accept pull requests without an associated issue).**
+## Context
 
-## Checklist
+#### Resolves / Addresses [ADAPT-XXXX](https://laerdal.atlassian.net/browse/ADAPT-XXXX)
 
-Below is a checklist of the key things that the core team will be looking for when reviewing your PR. Please check off as many of these as you can prior to submitting the PR, but don't worry if you can't do all of them, the core team are here to help!
+<!--
+  WHY is this change being made? Answer from a product or user perspective.
+  - What problem does it solve, or what value does it add?
+  - Add Figma links or screenshots where the change has visual impact.
+  - Reference a test course if demo validation is needed.
+-->
 
-- [ ] I have read the [CONTRIBUTING](https://github.com/adaptlearning/adapt_authoring/blob/master/.github/CONTRIBUTING.md) doc
-- [ ] I have checked that the code compiles correctly
-- [ ] I have checked that unit test suite passes locally with my changes
-- [ ] I have added new tests that cover my changes (where appropriate)
-- [ ] I have added documentation (where appropriate)
-- [ ] Any dependent changes have already been merged
+---
 
-## Next steps
+## Description
 
-The core team will be automatically notified of your changes, but also feel free to bring it to our attention via the [gitter.im channel](https://gitter.im/adaptlearning/adapt_authoring).
+<!--
+  HOW is this accomplished technically?
+  - What specific approach was taken and why?
+  - Note any architecture decisions, trade-offs, or alternatives considered.
+  - Mention DB changes, config updates, or breaking changes.
+-->
+
+---
+
+## Changes in the codebase
+
+<!--
+  Per-file breakdown — reviewers should be able to map each diff entry back to this list.
+  Add or remove file sections as needed.
+-->
+
+### `path/to/file.ext`
+-
+
+### `path/to/file.ext`
+-
+
+---
+
+<!--
+  Optional: add a structured table for config values, size mappings, API fields, etc.
+
+| | Column A | Column B | Column C |
+|---|---|---|---|
+| Row 1 | | | |
+-->
+
+---
+
+<!-- Reference links — full JIRA URLs so shorthand links in the body above resolve correctly -->
+[ADAPT-XXXX]: https://laerdal.atlassian.net/browse/ADAPT-XXXX

@@ -186,7 +186,18 @@ define(function(require){
     },
 
     onFormSubmitSuccess: function(data, importStatus, importXhr) {
-      Origin.router.navigateToHome();
+      if (data && data.deprecatedPlugins && data.deprecatedPlugins.length > 0) {
+        Origin.Notify.alert({
+          type: 'warning',
+          title: Origin.l10n.t('app.warningdefaulttitle'),
+          text: 'This course uses deprecated plugins, which may impact its functionality upon import. We recommend replacing or removing them to ensure the course works as expected.<br><br><strong>Deprecated plugin(s) found:</strong><br>' + data.deprecatedPlugins.join('<br>'),
+          callback: function() {
+            Origin.router.navigateToHome();
+          }
+        });
+      } else {
+        Origin.router.navigateToHome();
+      }
     },
 
     onAjaxError: function(data, status, error) {
