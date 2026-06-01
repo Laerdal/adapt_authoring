@@ -62,9 +62,9 @@ function initialize() {
                   if (err) {
                     return callback(err, 'Unable to retrieve child articles of contentobject ' + itemForDeletion._id);
                   }
+                  criteria._courseId = itemForDeletion._courseId;
                   var parentIds = [];
                   if (articles && articles.length !== 0) {
-                    criteria._courseId = itemForDeletion._courseId;
                     parentIds = _.pluck(articles, '_id');
                     // add the contentObject id as parent for assets on articles
                     parentIds.push(itemForDeletion._id);

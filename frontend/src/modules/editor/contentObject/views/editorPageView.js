@@ -61,10 +61,9 @@ define(function(require){
       return returnVal;
     },
 
-    // Clear cache and re-render when content changes
+    // Clear component cache and re-render when content changes
     onContentChanged: function() {
-      BatchLoader.clearCache(this.model.get('_id'));
-      this._batchLoadedContent = null;
+      this._componentCache = null;
       this.render();
     },
 
