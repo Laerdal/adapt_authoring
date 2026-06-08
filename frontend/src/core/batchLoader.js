@@ -96,11 +96,15 @@ define(function(require) {
     },
 
     /**
-     * Get children for a specific parent from cached data
+     * Get children for a specific parent from cached data.
      * @param {string} pageId - The page ID that was loaded
      * @param {string} parentId - The parent ID to get children for
      * @param {string} type - The content type (article, block, component)
-     * @returns {array} Array of child models
+     * @returns {array} Array of raw JSON items (NOT Backbone Model instances).
+     *   Callers must wrap each item with the appropriate Model constructor
+     *   (ArticleModel/BlockModel/ComponentModel) before using model APIs
+     *   like .get()/.set(). See editorPageArticleView.js#_getBlocksFromBatchCache
+     *   for the canonical wrap pattern.
      */
     getChildrenFromCache: function(pageId, parentId, type) {
       var cache = this._cache[pageId];

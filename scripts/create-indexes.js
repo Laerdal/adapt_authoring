@@ -34,8 +34,13 @@ const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
 const args = {};
 process.argv.slice(2).forEach(arg => {
-  const [k, v] = arg.replace(/^--/, '').split('=');
-  args[k] = v === undefined ? true : v;
+  // Split on the FIRST `=` only — values may legitimately contain `=` (e.g.
+  // connection URIs with query strings: `--connection-uri=mongodb://h/?tls=true&replicaSet=rs0`).
+  const stripped = arg.replace(/^--/, '');
+  const eqIdx = stripped.indexOf('=');
+  const k = eqIdx === -1 ? stripped : stripped.slice(0, eqIdx);
+  const v = eqIdx === -1 ? true     : stripped.slice(eqIdx + 1);
+  args[k] = v;
 });
 
 const DRY_RUN   = !!args['dry-run'];

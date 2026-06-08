@@ -9,11 +9,14 @@
  * Expected performance improvement: 5-10x faster query response times
  */
 
+// Mongoose auto-pluralises model names → actual MongoDB collection names.
+// Using the singular form here would create new empty collections and leave
+// the real (plural) ones un-indexed. See also scripts/db-diagnostic.js#CONTENT_COLLECTIONS.
 const CONTENT_COLLECTIONS = [
-  'article',
-  'block', 
-  'component',
-  'contentobject'
+  'articles',
+  'blocks',
+  'components',
+  'contentobjects'
 ];
 
 exports.up = function(db, callback) {

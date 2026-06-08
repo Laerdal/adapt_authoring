@@ -100,7 +100,6 @@ define(function(require){
       // article fetch. Both requests fire immediately; whichever finishes last
       // triggers rendering. This eliminates the N+1 pattern where each block
       // issued its own GET /api/content/component?_parentId=<id> request.
-      var self = this;
       var courseId = Origin.editor.data.course.get('_id');
       var componentsDone = false;
       var articlesDone = false;

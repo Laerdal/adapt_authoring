@@ -39,8 +39,13 @@ const config     = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
 const args = {};
 process.argv.slice(2).forEach(arg => {
-  const [k, v] = arg.replace(/^--/, '').split('=');
-  args[k] = v === undefined ? true : v;
+  // Split on the FIRST `=` only — values may legitimately contain `=` (e.g.
+  // connection URIs with query strings: `--connection-uri=mongodb://h/?tls=true&replicaSet=rs0`).
+  const stripped = arg.replace(/^--/, '');
+  const eqIdx = stripped.indexOf('=');
+  const k = eqIdx === -1 ? stripped : stripped.slice(0, eqIdx);
+  const v = eqIdx === -1 ? true     : stripped.slice(eqIdx + 1);
+  args[k] = v;
 });
 
 const TARGET_TENANT = args['tenant']  || null;
@@ -95,8 +100,13 @@ function buildClientOptions(extra = {}) {
 const CONTENT_COLLECTIONS = ['contentobjects', 'articles', 'blocks', 'components', 'courseassets'];
 
 function buildPublishQueries(courseId) {
-  const id = courseId ? new ObjectId(courseId) : null;
-  if (!id) return null;
+  if (!courseId) return null;
+  // ObjectId() throws synchronously on invalid input. Guard before constructing
+  // so the script fails with a clear message instead of an unhandled exception.
+  if (!/^[0-9a-fA-F]{24}$/.test(courseId)) {
+    throw new Error(`Invalid courseId "${courseId}" — expected 24-char hex string`);
+  }
+  const id = new ObjectId(courseId);
   return [
     { collection: 'contentobjects', filter: { _courseId: id }, sort: { _sortOrder: 1 }, label: 'getCourseJSON: contentobjects by courseId' },
     { collection: 'articles',       filter: { _courseId: id }, sort: { _sortOrder: 1 }, label: 'getCourseJSON: articles by courseId' },
@@ -142,7 +152,7 @@ async function analyseDatabase(dbName, forceExplainCourseId) {
     // ── 2. Find a sample courseId if not provided ─────────────────────────────
     let courseId = forceExplainCourseId;
     if (!courseId) {
-      const sample = await db.collection('course').findOne({}, { projection: { _id: 1 } });
+      const sample = await db.collection('courses').findOne({}, { projection: { _id: 1 } });
       if (sample) courseId = sample._id.toString();
     }
 
