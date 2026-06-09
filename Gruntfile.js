@@ -316,6 +316,63 @@ module.exports = function(grunt) {
     });
   });
 
+  // Bundles frontend by calling r.js directly. The grunt-contrib-requirejs
+  // plugin silently drops the `include` option, which causes shimmed libs
+  // declared inside function-scoped require() calls (jqueryUI, handlebars,
+  // jqueryForm, etc.) to be excluded from the bundle. r.js itself honours
+  // `include` correctly.
+  // Usage: requirejs-direct:dev | requirejs-direct:compile
+  grunt.registerTask('requirejs-direct', 'Bundle frontend via r.js directly (bypasses grunt-contrib-requirejs which drops `include`).', function(mode) {
+    var done = this.async();
+    var path = require('path');
+    var fs = require('fs');
+    var os = require('os');
+    var spawn = require('child_process').spawn;
+
+    var modeKey = mode || 'compile';
+    var existing = grunt.config.get('requirejs.' + modeKey + '.options');
+    if (!existing) {
+      grunt.fail.fatal('No requirejs config found for mode: ' + modeKey);
+      return;
+    }
+
+    var rjsConfig = Object.assign({}, existing, {
+      baseUrl: path.resolve(existing.baseUrl),
+      mainConfigFile: path.resolve(existing.mainConfigFile),
+      out: path.resolve(existing.out),
+      // Mirror the shimmed libs loaded by frontend/src/core/app.js#loadLibraries.
+      // r.js's static analyser misses these because the require() call is inside
+      // a function body, not at module top level.
+      include: [
+        'ace/ace', 'handlebars', 'imageReady', 'inview',
+        'jqueryForm', 'jqueryTagsInput', 'jqueryUI',
+        'polyfill', 'scrollTo', 'selectize', 'sweetalert', 'velocity'
+      ]
+    });
+
+    var configFile = path.join(os.tmpdir(), 'adapt-rjs-' + process.pid + '-' + Date.now() + '.json');
+    fs.writeFileSync(configFile, JSON.stringify(rjsConfig, null, 2));
+
+    grunt.log.writeln('Bundling with r.js (mode=' + modeKey + ')');
+    grunt.log.verbose.writeln('r.js config: ' + configFile);
+
+    var rjsBin = path.resolve('node_modules/requirejs/bin/r.js');
+    var child = spawn(process.execPath, [rjsBin, '-o', configFile], { stdio: 'inherit' });
+
+    child.on('close', function(code) {
+      try { fs.unlinkSync(configFile); } catch (e) { /* ignore */ }
+      if (code !== 0) {
+        grunt.fail.fatal('r.js exited with code ' + code);
+        return;
+      }
+      done();
+    });
+
+    child.on('error', function(err) {
+      grunt.fail.fatal('Failed to spawn r.js: ' + err.message);
+    });
+  });
+
   grunt.registerTask('default', ['build:dev']);
   grunt.registerTask('test', ['mochaTest']);
 
@@ -336,10 +393,10 @@ module.exports = function(grunt) {
       config.isProduction = isProduction;
       grunt.file.write(configFile, JSON.stringify(config, null, 2));
       // run the task
-      grunt.task.run(['migration-conf', 'requireBundle', 'generate-lang-json', 'copy', 'less:' + compilation, 'handlebars', 'requirejs:'+ compilation, `babel:${compilation}`]);
+      grunt.task.run(['migration-conf', 'requireBundle', 'generate-lang-json', 'copy', 'less:' + compilation, 'handlebars', 'requirejs-direct:'+ compilation, `babel:${compilation}`]);
 
     } catch(e) {
-      grunt.task.run(['requireBundle', 'copy', 'less:' + compilation, 'handlebars', 'requirejs:' + compilation, `babel:${compilation}`]);
+      grunt.task.run(['requireBundle', 'copy', 'less:' + compilation, 'handlebars', 'requirejs-direct:' + compilation, `babel:${compilation}`]);
     }
   });
 };

@@ -34,99 +34,102 @@ function isValidObjectId(id) {
   return /^[a-f\d]{24}$/i.test(id);
 }
 
-function copyCourseThumbnail(results, done) {
-  const database = require('../../../lib/database');
-  
+// Fetches the course document once at the start of the export pipeline so that
+// copyCourseThumbnail and any future steps can share it via results.fetchCourse.
+function fetchCourseRecord(results, done) {
   database.getDatabase(function(error, db) {
     if (error) return done(error);
-    
     db.retrieve('course', { _id: COURSE_ID }, function(error, courses) {
-      if (error || !courses || !courses.length) {
-        logger.log('warn', 'Failed to retrieve course for thumbnail export');
-        return done();
-      }
-      
-      const course = courses[0];
-      if (!course.heroImage) {
+      if (error) return done(error);
+      done(null, courses && courses.length ? courses[0] : null);
+    });
+  }, configuration.getConfig('dbName'));
+}
+
+function copyCourseThumbnail(results, done) {
+  const course = results.fetchCourse;
+  if (!course || !course.heroImage) {
+    return done();
+  }
+
+  // Validate ObjectId before attempting to retrieve asset
+  if (!isValidObjectId(course.heroImage)) {
+    logger.log('warn', `Invalid ObjectId for hero image: ${course.heroImage}`);
+    return done();
+  }
+
+  database.getDatabase(function(error, db) {
+    if (error) return done(error);
+
+    // Retrieve the asset details for the hero image
+    db.retrieve('asset', { _id: course.heroImage }, function(error, assets) {
+      if (error || !assets || !assets.length) {
+        logger.log('warn', `Failed to retrieve hero image asset: ${course.heroImage}`);
         return done();
       }
 
-      // Validate ObjectId before attempting to retrieve asset
-      if (!isValidObjectId(course.heroImage)) {
-        logger.log('warn', `Invalid ObjectId for hero image: ${course.heroImage}`);
-        return done();
-      }
+      const asset = assets[0];
 
-      // Retrieve the asset details for the hero image
-      db.retrieve('asset', { _id: course.heroImage }, function(error, assets) {
-        if (error || !assets || !assets.length) {
-          logger.log('warn', `Failed to retrieve hero image asset: ${course.heroImage}`);
+      // Get the correct storage repository
+      filestorage.getStorage(asset.repository, function(error, storage) {
+        if (error) {
+          logger.log('warn', `Failed to retrieve storage repository: ${error.message}`);
           return done();
         }
 
-        const asset = assets[0];
-        
-        // Get the correct storage repository
-        filestorage.getStorage(asset.repository, function(error, storage) {
-          if (error) {
-            logger.log('warn', `Failed to retrieve storage repository: ${error.message}`);
+        // Get the course language from the built course
+        const courseSrcDir = path.join(EXPORT_DIR, Constants.Folders.Source, Constants.Folders.Course);
+
+        // Find the language directory (usually 'en' or other language code)
+        fs.readdir(courseSrcDir, function(readDirError, files) {
+          if (readDirError) {
+            logger.log('warn', `Failed to read course directory: ${readDirError.message}`);
             return done();
           }
 
-          // Get the course language from the built course
-          const courseSrcDir = path.join(EXPORT_DIR, Constants.Folders.Source, Constants.Folders.Course);
-          
-          // Find the language directory (usually 'en' or other language code)
-          fs.readdir(courseSrcDir, function(readDirError, files) {
-            if (readDirError) {
-              logger.log('warn', `Failed to read course directory: ${readDirError.message}`);
-              return done();
+          // Find the first directory (language folder)
+          let languageDir = null;
+          for (const file of files) {
+            const filePath = path.join(courseSrcDir, file);
+            if (fs.statSync(filePath).isDirectory()) {
+              languageDir = file;
+              break;
             }
-            
-            // Find the first directory (language folder)
-            let languageDir = null;
-            for (const file of files) {
-              const filePath = path.join(courseSrcDir, file);
-              if (fs.statSync(filePath).isDirectory()) {
-                languageDir = file;
-                break;
+          }
+
+          if (!languageDir) {
+            logger.log('warn', 'No language directory found in course');
+            return done();
+          }
+
+          // Create destination directory under the course language directory
+          const thumbnailDir = path.join(courseSrcDir, languageDir, 'assets', 'thumb');
+          fs.ensureDir(thumbnailDir, function(error) {
+            if (error) return done(error);
+
+            // Get the source thumbnail path from storage
+            const srcPath = storage.resolvePath(asset.thumbnailPath || asset.path);
+            const destPath = path.join(thumbnailDir, path.basename(asset.thumbnailPath || asset.path));
+
+            // Copy the thumbnail
+            fs.copy(srcPath, destPath, function(error) {
+              if (error) {
+                logger.log('warn', `Failed to copy course thumbnail: ${error.message}`);
+                return done(error);
               }
-            }
-            
-            if (!languageDir) {
-              logger.log('warn', 'No language directory found in course');
-              return done();
-            }
-            
-            // Create destination directory under the course language directory
-            const thumbnailDir = path.join(courseSrcDir, languageDir, 'assets', 'thumb');
-            fs.ensureDir(thumbnailDir, function(error) {
-              if (error) return done(error);
-
-              // Get the source thumbnail path from storage
-              const srcPath = storage.resolvePath(asset.thumbnailPath || asset.path);
-              const destPath = path.join(thumbnailDir, path.basename(asset.thumbnailPath || asset.path));
-
-              // Copy the thumbnail
-              fs.copy(srcPath, destPath, function(error) {
-                if (error) {
-                  logger.log('warn', `Failed to copy course thumbnail: ${error.message}`);
-                  return done(error);
-                }
-                // Store metadata about the hero image (metadata is now guaranteed to exist)
-                metadata.heroImage = {
-                  assetId: asset._id,
-                  fileName: path.basename(asset.thumbnailPath || asset.path)
-                };
-                logger.log('info', `Successfully copied course thumbnail to: ${destPath}`);
-                done();
-              });
+              // Store metadata about the hero image
+              metadata.heroImage = {
+                assetId: asset._id,
+                fileName: path.basename(asset.thumbnailPath || asset.path)
+              };
+              logger.log('info', `Successfully copied course thumbnail to: ${destPath}`);
+              done();
             });
           });
         });
       });
     });
-  });
+  }, configuration.getConfig('dbName'));
 }
 
 function exportCourse(pCourseId, request, response, next, options = {}) {
@@ -148,12 +151,13 @@ function exportCourse(pCourseId, request, response, next, options = {}) {
 
   async.auto({
     ensureExportDir: ensureExportDir,
+    fetchCourse: ['ensureExportDir', fetchCourseRecord],
     generateLatestBuild: ['ensureExportDir', generateLatestBuild],
     copyFrameworkFiles: ['generateLatestBuild', copyFrameworkFiles],
     writeThemeVariables: ['copyFrameworkFiles', writeThemeVariables],
     writeCustomStyle: ['writeThemeVariables', writeCustomStyle],
     copyCourseFiles: ['generateLatestBuild', copyCourseFiles],
-    copyThumbnail: ['copyCourseFiles', copyCourseThumbnail]
+    copyThumbnail: ['copyCourseFiles', 'fetchCourse', copyCourseThumbnail]
     //copyAssets:['copyCourseFiles', copyAssets]
   }, async.apply(zipExport, next));
 }
