@@ -31,6 +31,7 @@ var origin = require('../../../'),
     exec = require('child_process').exec,
     IncomingForm = require('formidable').IncomingForm,
     installHelpers = require('../../../lib/installHelpers'),
+    questionComponentHelper = require('../../../lib/questionComponentHelper'),
     bytes = require('bytes');
 
 // errors
@@ -841,6 +842,11 @@ function addPackage (plugin, packageInfo, options, cb) {
   function addToDB(addCb) {
     // build the package information
     var package = extractPackageInfo(plugin, pkgMeta, schema);
+
+    if (plugin.packageType === 'component') {
+      package._isQuestionType = questionComponentHelper.isQuestionComponentPlugin(packageInfo.canonicalDir);
+    }
+
     // add the package to the modelname collection
     database.getDatabase(function (err, db) {
       if (err) {

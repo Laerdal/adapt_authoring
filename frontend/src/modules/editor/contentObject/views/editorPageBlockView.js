@@ -104,8 +104,8 @@ define(function(require){
         'editorView:addComponent:' + id + ' ' +
         'editorView:removeComponent:' + id + ' ' +
         'editorView:moveComponent:' + id
-      ] = this.render;
-      events['editorView:pasted:' + id] = this.onPaste;
+      ] = this.onContentChanged;
+      events['editorView:pasted:' + id] = this.onPasteWithCacheClear;
       this.listenTo(Origin, events);
 
       this.listenTo(this, {
@@ -114,6 +114,27 @@ define(function(require){
         'contextMenu:block:copyID': this.onCopyID,
         'contextMenu:block:delete': this.deleteBlockPrompt
       });
+    },
+    
+    /**
+     * Clear cache and re-render when components change
+     */
+    onContentChanged: function() {
+      // Clear the batch cache since content has changed
+      if (Origin.editor._batchLoadedContent) {
+        Origin.editor._batchLoadedContent = null;
+      }
+      this.render();
+    },
+    
+    /**
+     * Handle paste with cache clear
+     */
+    onPasteWithCacheClear: function() {
+      if (Origin.editor._batchLoadedContent) {
+        Origin.editor._batchLoadedContent = null;
+      }
+      this.onPaste();
     },
 
     postRender: function() {

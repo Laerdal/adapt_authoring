@@ -12,6 +12,8 @@ define(function(require){
     className: 'page',
     tagName: 'div',
     childrenRenderedCount: 0,
+    // Store pre-loaded content for child views to access
+    _batchLoadedContent: null,
 
     events: _.extend({}, EditorOriginView.prototype.events, {
       'click .add-article': 'addNewArticle',
@@ -27,8 +29,8 @@ define(function(require){
         'editorView:removeSubViews': this.remove,
         'pageView:itemAnimated': this.evaluateChildStatus
       };
-      originEvents['editorView:moveArticle:' + id] = this.render;
-      originEvents['editorView:pasted:' + id] = this.render;
+      originEvents['editorView:moveArticle:' + id] = this.onContentChanged;
+      originEvents['editorView:pasted:' + id] = this.onContentChanged;
       this.listenTo(Origin, originEvents);
 
       Origin.options.addItems([
@@ -59,6 +61,12 @@ define(function(require){
       return returnVal;
     },
 
+    // Clear component cache and re-render when content changes
+    onContentChanged: function() {
+      this._componentCache = null;
+      this.render();
+    },
+
     evaluateChildStatus: function() {
       this.childrenRenderedCount++;
 
@@ -70,9 +78,16 @@ define(function(require){
       this.setupScrollListener();
     },
 
+    /**
+     * Optimized addArticleViews using batch loading.
+     * Loads all articles, blocks, and components in a single API request
+     * instead of N+1 individual requests.
+     */
     addArticleViews: function() {
+      var self = this;
       this.$('.page-articles').empty();
       Origin.trigger('editorPageView:removePageSubViews');
+      
       // Insert the 'pre' paste zone for articles
       var prePasteArticle = new ArticleModel({
         _parentId: this.model.get('_id'),
@@ -85,7 +100,6 @@ define(function(require){
       // article fetch. Both requests fire immediately; whichever finishes last
       // triggers rendering. This eliminates the N+1 pattern where each block
       // issued its own GET /api/content/component?_parentId=<id> request.
-      var self = this;
       var courseId = Origin.editor.data.course.get('_id');
       var componentsDone = false;
       var articlesDone = false;
@@ -115,6 +129,7 @@ define(function(require){
           '<p class="page-articles-loading-msg">' + Origin.l10n.t('app.loading') + '</p>' +
         '</div>'
       );
+
 
       // Fire component prefetch (no-op on error — block views fall back to fetchChildren)
       (new ContentCollection(null, { _type: 'component', _courseId: courseId })).fetch({
@@ -193,11 +208,7 @@ define(function(require){
     }
     },
 
-    getCurrentUserRole: async function () {
-      const response = await fetch('/api/user/me');
-      const result = await response.json();
-      return result.rolesAsName[0];
-    },
+    // getCurrentUserRole is now cached at Origin.getCurrentUserRole (in templating/index.js)
     loadPageEdit: function(event) {
       event && event.preventDefault();
       var courseId = this.model.get('_courseId');

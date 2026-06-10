@@ -3,22 +3,28 @@
   var origin;
 
   function loadLibraries(callback) {
-    require([
-      'ace/ace',
-      'handlebars',
-      'imageReady',
-      'inview',
-      'jqueryForm',
-      'jqueryTagsInput',
-      'jqueryUI',
-      'polyfill',
-      'scrollTo',
-      'selectize',
-      'sweetalert',
-      'velocity'
-    ], function() {
-      window.Handlebars = $.extend(require('handlebars'), window.Handlebars);
-      callback();
+    require(['jquery'], function($) {
+      // Make jQuery available globally BEFORE loading jquery-ui etc.
+      // jquery-ui's shim expects window.jQuery to exist when its IIFE runs;
+      // without this, it silently fails to extend $.fn.
+      window.jQuery = window.$ = $;
+      require([
+        'ace/ace',
+        'handlebars',
+        'imageReady',
+        'inview',
+        'jqueryForm',
+        'jqueryTagsInput',
+        'jqueryUI',
+        'polyfill',
+        'scrollTo',
+        'selectize',
+        'sweetalert',
+        'velocity'
+      ], function() {
+        window.Handlebars = $.extend(require('handlebars'), window.Handlebars);
+        callback();
+      });
     });
   }
 
