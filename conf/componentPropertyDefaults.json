@@ -1,0 +1,11 @@
+{
+  "*": {
+    "title": "change : New Component Title",
+    "displayTitle": "change : New Component Title",
+    "body": "this is body"
+  },
+  "mcq": {
+    "properties._attempts": 7,
+    "properties._feedback.title": "Kripya feedback daalein"
+  }
+}
