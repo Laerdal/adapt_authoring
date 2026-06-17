@@ -62,4 +62,22 @@ describe('componentPropertyDefaults', function() {
     schema.properties.properties._attempts.default.should.equal(4);
     schema.properties.properties._canShowFeedback.default.should.equal(true);
   });
+
+  it('should skip array-template item paths when applying defaults to objects', function() {
+    var data = {
+      _component: 'mcq',
+      properties: {}
+    };
+    var config = {
+      mcq: {
+        'properties._items.items.text': 'Option text',
+        'properties._attempts': 2
+      }
+    };
+
+    componentPropertyDefaults.applyDefaultsToObject(data, data._component, config);
+
+    should.not.exist(data.properties._items);
+    data.properties._attempts.should.equal(2);
+  });
 });
