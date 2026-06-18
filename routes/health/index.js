@@ -140,6 +140,7 @@ function checkStoryboardFeature() {
     const enabled = config ? config.isEnabled !== false : false;
     const mem = process.memoryUsage();
     const heapUsedMB = Math.round(mem.heapUsed / 1048576);
+    const CRITICAL_HEAP_USED_MB = 800;
 
     const checks = {
       configPresent: Boolean(config),
@@ -148,7 +149,7 @@ function checkStoryboardFeature() {
         heapUsedMB,
         heapTotalMB: Math.round(mem.heapTotal / 1048576),
         rssMB: Math.round(mem.rss / 1048576),
-        critical: heapUsedMB > 800
+        critical: heapUsedMB > CRITICAL_HEAP_USED_MB
       }
     };
 
