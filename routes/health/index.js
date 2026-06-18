@@ -230,12 +230,12 @@ server.get('/api/health', function(req, res) {
     const mem = process.memoryUsage();
     const featureHealth = buildFeatureHealth();
     const anyFeatureDown = featureHealth.summary.down > 0;
-    const healthy = !dbError && !anyFeatureDown;
+    const anyFeatureDegraded = featureHealth.summary.degraded > 0;
+    const healthy = !dbError && !anyFeatureDown && !anyFeatureDegraded;
 
     // Instance is reachable when this handler returns a response.
     const instanceStatus = 'Up';
     const overallHealth = healthy ? 'ok' : 'degraded';
-
     const body = {
       status: instanceStatus,
       health: overallHealth,
