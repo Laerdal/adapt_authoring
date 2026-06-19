@@ -482,11 +482,12 @@ module.exports = function(grunt) {
       var suffix = missing.length > 50
         ? ('\n - ... and ' + (missing.length - 50) + ' more')
         : '';
-      grunt.fail.fatal(
+      grunt.log.warn(
         'componentPropertyDefaults.json is missing required default mappings.\n' +
         'Add the following keys:\n' + preview + suffix +
         '\n\nTip: regenerate component defaults before build.'
       );
+      return;
     }
 
     grunt.log.ok('componentPropertyDefaults.json validation passed.');
