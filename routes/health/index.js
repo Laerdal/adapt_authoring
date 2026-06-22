@@ -4,8 +4,13 @@ const configuration = require('../../lib/configuration');
 const pkg = require('../../package.json');
 const fs = require('fs');
 const path = require('path');
+const http = require('http');
+const https = require('https');
+const semver = require('semver');
 
 const server = module.exports = express();
+const DEFAULT_SUPPORT_URL = 'https://laerdal.atlassian.net/servicedesk/customer/portal/2';
+const SUPPORT_CHECK_TIMEOUT_MS = 5000;
 
 function getPluginsConfig() {
   return configuration.getConfig('plugins') || {};
@@ -27,39 +32,82 @@ function makeFeatureResult(checks, options) {
   };
 }
 
+function evaluateDependencyHealth(pluginPackageRelativePath) {
+  const pluginPackage = require(pluginPackageRelativePath);
+  const dependencies = pluginPackage.dependencies || {};
+  const dependencyNames = Object.keys(dependencies);
+  const missingPackages = [];
+  const versionMismatchPackages = [];
+
+  dependencyNames.forEach(function(dependencyName) {
+    const expectedRange = dependencies[dependencyName];
+    let resolvedPackageJsonPath;
+
+    try {
+      resolvedPackageJsonPath = require.resolve(dependencyName + '/package.json', {
+        paths: [__dirname]
+      });
+    } catch (resolveError) {
+      missingPackages.push(dependencyName);
+      return;
+    }
+
+    const installedPackage = require(resolvedPackageJsonPath);
+    const installedVersion = installedPackage.version;
+    const expectedIsRange = Boolean(semver.validRange(expectedRange));
+    const versionMatches = expectedIsRange
+      ? semver.satisfies(installedVersion, expectedRange)
+      : installedVersion === expectedRange;
+
+    if (!versionMatches) {
+      versionMismatchPackages.push(
+        dependencyName + ' (expected ' + expectedRange + ', installed ' + installedVersion + ')'
+      );
+    }
+  });
+
+  const errors = [];
+
+  if (missingPackages.length > 0) {
+    errors.push(missingPackages.join(', ') + ' is not installed');
+  }
+
+  if (versionMismatchPackages.length > 0) {
+    errors.push(versionMismatchPackages.join(', ') + ' package version does not match the installed version');
+  }
+
+  return {
+    dependencyPresent: errors.length === 0,
+    dependencyError: errors.join('; ')
+  };
+}
+
 function checkTranslationFeature() {
   try {
     const config = getPluginConfig('adapt-services-translation');
-    const smartling = (config && config.smartling) || {};
-    const medialocate = (config && config.medialocate) || {};
-    const leats = (config && config.leats) || {};
-    const enabled = config ? config.isEnabled !== false : false;
+    const dependencyHealth = evaluateDependencyHealth('../../plugins/services/translation/package.json');
 
     const checks = {
       configPresent: Boolean(config),
-      enabled,
-      adapters: {
-        smartlingConfigured: Boolean(smartling.userIdentifier && smartling.userSecret),
-        medialocateConfigured: Boolean(medialocate.baseUrl || medialocate.environment),
-        leatsConfigured: Boolean(leats.azureEndpoint && leats.azureApiKey && leats.deployment)
-      }
+      dependencyPresent: dependencyHealth.dependencyPresent
     };
 
-    if (!checks.configPresent || !enabled) {
+    if (!checks.configPresent) {
       return makeFeatureResult(checks, {
         status: 'down',
-        error: 'Translation plugin config missing or disabled'
+        error: 'Translation plugin config missing'
       });
     }
 
-    const adapterCount = [
-      checks.adapters.smartlingConfigured,
-      checks.adapters.medialocateConfigured,
-      checks.adapters.leatsConfigured
-    ].filter(Boolean).length;
+    if (!checks.dependencyPresent) {
+      return makeFeatureResult(checks, {
+        status: 'down',
+        error: dependencyHealth.dependencyError
+      });
+    }
 
     return makeFeatureResult(checks, {
-      status: adapterCount > 0 ? 'ok' : 'degraded'
+      status: 'ok'
     });
   } catch (error) {
     return makeFeatureResult({}, {
@@ -69,30 +117,36 @@ function checkTranslationFeature() {
   }
 }
 
+function checkAzcopyPresent() {
+  try {
+    const { execSync } = require('child_process');
+    execSync('azcopy --version', { stdio: 'ignore' });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 function checkCdnFeature() {
   try {
     const config = getPluginConfig('adapt-output-cdn');
-    const enabled = config ? config.isEnabled !== false : false;
-    const deployProviderConfigured = Boolean(
-      config && (config.provider || config.cdnProvider || config.deployProvider)
-    );
+    const dependencyHealth = evaluateDependencyHealth('../../plugins/output/cdn/package.json');
+    const azcopyPresent = checkAzcopyPresent();
 
     const checks = {
       configPresent: Boolean(config),
-      enabled,
-      deployProviderConfigured
+      dependencyPresent: dependencyHealth.dependencyPresent,
+      azcopyPresent
     };
 
-    if (!checks.configPresent || !enabled) {
-      return makeFeatureResult(checks, {
-        status: 'down',
-        error: 'CDN plugin config missing or disabled'
-      });
-    }
+    const errors = [];
+    if (!checks.configPresent) errors.push('CDN plugin config missing');
+    if (!checks.dependencyPresent) errors.push(dependencyHealth.dependencyError);
+    if (!checks.azcopyPresent) errors.push('azcopy is not installed');
 
     return makeFeatureResult(checks, {
-      status: deployProviderConfigured ? 'ok' : 'down',
-      error: deployProviderConfigured ? null : 'Deploy provider is not configured'
+      status: errors.length > 0 ? 'down' : 'ok',
+      error: errors.length > 0 ? errors.join('; ') : null
     });
   } catch (error) {
     return makeFeatureResult({}, {
@@ -172,17 +226,56 @@ function checkStoryboardFeature() {
   }
 }
 
-function checkSupportFeature() {
+function checkUrlAvailable(urlString) {
+  return new Promise(function(resolve) {
+    let parsedUrl;
+
+    try {
+      parsedUrl = new URL(urlString);
+    } catch (error) {
+      resolve({ available: false, error: 'Support URL is invalid' });
+      return;
+    }
+
+    const transport = parsedUrl.protocol === 'https:' ? https : http;
+    const request = transport.request(urlString, {
+      method: 'HEAD',
+      timeout: SUPPORT_CHECK_TIMEOUT_MS
+    }, function(response) {
+      response.resume();
+      const available = response.statusCode < 500;
+      resolve({
+        available,
+        error: available ? null : 'Support portal returned status ' + response.statusCode
+      });
+    });
+
+    request.on('error', function() {
+      resolve({ available: false, error: 'Support portal is not reachable' });
+    });
+
+    request.on('timeout', function() {
+      request.destroy();
+      resolve({ available: false, error: 'Support portal check timed out' });
+    });
+
+    request.end();
+  });
+}
+
+async function checkSupportFeature() {
   try {
     const supportLink = configuration.getConfig('supportLink');
+    const effectiveSupportUrl = supportLink || DEFAULT_SUPPORT_URL;
+    const availability = await checkUrlAvailable(effectiveSupportUrl);
     const checks = {
-      frontendDriven: true,
-      supportLinkConfigured: Boolean(supportLink),
-      configurationStatus: 'ok'
+      supportLinkConfigured: Boolean(effectiveSupportUrl),
+      portalAvailable: availability.available
     };
 
     return makeFeatureResult(checks, {
-      status: 'ok'
+      status: availability.available ? 'ok' : 'down',
+      error: availability.available ? null : availability.error
     });
   } catch (error) {
     return makeFeatureResult({}, {
@@ -192,13 +285,13 @@ function checkSupportFeature() {
   }
 }
 
-function buildFeatureHealth() {
+async function buildFeatureHealth() {
   const results = {
     translation: checkTranslationFeature(),
     cdn: checkCdnFeature(),
     preflight: checkPreflightFeature(),
     storyboard: checkStoryboardFeature(),
-    support: checkSupportFeature()
+    support: await checkSupportFeature()
   };
 
   const statuses = Object.keys(results).map(key => results[key].status);
@@ -227,9 +320,9 @@ function buildFeatureHealth() {
  *   { status, version, uptime, timestamp, memory: { heapUsedMB, heapTotalMB, rssMB }, checks: { database } }
  */
 server.get('/api/health', function(req, res) {
-  database.checkConnection(function(dbError) {
+  database.checkConnection(async function(dbError) {
     const mem = process.memoryUsage();
-    const featureHealth = buildFeatureHealth();
+    const featureHealth = await buildFeatureHealth();
     const anyFeatureDown = featureHealth.summary.down > 0;
     const anyFeatureDegraded = featureHealth.summary.degraded > 0;
     const healthy = !dbError && !anyFeatureDown && !anyFeatureDegraded;
