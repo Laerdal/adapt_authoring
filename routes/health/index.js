@@ -239,6 +239,11 @@ function checkUrlAvailable(urlString) {
       return;
     }
 
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      resolve({ available: false, error: 'Support URL must use http or https' });
+      return;
+    }
+
     const transport = parsedUrl.protocol === 'https:' ? https : http;
     const request = transport.request(urlString, {
       method: 'HEAD',
