@@ -132,6 +132,7 @@
     "on-headers": "^1.1.0",
     "path-to-regexp": "^0.1.13",
     "form-data": "^2.5.4",
+    "optimist": "^0.6.1",
     "mailparser": "^3.9.3",
     "nodemailer": "^8.0.11",
     "pug": "^3.0.3",
