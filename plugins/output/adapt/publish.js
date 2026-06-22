@@ -225,6 +225,26 @@ function publishCourse(courseId, mode, request, response, next) {
         }
       ], function(err) { callback(err); });
     },
+    // Inject the AI Tutor proxy endpoint into config for published output.
+    // The learner widget calls a server-side proxy (never Azure directly), so only the
+    // per-environment proxy URL is baked in — set via AI_TUTOR_PUBLIC_URL. When unset
+    // (e.g. preview on the authoring host) the widget falls back to a same-origin relative
+    // call. Runs while config is still array-form (sanitizeCourseJSON converts it next).
+    // Guarded so a failure here can never break the build.
+    function(callback) {
+      try {
+        var configObject = outputJson['config'] && outputJson['config'][0];
+        var aiTutor = configObject && configObject._extensions && configObject._extensions._aiTutor;
+        if (aiTutor && aiTutor._isEnabled) {
+          var publicUrl = process.env.AI_TUTOR_PUBLIC_URL || '';
+          if (publicUrl) aiTutor.tutorEndpoint = publicUrl;
+          aiTutor.courseId = courseId;
+        }
+      } catch (e) {
+        console.warn('[ai-tutor] endpoint injection skipped:', e && e.message);
+      }
+      callback(null);
+    },
     // sanitizeCourseJSON must run after applyTheme/applyMenu — it converts course and
     // config from arrays to single objects, which would break applyTheme's course[0] reads.
     function(callback) {
