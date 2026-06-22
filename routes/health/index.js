@@ -33,7 +33,9 @@ function makeFeatureResult(checks, options) {
 }
 
 function evaluateDependencyHealth(pluginPackageRelativePath) {
-  const pluginPackage = require(pluginPackageRelativePath);
+  const pluginPackagePath = require.resolve(pluginPackageRelativePath);
+  const pluginPackage = require(pluginPackagePath);
+  const pluginDir = path.dirname(pluginPackagePath);
   const dependencies = pluginPackage.dependencies || {};
   const dependencyNames = Object.keys(dependencies);
   const missingPackages = [];
@@ -45,7 +47,7 @@ function evaluateDependencyHealth(pluginPackageRelativePath) {
 
     try {
       resolvedPackageJsonPath = require.resolve(dependencyName + '/package.json', {
-        paths: [__dirname]
+        paths: [pluginDir]
       });
     } catch (resolveError) {
       missingPackages.push(dependencyName);
