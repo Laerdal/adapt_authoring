@@ -1,12 +1,24 @@
 const express = require('express');
 const semver = require('semver');
+const path = require('path');
 const configuration = require('../../lib/configuration');
-const PACKAGE = require('../../plugins/services/translation/package.json');
 
 const server = module.exports = express();
 
 function evaluateDependencyHealth() {
-  const dependencies = PACKAGE.dependencies || {};
+  const pluginPackageRelativePath = '../../plugins/services/translation/package.json';
+  let pluginPackage;
+  let pluginDir;
+
+  try {
+    const pluginPackagePath = require.resolve(pluginPackageRelativePath);
+    pluginPackage = require(pluginPackagePath);
+    pluginDir = path.dirname(pluginPackagePath);
+  } catch (error) {
+    return { dependencyPresent: false, dependencyError: 'Translation plugin package.json not found' };
+  }
+
+  const dependencies = pluginPackage.dependencies || {};
   const dependencyNames = Object.keys(dependencies);
   const missingPackages = [];
   const versionMismatchPackages = [];
@@ -17,7 +29,7 @@ function evaluateDependencyHealth() {
 
     try {
       resolvedPackageJsonPath = require.resolve(dependencyName + '/package.json', {
-        paths: [__dirname]
+        paths: [pluginDir]
       });
     } catch (resolveError) {
       missingPackages.push(dependencyName);
