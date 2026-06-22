@@ -122,7 +122,7 @@ function checkTranslationFeature() {
 function checkAzcopyPresent() {
   try {
     const { execSync } = require('child_process');
-    execSync('azcopy --version', { stdio: 'ignore' });
+    execSync('azcopy --version', { stdio: 'ignore', timeout: 2000 });
     return true;
   } catch (e) {
     return false;
