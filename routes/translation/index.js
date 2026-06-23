@@ -1,35 +1,102 @@
 const express = require('express');
+const semver = require('semver');
+const path = require('path');
 const configuration = require('../../lib/configuration');
 
 const server = module.exports = express();
 
+function evaluateDependencyHealth() {
+  const pluginPackageRelativePath = '../../plugins/services/translation/package.json';
+  let pluginPackage;
+  let pluginDir;
+
+  try {
+    const pluginPackagePath = require.resolve(pluginPackageRelativePath);
+    pluginPackage = require(pluginPackagePath);
+    pluginDir = path.dirname(pluginPackagePath);
+  } catch (error) {
+    return { dependencyPresent: false, dependencyError: 'Translation plugin package.json not found' };
+  }
+
+  const dependencies = pluginPackage.dependencies || {};
+  const dependencyNames = Object.keys(dependencies);
+  const missingPackages = [];
+  const versionMismatchPackages = [];
+
+  dependencyNames.forEach(function(dependencyName) {
+    const expectedRange = dependencies[dependencyName];
+    let resolvedPackageJsonPath;
+
+    try {
+      resolvedPackageJsonPath = require.resolve(dependencyName + '/package.json', {
+        paths: [pluginDir]
+      });
+    } catch (resolveError) {
+      missingPackages.push(dependencyName);
+      return;
+    }
+
+    const installedPackage = require(resolvedPackageJsonPath);
+    const installedVersion = installedPackage.version;
+    const expectedIsRange = Boolean(semver.validRange(expectedRange));
+    const versionMatches = expectedIsRange
+      ? semver.satisfies(installedVersion, expectedRange)
+      : installedVersion === expectedRange;
+
+    if (!versionMatches) {
+      versionMismatchPackages.push(
+        dependencyName + ' (expected ' + expectedRange + ', installed ' + installedVersion + ')'
+      );
+    }
+  });
+
+  const errors = [];
+
+  if (missingPackages.length > 0) {
+    errors.push(missingPackages.join(', ') + ' is not installed');
+  }
+
+  if (versionMismatchPackages.length > 0) {
+    errors.push(versionMismatchPackages.join(', ') + ' package version does not match the installed version');
+  }
+
+  return {
+    dependencyPresent: errors.length === 0,
+    dependencyError: errors.join('; ')
+  };
+}
+
 server.get('/api/translation/health', function(req, res) {
   const plugins = configuration.getConfig('plugins') || {};
-  const cfg = plugins['adapt-services-translation'] || {};
-  const smartling = cfg.smartling || {};
-  const medialocate = cfg.medialocate || {};
-  const leats = cfg.leats || {};
+  const cfg = plugins['adapt-services-translation'] || null;
+  const dependencyHealth = evaluateDependencyHealth();
+
+  const checks = {
+    configPresent: Boolean(cfg),
+    dependencyPresent: dependencyHealth.dependencyPresent
+  };
+
+  let status = 'ok';
+  let error = null;
+
+  if (!checks.configPresent) {
+    status = 'down';
+    error = 'Translation plugin config missing';
+  }
+
+  if (!checks.dependencyPresent) {
+    status = 'down';
+    error = dependencyHealth.dependencyError;
+  }
 
   res.json({
-    status: 'ok',
+    status,
     plugin: {
       name: 'adapt-services-translation',
-      enabled: cfg.isEnabled !== false
+      enabled: cfg ? cfg.isEnabled !== false : false
     },
-    checks: {
-      configPresent: Boolean(cfg && Object.keys(cfg).length),
-      adapters: {
-        smartling: {
-          configured: Boolean(smartling.userIdentifier && smartling.userSecret)
-        },
-        medialocate: {
-          configured: Boolean(medialocate.baseUrl || medialocate.environment)
-        },
-        leats: {
-          configured: Boolean(leats.azureEndpoint && leats.azureApiKey && leats.deployment)
-        }
-      }
-    },
+    checks,
+    error,
     timestamp: new Date().toISOString()
   });
 });
