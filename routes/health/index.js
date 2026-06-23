@@ -131,7 +131,7 @@ function checkAzcopyPresent() {
 function checkCdnDeployPresent() {
   try {
     const { execSync } = require('child_process');
-    execSync('cdndeploy --version', { stdio: 'ignore', timeout: 2000 });
+    execSync('cdndeploy -version', { stdio: 'ignore', timeout: 2000 });
     return true;
   } catch (e) {
     return false;
