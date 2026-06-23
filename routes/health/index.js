@@ -2,7 +2,6 @@ const express = require('express');
 const database = require('../../lib/database');
 const configuration = require('../../lib/configuration');
 const pkg = require('../../package.json');
-const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const https = require('https');
@@ -129,22 +128,40 @@ function checkAzcopyPresent() {
   }
 }
 
+function checkCdnDeployPresent() {
+  try {
+    const { execSync } = require('child_process');
+    execSync('cdndeploy --version', { stdio: 'ignore', timeout: 2000 });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 function checkCdnFeature() {
   try {
     const config = getPluginConfig('adapt-output-cdn');
-    const dependencyHealth = evaluateDependencyHealth('../../plugins/output/cdn/package.json');
+    const cdnDeployPresent = checkCdnDeployPresent();
     const azcopyPresent = checkAzcopyPresent();
 
     const checks = {
       configPresent: Boolean(config),
-      dependencyPresent: dependencyHealth.dependencyPresent,
+      cdnDeployPresent,
       azcopyPresent
     };
 
     const errors = [];
     if (!checks.configPresent) errors.push('CDN plugin config missing');
-    if (!checks.dependencyPresent) errors.push(dependencyHealth.dependencyError);
-    if (!checks.azcopyPresent) errors.push('azcopy is not installed');
+
+    const missingBinaries = [];
+    if (!checks.azcopyPresent) missingBinaries.push('azcopy');
+    if (!checks.cdnDeployPresent) missingBinaries.push('cdndeploy');
+
+    if (missingBinaries.length === 2) {
+      errors.push('azcopy, cdndeploy not present');
+    } else if (missingBinaries.length === 1) {
+      errors.push(missingBinaries[0] + ' is not installed');
+    }
 
     return makeFeatureResult(checks, {
       status: errors.length > 0 ? 'down' : 'ok',
@@ -162,13 +179,10 @@ function checkPreflightFeature() {
   try {
     const config = getPluginConfig('adapt-output-preflight');
     const enabled = config ? config.isEnabled !== false : false;
-    const fontPath = path.resolve(__dirname, '../../plugins/output/preflight/assets/arial-unicode-ms.ttf');
-    const fontFileAvailable = fs.existsSync(fontPath);
 
     const checks = {
       configPresent: Boolean(config),
-      enabled,
-      fontFileAvailable
+      enabled
     };
 
     if (!checks.configPresent || !enabled) {
@@ -179,8 +193,7 @@ function checkPreflightFeature() {
     }
 
     return makeFeatureResult(checks, {
-      status: fontFileAvailable ? 'ok' : 'down',
-      error: fontFileAvailable ? null : 'Required font dependency is missing'
+      status: 'ok'
     });
   } catch (error) {
     return makeFeatureResult({}, {
@@ -358,3 +371,4 @@ server.get('/api/health', function(req, res) {
     res.status(200).json(body);
   });
 });
+
