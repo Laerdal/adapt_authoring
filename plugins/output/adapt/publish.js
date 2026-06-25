@@ -234,7 +234,9 @@ function publishCourse(courseId, mode, request, response, next) {
     function(callback) {
       try {
         var configObject = outputJson['config'] && outputJson['config'][0];
-        var aiTutor = configObject && configObject._extensions && configObject._extensions._aiTutor;
+        // getCourseJSON → flattenNestedObjects promotes _extensions.* to top-level and deletes
+        // _extensions, so by here the config carries _aiTutor at the top level (not nested).
+        var aiTutor = configObject && configObject._aiTutor;
         if (aiTutor && aiTutor._isEnabled) {
           var publicUrl = process.env.AI_TUTOR_PUBLIC_URL || '';
           if (publicUrl) aiTutor.tutorEndpoint = publicUrl;
