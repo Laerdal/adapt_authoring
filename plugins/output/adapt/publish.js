@@ -239,6 +239,10 @@ function publishCourse(courseId, mode, request, response, next) {
           var publicUrl = process.env.AI_TUTOR_PUBLIC_URL || '';
           if (publicUrl) aiTutor.tutorEndpoint = publicUrl;
           aiTutor.courseId = courseId;
+          // Auto-ingest this course's documents into its vector store (handled by the
+          // ai-tutor service plugin). Fire-and-forget via the app event bus so it neither
+          // blocks nor breaks the build; the plugin's handler is idempotent.
+          app.emit('aitutor:ensureIngested', { courseId: String(courseId), tenantId: String(tenantId) });
         }
       } catch (e) {
         console.warn('[ai-tutor] endpoint injection skipped:', e && e.message);
