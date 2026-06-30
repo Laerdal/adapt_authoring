@@ -93,6 +93,25 @@ define([
       });
     },
 
+    render: function() {
+      var rendered = Backbone.Form.editors.__List.__Item.prototype.render.apply(this, arguments);
+      // Cloning a list item that references an asset duplicates the underlying courseasset,
+      // which the server rejects (500). Remove the clone control for such items — the AI Tutor
+      // source-document list is the primary case. The delete control remains.
+      if (this._referencesAsset()) {
+        this.$('[data-action="clone"]').remove();
+      }
+      return rendered;
+    },
+
+    _referencesAsset: function() {
+      var value = this.editor && this.editor.value;
+      if (!value || typeof value !== 'object') return false;
+      return _.some(_.values(Helpers.flattenNestedProperties(value)), function(v) {
+        return typeof v === 'string' && v.indexOf('course/assets') !== -1;
+      });
+    },
+
     cloneItem: function(event) {
       var flatItem = Helpers.flattenNestedProperties(this.editor.value);
       var itemValues = _.values(flatItem);
