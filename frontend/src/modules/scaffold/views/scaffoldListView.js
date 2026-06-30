@@ -62,6 +62,21 @@ define([
       var remove = function(isConfirmed) {
         if(isConfirmed === false) return;
 
+        // AI Tutor source doc removed → drop the per-course tag so it leaves this course's
+        // picker (the general tutor tag is kept server-side). Best-effort.
+        if (item && typeof item._isAiTutorSourceItem === 'function' && item._isAiTutorSourceItem()) {
+          var val = item.editor && item.editor.value;
+          var ref = val && (typeof val === 'object' ? val._document : val);
+          var fn = (typeof ref === 'string') ? ref.split('/').pop() : '';
+          if (fn && Origin.editor && Origin.editor.data && Origin.editor.data.course) {
+            $.ajax({
+              url: 'api/asset/aitutor-untag',
+              method: 'POST',
+              data: { filename: fn, courseId: Origin.editor.data.course.get('_id') }
+            });
+          }
+        }
+
         var index = this.items.indexOf(item);
         this.items[index].remove();
         this.items.splice(index, 1);
