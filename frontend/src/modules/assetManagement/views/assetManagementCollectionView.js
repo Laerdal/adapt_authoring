@@ -21,6 +21,8 @@ define(function(require){
         var assetType = this.search.assetType;
         if(assetType) this.filters = assetType.$in;
       }
+      // AI Tutor picker: scopes the query to one course's tutor docs (handled server-side).
+      if(options.aiTutorCourseId) this.aiTutorCourseId = options.aiTutorCourseId;
       this.initEventListeners();
 
       this._doLazyScroll = _.bind(_.throttle(this.doLazyScroll, 250), this);
@@ -76,18 +78,22 @@ define(function(require){
       }
       this.isCollectionFetching = true;
 
+      var fetchData = {
+        search: _.extend(this.search, {
+          tags: { $all: this.tags },
+          assetType: { $in: this.filters }
+        }),
+        operators : {
+          skip: this.fetchCount,
+          limit: this.pageSize,
+          sort: this.sort
+        }
+      };
+      // Tells the server to scope to this course's AI Tutor docs (only set by that picker).
+      if (this.aiTutorCourseId) fetchData.aiTutorCourseId = this.aiTutorCourseId;
+
       this.collection.fetch({
-        data: {
-          search: _.extend(this.search, {
-            tags: { $all: this.tags },
-            assetType: { $in: this.filters }
-          }),
-          operators : {
-            skip: this.fetchCount,
-            limit: this.pageSize,
-            sort: this.sort
-          }
-        },
+        data: fetchData,
         success: _.bind(function(collection, response) {
           this.isCollectionFetching = false;
           this.fetchCount += response.length;

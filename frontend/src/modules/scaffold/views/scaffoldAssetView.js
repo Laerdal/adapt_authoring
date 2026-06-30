@@ -206,7 +206,7 @@ define([
     onAssetButtonClicked: function(event) {
       event.preventDefault();
 
-      Origin.trigger('modal:open', AssetManagementModalView, {
+      var pickerOptions = {
         collection: new AssetCollection,
         assetType: this.assetType,
         _shouldShowScrollbar: false,
@@ -239,7 +239,15 @@ define([
           this.setValue(data.assetLink);
           this.createCourseAsset(courseAssetObject);
         }
-      }, this);
+      };
+
+      // A field can declare a private asset tag (inputType object: _assetTag). The AI Tutor
+      // source field uses this to scope its picker to the current course's tutor docs only.
+      if (this.schema._assetTag && Origin.editor && Origin.editor.data && Origin.editor.data.course) {
+        pickerOptions.aiTutorCourseId = Origin.editor.data.course.get('_id');
+      }
+
+      Origin.trigger('modal:open', AssetManagementModalView, pickerOptions, this);
     },
 
     onClearButtonClicked: function(event) {

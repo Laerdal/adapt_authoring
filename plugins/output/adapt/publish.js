@@ -245,6 +245,14 @@ function publishCourse(courseId, mode, request, response, next) {
           // ai-tutor service plugin). Fire-and-forget via the app event bus so it neither
           // blocks nor breaks the build; the plugin's handler is idempotent.
           app.emit('aitutor:ensureIngested', { courseId: String(courseId), tenantId: String(tenantId) });
+          // Tag the course's source docs so they're hidden from the normal asset list and
+          // scoped to this course's AI Tutor picker. Idempotent; fire-and-forget so it can
+          // never block or break the build (covers new docs + backfills existing ones).
+          if (app.assetmanager && typeof app.assetmanager.ensureCourseTutorTags === 'function') {
+            app.assetmanager.ensureCourseTutorTags(String(tenantId), String(courseId), function (e) {
+              if (e) console.warn('[ai-tutor] asset tag sync skipped:', e && e.message);
+            });
+          }
         }
       } catch (e) {
         console.warn('[ai-tutor] endpoint injection skipped:', e && e.message);
