@@ -8,15 +8,43 @@
     "_isVisible": true,
     "_isResetOnRevisit": "false",
     "_isA11yCompletionDescriptionEnabled": true,
-    "title": " Change : New Component Title",
-    "displayTitle": " Change : New Component Title",
-    "body": "change",
+    "title": "New Component Title",
+    "displayTitle": "New Component Title",
+    "body": "",
     "_ariaLevel": 0,
     "_onScreen._isEnabled": false,
     "_onScreen._classes": "",
-    "_onScreen._percentInviewVertical": 50
+    "_onScreen._percentInviewVertical": 50,
+    "_life-v2._textAlignment._title": "",
+    "_life-v2._textAlignment._body": "",
+    "_life-v2._textAlignment._instruction": "",
+    "_life-v2._componentColors.component-bg-color": "",
+    "_life-v2._componentColors.component-font-color": "",
+    "_life-v2._componentColors.component-header-color": ""
   },
   "cards": {
+    "title": "Explore the cards below",
+    "displayTitle": "Explore the cards below",
+    "properties._items": [
+      {
+        "title": "Card title 1",
+        "body": "<p>Add card description here....</p>",
+        "_graphic": {
+          "src": "",
+          "alt": ""
+        },
+        "_classes": ""
+      },
+      {
+        "title": "Card title 2",
+        "body": "<p>Add card description here...</p>",
+        "_graphic": {
+          "src": "",
+          "alt": ""
+        },
+        "_classes": ""
+      }
+    ],
     "properties._supportedLayout": "half-width",
     "properties.instruction": "",
     "properties._setCompletionOn": "allItems",
@@ -31,6 +59,38 @@
     "properties._items.items._classes": ""
   },
   "accordion": {
+    "title": "Explore the sections below",
+    "displayTitle": "Explore the sections below",
+    "body": "<p>Add the content here...</p>",
+    "_vanilla._textAlignment._title": "",
+    "_vanilla._textAlignment._body": "",
+    "_vanilla._textAlignment._instruction": "",
+    "properties._items": [
+      {
+        "title": "Item title1",
+        "body": "<p>Add Item body text</p>",
+        "_titleIcon": "",
+        "_imageAlignment": "full",
+        "_graphic": {
+          "alt": "",
+          "src": "",
+          "attribution": ""
+        },
+        "_classes": ""
+      },
+      {
+        "title": "Item title2",
+        "body": "<p>Add Item body text....</p>",
+        "_titleIcon": "",
+        "_imageAlignment": "full",
+        "_graphic": {
+          "alt": "",
+          "src": "",
+          "attribution": ""
+        },
+        "_classes": ""
+      }
+    ],
     "properties._supportedLayout": "full-width",
     "properties.instruction": "Select the headings to find out more.",
     "properties._setCompletionOn": "allItems",
@@ -47,6 +107,9 @@
     "properties._isCenterAligned": false
   },
   "assessmentResults": {
+    "title": "Assessment Results",
+    "displayTitle": "Assessment Results",
+    "properties._bands": [],
     "properties._supportedLayout": "both",
     "properties.instruction": "",
     "properties._isVisibleBeforeCompletion": true,
@@ -56,17 +119,52 @@
     "properties._retry.button": "Retry Assessment",
     "properties._retry.feedback": "",
     "properties._retry._routeToAssessment": false,
-    "properties._completionBody": "This component you're reading is a results component.<br>You have finished the assessment.<br>You scored {{score}} out of {{maxScore}}. {{{feedback}}}",
+    "properties._completionBody": "<p>This component you're reading is a results component.<br>You have finished the assessment.<br>You scored {{score}} out of {{maxScore}}. {{{feedback}}}</p>",
     "properties._bands.items.feedback": "",
     "properties._bands.items.feedbackNotFinal": "",
     "properties._bands.items._allowRetry": true,
     "properties._bands.items._classes": ""
   },
   "blank": {
+    "title": "New Component Title",
+    "displayTitle": "New Component Title",
     "properties._supportedLayout": "both",
     "properties._isOptional": true
   },
   "gmcq": {
+    "title": "Check your understanding",
+    "displayTitle": "Check your understanding",
+    "body": "<p>Add your question here</p>",
+    "properties._items": [
+      {
+        "_graphic": {
+          "large": "",
+          "small": "",
+          "alt": "",
+          "attribution": ""
+        },
+        "text": "Option 1",
+        "altText": "",
+        "_shouldBeSelected": true,
+        "_isPartlyCorrect": false,
+        "feedback": "",
+        "_score": 0
+      },
+      {
+        "_graphic": {
+          "large": "",
+          "small": "",
+          "alt": "",
+          "attribution": ""
+        },
+        "text": "Option 2",
+        "altText": "",
+        "_shouldBeSelected": false,
+        "_isPartlyCorrect": false,
+        "feedback": "",
+        "_score": 0
+      }
+    ],
     "properties._supportedLayout": "both",
     "properties.instruction": "Choose {{#if _isRadio}}one option{{else}}one or more options{{/if}} then select Submit.",
     "properties.ariaQuestion": "",
@@ -113,6 +211,9 @@
     "properties._buttons.remainingAttemptText": ""
   },
   "graphic": {
+    "title": "Enter image title",
+    "displayTitle": "Enter image title",
+    "body": "<p>Add description for this image</p>",
     "properties._supportedLayout": "both",
     "properties.instruction": "",
     "properties._graphic.alt": "",
@@ -126,6 +227,64 @@
     "properties._defaultScrollPercent": 0
   },
   "hotgraphic": {
+    "title": "Explore the image",
+    "displayTitle": "Explore the image",
+    "properties._items": [
+      {
+        "title": "Hotspot 1",
+        "body": "<p>Add description</p>",
+        "strapline": "Add strapline",
+        "_imageAlignment": "right",
+        "_graphic": {
+          "src": "",
+          "alt": "",
+          "attribution": "",
+          "_classes": ""
+        },
+        "_tooltip": {
+          "_isEnabled": false,
+          "text": "{{ariaLabel}}",
+          "_position": "bottom",
+          "_classes": ""
+        },
+        "_pin": {
+          "src": "",
+          "srcHover": "",
+          "srcVisited": "",
+          "alt": ""
+        },
+        "_classes": "",
+        "_left": 30,
+        "_top": 20
+      },
+      {
+        "title": "Hotspot 2",
+        "body": "<p>Add description</p>",
+        "strapline": "Add strapline text",
+        "_imageAlignment": "right",
+        "_graphic": {
+          "src": "",
+          "alt": "",
+          "attribution": "",
+          "_classes": ""
+        },
+        "_tooltip": {
+          "_isEnabled": false,
+          "text": "{{ariaLabel}}",
+          "_position": "bottom",
+          "_classes": ""
+        },
+        "_pin": {
+          "src": "",
+          "srcHover": "",
+          "srcVisited": "",
+          "alt": ""
+        },
+        "_classes": "",
+        "_left": 60,
+        "_top": 30
+      }
+    ],
     "properties._supportedLayout": "full-width",
     "properties.instruction": "Select the icons to find out more.",
     "properties._setCompletionOn": "allItems",
@@ -165,6 +324,40 @@
     "properties._items.items._top": 0
   },
   "matching": {
+    "title": "Match the items",
+    "displayTitle": "Match the items",
+    "properties._items": [
+      {
+        "text": "Item 1",
+        "_options": [
+          {
+            "text": "Option 1",
+            "_isCorrect": true,
+            "_score": 0
+          },
+          {
+            "text": "Option 2",
+            "_isCorrect": false,
+            "_score": 0
+          }
+        ]
+      },
+      {
+        "text": "Item 2",
+        "_options": [
+          {
+            "text": "Option 1",
+            "_isCorrect": false,
+            "_score": 0
+          },
+          {
+            "text": "Option 2",
+            "_isCorrect": true,
+            "_score": 0
+          }
+        ]
+      }
+    ],
     "properties._supportedLayout": "half-width",
     "properties.instruction": "Choose an option from each dropdown list and select Submit.",
     "properties.ariaQuestion": "",
@@ -187,8 +380,8 @@
     "properties._items.items._options.items._isCorrect": false,
     "properties._items.items._options.items._score": 0,
     "properties._feedback.title": "",
-    "properties._feedback.correct": "",
-    "properties._feedback._incorrect.final": "",
+    "properties._feedback.correct": "<p>Correct</p>",
+    "properties._feedback._incorrect.final": "<p>Incorrect</p>",
     "properties._feedback._incorrect.notFinal": "",
     "properties._feedback._partlyCorrect.final": "",
     "properties._feedback._partlyCorrect.notFinal": "",
@@ -206,16 +399,37 @@
     "properties._buttons.remainingAttemptText": ""
   },
   "mcq": {
+    "title": "Check your understanding",
+    "displayTitle": "Check your understanding",
+    "body": "<p>Enter your question here</p>",
     "properties._supportedLayout": "half-width",
     "properties.instruction": "Choose {{#if _isRadio}}one option{{else}}one or more options{{/if}} then select Submit.",
     "properties.ariaQuestion": "",
+    "properties._items": [
+      {
+        "text": "Option 1",
+        "altText": "",
+        "_shouldBeSelected": true,
+        "_isPartlyCorrect": false,
+        "feedback": "",
+        "_score": 0
+      },
+      {
+        "text": "Option 2",
+        "altText": "",
+        "_shouldBeSelected": false,
+        "_isPartlyCorrect": false,
+        "feedback": "",
+        "_score": 0
+      }
+    ],
     "properties._items.items.text": "",
     "properties._items.items.altText": "",
     "properties._items.items._shouldBeSelected": false,
     "properties._items.items._isPartlyCorrect": false,
     "properties._items.items.feedback": "",
     "properties._items.items._score": 0,
-    "properties._attempts": 19,
+    "properties._attempts": 1,
     "properties._canShowModelAnswer": true,
     "properties._canShowCorrectness": false,
     "properties._canShowFeedback": true,
@@ -279,6 +493,30 @@
     "properties._playerOptions": {}
   },
   "narrative": {
+    "title": "Explore the slides",
+    "displayTitle": "Explore the slides",
+    "properties._items": [
+      {
+        "title": "Slide 1",
+        "body": "<p>Add content</p>",
+        "_graphic": {
+          "src": "",
+          "alt": "",
+          "attribution": ""
+        },
+        "strapline": ""
+      },
+      {
+        "title": "Slide 2",
+        "body": "<p>Add content</p>",
+        "_graphic": {
+          "src": "",
+          "alt": "",
+          "attribution": ""
+        },
+        "strapline": ""
+      }
+    ],
     "properties._supportedLayout": "full-width",
     "properties.instruction": "Select the next and back arrows to find out more.",
     "properties.mobileInstruction": "Select the plus icon followed by the next arrow to find out more.",
@@ -295,6 +533,8 @@
     "properties._items.items.strapline": ""
   },
   "slider": {
+    "title": "Rate your experience",
+    "displayTitle": "Rate your experience",
     "properties._supportedLayout": "both",
     "properties.instruction": "Drag the slider to make your choice and select Submit.",
     "properties.ariaQuestion": "",
@@ -307,8 +547,8 @@
     "properties._shouldDisplayAttempts": false,
     "properties._questionWeight": 1,
     "properties._recordInteraction": true,
-    "properties.labelStart": "",
-    "properties.labelEnd": "",
+    "properties.labelStart": "Poor",
+    "properties.labelEnd": "Excellent",
     "properties._scaleStart": 1,
     "properties._scaleEnd": 10,
     "properties._scaleStep": 1,
@@ -339,10 +579,27 @@
     "properties._buttons.remainingAttemptText": ""
   },
   "text": {
+    "title": "Enter section title",
+    "displayTitle": "Enter section title",
+    "body": "<p>Add your content here...</p>",
     "properties._supportedLayout": "both",
     "properties.instruction": ""
   },
   "textinput": {
+    "title": "Fill in the blank",
+    "displayTitle": "Fill in the blank",
+    "body": "<p>Fill in the right option here</p>",
+    "properties._items": [
+      {
+        "_answers": [
+          "Option 1",
+          "Option 2"
+        ],
+        "prefix": "Add text before the answer",
+        "suffix": "text after the answer",
+        "placeholder": ""
+      }
+    ],
     "properties._supportedLayout": "both",
     "properties.instruction": "Input your answer and select Submit.",
     "properties.ariaQuestion": "",
@@ -391,6 +648,64 @@
     "properties._bands.items._classes": ""
   },
   "hotgrid": {
+    "title": "Explore the topics below",
+    "displayTitle": "Explore the topics below",
+    "properties._items": [
+      {
+        "title": "Item 1",
+        "body": "<p>Add description</p>",
+        "_imageAlignment": "right",
+        "_classes": "",
+        "_graphic": {
+          "src": "",
+          "srcHover": "",
+          "srcVisited": "",
+          "alt": "",
+          "title": ""
+        },
+        "_itemGraphic": {
+          "src": "",
+          "alt": "",
+          "attribution": ""
+        }
+      },
+      {
+        "title": "Item 2",
+        "body": "<p>Add description</p>",
+        "_imageAlignment": "right",
+        "_classes": "",
+        "_graphic": {
+          "src": "",
+          "srcHover": "",
+          "srcVisited": "",
+          "alt": "",
+          "title": ""
+        },
+        "_itemGraphic": {
+          "src": "",
+          "alt": "",
+          "attribution": ""
+        }
+      },
+      {
+        "title": "Item 3",
+        "body": "<p>Add description</p>",
+        "_imageAlignment": "right",
+        "_classes": "",
+        "_graphic": {
+          "src": "",
+          "srcHover": "",
+          "srcVisited": "",
+          "alt": "",
+          "title": ""
+        },
+        "_itemGraphic": {
+          "src": "",
+          "alt": "",
+          "attribution": ""
+        }
+      }
+    ],
     "properties._supportedLayout": "full-width",
     "properties.instruction": "Select the images to find out more.",
     "properties._setCompletionOn": "allItems",
@@ -413,6 +728,25 @@
     "properties._items.items._itemGraphic.attribution": ""
   },
   "actionplan": {
+    "title": "Create your action plan",
+    "displayTitle": "Create your action plan",
+    "body": "<div style=\"font-family:'Segoe UI';font-size:14px;font-style:normal;font-weight:400;line-height:20px;\">Use this space to define the steps you will take after completing this learning activity</div>",
+    "properties.pdf": [
+      {
+        "filename": "",
+        "title": "PDF title",
+        "subTitle": "",
+        "contentTitle": "",
+        "content": "",
+        "image": "",
+        "imgAltText": ""
+      }
+    ],
+    "properties._items": [
+      {
+        "title": "Action title"
+      }
+    ],
     "properties._supportedLayout": "both",
     "properties.instruction": "",
     "properties.exportText": "Download",
@@ -429,6 +763,8 @@
     "properties._actionPlanItemTextCharacter": "255"
   },
   "animation-frame": {
+    "title": "Enter title",
+    "displayTitle": "Enter title",
     "properties._supportedLayout": "both",
     "properties.animation": "",
     "properties.height_small": 200,
@@ -470,6 +806,35 @@
     "properties._resultdetailedfeedback._displayIncorrectQuestionFeedback": false
   },
   "laerdal-checklist": {
+    "title": "Complete the checklist",
+    "displayTitle": "Complete the checklist",
+    "properties._items": [
+      {
+        "text": "Option 1",
+        "altText": "",
+        "_shouldBeSelected": true,
+        "feedback": ""
+      },
+      {
+        "text": "Option 2",
+        "altText": "",
+        "_shouldBeSelected": true,
+        "feedback": ""
+      },
+      {
+        "text": "Option 3",
+        "altText": "",
+        "_shouldBeSelected": true,
+        "feedback": ""
+      },
+      {
+        "text": "Option 4",
+        "altText": "",
+        "_shouldBeSelected": true,
+        "feedback": ""
+      }
+    ],
+    "properties._texts": [],
     "properties._supportedLayout": "half-width",
     "properties.instruction": "Choose {{#if _isRadio}}one option{{else}}one or more options{{/if}} then select Submit.",
     "properties.ariaQuestion": "",
@@ -555,6 +920,28 @@
     "properties._buttons.remainingAttemptText": ""
   },
   "laerdal-flipcard": {
+    "title": "Explore the cards below",
+    "displayTitle": "Explore the cards below",
+    "properties._items": [
+      {
+        "frontImage": {
+          "alt": "",
+          "src": "",
+          "attribution": ""
+        },
+        "backTitle": "Card Title 1",
+        "backBody": "<p>Add description here</p>"
+      },
+      {
+        "frontImage": {
+          "alt": "",
+          "src": "",
+          "attribution": ""
+        },
+        "backTitle": "Card Title 2",
+        "backBody": "<p>Add description here</p>"
+      }
+    ],
     "properties._supportedLayout": "full-width",
     "properties.instruction": "",
     "properties._flipType": "allFlip",
@@ -565,6 +952,64 @@
     "properties._items.items.backBody": ""
   },
   "laerdal-form": {
+    "title": "Enter form title",
+    "displayTitle": "Enter form title",
+    "properties._items": [
+      {
+        "_inputType": "text",
+        "_label": "Field 1",
+        "_name": "field1",
+        "_isRequired": false,
+        "_inputTypeText": {
+          "_placeholder": "",
+          "_textConfirmation": false,
+          "_textConfirmationLabel": "",
+          "_textConfirmationPlaceholder": ""
+        },
+        "_inputTypeEmail": {
+          "_placeholder": "",
+          "_multiple": false,
+          "_emailConfirmation": false,
+          "_emailConfirmationLabel": "",
+          "_emailConfirmationPlaceholder": ""
+        },
+        "_inputTypeURL": {
+          "_placeholder": "",
+          "_urlConfirmation": false,
+          "_urlConfirmationLabel": "",
+          "_urlConfirmationPlaceholder": ""
+        },
+        "_inputTypeTextArea": {
+          "_placeholder": ""
+        },
+        "_inputTypeRange": {
+          "_startLabel": "",
+          "_endLabel": "",
+          "_min": 1,
+          "_max": 1,
+          "_step": 1
+        },
+        "_inputTypeHidden": {
+          "_value": ""
+        },
+        "_inputTypeTel": {
+          "_placeholder": "+47 XXXX XXXX",
+          "_telConfirmation": false,
+          "_telConfirmationLabel": "",
+          "_telConfirmationPlaceholder": ""
+        },
+        "_inputTypeChoice": {
+          "options": [],
+          "_isMultiSelect": false
+        },
+        "_inputTypeNumber": {
+          "_placeholder": "",
+          "_numberConfirmation": false,
+          "_numberConfirmationLabel": "",
+          "_numberConfirmationPlaceholder": ""
+        }
+      }
+    ],
     "properties._supportedLayout": "both",
     "properties.instruction": "",
     "properties._items.items._inputType": "text",
@@ -609,6 +1054,8 @@
     "properties._downloadPdfButtonText": "Download"
   },
   "laerdal-h5p": {
+    "title": "Enter title",
+    "displayTitle": "Enter title",
     "properties._supportedLayout": "both",
     "properties.instruction": "",
     "properties._h5pExternalAsset": "",
@@ -622,6 +1069,60 @@
     "properties._lazyLoad._clickToLoadText": "Click to load activity"
   },
   "laerdal-hotgraphic": {
+    "title": "Explore the image",
+    "displayTitle": "Explore the image",
+    "properties._items": [
+      {
+        "title": "Hotspot 1",
+        "_ariaLevel": 0,
+        "body": "<p>Add description</p>",
+        "strapline": "Add strapline text",
+        "_graphic": {
+          "src": "",
+          "alt": "",
+          "attribution": "",
+          "_classes": ""
+        },
+        "_pin": {
+          "src": "",
+          "alt": ""
+        },
+        "_tooltip": {
+          "_isEnabled": false,
+          "text": "{{ariaLabel}}",
+          "_position": "bottom",
+          "_classes": ""
+        },
+        "_classes": "",
+        "_left": 30,
+        "_top": 20
+      },
+      {
+        "title": "Hotspot 2",
+        "_ariaLevel": 0,
+        "body": "<p>Add description</p>",
+        "strapline": "Add strapline text",
+        "_graphic": {
+          "src": "",
+          "alt": "",
+          "attribution": "",
+          "_classes": ""
+        },
+        "_pin": {
+          "src": "",
+          "alt": ""
+        },
+        "_tooltip": {
+          "_isEnabled": false,
+          "text": "{{ariaLabel}}",
+          "_position": "bottom",
+          "_classes": ""
+        },
+        "_classes": "",
+        "_left": 60,
+        "_top": 40
+      }
+    ],
     "properties._supportedLayout": "full-width",
     "properties.instruction": "",
     "properties._setCompletionOn": "allItems",
@@ -657,6 +1158,8 @@
     "properties._items.items._top": 0
   },
   "laerdal-iframe": {
+    "title": "Enter interactivity title",
+    "displayTitle": "Enter interactivity title",
     "properties._supportedLayout": "both",
     "properties.instruction": "",
     "properties._source": "",
@@ -667,6 +1170,30 @@
     "properties.height.large": 200
   },
   "laerdal-imageSlider": {
+    "title": "Enter gallery title",
+    "displayTitle": "Enter gallery title",
+    "properties._items": [
+      {
+        "title": "Image 1",
+        "_ariaLevel": 0,
+        "body": "<p>Add description here</p>",
+        "_graphic": {
+          "alt": "",
+          "small": "",
+          "attribution": ""
+        }
+      },
+      {
+        "title": "Image 2",
+        "_ariaLevel": 0,
+        "body": "<p>Add description here</p>",
+        "_graphic": {
+          "alt": "",
+          "small": "",
+          "attribution": ""
+        }
+      }
+    ],
     "properties._supportedLayout": "full-width",
     "properties.instruction": "",
     "properties._setCompletionOn": "allItems",
@@ -678,6 +1205,8 @@
     "properties._items.items._graphic.attribution": ""
   },
   "laerdal-lottieInteractivity": {
+    "title": "Add title",
+    "displayTitle": "Add title",
     "properties._supportedLayout": "both",
     "properties.instruction": "",
     "properties._setCompletionOn": "inview",
@@ -699,9 +1228,12 @@
     "properties._manifest": {}
   },
   "laerdal-media": {
+    "title": "Enter media title",
+    "displayTitle": "Enter media title",
     "properties._supportedLayout": "both",
     "properties.instruction": "",
     "properties._media.title": "Media title",
+    "properties._media.cc": [],
     "properties._media.mp4": "",
     "properties._media.webm": "",
     "properties._media.mp3": "",
@@ -735,6 +1267,32 @@
     "properties._playerOptions": {}
   },
   "laerdal-media-playlist": {
+    "title": "Enter media title",
+    "displayTitle": "Enter media title",
+    "properties._items": [
+      {
+        "title": "Video title",
+        "mp3": "",
+        "mp4": "",
+        "poster": "",
+        "cc": [],
+        "_transcript": {
+          "inlineTranscriptTitle": "Transcript",
+          "inlineTranscriptBody": ""
+        }
+      },
+      {
+        "title": "Video title 2",
+        "mp3": "",
+        "mp4": "",
+        "poster": "",
+        "cc": [],
+        "_transcript": {
+          "inlineTranscriptTitle": "Transcript",
+          "inlineTranscriptBody": ""
+        }
+      }
+    ],
     "properties._supportedLayout": "both",
     "properties.instruction": "",
     "properties.playlistTitle": "",
@@ -757,6 +1315,48 @@
     "properties._playerOptions": {}
   },
   "laerdal-narrative": {
+    "title": "Explore the slides",
+    "displayTitle": "Explore the slides",
+    "properties._items": [
+      {
+        "title": "Slide 1",
+        "body": "<p>Add content</p>",
+        "_viewType": "graphic",
+        "_viewTypeGraphic": {
+          "alt": "",
+          "small": "",
+          "attribution": ""
+        },
+        "_viewTypeMedia": {
+          "title": "",
+          "mp4": "",
+          "webm": "",
+          "source": "",
+          "type": "",
+          "poster": "",
+          "cc": []
+        }
+      },
+      {
+        "title": "Slide 2",
+        "body": "<p>Add content</p>",
+        "_viewType": "graphic",
+        "_viewTypeGraphic": {
+          "alt": "",
+          "small": "",
+          "attribution": ""
+        },
+        "_viewTypeMedia": {
+          "title": "",
+          "mp4": "",
+          "webm": "",
+          "source": "",
+          "type": "",
+          "poster": "",
+          "cc": []
+        }
+      }
+    ],
     "properties._supportedLayout": "full-width",
     "properties.instruction": "Select the next and back arrows to find out more.",
     "properties.mobileInstruction": "Select the plus icon followed by the next arrow to find out more.",
@@ -844,6 +1444,26 @@
     "properties._buttons.remainingAttemptText": ""
   },
   "sentenceOrdering": {
+    "title": "Check your understanding",
+    "displayTitle": "Check your understanding",
+    "properties._items": [
+      {
+        "sentence": "Option 1",
+        "position": 0
+      },
+      {
+        "sentence": "Option 2",
+        "position": 1
+      },
+      {
+        "sentence": "Option 3",
+        "position": 2
+      },
+      {
+        "sentence": "Option 4",
+        "position": 3
+      }
+    ],
     "properties._supportedLayout": "both",
     "properties.instruction": "",
     "properties._items.items.sentence": "",
@@ -855,8 +1475,8 @@
     "properties._isRandom": false,
     "properties._recordInteraction": true,
     "properties._questionWeight": 1,
-    "properties._feedback.correct": "",
-    "properties._feedback._incorrect.final": "",
+    "properties._feedback.correct": "<p>Correct</p>",
+    "properties._feedback._incorrect.final": "<p>Incorrect</p>",
     "properties._feedback._incorrect.notFinal": "",
     "properties._buttons._submit.buttonText": "",
     "properties._buttons._submit.ariaLabel": "",
@@ -873,6 +1493,8 @@
     "properties._buttons.disabledAriaLabel": ""
   },
   "laerdal-slider": {
+    "title": "Rate your experience",
+    "displayTitle": "Rate your experience",
     "properties._supportedLayout": "both",
     "properties.instruction": "",
     "properties.ariaQuestion": "",
@@ -884,10 +1506,10 @@
     "properties._shouldDisplayAttempts": false,
     "properties._questionWeight": 1,
     "properties._recordInteraction": true,
-    "properties.labelStart": "",
-    "properties.labelEnd": "",
+    "properties.labelStart": "Poor",
+    "properties.labelEnd": "Excellent",
     "properties._scaleStart": 1,
-    "properties._scaleEnd": 10,
+    "properties._scaleEnd": 5,
     "properties._scaleStep": 1,
     "properties._correctAnswer": "",
     "properties._correctRange._bottom": 0,
@@ -914,6 +1536,30 @@
     "properties._buttons.remainingAttemptText": ""
   },
   "laerdal-tabs": {
+    "title": "Enter title",
+    "displayTitle": "Enter title",
+    "properties._items": [
+      {
+        "tabTitle": "Item 1",
+        "title": "Item 1",
+        "body": "<p>Enter description here</p>",
+        "_classes": "",
+        "_graphic": {
+          "alt": "",
+          "src": ""
+        }
+      },
+      {
+        "tabTitle": "Item title 2",
+        "title": "Item title",
+        "body": "<p>Enter description here</p>",
+        "_classes": "",
+        "_graphic": {
+          "alt": "",
+          "src": ""
+        }
+      }
+    ],
     "properties._supportedLayout": "full-width",
     "properties.instruction": "",
     "properties._setCompletionOn": "allItems",
@@ -926,11 +1572,23 @@
     "properties._items.items._graphic.src": ""
   },
   "laerdal-text": {
+    "title": "Enter section title",
+    "displayTitle": "Enter section title",
+    "body": "<p><meta content=\"text/html; charset=us-ascii\" http-equiv=\"Content-Type\"><style>a { text-decoration: none; color: #464feb; } tr th, tr td { border: 1px solid #e6e6e6; } tr th { background-color: #f5f5f5; }</style></p><div style=\"font-family:'Segoe UI';font-size:14px;font-style:normal;font-weight:400;line-height:20px;\">Add your content here...</div>",
     "properties._supportedLayout": "both",
     "properties.instruction": "",
     "properties.subtitle": ""
   },
   "laerdal-user-feedback": {
+    "title": "Feedback title",
+    "displayTitle": "Feedback title",
+    "properties._items": [
+      {
+        "title": "Enter title",
+        "placeholder": "Enter feedback",
+        "feedback": "<p>Thanks for sharing your feedback</p>"
+      }
+    ],
     "properties._supportedLayout": "both",
     "properties.instruction": "",
     "properties._items.items.title": "",
@@ -958,6 +1616,47 @@
     "properties._knownIssues": ""
   },
   "talk": {
+    "title": "Enter title",
+    "displayTitle": "Enter title",
+    "body": "<p>Enter description here</p>",
+    "properties._characters": [
+      {
+        "name": "Avatar1",
+        "_graphic": {
+          "src": "",
+          "alt": ""
+        },
+        "_classes": ""
+      },
+      {
+        "name": "Avatar2",
+        "_graphic": {
+          "src": "",
+          "alt": ""
+        },
+        "_classes": ""
+      }
+    ],
+    "properties._items": [
+      {
+        "_character": 1,
+        "text": "<p>Enter text for Avatar1</p>",
+        "_graphic": {
+          "src": "",
+          "alt": ""
+        },
+        "_classes": ""
+      },
+      {
+        "_character": 2,
+        "text": "<p>Enter text for Avatar2</p>",
+        "_graphic": {
+          "src": "",
+          "alt": ""
+        },
+        "_classes": ""
+      }
+    ],
     "properties._supportedLayout": "half-width",
     "properties.instruction": "",
     "properties._characters.items.name": "",
