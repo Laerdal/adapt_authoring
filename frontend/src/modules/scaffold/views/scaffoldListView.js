@@ -95,20 +95,25 @@ define([
 
     render: function() {
       var rendered = Backbone.Form.editors.__List.__Item.prototype.render.apply(this, arguments);
-      // Cloning a list item that references an asset duplicates the underlying courseasset,
-      // which the server rejects (500). Remove the clone control for such items — the AI Tutor
-      // source-document list is the primary case. The delete control remains.
-      if (this._referencesAsset()) {
+      // ONLY the AI Tutor source-document list: cloning an item duplicates the underlying
+      // courseasset (server rejects it → 500). Remove the clone (copy) control for that list
+      // alone — every other asset/list field keeps its existing behaviour. Delete is unaffected.
+      if (this._isAiTutorSourceItem()) {
         this.$('[data-action="clone"]').remove();
       }
       return rendered;
     },
 
-    _referencesAsset: function() {
-      var value = this.editor && this.editor.value;
-      if (!value || typeof value !== 'object') return false;
-      return _.some(_.values(Helpers.flattenNestedProperties(value)), function(v) {
-        return typeof v === 'string' && v.indexOf('course/assets') !== -1;
+    // True only for items whose field carries the AI Tutor private-asset marker (_assetTag,
+    // set via the inputType object on the source-document field).
+    _isAiTutorSourceItem: function() {
+      var schema = (this.editor && this.editor.schema) || this.schema;
+      if (!schema || typeof schema !== 'object') return false;
+      return _.some(_.values(schema), function(field) {
+        if (!field) return false;
+        if (field._assetTag) return true;
+        var it = field.inputType;
+        return !!(it && typeof it === 'object' && it._assetTag);
       });
     },
 
