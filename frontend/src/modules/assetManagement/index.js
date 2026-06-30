@@ -35,6 +35,11 @@ define(function(require) {
   function loadAssetsView() {
     (new TagsCollection()).fetch({
       success: function(tagsCollection) {
+        // Keep AI Tutor private tags out of the asset sidebar filter (their docs are hidden
+        // from the normal list and managed only via the AI Tutor config).
+        tagsCollection.remove(tagsCollection.filter(function(tag) {
+          return /^ai-tutor-source/.test(tag.get('title') || '');
+        }));
         // Load asset collection before so sidebarView has access to it
         var assetCollection = new AssetCollection();
         // No need to fetch as the collectionView takes care of this

@@ -206,7 +206,7 @@ define([
     onAssetButtonClicked: function(event) {
       event.preventDefault();
 
-      Origin.trigger('modal:open', AssetManagementModalView, {
+      var pickerOptions = {
         collection: new AssetCollection,
         assetType: this.assetType,
         _shouldShowScrollbar: false,
@@ -238,8 +238,26 @@ define([
 
           this.setValue(data.assetLink);
           this.createCourseAsset(courseAssetObject);
+
+          // Tag the asset as an AI Tutor source at ADD time (upload or select), so it's hidden
+          // from the normal asset list and scoped to this course's picker immediately — no
+          // dependency on preview. Best-effort; failure doesn't block adding the document.
+          if (this.schema._assetTag && data.assetId && Origin.editor && Origin.editor.data && Origin.editor.data.course) {
+            $.ajax({
+              url: 'api/asset/aitutor-tag',
+              method: 'POST',
+              data: { assetId: data.assetId, courseId: Origin.editor.data.course.get('_id') }
+            });
+          }
         }
-      }, this);
+      };
+
+      // AI Tutor source field: scope the picker to this course's tutor docs only.
+      if (this.schema._assetTag && Origin.editor && Origin.editor.data && Origin.editor.data.course) {
+        pickerOptions.aiTutorCourseId = Origin.editor.data.course.get('_id');
+      }
+
+      Origin.trigger('modal:open', AssetManagementModalView, pickerOptions, this);
     },
 
     onClearButtonClicked: function(event) {
