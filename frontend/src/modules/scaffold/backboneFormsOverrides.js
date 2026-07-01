@@ -103,6 +103,7 @@ define([
   // render ckeditor in textarea
   Backbone.Form.editors.TextArea.prototype.render = function() {
     textAreaRender.call(this);
+    var textAreaEditor = this;
 
     function until(conditionFunction) {
       function poll(resolve) {
@@ -1216,6 +1217,151 @@ Samaritan Assistance</label><br>
       return markDownToHtml;
     }
 
+    function escapeHtml(text) {
+      return String(text || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function plainTextToHtml(text) {
+      var normalized = String(text || '').replace(/\r\n?/g, '\n').trim();
+      if (!normalized) return '<p></p>';
+
+      return normalized
+        .split(/\n{2,}/)
+        .map(function(block) {
+          return '<p>' + escapeHtml(block).replace(/\n/g, '<br>') + '</p>';
+        })
+        .join('');
+    }
+
+    function sanitizePastedHtml(rawHtml, fallbackText) {
+      if (!rawHtml || typeof rawHtml !== 'string') {
+        return plainTextToHtml(fallbackText);
+      }
+
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(rawHtml, 'text/html');
+      var outDoc = document.implementation.createHTMLDocument('sanitized');
+      var allowedTags = {
+        p: true,
+        strong: true,
+        em: true,
+        ul: true,
+        ol: true,
+        li: true,
+        a: true,
+        br: true,
+        table: true,
+        thead: true,
+        tbody: true,
+        tr: true,
+        th: true,
+        td: true
+      };
+
+      function copyAllowedAttributes(sourceEl, targetEl, tag) {
+        if (tag === 'a') {
+          var href = sourceEl.getAttribute('href');
+          if (href) targetEl.setAttribute('href', href);
+          var target = sourceEl.getAttribute('target');
+          if (target) targetEl.setAttribute('target', target);
+          var rel = sourceEl.getAttribute('rel');
+          if (rel) targetEl.setAttribute('rel', rel);
+          var title = sourceEl.getAttribute('title');
+          if (title) targetEl.setAttribute('title', title);
+        }
+        if (tag === 'th' || tag === 'td') {
+          var colspan = sourceEl.getAttribute('colspan');
+          if (colspan) targetEl.setAttribute('colspan', colspan);
+          var rowspan = sourceEl.getAttribute('rowspan');
+          if (rowspan) targetEl.setAttribute('rowspan', rowspan);
+        }
+      }
+
+      function sanitizeNode(node, targetDoc) {
+        if (!node) return null;
+
+        if (node.nodeType === Node.TEXT_NODE) {
+          return targetDoc.createTextNode(node.nodeValue || '');
+        }
+
+        if (node.nodeType !== Node.ELEMENT_NODE) {
+          return null;
+        }
+
+        var tag = node.tagName.toLowerCase();
+        if (tag === 'script' || tag === 'style' || tag === 'meta' || tag === 'link' || tag === 'head' || tag === 'title') {
+          return null;
+        }
+
+        if (tag === 'b') tag = 'strong';
+        if (tag === 'i') tag = 'em';
+
+        if (/^h[1-6]$/.test(tag)) {
+          tag = 'p';
+        }
+
+        if (!allowedTags[tag]) {
+          var fragment = targetDoc.createDocumentFragment();
+          Array.prototype.forEach.call(node.childNodes, function(child) {
+            var sanitizedChild = sanitizeNode(child, targetDoc);
+            if (sanitizedChild) fragment.appendChild(sanitizedChild);
+          });
+          return fragment;
+        }
+
+        var cleanEl = targetDoc.createElement(tag);
+        copyAllowedAttributes(node, cleanEl, tag);
+
+        Array.prototype.forEach.call(node.childNodes, function(child) {
+          var sanitizedChild = sanitizeNode(child, targetDoc);
+          if (sanitizedChild) cleanEl.appendChild(sanitizedChild);
+        });
+
+        return cleanEl;
+      }
+
+      var container = outDoc.createElement('div');
+      Array.prototype.forEach.call(doc.body.childNodes, function(child) {
+        var sanitized = sanitizeNode(child, outDoc);
+        if (sanitized) container.appendChild(sanitized);
+      });
+
+      var sanitizedHtml = container.innerHTML.trim();
+      if (!sanitizedHtml) {
+        return plainTextToHtml(fallbackText);
+      }
+
+      return sanitizedHtml;
+    }
+
+    function onCKEditorPaste(editor, source, data, sanitizedHtml) {
+      // Central paste hook for CKEditor content pasted by users.
+      var pastedText = '';
+      if (data && data.dataTransfer && typeof data.dataTransfer.getData === 'function') {
+        pastedText = data.dataTransfer.getData('text/plain') || '';
+      } else if (data && data.clipboardData && typeof data.clipboardData.getData === 'function') {
+        pastedText = data.clipboardData.getData('text/plain') || '';
+      }
+
+      console.log('CKEditor paste detected', source);
+      console.log('Pasted text:', pastedText);
+      if (sanitizedHtml) {
+        console.log('Sanitized paste html:', sanitizedHtml);
+      }
+      textAreaEditor.trigger('change', textAreaEditor);
+      Origin.trigger('scaffold:ckeditor:paste', {
+        source: source,
+        data: data,
+        sanitizedHtml: sanitizedHtml || '',
+        editorId: editor && editor.id
+      });
+    }
+
 
 
 
@@ -1359,6 +1505,39 @@ Samaritan Assistance</label><br>
         this.editor.id = CKEDITOR.instances.length;
         CKEDITOR.instances.length++;
         CKEDITOR.instances[this.editor.id] = this.editor;
+
+        // Fire paste hook on real clipboard paste events.
+        try {
+          this.editor.editing.view.document.on('clipboardInput', (evt, data) => {
+            // Ignore drag/drop or unknown clipboard methods when method is provided.
+            if (data && data.method && data.method !== 'paste') return;
+
+            var html = data && data.dataTransfer && typeof data.dataTransfer.getData === 'function'
+              ? data.dataTransfer.getData('text/html')
+              : '';
+            var text = data && data.dataTransfer && typeof data.dataTransfer.getData === 'function'
+              ? data.dataTransfer.getData('text/plain')
+              : '';
+
+            var sanitizedHtml = sanitizePastedHtml(html, text);
+            data.content = this.editor.data.processor.toView(sanitizedHtml);
+
+            onCKEditorPaste(this.editor, 'clipboardInput', data, sanitizedHtml);
+          });
+        } catch (e) {
+          // Ignore if clipboardInput is unavailable for this build.
+        }
+
+        try {
+          const editableElement = this.editor.ui.view && this.editor.ui.view.editable && this.editor.ui.view.editable.element;
+          if (editableElement) {
+            editableElement.addEventListener('paste', (event) => {
+              onCKEditorPaste(this.editor, 'domPaste', event);
+            });
+          }
+        } catch (e) {
+          // Ignore if editable DOM paste listener cannot be attached.
+        }
       });
     });
     return this;
