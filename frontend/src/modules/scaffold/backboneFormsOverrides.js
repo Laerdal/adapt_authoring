@@ -1362,6 +1362,128 @@ Samaritan Assistance</label><br>
       });
     }
 
+    function PasteWithFormattingPlugin(editor) {
+      const balloon = editor.plugins.get('ContextualBalloon');
+      const popupView = {
+        element: null,
+        render() {},
+        destroy() {}
+      };
+
+      const closePopup = (panelElement, outsideClickHandler) => {
+        if (balloon.hasView(popupView)) {
+          balloon.remove(popupView);
+        }
+        if (panelElement && panelElement.parentNode) {
+          panelElement.parentNode.removeChild(panelElement);
+        }
+        document.removeEventListener('mousedown', outsideClickHandler);
+      };
+
+      editor.ui.componentFactory.add('pasteWithFormatting', locale => {
+        const undoView = editor.ui.componentFactory.create('undo');
+        const ButtonView = undoView.constructor;
+        const button = new ButtonView(locale);
+
+        button.set({
+          label: 'Paste with formatting',
+          icon: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M16 3h-1.18C14.4 1.84 13.3 1 12 1s-2.4.84-2.82 2H8a2 2 0 0 0-2 2v1H5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8v-2H5V8h1v1a2 2 0 0 0 2 2h4v2h2v-2h2a2 2 0 0 0 2-2V8h1v5h2V8a2 2 0 0 0-2-2h-1V5a2 2 0 0 0-2-2m-4-1a1 1 0 0 1 1 1h-2a1 1 0 0 1 1-1m4 7H8V5h8zm6.71 8.29l-3 3a1 1 0 0 1-1.42 0l-1.5-1.5l1.42-1.42l.79.79L21.29 15z"/></svg>',
+          withText: false,
+          tooltip: true,
+          tooltipPosition: 'n',
+          class: 'paste-with-formatting-button'
+        });
+
+        button.on('execute', () => {
+          const panelElement = document.createElement('div');
+          panelElement.classList.add('xml-import-popup-panel');
+          panelElement.innerHTML = `
+            <div class="XmlImport">
+              <span id="closeFormattedPastePopup">×</span>
+              <label>Paste with formatting</label>
+              <textarea id="formattedPasteInputArea" placeholder="Paste rich text/html here..."></textarea>
+              <div class="xmlButtons">
+                <button class="btnXmlImport buttonSubmit" id="formattedPasteSubmitBtn">Insert</button>
+                <button class="btnXmlImport buttonCancel" id="formattedPasteCancelBtn">Cancel</button>
+              </div>
+            </div>`;
+
+          document.body.appendChild(panelElement);
+          popupView.element = panelElement;
+
+          const inputEl = panelElement.querySelector('#formattedPasteInputArea');
+          let pastedHtml = '';
+
+          inputEl.addEventListener('paste', function(event) {
+            const clipboard = event.clipboardData || window.clipboardData;
+            if (!clipboard || typeof clipboard.getData !== 'function') return;
+
+            pastedHtml = clipboard.getData('text/html') || '';
+            const pastedText = clipboard.getData('text/plain') || '';
+            if (pastedText) {
+              inputEl.value = pastedText;
+            }
+          });
+
+          const outsideClickHandler = event => {
+            const balloonEl = balloon.view.element;
+            if (balloonEl && !balloonEl.contains(event.target)) {
+              closePopup(panelElement, outsideClickHandler);
+            }
+          };
+
+          panelElement.querySelector('#closeFormattedPastePopup').onclick = () => closePopup(panelElement, outsideClickHandler);
+          panelElement.querySelector('#formattedPasteCancelBtn').onclick = () => closePopup(panelElement, outsideClickHandler);
+
+          panelElement.querySelector('#formattedPasteSubmitBtn').onclick = () => {
+            const fallbackText = inputEl.value.trim();
+            const htmlToInsert = pastedHtml && pastedHtml.trim()
+              ? pastedHtml
+              : (fallbackText ? ('<p>' + escapeHtml(fallbackText).replace(/\n/g, '<br>') + '</p>') : '');
+
+            if (!htmlToInsert) {
+              inputEl.focus();
+              return;
+            }
+
+            try {
+              const viewFragment = editor.data.processor.toView(htmlToInsert);
+              const modelFragment = editor.data.toModel(viewFragment);
+              editor.model.change(() => {
+                const selection = editor.model.document.selection;
+                editor.model.insertContent(modelFragment, selection.getLastPosition());
+              });
+            } catch (e) {
+              const existingData = editor.getData ? (editor.getData() || '') : '';
+              editor.setData(existingData + htmlToInsert);
+            }
+
+            closePopup(panelElement, outsideClickHandler);
+          };
+
+          if (!balloon.hasView(popupView)) {
+            balloon.add({
+              view: popupView,
+              position: {
+                target: () => {
+                  const editorElement = editor.ui.view.element;
+                  const triggerButton = editorElement.querySelector('.paste-with-formatting-button');
+                  return triggerButton || editor.ui.view.editable.element;
+                }
+              }
+            });
+          }
+
+          setTimeout(() => {
+            inputEl.focus();
+            document.addEventListener('mousedown', outsideClickHandler);
+          }, 0);
+        });
+
+        return button;
+      });
+    }
+
 
 
 
@@ -1373,7 +1495,7 @@ Samaritan Assistance</label><br>
         versionCheck:false,
         enterMode: CKEDITOR[Origin.constants.ckEditorEnterMode],
         entities: false,
-        extraPlugins: [ AiAgentPlugin, xmlToHtmlPlugin ],
+        extraPlugins: [ AiAgentPlugin, xmlToHtmlPlugin, PasteWithFormattingPlugin ],
         // htmlSupport: {
         //   // Convert all allow/disallow strings to regexp, as config is json only
         //   allow: convertStringsToRegExDeep((Origin.constants.ckEditorHtmlSupport && Origin.constants.ckEditorHtmlSupport.allow) || []),
@@ -1449,6 +1571,7 @@ Samaritan Assistance</label><br>
             "uploadImage",
             "|",
             "xmlToHtmlConversion",
+            "pasteWithFormatting",
             ...(ckEditorAIAssistantEnable ? ["|", "AIAssistant"] : [])
           ],
           shouldNotGroupWhenFull: true,
