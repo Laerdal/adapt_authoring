@@ -138,8 +138,8 @@
     "properties._items": [
       {
         "_graphic": {
-          "large": "",
-          "small": "",
+          "large": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
+          "small": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
           "alt": "",
           "attribution": ""
         },
@@ -152,8 +152,8 @@
       },
       {
         "_graphic": {
-          "large": "",
-          "small": "",
+          "large": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
+          "small": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
           "alt": "",
           "attribution": ""
         },
@@ -218,8 +218,8 @@
     "properties.instruction": "",
     "properties._graphic.alt": "",
     "properties._graphic.longdescription": "",
-    "properties._graphic.large": "",
-    "properties._graphic.small": "",
+    "properties._graphic.large": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
+    "properties._graphic.small": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
     "properties._graphic.attribution": "",
     "properties._graphic._url": "",
     "properties._graphic._target": "_blank",
@@ -236,7 +236,7 @@
         "strapline": "Add strapline",
         "_imageAlignment": "right",
         "_graphic": {
-          "src": "",
+          "src": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer.png",
           "alt": "",
           "attribution": "",
           "_classes": ""
@@ -263,7 +263,7 @@
         "strapline": "Add strapline text",
         "_imageAlignment": "right",
         "_graphic": {
-          "src": "",
+          "src": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer.png",
           "alt": "",
           "attribution": "",
           "_classes": ""
@@ -288,7 +288,7 @@
     "properties._supportedLayout": "full-width",
     "properties.instruction": "Select the icons to find out more.",
     "properties._setCompletionOn": "allItems",
-    "properties._graphic.src": "",
+    "properties._graphic.src": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
     "properties._graphic.alt": "",
     "properties._graphic.attribution": "",
     "properties.mobileBody": "",
@@ -307,7 +307,7 @@
     "properties._items.items.body": "",
     "properties._items.items.strapline": "",
     "properties._items.items._imageAlignment": "right",
-    "properties._items.items._graphic.src": "",
+    "properties._items.items._graphic.src": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer.png",
     "properties._items.items._graphic.alt": "",
     "properties._items.items._graphic.attribution": "",
     "properties._items.items._graphic._classes": "",
@@ -500,8 +500,8 @@
         "title": "Slide 1",
         "body": "<p>Add content</p>",
         "_graphic": {
-          "src": "",
-          "alt": "",
+          "src": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
+          "alt": "image",
           "attribution": ""
         },
         "strapline": ""
@@ -510,8 +510,8 @@
         "title": "Slide 2",
         "body": "<p>Add content</p>",
         "_graphic": {
-          "src": "",
-          "alt": "",
+          "src": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
+          "alt": "image",
           "attribution": ""
         },
         "strapline": ""
@@ -657,14 +657,14 @@
         "_imageAlignment": "right",
         "_classes": "",
         "_graphic": {
-          "src": "",
+          "src": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
           "srcHover": "",
           "srcVisited": "",
           "alt": "",
           "title": ""
         },
         "_itemGraphic": {
-          "src": "",
+          "src": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
           "alt": "",
           "attribution": ""
         }
@@ -682,7 +682,7 @@
           "title": ""
         },
         "_itemGraphic": {
-          "src": "",
+          "src": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
           "alt": "",
           "attribution": ""
         }
@@ -693,14 +693,14 @@
         "_imageAlignment": "right",
         "_classes": "",
         "_graphic": {
-          "src": "",
+          "src": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
           "srcHover": "",
           "srcVisited": "",
           "alt": "",
           "title": ""
         },
         "_itemGraphic": {
-          "src": "",
+          "src": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
           "alt": "",
           "attribution": ""
         }
@@ -925,7 +925,7 @@
     "properties._items": [
       {
         "frontImage": {
-          "alt": "",
+          "alt": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
           "src": "",
           "attribution": ""
         },
@@ -934,7 +934,7 @@
       },
       {
         "frontImage": {
-          "alt": "",
+          "alt": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
           "src": "",
           "attribution": ""
         },
@@ -1179,7 +1179,7 @@
         "body": "<p>Add description here</p>",
         "_graphic": {
           "alt": "",
-          "small": "",
+          "small": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
           "attribution": ""
         }
       },
@@ -1189,7 +1189,7 @@
         "body": "<p>Add description here</p>",
         "_graphic": {
           "alt": "",
-          "small": "",
+          "small": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
           "attribution": ""
         }
       }
@@ -1210,7 +1210,7 @@
     "properties._supportedLayout": "both",
     "properties.instruction": "",
     "properties._setCompletionOn": "inview",
-    "properties._lottie.src": "",
+    "properties._lottie.src": "https://cdn-esim.contentservice.net/adapt/common-assets/sample-10s-2160p.mp4",
     "properties._lottie.controls": true,
     "properties._lottie.loop": -1,
     "properties._lottie.autoplay": false,
@@ -1234,13 +1234,13 @@
     "properties.instruction": "",
     "properties._media.title": "Media title",
     "properties._media.cc": [],
-    "properties._media.mp4": "",
+    "properties._media.mp4": "https://cdn-esim.contentservice.net/adapt/common-assets/sample-10s-2160p.mp4",
     "properties._media.webm": "",
     "properties._media.mp3": "",
     "properties._media.ogg": "",
     "properties._media.source": "",
     "properties._media.type": "",
-    "properties._media.poster": "",
+    "properties._media.poster": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-3.png",
     "properties._media.cc.items._srcType": "captions",
     "properties._media.cc.items._srcTypeCaption.label": "English",
     "properties._media.cc.items._srcTypeCaption.srclang": "en",
@@ -1273,7 +1273,7 @@
       {
         "title": "Video title",
         "mp3": "",
-        "mp4": "",
+        "mp4": "https://cdn-esim.contentservice.net/adapt/common-assets/sample-10s-2160p.mp4",
         "poster": "",
         "cc": [],
         "_transcript": {
@@ -1284,7 +1284,7 @@
       {
         "title": "Video title 2",
         "mp3": "",
-        "mp4": "",
+        "mp4": "https://cdn-esim.contentservice.net/adapt/common-assets/sample-10s-2160p.mp4",
         "poster": "",
         "cc": [],
         "_transcript": {
@@ -1324,7 +1324,7 @@
         "_viewType": "graphic",
         "_viewTypeGraphic": {
           "alt": "",
-          "small": "",
+          "small": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
           "attribution": ""
         },
         "_viewTypeMedia": {
@@ -1343,7 +1343,7 @@
         "_viewType": "graphic",
         "_viewTypeGraphic": {
           "alt": "",
-          "small": "",
+          "small": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
           "attribution": ""
         },
         "_viewTypeMedia": {
@@ -1368,7 +1368,7 @@
     "properties._items.items.body": "",
     "properties._items.items._viewType": "graphic",
     "properties._items.items._viewTypeGraphic.alt": "",
-    "properties._items.items._viewTypeGraphic.small": "",
+    "properties._items.items._viewTypeGraphic.small": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
     "properties._items.items._viewTypeGraphic.attribution": "",
     "properties._items.items._viewTypeMedia.title": "",
     "properties._items.items._viewTypeMedia.mp4": "",
@@ -1546,7 +1546,7 @@
         "_classes": "",
         "_graphic": {
           "alt": "",
-          "src": ""
+          "src": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png"
         }
       },
       {
@@ -1556,7 +1556,7 @@
         "_classes": "",
         "_graphic": {
           "alt": "",
-          "src": ""
+          "src": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png"
         }
       }
     ],
@@ -1623,7 +1623,7 @@
       {
         "name": "Avatar1",
         "_graphic": {
-          "src": "",
+          "src": "https://cdn-esim.contentservice.net/adapt/common-assets/images_avatar1.jpg",
           "alt": ""
         },
         "_classes": ""
@@ -1631,7 +1631,7 @@
       {
         "name": "Avatar2",
         "_graphic": {
-          "src": "",
+          "src": "https://cdn-esim.contentservice.net/adapt/common-assets/images_avatar1.jpg",
           "alt": ""
         },
         "_classes": ""
