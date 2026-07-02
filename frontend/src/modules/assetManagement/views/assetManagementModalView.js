@@ -34,7 +34,8 @@ define(function(require) {
       // Push collection through to collection view
       var view = new AssetManagementCollectionView({
         collection: this.collection,
-        search: this.search
+        search: this.search,
+        aiTutorCourseId: this.options.aiTutorCourseId
       });
       this.$('.asset-management-assets-container-inner').append(view.$el);
     },

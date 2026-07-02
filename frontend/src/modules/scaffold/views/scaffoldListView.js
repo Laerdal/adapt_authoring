@@ -62,6 +62,21 @@ define([
       var remove = function(isConfirmed) {
         if(isConfirmed === false) return;
 
+        // AI Tutor source doc removed → drop the per-course tag so it leaves this course's
+        // picker (the general tutor tag is kept server-side). Best-effort.
+        if (item && typeof item._isAiTutorSourceItem === 'function' && item._isAiTutorSourceItem()) {
+          var val = item.editor && item.editor.value;
+          var ref = val && (typeof val === 'object' ? val._document : val);
+          var fn = (typeof ref === 'string') ? ref.split('/').pop() : '';
+          if (fn && Origin.editor && Origin.editor.data && Origin.editor.data.course) {
+            $.ajax({
+              url: 'api/asset/aitutor-untag',
+              method: 'POST',
+              data: { filename: fn, courseId: Origin.editor.data.course.get('_id') }
+            });
+          }
+        }
+
         var index = this.items.indexOf(item);
         this.items[index].remove();
         this.items.splice(index, 1);
@@ -90,6 +105,30 @@ define([
     events: function() {
       return _.extend({}, Backbone.Form.editors.__List.__Item.prototype.events, {
         'click [data-action="clone"]': 'cloneItem'
+      });
+    },
+
+    render: function() {
+      var rendered = Backbone.Form.editors.__List.__Item.prototype.render.apply(this, arguments);
+      // ONLY the AI Tutor source-document list: cloning an item duplicates the underlying
+      // courseasset (server rejects it → 500). Remove the clone (copy) control for that list
+      // alone — every other asset/list field keeps its existing behaviour. Delete is unaffected.
+      if (this._isAiTutorSourceItem()) {
+        this.$('[data-action="clone"]').remove();
+      }
+      return rendered;
+    },
+
+    // True only for items whose field carries the AI Tutor private-asset marker (_assetTag,
+    // set via the inputType object on the source-document field).
+    _isAiTutorSourceItem: function() {
+      var schema = (this.editor && this.editor.schema) || this.schema;
+      if (!schema || typeof schema !== 'object') return false;
+      return _.some(_.values(schema), function(field) {
+        if (!field) return false;
+        if (field._assetTag) return true;
+        var it = field.inputType;
+        return !!(it && typeof it === 'object' && it._assetTag);
       });
     },
 
