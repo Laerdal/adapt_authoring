@@ -247,7 +247,7 @@ function publishCourse(courseId, mode, request, response, next) {
           app.emit('aitutor:ensureIngested', { courseId: String(courseId), tenantId: String(tenantId) });
         }
       } catch (e) {
-        console.warn('[ai-tutor] endpoint injection skipped:', e && e.message);
+        logger.log('warn', '[ai-tutor] endpoint injection skipped: ' + (e && e.message));
       }
       callback(null);
     },
