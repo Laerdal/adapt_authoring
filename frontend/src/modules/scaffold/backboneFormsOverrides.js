@@ -1348,8 +1348,7 @@ Samaritan Assistance</label><br>
         pastedText = data.clipboardData.getData('text/plain') || '';
       }
 
-      console.log('CKEditor paste detected', source);
-      console.log('Pasted text:', pastedText);
+      
       if (sanitizedHtml) {
         console.log('Sanitized paste html:', sanitizedHtml);
       }
