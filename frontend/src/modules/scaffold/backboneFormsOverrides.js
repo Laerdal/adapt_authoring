@@ -1263,14 +1263,79 @@ Samaritan Assistance</label><br>
         td: true
       };
 
+      function sanitizeLinkHref(href) {
+        if (!href || typeof href !== 'string') return '';
+
+        var trimmedHref = href.trim();
+        if (!trimmedHref) return '';
+
+        // Remove control characters and whitespace so obfuscated schemes like
+        // "java\nscript:" are normalized before validation.
+        var normalizedHref = trimmedHref
+          .replace(/[\u0000-\u001F\u007F\s]+/g, '')
+          .toLowerCase();
+
+        if (!normalizedHref) return '';
+
+        if (/^#/.test(trimmedHref) || /^(\/|\.\/|\.\.\/|\?)/.test(trimmedHref) || /^\/\//.test(trimmedHref)) {
+          return trimmedHref;
+        }
+
+        var schemeMatch = normalizedHref.match(/^([a-z][a-z0-9+.-]*):/i);
+        if (!schemeMatch) {
+          return trimmedHref;
+        }
+
+        var allowedSchemes = {
+          http: true,
+          https: true,
+          mailto: true,
+          tel: true
+        };
+
+        return allowedSchemes[schemeMatch[1]] ? trimmedHref : '';
+      }
+
+      function sanitizeRelTokens(rel) {
+        if (!rel || typeof rel !== 'string') return [];
+
+        return rel
+          .toLowerCase()
+          .split(/\s+/)
+          .filter(function(token) {
+            return token && /^[a-z0-9_-]+$/.test(token);
+          })
+          .filter(function(token, index, arr) {
+            return arr.indexOf(token) === index;
+          });
+      }
+
       function copyAllowedAttributes(sourceEl, targetEl, tag) {
         if (tag === 'a') {
-          var href = sourceEl.getAttribute('href');
+          var href = sanitizeLinkHref(sourceEl.getAttribute('href'));
           if (href) targetEl.setAttribute('href', href);
+
           var target = sourceEl.getAttribute('target');
-          if (target) targetEl.setAttribute('target', target);
-          var rel = sourceEl.getAttribute('rel');
-          if (rel) targetEl.setAttribute('rel', rel);
+          var normalizedTarget = target ? target.trim().toLowerCase() : '';
+          var allowedTargets = {
+            _blank: true,
+            _self: true,
+            _parent: true,
+            _top: true
+          };
+          if (allowedTargets[normalizedTarget]) {
+            targetEl.setAttribute('target', normalizedTarget);
+          }
+
+          var relTokens = sanitizeRelTokens(sourceEl.getAttribute('rel'));
+          if (normalizedTarget === '_blank') {
+            if (relTokens.indexOf('noopener') === -1) relTokens.push('noopener');
+            if (relTokens.indexOf('noreferrer') === -1) relTokens.push('noreferrer');
+          }
+          if (relTokens.length) {
+            targetEl.setAttribute('rel', relTokens.join(' '));
+          }
+
           var title = sourceEl.getAttribute('title');
           if (title) targetEl.setAttribute('title', title);
         }
@@ -1348,10 +1413,6 @@ Samaritan Assistance</label><br>
         pastedText = data.clipboardData.getData('text/plain') || '';
       }
 
-      
-      if (sanitizedHtml) {
-        console.log('Sanitized paste html:', sanitizedHtml);
-      }
       textAreaEditor.trigger('change', textAreaEditor);
       Origin.trigger('scaffold:ckeditor:paste', {
         source: source,
