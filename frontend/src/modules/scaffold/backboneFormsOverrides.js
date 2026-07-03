@@ -1765,7 +1765,8 @@ Samaritan Assistance</label><br>
         CKEDITOR.instances.length++;
         CKEDITOR.instances[this.editor.id] = this.editor;
 
-        // Fire paste hook on real clipboard paste events.
+        // Prefer CKEditor's clipboardInput hook; use DOM paste only as a fallback.
+        var hasClipboardInputHook = false;
         try {
           this.editor.editing.view.document.on('clipboardInput', (evt, data) => {
             // Ignore drag/drop or unknown clipboard methods when method is provided.
@@ -1783,19 +1784,47 @@ Samaritan Assistance</label><br>
 
             onCKEditorPaste(this.editor, 'clipboardInput', data, sanitizedHtml);
           });
+          hasClipboardInputHook = true;
         } catch (e) {
-          // Ignore if clipboardInput is unavailable for this build.
+          // clipboardInput is unavailable for this build; fallback to DOM paste.
         }
 
-        try {
-          const editableElement = this.editor.ui.view && this.editor.ui.view.editable && this.editor.ui.view.editable.element;
-          if (editableElement) {
-            editableElement.addEventListener('paste', (event) => {
-              onCKEditorPaste(this.editor, 'domPaste', event);
-            });
+        if (!hasClipboardInputHook) {
+          try {
+            const editableElement = this.editor.ui.view && this.editor.ui.view.editable && this.editor.ui.view.editable.element;
+            if (editableElement) {
+              editableElement.addEventListener('paste', (event) => {
+                const clipboard = event && (event.clipboardData || window.clipboardData);
+                const html = clipboard && typeof clipboard.getData === 'function'
+                  ? (clipboard.getData('text/html') || '')
+                  : '';
+                const text = clipboard && typeof clipboard.getData === 'function'
+                  ? (clipboard.getData('text/plain') || '')
+                  : '';
+
+                const sanitizedHtml = sanitizePastedHtml(html, text);
+
+                if (event && typeof event.preventDefault === 'function') {
+                  event.preventDefault();
+                }
+
+                try {
+                  const viewFragment = this.editor.data.processor.toView(sanitizedHtml);
+                  const modelFragment = this.editor.data.toModel(viewFragment);
+                  this.editor.model.change(() => {
+                    const selection = this.editor.model.document.selection;
+                    this.editor.model.insertContent(modelFragment, selection.getLastPosition());
+                  });
+                } catch (e) {
+                  // If model insertion fails in fallback mode, leave content unchanged.
+                }
+
+                onCKEditorPaste(this.editor, 'domPaste', event, sanitizedHtml);
+              });
+            }
+          } catch (e) {
+            // Ignore if editable DOM paste listener cannot be attached.
           }
-        } catch (e) {
-          // Ignore if editable DOM paste listener cannot be attached.
         }
       });
     });
