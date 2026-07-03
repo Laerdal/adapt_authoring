@@ -381,8 +381,14 @@ module.exports = function(grunt) {
     var path = require('path');
 
     var configPath = path.join('conf', 'config.json');
-    var config = grunt.file.readJSON(configPath);
     var defaultsPath = path.join('conf', 'componentPropertyDefaults.json');
+
+    if (!grunt.file.exists(configPath)) {
+       grunt.log.warn('Missing ' + configPath + '; skipping validate-component-defaults.');
+       return;
+    }
+    
+    var config = grunt.file.readJSON(configPath);
 
     if (!grunt.file.exists(defaultsPath)) {
       grunt.fail.fatal('Missing conf/componentPropertyDefaults.json');
