@@ -6,7 +6,7 @@
     "_isAvailable": true,
     "_isHidden": false,
     "_isVisible": true,
-    "_isResetOnRevisit": "false",
+    "_isResetOnRevisit": false,
     "_isA11yCompletionDescriptionEnabled": true,
     "title": "New Component Title",
     "displayTitle": "New Component Title",
