@@ -138,7 +138,10 @@ Component.prototype.retrieve = function (search, options, next) {
 };
 
 Component.prototype.create = function (data, next) {
-  componentPropertyDefaults.applyDefaultsToObject(data, data && data._component);
+  if (data && data._component) {
+     componentPropertyDefaults.applyDefaultsToObject(data, data._component);
+  }
+  // componentPropertyDefaults.applyDefaultsToObject(data, data && data._component);
   ContentPlugin.prototype.create.call(this, data, next);
 };
 
