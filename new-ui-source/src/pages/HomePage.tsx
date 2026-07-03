@@ -1,0 +1,618 @@
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { CourseCard } from '../components/course/index'
+import AiAssistant from '../components/common/AiAssistant'
+
+
+type Theme = 'LIFE Theme' | 'Vanilla Theme' | 'Custom Theme'
+
+interface Course {
+  id: number
+  title: string
+  description: string
+  savedDate: string
+  savedDateTs: number   // unix ms for sorting
+  imageUrl: string | null
+  theme: Theme
+  tags: string[]
+}
+
+const INITIAL_COURSES: Course[] = [
+  { id: 1, title: 'Introduction to Digital Marketing',    description: 'This comprehensive course covers all aspects of digital marketing including SEO, social media, and content strategy.',    savedDate: 'May 11, 2026', savedDateTs: new Date('2026-05-11').getTime(), imageUrl: null, theme: 'LIFE Theme',    tags: ['Marketing', 'SEO', 'Beginner'] },
+  { id: 2, title: 'Basic CPR Training',                   description: 'This course provides essential knowledge and hands-on practice for performing CPR in emergency situations.',             savedDate: 'Mar 27, 2026', savedDateTs: new Date('2026-03-27').getTime(), imageUrl: null, theme: 'Vanilla Theme', tags: ['Healthcare', 'Emergency', 'CPR'] },
+  { id: 3, title: 'Advanced Airway Management',           description: 'Covers advanced techniques for managing patient airways in clinical and pre-hospital settings.',                        savedDate: 'Mar 24, 2026', savedDateTs: new Date('2026-03-24').getTime(), imageUrl: null, theme: 'LIFE Theme',    tags: ['Healthcare', 'Advanced', 'Clinical'] },
+  { id: 4, title: 'Patient Safety Fundamentals',          description: 'An introduction to patient safety principles, error prevention, and culture of safety in healthcare organisations.',   savedDate: 'Feb 14, 2026', savedDateTs: new Date('2026-02-14').getTime(), imageUrl: null, theme: 'Custom Theme',  tags: ['Safety', 'Healthcare', 'Beginner'] },
+  { id: 5, title: 'Neonatal Resuscitation Program',       description: 'Evidence-based curriculum for healthcare providers who care for newborns at delivery.',                               savedDate: 'Jan 30, 2026', savedDateTs: new Date('2026-01-30').getTime(), imageUrl: null, theme: 'Vanilla Theme', tags: ['Neonatal', 'Emergency', 'Clinical'] },
+  { id: 6, title: 'Trauma Assessment and Management',     description: 'Systematic approach to evaluating and treating trauma patients in emergency and critical care settings.',             savedDate: 'Jan 10, 2026', savedDateTs: new Date('2026-01-10').getTime(), imageUrl: null, theme: 'LIFE Theme',    tags: ['Trauma', 'Emergency', 'Advanced'] },
+]
+
+const SORT_OPTIONS = [
+  { label: 'Recently Modified', value: 'recent'    },
+  { label: 'Alphabetical A–Z',  value: 'alpha-asc' },
+  { label: 'Alphabetical Z–A',  value: 'alpha-desc'},
+  { label: 'Date Created',      value: 'date'      },
+]
+const THEME_OPTIONS: Theme[] = ['LIFE Theme', 'Vanilla Theme', 'Custom Theme']
+const MENU_OPTIONS = ['LIFE Menu', 'Overview Menu', 'Box Menu']
+
+export default function HomePage() {
+  const navigate = useNavigate()
+  const [courses, setCourses] = useState<Course[]>(INITIAL_COURSES)
+
+  // Search / filter / sort / view
+  const [search, setSearch]           = useState('')
+  const [themeFilter, setThemeFilter] = useState<Theme | 'All'>('All')
+  const [sort, setSort]               = useState('recent')
+  const [view, setView]               = useState<'grid' | 'list'>('grid')
+  const [sortOpen, setSortOpen]       = useState(false)
+  const [filterOpen, setFilterOpen]   = useState(false)
+
+  // Toast notifications
+  type Toast = { id: number; message: string; type: 'success' | 'info' }
+  const [toasts, setToasts] = useState<Toast[]>([])
+  const toastCounter = useRef(0)
+
+  const showToast = useCallback((message: string, type: Toast['type'] = 'success') => {
+    const id = ++toastCounter.current
+    setToasts((prev) => [...prev, { id, message, type }])
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500)
+  }, [])
+
+  // Create modal
+  const [createOpen, setCreateOpen] = useState(false)
+  const [newTitle, setNewTitle]     = useState('')
+  const [newDesc, setNewDesc]       = useState('')
+  const [newTheme, setNewTheme]     = useState<Theme>(THEME_OPTIONS[0])
+  const [newMenu, setNewMenu]       = useState(MENU_OPTIONS[0])
+  const [themeOpen, setThemeOpen]   = useState(false)
+  const [menuOpen, setMenuOpen]     = useState(false)
+
+  // Close dropdowns on outside click
+  const toolbarRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    function handleMouseDown(e: MouseEvent) {
+      if (toolbarRef.current && !toolbarRef.current.contains(e.target as Node)) {
+        setSortOpen(false)
+        setFilterOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleMouseDown)
+    return () => document.removeEventListener('mousedown', handleMouseDown)
+  }, [])
+
+  function openCreateModal() {
+    setNewTitle('')
+    setNewDesc('')
+    setNewTheme(THEME_OPTIONS[0])
+    setNewMenu(MENU_OPTIONS[0])
+    setCreateOpen(true)
+  }
+
+  function handleNext() {
+    const params = new URLSearchParams({
+      title: newTitle || 'Untitled Course',
+      description: newDesc,
+      theme: newTheme,
+      menu: newMenu,
+    })
+    setCreateOpen(false)
+    navigate(`/course/new/setup?${params.toString()}`)
+  }
+
+  function handleUpdate(id: number, patch: { title?: string; description?: string; imageUrl?: string | null; tags?: string[] }) {
+    setCourses((prev) => prev.map((c) => c.id === id ? { ...c, ...patch } : c))
+  }
+
+  function handleCopy(id: number) {
+    const source = courses.find((c) => c.id === id)
+    if (!source) return
+    const newId = Math.max(0, ...courses.map((c) => c.id)) + 1
+    const copy: Course = {
+      ...source,
+      id: newId,
+      title: `${source.title} (Copy)`,
+      savedDate: 'Just now',
+      savedDateTs: Date.now(),
+    }
+    setCourses((prev) => [copy, ...prev])
+    showToast(`"${source.title}" copied successfully`)
+  }
+
+  function handleCopyId(id: number) {
+    navigator.clipboard.writeText(String(id)).catch(() => {})
+    showToast(`Course ID ${id} copied to clipboard`, 'info')
+  }
+
+  function handleDelete(id: number) {
+    setCourses((prev) => prev.filter((c) => c.id !== id))
+    showToast('Course deleted', 'info')
+  }
+
+  // Import
+  const importInputRef = useRef<HTMLInputElement>(null)
+
+  function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    // Reset so the same file can be re-imported if needed
+    e.target.value = ''
+    const newId = Math.max(0, ...courses.map((c) => c.id)) + 1
+    const nameParts = file.name.replace(/\.(zip|json)$/i, '')
+    const imported: Course = {
+      id: newId,
+      title: nameParts || 'Imported Course',
+      description: `Imported from ${file.name}`,
+      savedDate: 'Just now',
+      savedDateTs: Date.now(),
+      imageUrl: null,
+      theme: 'LIFE Theme',
+      tags: [],
+    }
+    setCourses((prev) => [imported, ...prev])
+    showToast(`"${imported.title}" imported successfully`)
+  }
+
+  function clearSearch() { setSearch('') }
+  function clearTheme()  { setThemeFilter('All') }
+  function clearAll()    { setSearch(''); setThemeFilter('All') }
+
+  const displayed = useMemo(() => {
+    let list = courses.filter((c) => {
+      const q = search.trim().toLowerCase()
+      const matchSearch = q === '' || c.title.toLowerCase().includes(q) || c.description.toLowerCase().includes(q) || c.tags.some((t) => t.toLowerCase().includes(q))
+      const matchTheme  = themeFilter === 'All' || c.theme === themeFilter
+      return matchSearch && matchTheme
+    })
+    switch (sort) {
+      case 'alpha-asc':  list = [...list].sort((a, b) => a.title.localeCompare(b.title)); break
+      case 'alpha-desc': list = [...list].sort((a, b) => b.title.localeCompare(a.title)); break
+      case 'date':       list = [...list].sort((a, b) => a.savedDateTs - b.savedDateTs);  break
+      default:           list = [...list].sort((a, b) => b.savedDateTs - a.savedDateTs);  break // recent
+    }
+    return list
+  }, [courses, search, themeFilter, sort])
+
+  const activeSort = SORT_OPTIONS.find((o) => o.value === sort)!
+  const hasFilters = search.trim() !== '' || themeFilter !== 'All'
+
+  return (
+    <>
+    <div className="px-4 sm:px-6 md:px-8 py-5 md:py-6">
+
+          {/* Page heading */}
+          <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">Dev Next Instance</h1>
+              <p className="text-sm text-[#6b7280] mt-1">Manage and organize your courses</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {/* Import */}
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".zip,.json"
+                className="hidden"
+                aria-label="Import course file"
+                onChange={handleImport}
+              />
+              <button
+                type="button"
+                onClick={() => importInputRef.current?.click()}
+                className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[#d1d5db] hover:bg-[#f9fafb] text-[#374151] text-sm font-semibold rounded-lg transition-colors"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                <span className="hidden sm:inline">Import Course</span>
+                <span className="sm:hidden">Import</span>
+              </button>
+
+              {/* Create New Course */}
+              <button
+                type="button"
+                onClick={openCreateModal}
+                className="flex items-center gap-2 px-4 py-2.5 bg-[#2d6fa8] hover:bg-[#245c8f] text-white text-sm font-semibold rounded-lg transition-colors"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19" />
+                  <line x1="5" y1="12" x2="19" y2="12" />
+                </svg>
+                <span className="hidden sm:inline">Create New Course</span>
+                <span className="sm:hidden">New</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Toolbar */}
+          <div ref={toolbarRef} className="flex flex-wrap items-center gap-2 mb-3">
+            {/* Search */}
+            <div className="relative w-full sm:flex-1 sm:max-w-sm">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Escape') clearSearch() }}
+                placeholder="Search by title or tags…"
+                className="w-full pl-9 pr-8 py-2.5 text-sm bg-white border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent placeholder-[#9ca3af] text-[#111827]"
+              />
+              {search && (
+                <button type="button" onClick={clearSearch} title="Clear search" className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#9ca3af] hover:text-[#374151] transition-colors">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 ml-auto sm:ml-0">
+              {/* Theme filter */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => { setFilterOpen((o) => !o); setSortOpen(false) }}
+                  className={`flex items-center gap-1.5 px-3 py-2.5 text-sm border rounded-lg transition-colors whitespace-nowrap ${
+                    themeFilter !== 'All'
+                      ? 'border-[#2d6fa8] bg-[#dbeeff] text-[#2d6fa8] font-medium'
+                      : 'bg-white border-[#e5e7eb] text-[#374151] hover:bg-[#f9fafb]'
+                  }`}
+                >
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18M7 8h10M11 12h2" />
+                  </svg>
+                  <span className="hidden sm:inline">{themeFilter === 'All' ? 'Filter' : themeFilter}</span>
+                  {themeFilter !== 'All' && (
+                    <span className="w-4 h-4 rounded-full bg-[#2d6fa8] text-white text-[10px] font-bold flex items-center justify-center">1</span>
+                  )}
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${filterOpen ? 'rotate-180' : ''}`}>
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </button>
+                {filterOpen && (
+                  <div className="absolute right-0 mt-1 w-52 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-20 py-1">
+                    <p className="px-3 py-1.5 text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">Filter by theme</p>
+                    {(['All', ...THEME_OPTIONS] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => { setThemeFilter(opt as Theme | 'All'); setFilterOpen(false) }}
+                        className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${
+                          themeFilter === opt ? 'bg-[#dbeeff] text-[#2d6fa8] font-medium' : 'text-[#374151] hover:bg-[#f9fafb]'
+                        }`}
+                      >
+                        {opt === 'All' ? 'All Themes' : opt}
+                        {themeFilter === opt && (
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        )}
+                      </button>
+                    ))}
+                    {themeFilter !== 'All' && (
+                      <>
+                        <div className="border-t border-[#f3f4f6] my-1" />
+                        <button type="button" onClick={() => { clearTheme(); setFilterOpen(false) }} className="w-full text-left px-3 py-2 text-sm text-[#ef4444] hover:bg-[#fef2f2] transition-colors">
+                          Clear filter
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Sort dropdown */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => { setSortOpen((o) => !o); setFilterOpen(false) }}
+                  className="flex items-center gap-1.5 px-3 py-2.5 text-sm text-[#374151] bg-white border border-[#e5e7eb] rounded-lg hover:bg-[#f9fafb] transition-colors whitespace-nowrap"
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 6h18M7 12h10M11 18h2" />
+                  </svg>
+                  <span className="hidden sm:inline">{activeSort.label}</span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${sortOpen ? 'rotate-180' : ''}`}>
+                    <path d="M6 9l6 6 6-6" />
+                  </svg>
+                </button>
+                {sortOpen && (
+                  <div className="absolute right-0 mt-1 w-48 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-20 py-1">
+                    <p className="px-3 py-1.5 text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">Sort by</p>
+                    {SORT_OPTIONS.map((opt) => (
+                      <button
+                        type="button"
+                        key={opt.value}
+                        onClick={() => { setSort(opt.value); setSortOpen(false) }}
+                        className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${
+                          sort === opt.value ? 'bg-[#dbeeff] text-[#2d6fa8] font-medium' : 'text-[#374151] hover:bg-[#f9fafb]'
+                        }`}
+                      >
+                        {opt.label}
+                        {sort === opt.value && (
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12" />
+                          </svg>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* View toggle */}
+              <div className="flex items-center border border-[#e5e7eb] rounded-lg overflow-hidden">
+                <button
+                  type="button"
+                  aria-label="Grid view"
+                  onClick={() => setView('grid')}
+                  className={`p-2.5 transition-colors ${view === 'grid' ? 'bg-[#2d6fa8] text-white' : 'bg-white text-[#9ca3af] hover:bg-[#f9fafb]'}`}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
+                    <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  aria-label="List view"
+                  onClick={() => setView('list')}
+                  className={`p-2.5 transition-colors border-l border-[#e5e7eb] ${view === 'list' ? 'bg-[#2d6fa8] text-white' : 'bg-white text-[#9ca3af] hover:bg-[#f9fafb]'}`}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
+                    <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Active filter chips */}
+          {hasFilters && (
+            <div className="flex flex-wrap items-center gap-2 mb-4">
+              {search.trim() && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#f3f4f6] text-xs text-[#374151] font-medium">
+                  Search: <span className="text-[#2d6fa8]">"{search.trim()}"</span>
+                  <button type="button" onClick={clearSearch} aria-label="Remove search filter" className="text-[#9ca3af] hover:text-[#374151] ml-0.5">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </span>
+              )}
+              {themeFilter !== 'All' && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#dbeeff] text-xs text-[#2d6fa8] font-medium">
+                  Theme: {themeFilter}
+                  <button type="button" onClick={clearTheme} aria-label="Remove theme filter" className="text-[#2d6fa8] hover:text-[#1e4d73] ml-0.5">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </span>
+              )}
+              <button type="button" onClick={clearAll} className="text-xs text-[#9ca3af] hover:text-[#374151] underline underline-offset-2 transition-colors">
+                Clear all
+              </button>
+              <span className="ml-auto text-xs text-[#9ca3af]">{displayed.length} course{displayed.length !== 1 ? 's' : ''}</span>
+            </div>
+          )}
+
+          {/* Courses */}
+          {displayed.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-24 text-[#9ca3af]">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" className="mb-3">
+                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+              </svg>
+              <p className="text-sm">No courses found</p>
+            </div>
+          ) : (
+            <div className={
+              view === 'grid'
+                ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5'
+                : 'flex flex-col gap-2'
+            }>
+              {displayed.map((course) => (
+                <CourseCard
+                  key={course.id}
+                  {...course}
+                  view={view}
+                  onUpdate={(patch) => handleUpdate(course.id, patch)}
+                  onCopy={() => handleCopy(course.id)}
+                  onCopyId={() => handleCopyId(course.id)}
+                  onDelete={() => handleDelete(course.id)}
+                />
+              ))}
+            </div>
+          )}
+    </div>
+
+      {/* Create Course Modal */}
+      {createOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          onClick={(e) => { if (e.target === e.currentTarget) setCreateOpen(false); }}
+        >
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg flex flex-col overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e5e7eb]">
+              <div>
+                <h2 className="font-semibold text-[#111827] text-base">Create New Course</h2>
+                <p className="text-xs text-[#6b7280] mt-0.5">Set up the basics before entering the editor</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCreateOpen(false)}
+                aria-label="Close"
+                className="p-1.5 rounded-lg hover:bg-[#f3f4f6] text-[#6b7280] transition-colors"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="px-6 py-5 flex flex-col gap-5">
+              {/* Course Title */}
+              <div>
+                <label className="block text-sm font-medium text-[#374151] mb-1.5">
+                  Course Title <span className="text-[#ef4444]">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  placeholder="e.g. Introduction to Digital Marketing"
+                  className="w-full px-3 py-2.5 text-sm border border-[#d1d5db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent text-[#111827] placeholder-[#9ca3af]"
+                  autoFocus
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-sm font-medium text-[#374151] mb-1.5">Description</label>
+                <textarea
+                  value={newDesc}
+                  onChange={(e) => setNewDesc(e.target.value)}
+                  rows={3}
+                  placeholder="Briefly describe what this course covers…"
+                  className="w-full px-3 py-2.5 text-sm border border-[#d1d5db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent text-[#111827] placeholder-[#9ca3af] resize-none"
+                />
+              </div>
+
+              {/* Theme + Menu selectors */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Theme selector */}
+                <div>
+                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Theme</label>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => { setThemeOpen((o) => !o); setMenuOpen(false); }}
+                      className="w-full flex items-center justify-between px-3 py-2.5 text-sm border border-[#d1d5db] rounded-lg bg-white hover:border-[#2d6fa8] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] text-[#111827] transition-colors"
+                    >
+                      <span>{newTheme}</span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${themeOpen ? 'rotate-180' : ''}`}>
+                        <path d="M6 9l6 6 6-6" />
+                      </svg>
+                    </button>
+                    {themeOpen && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-10 py-1">
+                        {THEME_OPTIONS.map((opt) => (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => { setNewTheme(opt); setThemeOpen(false); }}
+                            className={`w-full text-left px-3 py-2 text-sm transition-colors ${newTheme === opt ? 'bg-[#dbeeff] text-[#2d6fa8] font-medium' : 'text-[#374151] hover:bg-[#f9fafb]'}`}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Menu selector */}
+                <div>
+                  <label className="block text-sm font-medium text-[#374151] mb-1.5">Menu Style</label>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => { setMenuOpen((o) => !o); setThemeOpen(false); }}
+                      className="w-full flex items-center justify-between px-3 py-2.5 text-sm border border-[#d1d5db] rounded-lg bg-white hover:border-[#2d6fa8] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] text-[#111827] transition-colors"
+                    >
+                      <span>{newMenu}</span>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${menuOpen ? 'rotate-180' : ''}`}>
+                        <path d="M6 9l6 6 6-6" />
+                      </svg>
+                    </button>
+                    {menuOpen && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-10 py-1">
+                        {MENU_OPTIONS.map((opt) => (
+                          <button
+                            key={opt}
+                            type="button"
+                            onClick={() => { setNewMenu(opt); setMenuOpen(false); }}
+                            className={`w-full text-left px-3 py-2 text-sm transition-colors ${newMenu === opt ? 'bg-[#dbeeff] text-[#2d6fa8] font-medium' : 'text-[#374151] hover:bg-[#f9fafb]'}`}
+                          >
+                            {opt}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#e5e7eb]">
+              <button
+                type="button"
+                onClick={() => setCreateOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleNext}
+                disabled={!newTitle.trim()}
+                className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
+              >
+                Next
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M5 12h14M12 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Toast notifications ── */}
+      <div className="fixed top-4 right-4 z-[60] flex flex-col gap-2 pointer-events-none">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium pointer-events-auto animate-fade-in-down min-w-[260px] max-w-sm ${
+              toast.type === 'success'
+                ? 'bg-[#111827] text-white'
+                : 'bg-[#1e4d73] text-white'
+            }`}
+          >
+            {toast.type === 'success' ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[#4ade80]">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-[#60a5fa]">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+              </svg>
+            )}
+            <span className="flex-1">{toast.message}</span>
+            <button
+              type="button"
+              onClick={() => setToasts((prev) => prev.filter((t) => t.id !== toast.id))}
+              className="text-white/60 hover:text-white transition-colors ml-1"
+              aria-label="Dismiss"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <AiAssistant context="Dashboard" />
+    </>
+  )
+}
