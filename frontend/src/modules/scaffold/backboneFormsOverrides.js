@@ -1238,6 +1238,128 @@ Samaritan Assistance</label><br>
         .join('');
     }
 
+    function sanitizeLinkHref(href) {
+      if (!href || typeof href !== 'string') return '';
+
+      var trimmedHref = href.trim();
+      if (!trimmedHref) return '';
+
+      // Remove control characters and whitespace so obfuscated schemes like
+      // "java\nscript:" are normalized before validation.
+      var normalizedHref = trimmedHref
+        .replace(/[\u0000-\u001F\u007F\s]+/g, '')
+        .toLowerCase();
+
+      if (!normalizedHref) return '';
+
+      if (/^#/.test(trimmedHref) || /^(\/|\.\/|\.\.\/|\?)/.test(trimmedHref) || /^\/\//.test(trimmedHref)) {
+        return trimmedHref;
+      }
+
+      var schemeMatch = normalizedHref.match(/^([a-z][a-z0-9+.-]*):/i);
+      if (!schemeMatch) {
+        return trimmedHref;
+      }
+
+      var allowedSchemes = {
+        http: true,
+        https: true,
+        mailto: true,
+        tel: true
+      };
+
+      return allowedSchemes[schemeMatch[1]] ? trimmedHref : '';
+    }
+
+    function sanitizeRelTokens(rel) {
+      if (!rel || typeof rel !== 'string') return [];
+
+      return rel
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(function(token) {
+          return token && /^[a-z0-9_-]+$/.test(token);
+        })
+        .filter(function(token, index, arr) {
+          return arr.indexOf(token) === index;
+        });
+    }
+
+    function sanitizeRichPastedHtml(rawHtml, fallbackText) {
+      if (!rawHtml || typeof rawHtml !== 'string') {
+        return plainTextToHtml(fallbackText);
+      }
+
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(rawHtml, 'text/html');
+      var dangerousSelector = 'script,style,meta,link,head,title,iframe,object,embed,base,form,input,button,textarea,select,option,frame,frameset,applet,svg,math';
+
+      doc.querySelectorAll(dangerousSelector).forEach(function(el) {
+        el.remove();
+      });
+
+      doc.querySelectorAll('*').forEach(function(el) {
+        Array.prototype.slice.call(el.attributes).forEach(function(attr) {
+          var name = attr.name.toLowerCase();
+
+          if (/^on/.test(name)) {
+            el.removeAttribute(attr.name);
+            return;
+          }
+
+          if (name === 'href') {
+            var safeHref = sanitizeLinkHref(attr.value);
+            if (safeHref) {
+              el.setAttribute('href', safeHref);
+            } else {
+              el.removeAttribute('href');
+            }
+            return;
+          }
+
+          if (name === 'target') {
+            var normalizedTarget = String(attr.value || '').trim().toLowerCase();
+            var allowedTargets = {
+              _blank: true,
+              _self: true,
+              _parent: true,
+              _top: true
+            };
+
+            if (allowedTargets[normalizedTarget]) {
+              el.setAttribute('target', normalizedTarget);
+
+              if (normalizedTarget === '_blank') {
+                var relTokens = sanitizeRelTokens(el.getAttribute('rel'));
+                if (relTokens.indexOf('noopener') === -1) relTokens.push('noopener');
+                if (relTokens.indexOf('noreferrer') === -1) relTokens.push('noreferrer');
+                el.setAttribute('rel', relTokens.join(' '));
+              }
+            } else {
+              el.removeAttribute('target');
+            }
+            return;
+          }
+
+          if (name === 'rel') {
+            var filteredRel = sanitizeRelTokens(attr.value);
+            if (filteredRel.length) {
+              el.setAttribute('rel', filteredRel.join(' '));
+            } else {
+              el.removeAttribute('rel');
+            }
+          }
+        });
+      });
+
+      var sanitizedHtml = (doc.body && doc.body.innerHTML ? doc.body.innerHTML : '').trim();
+      if (!sanitizedHtml) {
+        return plainTextToHtml(fallbackText);
+      }
+
+      return sanitizedHtml;
+    }
+
     function sanitizePastedHtml(rawHtml, fallbackText) {
       if (!rawHtml || typeof rawHtml !== 'string') {
         return plainTextToHtml(fallbackText);
@@ -1262,53 +1384,6 @@ Samaritan Assistance</label><br>
         th: true,
         td: true
       };
-
-      function sanitizeLinkHref(href) {
-        if (!href || typeof href !== 'string') return '';
-
-        var trimmedHref = href.trim();
-        if (!trimmedHref) return '';
-
-        // Remove control characters and whitespace so obfuscated schemes like
-        // "java\nscript:" are normalized before validation.
-        var normalizedHref = trimmedHref
-          .replace(/[\u0000-\u001F\u007F\s]+/g, '')
-          .toLowerCase();
-
-        if (!normalizedHref) return '';
-
-        if (/^#/.test(trimmedHref) || /^(\/|\.\/|\.\.\/|\?)/.test(trimmedHref) || /^\/\//.test(trimmedHref)) {
-          return trimmedHref;
-        }
-
-        var schemeMatch = normalizedHref.match(/^([a-z][a-z0-9+.-]*):/i);
-        if (!schemeMatch) {
-          return trimmedHref;
-        }
-
-        var allowedSchemes = {
-          http: true,
-          https: true,
-          mailto: true,
-          tel: true
-        };
-
-        return allowedSchemes[schemeMatch[1]] ? trimmedHref : '';
-      }
-
-      function sanitizeRelTokens(rel) {
-        if (!rel || typeof rel !== 'string') return [];
-
-        return rel
-          .toLowerCase()
-          .split(/\s+/)
-          .filter(function(token) {
-            return token && /^[a-z0-9_-]+$/.test(token);
-          })
-          .filter(function(token, index, arr) {
-            return arr.indexOf(token) === index;
-          });
-      }
 
       function copyAllowedAttributes(sourceEl, targetEl, tag) {
         if (tag === 'a') {
@@ -1497,9 +1572,10 @@ Samaritan Assistance</label><br>
 
           panelElement.querySelector('#formattedPasteSubmitBtn').onclick = () => {
             const fallbackText = inputEl.value.trim();
-            const htmlToInsert = pastedHtml && pastedHtml.trim()
+            const rawHtmlToInsert = pastedHtml && pastedHtml.trim()
               ? pastedHtml
               : (fallbackText ? ('<p>' + escapeHtml(fallbackText).replace(/\n/g, '<br>') + '</p>') : '');
+            const htmlToInsert = sanitizeRichPastedHtml(rawHtmlToInsert, fallbackText);
 
             if (!htmlToInsert) {
               inputEl.focus();
