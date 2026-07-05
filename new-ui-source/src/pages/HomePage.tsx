@@ -1,13 +1,15 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { CourseCard } from '../components/course/index'
-import AiAssistant from '../components/common/AiAssistant'
+import { useLocation, useNavigate } from 'react-router-dom'
+import { CourseCard } from '@/components/course'
+import AiAssistant from '@/components/common/AiAssistant'
+import { deleteCourse, duplicateCourse, fetchDashboardCourses, updateCourse } from '@/api/adaptAuthoring'
 
 
 type Theme = 'LIFE Theme' | 'Vanilla Theme' | 'Custom Theme'
 
 interface Course {
   id: number
+  backendId?: string
   title: string
   description: string
   savedDate: string
@@ -37,7 +39,10 @@ const MENU_OPTIONS = ['LIFE Menu', 'Overview Menu', 'Box Menu']
 
 export default function HomePage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [courses, setCourses] = useState<Course[]>(INITIAL_COURSES)
+  const [isLoadingCourses, setIsLoadingCourses] = useState(true)
+  const READ_ONLY_REASON = 'This action is temporarily disabled until the matching Adapt API endpoint is wired.'
 
   // Search / filter / sort / view
   const [search, setSearch]           = useState('')
@@ -46,6 +51,8 @@ export default function HomePage() {
   const [view, setView]               = useState<'grid' | 'list'>('grid')
   const [sortOpen, setSortOpen]       = useState(false)
   const [filterOpen, setFilterOpen]   = useState(false)
+  const [tagFilterOpen, setTagFilterOpen] = useState(false)
+  const [selectedTags, setSelectedTags] = useState<string[]>([])
 
   // Toast notifications
   type Toast = { id: number; message: string; type: 'success' | 'info' }
@@ -57,6 +64,25 @@ export default function HomePage() {
     setToasts((prev) => [...prev, { id, message, type }])
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500)
   }, [])
+
+  const loadCourses = useCallback(async () => {
+    try {
+      setIsLoadingCourses(true)
+      const shared = location.pathname === '/shared'
+      const apiCourses = await fetchDashboardCourses(shared)
+      if (apiCourses.length > 0) {
+        setCourses(apiCourses)
+      }
+    } catch {
+      showToast('Could not load live course data. Showing local fallback.', 'info')
+    } finally {
+      setIsLoadingCourses(false)
+    }
+  }, [location.pathname, showToast])
+
+  useEffect(() => {
+    void loadCourses()
+  }, [loadCourses])
 
   // Create modal
   const [createOpen, setCreateOpen] = useState(false)
@@ -74,6 +100,7 @@ export default function HomePage() {
       if (toolbarRef.current && !toolbarRef.current.contains(e.target as Node)) {
         setSortOpen(false)
         setFilterOpen(false)
+        setTagFilterOpen(false)
       }
     }
     document.addEventListener('mousedown', handleMouseDown)
@@ -99,23 +126,39 @@ export default function HomePage() {
     navigate(`/course/new/setup?${params.toString()}`)
   }
 
-  function handleUpdate(id: number, patch: { title?: string; description?: string; imageUrl?: string | null; tags?: string[] }) {
-    setCourses((prev) => prev.map((c) => c.id === id ? { ...c, ...patch } : c))
+  async function handleUpdate(id: number, patch: { title?: string; description?: string; imageUrl?: string | null; tags?: string[] }) {
+    const target = courses.find((c) => c.id === id)
+    if (!target?.backendId) {
+      showToast('Could not resolve course ID for update.', 'info')
+      return
+    }
+    try {
+      await updateCourse(target.backendId, {
+        title: patch.title,
+        description: patch.description,
+        tags: patch.tags,
+      })
+      await loadCourses()
+      showToast('Course updated successfully')
+    } catch {
+      showToast('Course update failed.', 'info')
+    }
   }
 
-  function handleCopy(id: number) {
+  async function handleCopy(id: number) {
     const source = courses.find((c) => c.id === id)
     if (!source) return
-    const newId = Math.max(0, ...courses.map((c) => c.id)) + 1
-    const copy: Course = {
-      ...source,
-      id: newId,
-      title: `${source.title} (Copy)`,
-      savedDate: 'Just now',
-      savedDateTs: Date.now(),
+    if (!source.backendId) {
+      showToast('Could not resolve course ID for copy.', 'info')
+      return
     }
-    setCourses((prev) => [copy, ...prev])
-    showToast(`"${source.title}" copied successfully`)
+    try {
+      await duplicateCourse(source.backendId)
+      await loadCourses()
+      showToast(`"${source.title}" copied successfully`)
+    } catch {
+      showToast('Course copy failed.', 'info')
+    }
   }
 
   function handleCopyId(id: number) {
@@ -123,9 +166,19 @@ export default function HomePage() {
     showToast(`Course ID ${id} copied to clipboard`, 'info')
   }
 
-  function handleDelete(id: number) {
-    setCourses((prev) => prev.filter((c) => c.id !== id))
-    showToast('Course deleted', 'info')
+  async function handleDelete(id: number) {
+    const target = courses.find((c) => c.id === id)
+    if (!target?.backendId) {
+      showToast('Could not resolve course ID for delete.', 'info')
+      return
+    }
+    try {
+      await deleteCourse(target.backendId)
+      await loadCourses()
+      showToast('Course deleted', 'info')
+    } catch {
+      showToast('Course delete failed.', 'info')
+    }
   }
 
   // Import
@@ -134,34 +187,50 @@ export default function HomePage() {
   function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    // Reset so the same file can be re-imported if needed
     e.target.value = ''
-    const newId = Math.max(0, ...courses.map((c) => c.id)) + 1
-    const nameParts = file.name.replace(/\.(zip|json)$/i, '')
-    const imported: Course = {
-      id: newId,
-      title: nameParts || 'Imported Course',
-      description: `Imported from ${file.name}`,
-      savedDate: 'Just now',
-      savedDateTs: Date.now(),
-      imageUrl: null,
-      theme: 'LIFE Theme',
-      tags: [],
-    }
-    setCourses((prev) => [imported, ...prev])
-    showToast(`"${imported.title}" imported successfully`)
+    showToast(`${READ_ONLY_REASON} Import is blocked for now.`, 'info')
   }
 
   function clearSearch() { setSearch('') }
   function clearTheme()  { setThemeFilter('All') }
-  function clearAll()    { setSearch(''); setThemeFilter('All') }
+  function clearTags()   { setSelectedTags([]) }
+  function clearAll()    { setSearch(''); setThemeFilter('All'); setSelectedTags([]) }
+
+  function toggleTag(tag: string) {
+    setSelectedTags((prev) => (
+      prev.some((item) => item.toLowerCase() === tag.toLowerCase())
+        ? prev.filter((item) => item.toLowerCase() !== tag.toLowerCase())
+        : [...prev, tag]
+    ))
+  }
+
+  function normalizeTagValue(tag: unknown): string {
+    if (typeof tag === 'string') return tag.trim()
+    if (!tag || typeof tag !== 'object') return ''
+
+    const candidate = tag as { title?: unknown; name?: unknown; label?: unknown; id?: unknown }
+    const text = candidate.title ?? candidate.name ?? candidate.label ?? candidate.id
+    return typeof text === 'string' ? text.trim() : ''
+  }
+
+  const availableTags = useMemo(() => {
+    const tags = courses.flatMap((course) => course.tags)
+      .map((tag) => normalizeTagValue(tag))
+      .filter(Boolean)
+
+    return Array.from(new Set(tags)).sort((a, b) => a.localeCompare(b))
+  }, [courses])
 
   const displayed = useMemo(() => {
     let list = courses.filter((c) => {
       const q = search.trim().toLowerCase()
-      const matchSearch = q === '' || c.title.toLowerCase().includes(q) || c.description.toLowerCase().includes(q) || c.tags.some((t) => t.toLowerCase().includes(q))
+      const matchSearch = q === '' || c.title.toLowerCase().includes(q)
       const matchTheme  = themeFilter === 'All' || c.theme === themeFilter
-      return matchSearch && matchTheme
+      const courseTagLabels = c.tags.map((courseTag) => normalizeTagValue(courseTag)).filter(Boolean)
+      const matchTags = selectedTags.length === 0 || selectedTags.every((selectedTag) => (
+        courseTagLabels.some((courseTag) => courseTag.toLowerCase() === selectedTag.toLowerCase())
+      ))
+      return matchSearch && matchTheme && matchTags
     })
     switch (sort) {
       case 'alpha-asc':  list = [...list].sort((a, b) => a.title.localeCompare(b.title)); break
@@ -170,10 +239,10 @@ export default function HomePage() {
       default:           list = [...list].sort((a, b) => b.savedDateTs - a.savedDateTs);  break // recent
     }
     return list
-  }, [courses, search, themeFilter, sort])
+  }, [courses, search, themeFilter, selectedTags, sort])
 
   const activeSort = SORT_OPTIONS.find((o) => o.value === sort)!
-  const hasFilters = search.trim() !== '' || themeFilter !== 'All'
+  const hasFilters = search.trim() !== '' || themeFilter !== 'All' || selectedTags.length > 0
 
   return (
     <>
@@ -184,6 +253,7 @@ export default function HomePage() {
             <div>
               <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">Dev Next Instance</h1>
               <p className="text-sm text-[#6b7280] mt-1">Manage and organize your courses</p>
+              <p className="text-xs text-[#b45309] mt-1">Partial write mode: copy, edit, and delete are persisted; import and create remain disabled.</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {/* Import */}
@@ -198,6 +268,8 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={() => importInputRef.current?.click()}
+                title={READ_ONLY_REASON}
+                disabled
                 className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[#d1d5db] hover:bg-[#f9fafb] text-[#374151] text-sm font-semibold rounded-lg transition-colors"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -213,6 +285,8 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={openCreateModal}
+                title={READ_ONLY_REASON}
+                disabled
                 className="flex items-center gap-2 px-4 py-2.5 bg-[#2d6fa8] hover:bg-[#245c8f] text-white text-sm font-semibold rounded-lg transition-colors"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -228,25 +302,84 @@ export default function HomePage() {
           {/* Toolbar */}
           <div ref={toolbarRef} className="flex flex-wrap items-center gap-2 mb-3">
             {/* Search */}
-            <div className="relative w-full sm:flex-1 sm:max-w-sm">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Escape') clearSearch() }}
-                placeholder="Search by title or tags…"
-                className="w-full pl-9 pr-8 py-2.5 text-sm bg-white border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent placeholder-[#9ca3af] text-[#111827]"
-              />
-              {search && (
-                <button type="button" onClick={clearSearch} title="Clear search" className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#9ca3af] hover:text-[#374151] transition-colors">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            <div className="w-full sm:flex-1 sm:max-w-xl flex items-center gap-2">
+              <div className="relative flex-1">
+                <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9ca3af]" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Escape') clearSearch() }}
+                  placeholder="Search by name"
+                  className="w-full pl-9 pr-8 py-2.5 text-sm bg-white border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent placeholder-[#9ca3af] text-[#111827]"
+                />
+                {search && (
+                  <button type="button" onClick={clearSearch} title="Clear search" className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#9ca3af] hover:text-[#374151] transition-colors">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              <div className="relative shrink-0">
+                <button
+                  type="button"
+                  onClick={() => { setTagFilterOpen((open) => !open); setFilterOpen(false); setSortOpen(false) }}
+                  className={`flex items-center gap-1.5 px-3 py-2.5 text-sm border rounded-lg transition-colors whitespace-nowrap ${
+                    selectedTags.length > 0
+                      ? 'border-[#2d6fa8] bg-[#dbeeff] text-[#2d6fa8] font-medium'
+                      : 'bg-white border-[#e5e7eb] text-[#374151] hover:bg-[#f9fafb]'
+                  }`}
+                >
+                  Search by tag
+                  {selectedTags.length > 0 && (
+                    <span className="w-4 h-4 rounded-full bg-[#2d6fa8] text-white text-[10px] font-bold flex items-center justify-center">{selectedTags.length}</span>
+                  )}
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${tagFilterOpen ? 'rotate-180' : ''}`}>
+                    <path d="M6 9l6 6 6-6" />
                   </svg>
                 </button>
-              )}
+
+                {tagFilterOpen && (
+                  <div className="absolute left-0 mt-1 w-64 max-h-72 overflow-y-auto bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-20 py-1">
+                    <p className="px-3 py-1.5 text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">Filter by tag</p>
+                    {availableTags.length === 0 && (
+                      <p className="px-3 py-2 text-sm text-[#9ca3af]">No tags available</p>
+                    )}
+                    {availableTags.map((tag) => {
+                      const isSelected = selectedTags.some((selectedTag) => selectedTag.toLowerCase() === tag.toLowerCase())
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => toggleTag(tag)}
+                          className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${
+                            isSelected ? 'bg-[#dbeeff] text-[#2d6fa8] font-medium' : 'text-[#374151] hover:bg-[#f9fafb]'
+                          }`}
+                        >
+                          <span>#{tag}</span>
+                          {isSelected && (
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          )}
+                        </button>
+                      )
+                    })}
+                    {selectedTags.length > 0 && (
+                      <>
+                        <div className="border-t border-[#f3f4f6] my-1" />
+                        <button type="button" onClick={() => { clearTags(); setTagFilterOpen(false) }} className="w-full text-left px-3 py-2 text-sm text-[#ef4444] hover:bg-[#fef2f2] transition-colors">
+                          Clear tags
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="flex items-center gap-2 ml-auto sm:ml-0">
@@ -394,6 +527,21 @@ export default function HomePage() {
                   </button>
                 </span>
               )}
+              {selectedTags.map((tag) => (
+                <span key={tag} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#eef2ff] text-xs text-[#3730a3] font-medium">
+                  Tag: #{tag}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTags((prev) => prev.filter((item) => item.toLowerCase() !== tag.toLowerCase()))}
+                    aria-label={`Remove tag ${tag}`}
+                    className="text-[#3730a3] hover:text-[#1d4ed8] ml-0.5"
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </span>
+              ))}
               <button type="button" onClick={clearAll} className="text-xs text-[#9ca3af] hover:text-[#374151] underline underline-offset-2 transition-colors">
                 Clear all
               </button>
@@ -402,7 +550,11 @@ export default function HomePage() {
           )}
 
           {/* Courses */}
-          {displayed.length === 0 ? (
+          {isLoadingCourses ? (
+            <div className="flex flex-col items-center justify-center py-24 text-[#9ca3af]">
+              <p className="text-sm">Loading courses...</p>
+            </div>
+          ) : displayed.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 text-[#9ca3af]">
               <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" className="mb-3">
                 <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
