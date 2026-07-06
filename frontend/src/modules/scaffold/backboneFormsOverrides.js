@@ -1422,7 +1422,9 @@ Samaritan Assistance</label><br>
         }
       }
 
-      function sanitizeNode(node, targetDoc) {
+      function sanitizeNode(node, targetDoc, context) {
+        context = context || {};
+
         if (!node) return null;
 
         if (node.nodeType === Node.TEXT_NODE) {
@@ -1441,14 +1443,25 @@ Samaritan Assistance</label><br>
         if (tag === 'b') tag = 'strong';
         if (tag === 'i') tag = 'em';
 
-        if (/^h[1-6]$/.test(tag)) {
+        var isHeadingTag = /^h[1-6]$/.test(tag);
+        if (isHeadingTag) {
           tag = 'p';
+        }
+
+        // Keep bold text only for content that came from heading tags.
+        if (tag === 'strong' && !context.allowStrong) {
+          var unwrappedStrongFragment = targetDoc.createDocumentFragment();
+          Array.prototype.forEach.call(node.childNodes, function(child) {
+            var sanitizedStrongChild = sanitizeNode(child, targetDoc, context);
+            if (sanitizedStrongChild) unwrappedStrongFragment.appendChild(sanitizedStrongChild);
+          });
+          return unwrappedStrongFragment;
         }
 
         if (!allowedTags[tag]) {
           var fragment = targetDoc.createDocumentFragment();
           Array.prototype.forEach.call(node.childNodes, function(child) {
-            var sanitizedChild = sanitizeNode(child, targetDoc);
+            var sanitizedChild = sanitizeNode(child, targetDoc, context);
             if (sanitizedChild) fragment.appendChild(sanitizedChild);
           });
           return fragment;
@@ -1458,16 +1471,25 @@ Samaritan Assistance</label><br>
         copyAllowedAttributes(node, cleanEl, tag);
 
         Array.prototype.forEach.call(node.childNodes, function(child) {
-          var sanitizedChild = sanitizeNode(child, targetDoc);
+          var childContext = isHeadingTag ? { allowStrong: false } : context;
+          var sanitizedChild = sanitizeNode(child, targetDoc, childContext);
           if (sanitizedChild) cleanEl.appendChild(sanitizedChild);
         });
+
+        if (isHeadingTag && cleanEl.childNodes.length) {
+          var strongHeadingWrapper = targetDoc.createElement('strong');
+          while (cleanEl.firstChild) {
+            strongHeadingWrapper.appendChild(cleanEl.firstChild);
+          }
+          cleanEl.appendChild(strongHeadingWrapper);
+        }
 
         return cleanEl;
       }
 
       var container = outDoc.createElement('div');
       Array.prototype.forEach.call(doc.body.childNodes, function(child) {
-        var sanitized = sanitizeNode(child, outDoc);
+        var sanitized = sanitizeNode(child, outDoc, { allowStrong: false });
         if (sanitized) container.appendChild(sanitized);
       });
 
