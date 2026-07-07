@@ -1062,6 +1062,13 @@
     "properties.h5pAsset": "",
     "properties._isQuestionType": false,
     "properties._debug": false,
+    "properties._lazyLoad": {
+      "_isEnabled": true,
+      "_loadTrigger": "onVisible",
+      "_visibilityThreshold": 0.1,
+      "_loadingText": "Loading activity...",
+      "_clickToLoadText": "Click to load activity"
+    },
     "properties._lazyLoad._isEnabled": true,
     "properties._lazyLoad._loadTrigger": "onVisible",
     "properties._lazyLoad._visibilityThreshold": 0.1,
