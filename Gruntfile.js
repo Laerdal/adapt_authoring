@@ -392,6 +392,129 @@ module.exports = function(grunt) {
   grunt.registerTask('default', ['build:dev']);
   grunt.registerTask('test', ['mochaTest']);
 
+  grunt.registerTask('validate-component-defaults', 'Ensure componentPropertyDefaults.json contains all schema default entries.', function() {
+    var fs = require('fs');
+    var path = require('path');
+
+    var configPath = path.join('conf', 'config.json');
+    var defaultsPath = path.join('conf', 'componentPropertyDefaults.json');
+
+    if (!grunt.file.exists(configPath)) {
+       grunt.log.warn('Missing ' + configPath + '; skipping validate-component-defaults.');
+       return;
+    }
+    
+    var config = grunt.file.readJSON(configPath);
+
+    if (!grunt.file.exists(defaultsPath)) {
+      grunt.fail.fatal('Missing conf/componentPropertyDefaults.json');
+      return;
+    }
+
+    var frameworkRoot = path.join('temp', config.masterTenantID, 'adapt_framework', 'src');
+    var componentsRoot = path.join(frameworkRoot, 'components');
+    var coreSchemaPath = path.join(frameworkRoot, 'core', 'schema', 'component.model.schema');
+
+    if (!grunt.file.exists(componentsRoot) || !grunt.file.exists(coreSchemaPath)) {
+      grunt.fail.fatal('Could not find framework schema source under ' + frameworkRoot + '. Ensure framework plugins are installed/synced before build.');
+      return;
+    }
+
+    var defaultsConfig = grunt.file.readJSON(defaultsPath);
+    var missing = [];
+
+    function isObject(value) {
+      return value && typeof value === 'object' && !Array.isArray(value);
+    }
+
+    function collectDefaults(node, currentPath, out) {
+      if (!isObject(node)) {
+        return;
+      }
+
+      if (Object.prototype.hasOwnProperty.call(node, 'default')) {
+        out.push(currentPath);
+      }
+
+      if (isObject(node.properties)) {
+        Object.keys(node.properties).forEach(function(key) {
+          var nextPath = currentPath ? currentPath + '.' + key : key;
+          collectDefaults(node.properties[key], nextPath, out);
+        });
+      }
+
+      if (isObject(node.items)) {
+        var itemsPath = currentPath ? currentPath + '.items' : 'items';
+        collectDefaults(node.items, itemsPath, out);
+      }
+    }
+
+    function validateSection(sectionName, expectedPaths) {
+      var section = defaultsConfig[sectionName];
+      if (!section || !isObject(section)) {
+        missing.push(sectionName + ' (missing section)');
+        return;
+      }
+
+      expectedPaths.forEach(function(propertyPath) {
+        if (!Object.prototype.hasOwnProperty.call(section, propertyPath)) {
+          missing.push(sectionName + '.' + propertyPath);
+        }
+      });
+    }
+
+    var coreSchema = grunt.file.readJSON(coreSchemaPath);
+    var sharedExpected = [];
+    Object.keys(coreSchema.properties || {}).forEach(function(key) {
+      collectDefaults(coreSchema.properties[key], key, sharedExpected);
+    });
+    validateSection('*', sharedExpected);
+
+    fs.readdirSync(componentsRoot)
+      .sort()
+      .forEach(function(componentFolder) {
+        var folderPath = path.join(componentsRoot, componentFolder);
+        var stat = fs.statSync(folderPath);
+        if (!stat.isDirectory()) {
+          return;
+        }
+
+        var bowerPath = path.join(folderPath, 'bower.json');
+        var schemaPath = path.join(folderPath, 'properties.schema');
+        if (!grunt.file.exists(bowerPath) || !grunt.file.exists(schemaPath)) {
+          return;
+        }
+
+        var bowerJson = grunt.file.readJSON(bowerPath);
+        if (!bowerJson.component) {
+          return;
+        }
+
+        var schemaJson = grunt.file.readJSON(schemaPath);
+        var expected = [];
+        Object.keys(schemaJson.properties || {}).forEach(function(key) {
+          collectDefaults(schemaJson.properties[key], 'properties.' + key, expected);
+        });
+
+        validateSection(bowerJson.component, expected);
+      });
+
+    if (missing.length) {
+      var preview = missing.slice(0, 50).map(function(entry) { return ' - ' + entry; }).join('\n');
+      var suffix = missing.length > 50
+        ? ('\n - ... and ' + (missing.length - 50) + ' more')
+        : '';
+      grunt.log.warn(
+        'componentPropertyDefaults.json is missing required default mappings.\n' +
+        'Add the following keys:\n' + preview + suffix +
+        '\n\nTip: regenerate component defaults before build.'
+      );
+      return;
+    }
+
+    grunt.log.ok('componentPropertyDefaults.json validation passed.');
+  });
+
   /**
   * Accepts 'build' and 'prod' params
   * e.g. grunt build:prod
@@ -409,10 +532,9 @@ module.exports = function(grunt) {
       config.isProduction = isProduction;
       grunt.file.write(configFile, JSON.stringify(config, null, 2));
       // run the task
-      grunt.task.run(['migration-conf', 'requireBundle', 'generate-lang-json', 'copy', 'less:' + compilation, 'handlebars', 'requirejs-direct:'+ compilation, `babel:${compilation}`, 'sync-new-ui']);
-
+      grunt.task.run(['migration-conf', 'validate-component-defaults', 'requireBundle', 'generate-lang-json', 'copy', 'less:' + compilation, 'handlebars', 'requirejs-direct:'+ compilation, `babel:${compilation}`, 'sync-new-ui']);
     } catch(e) {
-      grunt.task.run(['requireBundle', 'copy', 'less:' + compilation, 'handlebars', 'requirejs-direct:' + compilation, `babel:${compilation}`, 'sync-new-ui']);
+      grunt.task.run(['validate-component-defaults', 'requireBundle', 'copy', 'less:' + compilation, 'handlebars', 'requirejs-direct:' + compilation, `babel:${compilation}`, 'sync-new-ui']);
     }
   });
 };

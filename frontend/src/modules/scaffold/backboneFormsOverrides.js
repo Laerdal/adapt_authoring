@@ -103,6 +103,7 @@ define([
   // render ckeditor in textarea
   Backbone.Form.editors.TextArea.prototype.render = function() {
     textAreaRender.call(this);
+    var textAreaEditor = this;
 
     function until(conditionFunction) {
       function poll(resolve) {
@@ -1216,6 +1217,431 @@ Samaritan Assistance</label><br>
       return markDownToHtml;
     }
 
+    function escapeHtml(text) {
+      return String(text || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function plainTextToHtml(text) {
+      var normalized = String(text || '').replace(/\r\n?/g, '\n').trim();
+      if (!normalized) return '<p></p>';
+
+      return normalized
+        .split(/\n{2,}/)
+        .map(function(block) {
+          return '<p>' + escapeHtml(block).replace(/\n/g, '<br>') + '</p>';
+        })
+        .join('');
+    }
+
+    function sanitizeLinkHref(href) {
+      if (!href || typeof href !== 'string') return '';
+
+      var trimmedHref = href.trim();
+      if (!trimmedHref) return '';
+
+      // Remove control characters and whitespace so obfuscated schemes like
+      // "java\nscript:" are normalized before validation.
+      var normalizedHref = trimmedHref
+        .replace(/[\u0000-\u001F\u007F\s]+/g, '')
+        .toLowerCase();
+
+      if (!normalizedHref) return '';
+
+      if (/^#/.test(trimmedHref) || /^(\/|\.\/|\.\.\/|\?)/.test(trimmedHref) || /^\/\//.test(trimmedHref)) {
+        return trimmedHref;
+      }
+
+      var schemeMatch = normalizedHref.match(/^([a-z][a-z0-9+.-]*):/i);
+      if (!schemeMatch) {
+        return trimmedHref;
+      }
+
+      var allowedSchemes = {
+        http: true,
+        https: true,
+        mailto: true,
+        tel: true
+      };
+
+      return allowedSchemes[schemeMatch[1]] ? trimmedHref : '';
+    }
+
+    function sanitizeRelTokens(rel) {
+      if (!rel || typeof rel !== 'string') return [];
+
+      return rel
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(function(token) {
+          return token && /^[a-z0-9_-]+$/.test(token);
+        })
+        .filter(function(token, index, arr) {
+          return arr.indexOf(token) === index;
+        });
+    }
+
+    function sanitizeRichPastedHtml(rawHtml, fallbackText) {
+      if (!rawHtml || typeof rawHtml !== 'string') {
+        return plainTextToHtml(fallbackText);
+      }
+
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(rawHtml, 'text/html');
+      var dangerousSelector = 'script,style,meta,link,head,title,iframe,object,embed,base,form,input,button,textarea,select,option,frame,frameset,applet,svg,math';
+
+      doc.querySelectorAll(dangerousSelector).forEach(function(el) {
+        el.remove();
+      });
+
+      doc.querySelectorAll('*').forEach(function(el) {
+        Array.prototype.slice.call(el.attributes).forEach(function(attr) {
+          var name = attr.name.toLowerCase();
+
+          if (/^on/.test(name)) {
+            el.removeAttribute(attr.name);
+            return;
+          }
+
+          if (name === 'href') {
+            var safeHref = sanitizeLinkHref(attr.value);
+            if (safeHref) {
+              el.setAttribute('href', safeHref);
+            } else {
+              el.removeAttribute('href');
+            }
+            return;
+          }
+
+          if (name === 'target') {
+            var normalizedTarget = String(attr.value || '').trim().toLowerCase();
+            var allowedTargets = {
+              _blank: true,
+              _self: true,
+              _parent: true,
+              _top: true
+            };
+
+            if (allowedTargets[normalizedTarget]) {
+              el.setAttribute('target', normalizedTarget);
+
+              if (normalizedTarget === '_blank') {
+                var relTokens = sanitizeRelTokens(el.getAttribute('rel'));
+                if (relTokens.indexOf('noopener') === -1) relTokens.push('noopener');
+                if (relTokens.indexOf('noreferrer') === -1) relTokens.push('noreferrer');
+                el.setAttribute('rel', relTokens.join(' '));
+              }
+            } else {
+              el.removeAttribute('target');
+            }
+            return;
+          }
+
+          if (name === 'rel') {
+            var filteredRel = sanitizeRelTokens(attr.value);
+            if (filteredRel.length) {
+              el.setAttribute('rel', filteredRel.join(' '));
+            } else {
+              el.removeAttribute('rel');
+            }
+          }
+        });
+      });
+
+      var sanitizedHtml = (doc.body && doc.body.innerHTML ? doc.body.innerHTML : '').trim();
+      if (!sanitizedHtml) {
+        return plainTextToHtml(fallbackText);
+      }
+
+      return sanitizedHtml;
+    }
+
+    function sanitizePastedHtml(rawHtml, fallbackText) {
+      if (!rawHtml || typeof rawHtml !== 'string') {
+        return plainTextToHtml(fallbackText);
+      }
+
+      var parser = new DOMParser();
+      var doc = parser.parseFromString(rawHtml, 'text/html');
+      var outDoc = document.implementation.createHTMLDocument('sanitized');
+      var allowedTags = {
+        p: true,
+        strong: true,
+        em: true,
+        ul: true,
+        ol: true,
+        li: true,
+        a: true,
+        br: true,
+        table: true,
+        thead: true,
+        tbody: true,
+        tr: true,
+        th: true,
+        td: true
+      };
+
+      function copyAllowedAttributes(sourceEl, targetEl, tag) {
+        if (tag === 'a') {
+          var href = sanitizeLinkHref(sourceEl.getAttribute('href'));
+          if (href) targetEl.setAttribute('href', href);
+
+          var target = sourceEl.getAttribute('target');
+          var normalizedTarget = target ? target.trim().toLowerCase() : '';
+          var allowedTargets = {
+            _blank: true,
+            _self: true,
+            _parent: true,
+            _top: true
+          };
+          if (allowedTargets[normalizedTarget]) {
+            targetEl.setAttribute('target', normalizedTarget);
+          }
+
+          var relTokens = sanitizeRelTokens(sourceEl.getAttribute('rel'));
+          if (normalizedTarget === '_blank') {
+            if (relTokens.indexOf('noopener') === -1) relTokens.push('noopener');
+            if (relTokens.indexOf('noreferrer') === -1) relTokens.push('noreferrer');
+          }
+          if (relTokens.length) {
+            targetEl.setAttribute('rel', relTokens.join(' '));
+          }
+
+          var title = sourceEl.getAttribute('title');
+          if (title) targetEl.setAttribute('title', title);
+        }
+        if (tag === 'th' || tag === 'td') {
+          var colspan = sourceEl.getAttribute('colspan');
+          if (colspan) targetEl.setAttribute('colspan', colspan);
+          var rowspan = sourceEl.getAttribute('rowspan');
+          if (rowspan) targetEl.setAttribute('rowspan', rowspan);
+        }
+      }
+
+      function sanitizeNode(node, targetDoc, context) {
+        context = context || {};
+
+        if (!node) return null;
+
+        if (node.nodeType === Node.TEXT_NODE) {
+          return targetDoc.createTextNode(node.nodeValue || '');
+        }
+
+        if (node.nodeType !== Node.ELEMENT_NODE) {
+          return null;
+        }
+
+        var tag = node.tagName.toLowerCase();
+        if (tag === 'script' || tag === 'style' || tag === 'meta' || tag === 'link' || tag === 'head' || tag === 'title') {
+          return null;
+        }
+
+        if (tag === 'b') tag = 'strong';
+        if (tag === 'i') tag = 'em';
+
+        var isHeadingTag = /^h[1-6]$/.test(tag);
+        if (isHeadingTag) {
+          tag = 'p';
+        }
+
+        // Keep bold text only for content that came from heading tags.
+        if (tag === 'strong' && !context.allowStrong) {
+          var unwrappedStrongFragment = targetDoc.createDocumentFragment();
+          Array.prototype.forEach.call(node.childNodes, function(child) {
+            var sanitizedStrongChild = sanitizeNode(child, targetDoc, context);
+            if (sanitizedStrongChild) unwrappedStrongFragment.appendChild(sanitizedStrongChild);
+          });
+          return unwrappedStrongFragment;
+        }
+
+        if (!allowedTags[tag]) {
+          var fragment = targetDoc.createDocumentFragment();
+          Array.prototype.forEach.call(node.childNodes, function(child) {
+            var sanitizedChild = sanitizeNode(child, targetDoc, context);
+            if (sanitizedChild) fragment.appendChild(sanitizedChild);
+          });
+          return fragment;
+        }
+
+        var cleanEl = targetDoc.createElement(tag);
+        copyAllowedAttributes(node, cleanEl, tag);
+
+        Array.prototype.forEach.call(node.childNodes, function(child) {
+          var childContext = isHeadingTag ? { allowStrong: false } : context;
+          var sanitizedChild = sanitizeNode(child, targetDoc, childContext);
+          if (sanitizedChild) cleanEl.appendChild(sanitizedChild);
+        });
+
+        if (isHeadingTag && cleanEl.childNodes.length) {
+          var strongHeadingWrapper = targetDoc.createElement('strong');
+          while (cleanEl.firstChild) {
+            strongHeadingWrapper.appendChild(cleanEl.firstChild);
+          }
+          cleanEl.appendChild(strongHeadingWrapper);
+        }
+
+        return cleanEl;
+      }
+
+      var container = outDoc.createElement('div');
+      Array.prototype.forEach.call(doc.body.childNodes, function(child) {
+        var sanitized = sanitizeNode(child, outDoc, { allowStrong: false });
+        if (sanitized) container.appendChild(sanitized);
+      });
+
+      var sanitizedHtml = container.innerHTML.trim();
+      if (!sanitizedHtml) {
+        return plainTextToHtml(fallbackText);
+      }
+
+      return sanitizedHtml;
+    }
+
+    function onCKEditorPaste(editor, source, data, sanitizedHtml) {
+      // Central paste hook for CKEditor content pasted by users.
+      var pastedText = '';
+      if (data && data.dataTransfer && typeof data.dataTransfer.getData === 'function') {
+        pastedText = data.dataTransfer.getData('text/plain') || '';
+      } else if (data && data.clipboardData && typeof data.clipboardData.getData === 'function') {
+        pastedText = data.clipboardData.getData('text/plain') || '';
+      }
+
+      textAreaEditor.trigger('change', textAreaEditor);
+      Origin.trigger('scaffold:ckeditor:paste', {
+        source: source,
+        data: data,
+        sanitizedHtml: sanitizedHtml || '',
+        editorId: editor && editor.id
+      });
+    }
+
+    function PasteWithFormattingPlugin(editor) {
+      const balloon = editor.plugins.get('ContextualBalloon');
+      const popupView = {
+        element: null,
+        render() {},
+        destroy() {}
+      };
+
+      const closePopup = (panelElement, outsideClickHandler) => {
+        if (balloon.hasView(popupView)) {
+          balloon.remove(popupView);
+        }
+        if (panelElement && panelElement.parentNode) {
+          panelElement.parentNode.removeChild(panelElement);
+        }
+        document.removeEventListener('mousedown', outsideClickHandler);
+      };
+
+      editor.ui.componentFactory.add('pasteWithFormatting', locale => {
+        const undoView = editor.ui.componentFactory.create('undo');
+        const ButtonView = undoView.constructor;
+        const button = new ButtonView(locale);
+
+        button.set({
+          label: 'Paste with formatting',
+          icon: '<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M16 3h-1.18C14.4 1.84 13.3 1 12 1s-2.4.84-2.82 2H8a2 2 0 0 0-2 2v1H5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8v-2H5V8h1v1a2 2 0 0 0 2 2h4v2h2v-2h2a2 2 0 0 0 2-2V8h1v5h2V8a2 2 0 0 0-2-2h-1V5a2 2 0 0 0-2-2m-4-1a1 1 0 0 1 1 1h-2a1 1 0 0 1 1-1m4 7H8V5h8zm6.71 8.29l-3 3a1 1 0 0 1-1.42 0l-1.5-1.5l1.42-1.42l.79.79L21.29 15z"/></svg>',
+          withText: false,
+          tooltip: true,
+          tooltipPosition: 'n',
+          class: 'paste-with-formatting-button'
+        });
+
+        button.on('execute', () => {
+          const panelElement = document.createElement('div');
+          panelElement.classList.add('xml-import-popup-panel');
+          panelElement.innerHTML = `
+            <div class="XmlImport">
+              <span id="closeFormattedPastePopup">×</span>
+              <label>Paste with formatting</label>
+              <textarea id="formattedPasteInputArea" placeholder="Paste rich text/html here..."></textarea>
+              <div class="xmlButtons">
+                <button class="btnXmlImport buttonSubmit" id="formattedPasteSubmitBtn">Insert</button>
+                <button class="btnXmlImport buttonCancel" id="formattedPasteCancelBtn">Cancel</button>
+              </div>
+            </div>`;
+
+          document.body.appendChild(panelElement);
+          popupView.element = panelElement;
+
+          const inputEl = panelElement.querySelector('#formattedPasteInputArea');
+          let pastedHtml = '';
+
+          inputEl.addEventListener('paste', function(event) {
+            const clipboard = event.clipboardData || window.clipboardData;
+            if (!clipboard || typeof clipboard.getData !== 'function') return;
+
+            pastedHtml = clipboard.getData('text/html') || '';
+            const pastedText = clipboard.getData('text/plain') || '';
+            if (pastedText) {
+              inputEl.value = pastedText;
+            }
+          });
+
+          const outsideClickHandler = event => {
+            const balloonEl = balloon.view.element;
+            if (balloonEl && !balloonEl.contains(event.target)) {
+              closePopup(panelElement, outsideClickHandler);
+            }
+          };
+
+          panelElement.querySelector('#closeFormattedPastePopup').onclick = () => closePopup(panelElement, outsideClickHandler);
+          panelElement.querySelector('#formattedPasteCancelBtn').onclick = () => closePopup(panelElement, outsideClickHandler);
+
+          panelElement.querySelector('#formattedPasteSubmitBtn').onclick = () => {
+            const fallbackText = inputEl.value.trim();
+            const rawHtmlToInsert = pastedHtml && pastedHtml.trim()
+              ? pastedHtml
+              : (fallbackText ? ('<p>' + escapeHtml(fallbackText).replace(/\n/g, '<br>') + '</p>') : '');
+            const htmlToInsert = sanitizeRichPastedHtml(rawHtmlToInsert, fallbackText);
+
+            if (!htmlToInsert) {
+              inputEl.focus();
+              return;
+            }
+
+            try {
+              const viewFragment = editor.data.processor.toView(htmlToInsert);
+              const modelFragment = editor.data.toModel(viewFragment);
+              editor.model.change(() => {
+                const selection = editor.model.document.selection;
+                editor.model.insertContent(modelFragment, selection.getLastPosition());
+              });
+            } catch (e) {
+              const existingData = editor.getData ? (editor.getData() || '') : '';
+              editor.setData(existingData + htmlToInsert);
+            }
+
+            closePopup(panelElement, outsideClickHandler);
+          };
+
+          if (!balloon.hasView(popupView)) {
+            balloon.add({
+              view: popupView,
+              position: {
+                target: () => {
+                  const editorElement = editor.ui.view.element;
+                  const triggerButton = editorElement.querySelector('.paste-with-formatting-button');
+                  return triggerButton || editor.ui.view.editable.element;
+                }
+              }
+            });
+          }
+
+          setTimeout(() => {
+            inputEl.focus();
+            document.addEventListener('mousedown', outsideClickHandler);
+          }, 0);
+        });
+
+        return button;
+      });
+    }
+
 
 
 
@@ -1227,7 +1653,7 @@ Samaritan Assistance</label><br>
         versionCheck:false,
         enterMode: CKEDITOR[Origin.constants.ckEditorEnterMode],
         entities: false,
-        extraPlugins: [ AiAgentPlugin, xmlToHtmlPlugin ],
+        extraPlugins: [ AiAgentPlugin, xmlToHtmlPlugin, PasteWithFormattingPlugin ],
         // htmlSupport: {
         //   // Convert all allow/disallow strings to regexp, as config is json only
         //   allow: convertStringsToRegExDeep((Origin.constants.ckEditorHtmlSupport && Origin.constants.ckEditorHtmlSupport.allow) || []),
@@ -1303,6 +1729,7 @@ Samaritan Assistance</label><br>
             "uploadImage",
             "|",
             "xmlToHtmlConversion",
+            "pasteWithFormatting",
             ...(ckEditorAIAssistantEnable ? ["|", "AIAssistant"] : [])
           ],
           shouldNotGroupWhenFull: true,
@@ -1359,6 +1786,68 @@ Samaritan Assistance</label><br>
         this.editor.id = CKEDITOR.instances.length;
         CKEDITOR.instances.length++;
         CKEDITOR.instances[this.editor.id] = this.editor;
+
+        // Prefer CKEditor's clipboardInput hook; use DOM paste only as a fallback.
+        var hasClipboardInputHook = false;
+        try {
+          this.editor.editing.view.document.on('clipboardInput', (evt, data) => {
+            // Ignore drag/drop or unknown clipboard methods when method is provided.
+            if (data && data.method && data.method !== 'paste') return;
+
+            var html = data && data.dataTransfer && typeof data.dataTransfer.getData === 'function'
+              ? data.dataTransfer.getData('text/html')
+              : '';
+            var text = data && data.dataTransfer && typeof data.dataTransfer.getData === 'function'
+              ? data.dataTransfer.getData('text/plain')
+              : '';
+
+            var sanitizedHtml = sanitizePastedHtml(html, text);
+            data.content = this.editor.data.processor.toView(sanitizedHtml);
+
+            onCKEditorPaste(this.editor, 'clipboardInput', data, sanitizedHtml);
+          });
+          hasClipboardInputHook = true;
+        } catch (e) {
+          // clipboardInput is unavailable for this build; fallback to DOM paste.
+        }
+
+        if (!hasClipboardInputHook) {
+          try {
+            const editableElement = this.editor.ui.view && this.editor.ui.view.editable && this.editor.ui.view.editable.element;
+            if (editableElement) {
+              editableElement.addEventListener('paste', (event) => {
+                const clipboard = event && (event.clipboardData || window.clipboardData);
+                const html = clipboard && typeof clipboard.getData === 'function'
+                  ? (clipboard.getData('text/html') || '')
+                  : '';
+                const text = clipboard && typeof clipboard.getData === 'function'
+                  ? (clipboard.getData('text/plain') || '')
+                  : '';
+
+                const sanitizedHtml = sanitizePastedHtml(html, text);
+
+                if (event && typeof event.preventDefault === 'function') {
+                  event.preventDefault();
+                }
+
+                try {
+                  const viewFragment = this.editor.data.processor.toView(sanitizedHtml);
+                  const modelFragment = this.editor.data.toModel(viewFragment);
+                  this.editor.model.change(() => {
+                    const selection = this.editor.model.document.selection;
+                    this.editor.model.insertContent(modelFragment, selection.getLastPosition());
+                  });
+                } catch (e) {
+                  // If model insertion fails in fallback mode, leave content unchanged.
+                }
+
+                onCKEditorPaste(this.editor, 'domPaste', event, sanitizedHtml);
+              });
+            }
+          } catch (e) {
+            // Ignore if editable DOM paste listener cannot be attached.
+          }
+        }
       });
     });
     return this;
