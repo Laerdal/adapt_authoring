@@ -1,9 +1,11 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { getAssets, trashAsset } from "@/api/adaptAuthoring";
 
 type AssetFormat = "image" | "audio" | "video" | "other";
 
 interface Asset {
   id: number;
+  backendId?: string;   // engine _id — used for delete/trash
   title: string;
   description: string;
   size: string;
@@ -175,7 +177,10 @@ let nextId = INITIAL_ASSETS.length + 1;
 function formatBytes(raw: string) { return raw; }
 
 export default function AssetManagementPage() {
-  const [assets, setAssets]             = useState<Asset[]>(INITIAL_ASSETS);
+  const [assets, setAssets]             = useState<Asset[]>([]);
+
+  const loadAssets = () => { getAssets().then(setAssets).catch(() => setAssets([])); };
+  useEffect(() => { loadAssets(); }, []);
   const [search, setSearch]             = useState("");
   const [formatFilter, setFormatFilter] = useState<AssetFormat | "All">("All");
   const [view, setView]                 = useState<ViewMode>("grid");
@@ -333,10 +338,16 @@ export default function AssetManagementPage() {
   }
 
   // ── Delete ──────────────────────────────────────────────────────────────
-  function confirmDelete() {
-    if (!deleteTarget) return;
-    setAssets((prev) => prev.filter((a) => a.id !== deleteTarget.id));
+  async function confirmDelete() {
+    const target = deleteTarget;
     setDeleteTarget(null);
+    if (!target?.backendId) return;
+    setAssets((prev) => prev.filter((a) => a.id !== target.id));
+    try {
+      await trashAsset(target.backendId);
+    } finally {
+      loadAssets();
+    }
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────

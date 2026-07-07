@@ -40,7 +40,7 @@ const MENU_OPTIONS = ['LIFE Menu', 'Overview Menu', 'Box Menu']
 export default function HomePage() {
   const navigate = useNavigate()
   const location = useLocation()
-  const [courses, setCourses] = useState<Course[]>(INITIAL_COURSES)
+  const [courses, setCourses] = useState<Course[]>([])
   const [isLoadingCourses, setIsLoadingCourses] = useState(true)
   const READ_ONLY_REASON = 'This action is temporarily disabled until the matching Adapt API endpoint is wired.'
 
@@ -70,11 +70,12 @@ export default function HomePage() {
       setIsLoadingCourses(true)
       const shared = location.pathname === '/shared'
       const apiCourses = await fetchDashboardCourses(shared)
-      if (apiCourses.length > 0) {
-        setCourses(apiCourses)
-      }
+      // Always reflect the live result — including empty (e.g. no shared courses),
+      // so the UI matches the engine instead of falling back to sample data.
+      setCourses(apiCourses)
     } catch {
-      showToast('Could not load live course data. Showing local fallback.', 'info')
+      setCourses([])
+      showToast('Could not load live course data.', 'info')
     } finally {
       setIsLoadingCourses(false)
     }
@@ -251,7 +252,7 @@ export default function HomePage() {
           {/* Page heading */}
           <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">Dev Next Instance</h1>
+              <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">{location.pathname === '/shared' ? 'Shared with Me' : location.pathname === '/my-courses' ? 'My Courses' : 'All Courses'}</h1>
               <p className="text-sm text-[#6b7280] mt-1">Manage and organize your courses</p>
               <p className="text-xs text-[#b45309] mt-1">Partial write mode: copy, edit, and delete are persisted; import and create remain disabled.</p>
             </div>

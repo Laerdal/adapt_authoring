@@ -35,7 +35,11 @@ export const router = createBrowserRouter([
       { path: '/course-structure-demo', element: <CourseStructureDemoPage /> },
     ],
   },
-])
+], {
+  // The app is served under Vite's base (/new/ in the engine embed). Strip the
+  // trailing slash so client routes resolve relative to it (becomes '' in dev).
+  basename: import.meta.env.BASE_URL.replace(/\/$/, ''),
+})
 
 export function Routes() {
   return <RouterProvider router={router} />

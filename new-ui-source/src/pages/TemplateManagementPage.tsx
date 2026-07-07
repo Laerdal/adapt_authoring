@@ -1,9 +1,11 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
+import { getTemplates, deleteTemplate } from '@/api/adaptAuthoring'
 
 type TemplateType = 'Page' | 'Article' | 'Block' | 'Component'
 
 interface Template {
   id: number
+  backendId?: string   // engine _id — used for delete
   name: string
   type: TemplateType
   description: string
@@ -43,7 +45,10 @@ const TYPE_COLORS: Record<TemplateType, { bg: string; text: string }> = {
 }
 
 export default function TemplateManagementPage() {
-  const [templates, setTemplates] = useState<Template[]>(INITIAL_TEMPLATES)
+  const [templates, setTemplates] = useState<Template[]>([])
+
+  const loadTemplates = () => { getTemplates().then(setTemplates).catch(() => setTemplates([])) }
+  useEffect(() => { loadTemplates() }, [])
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'All' | TemplateType>('All')
   const [page, setPage] = useState(1)
@@ -73,10 +78,16 @@ export default function TemplateManagementPage() {
     setEditTarget(null)
   }
 
-  function confirmDelete() {
-    if (!deleteTarget) return
-    setTemplates((prev) => prev.filter((t) => t.id !== deleteTarget.id))
+  async function confirmDelete() {
+    const target = deleteTarget
     setDeleteTarget(null)
+    if (!target?.backendId) return
+    setTemplates((prev) => prev.filter((t) => t.id !== target.id))
+    try {
+      await deleteTemplate(target.backendId)
+    } finally {
+      loadTemplates()
+    }
   }
 
   const filtered = useMemo(() => {

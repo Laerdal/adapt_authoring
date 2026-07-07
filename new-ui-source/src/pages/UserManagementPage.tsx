@@ -1,9 +1,12 @@
 import { useState, useMemo, useEffect, useRef } from "react";
+import { getUsers, setUserRole, deleteUser } from "@/api/adaptAuthoring";
 
 type Role = "Super Admin" | "Authenticated User" | "Course Creator";
 
 interface User {
   id: number;
+  backendId?: string;   // engine _id — used for role change / delete
+  roleIds?: string[];   // engine role ids — needed to reassign roles
   email: string;
   tenant: string;
   role: Role;
@@ -49,7 +52,10 @@ function isCompleteEmail(value: string): boolean {
 }
 
 export default function UserManagementPage() {
-  const [users, setUsers]             = useState<User[]>(INITIAL_USERS);
+  const [users, setUsers]             = useState<User[]>([]);
+
+  const loadUsers = () => { getUsers().then(setUsers).catch(() => setUsers([])); };
+  useEffect(() => { loadUsers(); }, []);
   const [search, setSearch]           = useState("");
   const [searchError, setSearchError] = useState("");
   const [roleFilter, setRoleFilter]   = useState<Role | "All">("All");
@@ -183,15 +189,29 @@ export default function UserManagementPage() {
     setPage(1);
   }
 
-  function changeRole(id: number, role: Role) {
-    setUsers((prev) => prev.map((u) => u.id === id ? { ...u, role } : u));
+  async function changeRole(id: number, role: Role) {
+    const target = users.find((u) => u.id === id);
     setRoleMenuTarget(null);
+    if (!target?.backendId) return;
+    // optimistic update, then persist + reload from the engine
+    setUsers((prev) => prev.map((u) => u.id === id ? { ...u, role } : u));
+    try {
+      await setUserRole(target.backendId, target.roleIds ?? [], role);
+    } finally {
+      loadUsers();
+    }
   }
 
-  function confirmDelete() {
-    if (!deleteTarget) return;
-    setUsers((prev) => prev.filter((u) => u.id !== deleteTarget.id));
+  async function confirmDelete() {
+    const target = deleteTarget;
     setDeleteTarget(null);
+    if (!target?.backendId) return;
+    setUsers((prev) => prev.filter((u) => u.id !== target.id));
+    try {
+      await deleteUser(target.backendId);
+    } finally {
+      loadUsers();
+    }
   }
 
   function handleActionMenu(id: number, action: string) {

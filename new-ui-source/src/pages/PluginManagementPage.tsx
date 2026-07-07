@@ -1,10 +1,12 @@
-import { useState, useMemo, useRef, useCallback } from "react";
+import { useState, useMemo, useRef, useCallback, useEffect } from "react";
+import { getPlugins } from "@/api/adaptAuthoring";
 
 type PluginStatus = "Enabled" | "Disabled";
 type PluginCategory = "Content" | "Assessment" | "Media" | "Analytics" | "Accessibility";
 
 interface Plugin {
   id: number;
+  backendId?: string;   // engine _id (enable/disable contract still pending)
   name: string;
   description: string;
   version: string;
@@ -34,7 +36,10 @@ const CATEGORIES: PluginCategory[] = ["Content", "Assessment", "Media", "Analyti
 type Toast = { id: number; message: string; type: "success" | "info" };
 
 export default function PluginManagementPage() {
-  const [plugins, setPlugins] = useState<Plugin[]>(INITIAL_PLUGINS);
+  const [plugins, setPlugins] = useState<Plugin[]>([]);
+
+  // Live list from the engine; graceful fallback to empty if unavailable.
+  useEffect(() => { getPlugins().then(setPlugins).catch(() => setPlugins([])); }, []);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<PluginCategory | "All">("All");
   const [statusFilter, setStatusFilter] = useState<PluginStatus | "All">("All");
