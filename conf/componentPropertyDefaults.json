@@ -1211,7 +1211,19 @@
     "properties._supportedLayout": "both",
     "properties.instruction": "",
     "properties._setCompletionOn": "inview",
-    "properties._lottie.src": "https://cdn-esim.contentservice.net/adapt/common-assets/sample-10s-2160p.mp4",
+    "properties._lottie": {
+      "src": "https://cdn-esim.contentservice.net/adapt/common-assets/605d788e2eae8ab17bb7bff5213cd857fae75bee.json",
+      "controls": true,
+      "loop": -1,
+      "autoplay": false,
+      "speed": 1,
+      "renderer": "svg",
+      "style": "",
+      "preserveAspectRatio": "xMidYMid meet",
+      "background": "",
+      "interactivity": ""
+    },
+    "properties._lottie.src": "https://cdn-esim.contentservice.net/adapt/common-assets/605d788e2eae8ab17bb7bff5213cd857fae75bee.json",
     "properties._lottie.controls": true,
     "properties._lottie.loop": -1,
     "properties._lottie.autoplay": false,
@@ -1220,7 +1232,7 @@
     "properties._lottie.style": "",
     "properties._lottie.preserveAspectRatio": "xMidYMid meet",
     "properties._lottie.background": "",
-    "properties._lottie.interactivity": {},
+    "properties._lottie.interactivity": "",
     "properties.description": ""
   },
   "manifest": {
