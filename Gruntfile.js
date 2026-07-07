@@ -373,6 +373,22 @@ module.exports = function(grunt) {
     });
   });
 
+  // Deploys the vendored New UI bundle (new-ui-bundle/) to the served location
+  // (public/new/) so /new is up to date after every build — no manual step needed.
+  grunt.registerTask('sync-new-ui', 'Deploy the New UI bundle to public/new (scripts/sync-new-ui.js).', function() {
+    var done = this.async();
+    var script = require('path').join(__dirname, 'scripts', 'sync-new-ui.js');
+    var child = require('child_process').spawn(process.execPath, [script], { stdio: 'inherit' });
+    child.on('exit', function(code) {
+      if (code !== 0) grunt.log.warn('sync-new-ui exited with code ' + code + '; /new may serve a stale bundle.');
+      done(); // non-fatal: never block the rest of the build on New UI sync
+    });
+    child.on('error', function(err) {
+      grunt.log.warn('sync-new-ui failed to spawn: ' + err.message);
+      done();
+    });
+  });
+
   grunt.registerTask('default', ['build:dev']);
   grunt.registerTask('test', ['mochaTest']);
 
@@ -393,10 +409,10 @@ module.exports = function(grunt) {
       config.isProduction = isProduction;
       grunt.file.write(configFile, JSON.stringify(config, null, 2));
       // run the task
-      grunt.task.run(['migration-conf', 'requireBundle', 'generate-lang-json', 'copy', 'less:' + compilation, 'handlebars', 'requirejs-direct:'+ compilation, `babel:${compilation}`]);
+      grunt.task.run(['migration-conf', 'requireBundle', 'generate-lang-json', 'copy', 'less:' + compilation, 'handlebars', 'requirejs-direct:'+ compilation, `babel:${compilation}`, 'sync-new-ui']);
 
     } catch(e) {
-      grunt.task.run(['requireBundle', 'copy', 'less:' + compilation, 'handlebars', 'requirejs-direct:' + compilation, `babel:${compilation}`]);
+      grunt.task.run(['requireBundle', 'copy', 'less:' + compilation, 'handlebars', 'requirejs-direct:' + compilation, `babel:${compilation}`, 'sync-new-ui']);
     }
   });
 };
