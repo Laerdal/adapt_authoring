@@ -29,7 +29,7 @@ function CourseContent () {
 util.inherits(CourseContent, ContentPlugin);
 
 var DASHBOARD_COURSE_FIELDS = [
-    '_id', '_tenantId', '_type', '_isShared', 'title', 'heroImage',
+    '_id', '_tenantId', '_type', '_isShared', 'title', 'displayTitle', 'description', 'heroImage',
     'updatedAt', 'updatedBy', 'createdAt', 'createdBy', 'tags', '_shareWithUsers'
 ];
 
