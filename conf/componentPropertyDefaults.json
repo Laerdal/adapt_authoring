@@ -1078,7 +1078,7 @@
         "body": "<p>Add description</p>",
         "strapline": "Add strapline text",
         "_graphic": {
-          "src": "",
+          "src": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
           "alt": "",
           "attribution": "",
           "_classes": ""
@@ -1103,7 +1103,7 @@
         "body": "<p>Add description</p>",
         "strapline": "Add strapline text",
         "_graphic": {
-          "src": "",
+          "src": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
           "alt": "",
           "attribution": "",
           "_classes": ""
@@ -1126,7 +1126,7 @@
     "properties._supportedLayout": "full-width",
     "properties.instruction": "",
     "properties._setCompletionOn": "allItems",
-    "properties._graphic.src": "",
+    "properties._graphic.src": "https://cdn-esim.contentservice.net/adapt/common-assets/Designer-2.png",
     "properties._graphic.alt": "",
     "properties._graphic.attribution": "",
     "properties.mobileBody": "",
@@ -1139,6 +1139,7 @@
     "properties._useGraphicsAsPins": false,
     "properties._hasStaticTooltips": false,
     "properties._isRound": false,
+    "properties._pinOffsetOrigin": false,
     "properties._items.items.title": "",
     "properties._items.items._ariaLevel": 0,
     "properties._items.items.body": "",
