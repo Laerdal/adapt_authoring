@@ -1,0 +1,229 @@
+@import url("https://fonts.googleapis.com/css2?family=Lato:wght@400;700&display=swap");
+@import "tailwindcss";
+
+:root {
+  /* ── LIFE Design System — Primitive Color Tokens ────────────────── */
+
+  /* Primary (color.primary.*) */
+  --life-primary-900: #041E29;
+  --life-primary-850: #0F2934;
+  --life-primary-800: #163746;
+  --life-primary-750: #184051;
+  --life-primary-700: #1D4C60;
+  --life-primary-600: #266580;
+  --life-primary-500: #2E7FA1;   /* brand primary */
+  --life-primary-400: #519DBD;
+  --life-primary-300: #7FBCD7;
+  --life-primary-200: #A9D3E5;
+  --life-primary-100: #D4E9F2;
+  --life-primary-050: #E3F5FC;
+  --life-primary-020: #F1FBFE;
+
+  /* Accent 1 / Teal (color.accent1.*) */
+  --life-accent1-700: #164F4C;
+  --life-accent1-600: #1E6965;
+  --life-accent1-500: #25837E;
+  --life-accent1-400: #3EA39E;
+  --life-accent1-300: #6BC2BE;
+  --life-accent1-200: #98D8D5;
+  --life-accent1-100: #C8EEEC;
+  --life-accent1-050: #E4F6F6;
+
+  /* Neutral (color.neutral.*) */
+  --life-neutral-850: #262626;
+  --life-neutral-800: #333333;
+  --life-neutral-750: #3B3B3B;
+  --life-neutral-700: #474747;
+  --life-neutral-600: #5E5E5E;
+  --life-neutral-500: #767676;
+  --life-neutral-400: #949494;
+  --life-neutral-300: #ABABAB;
+  --life-neutral-200: #CCCCCC;
+  --life-neutral-100: #E5E5E5;
+  --life-neutral-050: #F2F2F2;
+  --life-neutral-020: #FAFAFA;
+
+  /* Base (color.base.*) */
+  --life-base-black: #1A1A1A;
+  --life-base-white: #FFFFFF;
+
+  /* Feedback — Positive (color.positive.*) */
+  --life-positive-500: #14892F;
+  --life-positive-400: #37A851;
+  --life-positive-100: #CCEED2;
+  --life-positive-050: #E2F8E4;
+
+  /* Feedback — Warning (color.warning.*) */
+  --life-warning-500: #C45402;
+  --life-warning-400: #E97116;
+  --life-warning-100: #FCE3CF;
+  --life-warning-050: #FDF0E7;
+
+  /* Feedback — Critical (color.critical.*) */
+  --life-critical-600: #B42536;
+  --life-critical-500: #DC3449;
+  --life-critical-100: #FDDEE2;
+  --life-critical-050: #FEECF1;
+
+  /* ── Semantic / Surface tokens ──────────────────────────────────── */
+  --background: var(--life-base-white);
+  --surface:    var(--life-neutral-050);   /* color.neutral.050 — canvas bg */
+  --foreground: var(--life-base-black);
+  --border:     var(--life-neutral-100);   /* color.neutral.100 */
+
+  /* Canvas — card */
+  --canvas-card-bg:           rgba(46, 127, 161, 0.10);  /* primary.500 @ 10% */
+  --canvas-card-border:       var(--life-primary-500);
+  --canvas-card-border-sel:   var(--life-primary-500);
+  --canvas-card-ring:         transparent;
+  --canvas-card-shadow:       0 1px 4px 0 rgba(46, 127, 161, 0.08);
+  --canvas-card-radius:       8px;
+  --canvas-card-border-width: 2px;
+
+  /* Typography */
+  --font-size-xs:   0.75rem;    /* 12px */
+  --font-size-sm:   0.875rem;   /* 14px */
+  --font-size-base: 1rem;       /* 16px */
+  --font-size-lg:   1.125rem;   /* 18px */
+  --font-size-xl:   1.25rem;    /* 20px */
+  --font-size-2xl:  1.5rem;     /* 24px */
+  --font-size-3xl:  1.875rem;   /* 30px */
+
+  /* Radius */
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-xl:   16px;
+  --radius-full: 9999px;
+
+  /* Shadow */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: "Lato", var(--font-geist-sans), "Noto Sans", sans-serif;
+  --font-mono: var(--font-geist-mono);
+}
+
+/* ── Canvas Section Cards ───────────────────────────────────── */
+/*
+ * Default: no visible border — section blends into canvas bg.
+ * Hover:    2px dashed outline in primary-200 (subtle, non-distracting).
+ * Selected: 2px solid primary-500 + light shadow — clearly active.
+ */
+.menu-canvas-card {
+  background-color: var(--canvas-card-bg);
+  border-radius: var(--canvas-card-radius);
+  /* Reserve border space so layout never shifts on hover/select */
+  border: 2px solid transparent;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.menu-canvas-card:hover {
+  border: 2px dashed var(--life-primary-300);   /* hover — dashed outline */
+}
+.menu-canvas-card.is-selected {
+  border: 2px solid var(--life-primary-500);    /* selected — solid outline */
+  box-shadow: 0 0 0 3px var(--life-primary-100); /* soft glow */
+}
+/* While selected, don't re-apply hover dashed style */
+.menu-canvas-card.is-selected:hover {
+  border: 2px solid var(--life-primary-500);
+}
+.menu-canvas-chip {
+  background-color: var(--life-primary-100);  /* #D4E9F2 — color.primary.100 */
+  color: var(--life-primary-600);             /* #266580 — color.primary.600 */
+}
+.menu-canvas-logo-btn {
+  border: 1.5px dashed #d1d5db;
+  color: #9ca3af;
+  background-color: transparent;
+}
+.menu-canvas-logo-btn:hover {
+  border-color: #2d6fa8;
+  color: #2d6fa8;
+}
+.menu-canvas-title {
+  color: var(--life-neutral-850);
+}
+.menu-canvas-subtitle {
+  color: #c8d6e5;
+}
+.menu-canvas-body {
+  color: var(--life-neutral-850);
+}
+.menu-canvas-align-left  { text-align: left;   align-items: flex-start; }
+.menu-canvas-align-center { text-align: center; align-items: center;     }
+.menu-canvas-align-right  { text-align: right;  align-items: flex-end;   }
+.menu-canvas-input-align-left   { text-align: left;   }
+.menu-canvas-input-align-center { text-align: center; }
+.menu-canvas-input-align-right  { text-align: right;  }
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Lato", "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Responsive breakpoint reference ───────────────────────────
+   sm:  640px  — large phones / small tablets
+   md:  768px  — tablets / small laptops  (sidebar appears)
+   lg: 1024px  — laptops
+   xl: 1280px  — desktops
+   ─────────────────────────────────────────────────────────── */
+
+/* Prevent horizontal overflow at the root */
+html, body {
+  max-width: 100vw;
+  overflow-x: hidden;
+}
+
+/* Scrollable panel utility — panels that need inner scroll */
+.panel-scroll {
+  overflow-y: auto;
+}
+
+/* Touch-friendly tap targets on mobile */
+@media (max-width: 767px) {
+  button, a {
+    min-height: 36px;
+  }
+}
+
+/* Toast slide-in animation */
+@keyframes fade-in-down {
+  from { opacity: 0; transform: translateY(-10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in-down {
+  animation: fade-in-down 0.2s ease-out both;
+}
+
+/* Right-panel overlay — full-width sheet on very small phones */
+@media (max-width: 399px) {
+  .right-panel-overlay {
+    width: 100vw !important;
+  }
+}
+
+/* Force LTR in rich-text editors — prevents reversed typing in contenteditable */
+[contenteditable] {
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: embed;
+}
+[contenteditable] div,
+[contenteditable] p,
+[contenteditable] span {
+  direction: ltr;
+  unicode-bidi: embed;
+}

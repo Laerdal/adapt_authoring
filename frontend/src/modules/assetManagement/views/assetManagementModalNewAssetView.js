@@ -125,7 +125,7 @@ define(function(require){
       });
       this.$('#tags').val(tags);
 
-      this.$('.asset-form').ajaxSubmit({
+      var submitOptions = {
         uploadProgress: function(event, position, total, percentComplete) {
           $(".progress-container").css("visibility", "visible");
           var percentVal = percentComplete + '%';
@@ -145,7 +145,15 @@ define(function(require){
           Origin.trigger('assetManagement:collection:refresh', true);
           this.remove();
         }, this)
-      });
+      };
+
+      // AI Tutor upload → tell the server to tag this asset at creation, so it appears in the
+      // filtered tutor picker immediately and is hidden from the normal asset list.
+      if (this.aiTutorCourseId) {
+        submitOptions.data = { aiTutorCourseId: this.aiTutorCourseId };
+      }
+
+      this.$('.asset-form').ajaxSubmit(submitOptions);
 
       // Return false to prevent the page submitting
       return false;

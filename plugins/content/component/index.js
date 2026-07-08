@@ -13,6 +13,7 @@ var origin = require('../../../'),
     configuration = require('../../../lib/configuration'),
     database = require('../../../lib/database'),
     logger = require('../../../lib/logger'),
+    componentPropertyDefaults = require('../../../lib/componentPropertyDefaults'),
     defaultOptions = require('./defaults.json'),
     bower = require('bower'),
     async = require('async'),
@@ -134,6 +135,14 @@ Component.prototype.retrieve = function (search, options, next) {
   }
 
   ContentPlugin.prototype.retrieve.call(this, search, options, next);
+};
+
+Component.prototype.create = function (data, next) {
+  if (data && data._component) {
+     componentPropertyDefaults.applyDefaultsToObject(data, data._component);
+  }
+  // componentPropertyDefaults.applyDefaultsToObject(data, data && data._component);
+  ContentPlugin.prototype.create.call(this, data, next);
 };
 
 Component.prototype.update = function (search, delta, next)  {

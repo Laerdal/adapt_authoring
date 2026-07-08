@@ -18,7 +18,10 @@
   "scripts": {
     "test": "grunt test",
     "create-migration": "npx migrate-mongo create -f conf/migrations.js",
-    "postinstall": "node ./installPlugins.js"
+    "postinstall": "node ./installPlugins.js",
+    "new-ui:sync": "node scripts/sync-new-ui.js",
+    "new-ui:sync-from-bundle": "node scripts/sync-new-ui.js",
+    "new-ui:build-and-sync": "npm run new-ui:sync"
   },
   "dependencies": {
     "@babel/core": "^7.19.6",
@@ -73,8 +76,8 @@
     "matchdep": "^2.0.0",
     "method-override": "^3.0.0",
     "migrate-mongo": "^9.0.0",
-    "minimist": "^1.2.8",
     "mime": "^2.6.0",
+    "minimist": "^1.2.8",
     "moment": "^2.29.4",
     "mongodb": "^6.21.0",
     "mongodb-uri": "^0.9.7",
@@ -87,6 +90,7 @@
     "node-webvtt": "^1.9.4",
     "nodemailer": "^8.0.11",
     "optimist": "^0.6.1",
+    "p-limit": "^7.3.0",
     "passport": "^0.6.0",
     "passport-local": "^1.0.0",
     "rate-limit-redis": "^4.2.0",

@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Adapt New UI Implementation Guide</title>
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --card: #ffffff;
+      --text: #1f2937;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --brand: #2d6fa8;
+      --ok: #166534;
+      --warn: #92400e;
+      --bad: #b91c1c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+      line-height: 1.45;
+    }
+    .wrap {
+      max-width: 1200px;
+      margin: 24px auto;
+      padding: 0 16px 32px;
+    }
+    .hero {
+      background: linear-gradient(135deg, #1f4f77, #2d6fa8);
+      color: #fff;
+      border-radius: 14px;
+      padding: 20px;
+      box-shadow: 0 8px 24px rgba(31, 79, 119, 0.22);
+    }
+    .hero h1 { margin: 0 0 8px; font-size: 28px; }
+    .hero p { margin: 0; opacity: 0.95; }
+    .meta {
+      margin-top: 12px;
+      font-size: 13px;
+      opacity: 0.9;
+    }
+    .grid {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 16px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .span-12 { grid-column: span 12; }
+    .span-6 { grid-column: span 6; }
+    .span-4 { grid-column: span 4; }
+    @media (max-width: 980px) {
+      .span-6, .span-4 { grid-column: span 12; }
+    }
+    h2 {
+      margin: 0 0 10px;
+      font-size: 20px;
+      color: #111827;
+    }
+    h3 {
+      margin: 14px 0 8px;
+      font-size: 16px;
+      color: #111827;
+    }
+    p { margin: 8px 0; }
+    ul { margin: 8px 0 0 20px; }
+    li { margin: 4px 0; }
+    code {
+      background: #f3f4f6;
+      border: 1px solid #e5e7eb;
+      border-radius: 5px;
+      padding: 1px 6px;
+      font-family: Consolas, Menlo, Monaco, monospace;
+      font-size: 12px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid transparent;
+      margin-right: 6px;
+    }
+    .ok { color: var(--ok); background: #ecfdf3; border-color: #bbf7d0; }
+    .warn { color: var(--warn); background: #fffbeb; border-color: #fde68a; }
+    .bad { color: var(--bad); background: #fef2f2; border-color: #fecaca; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      font-size: 14px;
+      background: #fff;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #f9fafb;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: #374151;
+    }
+    .note {
+      border-left: 4px solid var(--brand);
+      background: #eff6ff;
+      padding: 10px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      margin-top: 10px;
+    }
+    .footer {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <h1>New UI Implementation Guide (Adapt Authoring)</h1>
+      <p>Single source of truth for what is implemented, what is pending, where code lives, and how to update behavior/UI safely.</p>
+      <div class="meta">
+        Owner: Adapt Authoring team<br />
+        Intended file location: <code>adapt_authoring/NEW_UI_IMPLEMENTATION_GUIDE.html</code><br />
+        Update this document whenever New UI behavior, endpoints, routes, or asset paths change.
+      </div>
+    </section>
+
+    <div class="grid">
+      <section class="card span-12">
+        <h2>1) Integration Architecture</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Layer</th>
+              <th>Purpose</th>
+              <th>Path(s)</th>
+              <th>Who edits this</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Route mounting</td>
+              <td>Serves New UI under <code>/new</code></td>
+              <td><code>routes/new/index.js</code></td>
+              <td>Backend integration engineer</td>
+            </tr>
+            <tr>
+              <td>Runtime UI (served)</td>
+              <td>Actual files browser executes</td>
+              <td><code>public/new/</code> and <code>public/new/assets/</code></td>
+              <td>Generated/synced output</td>
+            </tr>
+            <tr>
+              <td>Local New UI bundle source</td>
+              <td>Repo-local source for sync to <code>public/new</code></td>
+              <td><code>new-ui-bundle/</code></td>
+              <td>Frontend integrator (vendor/update)</td>
+            </tr>
+            <tr>
+              <td>Sync pipeline</td>
+              <td>Copies bundle + injects hash bridge + logo fallback</td>
+              <td><code>scripts/sync-new-ui.js</code></td>
+              <td>Backend integration engineer</td>
+            </tr>
+            <tr>
+              <td>NPM scripts</td>
+              <td>Entrypoints for sync/build-and-sync workflow</td>
+              <td><code>package.json</code></td>
+              <td>Backend integration engineer</td>
+            </tr>
+            <tr>
+              <td>Source snapshot (reference)</td>
+              <td>Readable React pages/components reference</td>
+              <td><code>new-ui-source/</code></td>
+              <td>Frontend integrator</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card span-6">
+        <h2>2) Status: Implemented vs Pending</h2>
+        <h3>Implemented and persisted</h3>
+        <p>
+          <span class="badge ok">Courses</span>
+          copy, edit metadata, delete
+        </p>
+        <p>
+          <span class="badge ok">Assets</span>
+          upload, edit, delete
+        </p>
+        <p>
+          <span class="badge ok">Templates</span>
+          edit, delete
+        </p>
+        <p>
+          <span class="badge ok">Users</span>
+          role change, delete
+        </p>
+
+        <h3>Intentionally guarded / pending wiring</h3>
+        <p><span class="badge warn">Add User</span> UI flow not fully endpoint-wired</p>
+        <p><span class="badge warn">Plugin Toggle</span> endpoint contract/mapping pending</p>
+        <p><span class="badge warn">Course Create/Import</span> full persistence flow not enabled</p>
+      </section>
+
+      <section class="card span-6">
+        <h2>3) Screen to Endpoint Map</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Screen</th>
+              <th>Route</th>
+              <th>Main endpoint families</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Dashboard / Courses</td>
+              <td><code>/new/#dashboard</code>, <code>/new/#shared</code></td>
+              <td><code>/api/my/course</code>, <code>/api/shared/course</code>, <code>/api/content/course/:id</code>, <code>/api/duplicatecourse/:id</code></td>
+            </tr>
+            <tr>
+              <td>Assets</td>
+              <td><code>/new/#assets</code></td>
+              <td><code>/api/asset/query</code>, <code>/api/asset</code>, <code>/api/asset/:id</code></td>
+            </tr>
+            <tr>
+              <td>Templates</td>
+              <td><code>/new/#templates</code></td>
+              <td><code>/api/content/templating</code>, <code>/api/content/templating/:id</code></td>
+            </tr>
+            <tr>
+              <td>Users</td>
+              <td><code>/new/#users</code></td>
+              <td><code>/api/user</code>, role assign/unassign endpoints</td>
+            </tr>
+            <tr>
+              <td>Plugins</td>
+              <td><code>/new/#plugins</code></td>
+              <td><code>/api/extensiontype</code>, enable/disable endpoints (pending wiring)</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card span-12">
+        <h2>4) Where to Change What (Behavior, UI, Titles)</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Change type</th>
+              <th>Primary place to edit</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Route mount or host behavior</td>
+              <td><code>routes/new/index.js</code></td>
+              <td>Controls serving under <code>/new</code>.</td>
+            </tr>
+            <tr>
+              <td>Sync behavior, hash bridge, logo fallback</td>
+              <td><code>scripts/sync-new-ui.js</code></td>
+              <td>Used by <code>npm run new-ui:sync</code>.</td>
+            </tr>
+            <tr>
+              <td>Screen titles / page-level copy</td>
+              <td><code>new-ui-source/src/pages/*.tsx</code></td>
+              <td>Reference source only unless rebuilt into bundle.</td>
+            </tr>
+            <tr>
+              <td>Component layout/styling</td>
+              <td><code>new-ui-source/src/components/**</code> and <code>new-ui-source/src/index.css</code></td>
+              <td>Reference source only unless rebuilt into bundle.</td>
+            </tr>
+            <tr>
+              <td>Immediate runtime hotfix</td>
+              <td><code>new-ui-bundle/assets/*.js</code></td>
+              <td>Minified bundle patch; fast but hard to maintain.</td>
+            </tr>
+            <tr>
+              <td>What browser actually runs</td>
+              <td><code>public/new/assets/*.js</code></td>
+              <td>Do not edit directly; regenerate via sync from bundle.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="note">
+          Current repository state: <code>new-ui-source</code> is a source snapshot for reference; runtime is sourced from <code>new-ui-bundle</code>. Any source change must be propagated into a new bundle and then synced.
+        </div>
+      </section>
+
+      <section class="card span-6">
+        <h2>5) Update Workflow</h2>
+        <h3>Safe/standard path</h3>
+        <ul>
+          <li>Update UI/behavior in source branch/workspace.</li>
+          <li>Produce updated static bundle.</li>
+          <li>Replace <code>new-ui-bundle/</code> contents in this repo.</li>
+          <li>Run <code>npm run new-ui:sync</code>.</li>
+          <li>Validate pages and endpoint behavior in Adapt.</li>
+          <li>Update this guide + push.</li>
+        </ul>
+
+        <h3>Emergency hotfix path</h3>
+        <ul>
+          <li>Patch <code>new-ui-bundle/assets/*.js</code> directly.</li>
+          <li>Run <code>npm run new-ui:sync</code>.</li>
+          <li>Document patch reason and follow-up source fix task.</li>
+        </ul>
+      </section>
+
+      <section class="card span-6">
+        <h2>6) Quick Troubleshooting</h2>
+        <h3>New UI does not load</h3>
+        <ul>
+          <li>Check <code>public/new/index.html</code> exists.</li>
+          <li>Run <code>npm run new-ui:sync</code>.</li>
+          <li>Confirm route mount in <code>routes/new/index.js</code>.</li>
+        </ul>
+
+        <h3>Logo broken</h3>
+        <ul>
+          <li>Check <code>public/new/adapt-logo.jpeg</code> exists.</li>
+          <li>Check <code>public/adapt-logo.jpeg</code> root fallback exists.</li>
+          <li>Hard refresh browser (Ctrl+F5).</li>
+        </ul>
+
+        <h3>Hash link opens wrong page</h3>
+        <ul>
+          <li>Verify hash bridge map in <code>scripts/sync-new-ui.js</code>.</li>
+          <li>Re-sync and hard refresh.</li>
+        </ul>
+      </section>
+
+      <section class="card span-12">
+        <h2>7) Change Log Section (Edit Every Update)</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Change summary</th>
+              <th>Files changed</th>
+              <th>Behavior impact</th>
+              <th>Owner</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>2026-07-03</td>
+              <td>Decoupled New UI from external repo path; local bundle workflow enabled.</td>
+              <td><code>package.json</code>, <code>scripts/sync-new-ui.js</code>, <code>new-ui-bundle/</code>, <code>new-ui-source/</code>, <code>public/new/</code></td>
+              <td>New UI now runs independently from adapt_authoring repo.</td>
+              <td>Implementation team</td>
+            </tr>
+            <tr>
+              <td>2026-07-03</td>
+              <td>Logo path hardening and sync fallback copy.</td>
+              <td><code>scripts/sync-new-ui.js</code>, <code>new-ui-bundle/assets/*.js</code>, <code>public/new/</code>, <code>public/adapt-logo.jpeg</code></td>
+              <td>Dashboard logo loads reliably.</td>
+              <td>Implementation team</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+
+    <div class="footer">
+      Document policy: keep this file in-repo, update on every New UI integration change, and review in PR.
+    </div>
+  </div>
+</body>
+</html>

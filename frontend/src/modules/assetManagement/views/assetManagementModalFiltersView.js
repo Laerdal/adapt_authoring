@@ -124,7 +124,13 @@ define(function(require) {
         onAddAssetClicked: function(event) {
             event && event.preventDefault();
             Origin.trigger('assetManagement:modal:newAssetOpened');
-            $('.modal-popup-content').append(new AssetManagementModalNewAssetView({model: new AssetModel()}).$el);
+            var newAssetView = new AssetManagementModalNewAssetView({ model: new AssetModel() });
+            // Propagate the AI Tutor context so the upload is tagged at creation (server-side),
+            // letting it appear immediately in the filtered tutor picker.
+            if (this.options && this.options.aiTutorCourseId) {
+              newAssetView.aiTutorCourseId = this.options.aiTutorCourseId;
+            }
+            $('.modal-popup-content').append(newAssetView.$el);
         }
 
     });
