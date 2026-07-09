@@ -26,6 +26,9 @@ export default function AssetPickerModal({ onSelect, onClose }: AssetPickerModal
 
   useEffect(() => {
     void loadAssets();
+    return () => {
+      if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    };
   }, []);
 
   function handleSearchChange(e: React.ChangeEvent<HTMLInputElement>) {
