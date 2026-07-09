@@ -373,20 +373,53 @@ module.exports = function(grunt) {
     });
   });
 
-  // Deploys the vendored New UI bundle (new-ui-bundle/) to the served location
-  // (public/new/) so /new is up to date after every build — no manual step needed.
-  grunt.registerTask('sync-new-ui', 'Deploy the New UI bundle to public/new (scripts/sync-new-ui.js).', function() {
+  // Builds the New UI from source (new-ui-source/ via Vite) then deploys the
+  // compiled output to public/new — same pattern as less/requirejs-direct for
+  // the old frontend. The vendored new-ui-bundle/ is used as a fallback only
+  // when the Vite build fails (e.g. missing Node >=20 native bindings).
+  grunt.registerTask('sync-new-ui', 'Compile new-ui-source/ with Vite and deploy to public/new.', function() {
     var done = this.async();
-    var script = require('path').join(__dirname, 'scripts', 'sync-new-ui.js');
-    var child = require('child_process').spawn(process.execPath, [script], { stdio: 'inherit' });
-    child.on('exit', function(code) {
-      if (code !== 0) grunt.log.warn('sync-new-ui exited with code ' + code + '; /new may serve a stale bundle.');
-      done(); // non-fatal: never block the rest of the build on New UI sync
+    var path = require('path');
+    var spawn = require('child_process').spawn;
+
+    var newUiDir   = path.join(__dirname, 'new-ui-source');
+    var distDir    = path.join(newUiDir, 'dist');
+    var syncScript = path.join(__dirname, 'scripts', 'sync-new-ui.js');
+
+    grunt.log.writeln('Building New UI from source (' + newUiDir + ')...');
+
+    var npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    var buildChild = spawn(npm, ['run', 'build'], { cwd: newUiDir, stdio: 'inherit', shell: true });
+
+    buildChild.on('error', function(err) {
+      grunt.log.warn('New UI build spawn failed: ' + err.message + '. Falling back to vendored bundle.');
+      runSync(null);
     });
-    child.on('error', function(err) {
-      grunt.log.warn('sync-new-ui failed to spawn: ' + err.message);
-      done();
+
+    buildChild.on('exit', function(code) {
+      if (code !== 0) {
+        grunt.log.warn('New UI Vite build exited with code ' + code + '. Falling back to vendored bundle.');
+        runSync(null);
+      } else {
+        grunt.log.ok('New UI build complete.');
+        runSync(distDir);
+      }
     });
+
+    function runSync(distPath) {
+      var env = Object.assign({}, process.env);
+      if (distPath) env.NEW_UI_DIST_PATH = distPath;
+
+      var syncChild = spawn(process.execPath, [syncScript], { stdio: 'inherit', env: env });
+      syncChild.on('exit', function(syncCode) {
+        if (syncCode !== 0) grunt.log.warn('sync-new-ui exited with code ' + syncCode + '; /new may serve a stale bundle.');
+        done();
+      });
+      syncChild.on('error', function(err) {
+        grunt.log.warn('sync-new-ui failed to spawn: ' + err.message);
+        done();
+      });
+    }
   });
 
   grunt.registerTask('default', ['build:dev']);

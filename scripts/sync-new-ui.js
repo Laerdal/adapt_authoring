@@ -3,11 +3,14 @@ const path = require('path');
 
 const repoRoot = path.resolve(__dirname, '..');
 const targetDir = path.join(repoRoot, 'public', 'new');
-const defaultLocalBundle = path.join(repoRoot, 'new-ui-bundle');
+// Primary source: built output from new-ui-source/ (compiled by grunt build).
+// Fallback: vendored new-ui-bundle/ for CI/environments that skip the Vite step.
+const newUiDist    = path.join(repoRoot, 'new-ui-source', 'dist');
+const legacyBundle = path.join(repoRoot, 'new-ui-bundle');
 
 const sourceDir = process.env.NEW_UI_DIST_PATH
   ? path.resolve(process.env.NEW_UI_DIST_PATH)
-  : defaultLocalBundle;
+  : (fs.existsSync(path.join(newUiDist, 'index.html')) ? newUiDist : legacyBundle);
 
 function copyRecursive(src, dst) {
   const stat = fs.statSync(src);

@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { useState, useRef } from "react";
 import ImageCropper from "@/components/common/ImageCropper";
+import AssetPickerModal from "@/components/common/AssetPickerModal";
 
 interface CourseCardProps {
   id: number;
@@ -8,29 +9,31 @@ interface CourseCardProps {
   description: string;
   savedDate: string;
   imageUrl?: string | null;
+  heroAssetId?: string | null;
   tags?: string[];
   view?: "grid" | "list";
-  onUpdate: (patch: { title?: string; description?: string; imageUrl?: string | null; tags?: string[] }) => void;
+  onUpdate: (patch: { title?: string; description?: string; heroAssetId?: string | null; tags?: string[] }) => void;
   onCopy: () => void;
   onCopyId: () => void;
   onDelete: () => void;
 }
 
 export default function CourseCard({
-  id, title, description, savedDate, imageUrl, tags = [],
+  id, title, description, savedDate, imageUrl, heroAssetId = null, tags = [],
   view = "grid", onUpdate, onCopy, onCopyId, onDelete,
 }: CourseCardProps) {
-  const [modalOpen, setModalOpen]       = useState(false);
-  const [menuOpen, setMenuOpen]         = useState(false);
-  const [deleteOpen, setDeleteOpen]     = useState(false);
-  const [editTitle, setEditTitle]       = useState(title);
-  const [editDesc, setEditDesc]         = useState(description);
-  const [editImage, setEditImage]       = useState<string | null>(imageUrl ?? null);
-  const [editTags, setEditTags]         = useState<string[]>(tags);
-  const [tagInput, setTagInput]         = useState("");
-  const [cropSrc, setCropSrc]           = useState<string | null>(null);
-  const fileInputRef                    = useRef<HTMLInputElement>(null);
-  const menuRef                         = useRef<HTMLDivElement>(null);
+  const [modalOpen, setModalOpen]           = useState(false);
+  const [menuOpen, setMenuOpen]             = useState(false);
+  const [deleteOpen, setDeleteOpen]         = useState(false);
+  const [editTitle, setEditTitle]           = useState(title);
+  const [editDesc, setEditDesc]             = useState(description);
+  const [editImage, setEditImage]           = useState<string | null>(imageUrl ?? null);
+  const [editHeroAssetId, setEditHeroAssetId] = useState<string | null>(heroAssetId);
+  const [editTags, setEditTags]             = useState<string[]>(tags);
+  const [tagInput, setTagInput]             = useState("");
+  const [cropSrc, setCropSrc]               = useState<string | null>(null);
+  const [assetPickerOpen, setAssetPickerOpen] = useState(false);
+  const menuRef                             = useRef<HTMLDivElement>(null);
 
   function addTag() {
     const t = tagInput.trim();
@@ -47,6 +50,7 @@ export default function CourseCard({
     setEditTitle(title);
     setEditDesc(description);
     setEditImage(imageUrl ?? null);
+    setEditHeroAssetId(heroAssetId);
     setEditTags(tags);
     setTagInput("");
     setCropSrc(null);
@@ -54,18 +58,19 @@ export default function CourseCard({
   }
 
   function handleSave() {
-    onUpdate({ title: editTitle, description: editDesc, imageUrl: editImage, tags: editTags });
+    onUpdate({ title: editTitle, description: editDesc, heroAssetId: editHeroAssetId, tags: editTags });
     setModalOpen(false);
   }
 
-  function handleImageFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    // Reset so the same file can be re-selected after cancel
-    e.target.value = "";
-    const reader = new FileReader();
-    reader.onload = (ev) => setCropSrc(ev.target?.result as string);
-    reader.readAsDataURL(file);
+  function handleAssetSelected(asset: { id: string; url: string }) {
+    setEditHeroAssetId(asset.id);
+    setEditImage(asset.url);
+    setAssetPickerOpen(false);
+  }
+
+  function handleRemoveImage() {
+    setEditHeroAssetId(null);
+    setEditImage(null);
   }
 
   function handleMenuAction(action: () => void) {
@@ -327,40 +332,34 @@ export default function CourseCard({
                       <div className="absolute inset-0 bg-black/0 hover:bg-black/25 transition-colors" />
                     </div>
                     <div className="flex items-center gap-2">
-                      <button type="button" onClick={() => setCropSrc(editImage)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#2d6fa8] border border-[#2d6fa8] rounded-lg hover:bg-[#dbeeff] transition-colors">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M6 2v4H2"/><path d="M18 22v-4h4"/><path d="M2 12A10 10 0 0 1 18.36 5.64"/><path d="M22 12A10 10 0 0 1 5.64 18.36"/>
-                        </svg>
-                        Crop / Adjust
-                      </button>
-                      <button type="button" onClick={() => fileInputRef.current?.click()}
+                      <button type="button" onClick={() => setAssetPickerOpen(true)}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#374151] border border-[#d1d5db] rounded-lg hover:bg-[#f3f4f6] transition-colors">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+                          <rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
                         </svg>
-                        Replace
+                        Change
                       </button>
-                      <button type="button" onClick={() => setEditImage(null)}
+                      <button type="button" onClick={handleRemoveImage}
                         className="ml-auto text-xs text-[#ef4444] hover:text-[#dc2626] font-medium transition-colors">
-                        Delete image
+                        Remove image
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div
-                    className="h-36 rounded-xl flex flex-col items-center justify-center border-2 border-dashed border-[#d1d5db] hover:border-[#2d6fa8] transition-colors cursor-pointer relative overflow-hidden"
+                  <button
+                    type="button"
+                    className="h-36 w-full rounded-xl flex flex-col items-center justify-center border-2 border-dashed border-[#d1d5db] hover:border-[#2d6fa8] transition-colors cursor-pointer relative overflow-hidden"
                     style={{ background: "linear-gradient(135deg, #2d6fa8 0%, #3498a0 60%, #4db0b8 100%)" }}
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => setAssetPickerOpen(true)}
+                    aria-label="Select cover image from asset library"
                   >
                     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                       <rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" />
                       <polyline points="21 15 16 10 5 21" />
                     </svg>
-                    <span className="mt-2 text-xs text-white/80">Click to upload image</span>
-                  </div>
+                    <span className="mt-2 text-xs text-white/80">Click to select from asset library</span>
+                  </button>
                 )}
-                <input ref={fileInputRef} type="file" accept="image/*" className="hidden" title="Upload cover image" aria-label="Upload cover image" onChange={handleImageFile} />
               </div>
 
               <div>
@@ -480,6 +479,14 @@ export default function CourseCard({
             </div>
           </div>
         </div>
+      )}
+
+      {/* ── ASSET PICKER MODAL ── */}
+      {assetPickerOpen && (
+        <AssetPickerModal
+          onSelect={handleAssetSelected}
+          onClose={() => setAssetPickerOpen(false)}
+        />
       )}
     </>
   );
