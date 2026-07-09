@@ -168,7 +168,7 @@ export async function updateCourse(
     updateData.displayTitle = patch.title;
   }
   if (patch.description !== undefined) updateData.description = patch.description;
-  if ("heroAssetId" in patch) updateData.heroImage = patch.heroAssetId ?? null;
+  if (patch.heroAssetId !== undefined) updateData.heroImage = patch.heroAssetId;
   if (patch.tags !== undefined) {
     updateData.tags = await resolveOrCreateTagIds(patch.tags);
   }
