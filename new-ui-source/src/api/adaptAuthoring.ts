@@ -35,6 +35,60 @@ export async function getInstanceName(): Promise<string> {
   }
 }
 
+// ── Assets ───────────────────────────────────────────────────────────────────
+export interface Asset {
+  _id: string;
+  title?: string;
+  filename?: string;
+  mimeType?: string;
+  thumbnailPath?: string;
+  path?: string;
+}
+
+// Query image assets from the engine asset manager.
+// GET /api/asset/query?search[mimeType]=image
+export async function queryImages(search?: string): Promise<Asset[]> {
+  const params = new URLSearchParams({ "search[mimeType]": "image" });
+  if (search) params.append("search[title]", search);
+  try {
+    const result = await apiClient.get<Asset[]>(`/api/asset/query?${params}`);
+    return Array.isArray(result) ? result : [];
+  } catch {
+    return [];
+  }
+}
+
+// Upload a file as a new asset. Returns the new asset's _id.
+export async function uploadAsset(file: File, title?: string): Promise<string> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("title", title ?? file.name);
+  const res = await fetch("/api/asset", {
+    method: "POST",
+    body: form,
+    credentials: "same-origin",
+  });
+  if (!res.ok) throw new Error(`Asset upload failed: ${res.statusText}`);
+  const json = await res.json() as { _id: string };
+  return json._id;
+}
+
+// ── Tags ─────────────────────────────────────────────────────────────────────
+// Resolve tag titles to engine tag ObjectIds, creating any that don't exist yet.
+// POST /api/content/tag with { title } is idempotent — returns existing if found.
+export async function resolveOrCreateTagIds(tagTitles: string[]): Promise<string[]> {
+  if (!tagTitles.length) return [];
+  const results = await Promise.all(
+    tagTitles.map(async (title) => {
+      const tag = await apiClient.post<{ _id?: string; id?: string }>("/api/content/tag", { title });
+      const id = tag._id ?? tag.id;
+      if (!id) throw new Error(`Tag resolve/create did not return an id for "${title}"`);
+      return id;
+    })
+  );
+  return results;
+}
+
 // ── Dashboard courses ─────────────────────────────────────────────────────────
 // Shape consumed by HomePage. `id` is a stable client key; `backendId` is the
 // engine _id used for mutations.
@@ -46,6 +100,7 @@ export interface DashboardCourse {
   savedDate: string;
   savedDateTs: number;
   imageUrl: string | null;
+  heroAssetId: string | null;
   theme: "LIFE Theme" | "Vanilla Theme" | "Custom Theme";
   tags: string[];
 }
@@ -64,6 +119,7 @@ const OBJECT_ID = /^[a-f0-9]{24}$/i;
 
 function toDashboardCourse(doc: EngineCourse, index: number): DashboardCourse {
   const ts = doc.updatedAt ? new Date(doc.updatedAt).getTime() : 0;
+  const heroAssetId = doc.heroImage && OBJECT_ID.test(doc.heroImage) ? doc.heroImage : null;
   return {
     id: index + 1,
     backendId: doc._id,
@@ -73,7 +129,9 @@ function toDashboardCourse(doc: EngineCourse, index: number): DashboardCourse {
       ? new Date(ts).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
       : "",
     savedDateTs: ts,
-    imageUrl: null,
+    // Serve the hero image via the engine's asset-serve endpoint.
+    imageUrl: heroAssetId ? `/api/asset/serve/${heroAssetId}` : null,
+    heroAssetId,
     theme: "LIFE Theme",
     // Tags come back as refs or populated objects; keep only human-readable names.
     tags: Array.isArray(doc.tags)
@@ -91,8 +149,28 @@ export async function fetchDashboardCourses(shared = false): Promise<DashboardCo
   return Array.isArray(docs) ? docs.map(toDashboardCourse) : [];
 }
 
-export function updateCourse(backendId: string, patch: Record<string, unknown>): Promise<unknown> {
-  return apiClient.put(`/api/content/course/${backendId}`, patch);
+// Update course details — resolves tag titles to IDs before sending to the engine.
+// Sends both `title` and `displayTitle` to keep the dashboard and course menu in sync.
+export async function updateCourse(
+  backendId: string,
+  patch: {
+    title?: string;
+    description?: string;
+    heroAssetId?: string | null;
+    tags?: string[];
+  }
+): Promise<unknown> {
+  const updateData: Record<string, unknown> = {};
+  if (patch.title !== undefined) {
+    updateData.title = patch.title;
+    updateData.displayTitle = patch.title;
+  }
+  if (patch.description !== undefined) updateData.description = patch.description;
+  if (patch.heroAssetId !== undefined) updateData.heroImage = patch.heroAssetId;
+  if (patch.tags !== undefined) {
+    updateData.tags = await resolveOrCreateTagIds(patch.tags);
+  }
+  return apiClient.put(`/api/content/course/${backendId}`, updateData);
 }
 
 export function duplicateCourse(backendId: string): Promise<unknown> {

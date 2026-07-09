@@ -8,6 +8,12 @@
 /frontend/src/plugins/plugins.js
 /frontend/src/templates/templates.js
 
+# New UI — all generated from source by `grunt build`, never commit build artefacts
+/new-ui-bundle
+/new-ui-source/dist
+/new-ui-source/node_modules
+/public/new
+
 node_modules
 /nbproject/
 /master/
