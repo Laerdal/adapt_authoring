@@ -80,15 +80,13 @@ export async function resolveOrCreateTagIds(tagTitles: string[]): Promise<string
   if (!tagTitles.length) return [];
   const results = await Promise.all(
     tagTitles.map(async (title) => {
-      try {
-        const tag = await apiClient.post<{ _id?: string; id?: string }>("/api/content/tag", { title });
-        return (tag._id ?? tag.id) || null;
-      } catch {
-        return null;
-      }
+      const tag = await apiClient.post<{ _id?: string; id?: string }>("/api/content/tag", { title });
+      const id = tag._id ?? tag.id;
+      if (!id) throw new Error(`Tag resolve/create did not return an id for "${title}"`);
+      return id;
     })
   );
-  return results.filter((id): id is string => id !== null);
+  return results;
 }
 
 // ── Dashboard courses ─────────────────────────────────────────────────────────
