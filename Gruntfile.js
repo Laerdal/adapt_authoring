@@ -375,10 +375,18 @@ module.exports = function(grunt) {
 
   // Builds the New UI from source (new-ui-source/ via Vite) then deploys the
   // compiled output to public/new — same pattern as less/requirejs-direct for
-  // the old frontend. On first run it installs new-ui-source dependencies. If
-  // any step fails the task degrades: public/new keeps serving the last
-  // deployed bundle (possibly stale) and a warning is logged — the overall
-  // grunt build is never failed by the New UI.
+  // the old frontend.
+  //
+  // Node version: the authoring tool runs on Node 18, but the New UI toolchain
+  // (Tailwind v4 / oxide) requires Node 20+. To keep Node 18 as the machine
+  // default, set NEW_UI_NODE_BIN to a Node 20 bin directory (e.g.
+  // /root/.nvm/versions/node/v20.x/bin). It is prepended to PATH for the New UI
+  // install/build child processes ONLY — grunt and everything else stay on the
+  // default Node. If unset, the current Node is used (fine when already >= 20).
+  //
+  // If any step fails the task degrades: public/new keeps serving the last
+  // deployed bundle (a warning is logged) — the overall grunt build never fails
+  // because of the New UI.
   grunt.registerTask('sync-new-ui', 'Compile new-ui-source/ with Vite and deploy to public/new.', function() {
     var done = this.async();
     var path = require('path');
@@ -389,6 +397,17 @@ module.exports = function(grunt) {
     var distDir    = path.join(newUiDir, 'dist');
     var syncScript = path.join(__dirname, 'scripts', 'sync-new-ui.js');
     var npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    var node20Bin = process.env.NEW_UI_NODE_BIN; // dir with Node 20 node/npm; unset = default node
+
+    // Env for New UI child processes: Node 20 on PATH when NEW_UI_NODE_BIN is set.
+    function childEnv() {
+      var env = Object.assign({}, process.env);
+      if (node20Bin) {
+        var key = ('Path' in env && !('PATH' in env)) ? 'Path' : 'PATH';
+        env[key] = node20Bin + path.delimiter + (env[key] || '');
+      }
+      return env;
+    }
 
     // Degrade, don't fail: warn and leave public/new untouched.
     function degrade(reason) {
@@ -399,12 +418,23 @@ module.exports = function(grunt) {
 
     // Run an npm step in new-ui-source; on non-zero/spawn-error, degrade.
     function npmStep(args, label, onOk) {
-      var child = spawn(npm, args, { cwd: newUiDir, stdio: 'inherit', shell: true });
+      var child = spawn(npm, args, { cwd: newUiDir, stdio: 'inherit', shell: true, env: childEnv() });
       child.on('error', function(err) { degrade(label + ' failed to spawn: ' + err.message); });
       child.on('exit', function(code) {
         if (code !== 0) return degrade(label + ' exited with code ' + code);
         onOk();
       });
+    }
+
+    // Tailwind oxide ships its native engine as a platform-specific package.
+    // If node_modules was installed under a Node that skipped it (e.g. Node 18
+    // vs oxide's node>=20 requirement), the parent exists but the binding does
+    // not — detect that so we reinstall rather than build against a broken tree.
+    function oxideBindingPresent() {
+      try {
+        var dir = path.join(newUiDir, 'node_modules', '@tailwindcss');
+        return fs.readdirSync(dir).some(function(n) { return /^oxide-/.test(n) && n !== 'oxide-wasm32-wasi'; });
+      } catch (e) { return false; }
     }
 
     function runSync() {
@@ -425,13 +455,14 @@ module.exports = function(grunt) {
       });
     }
 
-    // Dev convenience: install deps only when missing (fast no-op once present).
-    // Delete new-ui-source/node_modules to force a reinstall after dep changes.
-    if (fs.existsSync(path.join(newUiDir, 'node_modules'))) {
-      build();
-    } else {
-      grunt.log.writeln('Installing new-ui-source dependencies (first run)...');
+    // Install when deps are missing OR the oxide native binding is absent
+    // (self-heals a tree installed under the wrong Node). Otherwise skip for speed.
+    if (!fs.existsSync(path.join(newUiDir, 'node_modules')) || !oxideBindingPresent()) {
+      grunt.log.writeln('Installing new-ui-source dependencies ('
+        + (node20Bin ? 'Node 20 via NEW_UI_NODE_BIN' : 'default Node') + ')...');
       npmStep(['install'], 'New UI dependency install', build);
+    } else {
+      build();
     }
   });
 
