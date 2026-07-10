@@ -375,50 +375,63 @@ module.exports = function(grunt) {
 
   // Builds the New UI from source (new-ui-source/ via Vite) then deploys the
   // compiled output to public/new — same pattern as less/requirejs-direct for
-  // the old frontend. The vendored new-ui-bundle/ is used as a fallback only
-  // when the Vite build fails (e.g. missing Node >=20 native bindings).
+  // the old frontend. On first run it installs new-ui-source dependencies. If
+  // any step fails the task degrades: public/new keeps serving the last
+  // deployed bundle (possibly stale) and a warning is logged — the overall
+  // grunt build is never failed by the New UI.
   grunt.registerTask('sync-new-ui', 'Compile new-ui-source/ with Vite and deploy to public/new.', function() {
     var done = this.async();
     var path = require('path');
+    var fs = require('fs');
     var spawn = require('child_process').spawn;
 
     var newUiDir   = path.join(__dirname, 'new-ui-source');
     var distDir    = path.join(newUiDir, 'dist');
     var syncScript = path.join(__dirname, 'scripts', 'sync-new-ui.js');
-
-    grunt.log.writeln('Building New UI from source (' + newUiDir + ')...');
-
     var npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-    var buildChild = spawn(npm, ['run', 'build'], { cwd: newUiDir, stdio: 'inherit', shell: true });
 
-    buildChild.on('error', function(err) {
-      grunt.log.warn('New UI build spawn failed: ' + err.message + '. Falling back to vendored bundle.');
-      runSync(null);
-    });
+    // Degrade, don't fail: warn and leave public/new untouched.
+    function degrade(reason) {
+      grunt.log.warn('New UI not rebuilt (' + reason + '). /new will serve the '
+        + 'previously deployed bundle in public/new (may be stale).');
+      done();
+    }
 
-    buildChild.on('exit', function(code) {
-      if (code !== 0) {
-        grunt.log.warn('New UI Vite build exited with code ' + code + '. Falling back to vendored bundle.');
-        runSync(null);
-      } else {
-        grunt.log.ok('New UI build complete.');
-        runSync(distDir);
-      }
-    });
+    // Run an npm step in new-ui-source; on non-zero/spawn-error, degrade.
+    function npmStep(args, label, onOk) {
+      var child = spawn(npm, args, { cwd: newUiDir, stdio: 'inherit', shell: true });
+      child.on('error', function(err) { degrade(label + ' failed to spawn: ' + err.message); });
+      child.on('exit', function(code) {
+        if (code !== 0) return degrade(label + ' exited with code ' + code);
+        onOk();
+      });
+    }
 
-    function runSync(distPath) {
-      var env = Object.assign({}, process.env);
-      if (distPath) env.NEW_UI_DIST_PATH = distPath;
-
+    function runSync() {
+      var env = Object.assign({}, process.env, { NEW_UI_DIST_PATH: distDir });
       var syncChild = spawn(process.execPath, [syncScript], { stdio: 'inherit', env: env });
       syncChild.on('exit', function(syncCode) {
         if (syncCode !== 0) grunt.log.warn('sync-new-ui exited with code ' + syncCode + '; /new may serve a stale bundle.');
         done();
       });
-      syncChild.on('error', function(err) {
-        grunt.log.warn('sync-new-ui failed to spawn: ' + err.message);
-        done();
+      syncChild.on('error', function(err) { grunt.log.warn('sync-new-ui failed to spawn: ' + err.message); done(); });
+    }
+
+    function build() {
+      grunt.log.writeln('Building New UI from source (' + newUiDir + ')...');
+      npmStep(['run', 'build'], 'New UI Vite build', function() {
+        grunt.log.ok('New UI build complete.');
+        runSync();
       });
+    }
+
+    // Dev convenience: install deps only when missing (fast no-op once present).
+    // Delete new-ui-source/node_modules to force a reinstall after dep changes.
+    if (fs.existsSync(path.join(newUiDir, 'node_modules'))) {
+      build();
+    } else {
+      grunt.log.writeln('Installing new-ui-source dependencies (first run)...');
+      npmStep(['install'], 'New UI dependency install', build);
     }
   });
 

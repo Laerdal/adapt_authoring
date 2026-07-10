@@ -3,14 +3,13 @@ const path = require('path');
 
 const repoRoot = path.resolve(__dirname, '..');
 const targetDir = path.join(repoRoot, 'public', 'new');
-// Primary source: built output from new-ui-source/ (compiled by grunt build).
-// Fallback: vendored new-ui-bundle/ for CI/environments that skip the Vite step.
-const newUiDist    = path.join(repoRoot, 'new-ui-source', 'dist');
-const legacyBundle = path.join(repoRoot, 'new-ui-bundle');
+// Source: built output from new-ui-source/dist (compiled by grunt sync-new-ui).
+// NEW_UI_DIST_PATH overrides the location; there is no vendored-bundle fallback.
+const newUiDist = path.join(repoRoot, 'new-ui-source', 'dist');
 
 const sourceDir = process.env.NEW_UI_DIST_PATH
   ? path.resolve(process.env.NEW_UI_DIST_PATH)
-  : (fs.existsSync(path.join(newUiDist, 'index.html')) ? newUiDist : legacyBundle);
+  : newUiDist;
 
 function copyRecursive(src, dst) {
   const stat = fs.statSync(src);
@@ -69,8 +68,8 @@ function ensureRootLogo() {
 
 function main() {
   if (!fs.existsSync(sourceDir)) {
-    console.error('Source dist not found:', sourceDir);
-    console.error('Provide NEW_UI_DIST_PATH or add a local bundle at: ' + defaultLocalBundle);
+    console.error('New UI dist not found:', sourceDir);
+    console.error('Expected a Vite build in new-ui-source/dist, or set NEW_UI_DIST_PATH.');
     process.exit(1);
   }
 
