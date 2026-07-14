@@ -181,6 +181,175 @@ export function deleteCourse(backendId: string): Promise<unknown> {
   return apiClient.delete(`/api/content/course/${backendId}`);
 }
 
+export interface CreateCourseInput {
+  title: string;
+  description?: string;
+  instanceId?: string;
+  theme?: string;
+  menuStyle?: string;
+}
+
+export interface CreatedCourse {
+  id: string;
+  title: string;
+  description: string;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  status: "Draft" | "Published" | "Archived";
+  instanceId?: string;
+  theme?: string;
+  menuStyle?: string;
+}
+
+interface EnginePluginType {
+  _id: string;
+  name?: string;
+  displayName?: string;
+}
+
+interface EngineCourseDetails {
+  _id: string;
+  title?: string;
+  displayTitle?: string;
+  description?: string;
+}
+
+interface EngineConfigDetails {
+  _courseId?: string;
+  _theme?: string;
+  _menu?: string;
+}
+
+export interface CourseBootstrapData {
+  courseId: string;
+  title: string;
+  description: string;
+  themeName: string;
+  menuName: string;
+}
+
+function normalize(v?: string): string {
+  return (v ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function scorePluginMatch(plugin: EnginePluginType, label: string, kind: "theme" | "menu"): number {
+  const target = normalize(label);
+  const name = normalize(plugin.name);
+  const display = normalize(plugin.displayName);
+  if (!target) return 0;
+
+  if (target === name || target === display) return 100;
+  if (name.includes(target) || display.includes(target)) return 90;
+
+  const keywordsByLabel: Record<string, string[]> = kind === "theme"
+    ? {
+        lifetheme: ["life"],
+        vanillatheme: ["vanilla"],
+        customtheme: ["custom"]
+      }
+    : {
+        lifemenu: ["life"],
+        overviewmenu: ["overview"],
+        boxmenu: ["box"]
+      };
+
+  const keywords = keywordsByLabel[target] || [];
+  if (!keywords.length) return 0;
+
+  const hitCount = keywords.filter((k) => name.includes(k) || display.includes(k)).length;
+  return hitCount ? 70 + hitCount : 0;
+}
+
+function resolvePluginId(options: EnginePluginType[], label: string, kind: "theme" | "menu"): string | null {
+  let best: { id: string; score: number } | null = null;
+  for (const option of options) {
+    const score = scorePluginMatch(option, label, kind);
+    if (!option._id || score <= 0) continue;
+    if (!best || score > best.score) {
+      best = { id: option._id, score };
+    }
+  }
+  return best?.id ?? null;
+}
+
+async function getThemeTypes(): Promise<EnginePluginType[]> {
+  const rows = await apiClient.get<EnginePluginType[]>("/api/themetype");
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function getMenuTypes(): Promise<EnginePluginType[]> {
+  const rows = await apiClient.get<EnginePluginType[]>("/api/menutype");
+  return Array.isArray(rows) ? rows : [];
+}
+
+function toOptionLabel(row: EnginePluginType): string {
+  return (row.displayName || row.name || "").trim();
+}
+
+export async function getAuthoringThemeOptions(): Promise<string[]> {
+  const rows = await getThemeTypes();
+  return rows.map(toOptionLabel).filter(Boolean);
+}
+
+export async function getAuthoringMenuOptions(): Promise<string[]> {
+  const rows = await getMenuTypes();
+  return rows.map(toOptionLabel).filter(Boolean);
+}
+
+async function applyThemeToCourse(courseId: string, themeId: string): Promise<void> {
+  await apiClient.post(`/api/theme/${themeId}/makeitso/${courseId}`);
+}
+
+async function applyMenuToCourse(courseId: string, menuId: string): Promise<void> {
+  await apiClient.post(`/api/menu/${menuId}/makeitso/${courseId}`);
+}
+
+async function applyCourseSelections(courseId: string, themeLabel?: string, menuLabel?: string): Promise<void> {
+  const shouldApplyTheme = !!themeLabel?.trim();
+  const shouldApplyMenu = !!menuLabel?.trim();
+  if (!shouldApplyTheme && !shouldApplyMenu) return;
+
+  const [themes, menus] = await Promise.all([
+    shouldApplyTheme ? getThemeTypes() : Promise.resolve([]),
+    shouldApplyMenu ? getMenuTypes() : Promise.resolve([]),
+  ]);
+
+  if (themeLabel) {
+    const themeId = resolvePluginId(themes, themeLabel, "theme");
+    if (themeId) {
+      await applyThemeToCourse(courseId, themeId);
+    }
+  }
+
+  if (menuLabel) {
+    const menuId = resolvePluginId(menus, menuLabel, "menu");
+    if (menuId) {
+      await applyMenuToCourse(courseId, menuId);
+    }
+  }
+}
+
+export async function createCourse(input: CreateCourseInput): Promise<CreatedCourse> {
+  const created = await apiClient.post<CreatedCourse>("/api/courses", input);
+  await applyCourseSelections(created.id, input.theme, input.menuStyle);
+  return created;
+}
+
+export async function getCourseBootstrapData(courseId: string): Promise<CourseBootstrapData> {
+  const [course, config] = await Promise.all([
+    apiClient.get<EngineCourseDetails>(`/api/content/course/${courseId}`),
+    apiClient.get<EngineConfigDetails>(`/api/content/config/${courseId}`),
+  ]);
+
+  return {
+    courseId,
+    title: course.displayTitle || course.title || "Untitled Course",
+    description: course.description || "",
+    themeName: config._theme || "",
+    menuName: config._menu || "",
+  };
+}
+
 function fmtDate(v?: string): string {
   if (!v) return "";
   const d = new Date(v);
