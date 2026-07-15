@@ -5461,7 +5461,13 @@ function CourseCreationCenterContent() {
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
-    if (!courseId) return;
+    if (!courseId) {
+      setTitle(initialTitle);
+      setDescription(initialDescription);
+      setSavedThemeName("");
+      setSavedMenuName("");
+      return;
+    }
     let cancelled = false;
 
     (async () => {
@@ -5476,6 +5482,8 @@ function CourseCreationCenterContent() {
         if (cancelled) return;
         setTitle(initialTitle);
         setDescription(initialDescription);
+        setSavedThemeName("");
+        setSavedMenuName("");
       }
     })();
 
