@@ -397,9 +397,30 @@ module.exports = function(grunt) {
     var distDir    = path.join(newUiDir, 'dist');
     var syncScript = path.join(__dirname, 'scripts', 'sync-new-ui.js');
     var npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-    var node20Bin = process.env.NEW_UI_NODE_BIN; // dir with Node 20 node/npm; unset = default node
 
-    // Env for New UI child processes: Node 20 on PATH when NEW_UI_NODE_BIN is set.
+    // Auto-detect the newest Node 20 installed under nvm, so a plain
+    // `grunt build` works without any environment setup. An explicit
+    // NEW_UI_NODE_BIN always wins over auto-detection.
+    function discoverNode20Bin() {
+      try {
+        var base = process.env.NVM_DIR || path.join(require('os').homedir(), '.nvm');
+        var versions = path.join(base, 'versions', 'node');
+        var found = fs.readdirSync(versions)
+          .filter(function(d) { return /^v20\./.test(d); })
+          .sort(function(a, b) {
+            var x = a.slice(1).split('.').map(Number), y = b.slice(1).split('.').map(Number);
+            return (x[0] - y[0]) || (x[1] - y[1]) || (x[2] - y[2]);
+          });
+        if (!found.length) return undefined;
+        var bin = path.join(versions, found[found.length - 1], 'bin');
+        return fs.existsSync(path.join(bin, 'node')) ? bin : undefined;
+      } catch (e) { return undefined; }
+    }
+
+    var node20Src = process.env.NEW_UI_NODE_BIN ? 'NEW_UI_NODE_BIN' : 'auto-detected';
+    var node20Bin = process.env.NEW_UI_NODE_BIN || discoverNode20Bin(); // dir with Node 20 node/npm
+
+    // Env for New UI child processes: Node 20 on PATH when resolved above.
     function childEnv() {
       var env = Object.assign({}, process.env);
       if (node20Bin) {
@@ -449,6 +470,10 @@ module.exports = function(grunt) {
 
     function build() {
       grunt.log.writeln('Building New UI from source (' + newUiDir + ')...');
+      grunt.log.writeln(node20Bin
+        ? 'Using Node 20 (' + node20Src + '): ' + node20Bin
+        : 'NEW_UI_NODE_BIN not set and no Node 20 found under nvm; using default Node '
+          + '(Tailwind v4 requires Node 20 — build may fail).');
       npmStep(['run', 'build'], 'New UI Vite build', function() {
         grunt.log.ok('New UI build complete.');
         runSync();
@@ -459,7 +484,7 @@ module.exports = function(grunt) {
     // (self-heals a tree installed under the wrong Node). Otherwise skip for speed.
     if (!fs.existsSync(path.join(newUiDir, 'node_modules')) || !oxideBindingPresent()) {
       grunt.log.writeln('Installing new-ui-source dependencies ('
-        + (node20Bin ? 'Node 20 via NEW_UI_NODE_BIN' : 'default Node') + ')...');
+        + (node20Bin ? 'Node 20 via ' + node20Src : 'default Node') + ')...');
       npmStep(['install'], 'New UI dependency install', build);
     } else {
       build();
