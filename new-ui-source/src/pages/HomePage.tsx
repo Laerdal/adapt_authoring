@@ -114,28 +114,36 @@ export default function HomePage() {
   }, [loadCourses])
 
   useEffect(() => {
+    let cancelled = false;
+
     (async () => {
       try {
         const [themes, menus] = await Promise.all([
           getAuthoringThemeOptions(),
           getAuthoringMenuOptions(),
-        ])
+        ]);
+        if (cancelled) return;
 
-        const resolvedThemes = themes.length ? themes : FALLBACK_THEME_OPTIONS
-        const resolvedMenus = menus.length ? menus : FALLBACK_MENU_OPTIONS
+        const resolvedThemes = themes.length ? themes : FALLBACK_THEME_OPTIONS;
+        const resolvedMenus = menus.length ? menus : FALLBACK_MENU_OPTIONS;
 
-        setThemeOptions(resolvedThemes)
-        setMenuOptions(resolvedMenus)
-        setNewTheme((prev) => (prev && resolvedThemes.includes(prev)) ? prev : pickPreferredTheme(resolvedThemes))
-        setNewMenu((prev) => (prev && resolvedMenus.includes(prev)) ? prev : pickPreferredMenu(resolvedMenus))
+        setThemeOptions(resolvedThemes);
+        setMenuOptions(resolvedMenus);
+        setNewTheme((prev) => (prev && resolvedThemes.includes(prev)) ? prev : pickPreferredTheme(resolvedThemes));
+        setNewMenu((prev) => (prev && resolvedMenus.includes(prev)) ? prev : pickPreferredMenu(resolvedMenus));
       } catch {
-        setThemeOptions(FALLBACK_THEME_OPTIONS)
-        setMenuOptions(FALLBACK_MENU_OPTIONS)
-        setNewTheme((prev) => prev || pickPreferredTheme(FALLBACK_THEME_OPTIONS))
-        setNewMenu((prev) => prev || pickPreferredMenu(FALLBACK_MENU_OPTIONS))
+        if (cancelled) return;
+        setThemeOptions(FALLBACK_THEME_OPTIONS);
+        setMenuOptions(FALLBACK_MENU_OPTIONS);
+        setNewTheme((prev) => prev || pickPreferredTheme(FALLBACK_THEME_OPTIONS));
+        setNewMenu((prev) => prev || pickPreferredMenu(FALLBACK_MENU_OPTIONS));
       }
-    })()
-  }, [])
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Create modal
   const [createOpen, setCreateOpen] = useState(false)
