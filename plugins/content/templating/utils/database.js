@@ -8,7 +8,7 @@ async function getDatabase() {
   return new Promise((resolve, reject) => {
     database.getDatabase((error, db) => {
       if (error) {
-        reject(error);
+        return reject(error);
       }
       resolve(db);
     }, masterTenantID);
@@ -24,7 +24,7 @@ async function retrieveContent(contentType, data) {
       data,
       (error, results) => {
         if (error) {
-          reject(error);
+          return reject(error);
         }
         resolve(results);
       },
@@ -42,7 +42,7 @@ async function createContent(contentType, data) {
       data,
       (error, results) => {
         if (error) {
-          reject(error);
+          return reject(error);
         }
         resolve(results);
       },

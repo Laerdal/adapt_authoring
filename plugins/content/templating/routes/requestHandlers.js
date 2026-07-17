@@ -89,8 +89,6 @@ const KEY_MAP = {
 };
 
 async function handleTemplatePaste(req, res) {
-  const contentManager = app.contentmanager;
-  const user = app.usermanager.getCurrentUser();
   const templatePasteHelper = new TemplatePasteHelper({
     templateId: req.body.objectId,
     parentId: req.body.parentId,
@@ -148,7 +146,9 @@ class TemplatePasteHelper {
     });
 
     if (results.length !== 1) {
-      throw new Error('More than one template with id found');
+      throw new Error(
+        `Expected exactly one template with id ${this.templateId}, found ${results.length}`
+      );
     }
 
     templateObject = results[0]._doc;

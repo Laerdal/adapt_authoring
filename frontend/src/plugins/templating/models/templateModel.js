@@ -4,7 +4,7 @@ define(function (require) {
 
   const TemplateModel = Backbone.Model.extend({
     idAttribute: '_id',
-    urlRoot: 'api/template',
+    urlRoot: 'api/content/templating',
   });
 
   return TemplateModel;

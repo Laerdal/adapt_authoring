@@ -217,8 +217,8 @@ define(function (require) {
                 if (result.success) {
                   let templateTitle = $(this).closest('tr').find('td:first input').val();
                   let templateDescription = $(this).closest('tr').find('td:nth-child(3) input').val();
-                  $(this).closest('tr').find('td:first').empty().html(templateTitle);
-                  $(this).closest('tr').find('td:nth-child(3)').empty().html(templateDescription);
+                  $(this).closest('tr').find('td:first').empty().text(templateTitle);
+                  $(this).closest('tr').find('td:nth-child(3)').empty().text(templateDescription);
                   $(this).parent().find('.tempTrash, .tempEdit').show();
                   $(this).parent().find('.tempSave, .tempClose').hide();
                   Origin.Notify.snackbar('Template saved');
@@ -235,8 +235,8 @@ define(function (require) {
             $('.template-management-list').on('click', '.close-btn', function(e) {
               let $findTableFirstRow = $(this).closest('tr').find('td:first');
               let $findTableThreeRow = $(this).closest('tr').find('td:nth-child(3)');
-              $findTableFirstRow.html($findTableFirstRow.find('input').val());
-              $findTableThreeRow.html($findTableThreeRow.find('input').val());
+              $findTableFirstRow.text($findTableFirstRow.find('input').val());
+              $findTableThreeRow.text($findTableThreeRow.find('input').val());
               $(this).parent().find('.tempTrash, .tempEdit').show();
               $(this).parent().find('.tempSave, .tempClose').hide();              
             $(this).closest('tr').find('td').css({'padding-top': '16px', 'padding-bottom': '16px'});
@@ -250,8 +250,15 @@ define(function (require) {
             let firstCellContent = $findTableFirstRow.text().trim();
             let thirdCellContent = $findTableThreeRow.text().trim();
 
-            $findTableFirstRow.html(`<input type='text' value='${firstCellContent}' class='editTemplate' />`);
-            $findTableThreeRow.html(`<input type='text' value='${thirdCellContent}' class='editTemplate' />`);
+            // Build inputs via the DOM and set the value with .val() so that
+            // template titles/descriptions containing quotes or markup can't
+            // break the attribute or inject HTML.
+            $findTableFirstRow.empty().append(
+              $('<input type="text" class="editTemplate" />').val(firstCellContent)
+            );
+            $findTableThreeRow.empty().append(
+              $('<input type="text" class="editTemplate" />').val(thirdCellContent)
+            );
             $(this).parent().find('.tempTrash, .tempEdit').hide();
             $(this).parent().find('.tempSave, .tempClose').show();
             $(this).closest('tr').find('td').css({'padding-top': '8px', 'padding-bottom': '8px'});
@@ -286,6 +293,10 @@ define(function (require) {
                 }
               }
             });
+          } else {
+            // Table already initialised (filter / refresh / refetch): refresh
+            // its data so the latest response is shown instead of a stale table.
+            $('.template-management-list').DataTable().clear().rows.add(filteredResponse).draw();
           }
 
             async function updateTemplate(id, newTitle, newDescription, courseId, referenceId, referenceType, self) {
@@ -442,7 +453,7 @@ define(function (require) {
           'scroll',
           this._doLazyScroll
         );
-        $(window).on('resize', this._onResize);
+        $(window).off('resize', this._onResize);
 
         OriginView.prototype.remove.apply(this, arguments);
       },
