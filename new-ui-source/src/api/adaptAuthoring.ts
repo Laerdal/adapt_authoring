@@ -259,10 +259,22 @@ export function deleteUser(userBackendId: string): Promise<unknown> {
 
 // ── Templates ─────────────────────────────────────────────────────────────────
 export type TemplateType = "Page" | "Article" | "Block" | "Component";
-const TEMPLATE_TYPES: TemplateType[] = ["Page", "Article", "Block", "Component"];
+// The engine stores the template's content kind in `referenceType`
+// (contentobject/article/block/component). A "contentobject" template is a Page.
 const coerceTemplateType = (v?: string): TemplateType => {
-  const cap = v ? v.charAt(0).toUpperCase() + v.slice(1).toLowerCase() : "";
-  return (TEMPLATE_TYPES as string[]).includes(cap) ? (cap as TemplateType) : "Page";
+  switch ((v ?? "").toLowerCase()) {
+    case "contentobject":
+    case "page":
+      return "Page";
+    case "article":
+      return "Article";
+    case "block":
+      return "Block";
+    case "component":
+      return "Component";
+    default:
+      return "Page";
+  }
 };
 
 export interface DashboardTemplate {
@@ -272,6 +284,7 @@ export interface DashboardTemplate {
   type: TemplateType;
   description: string;
   timestamp: Date;
+  author: string;
 }
 
 interface EngineTemplate {
@@ -279,23 +292,42 @@ interface EngineTemplate {
   title?: string;
   displayName?: string;
   name?: string;
-  templateType?: string;
-  _type?: string;
+  referenceType?: string;
   description?: string;
+  createdBy?: string | { _id?: string };
+  author?: string;
   createdAt?: string;
   updatedAt?: string;
 }
 
-export async function getTemplates(): Promise<DashboardTemplate[]> {
-  const docs = await apiClient.get<EngineTemplate[]>("/api/content/templating");
+// "mine"   → templates I created            → GET /api/my/templating
+// "shared" → templates shared with me        → GET /api/shared/templating
+//   (shared with everyone, or explicitly with me — mirrors /shared/course)
+export type TemplateScope = "mine" | "shared";
+
+export async function getTemplates(
+  scope: TemplateScope = "mine"
+): Promise<DashboardTemplate[]> {
+  const endpoint = scope === "shared" ? "/api/shared/templating" : "/api/my/templating";
+  const docs = await apiClient.get<EngineTemplate[]>(endpoint);
   return (Array.isArray(docs) ? docs : []).map((t, i) => ({
     id: i + 1,
     backendId: t._id,
-    name: t.displayName || t.title || t.name || "Untitled",
-    type: coerceTemplateType(t.templateType || t._type),
+    name: t.title || t.displayName || t.name || "Untitled",
+    type: coerceTemplateType(t.referenceType),
     description: t.description || "",
     timestamp: new Date(t.updatedAt || t.createdAt || 0),
+    author: t.author || "",
   }));
+}
+
+// Persist a template rename/description edit. Matches the legacy UI which PUTs
+// { title, description } to the templating content endpoint.
+export function updateTemplate(
+  backendId: string,
+  patch: { title?: string; description?: string }
+): Promise<unknown> {
+  return apiClient.put(`/api/content/templating/${backendId}`, patch);
 }
 
 export function deleteTemplate(backendId: string): Promise<unknown> {

@@ -1,0 +1,15 @@
+{
+  "plugins": {
+    "adapt-content-template": {
+      "isEnabled": true,
+      "frontend": {
+        "path": "/home/user/adapt-authoring-plugins/frontend/src/plugins/templating",
+        "dest": "templating"
+      },
+      "backend": {
+        "path": "/home/user/adapt-authoring-plugins/plugins/content/templating",
+        "dest": "content"
+      }
+    }
+  }
+}

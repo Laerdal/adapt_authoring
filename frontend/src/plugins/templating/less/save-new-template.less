@@ -1,0 +1,42 @@
+.save-new-template {
+  padding: 1rem;
+  h1 {
+    padding: 10px 0 15px 0;
+    font-size: 18px;
+    text-transform: capitalize;
+  }
+  // Scope the modal's own label / text-input styling to the name & description
+  // rows only, so it does NOT bleed into the reused scaffold sharing fields
+  // (they must render exactly like Project Settings).
+  .form-input > label {
+    padding-bottom: 10px;
+    font-size: 14px;
+  }
+  .form-input > input[type="text"] {
+    margin-bottom: 15px;
+    width: calc(100% - 16px);
+  }
+
+  // Defensive cap for the reused users selectize dropdown so a long list scrolls
+  // internally instead of overflowing the modal (matches the standard 200px).
+  .selectize-dropdown-content {
+    max-height: 200px;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  // The scaffold sharing fields render inside a Backbone.Form <fieldset> whose
+  // default styling (indented white box + 30px field padding + 90% input width)
+  // misaligns them with the Name / Description rows above. Neutralise it so all
+  // four controls share the same left edge and full width.
+  fieldset {
+    margin-left: 0;
+    background-color: transparent;
+  }
+  .field {
+    padding: 10px 0;
+  }
+  .field .field-editor .selectize-control .selectize-input {
+    width: calc(100% - 16px);
+  }
+}

@@ -1,0 +1,24 @@
+<div class="editor-template-list-item-inner">
+  <div class="editor-template-list-item-icon {{#if name}}{{name}}{{/if}}"></div>
+  {{#if title}}
+    <div class="editor-template-list-item-details">
+      <span class="editor-template-list-item-display-name" {{#if description}}title="{{description}}"{{/if}}>{{title}}</span>
+      {{#if description}}
+        <br/><span class="editor-template-list-item-description">{{description}}</span>
+      {{/if}}
+    </div>
+  {{/if}}
+</div>
+<div class="editor-template-list-item-overlay display-none">
+  <div class="editor-template-list-item-overlay-inner clearfix">
+    {{#if availablePositions.left}}
+      <a class="btn primary editor-template-list-item-overlay-button editor-template-list-item-overlay-left" data-position="left">{{t 'app.addtoleft'}}</a>
+    {{/if}}
+    {{#if availablePositions.full}}
+      <a class="btn primary editor-template-list-item-overlay-button editor-template-list-item-overlay-add" data-position="full">{{t 'app.addfullwidth'}}</a>
+    {{/if}}
+    {{#if availablePositions.right}}
+      <a class="btn primary editor-template-list-item-overlay-button editor-template-list-item-overlay-right" data-position="right">{{t 'app.addtoright'}}</a>
+    {{/if}}
+  </div>
+</div>

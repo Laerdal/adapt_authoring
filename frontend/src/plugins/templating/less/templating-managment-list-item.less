@@ -1,0 +1,311 @@
+.template-management-collection-inner{
+  margin: 2rem;
+  font-size: 14px;
+  line-height: 1.7;
+  .template-management-header{
+    padding-bottom: 1.25rem;
+    h1{
+      font-size: 18px;
+    }
+    p {
+      font-size: 14px;
+    }
+  }
+  .top{
+    display: flex;
+    align-items: center;
+    justify-content: left;
+    margin-bottom: 1.688rem;
+  }
+  .bottom {
+    display: flex;
+    background: #ffffff;
+    width: 100%;
+    margin: 9px 0px;
+    text-align: right;
+    padding: 12px 0;
+    border-top: 1px #cccccc solid;
+    border-bottom: 1px #cccccc solid;
+    color: #1f1f1f;
+    font-size: 14px;
+    align-items: center;
+    justify-content: right;
+  }
+  .template-management-list{
+    width: 100%;
+    border-spacing: 0 5px;
+    border-collapse: inherit;
+    thead{
+      background: #ffffff;
+      border-radius: 4px;
+      border: 1px solid #DBF1F8;
+    }
+    tr{
+      padding: 1rem;
+      background: #ffffff;
+      border-radius: 4px;
+      margin: 2px auto;
+      outline-style: solid; 
+      outline-width: 2px;   
+      outline-color: #DBF1F8; 
+    }
+     th{
+      text-transform: capitalize;
+      font-size: 14px;
+    }
+    td{      
+      line-height: 1.231rem;
+      font-size: 14px;
+      padding: 1.156rem 1.25rem;
+      font-weight: 400;
+      vertical-align: middle;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      white-space: nowrap;
+      max-width: 150px;
+      width: 30%;
+      &:nth-child(2){
+        width: 15%;
+        text-transform: capitalize;
+      }
+      &:nth-child(4) {
+        text-transform: uppercase;
+        width: 15%;
+      }
+      &:last-child{
+        text-align: right;
+      }
+    }
+    th{
+      text-align: left;
+      line-height: 1.231rem;
+      padding: 1.156rem 1.25rem;
+      font-weight: 600;
+      cursor: pointer;
+      &:last-child{
+        cursor: default;
+        text-align: right;
+        text-transform: none;
+      }
+      &.sorting::after{
+        content: url(assets/upArrow.svg); /* Replace with your image URL */
+        display: inline-block;
+        opacity: 0.4;
+        width: 10px;
+        height: 20px;
+        vertical-align: middle;
+        padding-left: 12px;
+      }
+      &.sorting_asc::after{
+        content: url(assets/upArrow.svg); /* Replace with your image URL */
+        display: inline-block;
+        width: 10px;
+        height: 20px;
+        vertical-align: middle;
+        padding-left: 10px;
+      }
+      &.sorting_desc::after{
+        content: url(assets/downArrow.svg); /* Replace with your image URL */
+        display: inline-block;
+        width: 10px;
+        height: 20px;
+        vertical-align: middle;
+        padding-left: 10px;
+      }
+    }
+    .tempEdit{
+      background: url(assets/edit.svg) no-repeat;
+      width: 20px;
+      height: 22px;
+      display: inline-block;
+      margin-right: 10px;
+    }
+    .tempTrash{
+      background: url(assets/Trash.svg) no-repeat;
+      width: 20px;
+      height: 22px;
+      display: inline-block;
+    }
+    .tempEdit{
+    background: url(assets/edit.svg) no-repeat;
+    width: 20px;
+    height: 22px;
+    display: inline-block;
+    margin-right: 15px;
+  }
+  .tempTrash{
+    background: url(assets/Trash.svg) no-repeat;
+    width: 20px;
+    height: 22px;
+    display: inline-block;
+  }
+  .templateUpArrow{
+    background: url(assets/upArrow.svg) 0px 10px no-repeat;
+    width: 20px;
+    height: 23px;
+    display: inline-block;
+  }
+  .templateDownArrow{
+    background: url(assets/downArrow.svg) 0px 10px no-repeat;
+    width: 20px;
+    height: 23px;
+    display: inline-block;
+  }
+  .tempSave{
+    margin-right: 15px;
+    line-height: 24px;
+    padding: 8px 15px;
+  }
+  .editTemplate{
+    border: 1px solid #cccccc;
+    border-radius: 4px;
+  }
+  .tempClose{
+    background: url(assets/close.svg) no-repeat;
+    width: 20px;
+    height: 22px;
+    display: inline-block;
+  }  
+  }
+  input[type="search"] {
+    padding-left: 38px;
+    background: #ffffff url(assets/search.svg)  12px center no-repeat;
+    border: 1px #cccccc solid;
+    width: 100%;
+    height: 2.625rem;
+    &::placeholder{
+      color: #999999;
+    }
+  }
+  .custom-filters{
+    label {
+      padding-right: 1.25rem;
+      font-size: 14px;
+      font-weight: 600;
+      color: #4D4D4D;
+      cursor: pointer;
+      &:first-child{
+        padding-left: 1.25rem;
+      }
+      input[type="radio"]{
+        vertical-align: middle;
+        margin-right: 0.5rem;
+      }
+    }
+  }
+  .dataTables_filter{
+    padding-left: 1.25rem;
+    flex-grow: 1;
+  }
+  select{
+    border: 0;
+    min-width: 55px;
+    margin-right: 15px;
+    padding-left: 0;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background: url(assets/dropdownArrow.svg) no-repeat right 10px center;
+  }
+  .paginate_button{
+    &.disabled{
+      cursor: default !important;
+      opacity: 0.5;
+    }
+    &.next{
+      background: transparent url(assets/rightArrow.svg) center no-repeat!important;
+      width: 48px;
+      height: 26px;
+      display: inline-block;
+      cursor: pointer;
+      text-indent: -9999px;
+      vertical-align: middle;
+    }
+    &.previous {
+      background: transparent url(assets/leftArrow.svg) center no-repeat!important;
+      width: 48px;
+      height: 26px;
+      display: inline-block;
+      cursor: pointer;
+      text-indent: -9999px;
+      vertical-align: middle;
+    }
+  }
+  .dataTables_info{
+    color: #1f1f1f;
+  }
+  .dataTables_length{
+    label, select {
+      font-size: 16px;
+      font-weight: 700;
+      color: #666666;
+    }
+  }
+
+  /* Hide the default radio button */
+  .custom-radio input[type="radio"] {
+    display: none;
+  }
+
+  /* Style the custom radio button */
+  .custom-radio {
+    position: relative;
+    padding-left: 30px;
+    cursor: pointer;
+    display: inline-block;
+    .custom-radio-label{
+      margin-left: .1rem;
+    }
+  }
+
+  /* Create the custom radio indicator */
+  .custom-radio::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #767676;
+    border-radius: 50%;
+    transition: border-color 0.3s ease;
+  }
+
+  /* Change border color and inner circle when checked */
+  .custom-radio input[type="radio"]:checked + .custom-radio-label::before {
+    content: "";
+    position: absolute;
+    left: 5px;
+    top: 5px;
+    width: 10px;
+    height: 10px;
+    background-color:#215EC1;
+    border: 2px solid #215EC1;
+    border-radius: 50%;
+  }
+  /* Checked state - Inner circle */
+  .custom-radio input[type="radio"]:checked + .custom-radio-label::after {
+    content: "";
+    position: absolute;
+    left: 0px;
+    top: 0px;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #215EC1;
+    border-radius: 50%;
+  }
+  .custom-radio:first-child input[type="radio"] + .custom-radio-label{
+    margin-left: 0.7rem;
+  }
+}
+.sweet-alert h2{
+  text-transform: capitalize;
+}
+.template-management-list-item {
+  padding: 1rem;
+  background: #ffffff;
+  border-radius: 4px;
+  margin: 2px auto;  
+  outline: auto;
+  outline-color: #DBF1F8;
+}
