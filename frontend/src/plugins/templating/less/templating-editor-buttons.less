@@ -1,0 +1,96 @@
+.add-control {
+  display: flex;
+  justify-content: space-between;
+  .add-article,
+  .add-block,
+  .add-component,
+  .add-component-template,
+  .add-block-template,
+  .add-article-template {
+    font-size: 16px;
+    width: 100%;
+    padding: 0;
+    line-height: 50px;
+    text-align: center;
+    color: @primary-color;
+    border: 1px dashed @primary-color;
+    transition: all 0s;
+
+    &.add-article,
+    &.add-article-template {
+      background-color: #f6fbfe;
+      width: 48%;
+      margin-bottom: 50px;
+    }
+
+    &.add-block,
+    &.add-block-template {
+      background-color: #eaf8fb;
+      width: 46%;
+      margin: 0 2% 20px;
+    }
+
+    &.add-component,
+    &.add-component-template {
+      background-color: #d6f3f9;
+      width: 48%;
+      &.left,
+      &.right {
+        width: 48%;
+        position: relative;
+        top: 0px;
+        float: left;
+      }
+      &.right {
+        float: right;
+      }
+    }
+
+    &:hover,
+    &:focus {
+      padding: 0;
+      line-height: 50px;
+      text-align: center;
+      color: @primary-color;
+      border: 1px solid @primary-color;
+    }
+  }
+}
+
+.editor-menu-layer-controls {
+  height: 58px;
+  button {
+    width: 80px;
+  }
+}
+
+.template-management-list-item {
+  .article {
+    position: relative;
+    border-radius: 3px;
+    background-color: #F6FBFE;
+    border: 2px dotted #31B8CC;
+    margin-bottom: 20px;
+    cursor: pointer;
+    padding: 1rem;
+  }
+
+  .block {
+    background-color: #EAF8FB;
+    border: 2px dotted #31B8CC;
+    position: relative;
+    margin-bottom: 20px;
+    padding: 1rem;
+  }
+
+  .component {
+    overflow: hidden;
+    position: relative;
+    min-height: 90px;
+    background-color: #D6F3F9;
+    border-radius: 3px;
+    border: 2px dotted #31B8CC;
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+}
