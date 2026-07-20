@@ -1,7 +1,0 @@
-{
-  "name": "adapt-content-template",
-  "displayName": "Template content type",
-  "version": "0.2.0",
-  "main": "index",
-  "dependencies": {}
-}
