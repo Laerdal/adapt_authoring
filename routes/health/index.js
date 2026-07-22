@@ -10,6 +10,13 @@ const semver = require('semver');
 const server = module.exports = express();
 const DEFAULT_SUPPORT_URL = 'https://laerdal.atlassian.net/servicedesk/customer/portal/2';
 const SUPPORT_CHECK_TIMEOUT_MS = 5000;
+const HEALTH_CACHE_TTL_MS = 30000;
+
+let healthSnapshotCache = {
+  expiresAt: 0,
+  value: null,
+  inFlight: null
+};
 
 function getPluginsConfig() {
   return configuration.getConfig('plugins') || {};
@@ -329,6 +336,66 @@ async function buildFeatureHealth() {
   };
 }
 
+function checkDatabaseConnection() {
+  return new Promise((resolve) => {
+    database.checkConnection(function(dbError) {
+      resolve(dbError || null);
+    });
+  });
+}
+
+async function getHealthSnapshot() {
+  const now = Date.now();
+  if (healthSnapshotCache.value && healthSnapshotCache.expiresAt > now) {
+    return healthSnapshotCache.value;
+  }
+
+  if (healthSnapshotCache.inFlight) {
+    return healthSnapshotCache.inFlight;
+  }
+
+  healthSnapshotCache.inFlight = (async () => {
+  const dbError = await checkDatabaseConnection();
+  const mem = process.memoryUsage();
+  const featureHealth = await buildFeatureHealth();
+  const anyFeatureDown = featureHealth.summary.down > 0;
+  const anyFeatureDegraded = featureHealth.summary.degraded > 0;
+  const healthy = !dbError && !anyFeatureDown && !anyFeatureDegraded;
+
+  // Instance is reachable when this handler returns a response.
+  const instanceStatus = 'Up';
+  const overallHealth = healthy ? 'ok' : 'degraded';
+
+    const snapshot = {
+    status: instanceStatus,
+    health: overallHealth,
+    version: pkg.version,
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+    memory: {
+      heapUsedMB: Math.round(mem.heapUsed / 1048576),
+      heapTotalMB: Math.round(mem.heapTotal / 1048576),
+      rssMB: Math.round(mem.rss / 1048576)
+    },
+    checks: {
+      database: dbError ? String(dbError) : 'ok'
+    },
+    features: featureHealth.features,
+    featureSummary: featureHealth.summary
+    };
+
+    healthSnapshotCache.value = snapshot;
+    healthSnapshotCache.expiresAt = Date.now() + HEALTH_CACHE_TTL_MS;
+    return snapshot;
+  })();
+
+  try {
+    return await healthSnapshotCache.inFlight;
+  } finally {
+    healthSnapshotCache.inFlight = null;
+  }
+}
+
 /**
  * GET /api/health
  *
@@ -340,35 +407,22 @@ async function buildFeatureHealth() {
  *   { status, version, uptime, timestamp, memory: { heapUsedMB, heapTotalMB, rssMB }, checks: { database } }
  */
 server.get('/api/health', function(req, res) {
-  database.checkConnection(async function(dbError) {
-    const mem = process.memoryUsage();
-    const featureHealth = await buildFeatureHealth();
-    const anyFeatureDown = featureHealth.summary.down > 0;
-    const anyFeatureDegraded = featureHealth.summary.degraded > 0;
-    const healthy = !dbError && !anyFeatureDown && !anyFeatureDegraded;
-
-    // Instance is reachable when this handler returns a response.
-    const instanceStatus = 'Up';
-    const overallHealth = healthy ? 'ok' : 'degraded';
-    const body = {
-      status: instanceStatus,
-      health: overallHealth,
-      version: pkg.version,
-      uptime: Math.floor(process.uptime()),
-      timestamp: new Date().toISOString(),
-      memory: {
-        heapUsedMB: Math.round(mem.heapUsed / 1048576),
-        heapTotalMB: Math.round(mem.heapTotal / 1048576),
-        rssMB: Math.round(mem.rss / 1048576)
-      },
-      checks: {
-        database: dbError ? String(dbError) : 'ok'
-      },
-      features: featureHealth.features,
-      featureSummary: featureHealth.summary
-    };
-
-    res.status(200).json(body);
-  });
+  getHealthSnapshot()
+    .then((body) => res.status(200).json(body))
+    .catch((error) => {
+      res.status(200).json({
+        status: 'Up',
+        health: 'degraded',
+        version: pkg.version,
+        uptime: Math.floor(process.uptime()),
+        timestamp: new Date().toISOString(),
+        memory: {},
+        checks: { database: error && error.message ? error.message : 'error' },
+        features: {},
+        featureSummary: { total: 0, ok: 0, degraded: 0, down: 0, downFeatures: [] }
+      });
+    });
 });
+
+server.getHealthSnapshot = getHealthSnapshot;
 

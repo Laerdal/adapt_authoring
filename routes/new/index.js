@@ -8,6 +8,8 @@ const permissions = require('../../lib/permissions');
 
 const server = module.exports = express();
 
+server.use(require('./courses'));
+
 // The SPA shell is public (all data comes from gated /api/* calls), so exempt
 // /new/* from the permissions gate — same posture as the login page and root.
 permissions.ignoreRoute(/^\/new\/?.*$/);

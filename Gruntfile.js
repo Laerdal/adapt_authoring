@@ -373,20 +373,122 @@ module.exports = function(grunt) {
     });
   });
 
-  // Deploys the vendored New UI bundle (new-ui-bundle/) to the served location
-  // (public/new/) so /new is up to date after every build — no manual step needed.
-  grunt.registerTask('sync-new-ui', 'Deploy the New UI bundle to public/new (scripts/sync-new-ui.js).', function() {
+  // Builds the New UI from source (new-ui-source/ via Vite) then deploys the
+  // compiled output to public/new — same pattern as less/requirejs-direct for
+  // the old frontend.
+  //
+  // Node version: the authoring tool runs on Node 18, but the New UI toolchain
+  // (Tailwind v4 / oxide) requires Node 20+. To keep Node 18 as the machine
+  // default, set NEW_UI_NODE_BIN to a Node 20 bin directory (e.g.
+  // /root/.nvm/versions/node/v20.x/bin). It is prepended to PATH for the New UI
+  // install/build child processes ONLY — grunt and everything else stay on the
+  // default Node. If unset, the current Node is used (fine when already >= 20).
+  //
+  // If any step fails the task degrades: public/new keeps serving the last
+  // deployed bundle (a warning is logged) — the overall grunt build never fails
+  // because of the New UI.
+  grunt.registerTask('sync-new-ui', 'Compile new-ui-source/ with Vite and deploy to public/new.', function() {
     var done = this.async();
-    var script = require('path').join(__dirname, 'scripts', 'sync-new-ui.js');
-    var child = require('child_process').spawn(process.execPath, [script], { stdio: 'inherit' });
-    child.on('exit', function(code) {
-      if (code !== 0) grunt.log.warn('sync-new-ui exited with code ' + code + '; /new may serve a stale bundle.');
-      done(); // non-fatal: never block the rest of the build on New UI sync
-    });
-    child.on('error', function(err) {
-      grunt.log.warn('sync-new-ui failed to spawn: ' + err.message);
+    var path = require('path');
+    var fs = require('fs');
+    var spawn = require('child_process').spawn;
+
+    var newUiDir   = path.join(__dirname, 'new-ui-source');
+    var distDir    = path.join(newUiDir, 'dist');
+    var syncScript = path.join(__dirname, 'scripts', 'sync-new-ui.js');
+    var npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+
+    // Auto-detect the newest Node 20 installed under nvm, so a plain
+    // `grunt build` works without any environment setup. An explicit
+    // NEW_UI_NODE_BIN always wins over auto-detection.
+    function discoverNode20Bin() {
+      try {
+        var base = process.env.NVM_DIR || path.join(require('os').homedir(), '.nvm');
+        var versions = path.join(base, 'versions', 'node');
+        var found = fs.readdirSync(versions)
+          .filter(function(d) { return /^v20\./.test(d); })
+          .sort(function(a, b) {
+            var x = a.slice(1).split('.').map(Number), y = b.slice(1).split('.').map(Number);
+            return (x[0] - y[0]) || (x[1] - y[1]) || (x[2] - y[2]);
+          });
+        if (!found.length) return undefined;
+        var bin = path.join(versions, found[found.length - 1], 'bin');
+        return fs.existsSync(path.join(bin, 'node')) ? bin : undefined;
+      } catch (e) { return undefined; }
+    }
+
+    var node20Src = process.env.NEW_UI_NODE_BIN ? 'NEW_UI_NODE_BIN' : 'auto-detected';
+    var node20Bin = process.env.NEW_UI_NODE_BIN || discoverNode20Bin(); // dir with Node 20 node/npm
+
+    // Env for New UI child processes: Node 20 on PATH when resolved above.
+    function childEnv() {
+      var env = Object.assign({}, process.env);
+      if (node20Bin) {
+        var key = ('Path' in env && !('PATH' in env)) ? 'Path' : 'PATH';
+        env[key] = node20Bin + path.delimiter + (env[key] || '');
+      }
+      return env;
+    }
+
+    // Degrade, don't fail: warn and leave public/new untouched.
+    function degrade(reason) {
+      grunt.log.warn('New UI not rebuilt (' + reason + '). /new will serve the '
+        + 'previously deployed bundle in public/new (may be stale).');
       done();
-    });
+    }
+
+    // Run an npm step in new-ui-source; on non-zero/spawn-error, degrade.
+    function npmStep(args, label, onOk) {
+      var child = spawn(npm, args, { cwd: newUiDir, stdio: 'inherit', shell: true, env: childEnv() });
+      child.on('error', function(err) { degrade(label + ' failed to spawn: ' + err.message); });
+      child.on('exit', function(code) {
+        if (code !== 0) return degrade(label + ' exited with code ' + code);
+        onOk();
+      });
+    }
+
+    // Tailwind oxide ships its native engine as a platform-specific package.
+    // If node_modules was installed under a Node that skipped it (e.g. Node 18
+    // vs oxide's node>=20 requirement), the parent exists but the binding does
+    // not — detect that so we reinstall rather than build against a broken tree.
+    function oxideBindingPresent() {
+      try {
+        var dir = path.join(newUiDir, 'node_modules', '@tailwindcss');
+        return fs.readdirSync(dir).some(function(n) { return /^oxide-/.test(n) && n !== 'oxide-wasm32-wasi'; });
+      } catch (e) { return false; }
+    }
+
+    function runSync() {
+      var env = Object.assign({}, process.env, { NEW_UI_DIST_PATH: distDir });
+      var syncChild = spawn(process.execPath, [syncScript], { stdio: 'inherit', env: env });
+      syncChild.on('exit', function(syncCode) {
+        if (syncCode !== 0) grunt.log.warn('sync-new-ui exited with code ' + syncCode + '; /new may serve a stale bundle.');
+        done();
+      });
+      syncChild.on('error', function(err) { grunt.log.warn('sync-new-ui failed to spawn: ' + err.message); done(); });
+    }
+
+    function build() {
+      grunt.log.writeln('Building New UI from source (' + newUiDir + ')...');
+      grunt.log.writeln(node20Bin
+        ? 'Using Node 20 (' + node20Src + '): ' + node20Bin
+        : 'NEW_UI_NODE_BIN not set and no Node 20 found under nvm; using default Node '
+          + '(Tailwind v4 requires Node 20 — build may fail).');
+      npmStep(['run', 'build'], 'New UI Vite build', function() {
+        grunt.log.ok('New UI build complete.');
+        runSync();
+      });
+    }
+
+    // Install when deps are missing OR the oxide native binding is absent
+    // (self-heals a tree installed under the wrong Node). Otherwise skip for speed.
+    if (!fs.existsSync(path.join(newUiDir, 'node_modules')) || !oxideBindingPresent()) {
+      grunt.log.writeln('Installing new-ui-source dependencies ('
+        + (node20Bin ? 'Node 20 via ' + node20Src : 'default Node') + ')...');
+      npmStep(['install'], 'New UI dependency install', build);
+    } else {
+      build();
+    }
   });
 
   grunt.registerTask('default', ['build:dev']);

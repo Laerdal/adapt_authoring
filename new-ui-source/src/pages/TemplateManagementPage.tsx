@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { getTemplates, deleteTemplate } from '@/api/adaptAuthoring'
+import { getTemplates, deleteTemplate, updateTemplate, type TemplateScope } from '@/api/adaptAuthoring'
 
 type TemplateType = 'Page' | 'Article' | 'Block' | 'Component'
 
@@ -10,6 +10,7 @@ interface Template {
   type: TemplateType
   description: string
   timestamp: Date
+  author?: string      // creator's name — shown in the Shared Templates view
 }
 
 const INITIAL_TEMPLATES: Template[] = [
@@ -46,9 +47,10 @@ const TYPE_COLORS: Record<TemplateType, { bg: string; text: string }> = {
 
 export default function TemplateManagementPage() {
   const [templates, setTemplates] = useState<Template[]>([])
+  const [scope, setScope] = useState<TemplateScope>('mine')
 
-  const loadTemplates = () => { getTemplates().then(setTemplates).catch(() => setTemplates([])) }
-  useEffect(() => { loadTemplates() }, [])
+  const loadTemplates = () => { getTemplates(scope).then(setTemplates).catch(() => setTemplates([])) }
+  useEffect(() => { loadTemplates() }, [scope])
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'All' | TemplateType>('All')
   const [page, setPage] = useState(1)
@@ -68,14 +70,21 @@ export default function TemplateManagementPage() {
     setEditDesc(t.description)
   }
 
-  function saveEdit() {
-    if (!editTarget) return
+  async function saveEdit() {
+    const target = editTarget
+    if (!target) return
+    const name = editName.trim()
+    const description = editDesc.trim()
     setTemplates((prev) =>
-      prev.map((t) =>
-        t.id === editTarget.id ? { ...t, name: editName.trim(), description: editDesc.trim() } : t
-      )
+      prev.map((t) => (t.id === target.id ? { ...t, name, description } : t))
     )
     setEditTarget(null)
+    if (!target.backendId) return
+    try {
+      await updateTemplate(target.backendId, { title: name, description })
+    } finally {
+      loadTemplates()
+    }
   }
 
   async function confirmDelete() {
@@ -114,6 +123,17 @@ export default function TemplateManagementPage() {
     setPage(1)
   }
 
+  function handleScope(val: TemplateScope) {
+    if (val === scope) return
+    setScope(val)
+    setPage(1)
+  }
+
+  const SCOPE_OPTIONS: { value: TemplateScope; label: string }[] = [
+    { value: 'mine', label: 'My Templates' },
+    { value: 'shared', label: 'Shared Templates' },
+  ]
+
   return (
     <>
       <div className="px-4 sm:px-6 md:px-8 py-5 md:py-6">
@@ -123,6 +143,24 @@ export default function TemplateManagementPage() {
             <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">Template Management</h1>
             <p className="text-sm text-[#6b7280] mt-1">Browse and manage reusable content templates</p>
           </div>
+        </div>
+
+        {/* Ownership scope toggle — My vs Shared with me */}
+        <div className="flex items-center gap-1 bg-[#f3f4f6] rounded-lg p-1 mb-4 w-fit">
+          {SCOPE_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => handleScope(opt.value)}
+              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors whitespace-nowrap ${
+                scope === opt.value
+                  ? 'bg-white text-[#2d6fa8] shadow-sm'
+                  : 'text-[#6b7280] hover:text-[#374151]'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
 
         {/* Toolbar */}
@@ -174,13 +212,16 @@ export default function TemplateManagementPage() {
                   <th className="text-left px-4 py-3 font-medium text-[#6b7280] w-[12%]">Type</th>
                   <th className="text-left px-4 py-3 font-medium text-[#6b7280]">Description</th>
                   <th className="text-left px-4 py-3 font-medium text-[#6b7280] w-[18%] whitespace-nowrap">Time Stamp</th>
+                  {scope === 'shared' && (
+                    <th className="text-left px-4 py-3 font-medium text-[#6b7280] w-[15%] whitespace-nowrap">Author</th>
+                  )}
                   <th className="text-right px-4 py-3 font-medium text-[#6b7280] w-[10%]">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {paginated.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-16 text-center text-[#9ca3af]">
+                    <td colSpan={scope === 'shared' ? 6 : 5} className="py-16 text-center text-[#9ca3af]">
                       <svg className="mx-auto mb-3" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
                       </svg>
@@ -203,6 +244,9 @@ export default function TemplateManagementPage() {
                         </td>
                         <td className="px-4 py-3 text-[#6b7280] max-w-xs truncate" title={t.description}>{t.description}</td>
                         <td className="px-4 py-3 text-[#6b7280] whitespace-nowrap font-mono text-xs">{formatTimestamp(t.timestamp)}</td>
+                        {scope === 'shared' && (
+                          <td className="px-4 py-3 text-[#6b7280] whitespace-nowrap">{t.author || '—'}</td>
+                        )}
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end gap-1">
                             <button

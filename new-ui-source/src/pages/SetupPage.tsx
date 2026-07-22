@@ -1,10 +1,11 @@
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
-import { Suspense, useState, useRef, useCallback } from "react";
+import { Suspense, useEffect, useState, useRef, useCallback } from "react";
 import AiAssistant from "../components/common/AiAssistant";
 import CourseStructureMap from "../components/course/CourseStructureMap";
 import type { CourseStructureState } from "../components/course/CourseStructureMap";
 import CourseStructureTree from "../components/course/CourseStructureTree";
+import { getCourseBootstrapData } from "../api/adaptAuthoring";
 
 /* ── Nav items ── */
 const NAV_ITEMS = [
@@ -879,8 +880,34 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
 }
 
 /* ── Theme selection panel ── */
-function ThemePanel() {
-  const [selected, setSelected] = useState<string | null>(null);
+function normalizeName(v?: string): string {
+  return (v ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function mapThemeNameToId(themeName?: string): string | null {
+  const n = normalizeName(themeName);
+  if (!n) return null;
+  if (n.includes("life")) return "life";
+  if (n.includes("vanilla")) return "vanilla";
+  if (n.includes("custom")) return "custom";
+  return null;
+}
+
+function mapMenuNameToStyle(menuName?: string): string {
+  const n = normalizeName(menuName);
+  if (!n) return "";
+  if (n.includes("life")) return "life";
+  if (n.includes("overview")) return "overview";
+  if (n.includes("box")) return "box";
+  return "";
+}
+
+function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
+  const [selected, setSelected] = useState<string | null>(mapThemeNameToId(initialThemeName));
+
+  useEffect(() => {
+    setSelected(mapThemeNameToId(initialThemeName));
+  }, [initialThemeName]);
 
   if (selected === "custom") {
     return (
@@ -1462,8 +1489,16 @@ function MenuSelect<T extends string>({ label, value, options, onChange }: {
 }
 
 /* ── Main MenuPanel component ── */
-function MenuPanel() {
-  const [cfg, setCfg] = useState<MenuConfig>(DEFAULT_MENU_CFG);
+function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
+  const [cfg, setCfg] = useState<MenuConfig>({
+    ...DEFAULT_MENU_CFG,
+    menuStyle: mapMenuNameToStyle(initialMenuName),
+  });
+
+  useEffect(() => {
+    const style = mapMenuNameToStyle(initialMenuName);
+    setCfg((prev) => ({ ...prev, menuStyle: style }));
+  }, [initialMenuName]);
 
   function set<K extends keyof MenuConfig>(k: K, v: MenuConfig[K]) {
     setCfg((prev) => ({ ...prev, [k]: v }));
@@ -5413,22 +5448,57 @@ function ComingSoonPanel({ label }: { label: string }) {
 function CourseCreationCenterContent() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const title = params.get("title") ?? "Untitled Course";
-  const description = params.get("description") ?? "";
+  const initialTitle = params.get("title") ?? "Untitled Course";
+  const initialDescription = params.get("description") ?? "";
+  const courseId = params.get("courseId") ?? "";
 
-  // Derive a stable course id from the title so Skip to Editor lands on the correct route
-  const courseId = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "new-course";
+  const [title, setTitle] = useState(initialTitle);
+  const [description, setDescription] = useState(initialDescription);
+  const [savedThemeName, setSavedThemeName] = useState("");
+  const [savedMenuName, setSavedMenuName] = useState("");
 
   const [activeNav, setActiveNav] = useState("overview");
   const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (!courseId) {
+      setTitle(initialTitle);
+      setDescription(initialDescription);
+      setSavedThemeName("");
+      setSavedMenuName("");
+      return;
+    }
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const data = await getCourseBootstrapData(courseId);
+        if (cancelled) return;
+        setTitle(data.title || initialTitle);
+        setDescription(data.description || initialDescription);
+        setSavedThemeName(data.themeName || "");
+        setSavedMenuName(data.menuName || "");
+      } catch {
+        if (cancelled) return;
+        setTitle(initialTitle);
+        setDescription(initialDescription);
+        setSavedThemeName("");
+        setSavedMenuName("");
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId, initialDescription, initialTitle]);
 
   const activeItem = NAV_ITEMS.find((n) => !n.heading && n.id === activeNav)!;
 
   function renderPanel() {
     if (activeNav === "overview") return <CourseOverviewPanel title={title} description={description} />;
     if (activeNav === "structure") return <CourseStructurePanel />;
-    if (activeNav === "theme") return <ThemePanel />;
-    if (activeNav === "menu") return <MenuPanel />;
+    if (activeNav === "theme") return <ThemePanel initialThemeName={savedThemeName} />;
+    if (activeNav === "menu") return <MenuPanel initialMenuName={savedMenuName} />;
     if (activeNav === "navigation") return <NavigationPanel />;
     if (activeNav === "accessibility") return <AccessibilityPanel />;
     if (activeNav === "tracking") return <TrackingAnalyticsPanel />;
@@ -5442,6 +5512,11 @@ function CourseCreationCenterContent() {
 
   return (
     <div className="flex flex-col h-screen bg-white overflow-hidden">
+      {!courseId && (
+        <div className="mx-4 mt-4 rounded-xl border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b]">
+          No backend course was initialized for this setup flow. Start from Create New Course on the dashboard.
+        </div>
+      )}
       {/* ── Header ── */}
       <header className="h-14 bg-white border-b border-[#e5e7eb] flex items-center shrink-0 px-4 relative z-10">
         {/* Left: logo + back */}
@@ -5563,6 +5638,7 @@ function CourseCreationCenterContent() {
             <div className="px-3 pb-4 border-t border-[#e5e7eb] pt-3 shrink-0">
               <button
                 type="button"
+                disabled={!courseId}
                 onClick={() => navigate(`/course/${courseId}`)}
                 className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-[#6b7280] hover:text-[#2d6fa8] hover:bg-[#f3f4f6] rounded-lg transition-colors border border-[#e5e7eb]"
               >

@@ -35,6 +35,60 @@ export async function getInstanceName(): Promise<string> {
   }
 }
 
+// ── Assets ───────────────────────────────────────────────────────────────────
+export interface Asset {
+  _id: string;
+  title?: string;
+  filename?: string;
+  mimeType?: string;
+  thumbnailPath?: string;
+  path?: string;
+}
+
+// Query image assets from the engine asset manager.
+// GET /api/asset/query?search[mimeType]=image
+export async function queryImages(search?: string): Promise<Asset[]> {
+  const params = new URLSearchParams({ "search[mimeType]": "image" });
+  if (search) params.append("search[title]", search);
+  try {
+    const result = await apiClient.get<Asset[]>(`/api/asset/query?${params}`);
+    return Array.isArray(result) ? result : [];
+  } catch {
+    return [];
+  }
+}
+
+// Upload a file as a new asset. Returns the new asset's _id.
+export async function uploadAsset(file: File, title?: string): Promise<string> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("title", title ?? file.name);
+  const res = await fetch("/api/asset", {
+    method: "POST",
+    body: form,
+    credentials: "same-origin",
+  });
+  if (!res.ok) throw new Error(`Asset upload failed: ${res.statusText}`);
+  const json = await res.json() as { _id: string };
+  return json._id;
+}
+
+// ── Tags ─────────────────────────────────────────────────────────────────────
+// Resolve tag titles to engine tag ObjectIds, creating any that don't exist yet.
+// POST /api/content/tag with { title } is idempotent — returns existing if found.
+export async function resolveOrCreateTagIds(tagTitles: string[]): Promise<string[]> {
+  if (!tagTitles.length) return [];
+  const results = await Promise.all(
+    tagTitles.map(async (title) => {
+      const tag = await apiClient.post<{ _id?: string; id?: string }>("/api/content/tag", { title });
+      const id = tag._id ?? tag.id;
+      if (!id) throw new Error(`Tag resolve/create did not return an id for "${title}"`);
+      return id;
+    })
+  );
+  return results;
+}
+
 // ── Dashboard courses ─────────────────────────────────────────────────────────
 // Shape consumed by HomePage. `id` is a stable client key; `backendId` is the
 // engine _id used for mutations.
@@ -46,6 +100,7 @@ export interface DashboardCourse {
   savedDate: string;
   savedDateTs: number;
   imageUrl: string | null;
+  heroAssetId: string | null;
   theme: "LIFE Theme" | "Vanilla Theme" | "Custom Theme";
   tags: string[];
 }
@@ -64,6 +119,7 @@ const OBJECT_ID = /^[a-f0-9]{24}$/i;
 
 function toDashboardCourse(doc: EngineCourse, index: number): DashboardCourse {
   const ts = doc.updatedAt ? new Date(doc.updatedAt).getTime() : 0;
+  const heroAssetId = doc.heroImage && OBJECT_ID.test(doc.heroImage) ? doc.heroImage : null;
   return {
     id: index + 1,
     backendId: doc._id,
@@ -73,7 +129,9 @@ function toDashboardCourse(doc: EngineCourse, index: number): DashboardCourse {
       ? new Date(ts).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
       : "",
     savedDateTs: ts,
-    imageUrl: null,
+    // Serve the hero image via the engine's asset-serve endpoint.
+    imageUrl: heroAssetId ? `/api/asset/serve/${heroAssetId}` : null,
+    heroAssetId,
     theme: "LIFE Theme",
     // Tags come back as refs or populated objects; keep only human-readable names.
     tags: Array.isArray(doc.tags)
@@ -91,8 +149,28 @@ export async function fetchDashboardCourses(shared = false): Promise<DashboardCo
   return Array.isArray(docs) ? docs.map(toDashboardCourse) : [];
 }
 
-export function updateCourse(backendId: string, patch: Record<string, unknown>): Promise<unknown> {
-  return apiClient.put(`/api/content/course/${backendId}`, patch);
+// Update course details — resolves tag titles to IDs before sending to the engine.
+// Sends both `title` and `displayTitle` to keep the dashboard and course menu in sync.
+export async function updateCourse(
+  backendId: string,
+  patch: {
+    title?: string;
+    description?: string;
+    heroAssetId?: string | null;
+    tags?: string[];
+  }
+): Promise<unknown> {
+  const updateData: Record<string, unknown> = {};
+  if (patch.title !== undefined) {
+    updateData.title = patch.title;
+    updateData.displayTitle = patch.title;
+  }
+  if (patch.description !== undefined) updateData.description = patch.description;
+  if (patch.heroAssetId !== undefined) updateData.heroImage = patch.heroAssetId;
+  if (patch.tags !== undefined) {
+    updateData.tags = await resolveOrCreateTagIds(patch.tags);
+  }
+  return apiClient.put(`/api/content/course/${backendId}`, updateData);
 }
 
 export function duplicateCourse(backendId: string): Promise<unknown> {
@@ -101,6 +179,179 @@ export function duplicateCourse(backendId: string): Promise<unknown> {
 
 export function deleteCourse(backendId: string): Promise<unknown> {
   return apiClient.delete(`/api/content/course/${backendId}`);
+}
+
+export interface CreateCourseInput {
+  title: string;
+  description?: string;
+  instanceId?: string;
+  theme?: string;
+  menuStyle?: string;
+}
+
+export interface CreatedCourse {
+  id: string;
+  title: string;
+  description: string;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  status: "Draft" | "Published" | "Archived";
+  instanceId?: string;
+  theme?: string;
+  menuStyle?: string;
+}
+
+interface EnginePluginType {
+  _id: string;
+  name?: string;
+  displayName?: string;
+}
+
+interface EngineCourseDetails {
+  _id: string;
+  title?: string;
+  displayTitle?: string;
+  description?: string;
+}
+
+interface EngineConfigDetails {
+  _courseId?: string;
+  _theme?: string;
+  _menu?: string;
+}
+
+export interface CourseBootstrapData {
+  courseId: string;
+  title: string;
+  description: string;
+  themeName: string;
+  menuName: string;
+}
+
+function normalize(v?: string): string {
+  return (v ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function scorePluginMatch(plugin: EnginePluginType, label: string, kind: "theme" | "menu"): number {
+  const target = normalize(label);
+  const name = normalize(plugin.name);
+  const display = normalize(plugin.displayName);
+  if (!target) return 0;
+
+  if (target === name || target === display) return 100;
+  if (name.includes(target) || display.includes(target)) return 90;
+
+  const keywordsByLabel: Record<string, string[]> = kind === "theme"
+    ? {
+        lifetheme: ["life"],
+        vanillatheme: ["vanilla"],
+        customtheme: ["custom"]
+      }
+    : {
+        lifemenu: ["life"],
+        overviewmenu: ["overview"],
+        boxmenu: ["box"]
+      };
+
+  const keywords = keywordsByLabel[target] || [];
+  if (!keywords.length) return 0;
+
+  const hitCount = keywords.filter((k) => name.includes(k) || display.includes(k)).length;
+  return hitCount ? 70 + hitCount : 0;
+}
+
+function resolvePluginId(options: EnginePluginType[], label: string, kind: "theme" | "menu"): string | null {
+  let best: { id: string; score: number } | null = null;
+  for (const option of options) {
+    const score = scorePluginMatch(option, label, kind);
+    if (!option._id || score <= 0) continue;
+    if (!best || score > best.score) {
+      best = { id: option._id, score };
+    }
+  }
+  return best?.id ?? null;
+}
+
+async function getThemeTypes(): Promise<EnginePluginType[]> {
+  const rows = await apiClient.get<EnginePluginType[]>("/api/themetype");
+  return Array.isArray(rows) ? rows : [];
+}
+
+async function getMenuTypes(): Promise<EnginePluginType[]> {
+  const rows = await apiClient.get<EnginePluginType[]>("/api/menutype");
+  return Array.isArray(rows) ? rows : [];
+}
+
+function toOptionLabel(row: EnginePluginType): string {
+  return (row.displayName || row.name || "").trim();
+}
+
+export async function getAuthoringThemeOptions(): Promise<string[]> {
+  const rows = await getThemeTypes();
+  return rows.map(toOptionLabel).filter(Boolean);
+}
+
+export async function getAuthoringMenuOptions(): Promise<string[]> {
+  const rows = await getMenuTypes();
+  return rows.map(toOptionLabel).filter(Boolean);
+}
+
+async function applyThemeToCourse(courseId: string, themeId: string): Promise<void> {
+  await apiClient.post(`/api/theme/${themeId}/makeitso/${courseId}`);
+}
+
+async function applyMenuToCourse(courseId: string, menuId: string): Promise<void> {
+  await apiClient.post(`/api/menu/${menuId}/makeitso/${courseId}`);
+}
+
+async function applyCourseSelections(courseId: string, themeLabel?: string, menuLabel?: string): Promise<void> {
+  const shouldApplyTheme = !!themeLabel?.trim();
+  const shouldApplyMenu = !!menuLabel?.trim();
+  if (!shouldApplyTheme && !shouldApplyMenu) return;
+
+  const [themes, menus] = await Promise.all([
+    shouldApplyTheme ? getThemeTypes() : Promise.resolve([]),
+    shouldApplyMenu ? getMenuTypes() : Promise.resolve([]),
+  ]);
+
+  if (themeLabel) {
+    const themeId = resolvePluginId(themes, themeLabel, "theme");
+    if (themeId) {
+      await applyThemeToCourse(courseId, themeId);
+    }
+  }
+
+  if (menuLabel) {
+    const menuId = resolvePluginId(menus, menuLabel, "menu");
+    if (menuId) {
+      await applyMenuToCourse(courseId, menuId);
+    }
+  }
+}
+
+export async function createCourse(input: CreateCourseInput): Promise<CreatedCourse> {
+  const created = await apiClient.post<CreatedCourse>("/api/courses", input);
+  try {
+    await applyCourseSelections(created.id, input.theme, input.menuStyle);
+  } catch (err) {
+    console.warn("Failed to apply theme/menu selections", err);
+  }
+  return created;
+}
+
+export async function getCourseBootstrapData(courseId: string): Promise<CourseBootstrapData> {
+  const [course, config] = await Promise.all([
+    apiClient.get<EngineCourseDetails>(`/api/content/course/${courseId}`),
+    apiClient.get<EngineConfigDetails>(`/api/content/config/${courseId}`),
+  ]);
+
+  return {
+    courseId,
+    title: course.displayTitle || course.title || "Untitled Course",
+    description: course.description || "",
+    themeName: config._theme || "",
+    menuName: config._menu || "",
+  };
 }
 
 function fmtDate(v?: string): string {
@@ -181,10 +432,22 @@ export function deleteUser(userBackendId: string): Promise<unknown> {
 
 // ── Templates ─────────────────────────────────────────────────────────────────
 export type TemplateType = "Page" | "Article" | "Block" | "Component";
-const TEMPLATE_TYPES: TemplateType[] = ["Page", "Article", "Block", "Component"];
+// The engine stores the template's content kind in `referenceType`
+// (contentobject/article/block/component). A "contentobject" template is a Page.
 const coerceTemplateType = (v?: string): TemplateType => {
-  const cap = v ? v.charAt(0).toUpperCase() + v.slice(1).toLowerCase() : "";
-  return (TEMPLATE_TYPES as string[]).includes(cap) ? (cap as TemplateType) : "Page";
+  switch ((v ?? "").toLowerCase()) {
+    case "contentobject":
+    case "page":
+      return "Page";
+    case "article":
+      return "Article";
+    case "block":
+      return "Block";
+    case "component":
+      return "Component";
+    default:
+      return "Page";
+  }
 };
 
 export interface DashboardTemplate {
@@ -194,6 +457,7 @@ export interface DashboardTemplate {
   type: TemplateType;
   description: string;
   timestamp: Date;
+  author: string;
 }
 
 interface EngineTemplate {
@@ -201,23 +465,42 @@ interface EngineTemplate {
   title?: string;
   displayName?: string;
   name?: string;
-  templateType?: string;
-  _type?: string;
+  referenceType?: string;
   description?: string;
+  createdBy?: string | { _id?: string };
+  author?: string;
   createdAt?: string;
   updatedAt?: string;
 }
 
-export async function getTemplates(): Promise<DashboardTemplate[]> {
-  const docs = await apiClient.get<EngineTemplate[]>("/api/content/templating");
+// "mine"   → templates I created            → GET /api/my/templating
+// "shared" → templates shared with me        → GET /api/shared/templating
+//   (shared with everyone, or explicitly with me — mirrors /shared/course)
+export type TemplateScope = "mine" | "shared";
+
+export async function getTemplates(
+  scope: TemplateScope = "mine"
+): Promise<DashboardTemplate[]> {
+  const endpoint = scope === "shared" ? "/api/shared/templating" : "/api/my/templating";
+  const docs = await apiClient.get<EngineTemplate[]>(endpoint);
   return (Array.isArray(docs) ? docs : []).map((t, i) => ({
     id: i + 1,
     backendId: t._id,
-    name: t.displayName || t.title || t.name || "Untitled",
-    type: coerceTemplateType(t.templateType || t._type),
+    name: t.title || t.displayName || t.name || "Untitled",
+    type: coerceTemplateType(t.referenceType),
     description: t.description || "",
     timestamp: new Date(t.updatedAt || t.createdAt || 0),
+    author: t.author || "",
   }));
+}
+
+// Persist a template rename/description edit. Matches the legacy UI which PUTs
+// { title, description } to the templating content endpoint.
+export function updateTemplate(
+  backendId: string,
+  patch: { title?: string; description?: string }
+): Promise<unknown> {
+  return apiClient.put(`/api/content/templating/${backendId}`, patch);
 }
 
 export function deleteTemplate(backendId: string): Promise<unknown> {

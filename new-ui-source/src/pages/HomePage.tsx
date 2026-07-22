@@ -2,10 +2,10 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { CourseCard } from '@/components/course'
 import AiAssistant from '@/components/common/AiAssistant'
-import { deleteCourse, duplicateCourse, fetchDashboardCourses, updateCourse } from '@/api/adaptAuthoring'
+import { createCourse, deleteCourse, duplicateCourse, fetchDashboardCourses, getAuthoringMenuOptions, getAuthoringThemeOptions, updateCourse } from '@/api/adaptAuthoring'
 
 
-type Theme = 'LIFE Theme' | 'Vanilla Theme' | 'Custom Theme'
+type Theme = string
 
 interface Course {
   id: number
@@ -15,17 +15,18 @@ interface Course {
   savedDate: string
   savedDateTs: number   // unix ms for sorting
   imageUrl: string | null
+  heroAssetId: string | null
   theme: Theme
   tags: string[]
 }
 
 const INITIAL_COURSES: Course[] = [
-  { id: 1, title: 'Introduction to Digital Marketing',    description: 'This comprehensive course covers all aspects of digital marketing including SEO, social media, and content strategy.',    savedDate: 'May 11, 2026', savedDateTs: new Date('2026-05-11').getTime(), imageUrl: null, theme: 'LIFE Theme',    tags: ['Marketing', 'SEO', 'Beginner'] },
-  { id: 2, title: 'Basic CPR Training',                   description: 'This course provides essential knowledge and hands-on practice for performing CPR in emergency situations.',             savedDate: 'Mar 27, 2026', savedDateTs: new Date('2026-03-27').getTime(), imageUrl: null, theme: 'Vanilla Theme', tags: ['Healthcare', 'Emergency', 'CPR'] },
-  { id: 3, title: 'Advanced Airway Management',           description: 'Covers advanced techniques for managing patient airways in clinical and pre-hospital settings.',                        savedDate: 'Mar 24, 2026', savedDateTs: new Date('2026-03-24').getTime(), imageUrl: null, theme: 'LIFE Theme',    tags: ['Healthcare', 'Advanced', 'Clinical'] },
-  { id: 4, title: 'Patient Safety Fundamentals',          description: 'An introduction to patient safety principles, error prevention, and culture of safety in healthcare organisations.',   savedDate: 'Feb 14, 2026', savedDateTs: new Date('2026-02-14').getTime(), imageUrl: null, theme: 'Custom Theme',  tags: ['Safety', 'Healthcare', 'Beginner'] },
-  { id: 5, title: 'Neonatal Resuscitation Program',       description: 'Evidence-based curriculum for healthcare providers who care for newborns at delivery.',                               savedDate: 'Jan 30, 2026', savedDateTs: new Date('2026-01-30').getTime(), imageUrl: null, theme: 'Vanilla Theme', tags: ['Neonatal', 'Emergency', 'Clinical'] },
-  { id: 6, title: 'Trauma Assessment and Management',     description: 'Systematic approach to evaluating and treating trauma patients in emergency and critical care settings.',             savedDate: 'Jan 10, 2026', savedDateTs: new Date('2026-01-10').getTime(), imageUrl: null, theme: 'LIFE Theme',    tags: ['Trauma', 'Emergency', 'Advanced'] },
+  { id: 1, title: 'Introduction to Digital Marketing',    description: 'This comprehensive course covers all aspects of digital marketing including SEO, social media, and content strategy.',    savedDate: 'May 11, 2026', savedDateTs: new Date('2026-05-11').getTime(), imageUrl: null, heroAssetId: null, theme: 'LIFE Theme',    tags: ['Marketing', 'SEO', 'Beginner'] },
+  { id: 2, title: 'Basic CPR Training',                   description: 'This course provides essential knowledge and hands-on practice for performing CPR in emergency situations.',             savedDate: 'Mar 27, 2026', savedDateTs: new Date('2026-03-27').getTime(), imageUrl: null, heroAssetId: null, theme: 'Vanilla Theme', tags: ['Healthcare', 'Emergency', 'CPR'] },
+  { id: 3, title: 'Advanced Airway Management',           description: 'Covers advanced techniques for managing patient airways in clinical and pre-hospital settings.',                        savedDate: 'Mar 24, 2026', savedDateTs: new Date('2026-03-24').getTime(), imageUrl: null, heroAssetId: null, theme: 'LIFE Theme',    tags: ['Healthcare', 'Advanced', 'Clinical'] },
+  { id: 4, title: 'Patient Safety Fundamentals',          description: 'An introduction to patient safety principles, error prevention, and culture of safety in healthcare organisations.',   savedDate: 'Feb 14, 2026', savedDateTs: new Date('2026-02-14').getTime(), imageUrl: null, heroAssetId: null, theme: 'Custom Theme',  tags: ['Safety', 'Healthcare', 'Beginner'] },
+  { id: 5, title: 'Neonatal Resuscitation Program',       description: 'Evidence-based curriculum for healthcare providers who care for newborns at delivery.',                               savedDate: 'Jan 30, 2026', savedDateTs: new Date('2026-01-30').getTime(), imageUrl: null, heroAssetId: null, theme: 'Vanilla Theme', tags: ['Neonatal', 'Emergency', 'Clinical'] },
+  { id: 6, title: 'Trauma Assessment and Management',     description: 'Systematic approach to evaluating and treating trauma patients in emergency and critical care settings.',             savedDate: 'Jan 10, 2026', savedDateTs: new Date('2026-01-10').getTime(), imageUrl: null, heroAssetId: null, theme: 'LIFE Theme',    tags: ['Trauma', 'Emergency', 'Advanced'] },
 ]
 
 const SORT_OPTIONS = [
@@ -34,25 +35,52 @@ const SORT_OPTIONS = [
   { label: 'Alphabetical Z–A',  value: 'alpha-desc'},
   { label: 'Date Created',      value: 'date'      },
 ]
-const THEME_OPTIONS: Theme[] = ['LIFE Theme', 'Vanilla Theme', 'Custom Theme']
-const MENU_OPTIONS = ['LIFE Menu', 'Overview Menu', 'Box Menu']
+const FALLBACK_THEME_OPTIONS: Theme[] = ['LIFE Theme']
+const FALLBACK_MENU_OPTIONS = ['LIFE Menu']
+
+function normalizeOption(v: string): string {
+  return v.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+function pickPreferredTheme(options: string[]): string {
+  const exactLife = options.find((o) => normalizeOption(o) === 'lifetheme')
+  if (exactLife) return exactLife
+
+  const lifeNotV2 = options.find((o) => /life/i.test(o) && !/v2/i.test(o))
+  if (lifeNotV2) return lifeNotV2
+
+  return options[0] || 'LIFE Theme'
+}
+
+function pickPreferredMenu(options: string[]): string {
+  const exactLife = options.find((o) => normalizeOption(o) === 'lifemenu')
+  if (exactLife) return exactLife
+
+  const life = options.find((o) => /life/i.test(o))
+  if (life) return life
+
+  return options[0] || 'LIFE Menu'
+}
 
 export default function HomePage() {
   const navigate = useNavigate()
   const location = useLocation()
   const [courses, setCourses] = useState<Course[]>([])
   const [isLoadingCourses, setIsLoadingCourses] = useState(true)
-  const READ_ONLY_REASON = 'This action is temporarily disabled until the matching Adapt API endpoint is wired.'
+  const READ_ONLY_REASON = 'Import is temporarily disabled until the matching Adapt API endpoint is wired.'
 
   // Search / filter / sort / view
   const [search, setSearch]           = useState('')
   const [themeFilter, setThemeFilter] = useState<Theme | 'All'>('All')
+  const [themeOptions, setThemeOptions] = useState<Theme[]>(FALLBACK_THEME_OPTIONS)
+  const [menuOptions, setMenuOptions] = useState<string[]>(FALLBACK_MENU_OPTIONS)
   const [sort, setSort]               = useState('recent')
   const [view, setView]               = useState<'grid' | 'list'>('grid')
   const [sortOpen, setSortOpen]       = useState(false)
   const [filterOpen, setFilterOpen]   = useState(false)
   const [tagFilterOpen, setTagFilterOpen] = useState(false)
   const [selectedTags, setSelectedTags] = useState<string[]>([])
+  const [tagSearch, setTagSearch]         = useState('')
 
   // Toast notifications
   type Toast = { id: number; message: string; type: 'success' | 'info' }
@@ -85,14 +113,47 @@ export default function HomePage() {
     void loadCourses()
   }, [loadCourses])
 
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const [themes, menus] = await Promise.all([
+          getAuthoringThemeOptions(),
+          getAuthoringMenuOptions(),
+        ]);
+        if (cancelled) return;
+
+        const resolvedThemes = themes.length ? themes : FALLBACK_THEME_OPTIONS;
+        const resolvedMenus = menus.length ? menus : FALLBACK_MENU_OPTIONS;
+
+        setThemeOptions(resolvedThemes);
+        setMenuOptions(resolvedMenus);
+        setNewTheme((prev) => (prev && resolvedThemes.includes(prev)) ? prev : pickPreferredTheme(resolvedThemes));
+        setNewMenu((prev) => (prev && resolvedMenus.includes(prev)) ? prev : pickPreferredMenu(resolvedMenus));
+      } catch {
+        if (cancelled) return;
+        setThemeOptions(FALLBACK_THEME_OPTIONS);
+        setMenuOptions(FALLBACK_MENU_OPTIONS);
+        setNewTheme((prev) => prev || pickPreferredTheme(FALLBACK_THEME_OPTIONS));
+        setNewMenu((prev) => prev || pickPreferredMenu(FALLBACK_MENU_OPTIONS));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Create modal
   const [createOpen, setCreateOpen] = useState(false)
   const [newTitle, setNewTitle]     = useState('')
   const [newDesc, setNewDesc]       = useState('')
-  const [newTheme, setNewTheme]     = useState<Theme>(THEME_OPTIONS[0])
-  const [newMenu, setNewMenu]       = useState(MENU_OPTIONS[0])
+  const [newTheme, setNewTheme]     = useState<Theme>(pickPreferredTheme(FALLBACK_THEME_OPTIONS))
+  const [newMenu, setNewMenu]       = useState(pickPreferredMenu(FALLBACK_MENU_OPTIONS))
   const [themeOpen, setThemeOpen]   = useState(false)
   const [menuOpen, setMenuOpen]     = useState(false)
+  const [isCreatingCourse, setIsCreatingCourse] = useState(false)
 
   // Close dropdowns on outside click
   const toolbarRef = useRef<HTMLDivElement>(null)
@@ -111,23 +172,41 @@ export default function HomePage() {
   function openCreateModal() {
     setNewTitle('')
     setNewDesc('')
-    setNewTheme(THEME_OPTIONS[0])
-    setNewMenu(MENU_OPTIONS[0])
+    setNewTheme(pickPreferredTheme(themeOptions))
+    setNewMenu(pickPreferredMenu(menuOptions))
     setCreateOpen(true)
   }
 
-  function handleNext() {
-    const params = new URLSearchParams({
-      title: newTitle || 'Untitled Course',
-      description: newDesc,
-      theme: newTheme,
-      menu: newMenu,
-    })
-    setCreateOpen(false)
-    navigate(`/course/new/setup?${params.toString()}`)
+  async function handleNext() {
+    const title = newTitle.trim() || 'Untitled Course'
+
+    try {
+      setIsCreatingCourse(true)
+      const created = await createCourse({
+        title,
+        description: newDesc,
+        theme: newTheme,
+        menuStyle: newMenu,
+      })
+
+      const params = new URLSearchParams({
+        title,
+        description: newDesc,
+        theme: newTheme,
+        menu: newMenu,
+        courseId: created.id,
+      })
+
+      setCreateOpen(false)
+      navigate(`/course/new/setup?${params.toString()}`)
+    } catch {
+      showToast('Course creation failed.', 'info')
+    } finally {
+      setIsCreatingCourse(false)
+    }
   }
 
-  async function handleUpdate(id: number, patch: { title?: string; description?: string; imageUrl?: string | null; tags?: string[] }) {
+  async function handleUpdate(id: number, patch: { title?: string; description?: string; heroAssetId?: string | null; tags?: string[] }) {
     const target = courses.find((c) => c.id === id)
     if (!target?.backendId) {
       showToast('Could not resolve course ID for update.', 'info')
@@ -137,6 +216,7 @@ export default function HomePage() {
       await updateCourse(target.backendId, {
         title: patch.title,
         description: patch.description,
+        heroAssetId: patch.heroAssetId,
         tags: patch.tags,
       })
       await loadCourses()
@@ -254,7 +334,7 @@ export default function HomePage() {
             <div>
               <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">{location.pathname === '/shared' ? 'Shared with Me' : location.pathname === '/my-courses' ? 'My Courses' : 'All Courses'}</h1>
               <p className="text-sm text-[#6b7280] mt-1">Manage and organize your courses</p>
-              <p className="text-xs text-[#b45309] mt-1">Partial write mode: copy, edit, and delete are persisted; import and create remain disabled.</p>
+              <p className="text-xs text-[#b45309] mt-1">Partial write mode: copy, edit, delete, and create are persisted; import remains disabled.</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {/* Import */}
@@ -286,8 +366,6 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={openCreateModal}
-                title={READ_ONLY_REASON}
-                disabled
                 className="flex items-center gap-2 px-4 py-2.5 bg-[#2d6fa8] hover:bg-[#245c8f] text-white text-sm font-semibold rounded-lg transition-colors"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -328,7 +406,7 @@ export default function HomePage() {
               <div className="relative shrink-0">
                 <button
                   type="button"
-                  onClick={() => { setTagFilterOpen((open) => !open); setFilterOpen(false); setSortOpen(false) }}
+                  onClick={() => { setTagFilterOpen((open) => !open); setFilterOpen(false); setSortOpen(false); setTagSearch('') }}
                   className={`flex items-center gap-1.5 px-3 py-2.5 text-sm border rounded-lg transition-colors whitespace-nowrap ${
                     selectedTags.length > 0
                       ? 'border-[#2d6fa8] bg-[#dbeeff] text-[#2d6fa8] font-medium'
@@ -345,12 +423,28 @@ export default function HomePage() {
                 </button>
 
                 {tagFilterOpen && (
-                  <div className="absolute left-0 mt-1 w-64 max-h-72 overflow-y-auto bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-20 py-1">
-                    <p className="px-3 py-1.5 text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">Filter by tag</p>
-                    {availableTags.length === 0 && (
-                      <p className="px-3 py-2 text-sm text-[#9ca3af]">No tags available</p>
+                  <div className="absolute left-0 mt-1 w-64 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-20 py-1">
+                    {/* Search input */}
+                    <div className="px-2 pt-1.5 pb-1">
+                      <div className="relative">
+                        <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9ca3af]" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        </svg>
+                        <input
+                          type="text"
+                          value={tagSearch}
+                          onChange={(e) => setTagSearch(e.target.value)}
+                          placeholder="Search tags…"
+                          className="w-full pl-7 pr-2 py-1.5 text-xs border border-[#e5e7eb] rounded-md focus:outline-none focus:ring-1 focus:ring-[#2d6fa8] focus:border-transparent text-[#111827] bg-[#f9fafb]"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </div>
+                    </div>
+                    <div className="max-h-56 overflow-y-auto">
+                    {availableTags.filter((t) => !tagSearch.trim() || t.toLowerCase().includes(tagSearch.trim().toLowerCase())).length === 0 && (
+                      <p className="px-3 py-2 text-sm text-[#9ca3af]">No matching tags</p>
                     )}
-                    {availableTags.map((tag) => {
+                    {availableTags.filter((t) => !tagSearch.trim() || t.toLowerCase().includes(tagSearch.trim().toLowerCase())).map((tag) => {
                       const isSelected = selectedTags.some((selectedTag) => selectedTag.toLowerCase() === tag.toLowerCase())
                       return (
                         <button
@@ -370,10 +464,11 @@ export default function HomePage() {
                         </button>
                       )
                     })}
+                    </div>
                     {selectedTags.length > 0 && (
                       <>
                         <div className="border-t border-[#f3f4f6] my-1" />
-                        <button type="button" onClick={() => { clearTags(); setTagFilterOpen(false) }} className="w-full text-left px-3 py-2 text-sm text-[#ef4444] hover:bg-[#fef2f2] transition-colors">
+                        <button type="button" onClick={() => { clearTags(); setTagFilterOpen(false); setTagSearch('') }} className="w-full text-left px-3 py-2 text-sm text-[#ef4444] hover:bg-[#fef2f2] transition-colors">
                           Clear tags
                         </button>
                       </>
@@ -409,7 +504,7 @@ export default function HomePage() {
                 {filterOpen && (
                   <div className="absolute right-0 mt-1 w-52 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-20 py-1">
                     <p className="px-3 py-1.5 text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">Filter by theme</p>
-                    {(['All', ...THEME_OPTIONS] as const).map((opt) => (
+                    {(['All', ...themeOptions]).map((opt) => (
                       <button
                         key={opt}
                         type="button"
@@ -590,7 +685,7 @@ export default function HomePage() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
           onClick={(e) => { if (e.target === e.currentTarget) setCreateOpen(false); }}
         >
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg flex flex-col overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg flex flex-col overflow-visible">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#e5e7eb]">
               <div>
@@ -656,7 +751,7 @@ export default function HomePage() {
                     </button>
                     {themeOpen && (
                       <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-10 py-1">
-                        {THEME_OPTIONS.map((opt) => (
+                        {themeOptions.map((opt) => (
                           <button
                             key={opt}
                             type="button"
@@ -687,7 +782,7 @@ export default function HomePage() {
                     </button>
                     {menuOpen && (
                       <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-10 py-1">
-                        {MENU_OPTIONS.map((opt) => (
+                        {menuOptions.map((opt) => (
                           <button
                             key={opt}
                             type="button"
@@ -716,10 +811,10 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={handleNext}
-                disabled={!newTitle.trim()}
+                disabled={!newTitle.trim() || isCreatingCourse}
                 className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
               >
-                Next
+                {isCreatingCourse ? 'Creating...' : 'Next'}
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M5 12h14M12 5l7 7-7 7" />
                 </svg>
