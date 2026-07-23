@@ -2,6 +2,10 @@
 
 # dependencies
 /node_modules
+# package-lock.json is intentionally NOT committed: a lock generated on one OS
+# makes npm skip the platform-specific @tailwindcss/oxide native binary on
+# another OS (npm/cli#4828). Let each platform resolve its own lock at install.
+/package-lock.json
 /.pnp
 .pnp.*
 .yarn/*
