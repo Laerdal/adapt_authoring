@@ -454,7 +454,14 @@ module.exports = function(grunt) {
     function oxideBindingPresent() {
       try {
         var dir = path.join(newUiDir, 'node_modules', '@tailwindcss');
-        return fs.readdirSync(dir).some(function(n) { return /^oxide-/.test(n) && n !== 'oxide-wasm32-wasi'; });
+        var osPrefix = 'oxide-' + process.platform; // e.g. oxide-linux-*, oxide-win32-*, oxide-darwin-*
+        // Require an oxide package for THIS OS that actually contains a .node binary.
+        // A wrong-platform or partial dir (e.g. a win32 tree copied onto Linux) must not pass.
+        return fs.readdirSync(dir).some(function(n) {
+          if (n.indexOf(osPrefix) !== 0) return false;
+          try { return fs.readdirSync(path.join(dir, n)).some(function(f) { return f.endsWith('.node'); }); }
+          catch (e) { return false; }
+        });
       } catch (e) { return false; }
     }
 
