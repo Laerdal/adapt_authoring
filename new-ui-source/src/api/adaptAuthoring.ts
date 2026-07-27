@@ -354,6 +354,405 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
   };
 }
 
+// ── Course structure (modules / topics / sections / content groups / components)
+// The Course Structure screen maps the real Adapt content hierarchy onto a
+// 5-level model (see src/types/structure.ts):
+//   Module        → menu contentobject (_type:'menu')
+//   Topic         → page contentobject (_type:'page'; child of course or a module)
+//   Section       → article
+//   Content Group → block
+//   Component     → component (_component / _componentType)
+// Everything persists through the generic /api/content/:type CRUD routes.
+import {
+  LEVEL_TO_CONTENT_TYPE,
+  type StructureLevel,
+  type CourseStructure,
+  type SModule,
+  type STopic,
+  type SSection,
+  type SContentGroup,
+  type SComponent,
+} from "../types/structure";
+
+interface EngineContentNode {
+  _id: string;
+  _courseId?: string;
+  _parentId?: string;
+  _type?: string;
+  title?: string;
+  displayTitle?: string;
+  _sortOrder?: number;
+  _component?: string;
+  _componentType?: string;
+  _layout?: string;
+}
+
+// A component type installed on the instance (GET /api/componenttype).
+export interface ComponentTypeOption {
+  component: string; // engine `_component` key, e.g. 'text'
+  displayName: string;
+  description: string;
+  icon: string | null;
+  _id: string; // componenttype ObjectId (→ component._componentType)
+  version: string;
+  properties: Record<string, unknown>;
+}
+
+const bySortOrder = (a: EngineContentNode, b: EngineContentNode): number =>
+  (a._sortOrder ?? 0) - (b._sortOrder ?? 0);
+
+async function getContentByCourse(
+  type: string,
+  courseId: string
+): Promise<EngineContentNode[]> {
+  const rows = await apiClient.get<EngineContentNode[]>(
+    `/api/content/${type}?_courseId=${courseId}`
+  );
+  return Array.isArray(rows) ? rows : [];
+}
+
+// Fetch the whole course tree and assemble it into the 5-level structure model.
+export async function getCourseStructure(
+  courseId: string,
+  courseTitle = "Course"
+): Promise<CourseStructure> {
+  const [contentObjects, articles, blocks, components] = await Promise.all([
+    getContentByCourse("contentobject", courseId),
+    getContentByCourse("article", courseId),
+    getContentByCourse("block", courseId),
+    getContentByCourse("component", courseId),
+  ]);
+
+  const label = (n: EngineContentNode): string =>
+    n.displayTitle || n.title || "Untitled";
+  const childrenOf = (rows: EngineContentNode[], parentId: string) =>
+    rows.filter((r) => r._parentId === parentId).sort(bySortOrder);
+
+  const menus = contentObjects.filter((c) => c._type === "menu");
+  const pages = contentObjects.filter((c) => c._type === "page");
+  const childMenus = (parentId: string) =>
+    menus.filter((m) => m._parentId === parentId).sort(bySortOrder);
+  const childPages = (parentId: string) =>
+    pages.filter((p) => p._parentId === parentId).sort(bySortOrder);
+
+  const buildTopic = (page: EngineContentNode): STopic => ({
+    id: page._id,
+    title: label(page),
+    sortOrder: page._sortOrder ?? 0,
+    sections: childrenOf(articles, page._id).map(
+      (article): SSection => ({
+        id: article._id,
+        title: label(article),
+        contentGroups: childrenOf(blocks, article._id).map(
+          (block): SContentGroup => ({
+            id: block._id,
+            title: label(block),
+            components: childrenOf(components, block._id).map(
+              (comp): SComponent => ({
+                id: comp._id,
+                title: label(comp),
+                componentKey: comp._component || "",
+              })
+            ),
+          })
+        ),
+      })
+    ),
+  });
+
+  // Menus nest recursively; each carries its child menus (sub-modules) + pages.
+  const buildModule = (menu: EngineContentNode): SModule => ({
+    id: menu._id,
+    title: label(menu),
+    sortOrder: menu._sortOrder ?? 0,
+    modules: childMenus(menu._id).map(buildModule),
+    topics: childPages(menu._id).map(buildTopic),
+  });
+
+  return {
+    courseTitle,
+    modules: childMenus(courseId).map(buildModule),
+    topics: childPages(courseId).map(buildTopic),
+  };
+}
+
+// ── Component types (Add Component drawer) ──────────────────────────────────
+export async function getAvailableComponents(): Promise<ComponentTypeOption[]> {
+  const rows = await apiClient.get<
+    Array<Partial<ComponentTypeOption> & { component?: string }>
+  >("/api/componenttype");
+  return (Array.isArray(rows) ? rows : [])
+    .filter((c) => c && c.component)
+    .map((c) => ({
+      component: c.component as string,
+      displayName: c.displayName || (c.component as string),
+      description: c.description || "",
+      icon: c.icon || null,
+      _id: c._id as string,
+      version: c.version || "7.9.0",
+      properties: c.properties || {},
+    }));
+}
+
+// Merged content schemas keyed by component name (GET /api/content/schema),
+// cached for the session. Used to pre-populate a new component's defaults so
+// question components (e.g. mcq) get a valid _buttons sub-tree at runtime.
+// Ported from adapt-preview-edit/js/contentEditView.js (fetchMergedComponentSchema).
+let mergedSchemaCache: Record<string, { properties?: Record<string, unknown> }> | null = null;
+
+async function fetchMergedComponentSchema(
+  componentKey: string
+): Promise<{ properties?: Record<string, unknown> } | null> {
+  if (!componentKey) return null;
+  try {
+    if (!mergedSchemaCache) {
+      mergedSchemaCache = await apiClient.get("/api/content/schema");
+    }
+    return mergedSchemaCache?.[componentKey] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Walk a schema `properties` object, producing each property's default value.
+// Ported from adapt-preview-edit/js/contentEditView.js (buildSchemaDefaults).
+function buildSchemaDefaults(
+  schemaProperties: Record<string, unknown> | undefined
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (!schemaProperties || typeof schemaProperties !== "object") return out;
+
+  for (const key of Object.keys(schemaProperties)) {
+    const prop = schemaProperties[key] as {
+      type?: string;
+      default?: unknown;
+      properties?: Record<string, unknown>;
+    };
+    if (!prop || typeof prop !== "object") continue;
+
+    if (prop.type === "object" && prop.properties) {
+      let base: Record<string, unknown> = {};
+      if (prop.default && typeof prop.default === "object") {
+        try {
+          base = JSON.parse(JSON.stringify(prop.default));
+        } catch {
+          base = {};
+        }
+      }
+      const nested = buildSchemaDefaults(prop.properties);
+      const merged = { ...nested, ...base }; // schema-declared default wins
+      if (Object.keys(merged).length) out[key] = merged;
+      continue;
+    }
+
+    if (prop.default !== undefined) {
+      try {
+        out[key] = JSON.parse(JSON.stringify(prop.default));
+      } catch {
+        out[key] = prop.default;
+      }
+      continue;
+    }
+
+    if (prop.type === "array") out[key] = [];
+  }
+  return out;
+}
+
+interface CreateContentResult { _id: string }
+
+// _sortOrder is 1-based and appended to the end of the sibling list.
+async function createContentNode(
+  type: string,
+  body: Record<string, unknown>
+): Promise<string> {
+  const res = await apiClient.post<CreateContentResult>(`/api/content/${type}`, body);
+  return res._id;
+}
+
+// Module / Sub-Module = menu contentobject. `parentId` is the course (top-level
+// module) or another menu (sub-module).
+export function createModule(
+  courseId: string,
+  parentId: string,
+  title: string,
+  sortOrder: number
+): Promise<string> {
+  return createContentNode("contentobject", {
+    _courseId: courseId,
+    _parentId: parentId,
+    _type: "menu",
+    title,
+    displayTitle: title,
+    _sortOrder: sortOrder,
+  });
+}
+
+// Topic = page contentobject; parent is the course (top-level) or a module.
+export function createTopic(
+  courseId: string,
+  parentId: string,
+  title: string,
+  sortOrder: number
+): Promise<string> {
+  return createContentNode("contentobject", {
+    _courseId: courseId,
+    _parentId: parentId,
+    _type: "page",
+    title,
+    displayTitle: title,
+    _sortOrder: sortOrder,
+  });
+}
+
+export function createArticle(
+  courseId: string,
+  parentId: string,
+  title: string,
+  sortOrder: number
+): Promise<string> {
+  return createContentNode("article", {
+    _courseId: courseId,
+    _parentId: parentId,
+    title,
+    displayTitle: title,
+    _sortOrder: sortOrder,
+  });
+}
+
+export function createBlock(
+  courseId: string,
+  parentId: string,
+  title: string,
+  sortOrder: number
+): Promise<string> {
+  return createContentNode("block", {
+    _courseId: courseId,
+    _parentId: parentId,
+    title,
+    displayTitle: title,
+    _sortOrder: sortOrder,
+  });
+}
+
+// Create a component of the given type inside a content group (block), applying
+// schema defaults + a defensive PUT (mirrors adapt-preview-edit contentEditView).
+export async function createComponent(
+  courseId: string,
+  blockId: string,
+  componentType: ComponentTypeOption,
+  sortOrder: number,
+  layout: "full" | "left" | "right" = "full"
+): Promise<string> {
+  const merged = await fetchMergedComponentSchema(componentType.component);
+  const schemaSource =
+    (merged && merged.properties) || componentType.properties || {};
+  const schemaDefaults = buildSchemaDefaults(
+    schemaSource as Record<string, unknown>
+  );
+
+  const body: Record<string, unknown> = {
+    ...schemaDefaults,
+    _courseId: courseId,
+    _parentId: blockId,
+    _type: "component",
+    _component: componentType.component,
+    _componentType: componentType._id,
+    _componentTypeDisplayName: componentType.displayName,
+    _layout: layout,
+    title: componentType.displayName,
+    displayTitle: componentType.displayName,
+    version: componentType.version,
+    _sortOrder: sortOrder,
+  };
+
+  const id = await createContentNode("component", body);
+
+  // Defensive: some POST handlers strip componenttype-specific fields on create;
+  // re-apply the schema defaults so nested sub-trees (e.g. _buttons) persist.
+  if (Object.keys(schemaDefaults).length) {
+    try {
+      await apiClient.put(`/api/content/component/${id}`, schemaDefaults);
+    } catch {
+      /* non-fatal */
+    }
+  }
+  return id;
+}
+
+// Resolve the "text" component type (for default seeding). Cached.
+let textComponentPromise: Promise<ComponentTypeOption | null> | null = null;
+function getTextComponentType(): Promise<ComponentTypeOption | null> {
+  if (!textComponentPromise) {
+    textComponentPromise = getAvailableComponents()
+      .then(
+        (list) =>
+          list.find((c) => c.component.toLowerCase() === "text") ?? null
+      )
+      .catch(() => null);
+  }
+  return textComponentPromise;
+}
+
+// Seed a Topic → Section → Content Group → text Component under `parentId`
+// (the course, or a module). Returns the new topic id.
+export async function seedDefaultTopic(
+  courseId: string,
+  parentId: string,
+  topicTitle = "Untitled Topic",
+  sortOrder = 1
+): Promise<string> {
+  const topicId = await createTopic(courseId, parentId, topicTitle, sortOrder);
+  const articleId = await createArticle(courseId, topicId, "Untitled Section", 1);
+  const blockId = await createBlock(courseId, articleId, "Untitled Content Group", 1);
+  const text = await getTextComponentType();
+  // A single component is placed on the left (see design).
+  if (text) await createComponent(courseId, blockId, text, 1, "left");
+  return topicId;
+}
+
+// Change a component's column layout (left | right | full).
+export function updateComponentLayout(
+  id: string,
+  layout: "full" | "left" | "right"
+): Promise<unknown> {
+  return apiClient.put(`/api/content/component/${id}`, { _layout: layout });
+}
+
+// Fresh-course default: one top-level topic with a starter text component.
+export function seedDefaultStructure(courseId: string): Promise<string> {
+  return seedDefaultTopic(courseId, courseId, "Untitled Topic", 1);
+}
+
+// title == displayTitle (the two are kept in sync — see developer notes).
+export function renameStructureNode(
+  level: StructureLevel,
+  id: string,
+  title: string
+): Promise<unknown> {
+  return apiClient.put(`/api/content/${LEVEL_TO_CONTENT_TYPE[level]}/${id}`, {
+    title,
+    displayTitle: title,
+  });
+}
+
+export function deleteStructureNode(level: StructureLevel, id: string): Promise<unknown> {
+  return apiClient.delete(`/api/content/${LEVEL_TO_CONTENT_TYPE[level]}/${id}`);
+}
+
+// Persist a new sibling order by re-numbering _sortOrder (1-based) for each id.
+export async function reorderStructureNodes(
+  level: StructureLevel,
+  orderedIds: string[]
+): Promise<void> {
+  const type = LEVEL_TO_CONTENT_TYPE[level];
+  await Promise.all(
+    orderedIds.map((id, i) =>
+      apiClient.put(`/api/content/${type}/${id}`, { _sortOrder: i + 1 })
+    )
+  );
+}
+
 function fmtDate(v?: string): string {
   if (!v) return "";
   const d = new Date(v);
