@@ -13,7 +13,7 @@ import {
   mergedChildren,
   acceptsChild,
 } from '../../types/structure';
-import { StructureIcon } from './structureIcons';
+import { StructureIcon } from './StructureIcons';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 

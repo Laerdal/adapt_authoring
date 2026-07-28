@@ -6,7 +6,7 @@ import {
   type StructureLevel,
   mergedChildren,
 } from "../../types/structure";
-import { StructureIcon } from "./structureIcons";
+import { StructureIcon } from "./StructureIcons";
 
 // Top-down org-chart of the real course hierarchy:
 //   Course → Module → Sub-Module → Topic → Section → Content Group → Component
