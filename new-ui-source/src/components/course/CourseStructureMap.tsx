@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useId } from 'react';
 import type { Course } from '../../types/course';
-import { StructureIcon } from './structureIcons';
 
 // ─── Data model ──────────────────────────────────────────────────────────────
 
@@ -155,28 +154,12 @@ function HLine({ y, x1, x2 }: { y: number; x1: number; x2: number }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-// Display labels for the four levels (course caption stays "Course").
-export interface StructureLabels {
-  module: string;
-  topic: string;
-  section: string;
-  block: string;
-}
-
-const DEFAULT_LABELS: StructureLabels = {
-  module: 'Module',
-  topic: 'Topic',
-  section: 'Section',
-  block: 'Block',
-};
-
 export interface CourseStructureMapProps {
   initialState?: CourseStructureState;
   courseTitle?: string;
   onChange?: (state: CourseStructureState) => void;
   course?: Course;
   onNodeClick?: (pageId: string) => void;
-  labels?: StructureLabels;
 }
 
 type ModalTarget =
@@ -202,7 +185,6 @@ export default function CourseStructureMap({
   onChange,
   course,
   onNodeClick,
-  labels = DEFAULT_LABELS,
 }: CourseStructureMapProps) {
   const [state, setState] = useState<CourseStructureState>(
     initialState ?? { courseTitle, modules: [] }
@@ -554,23 +536,21 @@ export default function CourseStructureMap({
                       {/* Module card */}
                       <foreignObject x={ml.modCX - CW / 2} y={MOD_TOP} width={CW} height={CH}>
                         <div className="w-full h-full group/card">
-                          <div
-                            role={onNodeClick ? 'button' : undefined}
-                            onClick={onNodeClick ? () => onNodeClick(ml.mod.id) : undefined}
-                            className={`bg-white border-2 ${c.border} rounded-xl overflow-hidden shadow-sm h-full flex flex-col ${onNodeClick ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
-                          >
+                          <div className={`bg-white border-2 ${c.border} rounded-xl overflow-hidden shadow-sm h-full flex flex-col`}>
                             <div className={`flex-1 ${c.light} flex items-center justify-center`}>
-                              <StructureIcon level="topic" size={34} className={`${c.icon} opacity-70`} />
+                              <svg className={`w-9 h-9 ${c.icon} opacity-60`} fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6.429 9.75L2.25 12l4.179 2.25m0-4.5l5.571 3 5.571-3m-11.142 0L2.25 7.5 12 2.25l9.75 5.25-4.179 2.25m0 0L21.75 12l-4.179 2.25m0 0l4.179 2.25L12 21.75 2.25 16.5l4.179-2.25m11.142 0l-5.571 3-5.571-3" />
+                              </svg>
                             </div>
                             <div className="px-3 py-2 shrink-0 flex items-start justify-between gap-1">
                               <div className="min-w-0">
                                 <p className="text-xs font-semibold text-gray-900 truncate">{ml.mod.title}</p>
-                                <p className="text-[10px] text-gray-400 mt-0.5">{labels.module}</p>
+                                <p className="text-[10px] text-gray-400 mt-0.5">Module</p>
                               </div>
                               <button
                                 type="button"
                                 aria-label={`Edit module ${ml.mod.title}`}
-                                onClick={(e) => { e.stopPropagation(); setEditTarget({ type: 'module', moduleId: ml.mod.id }); }}
+                                onClick={() => setEditTarget({ type: 'module', moduleId: ml.mod.id })}
                                 className="shrink-0 opacity-0 group-hover/card:opacity-100 transition-opacity p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-blue-600"
                               >
                                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -620,12 +600,14 @@ export default function CourseStructureMap({
                               <div className="w-full h-full group/card">
                                 <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm h-full flex flex-col">
                                   <div className={`flex-1 ${c.light} flex items-center justify-center`}>
-                                    <StructureIcon level="section" size={30} className={`${c.icon} opacity-70`} />
+                                    <svg className={`w-8 h-8 ${c.icon} opacity-60`} fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+                                    </svg>
                                   </div>
                                   <div className="px-3 py-2 shrink-0 flex items-start justify-between gap-1">
                                     <div className="min-w-0">
                                       <p className="text-xs font-semibold text-gray-900 truncate">{tl.topic.title}</p>
-                                      <p className="text-[10px] text-gray-400 mt-0.5">{labels.topic}</p>
+                                      <p className="text-[10px] text-gray-400 mt-0.5">Topic</p>
                                     </div>
                                     <button
                                       type="button"
@@ -672,13 +654,15 @@ export default function CourseStructureMap({
                                 <foreignObject x={sl.sectionX} y={SEC_TOP} width={CW} height={CH}>
                                   <div className="w-full h-full group/card">
                                     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm h-full flex flex-col">
-                                      <div className={`flex-1 ${c.light} flex items-center justify-center opacity-80`}>
-                                        <StructureIcon level="contentGroup" size={26} className={`${c.icon} opacity-70`} />
+                                      <div className={`flex-1 ${c.light} flex items-center justify-center opacity-70`}>
+                                        <svg className={`w-7 h-7 ${c.icon} opacity-50`} fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h7.5M8.25 12h7.5m-7.5 5.25h7.5" />
+                                        </svg>
                                       </div>
                                       <div className="px-3 py-2 shrink-0 flex items-start justify-between gap-1">
                                         <div className="min-w-0">
                                           <p className="text-xs font-semibold text-gray-900 truncate">{sl.section.title}</p>
-                                          <p className="text-[10px] text-gray-400 mt-0.5">{labels.section}</p>
+                                          <p className="text-[10px] text-gray-400 mt-0.5">Section</p>
                                         </div>
                                         <button
                                           type="button"
@@ -721,13 +705,15 @@ export default function CourseStructureMap({
                                     <foreignObject x={bl.blockX} y={BLOCK_TOP} width={CW} height={CH}>
                                       <div className="w-full h-full group/card">
                                         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm h-full flex flex-col">
-                                          <div className={`flex-1 ${c.light} flex items-center justify-center opacity-80`}>
-                                            <StructureIcon level="component" size={24} className={`${c.icon} opacity-70`} />
+                                          <div className={`flex-1 ${c.light} flex items-center justify-center opacity-60`}>
+                                            <svg className={`w-6 h-6 ${c.icon} opacity-50`} fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 010 3.75H5.625a1.875 1.875 0 010-3.75z" />
+                                            </svg>
                                           </div>
                                           <div className="px-3 py-2 shrink-0 flex items-start justify-between gap-1">
                                             <div className="min-w-0">
                                               <p className="text-xs font-semibold text-gray-900 truncate">{bl.block.title}</p>
-                                              <p className="text-[10px] text-gray-400 mt-0.5">{labels.block}</p>
+                                              <p className="text-[10px] text-gray-400 mt-0.5">Block</p>
                                             </div>
                                             <button
                                               type="button"

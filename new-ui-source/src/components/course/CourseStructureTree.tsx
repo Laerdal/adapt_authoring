@@ -266,12 +266,7 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
     return (
       <div key={topic.id}>
         {renderRow({ level: 'topic', id: topic.id, title: topic.title, group: `children:${containerId}`, index, count, reorderGroup: (f, t) => props.onReorderChildren(containerId, f, t), navigateTopicId: topic.id, expandable: true, quickAddLabel: `Add ${labels.section}`, onQuickAdd: () => props.onAddSection(topic.id) })}
-        {isOpen(topic.id) && (
-          <div className={indent}>
-            {renderSections(topic.sections, topic.id)}
-            <div className="ml-1"><AddLink label={`Add ${labels.section}`} onClick={() => props.onAddSection(topic.id)} /></div>
-          </div>
-        )}
+        {isOpen(topic.id) && renderSections(topic.sections, topic.id)}
       </div>
     );
   }

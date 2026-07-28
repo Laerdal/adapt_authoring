@@ -70,11 +70,7 @@ export default function CourseStructureMapView(props: Props) {
     const editing = inlineId === id;
     const levelLabel = level === "course" ? "Course" : labels[level];
     return (
-      <div
-        className={`csm-card inline-block w-[156px] rounded-xl border border-[#cfe0ef] bg-white shadow-sm overflow-hidden align-top ${onOpen ? "cursor-pointer hover:shadow-md transition-shadow" : ""}`}
-        onClick={onOpen}
-        role={onOpen ? "button" : undefined}
-      >
+      <div className={`csm-card inline-block w-[156px] rounded-xl border border-[#cfe0ef] bg-white shadow-sm overflow-hidden align-top ${onOpen ? "hover:shadow-md transition-shadow" : ""}`}>
         <div className="h-14 bg-[#dbeaf5] flex items-center justify-center text-[#3d6b91]">
           {level === "course" ? (
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
@@ -97,6 +93,10 @@ export default function CourseStructureMapView(props: Props) {
                 aria-label="Edit title"
                 className="w-full text-xs border border-[#2d6fa8] rounded px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
+            ) : onOpen ? (
+              <button type="button" onClick={onOpen} title="Open in editor" className="w-full text-left text-xs font-semibold text-[#111827] truncate hover:text-[#2d6fa8] hover:underline">
+                {title}
+              </button>
             ) : (
               <p className="text-xs font-semibold text-[#111827] truncate">{title}</p>
             )}
@@ -145,7 +145,7 @@ export default function CourseStructureMapView(props: Props) {
     return (
       <ul>
         {cg.components.map((comp) => (
-          <li key={comp.id}>{card("component", comp.id, comp.title, () => undefined)}</li>
+          <li key={comp.id}>{card("component", comp.id, comp.title)}</li>
         ))}
         {cg.components.length < 2 && addLi(`addcomp-${cg.id}`, labels.component, () => props.onAddComponent(cg.id))}
       </ul>
@@ -157,11 +157,11 @@ export default function CourseStructureMapView(props: Props) {
       <ul>
         {topic.sections.map((section) => (
           <li key={section.id}>
-            {card("section", section.id, section.title, () => props.onOpenTopic(topic.id))}
+            {card("section", section.id, section.title)}
             <ul>
               {section.contentGroups.map((cg) => (
                 <li key={cg.id}>
-                  {card("contentGroup", cg.id, cg.title, () => props.onOpenTopic(topic.id))}
+                  {card("contentGroup", cg.id, cg.title)}
                   {componentsUl(cg)}
                 </li>
               ))}

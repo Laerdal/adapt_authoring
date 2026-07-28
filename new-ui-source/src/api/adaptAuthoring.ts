@@ -394,7 +394,7 @@ export interface ComponentTypeOption {
   description: string;
   icon: string | null;
   _id: string; // componenttype ObjectId (→ component._componentType)
-  version: string;
+  version?: string; // omitted when the backend doesn't provide one
   properties: Record<string, unknown>;
 }
 
@@ -489,7 +489,7 @@ export async function getAvailableComponents(): Promise<ComponentTypeOption[]> {
       description: c.description || "",
       icon: c.icon || null,
       _id: c._id as string,
-      version: c.version || "7.9.0",
+      version: c.version, // leave undefined if absent — server applies its default
       properties: c.properties || {},
     }));
 }
@@ -662,9 +662,10 @@ export async function createComponent(
     _layout: layout,
     title: componentType.displayName,
     displayTitle: componentType.displayName,
-    version: componentType.version,
     _sortOrder: sortOrder,
   };
+  // Only send version when known; otherwise let the server's default apply.
+  if (componentType.version) body.version = componentType.version;
 
   const id = await createContentNode("component", body);
 
