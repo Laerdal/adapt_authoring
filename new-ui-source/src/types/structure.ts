@@ -69,6 +69,27 @@ export function mergedChildren(modules: SModule[], topics: STopic[]): ContainerC
   return children.sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
+// Container level for drag-and-drop validation ("course" is the implicit root).
+export type ContainerLevel = "course" | "module" | "topic" | "section" | "contentGroup";
+
+// Which child levels a container accepts — the rule that validates drag-and-drop
+// (a Section only into a Topic, a Component only into a Content Group, etc.).
+export function acceptsChild(parentLevel: string, childLevel: StructureLevel): boolean {
+  switch (parentLevel) {
+    case "course":
+    case "module":
+      return childLevel === "module" || childLevel === "topic";
+    case "topic":
+      return childLevel === "section";
+    case "section":
+      return childLevel === "contentGroup";
+    case "contentGroup":
+      return childLevel === "component";
+    default:
+      return false;
+  }
+}
+
 // Display labels for each level (matches the design).
 export const STRUCTURE_LABELS: Record<StructureLevel, string> = {
   module: "Module",

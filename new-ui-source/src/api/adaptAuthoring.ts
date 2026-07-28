@@ -741,6 +741,20 @@ export function deleteStructureNode(level: StructureLevel, id: string): Promise<
   return apiClient.delete(`/api/content/${LEVEL_TO_CONTENT_TYPE[level]}/${id}`);
 }
 
+// Re-parent a node (drag-and-drop across the hierarchy): set its _parentId and
+// _sortOrder. The engine's generic PUT accepts a partial update.
+export function moveContentNode(
+  level: StructureLevel,
+  id: string,
+  newParentId: string,
+  sortOrder: number
+): Promise<unknown> {
+  return apiClient.put(`/api/content/${LEVEL_TO_CONTENT_TYPE[level]}/${id}`, {
+    _parentId: newParentId,
+    _sortOrder: sortOrder,
+  });
+}
+
 // Persist a new sibling order by re-numbering _sortOrder (1-based) for each id.
 export async function reorderStructureNodes(
   level: StructureLevel,

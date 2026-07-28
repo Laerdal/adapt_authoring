@@ -320,8 +320,7 @@ function CourseStructurePanel({
     addComponent,
     rename,
     remove,
-    reorder,
-    reorderChildren,
+    moveNode,
   } = useCourseStructure(courseId, courseTitle);
 
   return (
@@ -413,8 +412,7 @@ function CourseStructurePanel({
               onAddComponent={(blockId) => setAddComponentBlockId(blockId)}
               onRename={rename}
               onRemove={remove}
-              onReorder={reorder}
-              onReorderChildren={reorderChildren}
+              onMove={moveNode}
               onOpenTopic={onOpenEditor}
             />
           ) : (
