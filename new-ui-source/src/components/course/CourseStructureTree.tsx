@@ -1,923 +1,360 @@
 'use client';
 
-import React, { useState, useRef, useCallback } from 'react';
-import type {
-  CourseStructureState,
-  StructureModule,
-  StructureTopic,
-  StructureSection,
-  StructureBlock,
-} from './CourseStructureMap';
-import { AddModal } from './CourseStructureMap';
-
-// ─── Edit target ──────────────────────────────────────────────────────────────
-
-type EditTarget =
-  | { type: 'module'; moduleId: string }
-  | { type: 'topic'; moduleId: string; topicId: string }
-  | { type: 'section'; moduleId: string; topicId: string; sectionId: string }
-  | { type: 'block'; moduleId: string; topicId: string; sectionId: string; blockId: string };
+import React, { useState } from 'react';
+import {
+  type CourseStructure,
+  type StructureLevel,
+  type ContainerLevel,
+  type SModule,
+  type STopic,
+  type SSection,
+  type SContentGroup,
+  type SComponent,
+  mergedChildren,
+  acceptsChild,
+} from '../../types/structure';
+import { StructureIcon } from './structureIcons';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
-interface CourseStructureTreeProps {
-  state: CourseStructureState;
-  onChange: (state: CourseStructureState) => void;
+export interface CourseStructureTreeProps {
+  structure: CourseStructure;
+  courseId: string;
+  labels: Record<StructureLevel, string>;
+  onAddModule: () => void;
+  onAddSubModule: (moduleId: string) => void;
+  onAddTopic: (parentId: string | null) => void;
+  onAddSection: (topicId: string) => void;
+  onAddContentGroup: (sectionId: string) => void;
+  onAddComponent: (blockId: string) => void;
+  onRename: (level: StructureLevel, id: string, title: string) => void;
+  onRemove: (level: StructureLevel, id: string) => void;
+  // Drag-and-drop: move `id` under `newParentId`, before `beforeId` (null = append).
+  onMove: (level: StructureLevel, id: string, newParentId: string, beforeId: string | null) => void;
+  onOpenTopic: (topicId: string) => void;
 }
 
-// ─── Drag state ───────────────────────────────────────────────────────────────
+interface Dragged { level: StructureLevel; id: string; }
+interface RowRef { level: StructureLevel; id: string; parentId: string; parentLevel: ContainerLevel; }
+type DropPlan = { newParentId: string; beforeId: string | null; mode: 'before' | 'into' };
 
-interface DragInfo {
-  type: 'module' | 'topic' | 'section' | 'block';
-  parentPath: string; // e.g. "" for modules, "mod-1" for topics, "mod-1/topic-1" for sections
-  index: number;
+// Resolve a drop of `dragged` onto `row`:
+//  • same level          → reorder / move as a sibling before that row
+//  • different level, row is a valid container for it → move INTO the row
+//  • different level, but a sibling is valid          → move as a sibling
+function computeDrop(dragged: Dragged, row: RowRef): DropPlan | null {
+  if (dragged.id === row.id) return null;
+  if (dragged.level === row.level) {
+    return acceptsChild(row.parentLevel, dragged.level)
+      ? { newParentId: row.parentId, beforeId: row.id, mode: 'before' }
+      : null;
+  }
+  if (acceptsChild(row.level, dragged.level)) {
+    return { newParentId: row.id, beforeId: null, mode: 'into' };
+  }
+  if (acceptsChild(row.parentLevel, dragged.level)) {
+    return { newParentId: row.parentId, beforeId: row.id, mode: 'before' };
+  }
+  return null;
 }
 
-// ─── Add modal target ─────────────────────────────────────────────────────────
-
-type AddTarget =
-  | { type: 'module' }
-  | { type: 'topic'; moduleId: string }
-  | { type: 'section'; moduleId: string; topicId: string }
-  | { type: 'block'; moduleId: string; topicId: string; sectionId: string };
-
-// ─── Delete confirmation state ────────────────────────────────────────────────
-
-type DeleteTarget =
-  | { type: 'module'; moduleId: string }
-  | { type: 'topic'; moduleId: string; topicId: string }
-  | { type: 'section'; moduleId: string; topicId: string; sectionId: string }
-  | { type: 'block'; moduleId: string; topicId: string; sectionId: string; blockId: string };
-
-// ─── Keyboard grab state ──────────────────────────────────────────────────────
-
-interface GrabState {
-  type: 'module' | 'topic' | 'section' | 'block';
-  parentPath: string;
-  index: number;
-  originalIndex: number;
-}
-
-// ─── Utility ──────────────────────────────────────────────────────────────────
-
-function uid() {
-  return Math.random().toString(36).slice(2, 9);
-}
-
-// ─── Reorder helper ───────────────────────────────────────────────────────────
-
-function reorder<T>(arr: T[], from: number, to: number): T[] {
-  const next = [...arr];
-  const [item] = next.splice(from, 1);
-  next.splice(to, 0, item);
-  return next;
-}
+const LEVEL_ICON_COLOR: Record<StructureLevel, string> = {
+  module: 'text-[#3d8f7c]',
+  topic: 'text-[#2d6fa8]',
+  section: 'text-[#d1a808]',
+  contentGroup: 'text-[#3d8f7c]',
+  component: 'text-[#6b7280]',
+};
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
-
-function GripIcon() {
+function Chevron({ open }: { open: boolean }) {
   return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-[#9ca3af]">
-      <circle cx="9" cy="6" r="1.5" />
-      <circle cx="15" cy="6" r="1.5" />
-      <circle cx="9" cy="12" r="1.5" />
-      <circle cx="15" cy="12" r="1.5" />
-      <circle cx="9" cy="18" r="1.5" />
-      <circle cx="15" cy="18" r="1.5" />
-    </svg>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="3 6 5 6 21 6" />
-      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-      <path d="M10 11v6M14 11v6" />
-      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-    </svg>
-  );
-}
-
-function PencilIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-    </svg>
-  );
-}
-
-function PlusIcon({ size = 13 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="5" x2="12" y2="19" />
-      <line x1="5" y1="12" x2="19" y2="12" />
-    </svg>
-  );
-}
-
-function ChevronIcon({ expanded }: { expanded: boolean }) {
-  return (
-    <svg
-      width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-      strokeLinecap="round" strokeLinejoin="round"
-      className={`transition-transform duration-150 ${expanded ? 'rotate-90' : ''}`}
-    >
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${open ? 'rotate-90' : ''}`}>
       <path d="M9 6l6 6-6 6" />
     </svg>
   );
 }
-
-// ─── Main component ───────────────────────────────────────────────────────────
-
-export default function CourseStructureTree({ state, onChange }: CourseStructureTreeProps) {
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({
-    'module-1': true,
-    'topic-1': true,
-  });
-  const [addTarget, setAddTarget] = useState<AddTarget | null>(null);
-  const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
-  const [dropTarget, setDropTarget] = useState<{ parentPath: string; index: number } | null>(null);
-  const [grabbed, setGrabbed] = useState<GrabState | null>(null);
-  const liveRef = useRef<HTMLDivElement>(null);
-
-  const dragInfo = useRef<DragInfo | null>(null);
-
-  const announce = useCallback((msg: string) => {
-    if (liveRef.current) liveRef.current.textContent = msg;
-  }, []);
-
-  function toggleExpand(id: string) {
-    setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
-  }
-
-  // ── Add modal confirm ──────────────────────────────────────────────────────
-
-  function handleAddConfirm(title: string, description: string) {
-    if (!addTarget) return;
-    const s = structuredClone(state);
-    if (addTarget.type === 'module') {
-      s.modules.push({ id: `mod-${uid()}`, title, description, colorIndex: s.modules.length % 6, topics: [] });
-    } else if (addTarget.type === 'topic') {
-      const mod = s.modules.find(m => m.id === addTarget.moduleId);
-      if (mod) mod.topics.push({ id: `topic-${uid()}`, title, description, sections: [] });
-    } else if (addTarget.type === 'section') {
-      const mod = s.modules.find(m => m.id === addTarget.moduleId);
-      const topic = mod?.topics.find(t => t.id === addTarget.topicId);
-      if (topic) topic.sections.push({ id: `sec-${uid()}`, title, description, blocks: [] });
-    } else if (addTarget.type === 'block') {
-      const mod = s.modules.find(m => m.id === addTarget.moduleId);
-      const topic = mod?.topics.find(t => t.id === addTarget.topicId);
-      const sec = topic?.sections.find(se => se.id === addTarget.sectionId);
-      if (sec) sec.blocks.push({ id: `block-${uid()}`, title, description });
-    }
-    onChange(s);
-    setAddTarget(null);
-  }
-
-  // ── Edit modal ────────────────────────────────────────────────────────────
-
-  function getEditInitialValues(): { title: string; description: string } {
-    if (!editTarget) return { title: '', description: '' };
-    if (editTarget.type === 'module') {
-      const m = state.modules.find(x => x.id === editTarget.moduleId);
-      return { title: m?.title ?? '', description: m?.description ?? '' };
-    }
-    if (editTarget.type === 'topic') {
-      const m = state.modules.find(x => x.id === editTarget.moduleId);
-      const t = m?.topics.find(x => x.id === editTarget.topicId);
-      return { title: t?.title ?? '', description: t?.description ?? '' };
-    }
-    if (editTarget.type === 'section') {
-      const m = state.modules.find(x => x.id === editTarget.moduleId);
-      const t = m?.topics.find(x => x.id === editTarget.topicId);
-      const s = t?.sections.find(x => x.id === editTarget.sectionId);
-      return { title: s?.title ?? '', description: s?.description ?? '' };
-    }
-    const m = state.modules.find(x => x.id === editTarget.moduleId);
-    const t = m?.topics.find(x => x.id === editTarget.topicId);
-    const s = t?.sections.find(x => x.id === editTarget.sectionId);
-    const b = s?.blocks.find(x => x.id === editTarget.blockId);
-    return { title: b?.title ?? '', description: b?.description ?? '' };
-  }
-
-  function handleEditConfirm(newTitle: string, newDescription: string) {
-    if (!editTarget) return;
-    const s = structuredClone(state);
-    if (editTarget.type === 'module') {
-      const m = s.modules.find(x => x.id === editTarget.moduleId);
-      if (m) { m.title = newTitle; m.description = newDescription; }
-    } else if (editTarget.type === 'topic') {
-      const m = s.modules.find(x => x.id === editTarget.moduleId);
-      const t = m?.topics.find(x => x.id === editTarget.topicId);
-      if (t) { t.title = newTitle; t.description = newDescription; }
-    } else if (editTarget.type === 'section') {
-      const m = s.modules.find(x => x.id === editTarget.moduleId);
-      const t = m?.topics.find(x => x.id === editTarget.topicId);
-      const sec = t?.sections.find(x => x.id === editTarget.sectionId);
-      if (sec) { sec.title = newTitle; sec.description = newDescription; }
-    } else if (editTarget.type === 'block') {
-      const m = s.modules.find(x => x.id === editTarget.moduleId);
-      const t = m?.topics.find(x => x.id === editTarget.topicId);
-      const sec = t?.sections.find(x => x.id === editTarget.sectionId);
-      const b = sec?.blocks.find(x => x.id === editTarget.blockId);
-      if (b) { b.title = newTitle; b.description = newDescription; }
-    }
-    onChange(s);
-    setEditTarget(null);
-  }
-
-  // ── Delete confirm ────────────────────────────────────────────────────────
-
-  function handleDeleteConfirm() {
-    if (!deleteTarget) return;
-    const s = structuredClone(state);
-    if (deleteTarget.type === 'module') {
-      s.modules = s.modules.filter(m => m.id !== deleteTarget.moduleId);
-    } else if (deleteTarget.type === 'topic') {
-      const mod = s.modules.find(m => m.id === deleteTarget.moduleId);
-      if (mod) mod.topics = mod.topics.filter(t => t.id !== deleteTarget.topicId);
-    } else if (deleteTarget.type === 'section') {
-      const mod = s.modules.find(m => m.id === deleteTarget.moduleId);
-      const topic = mod?.topics.find(t => t.id === deleteTarget.topicId);
-      if (topic) topic.sections = topic.sections.filter(se => se.id !== deleteTarget.sectionId);
-    } else if (deleteTarget.type === 'block') {
-      const mod = s.modules.find(m => m.id === deleteTarget.moduleId);
-      const topic = mod?.topics.find(t => t.id === deleteTarget.topicId);
-      const sec = topic?.sections.find(se => se.id === deleteTarget.sectionId);
-      if (sec) sec.blocks = sec.blocks.filter(bl => bl.id !== deleteTarget.blockId);
-    }
-    onChange(s);
-    setDeleteTarget(null);
-  }
-
-  // ── Drag handlers ─────────────────────────────────────────────────────────
-
-  function onDragStart(info: DragInfo) {
-    dragInfo.current = info;
-  }
-
-  function onDragOver(e: React.DragEvent, parentPath: string, index: number) {
-    e.preventDefault();
-    setDropTarget({ parentPath, index });
-  }
-
-  function onDrop(e: React.DragEvent, parentPath: string, toIndex: number) {
-    e.preventDefault();
-    setDropTarget(null);
-    const info = dragInfo.current;
-    if (!info || info.parentPath !== parentPath) return;
-    if (info.index === toIndex) return;
-    const s = structuredClone(state);
-    if (info.type === 'module') {
-      s.modules = reorder(s.modules, info.index, toIndex);
-    } else if (info.type === 'topic') {
-      const mod = s.modules.find(m => m.id === parentPath);
-      if (mod) mod.topics = reorder(mod.topics, info.index, toIndex);
-    } else if (info.type === 'section') {
-      const [modId, topicId] = parentPath.split('/');
-      const mod = s.modules.find(m => m.id === modId);
-      const topic = mod?.topics.find(t => t.id === topicId);
-      if (topic) topic.sections = reorder(topic.sections, info.index, toIndex);
-    } else if (info.type === 'block') {
-      const [modId, topicId, secId] = parentPath.split('/');
-      const mod = s.modules.find(m => m.id === modId);
-      const topic = mod?.topics.find(t => t.id === topicId);
-      const sec = topic?.sections.find(se => se.id === secId);
-      if (sec) sec.blocks = reorder(sec.blocks, info.index, toIndex);
-    }
-    onChange(s);
-    dragInfo.current = null;
-  }
-
-  // ── Keyboard DnD ──────────────────────────────────────────────────────────
-
-  function handleGrabKeyDown(
-    e: React.KeyboardEvent,
-    type: GrabState['type'],
-    parentPath: string,
-    index: number,
-    siblingCount: number,
-  ) {
-    if (e.key === 'Space' || e.key === 'Enter') {
-      e.preventDefault();
-      if (grabbed && grabbed.parentPath === parentPath && grabbed.index === index) {
-        // Drop
-        setGrabbed(null);
-        announce(`${type} dropped at position ${index + 1}`);
-        return;
-      }
-      setGrabbed({ type, parentPath, index, originalIndex: index });
-      announce(`${type} grabbed. Use arrow keys to move. Press Space or Enter to drop, Escape to cancel.`);
-      return;
-    }
-
-    if (!grabbed || grabbed.parentPath !== parentPath || grabbed.index !== index) return;
-
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      // Revert
-      const s = structuredClone(state);
-      applyReorder(s, grabbed.type, grabbed.parentPath, grabbed.index, grabbed.originalIndex);
-      onChange(s);
-      setGrabbed(null);
-      announce('Cancelled. Item returned to original position.');
-      return;
-    }
-
-    if (e.key === 'ArrowUp' && index > 0) {
-      e.preventDefault();
-      const newIndex = index - 1;
-      const s = structuredClone(state);
-      applyReorder(s, grabbed.type, grabbed.parentPath, index, newIndex);
-      onChange(s);
-      setGrabbed({ ...grabbed, index: newIndex });
-      announce(`${type} moved to position ${newIndex + 1} of ${siblingCount}`);
-    }
-
-    if (e.key === 'ArrowDown' && index < siblingCount - 1) {
-      e.preventDefault();
-      const newIndex = index + 1;
-      const s = structuredClone(state);
-      applyReorder(s, grabbed.type, grabbed.parentPath, index, newIndex);
-      onChange(s);
-      setGrabbed({ ...grabbed, index: newIndex });
-      announce(`${type} moved to position ${newIndex + 1} of ${siblingCount}`);
-    }
-  }
-
-  function applyReorder(
-    s: CourseStructureState,
-    type: GrabState['type'],
-    parentPath: string,
-    from: number,
-    to: number,
-  ) {
-    if (type === 'module') {
-      s.modules = reorder(s.modules, from, to);
-    } else if (type === 'topic') {
-      const mod = s.modules.find(m => m.id === parentPath);
-      if (mod) mod.topics = reorder(mod.topics, from, to);
-    } else if (type === 'section') {
-      const [modId, topicId] = parentPath.split('/');
-      const mod = s.modules.find(m => m.id === modId);
-      const topic = mod?.topics.find(t => t.id === topicId);
-      if (topic) topic.sections = reorder(topic.sections, from, to);
-    } else {
-      const [modId, topicId, secId] = parentPath.split('/');
-      const mod = s.modules.find(m => m.id === modId);
-      const topic = mod?.topics.find(t => t.id === topicId);
-      const sec = topic?.sections.find(se => se.id === secId);
-      if (sec) sec.blocks = reorder(sec.blocks, from, to);
-    }
-  }
-
-  // ── Drop indicator ────────────────────────────────────────────────────────
-
-  function isDropTarget(parentPath: string, index: number) {
-    return dropTarget?.parentPath === parentPath && dropTarget?.index === index;
-  }
-
-  // ── Delete confirmation check ─────────────────────────────────────────────
-
-  function isDeleteTarget(id: string) {
-    if (!deleteTarget) return false;
-    if (deleteTarget.type === 'module') return deleteTarget.moduleId === id;
-    if (deleteTarget.type === 'topic') return deleteTarget.topicId === id;
-    if (deleteTarget.type === 'section') return deleteTarget.sectionId === id;
-    if (deleteTarget.type === 'block') return deleteTarget.blockId === id;
-    return false;
-  }
-
-  function getDeleteTitle() {
-    if (!deleteTarget) return '';
-    if (deleteTarget.type === 'module') return state.modules.find(m => m.id === deleteTarget.moduleId)?.title ?? 'this module';
-    if (deleteTarget.type === 'topic') {
-      const mod = state.modules.find(m => m.id === deleteTarget.moduleId);
-      return mod?.topics.find(t => t.id === deleteTarget.topicId)?.title ?? 'this topic';
-    }
-    if (deleteTarget.type === 'section') {
-      const mod = state.modules.find(m => m.id === deleteTarget.moduleId);
-      const topic = mod?.topics.find(t => t.id === deleteTarget.topicId);
-      return topic?.sections.find(s => s.id === deleteTarget.sectionId)?.title ?? 'this section';
-    }
-    if (deleteTarget.type === 'block') {
-      const mod = state.modules.find(m => m.id === deleteTarget.moduleId);
-      const topic = mod?.topics.find(t => t.id === deleteTarget.topicId);
-      const sec = topic?.sections.find(se => se.id === deleteTarget.sectionId);
-      return sec?.blocks.find(b => b.id === deleteTarget.blockId)?.title ?? 'this block';
-    }
-    return '';
-  }
-
-  // ── Row helpers ───────────────────────────────────────────────────────────
-
-  function DeleteConfirmRow({ label }: { label: string }) {
-    return (
-      <div className="flex items-center gap-2 px-2 py-2 rounded-lg bg-[#fef2f2] border border-[#fecaca] text-sm">
-        <span className="flex-1 text-[#991b1b] font-medium truncate">Delete {label}?</span>
-        <button
-          type="button"
-          onClick={() => setDeleteTarget(null)}
-          className="px-2 py-1 text-xs rounded text-[#6b7280] hover:bg-[#f3f4f6] transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={handleDeleteConfirm}
-          className="px-2 py-1 text-xs rounded bg-[#dc2626] text-white hover:bg-[#b91c1c] transition-colors font-medium"
-        >
-          Delete
-        </button>
-      </div>
-    );
-  }
-
-  // ── Block rows ────────────────────────────────────────────────────────────
-
-  function renderBlocks(blocks: StructureBlock[], modId: string, topicId: string, secId: string) {
-    const parentPath = `${modId}/${topicId}/${secId}`;
-    return (
-      <div role="list" className="ml-5 space-y-0.5">
-        {blocks.map((block, i) => {
-          const isGrabbed = grabbed?.parentPath === parentPath && grabbed?.index === i;
-          const deleteKey = block.id;
-          if (isDeleteTarget(deleteKey)) {
-            return (
-              <div key={block.id} role="listitem">
-                <DeleteConfirmRow label={block.title} />
-              </div>
-            );
-          }
-          return (
-            <div key={block.id} role="listitem">
-              {isDropTarget(parentPath, i) && (
-                <div className="h-0.5 bg-blue-500 rounded mb-0.5" />
-              )}
-              <div
-                draggable
-                onDragStart={() => onDragStart({ type: 'block', parentPath, index: i })}
-                onDragOver={e => onDragOver(e, parentPath, i)}
-                onDrop={e => onDrop(e, parentPath, i)}
-                onDragEnd={() => setDropTarget(null)}
-                className={`p-2.5 rounded-lg hover:bg-[#f9fafb] flex items-center gap-2 group transition-colors ${isGrabbed ? 'opacity-50 bg-blue-50' : ''}`}
-                aria-label={`Block: ${block.title}, ${i + 1} of ${blocks.length} blocks`}
-              >
-                <button
-                  type="button"
-                  aria-label={`Drag handle for block ${block.title}`}
-                  aria-grabbed={isGrabbed ? 'true' : 'false'}
-                  className="shrink-0 cursor-grab active:cursor-grabbing p-0.5 rounded hover:bg-[#e5e7eb] opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100"
-                  onKeyDown={e => handleGrabKeyDown(e, 'block', parentPath, i, blocks.length)}
-                >
-                  <GripIcon />
-                </button>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="18" height="18" rx="2" />
-                </svg>
-                <span className="text-sm text-[#6b7280] truncate flex-1">{block.title}</span>
-                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                  <button
-                    type="button"
-                    aria-label={`Edit block ${block.title}`}
-                    onClick={() => setEditTarget({ type: 'block', moduleId: modId, topicId, sectionId: secId, blockId: block.id })}
-                    className="p-1 rounded hover:bg-[#e5e7eb] text-[#9ca3af] hover:text-[#2d6fa8] transition-colors"
-                  >
-                    <PencilIcon />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Delete block ${block.title}`}
-                    onClick={() => setDeleteTarget({ type: 'block', moduleId: modId, topicId, sectionId: secId, blockId: block.id })}
-                    className="p-1 rounded hover:bg-[#fee2e2] text-[#9ca3af] hover:text-[#dc2626] transition-colors"
-                  >
-                    <TrashIcon />
-                  </button>
-                </div>
-              </div>
-              {i === blocks.length - 1 && isDropTarget(parentPath, i + 1) && (
-                <div className="h-0.5 bg-blue-500 rounded mt-0.5" />
-              )}
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-
-  // ── Section rows ──────────────────────────────────────────────────────────
-
-  function renderSections(sections: StructureSection[], modId: string, topicId: string) {
-    const parentPath = `${modId}/${topicId}`;
-    return (
-      <div role="list" className="ml-5 space-y-0.5 border-l border-[#e5e7eb] pl-3">
-        {sections.map((sec, i) => {
-          const isGrabbed = grabbed?.parentPath === parentPath && grabbed?.index === i;
-          const deleteKey = sec.id;
-          if (isDeleteTarget(deleteKey) && deleteTarget?.type === 'section') {
-            return (
-              <div key={sec.id} role="listitem">
-                <DeleteConfirmRow label={sec.title} />
-              </div>
-            );
-          }
-          return (
-            <div key={sec.id} role="listitem">
-              {isDropTarget(parentPath, i) && (
-                <div className="h-0.5 bg-blue-500 rounded mb-0.5" />
-              )}
-              <div
-                draggable
-                onDragStart={() => onDragStart({ type: 'section', parentPath, index: i })}
-                onDragOver={e => onDragOver(e, parentPath, i)}
-                onDrop={e => onDrop(e, parentPath, i)}
-                onDragEnd={() => setDropTarget(null)}
-                className={`rounded-lg ${isGrabbed ? 'opacity-50 bg-blue-50' : ''}`}
-              >
-                <div
-                  className="p-2.5 rounded-lg hover:bg-[#f9fafb] flex items-center justify-between group"
-                  aria-label={`Section: ${sec.title}, ${i + 1} of ${sections.length} sections`}
-                >
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <button
-                      type="button"
-                      aria-label={`Drag handle for section ${sec.title}`}
-                      aria-grabbed={isGrabbed ? 'true' : 'false'}
-                      className="shrink-0 cursor-grab active:cursor-grabbing p-0.5 rounded hover:bg-[#e5e7eb] opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100"
-                      onKeyDown={e => handleGrabKeyDown(e, 'section', parentPath, i, sections.length)}
-                    >
-                      <GripIcon />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => toggleExpand(sec.id)}
-                      className="p-0.5 rounded hover:bg-[#e5e7eb] text-[#6b7280] shrink-0"
-                      aria-label={expanded[sec.id] ? 'Collapse section' : 'Expand section'}
-                    >
-                      <ChevronIcon expanded={!!expanded[sec.id]} />
-                    </button>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#d1a808" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-                      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-                    </svg>
-                    <span className="text-sm text-[#6b7280] truncate">{sec.title}</span>
-                  </div>
-                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                    <button
-                      type="button"
-                      aria-label={`Add block to section ${sec.title}`}
-                      onClick={() => setAddTarget({ type: 'block', moduleId: modId, topicId, sectionId: sec.id })}
-                      className="p-1 rounded hover:bg-[#e5e7eb] text-[#9ca3af] hover:text-[#2d6fa8] transition-colors"
-                    >
-                      <PlusIcon />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Edit section ${sec.title}`}
-                      onClick={() => setEditTarget({ type: 'section', moduleId: modId, topicId, sectionId: sec.id })}
-                      className="p-1 rounded hover:bg-[#e5e7eb] text-[#9ca3af] hover:text-[#2d6fa8] transition-colors"
-                    >
-                      <PencilIcon />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Delete section ${sec.title}`}
-                      onClick={() => setDeleteTarget({ type: 'section', moduleId: modId, topicId, sectionId: sec.id })}
-                      className="p-1 rounded hover:bg-[#fee2e2] text-[#9ca3af] hover:text-[#dc2626] transition-colors"
-                    >
-                      <TrashIcon />
-                    </button>
-                  </div>
-                </div>
-                {expanded[sec.id] && renderBlocks(sec.blocks, modId, topicId, sec.id)}
-                {expanded[sec.id] && (
-                  <div className="ml-5 mt-0.5">
-                    <button
-                      type="button"
-                      onClick={() => setAddTarget({ type: 'block', moduleId: modId, topicId, sectionId: sec.id })}
-                      aria-label="Add block"
-                      className="flex items-center gap-1.5 text-xs text-[#9ca3af] hover:text-[#2d6fa8] px-2 py-1 rounded hover:bg-[#f0f7ff] transition-colors"
-                    >
-                      <PlusIcon size={11} />
-                      Add block
-                    </button>
-                  </div>
-                )}
-              </div>
-              {i === sections.length - 1 && isDropTarget(parentPath, i + 1) && (
-                <div className="h-0.5 bg-blue-500 rounded mt-0.5" />
-              )}
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-
-  // ── Topic rows ────────────────────────────────────────────────────────────
-
-  function renderTopics(topics: StructureTopic[], modId: string) {
-    const parentPath = modId;
-    return (
-      <div role="list" className="ml-5 space-y-0.5 border-l border-[#e5e7eb] pl-3">
-        {topics.map((topic, i) => {
-          const isGrabbed = grabbed?.parentPath === parentPath && grabbed?.index === i;
-          const deleteKey = topic.id;
-          if (isDeleteTarget(deleteKey) && deleteTarget?.type === 'topic') {
-            return (
-              <div key={topic.id} role="listitem">
-                <DeleteConfirmRow label={topic.title} />
-              </div>
-            );
-          }
-          return (
-            <div key={topic.id} role="listitem">
-              {isDropTarget(parentPath, i) && (
-                <div className="h-0.5 bg-blue-500 rounded mb-0.5" />
-              )}
-              <div
-                draggable
-                onDragStart={() => onDragStart({ type: 'topic', parentPath, index: i })}
-                onDragOver={e => onDragOver(e, parentPath, i)}
-                onDrop={e => onDrop(e, parentPath, i)}
-                onDragEnd={() => setDropTarget(null)}
-                className={`rounded-lg ${isGrabbed ? 'opacity-50 bg-blue-50' : ''}`}
-              >
-                <div
-                  className="p-2.5 rounded-lg hover:bg-[#f9fafb] flex items-center justify-between group"
-                  aria-label={`Topic: ${topic.title}, ${i + 1} of ${topics.length} topics`}
-                >
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <button
-                      type="button"
-                      aria-label={`Drag handle for topic ${topic.title}`}
-                      aria-grabbed={isGrabbed ? 'true' : 'false'}
-                      className="shrink-0 cursor-grab active:cursor-grabbing p-0.5 rounded hover:bg-[#e5e7eb] opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100"
-                      onKeyDown={e => handleGrabKeyDown(e, 'topic', parentPath, i, topics.length)}
-                    >
-                      <GripIcon />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => toggleExpand(topic.id)}
-                      className="p-0.5 rounded hover:bg-[#e5e7eb] text-[#6b7280] shrink-0"
-                      aria-label={expanded[topic.id] ? 'Collapse topic' : 'Expand topic'}
-                    >
-                      <ChevronIcon expanded={!!expanded[topic.id]} />
-                    </button>
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
-                    </svg>
-                    <span className="text-sm text-[#6b7280] truncate">{topic.title}</span>
-                  </div>
-                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                    <button
-                      type="button"
-                      aria-label={`Add section to topic ${topic.title}`}
-                      onClick={() => setAddTarget({ type: 'section', moduleId: modId, topicId: topic.id })}
-                      className="p-1 rounded hover:bg-[#e5e7eb] text-[#9ca3af] hover:text-[#2d6fa8] transition-colors"
-                    >
-                      <PlusIcon />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Edit topic ${topic.title}`}
-                      onClick={() => setEditTarget({ type: 'topic', moduleId: modId, topicId: topic.id })}
-                      className="p-1 rounded hover:bg-[#e5e7eb] text-[#9ca3af] hover:text-[#2d6fa8] transition-colors"
-                    >
-                      <PencilIcon />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Delete topic ${topic.title}`}
-                      onClick={() => setDeleteTarget({ type: 'topic', moduleId: modId, topicId: topic.id })}
-                      className="p-1 rounded hover:bg-[#fee2e2] text-[#9ca3af] hover:text-[#dc2626] transition-colors"
-                    >
-                      <TrashIcon />
-                    </button>
-                  </div>
-                </div>
-                {expanded[topic.id] && renderSections(topic.sections, modId, topic.id)}
-                {expanded[topic.id] && (
-                  <div className="ml-5 mt-0.5">
-                    <button
-                      type="button"
-                      onClick={() => setAddTarget({ type: 'section', moduleId: modId, topicId: topic.id })}
-                      aria-label="Add section"
-                      className="flex items-center gap-1.5 text-xs text-[#9ca3af] hover:text-[#2d6fa8] px-2 py-1 rounded hover:bg-[#f0f7ff] transition-colors"
-                    >
-                      <PlusIcon size={11} />
-                      Add section
-                    </button>
-                  </div>
-                )}
-              </div>
-              {i === topics.length - 1 && isDropTarget(parentPath, i + 1) && (
-                <div className="h-0.5 bg-blue-500 rounded mt-0.5" />
-              )}
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-
-  // ── Module rows ───────────────────────────────────────────────────────────
-
-  function renderModules(modules: StructureModule[]) {
-    const parentPath = '';
-    return (
-      <div role="list" className="ml-4 space-y-1 border-l-2 border-[#e5e7eb] pl-4">
-        {modules.map((mod, i) => {
-          const isGrabbed = grabbed?.parentPath === parentPath && grabbed?.index === i;
-          const deleteKey = mod.id;
-          if (isDeleteTarget(deleteKey) && deleteTarget?.type === 'module') {
-            return (
-              <div key={mod.id} role="listitem">
-                <DeleteConfirmRow label={mod.title} />
-              </div>
-            );
-          }
-          return (
-            <div key={mod.id} role="listitem">
-              {isDropTarget(parentPath, i) && (
-                <div className="h-0.5 bg-blue-500 rounded mb-0.5" />
-              )}
-              <div
-                draggable
-                onDragStart={() => onDragStart({ type: 'module', parentPath, index: i })}
-                onDragOver={e => onDragOver(e, parentPath, i)}
-                onDrop={e => onDrop(e, parentPath, i)}
-                onDragEnd={() => setDropTarget(null)}
-                className={`rounded-lg ${isGrabbed ? 'opacity-50 bg-blue-50' : ''}`}
-              >
-                <div
-                  className="p-2.5 rounded-lg hover:bg-[#f9fafb] flex items-center justify-between group"
-                  aria-label={`Module: ${mod.title}, ${i + 1} of ${modules.length} modules`}
-                >
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <button
-                      type="button"
-                      aria-label={`Drag handle for module ${mod.title}`}
-                      aria-grabbed={isGrabbed ? 'true' : 'false'}
-                      className="shrink-0 cursor-grab active:cursor-grabbing p-0.5 rounded hover:bg-[#e5e7eb] opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100"
-                      onKeyDown={e => handleGrabKeyDown(e, 'module', parentPath, i, modules.length)}
-                    >
-                      <GripIcon />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => toggleExpand(mod.id)}
-                      className="p-0.5 rounded hover:bg-[#e5e7eb] text-[#6b7280] shrink-0"
-                      aria-label={expanded[mod.id] ? 'Collapse module' : 'Expand module'}
-                    >
-                      <ChevronIcon expanded={!!expanded[mod.id]} />
-                    </button>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <polygon points="12 2 2 7 12 12 22 7 12 2" />
-                    </svg>
-                    <span className="text-sm font-medium text-[#374151] truncate">{mod.title}</span>
-                  </div>
-                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                    <button
-                      type="button"
-                      aria-label={`Add topic to module ${mod.title}`}
-                      onClick={() => setAddTarget({ type: 'topic', moduleId: mod.id })}
-                      className="p-1 rounded hover:bg-[#e5e7eb] text-[#9ca3af] hover:text-[#2d6fa8] transition-colors"
-                    >
-                      <PlusIcon />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Edit module ${mod.title}`}
-                      onClick={() => setEditTarget({ type: 'module', moduleId: mod.id })}
-                      className="p-1 rounded hover:bg-[#e5e7eb] text-[#9ca3af] hover:text-[#2d6fa8] transition-colors"
-                    >
-                      <PencilIcon />
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={`Delete module ${mod.title}`}
-                      onClick={() => setDeleteTarget({ type: 'module', moduleId: mod.id })}
-                      className="p-1 rounded hover:bg-[#fee2e2] text-[#9ca3af] hover:text-[#dc2626] transition-colors"
-                    >
-                      <TrashIcon />
-                    </button>
-                  </div>
-                </div>
-                {expanded[mod.id] && renderTopics(mod.topics, mod.id)}
-                {expanded[mod.id] && (
-                  <div className="ml-5 mt-0.5">
-                    <button
-                      type="button"
-                      onClick={() => setAddTarget({ type: 'topic', moduleId: mod.id })}
-                      aria-label="Add topic"
-                      className="flex items-center gap-1.5 text-xs text-[#9ca3af] hover:text-[#2d6fa8] px-2 py-1 rounded hover:bg-[#f0f7ff] transition-colors"
-                    >
-                      <PlusIcon size={11} />
-                      Add topic
-                    </button>
-                  </div>
-                )}
-              </div>
-              {i === modules.length - 1 && isDropTarget(parentPath, i + 1) && (
-                <div className="h-0.5 bg-blue-500 rounded mt-0.5" />
-              )}
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-
-  // ── Add / Edit modal labels ────────────────────────────────────────────────
-
-  const addLabel = addTarget
-    ? addTarget.type === 'module' ? 'Add Module'
-    : addTarget.type === 'topic' ? 'Add Topic'
-    : addTarget.type === 'section' ? 'Add Section'
-    : 'Add Block'
-    : '';
-
-  const editLabel = editTarget
-    ? editTarget.type === 'module' ? 'Edit Module'
-    : editTarget.type === 'topic' ? 'Edit Topic'
-    : editTarget.type === 'section' ? 'Edit Section'
-    : 'Edit Block'
-    : '';
-
-  const editInitial = editTarget ? getEditInitialValues() : { title: '', description: '' };
-
-  // ── Render ────────────────────────────────────────────────────────────────
-
+function Grip() {
   return (
-    <>
-      {/* Visually hidden live region for DnD announcements */}
-      <div
-        ref={liveRef}
-        role="status"
-        aria-live="assertive"
-        aria-atomic="true"
-        className="sr-only"
-      />
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-[#9ca3af]">
+      <circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" /><circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" /><circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" />
+    </svg>
+  );
+}
+function Pencil() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </svg>
+  );
+}
+function Trash() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+    </svg>
+  );
+}
+function Plus({ size = 13 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  );
+}
 
-      {addTarget && (
-        <AddModal
-          title={addLabel}
-          onConfirm={handleAddConfirm}
-          onCancel={() => setAddTarget(null)}
-        />
-      )}
-      {editTarget && (
-        <AddModal
-          title={editLabel}
-          initialTitle={editInitial.title}
-          initialDescription={editInitial.description}
-          confirmLabel="Save"
-          onConfirm={handleEditConfirm}
-          onCancel={() => setEditTarget(null)}
-        />
-      )}
+// ─── Component ──────────────────────────────────────────────────────────────
 
-      <div className="space-y-1">
-        {/* Course root */}
-        <div className="bg-[#f3f4f6] border border-[#e5e7eb] rounded-lg p-3 flex items-center justify-between">
-          <div className="flex items-center gap-2 flex-1">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2d6fa8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-            </svg>
-            <span className="font-semibold text-[#111827] text-sm">{state.courseTitle}</span>
+export default function CourseStructureTree(props: CourseStructureTreeProps) {
+  const { structure, courseId, labels } = props;
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [inlineId, setInlineId] = useState<string | null>(null);
+  const [inlineValue, setInlineValue] = useState('');
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [drag, setDrag] = useState<Dragged | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ rowId: string; mode: 'before' | 'into' } | null>(null);
+
+  const isOpen = (id: string) => collapsed[id] !== true;
+  const toggle = (id: string) => setCollapsed((p) => ({ ...p, [id]: p[id] ? false : true }));
+
+  function startRename(id: string, title: string) { setInlineId(id); setInlineValue(title); }
+  function commitRename(level: StructureLevel) {
+    if (!inlineId) return;
+    const v = inlineValue.trim();
+    const id = inlineId;
+    setInlineId(null);
+    if (v) props.onRename(level, id, v);
+  }
+  function clearDrag() { setDrag(null); setDropTarget(null); }
+
+  // ── Row chrome (shared across every level) ──────────────────────────────────
+  interface RowProps {
+    level: StructureLevel;
+    id: string;
+    title: string;
+    parentId: string;
+    parentLevel: ContainerLevel;
+    expandable?: boolean;
+    navigateTopicId?: string;
+    quickAddLabel?: string;
+    onQuickAdd?: () => void;
+    deleteWarning?: string;
+  }
+
+  // Plain render function (not a nested component) so the inline <input> keeps
+  // focus across re-renders while typing.
+  function renderRow(p: RowProps): React.ReactNode {
+    const editing = inlineId === p.id;
+    const isModule = p.level === 'module';
+    const rowRef: RowRef = { level: p.level, id: p.id, parentId: p.parentId, parentLevel: p.parentLevel };
+    const isDropInto = dropTarget?.rowId === p.id && dropTarget.mode === 'into';
+    const isDropBefore = dropTarget?.rowId === p.id && dropTarget.mode === 'before';
+
+    if (deleteId === p.id) {
+      return (
+        <div className="px-2 py-2 rounded-lg bg-[#fef2f2] border border-[#fecaca] text-sm">
+          <div className="flex items-center gap-2">
+            <span className="flex-1 text-[#991b1b] font-medium truncate">Delete “{p.title}”?</span>
+            <button type="button" onClick={() => setDeleteId(null)} className="px-2 py-1 text-xs rounded text-[#6b7280] hover:bg-[#f3f4f6]">Cancel</button>
+            <button type="button" onClick={() => { setDeleteId(null); props.onRemove(p.level, p.id); }} className="px-2 py-1 text-xs rounded bg-[#dc2626] text-white hover:bg-[#b91c1c] font-medium">Delete</button>
           </div>
-          <button
-            type="button"
-            aria-label="Add module"
-            onClick={() => setAddTarget({ type: 'module' })}
-            className="p-1 rounded hover:bg-white text-[#9ca3af] hover:text-[#2d6fa8] transition-colors"
-          >
-            <PlusIcon />
-          </button>
+          {p.deleteWarning && (
+            <p className="mt-1.5 flex items-center gap-1 text-xs text-[#b45309]">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+              </svg>
+              {p.deleteWarning}
+            </p>
+          )}
         </div>
+      );
+    }
 
-        {/* Modules */}
-        {renderModules(state.modules)}
-
-        {/* Add module inline link */}
-        <div className="ml-4 pl-4">
-          <button
-            type="button"
-            onClick={() => setAddTarget({ type: 'module' })}
-            aria-label="Add module"
-            className="flex items-center gap-1.5 text-xs text-[#9ca3af] hover:text-[#2d6fa8] px-2 py-1 rounded hover:bg-[#f0f7ff] transition-colors"
-          >
-            <PlusIcon size={11} />
-            Add module
+    return (
+      <>
+        {isDropBefore && <div className="h-0.5 bg-[#2d6fa8] rounded mb-0.5" />}
+        <div
+          draggable={!editing}
+          onDragStart={() => setDrag({ level: p.level, id: p.id })}
+          onDragOver={(e) => {
+            if (!drag) return;
+            const plan = computeDrop(drag, rowRef);
+            if (plan) { e.preventDefault(); setDropTarget({ rowId: p.id, mode: plan.mode }); }
+          }}
+          onDrop={(e) => {
+            if (!drag) return;
+            const plan = computeDrop(drag, rowRef);
+            if (plan) { e.preventDefault(); props.onMove(drag.level, drag.id, plan.newParentId, plan.beforeId); }
+            clearDrag();
+          }}
+          onDragEnd={clearDrag}
+          className={`group flex items-center gap-1.5 px-2 py-2 rounded-lg transition-colors ${isModule ? 'border-l-2 border-[#3d8f7c]' : ''} ${isDropInto ? 'ring-2 ring-[#2d6fa8] bg-[#f0f7ff]' : 'hover:bg-[#f9fafb]'}`}
+          aria-label={`${labels[p.level]}: ${p.title}`}
+        >
+          <button type="button" aria-label={`Drag ${p.title}`} className="shrink-0 cursor-grab active:cursor-grabbing p-0.5 rounded hover:bg-[#e5e7eb] opacity-0 group-hover:opacity-100 transition-opacity">
+            <Grip />
           </button>
+
+          {p.expandable ? (
+            <button type="button" onClick={() => toggle(p.id)} aria-label={isOpen(p.id) ? 'Collapse' : 'Expand'} className="p-0.5 rounded hover:bg-[#e5e7eb] text-[#6b7280] shrink-0">
+              <Chevron open={isOpen(p.id)} />
+            </button>
+          ) : (
+            <span className="w-4 shrink-0" />
+          )}
+
+          <span className="shrink-0"><StructureIcon level={p.level} size={15} className={LEVEL_ICON_COLOR[p.level]} /></span>
+
+          {/* Title + level label grouped on the left (label sits right after the title). */}
+          <div className="flex-1 min-w-0 flex items-center gap-2">
+            {editing ? (
+              <input
+                autoFocus
+                value={inlineValue}
+                onChange={(e) => setInlineValue(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitRename(p.level); } else if (e.key === 'Escape') { e.preventDefault(); setInlineId(null); } }}
+                onBlur={() => commitRename(p.level)}
+                onClick={(e) => e.stopPropagation()}
+                aria-label="Edit title"
+                className="flex-1 min-w-0 text-sm border border-[#2d6fa8] rounded px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            ) : p.navigateTopicId ? (
+              <button type="button" onClick={() => props.onOpenTopic(p.navigateTopicId!)} className="min-w-0 truncate text-left text-sm font-semibold text-[#111827] hover:text-[#2d6fa8] hover:underline" title="Open in editor">
+                {p.title}
+              </button>
+            ) : (
+              <span className={`min-w-0 truncate text-sm ${isModule ? 'font-bold uppercase tracking-wide text-[#374151]' : 'text-[#374151]'}`}>{p.title}</span>
+            )}
+
+            {!editing && (isModule ? (
+              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[#3d8f7c] bg-[#e6f4f1] rounded px-1.5 py-0.5">{labels.module}</span>
+            ) : (
+              <span className="shrink-0 text-[11px] uppercase tracking-wide text-[#c5cad1]">{labels[p.level]}</span>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+            {p.onQuickAdd && (
+              <button type="button" aria-label={p.quickAddLabel} title={p.quickAddLabel} onClick={p.onQuickAdd} className="p-1 rounded hover:bg-[#e5e7eb] text-[#9ca3af] hover:text-[#2d6fa8]">
+                <Plus />
+              </button>
+            )}
+            <button type="button" aria-label={`Rename ${p.title}`} onClick={() => startRename(p.id, p.title)} className="p-1 rounded hover:bg-[#e5e7eb] text-[#9ca3af] hover:text-[#2d6fa8]">
+              <Pencil />
+            </button>
+            <button type="button" aria-label={`Delete ${p.title}`} onClick={() => setDeleteId(p.id)} className="p-1 rounded hover:bg-[#fee2e2] text-[#9ca3af] hover:text-[#dc2626]">
+              <Trash />
+            </button>
+          </div>
         </div>
+      </>
+    );
+  }
+
+  function AddLink({ label, onClick }: { label: string; onClick: () => void }) {
+    return (
+      <button type="button" onClick={onClick} aria-label={label} className="flex items-center gap-1.5 text-xs text-[#9ca3af] hover:text-[#2d6fa8] px-2 py-1 rounded hover:bg-[#f0f7ff] transition-colors">
+        <Plus size={11} />
+        {label}
+      </button>
+    );
+  }
+
+  // Tighter per-level indent so the hierarchy stays left-aligned (per Figma).
+  const indent = 'ml-3 border-l border-[#e5e7eb] pl-2 space-y-0.5';
+
+  // ── Level renderers ─────────────────────────────────────────────────────────
+  function renderComponents(components: SComponent[], blockId: string) {
+    return (
+      <div className={indent}>
+        {components.map((c) => (
+          <React.Fragment key={c.id}>
+            {renderRow({ level: 'component', id: c.id, title: c.title, parentId: blockId, parentLevel: 'contentGroup', deleteWarning: components.length === 1 ? `This is the only component — the ${labels.contentGroup.toLowerCase()} will be left empty.` : undefined })}
+          </React.Fragment>
+        ))}
+        {components.length < 2 && <div className="ml-1"><AddLink label={`Add ${labels.component}`} onClick={() => props.onAddComponent(blockId)} /></div>}
       </div>
-    </>
+    );
+  }
+
+  function renderContentGroups(groups: SContentGroup[], sectionId: string) {
+    return (
+      <div className={indent}>
+        {groups.map((cg) => (
+          <div key={cg.id}>
+            {renderRow({ level: 'contentGroup', id: cg.id, title: cg.title, parentId: sectionId, parentLevel: 'section', expandable: true, quickAddLabel: `Add ${labels.component}`, onQuickAdd: cg.components.length < 2 ? () => props.onAddComponent(cg.id) : undefined })}
+            {isOpen(cg.id) && renderComponents(cg.components, cg.id)}
+          </div>
+        ))}
+        <div className="ml-1"><AddLink label={`Add ${labels.contentGroup}`} onClick={() => props.onAddContentGroup(sectionId)} /></div>
+      </div>
+    );
+  }
+
+  function renderSections(sections: SSection[], topicId: string) {
+    return (
+      <div className={indent}>
+        {sections.map((sec) => (
+          <div key={sec.id}>
+            {renderRow({ level: 'section', id: sec.id, title: sec.title, parentId: topicId, parentLevel: 'topic', navigateTopicId: topicId, expandable: true, quickAddLabel: `Add ${labels.contentGroup}`, onQuickAdd: () => props.onAddContentGroup(sec.id) })}
+            {isOpen(sec.id) && renderContentGroups(sec.contentGroups, sec.id)}
+          </div>
+        ))}
+        <div className="ml-1"><AddLink label={`Add ${labels.section}`} onClick={() => props.onAddSection(topicId)} /></div>
+      </div>
+    );
+  }
+
+  function renderTopic(topic: STopic, containerId: string, parentLevel: ContainerLevel) {
+    return (
+      <div key={topic.id}>
+        {renderRow({ level: 'topic', id: topic.id, title: topic.title, parentId: containerId, parentLevel, navigateTopicId: topic.id, expandable: true, quickAddLabel: `Add ${labels.section}`, onQuickAdd: () => props.onAddSection(topic.id) })}
+        {isOpen(topic.id) && renderSections(topic.sections, topic.id)}
+      </div>
+    );
+  }
+
+  function renderModule(mod: SModule, containerId: string, parentLevel: ContainerLevel) {
+    return (
+      <div key={mod.id}>
+        {renderRow({ level: 'module', id: mod.id, title: mod.title, parentId: containerId, parentLevel, expandable: true, quickAddLabel: `Add ${labels.topic}`, onQuickAdd: () => props.onAddTopic(mod.id) })}
+        {isOpen(mod.id) && (
+          <div className={indent}>
+            {renderChildren(mod.id, mod.modules, mod.topics, 'module')}
+            <div className="ml-1 flex items-center gap-3">
+              <AddLink label={`Add ${labels.topic}`} onClick={() => props.onAddTopic(mod.id)} />
+              <AddLink label="Add Sub-Module" onClick={() => props.onAddSubModule(mod.id)} />
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Render a container's merged children (modules + topics) in sort order.
+  function renderChildren(containerId: string, modules: SModule[], topics: STopic[], parentLevel: ContainerLevel) {
+    const children = mergedChildren(modules, topics);
+    return (
+      <>
+        {children.map((child) =>
+          child.kind === 'module'
+            ? renderModule(child.node, containerId, parentLevel)
+            : renderTopic(child.node, containerId, parentLevel)
+        )}
+      </>
+    );
+  }
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+  return (
+    <div className="border border-[#e5e7eb] rounded-xl p-4 space-y-1">
+      {renderChildren(courseId, structure.modules, structure.topics, 'course')}
+
+      {/* Course-level add actions */}
+      <div className="flex items-center justify-between pt-3 mt-2 border-t border-[#e5e7eb]">
+        <AddLink label={`Add ${labels.topic}`} onClick={() => props.onAddTopic(null)} />
+        <AddLink label={`Add ${labels.module}`} onClick={() => props.onAddModule()} />
+      </div>
+    </div>
   );
 }

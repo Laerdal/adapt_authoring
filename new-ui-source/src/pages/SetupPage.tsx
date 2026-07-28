@@ -2,10 +2,12 @@ import { useSearchParams, useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { Suspense, useEffect, useState, useRef, useCallback } from "react";
 import AiAssistant from "../components/common/AiAssistant";
-import CourseStructureMap from "../components/course/CourseStructureMap";
-import type { CourseStructureState } from "../components/course/CourseStructureMap";
+import CourseStructureMapView from "../components/course/CourseStructureMapView";
 import CourseStructureTree from "../components/course/CourseStructureTree";
+import AddComponentDrawer from "../components/course/AddComponentDrawer";
 import { getCourseBootstrapData } from "../api/adaptAuthoring";
+import { useCourseStructure } from "../hooks/useCourseStructure";
+import { STRUCTURE_LABELS } from "../types/structure";
 
 /* ── Nav items ── */
 const NAV_ITEMS = [
@@ -293,55 +295,40 @@ function CourseOverviewPanel({ title, description }: { title: string; descriptio
 }
 
 /* ── Course Structure panel ── */
-function CourseStructurePanel() {
+function CourseStructurePanel({
+  courseId,
+  courseTitle,
+  onOpenEditor,
+}: {
+  courseId: string;
+  courseTitle: string;
+  onOpenEditor: (topicId: string) => void;
+}) {
   const [viewMode, setViewMode] = useState<"tree" | "map">("tree");
-
-  const [structureState, setStructureState] = useState<CourseStructureState>({
-    courseTitle: 'Course',
-    modules: [
-      {
-        id: 'module-1',
-        title: 'Module 1: Introduction',
-        description: '',
-        colorIndex: 0,
-        topics: [
-          {
-            id: 'topic-1',
-            title: 'Topic 1.1: Basics',
-            description: '',
-            sections: [
-              {
-                id: 'section-1',
-                title: 'Welcome (Article)',
-                description: '',
-                blocks: [
-                  { id: 'block-1', title: 'Block: Title', description: '' },
-                  { id: 'block-2', title: 'Block: Content', description: '' },
-                ],
-              },
-            ],
-          },
-          { id: 'topic-2', title: 'Topic 1.2: Advanced', description: '', sections: [] },
-        ],
-      },
-      {
-        id: 'module-2',
-        title: 'Module 2: Deep Dive',
-        description: '',
-        colorIndex: 1,
-        topics: [
-          { id: 'topic-3', title: 'Topic 2.1: Details', description: '', sections: [] },
-        ],
-      },
-    ],
-  });
+  // Content-group id whose Add Component drawer is open (null = closed).
+  const [addComponentBlockId, setAddComponentBlockId] = useState<string | null>(null);
+  const {
+    state,
+    loading,
+    busy,
+    error,
+    addModule,
+    addSubModule,
+    addTopic,
+    addSection,
+    addContentGroup,
+    addComponent,
+    rename,
+    remove,
+    moveNode,
+  } = useCourseStructure(courseId, courseTitle);
 
   return (
     <div className="max-w-5xl w-full">
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex items-start justify-between mb-4">
         <div>
           <h2 className="text-xl font-bold text-[#111827]">Course Structure</h2>
-          <p className="text-sm text-[#6b7280] mt-0.5">Organize your course content with modules, topics, sections, and components.</p>
+          <p className="text-sm text-[#6b7280] mt-0.5">Build your structure before editing.</p>
         </div>
 
         {/* View mode toggle */}
@@ -356,8 +343,12 @@ function CourseStructurePanel() {
             }`}
             title="Tree view"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="8" y1="6" x2="8" y2="18" /><path d="M8 10h4M8 14h4" /><path d="M12 6v12" />
+            {/* Tree toggle glyph — from public/assets/icons/Icon-tree.svg (currentColor so it tints per state) */}
+            <svg width="14" height="14" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.08333" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3.25 1.625V8.125" />
+              <path d="M9.75 4.875C10.6475 4.875 11.375 4.14746 11.375 3.25C11.375 2.35254 10.6475 1.625 9.75 1.625C8.85254 1.625 8.125 2.35254 8.125 3.25C8.125 4.14746 8.85254 4.875 9.75 4.875Z" />
+              <path d="M3.25 11.375C4.14746 11.375 4.875 10.6475 4.875 9.75C4.875 8.85254 4.14746 8.125 3.25 8.125C2.35254 8.125 1.625 8.85254 1.625 9.75C1.625 10.6475 2.35254 11.375 3.25 11.375Z" />
+              <path d="M9.75 4.875C9.75 6.16793 9.23639 7.40791 8.32215 8.32215C7.40791 9.23639 6.16793 9.75 4.875 9.75" />
             </svg>
             Tree
           </button>
@@ -371,27 +362,85 @@ function CourseStructurePanel() {
             }`}
             title="Course map view"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
-              <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
+            {/* Map toggle glyph — from public/assets/icons/Icon-map.svg (currentColor so it tints per state) */}
+            <svg width="14" height="14" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.08333" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="1.625" y="1.625" width="3.79167" height="3.79167" rx="0.541667" />
+              <rect x="7.5835" y="1.625" width="3.79167" height="3.79167" rx="0.541667" />
+              <rect x="7.5835" y="7.58398" width="3.79167" height="3.79167" rx="0.541667" />
+              <rect x="1.625" y="7.58398" width="3.79167" height="3.79167" rx="0.541667" />
             </svg>
             Map
           </button>
         </div>
       </div>
 
-      {viewMode === "tree" ? (
-        <CourseStructureTree state={structureState} onChange={setStructureState} />
-      ) : (
-        <CourseStructureMap
-          initialState={structureState}
-          onChange={setStructureState}
-        />
+      {/* Info / rules banner */}
+      <div className="mb-5 p-3.5 rounded-lg bg-[#f0faf8] border border-[#99e6de] text-sm text-[#0d7377]">
+        Organize your course into modules, topics, sections, content groups and components. At least one topic
+        is mandatory at the course level, and every module must contain at least one topic.
+      </div>
+
+      {error && (
+        <div className="mb-4 rounded-lg border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b]">
+          {error.message}
+        </div>
       )}
 
-      <div className="mt-6 p-4 rounded-lg bg-[#f0faf8] border border-[#99e6de] text-sm text-[#0d7377]">
-        <p className="font-medium">Build your structure here to organize content before editing.</p>
-      </div>
+      {!courseId ? (
+        <div className="rounded-lg border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b]">
+          No course is associated with this setup flow, so the structure cannot be loaded.
+        </div>
+      ) : loading ? (
+        <div className="flex items-center gap-3 text-sm text-[#6b7280] py-12 justify-center">
+          <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 12a9 9 0 1 1-6.219-8.56" strokeLinecap="round" />
+          </svg>
+          Loading course structure…
+        </div>
+      ) : (
+        <div className={busy ? "opacity-60 pointer-events-none transition-opacity" : "transition-opacity"}>
+          {viewMode === "tree" ? (
+            <CourseStructureTree
+              structure={state}
+              courseId={courseId}
+              labels={STRUCTURE_LABELS}
+              onAddModule={addModule}
+              onAddSubModule={addSubModule}
+              onAddTopic={addTopic}
+              onAddSection={addSection}
+              onAddContentGroup={addContentGroup}
+              onAddComponent={(blockId) => setAddComponentBlockId(blockId)}
+              onRename={rename}
+              onRemove={remove}
+              onMove={moveNode}
+              onOpenTopic={onOpenEditor}
+            />
+          ) : (
+            <CourseStructureMapView
+              structure={state}
+              labels={STRUCTURE_LABELS}
+              onOpenTopic={onOpenEditor}
+              onAddModule={addModule}
+              onAddSubModule={addSubModule}
+              onAddTopic={addTopic}
+              onAddSection={addSection}
+              onAddContentGroup={addContentGroup}
+              onAddComponent={(blockId) => setAddComponentBlockId(blockId)}
+              onRename={rename}
+            />
+          )}
+        </div>
+      )}
+
+      {addComponentBlockId && (
+        <AddComponentDrawer
+          onClose={() => setAddComponentBlockId(null)}
+          onSelect={(componentType) => {
+            addComponent(addComponentBlockId, componentType);
+            setAddComponentBlockId(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -5496,7 +5545,16 @@ function CourseCreationCenterContent() {
 
   function renderPanel() {
     if (activeNav === "overview") return <CourseOverviewPanel title={title} description={description} />;
-    if (activeNav === "structure") return <CourseStructurePanel />;
+    if (activeNav === "structure")
+      return (
+        <CourseStructurePanel
+          courseId={courseId}
+          courseTitle={title}
+          onOpenEditor={(pageId) =>
+            navigate(`/course/${courseId}`, { state: { pageId } })
+          }
+        />
+      );
     if (activeNav === "theme") return <ThemePanel initialThemeName={savedThemeName} />;
     if (activeNav === "menu") return <MenuPanel initialMenuName={savedMenuName} />;
     if (activeNav === "navigation") return <NavigationPanel />;
