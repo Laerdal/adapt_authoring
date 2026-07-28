@@ -164,30 +164,33 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
 
           <span className="shrink-0"><StructureIcon level={p.level} size={15} className={LEVEL_ICON_COLOR[p.level]} /></span>
 
-          {editing ? (
-            <input
-              autoFocus
-              value={inlineValue}
-              onChange={(e) => setInlineValue(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitRename(p.level); } else if (e.key === 'Escape') { e.preventDefault(); setInlineId(null); } }}
-              onBlur={() => commitRename(p.level)}
-              onClick={(e) => e.stopPropagation()}
-              aria-label="Edit title"
-              className="flex-1 min-w-0 text-sm border border-[#2d6fa8] rounded px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          ) : p.navigateTopicId ? (
-            <button type="button" onClick={() => props.onOpenTopic(p.navigateTopicId!)} className="flex-1 min-w-0 text-left text-sm truncate font-semibold text-[#111827] hover:text-[#2d6fa8] hover:underline" title="Open in editor">
-              {p.title}
-            </button>
-          ) : (
-            <span className={`flex-1 min-w-0 text-sm truncate ${isModule ? 'font-bold uppercase tracking-wide text-[#374151]' : 'text-[#374151]'}`}>{p.title}</span>
-          )}
+          {/* Title + level label grouped on the left (label sits right after the title). */}
+          <div className="flex-1 min-w-0 flex items-center gap-2">
+            {editing ? (
+              <input
+                autoFocus
+                value={inlineValue}
+                onChange={(e) => setInlineValue(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitRename(p.level); } else if (e.key === 'Escape') { e.preventDefault(); setInlineId(null); } }}
+                onBlur={() => commitRename(p.level)}
+                onClick={(e) => e.stopPropagation()}
+                aria-label="Edit title"
+                className="flex-1 min-w-0 text-sm border border-[#2d6fa8] rounded px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            ) : p.navigateTopicId ? (
+              <button type="button" onClick={() => props.onOpenTopic(p.navigateTopicId!)} className="min-w-0 truncate text-left text-sm font-semibold text-[#111827] hover:text-[#2d6fa8] hover:underline" title="Open in editor">
+                {p.title}
+              </button>
+            ) : (
+              <span className={`min-w-0 truncate text-sm ${isModule ? 'font-bold uppercase tracking-wide text-[#374151]' : 'text-[#374151]'}`}>{p.title}</span>
+            )}
 
-          {isModule ? (
-            <span className="ml-1 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[#3d8f7c] bg-[#e6f4f1] rounded px-1.5 py-0.5">{labels.module}</span>
-          ) : (
-            <span className="ml-1 shrink-0 text-[11px] uppercase tracking-wide text-[#c5cad1] hidden sm:inline">{labels[p.level]}</span>
-          )}
+            {!editing && (isModule ? (
+              <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[#3d8f7c] bg-[#e6f4f1] rounded px-1.5 py-0.5">{labels.module}</span>
+            ) : (
+              <span className="shrink-0 text-[11px] uppercase tracking-wide text-[#c5cad1]">{labels[p.level]}</span>
+            ))}
+          </div>
 
           <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
             {p.onQuickAdd && (
@@ -218,7 +221,8 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
     );
   }
 
-  const indent = 'ml-6 border-l border-[#e5e7eb] pl-3 space-y-0.5';
+  // Tighter per-level indent so the hierarchy stays left-aligned (per Figma).
+  const indent = 'ml-3 border-l border-[#e5e7eb] pl-2 space-y-0.5';
 
   // ── Level renderers ─────────────────────────────────────────────────────────
   function renderComponents(components: SComponent[], blockId: string) {
