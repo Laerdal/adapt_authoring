@@ -1,6 +1,7 @@
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { Suspense, useEffect, useState, useRef, useCallback } from "react";
+import { useAuth } from "../context/AuthContext";
 import AiAssistant from "../components/common/AiAssistant";
 import CourseStructureMapView from "../components/course/CourseStructureMapView";
 import CourseStructureTree from "../components/course/CourseStructureTree";
@@ -9,11 +10,33 @@ import { getCourseBootstrapData } from "../api/adaptAuthoring";
 import { useCourseStructure } from "../hooks/useCourseStructure";
 import { STRUCTURE_LABELS } from "../types/structure";
 
+const ICON_BASE = "/new/assets/icons";
+
+function SidebarMaskIcon({ file, className }: { file: string; className?: string }) {
+  const iconPath = `${ICON_BASE}/${file}`;
+  return (
+    <span
+      aria-hidden="true"
+      className={className ?? "block w-[18px] h-[18px] bg-current"}
+      style={{
+        WebkitMaskImage: `url(${iconPath})`,
+        maskImage: `url(${iconPath})`,
+        WebkitMaskRepeat: "no-repeat",
+        maskRepeat: "no-repeat",
+        WebkitMaskPosition: "center",
+        maskPosition: "center",
+        WebkitMaskSize: "contain",
+        maskSize: "contain",
+      }}
+    />
+  );
+}
+
 /* ── Nav items ── */
 const NAV_ITEMS = [
   {
-    id: "heading-views",
-    label: "Views",
+    id: "heading-course-setup",
+    label: "Course Setup",
     heading: true,
     icon: null,
   },
@@ -21,112 +44,99 @@ const NAV_ITEMS = [
     id: "overview",
     label: "Course Overview",
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-        <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-      </svg>
+      <SidebarMaskIcon file="overview-icon.svg" />
     ),
   },
   {
     id: "structure",
     label: "Course Structure",
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <polygon points="12 2 2 7 12 12 22 7 12 2" />
-        <polyline points="2 17 12 22 22 17" />
-        <polyline points="2 12 12 17 22 12" />
-      </svg>
+      <SidebarMaskIcon file="structure-icon.svg" />
     ),
+  },
+  {
+    id: "heading-design",
+    label: "Design & Appearance",
+    heading: true,
+    icon: null,
   },
   {
     id: "theme",
     label: "Theme",
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <path d="M8 14s1.5 2 4 2 4-2 4-2" />
-        <line x1="9" y1="9" x2="9.01" y2="9" />
-        <line x1="15" y1="9" x2="15.01" y2="9" />
-      </svg>
+      <SidebarMaskIcon file="theme-icon.svg" />
     ),
   },
   {
     id: "menu",
     label: "Menu",
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <line x1="3" y1="6" x2="21" y2="6" />
-        <line x1="3" y1="12" x2="21" y2="12" />
-        <line x1="3" y1="18" x2="21" y2="18" />
-      </svg>
+      <SidebarMaskIcon file="menu-icon.svg" />
     ),
+  },
+  {
+    id: "heading-learning-flow",
+    label: "Learning Flow",
+    heading: true,
+    icon: null,
   },
   {
     id: "navigation",
     label: "Navigation",
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
-      </svg>
-    ),
-  },
-  {
-    id: "accessibility",
-    label: "Accessibility",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <path d="M12 8v4l3 3" />
-      </svg>
-    ),
-  },
-  {
-    id: "tracking",
-    label: "Tracking & Analytics",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <line x1="18" y1="20" x2="18" y2="10" />
-        <line x1="12" y1="20" x2="12" y2="4" />
-        <line x1="6" y1="20" x2="6" y2="14" />
-      </svg>
+      <SidebarMaskIcon file="navigation-icon.svg" />
     ),
   },
   {
     id: "completion",
     label: "Completion & Progress",
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-        <polyline points="22 4 12 14.01 9 11.01" />
-      </svg>
+      <SidebarMaskIcon file="completion-icon.svg" />
     ),
   },
   {
     id: "learner-experience",
     label: "Learner Experience",
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" />
-        <path d="M12 6v6l4 2.5" />
-      </svg>
+      <SidebarMaskIcon file="learner-icon.svg" />
+    ),
+  },
+  {
+    id: "heading-insights",
+    label: "Insights",
+    heading: true,
+    icon: null,
+  },
+  {
+    id: "tracking",
+    label: "Tracking & Analytics",
+    icon: (
+      <SidebarMaskIcon file="tracking-icon.svg" />
+    ),
+  },
+  {
+    id: "heading-advanced",
+    label: "Advanced",
+    heading: true,
+    icon: null,
+  },
+  {
+    id: "accessibility",
+    label: "Accessibility",
+    icon: (
+      <SidebarMaskIcon file="preview-icon.svg" />
     ),
   },
   {
     id: "technical-settings",
     label: "Technical Settings",
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="1" />
-        <path d="M12 1v6m0 6v6" />
-        <path d="M4.22 4.22l4.24 4.24m2.96 3.08l4.24 4.24M1 12h6m6 0h6" />
-        <path d="M4.22 19.78l4.24-4.24m2.96-3.08l4.24-4.24M19.78 4.22l-4.24 4.24m-2.96 3.08l-4.24 4.24" />
-      </svg>
+      <SidebarMaskIcon file="setting-icon.svg" />
     ),
   },
   {
     id: "heading-action",
-    label: "Action",
+    label: "Actions",
     heading: true,
     icon: null,
   },
@@ -134,46 +144,35 @@ const NAV_ITEMS = [
     id: "cdn-deployment",
     label: "CDN Deployment",
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-        <line x1="2" y1="20" x2="22" y2="20" />
-        <line x1="6" y1="17" x2="6" y2="20" />
-        <line x1="18" y1="17" x2="18" y2="20" />
-      </svg>
-    ),
-  },
-  {
-    id: "storyboarding",
-    label: "Storyboarding",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="2" width="6" height="6" /><rect x="10" y="2" width="6" height="6" />
-        <rect x="18" y="2" width="4" height="6" /><rect x="2" y="10" width="6" height="6" />
-        <rect x="10" y="10" width="6" height="6" /><rect x="18" y="10" width="4" height="6" />
-      </svg>
-    ),
-  },
-  {
-    id: "preflight-validator",
-    label: "Preflight Validator",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-        <polyline points="22 4 12 14.01 9 11.01" />
-      </svg>
+      <SidebarMaskIcon file="cdn-icon.svg" />
     ),
   },
   {
     id: "translation",
     label: "Translation",
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" />
-        <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-      </svg>
+      <SidebarMaskIcon file="translation-icon.svg" />
     ),
   },
 ];
+
+type NavLeafItem = Extract<(typeof NAV_ITEMS)[number], { heading?: false }>;
+
+function isNavLeafItem(item: (typeof NAV_ITEMS)[number]): item is NavLeafItem {
+  return item.heading !== true;
+}
+
+const NAV_GROUPS = NAV_ITEMS.reduce<{ id: string; label: string; items: NavLeafItem[] }[]>((groups, item) => {
+  if (!isNavLeafItem(item)) {
+    groups.push({ id: item.id, label: item.label, items: [] });
+    return groups;
+  }
+  if (groups.length === 0) {
+    groups.push({ id: "heading-main", label: "Main", items: [] });
+  }
+  groups[groups.length - 1].items.push(item);
+  return groups;
+}, []);
 
 /* ── Course Overview panel ── */
 function CourseOverviewPanel({ title, description }: { title: string; description: string }) {
@@ -5261,6 +5260,46 @@ function ExportPanel() {
   );
 }
 
+function ExportDialog({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4" onMouseDown={onClose}>
+      <div
+        className="w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-2xl border border-[#e5e7eb] flex flex-col"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Export dialog"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#f3f4f6] shrink-0">
+          <div>
+            <h3 className="text-base font-semibold text-[#111827]">Export</h3>
+            <p className="text-sm text-[#6b7280] mt-0.5">Choose how you'd like to export this course.</p>
+          </div>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#f3f4f6] transition-colors" aria-label="Close export dialog">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 md:p-6 bg-[#f8fafc]">
+          <ExportPanel />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Publish Panel ── */
 function PublishCheckbox({ checked, onChange, children }: { checked: boolean; onChange: (v: boolean) => void; children: React.ReactNode }) {
   return (
@@ -5497,6 +5536,7 @@ function ComingSoonPanel({ label }: { label: string }) {
 function CourseCreationCenterContent() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const initialTitle = params.get("title") ?? "Untitled Course";
   const initialDescription = params.get("description") ?? "";
   const courseId = params.get("courseId") ?? "";
@@ -5508,6 +5548,10 @@ function CourseCreationCenterContent() {
 
   const [activeNav, setActiveNav] = useState("overview");
   const [collapsed, setCollapsed] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(NAV_GROUPS.map((group) => [group.id, true]))
+  );
 
   useEffect(() => {
     if (!courseId) {
@@ -5541,7 +5585,15 @@ function CourseCreationCenterContent() {
     };
   }, [courseId, initialDescription, initialTitle]);
 
-  const activeItem = NAV_ITEMS.find((n) => !n.heading && n.id === activeNav)!;
+  const activeItem = NAV_ITEMS.find((n) => !n.heading && n.id === activeNav);
+  const loginName = user?.username || user?.email || "Not signed in";
+
+  function toggleGroup(groupId: string) {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [groupId]: !prev[groupId],
+    }));
+  }
 
   function renderPanel() {
     if (activeNav === "overview") return <CourseOverviewPanel title={title} description={description} />;
@@ -5563,72 +5615,81 @@ function CourseCreationCenterContent() {
     if (activeNav === "completion") return <CompletionProgressPanel />;
     if (activeNav === "learner-experience") return <LearnerExperiencePanel />;
     if (activeNav === "technical-settings") return <TechnicalSettingsPanel />;
-    if (activeNav === "export") return <ExportPanel />;
     if (activeNav === "publish") return <PublishPanel />;
-    return <ComingSoonPanel label={activeItem?.label ?? ""} />;
+    return <ComingSoonPanel label={activeItem?.label ?? (activeNav === "storyboarding" ? "Storyboarding" : "")} />;
+  }
+
+  function openExportDialog() {
+    setShowExportDialog(true);
   }
 
   return (
-    <div className="flex flex-col h-screen bg-white overflow-hidden">
+    <div className="flex flex-col h-screen bg-[#f8fafc] overflow-hidden">
       {!courseId && (
         <div className="mx-4 mt-4 rounded-xl border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b]">
           No backend course was initialized for this setup flow. Start from Create New Course on the dashboard.
         </div>
       )}
       {/* ── Header ── */}
-      <header className="h-14 bg-white border-b border-[#e5e7eb] flex items-center shrink-0 px-4 relative z-10">
-        {/* Left: logo + back */}
-        <div className="flex items-center gap-3 w-56 shrink-0">
-          <img src="/adapt-logo.jpeg" alt="Adapt logo" width={32} height={32} className="rounded-lg shrink-0" />
-          <span className="font-semibold text-[#111827] text-sm tracking-tight">Adapt Studio</span>
+      <header className="h-[56px] bg-white border-b border-[#d8dde6] flex items-center shrink-0 px-4 md:px-6 gap-3 relative z-10">
+        <div className="flex items-center gap-3 md:gap-4 min-w-0">
+          <img src="/adapt-logo.jpeg" alt="Adapt logo" width={34} height={34} className="rounded-lg shrink-0" />
+          <div className="min-w-0 flex items-center gap-3">
+            <p className="text-[15px] leading-none font-semibold text-[#1f2937] tracking-tight hidden lg:block">Adapt Studio</p>
+            <div className="hidden lg:block w-px h-5 bg-[#d8dde6]" />
+            <p className="text-[13px] font-medium text-[#1a1a1a] truncate max-w-[260px]">{title}</p>
+          </div>
         </div>
 
-        {/* Center: page title */}
-        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2">
-          <span className="text-sm font-semibold text-[#111827]">Course Creation Center</span>
-          <span className="text-[#d1d5db]">|</span>
-          <span className="text-sm text-[#6b7280] truncate max-w-[200px]">{title}</span>
-        </div>
-
-        {/* Right: actions */}
         <div className="ml-auto flex items-center gap-2">
           <Link
             to="/"
-            className="flex items-center gap-1.5 px-3 py-2 text-sm text-[#6b7280] hover:text-[#111827] hover:bg-[#f3f4f6] rounded-lg transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold text-[#4b5563] border border-transparent rounded-[8px] hover:bg-[#f3f4f6] hover:text-[#111827] transition-colors cursor-pointer"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M19 12H5M12 19l-7-7 7-7" />
-            </svg>
-            Back
+            <SidebarMaskIcon file="back-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+            <span className="hidden md:inline">Back</span>
           </Link>
-          <button type="button" className="flex items-center gap-2 px-3.5 py-2 text-sm text-[#374151] border border-[#e5e7eb] rounded-lg hover:bg-[#f9fafb] transition-colors">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
-            </svg>
-            Preview
-          </button>
+
           <button
             type="button"
-            onClick={() => setActiveNav("export")}
-            className={`flex items-center gap-2 px-3.5 py-2 text-sm border rounded-lg transition-colors ${activeNav === "export" ? "border-[#2d6fa8] bg-[#dbeeff] text-[#2d6fa8] font-medium" : "text-[#374151] border-[#e5e7eb] hover:bg-[#f9fafb]"}`}
+            onClick={() => setActiveNav("storyboarding")}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold border-2 rounded-[8px] transition-colors cursor-pointer bg-white ${activeNav === "storyboarding" ? "border-[var(--life-primary-800)] text-[var(--life-primary-800)]" : "border-[var(--life-neutral-200)] text-[var(--life-base-black)] hover:border-[var(--life-primary-700)] hover:text-[var(--life-primary-700)] active:border-[var(--life-primary-800)] active:text-[var(--life-primary-800)]"}`}
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            Export
+            <SidebarMaskIcon file="storyboard-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+            <span className="hidden lg:inline">Storyboard</span>
           </button>
+
+          <button type="button" className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold border-2 border-[var(--life-neutral-200)] text-[var(--life-base-black)] rounded-[8px] bg-white hover:border-[var(--life-primary-700)] hover:text-[var(--life-primary-700)] active:border-[var(--life-primary-800)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer">
+            <SidebarMaskIcon file="preview-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+            <span className="hidden lg:inline">Preview</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={openExportDialog}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold border-2 border-[var(--life-neutral-200)] bg-white text-[var(--life-base-black)] rounded-[8px] hover:border-[var(--life-primary-700)] hover:text-[var(--life-primary-700)] active:border-[var(--life-primary-800)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer"
+          >
+            <SidebarMaskIcon file="export-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+            <span className="hidden lg:inline">Export</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+
           <button
             type="button"
             onClick={() => setActiveNav("publish")}
-            className={`flex items-center gap-2 px-3.5 py-2 text-sm font-semibold rounded-lg transition-colors ${activeNav === "publish" ? "border border-[#2d6fa8] bg-[#dbeeff] text-[#2d6fa8]" : "text-white bg-[#2E7FA1] hover:bg-[#266580]"}`}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold rounded-[8px] transition-colors active:bg-[var(--life-primary-800)] cursor-pointer ${activeNav === "publish" ? "bg-[var(--life-primary-700)] text-[var(--life-base-white)]" : "bg-[var(--life-primary-500)] text-[var(--life-base-white)] hover:bg-[var(--life-primary-700)]"}`}
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-            </svg>
-            Publish
+            <SidebarMaskIcon file="publish-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+            <span className="hidden lg:inline">Publish</span>
           </button>
+
+          <div className="hidden xl:flex items-center pl-3 border-l border-[#d8dde6]">
+            <span className="max-w-[260px] truncate text-[13px] font-medium text-[#9ca3af] select-none">
+              {loginName}
+            </span>
+          </div>
         </div>
       </header>
 
@@ -5637,83 +5698,155 @@ function CourseCreationCenterContent() {
 
         {/* ── Left panel ── */}
         <aside
-          className={`h-full bg-white border-r border-[#e5e7eb] flex flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-14" : "w-56"}`}
+          className={`h-full bg-white border-r border-[#d8dde6] flex flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-16" : "w-[256px]"}`}
         >
           {/* Collapse toggle */}
-          <div className={`flex items-center h-12 border-b border-[#e5e7eb] px-2 shrink-0 ${collapsed ? "justify-center" : "justify-end"}`}>
-            <button
-              type="button"
-              onClick={() => setCollapsed((c) => !c)}
-              aria-label={collapsed ? "Expand panel" : "Collapse panel"}
-              title={collapsed ? "Expand panel" : "Collapse panel"}
-              className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#f3f4f6] transition-colors"
-            >
-              <svg
-                width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                className={`transition-transform duration-200 ${collapsed ? "rotate-180" : ""}`}
+          <div className={`flex items-center h-14 border-b border-[#d8dde6] px-4 shrink-0 ${collapsed ? "justify-center" : "justify-between"}`}>
+            {!collapsed && (
+              <div>
+                <p className="text-[13px] leading-none font-bold text-[#1f1f1f] tracking-tight">Course Configuration</p>
+              </div>
+            )}
+            <div className="relative group">
+              <button
+                type="button"
+                onClick={() => setCollapsed((c) => !c)}
+                aria-label={collapsed ? "Expand panel" : "Collapse panel"}
+                className="w-9 h-9 rounded-lg text-[#9ca3af] hover:bg-[var(--life-neutral-100)] transition-colors flex items-center justify-center cursor-pointer"
               >
-                <path d="M15 18l-6-6 6-6" />
-              </svg>
-            </button>
+                <svg
+                  width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                  className={`transition-transform duration-200 ${collapsed ? "rotate-180" : ""}`}
+                >
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+              </button>
+              <span className="pointer-events-none absolute left-full top-1/2 z-20 ml-2 -translate-y-1/2 whitespace-nowrap rounded-[8px] bg-[#215369] px-3 py-1 text-[11px] font-medium text-[#ffffff] opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                {collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              </span>
+            </div>
           </div>
 
           {/* Nav items */}
-          <nav className="flex flex-col gap-0.5 px-2 pt-3 flex-1 overflow-y-auto pb-4">
-            {NAV_ITEMS.map((item) => {
-              if (item.heading) {
-                return collapsed ? (
-                  <div key={item.id} className="mx-2 my-1 border-t border-[#e5e7eb]" />
-                ) : (
-                  <p key={item.id} className="px-2 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-[#9ca3af]">
-                    {item.label}
-                  </p>
+          <nav className="flex flex-col gap-0.5 px-0 pt-2 flex-1 overflow-y-auto pb-4">
+            {collapsed ? (
+              NAV_GROUPS.map((group) => (
+                <div key={group.id}>
+                  <div className="mx-3 my-2 border-t border-[#e5e7eb]" />
+                  {group.items.map((item) => {
+                    const isActive = activeNav === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setActiveNav(item.id)}
+                        title={item.label}
+                        className="relative flex items-center justify-center w-full py-1.5 transition-colors cursor-pointer"
+                      >
+                        <span
+                          className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
+                            isActive ? "bg-[var(--life-primary-100)] text-[#236585]" : "text-[#6b7280] hover:bg-[var(--life-neutral-100)]"
+                          }`}
+                        >
+                          <span className="shrink-0">{item.icon}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))
+            ) : (
+              NAV_GROUPS.map((group) => {
+                const groupExpanded = expandedGroups[group.id] ?? true;
+                const groupIsActive = group.items.some((item) => item.id === activeNav);
+                return (
+                  <div key={group.id} className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(group.id)}
+                      className={`w-full px-5 py-2 flex items-center justify-between text-left font-[var(--font-family-primary)] text-[11px] leading-none font-[700] uppercase tracking-[0.08em] transition-colors cursor-pointer ${groupIsActive ? "text-[#2e7fa1]" : "text-[#6b7280]"}`}
+                      style={{ fontWeight: 700 }}
+                    >
+                      <span>{group.label}</span>
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className={`transition-transform duration-200 ${groupExpanded ? "" : "-rotate-90"}`}
+                      >
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </button>
+
+                    {groupExpanded && group.items.map((item) => {
+                      const isActive = activeNav === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setActiveNav(item.id)}
+                          className={`relative flex items-center gap-3 px-5 py-2 text-left w-full font-[var(--font-family-primary)] font-[400] transition-colors cursor-pointer ${
+                            isActive
+                              ? "bg-[var(--life-primary-100)] text-[#236585]"
+                              : "text-[#5b6674] hover:bg-[var(--life-neutral-100)] hover:text-[#374151]"
+                          }`}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={`absolute left-0 top-0 h-full w-[3px] rounded-r-sm transition-opacity ${isActive ? "bg-[var(--life-primary-500)] opacity-100" : "opacity-0"}`}
+                          />
+                          <span className="shrink-0">{item.icon}</span>
+                          <span className="font-[var(--font-family-primary)] text-[var(--text-p)] font-[var(--font-weight-regular)] leading-[1.5] whitespace-nowrap overflow-hidden text-ellipsis">{item.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 );
-              }
-              const isActive = activeNav === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setActiveNav(item.id)}
-                  title={collapsed ? item.label : undefined}
-                  className={`flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm transition-colors text-left w-full ${
-                    isActive
-                      ? "bg-[#dbeeff] text-[#2d6fa8] font-semibold"
-                      : "text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#374151]"
-                  }`}
-                >
-                  <span className="shrink-0">{item.icon}</span>
-                  {!collapsed && (
-                    <span className="truncate leading-tight">{item.label}</span>
-                  )}
-                </button>
-              );
-            })}
+              })
+            )}
           </nav>
 
           {/* Skip to editor — bottom */}
           {!collapsed && (
-            <div className="px-3 pb-4 border-t border-[#e5e7eb] pt-3 shrink-0">
+            <div className="px-4 pb-4 border-t border-[#e5e7eb] pt-3 shrink-0">
               <button
                 type="button"
                 disabled={!courseId}
                 onClick={() => navigate(`/course/${courseId}`)}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-[#6b7280] hover:text-[#2d6fa8] hover:bg-[#f3f4f6] rounded-lg transition-colors border border-[#e5e7eb]"
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Skip to Editor
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M5 12h14M12 5l7 7-7 7" />
-                </svg>
+                <SidebarMaskIcon file="chevron-right.svg" className="block w-[13px] h-[13px] shrink-0 bg-current" />
+              </button>
+            </div>
+          )}
+          {collapsed && (
+            <div className="px-2 pb-3 border-t border-[#e5e7eb] pt-3 shrink-0">
+              <button
+                type="button"
+                disabled={!courseId}
+                onClick={() => navigate(`/course/${courseId}`)}
+                aria-label="Skip to Editor"
+                title="Skip to Editor"
+                className="w-full h-10 flex items-center justify-center rounded-lg text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <SidebarMaskIcon file="chevron-right.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
               </button>
             </div>
           )}
         </aside>
 
         {/* ── Right content panel ── */}
-        <main className={`flex-1 overflow-hidden ${activeNav === "menu" || activeNav === "navigation" ? "" : "overflow-y-auto px-8 py-8 min-h-0"}`}>
+        <main className={`flex-1 overflow-hidden bg-[#f8fafc] ${activeNav === "menu" || activeNav === "navigation" ? "" : "overflow-y-auto px-8 py-8 min-h-0"}`}>
           {renderPanel()}
         </main>
       </div>
+      {showExportDialog && <ExportDialog onClose={() => setShowExportDialog(false)} />}
       <AiAssistant context="Course Creation Center" suggestions={[
         'How do I set up my course structure?',
         'What does the Preflight Validator check?',
