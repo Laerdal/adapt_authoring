@@ -5644,7 +5644,7 @@ function CourseCreationCenterContent() {
         <div className="ml-auto flex items-center gap-2">
           <Link
             to="/"
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium text-[#4b5563] border border-transparent rounded-[8px] hover:bg-[#f3f4f6] hover:text-[#111827] transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium text-[#4b5563] border border-transparent rounded-[8px] hover:bg-[#f3f4f6] hover:text-[#111827] transition-colors cursor-pointer"
           >
             <img src={`${ICON_BASE}/back-icon.svg`} alt="" aria-hidden="true" className="w-[14px] h-[14px] shrink-0" />
             <span className="hidden md:inline">Back</span>
@@ -5653,13 +5653,13 @@ function CourseCreationCenterContent() {
           <button
             type="button"
             onClick={() => setActiveNav("storyboarding")}
-            className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium border rounded-[8px] transition-colors ${activeNav === "storyboarding" ? "border-[#2f86ab] bg-[#ecf7fc] text-[#2f86ab]" : "border-[#d1d5db] bg-white text-[#1f2937] hover:bg-[#f8fafc]"}`}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium border rounded-[8px] transition-colors cursor-pointer ${activeNav === "storyboarding" ? "border-[#2f86ab] bg-[#ecf7fc] text-[#2f86ab]" : "border-[#d1d5db] bg-white text-[#1f2937] hover:bg-[#f8fafc]"}`}
           >
             <img src={`${ICON_BASE}/storyboard-icon.svg`} alt="" aria-hidden="true" className="w-[14px] h-[14px] shrink-0" />
             <span className="hidden lg:inline">Storyboard</span>
           </button>
 
-          <button type="button" className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium text-[#1a1a1a] border border-[#d1d5db] rounded-[8px] hover:bg-[#f8fafc] transition-colors">
+          <button type="button" className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium text-[#1a1a1a] border border-[#d1d5db] rounded-[8px] hover:bg-[#f8fafc] transition-colors cursor-pointer">
             <img src={`${ICON_BASE}/preview-icon.svg`} alt="" aria-hidden="true" className="w-[14px] h-[14px] shrink-0" />
             <span className="hidden lg:inline">Preview</span>
           </button>
@@ -5667,7 +5667,7 @@ function CourseCreationCenterContent() {
           <button
             type="button"
             onClick={openExportDialog}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium border border-[#d1d5db] bg-white text-[#1a1a1a] rounded-[8px] hover:bg-[#f8fafc] transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium border border-[#d1d5db] bg-white text-[#1a1a1a] rounded-[8px] hover:bg-[#f8fafc] transition-colors cursor-pointer"
           >
             <img src={`${ICON_BASE}/export-icon.svg`} alt="" aria-hidden="true" className="w-[14px] h-[14px] shrink-0" />
             <span className="hidden lg:inline">Export</span>
@@ -5679,7 +5679,7 @@ function CourseCreationCenterContent() {
           <button
             type="button"
             onClick={() => setActiveNav("publish")}
-            className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium rounded-[8px] transition-colors ${activeNav === "publish" ? "bg-[#266580] text-white" : "bg-[#2f86ab] text-white hover:bg-[#2a7393]"}`}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium rounded-[8px] transition-colors active:bg-[var(--life-primary-800)] cursor-pointer ${activeNav === "publish" ? "bg-[var(--life-primary-700)] text-[var(--life-base-white)]" : "bg-[var(--life-primary-500)] text-[var(--life-base-white)] hover:bg-[var(--life-primary-700)]"}`}
           >
             <img src={`${ICON_BASE}/publish-icon.svg`} alt="" aria-hidden="true" className="w-[14px] h-[14px] shrink-0" />
             <span className="hidden lg:inline">Publish</span>
@@ -5712,7 +5712,7 @@ function CourseCreationCenterContent() {
                 type="button"
                 onClick={() => setCollapsed((c) => !c)}
                 aria-label={collapsed ? "Expand panel" : "Collapse panel"}
-                className="w-9 h-9 rounded-lg text-[#9ca3af] hover:bg-[#f3f4f6] transition-colors flex items-center justify-center"
+                className="w-9 h-9 rounded-lg text-[#9ca3af] hover:bg-[var(--life-neutral-100)] transition-colors flex items-center justify-center cursor-pointer"
               >
                 <svg
                   width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -5741,11 +5741,11 @@ function CourseCreationCenterContent() {
                         type="button"
                         onClick={() => setActiveNav(item.id)}
                         title={item.label}
-                        className="relative flex items-center justify-center w-full py-1.5 transition-colors"
+                        className="relative flex items-center justify-center w-full py-1.5 transition-colors cursor-pointer"
                       >
                         <span
                           className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
-                            isActive ? "bg-[#d9edf7] text-[#236585]" : "text-[#6b7280] hover:bg-[#f3f4f6]"
+                            isActive ? "bg-[var(--life-primary-100)] text-[#236585]" : "text-[#6b7280] hover:bg-[var(--life-neutral-100)]"
                           }`}
                         >
                           <span className="shrink-0">{item.icon}</span>
@@ -5764,7 +5764,7 @@ function CourseCreationCenterContent() {
                     <button
                       type="button"
                       onClick={() => toggleGroup(group.id)}
-                      className={`w-full px-5 py-2 flex items-center justify-between text-left font-[var(--font-family-primary)] text-[11px] leading-none font-[700] uppercase tracking-[0.08em] hover:bg-[#f8fafc] transition-colors ${groupIsActive ? "text-[#2e7fa1]" : "text-[#6b7280]"}`}
+                      className={`w-full px-5 py-2 flex items-center justify-between text-left font-[var(--font-family-primary)] text-[11px] leading-none font-[700] uppercase tracking-[0.08em] transition-colors cursor-pointer ${groupIsActive ? "text-[#2e7fa1]" : "text-[#6b7280]"}`}
                       style={{ fontWeight: 700 }}
                     >
                       <span>{group.label}</span>
@@ -5790,15 +5790,15 @@ function CourseCreationCenterContent() {
                           key={item.id}
                           type="button"
                           onClick={() => setActiveNav(item.id)}
-                          className={`relative flex items-center gap-3 px-5 py-2 text-left w-full font-[var(--font-family-primary)] font-[400] transition-colors ${
+                          className={`relative flex items-center gap-3 px-5 py-2 text-left w-full font-[var(--font-family-primary)] font-[400] transition-colors cursor-pointer ${
                             isActive
-                              ? "bg-[#ecf7fc] text-[#236585]"
-                              : "text-[#5b6674] hover:bg-[#f3f4f6] hover:text-[#374151]"
+                              ? "bg-[var(--life-primary-100)] text-[#236585]"
+                              : "text-[#5b6674] hover:bg-[var(--life-neutral-100)] hover:text-[#374151]"
                           }`}
                         >
                           <span
                             aria-hidden="true"
-                            className={`absolute left-0 top-0 h-full w-[3px] rounded-r-sm transition-opacity ${isActive ? "bg-[#2e7fa1] opacity-100" : "opacity-0"}`}
+                            className={`absolute left-0 top-0 h-full w-[3px] rounded-r-sm transition-opacity ${isActive ? "bg-[var(--life-primary-500)] opacity-100" : "opacity-0"}`}
                           />
                           <span className="shrink-0">{item.icon}</span>
                           <span className="font-[var(--font-family-primary)] text-[var(--text-p)] font-[var(--font-weight-regular)] leading-[1.5] whitespace-nowrap overflow-hidden text-ellipsis">{item.label}</span>
@@ -5818,7 +5818,7 @@ function CourseCreationCenterContent() {
                 type="button"
                 disabled={!courseId}
                 onClick={() => navigate(`/course/${courseId}`)}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold text-white bg-[#2f86ab] hover:bg-[#2a7393] rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Skip to Editor
                 <SidebarMaskIcon file="chevron-right.svg" className="block w-[13px] h-[13px] shrink-0 bg-current" />
@@ -5833,7 +5833,7 @@ function CourseCreationCenterContent() {
                 onClick={() => navigate(`/course/${courseId}`)}
                 aria-label="Skip to Editor"
                 title="Skip to Editor"
-                className="w-full h-10 flex items-center justify-center rounded-lg text-white bg-[#2f86ab] hover:bg-[#2a7393] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full h-10 flex items-center justify-center rounded-lg text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <SidebarMaskIcon file="chevron-right.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
               </button>
