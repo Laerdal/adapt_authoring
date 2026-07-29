@@ -857,7 +857,7 @@
     "properties._isQuestionType": true,
     "properties._setCompletionOn": "inview",
     "properties._feedback.title": "",
-    "properties._feedback.body": "feedback body",
+    "properties._feedback.body": "",
     "properties._feedback.correct": "",
     "properties._feedback._incorrect.final": "",
     "properties._feedback._incorrect.notFinal": "",
