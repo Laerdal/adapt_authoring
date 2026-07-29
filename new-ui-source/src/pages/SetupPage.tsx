@@ -472,6 +472,29 @@ const FONT_OPTIONS = [
   "Montserrat", "Open Sans", "Poppins", "Roboto", "Source Sans Pro",
 ];
 
+const PAGE_TITLE_OPTIONS = ["H1", "H2", "H3", "H4", "H5", "H6", "Paragraph"];
+
+const PAGE_TITLE_LABELS: Record<string, string> = {
+  H1: "H1 — 3.5rem", H2: "H2 — 3rem", H3: "H3 — 2.5rem",
+  H4: "H4 — 2rem", H5: "H5 — 1.5rem", H6: "H6 — —",
+  Paragraph: "Paragraph — 1.125rem",
+};
+
+const PREVIEW_TITLE_SIZE: Record<string, string | null> = {
+  H1: "1.7rem", H2: "1.45rem", H3: "1.25rem",
+  H4: "1.1rem", H5: "1rem", H6: null,
+  Paragraph: "0.95rem",
+};
+
+const CALC_VALUES = [
+  { label: "H1 (Page Title)", rem: "3.5rem", px: "56px" },
+  { label: "H2", rem: "3rem", px: "48px" },
+  { label: "H3", rem: "2.5rem", px: "40px" },
+  { label: "H4", rem: "2rem", px: "32px" },
+  { label: "H5", rem: "1.5rem", px: "24px" },
+  { label: "Paragraph", rem: "1.125rem", px: "18px" },
+];
+
 const H1_SIZE_OPTIONS = [
   { label: "H1 — 3.5rem", value: "3.5rem" },
   { label: "H2 — 3rem",   value: "3rem" },
@@ -951,20 +974,321 @@ function mapMenuNameToStyle(menuName?: string): string {
   return "";
 }
 
+const ACCORDION_DEFS = [
+  { id: 'global', label: 'Global Theme' },
+  { id: 'page', label: 'Page Structure' },
+  { id: 'progress', label: 'Progress Styling' },
+  { id: 'navigation', label: 'Navigation Styling' },
+  { id: 'menu', label: 'Menu Styling' },
+  { id: 'feedback', label: 'Feedback & Validation' },
+  { id: 'overlays', label: 'Overlays Styling' },
+];
+
+const VANILLA_ACCORDION_DEFS: { id: string; label: string; fields: string[] }[] = [
+  {
+    id: 'global', label: 'Global',
+    fields: [
+      'Font colour', 'Font colour inverted', 'Link font colour',
+      'Link font colour - inverted', 'Link font colour - hover',
+      'Link font colour - inverted hover', 'Heading colour', 'Heading colour - inverted',
+    ],
+  },
+  {
+    id: 'items', label: 'Items (Components)',
+    fields: [
+      'Item colour', 'Item colour - inverted', 'Item colour - hover',
+      'Item colour - inverted hover', 'Item colour - selected',
+      'Item colour - inverted selected', 'Visited colour', 'Visited colour - inverted',
+    ],
+  },
+  {
+    id: 'buttons', label: 'Buttons',
+    fields: [
+      'Button colour', 'Button colour - inverted', 'Button colour - hover',
+      'Button colour - inverted hover', 'Button icon colour', 'Button icon colour - inverted',
+      'Button icon colour - hover', 'Button icon colour - inverted hover',
+      'Disabled colour', 'Disabled colour - inverted',
+    ],
+  },
+  {
+    id: 'validation', label: 'Validation States',
+    fields: [
+      'Validation success colour', 'Validation success colour - inverted',
+      'Validation error colour', 'Validation error colour - inverted',
+    ],
+  },
+  {
+    id: 'progress', label: 'Progress',
+    fields: [
+      'Progress fill colour', 'Progress background colour', 'Progress border colour',
+    ],
+  },
+  {
+    id: 'menu', label: 'Menu',
+    fields: [
+      'Menu header background colour', 'Menu header title colour', 'Menu header subtitle colour',
+      'Menu header body colour', 'Menu header instruction colour', 'Menu item colour',
+      'Menu item colour - inverted', 'Menu item border colour',
+      'Menu item progress fill colour', 'Menu item progress background colour',
+      'Menu item progress border colour', 'Menu item button background colour',
+      'Menu item button background colour - inverted', 'Menu item button background colour - hover',
+      'Menu item button background colour - inverted hover',
+    ],
+  },
+  {
+    id: 'navigation', label: 'Navigation',
+    fields: [
+      'Navigation background colour', 'Navigation background colour - inverted',
+      'Navigation button background colour', 'Navigation button background colour - inverted',
+      'Navigation button background colour - hover', 'Navigation button background colour - inverted hover',
+      'Navigation progress fill colour', 'Navigation progress background colour - inverted',
+      'Navigation progress border colour', 'Navigation progress fill colour - hover',
+      'Navigation progress background colour - inverted hover', 'Navigation progress border colour - hover',
+    ],
+  },
+  {
+    id: 'notify', label: 'Notify (Pop up)',
+    fields: [
+      'Notify background colour', 'Notify background colour - inverted',
+      'Notify link font colour', 'Notify link font colour - hover',
+      'Notify button background colour', 'Notify button background colour - inverted',
+      'Notify button background colour - hover', 'Notify button background colour - inverted hover',
+      'Notify icon button background colour', 'Notify icon button background colour - inverted',
+      'Notify icon button background colour - hover', 'Notify icon button background colour - inverted hover',
+    ],
+  },
+  {
+    id: 'drawer', label: 'Drawer',
+    fields: [
+      'Drawer background colour', 'Drawer background colour - inverted',
+      'Drawer link font colour', 'Drawer link font colour - hover',
+      'Drawer icon button background colour', 'Drawer icon button background colour - inverted',
+      'Drawer icon button background colour - hover', 'Drawer icon button background colour - inverted hover',
+      'Drawer item background colour', 'Drawer item background colour - inverted',
+      'Drawer item background colour - hover', 'Drawer item background colour - inverted hover',
+      'Drawer item background colour - selected', 'Drawer item background colour - inverted selected',
+      'Drawer progress fill colour', 'Drawer progress background colour', 'Drawer progress border colour',
+      'Drawer progress colour - hover', 'Drawer progress colour - inverted hover',
+      'Drawer progress border colour - hover',
+    ],
+  },
+  {
+    id: 'misc', label: 'Misc',
+    fields: [
+      'Background colour', 'Background colour - inverted',
+      'Shadow background colour (loading / pop up background)', 'Shadow background colour - inverted',
+      'Loading animation background colour', 'Loading animation colour - inverted',
+    ],
+  },
+];
+
 function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
   const [selected, setSelected] = useState<string | null>(mapThemeNameToId(initialThemeName));
+  const [checkNotFinal, setCheckNotFinal] = useState(false);
+  const [checkUnanswered, setCheckUnanswered] = useState(false);
+  const [checkHideFeedback, setCheckHideFeedback] = useState(false);
+  const [checkHidePartial, setCheckHidePartial] = useState(false);
+  const [activeAccordion, setActiveAccordion] = useState<string | null>(null);
+  const [activeVanillaAccordion, setActiveVanillaAccordion] = useState<string | null>('global');
+  const [vanillaColors, setVanillaColors] = useState<Record<string, string>>({});
+  const [activeCustomAccordion, setActiveCustomAccordion] = useState<string | null>('global');
+  const [customSettings, setCustomSettings] = useState({
+    primaryColor: '#2d6fa8',
+    secondaryColor: '#5aad78',
+    headingFont: 'Lato',
+    paragraphFont: 'Lato',
+    fontColor: '#111827',
+    headingFontColor: '#111827',
+    instructionColor: '#6b7280',
+    linkFontColor: '#2d6fa8',
+    pageTitleSize: 'H1',
+    pageBackgroundColor: '#ffffff',
+    pageBorderColor: '#e5e7eb',
+    progressFillColor: '#2d6fa8',
+    progressBackgroundColor: '#e5e7eb',
+    progressBorderColor: '#d1d5db',
+    navBackground: '#ffffff',
+    navTextColor: '#111827',
+    navBorderColor: '#e5e7eb',
+    navHoverColor: '#f9fafb',
+    menuBackground: '#ffffff',
+    menuTextColor: '#111827',
+    menuHoverBackground: '#f9fafb',
+    menuActiveColor: '#2d6fa8',
+    successColor: '#22c55e',
+    errorColor: '#ef4444',
+    warningColor: '#f59e0b',
+    infoColor: '#3b82f6',
+    overlayBackground: 'rgba(0, 0, 0, 0.5)',
+    modalBackground: '#ffffff',
+    modalBorderColor: '#e5e7eb',
+    modalShadowColor: 'rgba(0, 0, 0, 0.1)',
+  });
 
   useEffect(() => {
     setSelected(mapThemeNameToId(initialThemeName));
   }, [initialThemeName]);
 
-  if (selected === "custom") {
+  // Color Picker Component
+  const ColorPickerField = ({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) => (
+    <div>
+      <p className="text-xs font-bold text-[#111827] mb-2">{label}</p>
+      <div className="flex gap-2 items-center">
+        <label className="w-8 h-8 rounded border border-[#d1d5db] cursor-pointer flex-shrink-0 block overflow-hidden relative">
+          <span className="block w-full h-full" style={{ backgroundColor: value }} />
+          <input type="color" value={value} onChange={e => onChange(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
+        </label>
+        <input type="text" value={value.toUpperCase()} onChange={e => { const v = e.target.value; if (/^#[0-9A-Fa-f]{0,6}$/.test(v)) onChange(v); }} className="text-xs flex-1 border border-[#d1d5db] rounded px-2 py-1 text-[#111827] focus:border-[#2d6fa8] outline-none" />
+      </div>
+    </div>
+  );
+
+  // Font Dropdown Component
+  const FontDropdownField = ({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) => (
+    <div>
+      <p className="text-xs font-bold text-[#111827] mb-2">{label}</p>
+      <select value={value} onChange={e => onChange(e.target.value)} className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:border-[#2d6fa8] outline-none">
+        {FONT_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
+      </select>
+    </div>
+  );
+
+  // Live Preview Component
+  const LivePreview = () => {
+    const [darkMode, setDarkMode] = useState(false);
+    const previewBg = darkMode ? '#1a1a1a' : '#f8f8f8';
+    const textColor = darkMode ? '#e8e8e8' : customSettings.fontColor;
+    const headingColor = darkMode ? '#ffffff' : customSettings.headingFontColor;
+    const titleSize = PREVIEW_TITLE_SIZE[customSettings.pageTitleSize];
+
     return (
-      <div className="h-full w-full overflow-hidden">
-        <CustomThemeEditor onBack={() => setSelected(null)} />
+      <div className="border border-[#e5e7eb] rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)' }}>
+        <div className="flex items-center justify-between px-3 py-2 bg-white border-b border-[#e5e7eb]">
+          <div className="flex items-center gap-2">
+            <div style={{ width: '13px', height: '13px', backgroundColor: customSettings.primaryColor, borderRadius: '2px' }} />
+            <span className="text-xs font-bold text-[#111827]">Live Preview</span>
+          </div>
+          <div className="flex gap-1">
+            <button onClick={() => setDarkMode(!darkMode)} className="w-7 h-7 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded text-[#6b7280] hover:bg-[#f9fafb]" title="Toggle dark mode">
+              {darkMode ? '☀' : '🌙'}
+            </button>
+          </div>
+        </div>
+        <div style={{ backgroundColor: previewBg, fontSize: '13px' }}>
+          <div style={{ height: '4px', background: `linear-gradient(to right, ${customSettings.primaryColor} 60%, ${darkMode ? '#333' : '#e0e0e0'} 60%)` }} />
+          <div style={{ background: customSettings.primaryColor, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: '11px' }}>☰</span>
+            <span style={{ fontFamily: `${customSettings.paragraphFont}, sans-serif`, fontSize: '11px', color: 'rgba(255,255,255,0.85)', flex: 1 }}>
+              New Course Title <span style={{ opacity: 0.6 }}>/ Page Title</span>
+            </span>
+            <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '11px' }}>🔍</span>
+          </div>
+          <div style={{ padding: '20px 18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ fontFamily: `${customSettings.headingFont}, sans-serif`, fontSize: titleSize ?? '1rem', fontWeight: 700, color: headingColor, lineHeight: 1.2 }}>
+              {customSettings.pageTitleSize === 'H6' ? '—' : 'New Menu/Page Title'}
+            </div>
+            <div style={{ fontFamily: `${customSettings.paragraphFont}, sans-serif`, fontSize: '0.85rem', color: textColor, lineHeight: 1.5 }}>Body text</div>
+            <div style={{ fontFamily: `${customSettings.paragraphFont}, sans-serif`, fontSize: '0.85rem', color: customSettings.linkFontColor, textDecoration: 'underline', cursor: 'pointer' }}>
+              This is a sample link
+            </div>
+            <div style={{ fontFamily: `${customSettings.paragraphFont}, sans-serif`, fontSize: '0.82rem', color: customSettings.instructionColor, fontStyle: 'italic' }}>
+              Choose one option then select Submit.
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {[{ label: 'Correct', selected: true }, { label: 'Incorrect', selected: false }].map(opt => (
+                <div key={opt.label} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '14px', height: '14px', borderRadius: '50%', flexShrink: 0, border: `2px solid ${opt.selected ? customSettings.secondaryColor : (darkMode ? '#555' : '#ccc')}`, background: opt.selected ? customSettings.secondaryColor : 'transparent' }} />
+                  <span style={{ fontFamily: `${customSettings.paragraphFont}, sans-serif`, fontSize: '0.82rem', color: textColor }}>{opt.label}</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ alignSelf: 'flex-start', background: customSettings.primaryColor, borderRadius: '6px', padding: '7px 16px', fontFamily: `${customSettings.paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
+              Submit
+            </div>
+          </div>
+        </div>
       </div>
     );
-  }
+  };
+
+  // Custom Theme Editor Component
+  const CustomThemeEditor = ({ onBack }: { onBack: () => void }) => (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', alignItems: 'start' }}>
+      {/* Left: breadcrumb + accordions */}
+      <div className="space-y-5">
+        <div className="flex items-center gap-1">
+          <button onClick={onBack} className="flex items-center gap-1 bg-none border-none cursor-pointer text-[#2d6fa8] hover:opacity-75 p-0">
+            <span>←</span>
+            <span className="text-xs font-semibold">Theme</span>
+          </button>
+          <span className="text-[#6b7280]">›</span>
+          <span className="text-xs font-bold text-[#111827]">Custom Theme</span>
+        </div>
+
+        <div className="space-y-2">
+          {ACCORDION_DEFS.map((acc) => {
+            const isOpen = activeCustomAccordion === acc.id;
+            return (
+              <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-hidden">
+                <button
+                  onClick={() => setActiveCustomAccordion(isOpen ? null : acc.id)}
+                  className={`w-full flex items-center justify-between px-4 py-3 transition-colors border-b border-[#e5e7eb] ${isOpen ? 'bg-[#f9fafb]' : 'bg-white hover:bg-[#f9fafb]'}`}
+                >
+                  <span className="text-xs font-bold text-[#111827]">{acc.label}</span>
+                  <svg className={`w-4 h-4 text-[#6b7280] transition-transform ${isOpen ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </button>
+                {isOpen && acc.id === 'global' && (
+                  <div className="px-4 py-4 bg-white border-t border-[#e5e7eb]">
+                    <div className="grid grid-cols-2 gap-4">
+                      <ColorPickerField label="Primary colour" value={customSettings.primaryColor} onChange={v => setCustomSettings({...customSettings, primaryColor: v})} />
+                      <ColorPickerField label="Secondary colour" value={customSettings.secondaryColor} onChange={v => setCustomSettings({...customSettings, secondaryColor: v})} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mt-4">
+                      <FontDropdownField label="Heading font" value={customSettings.headingFont} onChange={v => setCustomSettings({...customSettings, headingFont: v})} />
+                      <FontDropdownField label="Paragraph font" value={customSettings.paragraphFont} onChange={v => setCustomSettings({...customSettings, paragraphFont: v})} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mt-4">
+                      <ColorPickerField label="Font colour" value={customSettings.fontColor} onChange={v => setCustomSettings({...customSettings, fontColor: v})} />
+                      <ColorPickerField label="Heading font colour" value={customSettings.headingFontColor} onChange={v => setCustomSettings({...customSettings, headingFontColor: v})} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mt-4">
+                      <ColorPickerField label="Instruction colour" value={customSettings.instructionColor} onChange={v => setCustomSettings({...customSettings, instructionColor: v})} />
+                      <ColorPickerField label="Link font colour" value={customSettings.linkFontColor} onChange={v => setCustomSettings({...customSettings, linkFontColor: v})} />
+                    </div>
+                    <div className="mt-4">
+                      <p className="text-xs font-bold text-[#111827] mb-2">Page Title Size</p>
+                      <select value={customSettings.pageTitleSize} onChange={e => setCustomSettings({...customSettings, pageTitleSize: e.target.value})} className="text-xs w-full border-2 border-[#2d6fa8] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:outline-none">
+                        {PAGE_TITLE_OPTIONS.map(h => <option key={h} value={h}>{PAGE_TITLE_LABELS[h]}</option>)}
+                      </select>
+                      {customSettings.pageTitleSize !== 'H6' && (
+                        <div className="mt-2 border-l-[3px] border-l-[#2d6fa8] bg-[#f0f7ff] rounded-r px-3 py-2">
+                          <p className="text-xs font-bold text-[#111827] mb-1">Calculated values for Desktop:</p>
+                          {CALC_VALUES.map(row => (
+                            <div key={row.label} className="text-xs text-[#2d6fa8] leading-relaxed">
+                              {row.label}: {row.rem} ({row.px})
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Right: live preview */}
+      <div style={{ position: 'sticky', top: '32px' }}>
+        <p className="text-xs font-bold text-[#111827] mb-3">Live Preview</p>
+        <LivePreview />
+        <p className="text-xs text-[#6b7280] mt-2 text-center">Preview updates as you change settings</p>
+      </div>
+    </div>
+  );
 
   return (
     <div className="max-w-3xl w-full px-6 py-6">
@@ -1012,6 +1336,457 @@ function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
           );
         })}
       </div>
+
+      {/* Separator */}
+      <div className="h-px bg-[#e5e7eb] my-5" />
+
+      {/* Preset Section */}
+      <div className="flex items-center gap-3 flex-wrap mb-5">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-[#111827]">Preset:</span>
+          <select
+            className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md bg-white text-[#111827] cursor-pointer outline-none focus:border-[#2d6fa8]"
+          >
+            <option>No preset</option>
+            <option>Preset 1</option>
+            <option>Preset 2</option>
+          </select>
+        </div>
+        <button className="text-xs font-semibold px-5 py-1.5 border border-[#2d6fa8] text-[#2d6fa8] rounded-md hover:bg-[#f0f7ff] transition-colors">
+          Save preset
+        </button>
+        <button className="text-xs font-semibold px-5 py-1.5 border border-[#d1d5db] text-[#111827] bg-white rounded-md hover:bg-[#f9fafb] transition-colors">
+          Manage presets
+        </button>
+      </div>
+
+      <p className="text-xs text-[#6b7280] mb-5 leading-relaxed">
+        <strong className="text-[#111827]">Tip:</strong> You can save your selections as a 'preset' for quick access later.
+      </p>
+
+      {/* Separator */}
+      <div className="h-px bg-[#e5e7eb] mb-4" />
+
+      {/* Configuration Accordions - shown based on selected theme */}
+      <div className="space-y-2">
+        {/* Configuration: Course - LIFE and Custom only */}
+        {selected !== "vanilla" && (
+          <ThemeAccordion
+            label="Configuration: Course"
+            isOpen={activeAccordion === "Configuration: Course"}
+            onToggle={() => setActiveAccordion(activeAccordion === "Configuration: Course" ? null : "Configuration: Course")}
+          >
+            <div className="space-y-5">
+              <div>
+                <p className="text-xs font-semibold text-[#111827] mb-2.5">Custom Icons: Sprite Sheets</p>
+                <button className="px-5 py-2 text-xs font-semibold text-white bg-[#2d6fa8] rounded-md hover:bg-[#1e5a96] transition-colors">
+                  Add
+                </button>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-[#111827] mb-2.5">Custom Icons: Single Icons</p>
+                <button className="px-5 py-2 text-xs font-semibold text-white bg-[#2d6fa8] rounded-md hover:bg-[#1e5a96] transition-colors">
+                  Add
+                </button>
+              </div>
+            </div>
+          </ThemeAccordion>
+        )}
+
+        {/* Configuration: Blocks - LIFE and Custom only */}
+        {selected !== "vanilla" && (
+          <ThemeAccordion
+            label="Configuration: Blocks"
+            isOpen={activeAccordion === "Configuration: Blocks"}
+            onToggle={() => setActiveAccordion(activeAccordion === "Configuration: Blocks" ? null : "Configuration: Blocks")}
+          >
+            <div className="space-y-5">
+              <div>
+                <p className="text-xs font-semibold text-[#111827] mb-2">Spacing top</p>
+                <select className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md bg-white text-[#111827] cursor-pointer outline-none focus:border-[#2d6fa8]" style={{ minWidth: "110px" }}>
+                  <option>None</option>
+                  <option>Single</option>
+                  <option>Double</option>
+                  <option>Triple</option>
+                </select>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-[#111827] mb-2">Spacing bottom</p>
+                <select className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md bg-white text-[#111827] cursor-pointer outline-none focus:border-[#2d6fa8]" style={{ minWidth: "110px" }}>
+                  <option>None</option>
+                  <option>Single</option>
+                  <option>Double</option>
+                  <option>Triple</option>
+                </select>
+              </div>
+            </div>
+          </ThemeAccordion>
+        )}
+
+        {/* Configuration: Components - LIFE and Custom only */}
+        {selected !== "vanilla" && (
+          <ThemeAccordion
+            label="Configuration: Components"
+            isOpen={activeAccordion === "Configuration: Components"}
+            onToggle={() => setActiveAccordion(activeAccordion === "Configuration: Components" ? null : "Configuration: Components")}
+          >
+            <div className="space-y-5">
+              <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCheckNotFinal(!checkNotFinal)}>
+                <div 
+                  style={{
+                    width: "18px",
+                    height: "18px",
+                    borderRadius: "4px",
+                    border: `1.5px solid ${checkNotFinal ? "#2d6fa8" : "#d1d5db"}`,
+                    backgroundColor: checkNotFinal ? "#2d6fa8" : "white",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    transition: "all 0.15s",
+                    flexShrink: 0
+                  }}
+                >
+                  {checkNotFinal && (
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
+                </div>
+                <span className="text-xs text-[#111827] leading-normal">Display marking for not-final attempts</span>
+              </div>
+
+              <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCheckUnanswered(!checkUnanswered)}>
+                <div 
+                  style={{
+                    width: "18px",
+                    height: "18px",
+                    borderRadius: "4px",
+                    border: `1.5px solid ${checkUnanswered ? "#2d6fa8" : "#d1d5db"}`,
+                    backgroundColor: checkUnanswered ? "#2d6fa8" : "white",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    transition: "all 0.15s",
+                    flexShrink: 0
+                  }}
+                >
+                  {checkUnanswered && (
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
+                </div>
+                <span className="text-xs text-[#111827] leading-normal">Display marking for unanswered correct responses</span>
+              </div>
+
+              <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCheckHideFeedback(!checkHideFeedback)}>
+                <div 
+                  style={{
+                    width: "18px",
+                    height: "18px",
+                    borderRadius: "4px",
+                    border: `1.5px solid ${checkHideFeedback ? "#2d6fa8" : "#d1d5db"}`,
+                    backgroundColor: checkHideFeedback ? "#2d6fa8" : "white",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    transition: "all 0.15s",
+                    flexShrink: 0
+                  }}
+                >
+                  {checkHideFeedback && (
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
+                </div>
+                <span className="text-xs text-[#111827] leading-normal">Hide feedback on first attempt on assessments</span>
+              </div>
+
+              <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCheckHidePartial(!checkHidePartial)}>
+                <div 
+                  style={{
+                    width: "18px",
+                    height: "18px",
+                    borderRadius: "4px",
+                    border: `1.5px solid ${checkHidePartial ? "#2d6fa8" : "#d1d5db"}`,
+                    backgroundColor: checkHidePartial ? "#2d6fa8" : "white",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    transition: "all 0.15s",
+                    flexShrink: 0
+                  }}
+                >
+                  {checkHidePartial && (
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
+                </div>
+                <span className="text-xs text-[#111827] leading-normal">Hide partially correct feedback on the question and result page</span>
+              </div>
+            </div>
+          </ThemeAccordion>
+        )}
+
+        {/* On Screen Classes - always visible */}
+        <ThemeAccordion
+          label="On Screen Classes"
+          isOpen={activeAccordion === "On Screen Classes"}
+          onToggle={() => setActiveAccordion(activeAccordion === "On Screen Classes" ? null : "On Screen Classes")}
+        >
+          <div className="space-y-5">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {}}
+                className="relative w-10 h-5.5 rounded-full border-none cursor-pointer flex-shrink-0 transition-colors"
+                style={{ backgroundColor: "#d1d5db" }}
+              >
+                <span
+                  className="absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-all"
+                  style={{ boxShadow: "0 1px 3px rgba(0, 0, 0, 0.25)" }}
+                />
+              </button>
+              <span className="text-xs text-[#111827] font-semibold">Enable On Screen Classes</span>
+            </div>
+          </div>
+        </ThemeAccordion>
+      </div>
+
+      {/* Vanilla Theme Settings — only shown when Vanilla is selected */}
+      {selected === "vanilla" && (
+        <div className="border border-[#e5e7eb] rounded-xl p-6 bg-white mt-2">
+          <h3 className="text-sm font-bold text-[#111827] mb-4">Vanilla Theme Settings</h3>
+          <div className="space-y-2">
+            {VANILLA_ACCORDION_DEFS.map((acc) => {
+              const isOpen = activeVanillaAccordion === acc.id;
+              return (
+                <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setActiveVanillaAccordion(isOpen ? null : acc.id)}
+                    className={`w-full flex items-center justify-between px-4 py-3 transition-colors border-b border-[#e5e7eb] ${isOpen ? 'bg-[#f9fafb]' : 'bg-white hover:bg-[#f9fafb]'}`}
+                  >
+                    <span className="text-xs font-bold text-[#111827]">{acc.label}</span>
+                    <svg
+                      className={`w-4 h-4 text-[#6b7280] transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </button>
+                  {isOpen && (
+                    <div className="px-4 py-4 bg-white border-t border-[#e5e7eb]">
+                      <div className="flex flex-col gap-4">
+                        {acc.fields.map((field) => {
+                          const key = `${acc.id}::${field}`;
+                          const colorVal = vanillaColors[key] ?? '';
+                          const isEmpty = !colorVal;
+                          return (
+                            <div key={field}>
+                              <p className="text-xs text-[#111827] mb-2 leading-snug">{field}</p>
+                              <label
+                                style={{
+                                  display: 'block',
+                                  width: '56px',
+                                  height: '56px',
+                                  borderRadius: '10px',
+                                  border: '1px solid #e5e7eb',
+                                  cursor: 'pointer',
+                                  overflow: 'hidden',
+                                  position: 'relative',
+                                  flexShrink: 0,
+                                }}
+                              >
+                                {isEmpty ? (
+                                  <div style={{ width: '100%', height: '100%', backgroundImage: 'repeating-conic-gradient(#d0d0d0 0% 25%, #f8f8f8 0% 50%)', backgroundSize: '10px 10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" style={{ opacity: 0.45 }}>
+                                      <line x1="4" y1="4" x2="18" y2="18" stroke="#888" strokeWidth="2" strokeLinecap="round" />
+                                      <line x1="18" y1="4" x2="4" y2="18" stroke="#888" strokeWidth="2" strokeLinecap="round" />
+                                    </svg>
+                                  </div>
+                                ) : (
+                                  <div style={{ width: '100%', height: '100%', background: colorVal }} />
+                                )}
+                                <input
+                                  type="color"
+                                  value={colorVal || '#ffffff'}
+                                  onChange={(e) => setVanillaColors(prev => ({ ...prev, [key]: e.target.value }))}
+                                  style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%', cursor: 'pointer', border: 'none', padding: 0 }}
+                                />
+                              </label>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Custom Theme Settings — only shown when Custom is selected */}
+      {selected === "custom" && (
+        <div className="border border-[#e5e7eb] rounded-xl p-6 bg-white mt-2">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Left column: Breadcrumb + Accordions */}
+            <div className="lg:col-span-2 space-y-4">
+              <div className="text-xs text-[#6b7280]">
+                <span className="font-semibold">Theme</span>
+                {activeCustomAccordion && (
+                  <>
+                    <span className="mx-1.5">/</span>
+                    <span className="font-semibold">{ACCORDION_DEFS.find(a => a.id === activeCustomAccordion)?.label}</span>
+                  </>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                {ACCORDION_DEFS.map((acc) => {
+                  const isOpen = activeCustomAccordion === acc.id;
+                  return (
+                    <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-hidden">
+                      <button
+                        onClick={() => setActiveCustomAccordion(isOpen ? null : acc.id)}
+                        className={`w-full flex items-center justify-between px-4 py-3 transition-colors ${isOpen ? 'bg-[#f9fafb]' : 'bg-white hover:bg-[#f9fafb]'}`}
+                      >
+                        <span className="text-xs font-bold text-[#111827]">{acc.label}</span>
+                        <svg
+                          className={`w-4 h-4 text-[#6b7280] transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                        >
+                          <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                      </button>
+                      {isOpen && (
+                        <div className="px-4 py-4 bg-white border-t border-[#e5e7eb] space-y-4">
+                          {acc.id === 'global' && (
+                            <>
+                              <ColorPickerField label="Primary Color" value={customSettings.primaryColor} onChange={(v) => setCustomSettings({ ...customSettings, primaryColor: v })} />
+                              <ColorPickerField label="Secondary Color" value={customSettings.secondaryColor} onChange={(v) => setCustomSettings({ ...customSettings, secondaryColor: v })} />
+                              <ColorPickerField label="Font Color" value={customSettings.fontColor} onChange={(v) => setCustomSettings({ ...customSettings, fontColor: v })} />
+                              <ColorPickerField label="Heading Font Color" value={customSettings.headingFontColor} onChange={(v) => setCustomSettings({ ...customSettings, headingFontColor: v })} />
+                              <ColorPickerField label="Instruction Color" value={customSettings.instructionColor} onChange={(v) => setCustomSettings({ ...customSettings, instructionColor: v })} />
+                              <ColorPickerField label="Link Font Color" value={customSettings.linkFontColor} onChange={(v) => setCustomSettings({ ...customSettings, linkFontColor: v })} />
+                              <FontDropdownField label="Heading Font" value={customSettings.headingFont} onChange={(v) => setCustomSettings({ ...customSettings, headingFont: v })} />
+                              <FontDropdownField label="Paragraph Font" value={customSettings.paragraphFont} onChange={(v) => setCustomSettings({ ...customSettings, paragraphFont: v })} />
+                            </>
+                          )}
+                          {acc.id === 'page' && (
+                            <>
+                              <div>
+                                <p className="text-xs font-bold text-[#111827] mb-2">Page Title Size</p>
+                                <select value={customSettings.pageTitleSize} onChange={(e) => setCustomSettings({ ...customSettings, pageTitleSize: e.target.value })} className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:border-[#2d6fa8] outline-none">
+                                  {PAGE_TITLE_OPTIONS.map(opt => <option key={opt} value={opt}>{PAGE_TITLE_LABELS[opt]}</option>)}
+                                </select>
+                              </div>
+                              <ColorPickerField label="Page Background Color" value={customSettings.pageBackgroundColor || '#ffffff'} onChange={(v) => setCustomSettings({ ...customSettings, pageBackgroundColor: v })} />
+                              <ColorPickerField label="Page Border Color" value={customSettings.pageBorderColor || '#e5e7eb'} onChange={(v) => setCustomSettings({ ...customSettings, pageBorderColor: v })} />
+                            </>
+                          )}
+                          {acc.id === 'progress' && (
+                            <>
+                              <ColorPickerField label="Progress Fill Color" value={customSettings.progressFillColor || '#2d6fa8'} onChange={(v) => setCustomSettings({ ...customSettings, progressFillColor: v })} />
+                              <ColorPickerField label="Progress Background Color" value={customSettings.progressBackgroundColor || '#e5e7eb'} onChange={(v) => setCustomSettings({ ...customSettings, progressBackgroundColor: v })} />
+                              <ColorPickerField label="Progress Border Color" value={customSettings.progressBorderColor || '#d1d5db'} onChange={(v) => setCustomSettings({ ...customSettings, progressBorderColor: v })} />
+                            </>
+                          )}
+                          {acc.id === 'navigation' && (
+                            <>
+                              <ColorPickerField label="Navigation Background" value={customSettings.navBackground || '#ffffff'} onChange={(v) => setCustomSettings({ ...customSettings, navBackground: v })} />
+                              <ColorPickerField label="Navigation Text Color" value={customSettings.navTextColor || '#111827'} onChange={(v) => setCustomSettings({ ...customSettings, navTextColor: v })} />
+                              <ColorPickerField label="Navigation Border Color" value={customSettings.navBorderColor || '#e5e7eb'} onChange={(v) => setCustomSettings({ ...customSettings, navBorderColor: v })} />
+                              <ColorPickerField label="Navigation Hover Color" value={customSettings.navHoverColor || '#f9fafb'} onChange={(v) => setCustomSettings({ ...customSettings, navHoverColor: v })} />
+                            </>
+                          )}
+                          {acc.id === 'menu' && (
+                            <>
+                              <ColorPickerField label="Menu Background" value={customSettings.menuBackground || '#ffffff'} onChange={(v) => setCustomSettings({ ...customSettings, menuBackground: v })} />
+                              <ColorPickerField label="Menu Text Color" value={customSettings.menuTextColor || '#111827'} onChange={(v) => setCustomSettings({ ...customSettings, menuTextColor: v })} />
+                              <ColorPickerField label="Menu Hover Background" value={customSettings.menuHoverBackground || '#f9fafb'} onChange={(v) => setCustomSettings({ ...customSettings, menuHoverBackground: v })} />
+                              <ColorPickerField label="Menu Active Color" value={customSettings.menuActiveColor || '#2d6fa8'} onChange={(v) => setCustomSettings({ ...customSettings, menuActiveColor: v })} />
+                            </>
+                          )}
+                          {acc.id === 'feedback' && (
+                            <>
+                              <ColorPickerField label="Success Color" value={customSettings.successColor || '#22c55e'} onChange={(v) => setCustomSettings({ ...customSettings, successColor: v })} />
+                              <ColorPickerField label="Error Color" value={customSettings.errorColor || '#ef4444'} onChange={(v) => setCustomSettings({ ...customSettings, errorColor: v })} />
+                              <ColorPickerField label="Warning Color" value={customSettings.warningColor || '#f59e0b'} onChange={(v) => setCustomSettings({ ...customSettings, warningColor: v })} />
+                              <ColorPickerField label="Info Color" value={customSettings.infoColor || '#3b82f6'} onChange={(v) => setCustomSettings({ ...customSettings, infoColor: v })} />
+                            </>
+                          )}
+                          {acc.id === 'overlays' && (
+                            <>
+                              <ColorPickerField label="Overlay Background" value={customSettings.overlayBackground || 'rgba(0, 0, 0, 0.5)'} onChange={(v) => setCustomSettings({ ...customSettings, overlayBackground: v })} />
+                              <ColorPickerField label="Modal Background" value={customSettings.modalBackground || '#ffffff'} onChange={(v) => setCustomSettings({ ...customSettings, modalBackground: v })} />
+                              <ColorPickerField label="Modal Border Color" value={customSettings.modalBorderColor || '#e5e7eb'} onChange={(v) => setCustomSettings({ ...customSettings, modalBorderColor: v })} />
+                              <ColorPickerField label="Modal Shadow Color" value={customSettings.modalShadowColor || 'rgba(0, 0, 0, 0.1)'} onChange={(v) => setCustomSettings({ ...customSettings, modalShadowColor: v })} />
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Right column: Live Preview (Sticky) */}
+            <div className="lg:col-span-1">
+              <div className="sticky top-6">
+                <LivePreview />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Theme Accordion Component ── */
+function ThemeAccordion({
+  label,
+  children,
+  isOpen,
+  onToggle
+}: {
+  label: string;
+  children: React.ReactNode;
+  isOpen: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="border border-[#e5e7eb] rounded-lg overflow-hidden">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-[#f9fafb] transition-colors border-b border-[#e5e7eb]"
+      >
+        <span className="text-xs font-bold text-[#111827]">{label}</span>
+        <svg
+          className={`w-4 h-4 text-[#6b7280] transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      {isOpen && (
+        <div className="px-4 py-3 bg-white border-t border-[#e5e7eb]">
+          {children}
+        </div>
+      )}
     </div>
   );
 }
