@@ -5644,32 +5644,32 @@ function CourseCreationCenterContent() {
         <div className="ml-auto flex items-center gap-2">
           <Link
             to="/"
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium text-[#4b5563] border border-transparent rounded-[8px] hover:bg-[#f3f4f6] hover:text-[#111827] transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold text-[#4b5563] border border-transparent rounded-[8px] hover:bg-[#f3f4f6] hover:text-[#111827] transition-colors cursor-pointer"
           >
-            <img src={`${ICON_BASE}/back-icon.svg`} alt="" aria-hidden="true" className="w-[14px] h-[14px] shrink-0" />
+            <SidebarMaskIcon file="back-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
             <span className="hidden md:inline">Back</span>
           </Link>
 
           <button
             type="button"
             onClick={() => setActiveNav("storyboarding")}
-            className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium border rounded-[8px] transition-colors cursor-pointer ${activeNav === "storyboarding" ? "border-[#2f86ab] bg-[#ecf7fc] text-[#2f86ab]" : "border-[#d1d5db] bg-white text-[#1f2937] hover:bg-[#f8fafc]"}`}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold border-2 rounded-[8px] transition-colors cursor-pointer bg-white ${activeNav === "storyboarding" ? "border-[var(--life-primary-800)] text-[var(--life-primary-800)]" : "border-[var(--life-neutral-200)] text-[var(--life-base-black)] hover:border-[var(--life-primary-700)] hover:text-[var(--life-primary-700)] active:border-[var(--life-primary-800)] active:text-[var(--life-primary-800)]"}`}
           >
-            <img src={`${ICON_BASE}/storyboard-icon.svg`} alt="" aria-hidden="true" className="w-[14px] h-[14px] shrink-0" />
+            <SidebarMaskIcon file="storyboard-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
             <span className="hidden lg:inline">Storyboard</span>
           </button>
 
-          <button type="button" className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium text-[#1a1a1a] border border-[#d1d5db] rounded-[8px] hover:bg-[#f8fafc] transition-colors cursor-pointer">
-            <img src={`${ICON_BASE}/preview-icon.svg`} alt="" aria-hidden="true" className="w-[14px] h-[14px] shrink-0" />
+          <button type="button" className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold border-2 border-[var(--life-neutral-200)] text-[var(--life-base-black)] rounded-[8px] bg-white hover:border-[var(--life-primary-700)] hover:text-[var(--life-primary-700)] active:border-[var(--life-primary-800)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer">
+            <SidebarMaskIcon file="preview-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
             <span className="hidden lg:inline">Preview</span>
           </button>
 
           <button
             type="button"
             onClick={openExportDialog}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium border border-[#d1d5db] bg-white text-[#1a1a1a] rounded-[8px] hover:bg-[#f8fafc] transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold border-2 border-[var(--life-neutral-200)] bg-white text-[var(--life-base-black)] rounded-[8px] hover:border-[var(--life-primary-700)] hover:text-[var(--life-primary-700)] active:border-[var(--life-primary-800)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer"
           >
-            <img src={`${ICON_BASE}/export-icon.svg`} alt="" aria-hidden="true" className="w-[14px] h-[14px] shrink-0" />
+            <SidebarMaskIcon file="export-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
             <span className="hidden lg:inline">Export</span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
               <polyline points="6 9 12 15 18 9" />
@@ -5679,9 +5679,9 @@ function CourseCreationCenterContent() {
           <button
             type="button"
             onClick={() => setActiveNav("publish")}
-            className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-medium rounded-[8px] transition-colors active:bg-[var(--life-primary-800)] cursor-pointer ${activeNav === "publish" ? "bg-[var(--life-primary-700)] text-[var(--life-base-white)]" : "bg-[var(--life-primary-500)] text-[var(--life-base-white)] hover:bg-[var(--life-primary-700)]"}`}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold rounded-[8px] transition-colors active:bg-[var(--life-primary-800)] cursor-pointer ${activeNav === "publish" ? "bg-[var(--life-primary-700)] text-[var(--life-base-white)]" : "bg-[var(--life-primary-500)] text-[var(--life-base-white)] hover:bg-[var(--life-primary-700)]"}`}
           >
-            <img src={`${ICON_BASE}/publish-icon.svg`} alt="" aria-hidden="true" className="w-[14px] h-[14px] shrink-0" />
+            <SidebarMaskIcon file="publish-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
             <span className="hidden lg:inline">Publish</span>
           </button>
 
@@ -5818,7 +5818,7 @@ function CourseCreationCenterContent() {
                 type="button"
                 disabled={!courseId}
                 onClick={() => navigate(`/course/${courseId}`)}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Skip to Editor
                 <SidebarMaskIcon file="chevron-right.svg" className="block w-[13px] h-[13px] shrink-0 bg-current" />
