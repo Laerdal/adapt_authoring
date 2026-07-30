@@ -1092,6 +1092,7 @@ function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
   const [activeVanillaAccordion, setActiveVanillaAccordion] = useState<string | null>('global');
   const [vanillaColors, setVanillaColors] = useState<Record<string, string>>({});
   const [activeCustomAccordion, setActiveCustomAccordion] = useState<string | null>('global');
+  const [previewDarkMode, setPreviewDarkMode] = useState(false);
   const [customSettings, setCustomSettings] = useState({
     primaryColor: '#2d6fa8',
     secondaryColor: '#5aad78',
@@ -1155,7 +1156,7 @@ function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
 
   // Live Preview Component
   const LivePreview = () => {
-    const [darkMode, setDarkMode] = useState(false);
+    const darkMode = previewDarkMode;
     const previewBg = darkMode ? '#1a1a1a' : '#f8f8f8';
     const textColor = darkMode ? '#e8e8e8' : customSettings.fontColor;
     const headingColor = darkMode ? '#ffffff' : customSettings.headingFontColor;
@@ -1163,17 +1164,6 @@ function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
 
     return (
       <div className="border border-[#e5e7eb] rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)' }}>
-        <div className="flex items-center justify-between px-3 py-2 bg-white border-b border-[#e5e7eb]">
-          <div className="flex items-center gap-2">
-            <div style={{ width: '13px', height: '13px', backgroundColor: customSettings.primaryColor, borderRadius: '2px' }} />
-            <span className="text-xs font-bold text-[#111827]">Live Preview</span>
-          </div>
-          <div className="flex gap-1">
-            <button onClick={() => setDarkMode(!darkMode)} className="w-7 h-7 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded text-[#6b7280] hover:bg-[#f9fafb]" title="Toggle dark mode">
-              {darkMode ? '☀' : '🌙'}
-            </button>
-          </div>
-        </div>
         <div style={{ backgroundColor: previewBg, fontSize: '13px' }}>
           <div style={{ height: '4px', background: `linear-gradient(to right, ${customSettings.primaryColor} 60%, ${darkMode ? '#333' : '#e0e0e0'} 60%)` }} />
           <div style={{ background: customSettings.primaryColor, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -1748,6 +1738,16 @@ function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
             {/* Right column: Live Preview (Sticky) */}
             <div>
               <div className="sticky top-6">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm font-bold text-[#111827]">Live Preview</span>
+                  <button
+                    onClick={() => setPreviewDarkMode(v => !v)}
+                    className="w-7 h-7 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded text-[#6b7280] hover:bg-[#f9fafb]"
+                    title="Toggle dark mode"
+                  >
+                    {previewDarkMode ? '☀' : '🌙'}
+                  </button>
+                </div>
                 <LivePreview />
               </div>
             </div>
