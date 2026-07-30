@@ -31,6 +31,8 @@ export interface CourseStructureTreeProps {
   onRemove: (level: StructureLevel, id: string) => void;
   // Drag-and-drop: move `id` under `newParentId`, before `beforeId` (null = append).
   onMove: (level: StructureLevel, id: string, newParentId: string, beforeId: string | null) => void;
+  // Open a topic in the Page Editor (the "→" affordance on topic rows).
+  onOpenTopic: (topicId: string) => void;
 }
 
 interface Dragged { level: StructureLevel; id: string; }
@@ -94,6 +96,13 @@ function Plus({ size = 13 }: { size?: number }) {
     </svg>
   );
 }
+function ArrowRight() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+    </svg>
+  );
+}
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -128,6 +137,7 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
     parentLevel: ContainerLevel;
     expandable?: boolean;
     deleteWarning?: string;
+    onOpen?: () => void;
   }
 
   // Plain render function (not a nested component) so the inline <input> keeps
@@ -226,6 +236,11 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
           </div>
 
           <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+            {p.onOpen && (
+              <button type="button" aria-label={`Open ${p.title} in Page Editor`} title="Open in Page Editor" onClick={p.onOpen} className="p-1 rounded hover:bg-[#e5e7eb] text-[#9ca3af] hover:text-[#2d6fa8]">
+                <ArrowRight />
+              </button>
+            )}
             <button type="button" aria-label={`Delete ${p.title}`} onClick={() => setDeleteId(p.id)} className="p-1 rounded hover:bg-[#fee2e2] text-[#9ca3af] hover:text-[#dc2626]">
               <Trash />
             </button>
@@ -292,7 +307,7 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
   function renderTopic(topic: STopic, containerId: string, parentLevel: ContainerLevel) {
     return (
       <div key={topic.id}>
-        {renderRow({ level: 'topic', id: topic.id, title: topic.title, parentId: containerId, parentLevel, expandable: true })}
+        {renderRow({ level: 'topic', id: topic.id, title: topic.title, parentId: containerId, parentLevel, expandable: true, onOpen: () => props.onOpenTopic(topic.id) })}
         {isOpen(topic.id) && renderSections(topic.sections, topic.id)}
       </div>
     );
