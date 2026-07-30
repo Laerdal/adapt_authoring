@@ -413,7 +413,6 @@ function CourseStructurePanel({
               onRename={rename}
               onRemove={remove}
               onMove={moveNode}
-              onOpenTopic={onOpenEditor}
             />
           ) : (
             <CourseStructureMapView
@@ -431,6 +430,18 @@ function CourseStructurePanel({
           )}
         </div>
       )}
+
+      {/* Tip — guide next steps (bottom of the Course Structure page) */}
+      <div className="mt-5 flex items-start gap-2 rounded-lg bg-[#f8fafc] border border-[#e5e7eb] px-3.5 py-2.5 text-sm text-[#6b7280]">
+        <svg className="shrink-0 mt-0.5 text-[#f0b429]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 18h6M10 22h4M12 2a7 7 0 0 0-4 12.74V17h8v-2.26A7 7 0 0 0 12 2z" />
+        </svg>
+        <span>
+          <span className="font-medium text-[#374151]">Tip:</span> Click an item’s title to rename it. In Tree view,
+          drag items to reorder or move them across the hierarchy. Use the <span className="font-medium">+ Add</span> links
+          to build out your structure, then open a topic to add content in the editor.
+        </span>
+      </div>
 
       {addComponentBlockId && (
         <AddComponentDrawer
