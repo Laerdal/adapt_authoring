@@ -1291,7 +1291,8 @@ function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
   );
 
   return (
-    <div className="max-w-3xl w-full px-6 py-6">
+    // <div className="max-w-3xl w-full px-6 py-6">
+    <div className=" w-full px-6 py-6">
       <div className="mb-6">
         <h2 className="text-base font-semibold text-[#111827]">
           Select Theme <span className="text-red-500">*</span>
@@ -1668,22 +1669,26 @@ function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
                         </svg>
                       </button>
                       {isOpen && (
-                        <div className="px-4 py-4 bg-white border-t border-[#e5e7eb] space-y-4">
+                        <div className="px-4 py-4 bg-white border-t border-[#e5e7eb]">
                           {acc.id === 'global' && (
                             <>
-                              <ColorPickerField label="Primary Color" value={customSettings.primaryColor} onChange={(v) => setCustomSettings({ ...customSettings, primaryColor: v })} />
-                              <ColorPickerField label="Secondary Color" value={customSettings.secondaryColor} onChange={(v) => setCustomSettings({ ...customSettings, secondaryColor: v })} />
-                              <ColorPickerField label="Font Color" value={customSettings.fontColor} onChange={(v) => setCustomSettings({ ...customSettings, fontColor: v })} />
-                              <ColorPickerField label="Heading Font Color" value={customSettings.headingFontColor} onChange={(v) => setCustomSettings({ ...customSettings, headingFontColor: v })} />
-                              <ColorPickerField label="Instruction Color" value={customSettings.instructionColor} onChange={(v) => setCustomSettings({ ...customSettings, instructionColor: v })} />
-                              <ColorPickerField label="Link Font Color" value={customSettings.linkFontColor} onChange={(v) => setCustomSettings({ ...customSettings, linkFontColor: v })} />
-                              <FontDropdownField label="Heading Font" value={customSettings.headingFont} onChange={(v) => setCustomSettings({ ...customSettings, headingFont: v })} />
-                              <FontDropdownField label="Paragraph Font" value={customSettings.paragraphFont} onChange={(v) => setCustomSettings({ ...customSettings, paragraphFont: v })} />
+                              <div className="grid grid-cols-2 gap-x-4 gap-y-4 mb-4">
+                                <ColorPickerField label="Primary Color" value={customSettings.primaryColor} onChange={(v) => setCustomSettings({ ...customSettings, primaryColor: v })} />
+                                <ColorPickerField label="Secondary Color" value={customSettings.secondaryColor} onChange={(v) => setCustomSettings({ ...customSettings, secondaryColor: v })} />
+                                <ColorPickerField label="Font Color" value={customSettings.fontColor} onChange={(v) => setCustomSettings({ ...customSettings, fontColor: v })} />
+                                <ColorPickerField label="Heading Font Color" value={customSettings.headingFontColor} onChange={(v) => setCustomSettings({ ...customSettings, headingFontColor: v })} />
+                                <ColorPickerField label="Instruction Color" value={customSettings.instructionColor} onChange={(v) => setCustomSettings({ ...customSettings, instructionColor: v })} />
+                                <ColorPickerField label="Link Font Color" value={customSettings.linkFontColor} onChange={(v) => setCustomSettings({ ...customSettings, linkFontColor: v })} />
+                              </div>
+                              <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+                                <FontDropdownField label="Heading Font" value={customSettings.headingFont} onChange={(v) => setCustomSettings({ ...customSettings, headingFont: v })} />
+                                <FontDropdownField label="Paragraph Font" value={customSettings.paragraphFont} onChange={(v) => setCustomSettings({ ...customSettings, paragraphFont: v })} />
+                              </div>
                             </>
                           )}
                           {acc.id === 'page' && (
-                            <>
-                              <div>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+                              <div className="col-span-2">
                                 <p className="text-xs font-bold text-[#111827] mb-2">Page Title Size</p>
                                 <select value={customSettings.pageTitleSize} onChange={(e) => setCustomSettings({ ...customSettings, pageTitleSize: e.target.value })} className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:border-[#2d6fa8] outline-none">
                                   {PAGE_TITLE_OPTIONS.map(opt => <option key={opt} value={opt}>{PAGE_TITLE_LABELS[opt]}</option>)}
@@ -1691,46 +1696,46 @@ function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
                               </div>
                               <ColorPickerField label="Page Background Color" value={customSettings.pageBackgroundColor || '#ffffff'} onChange={(v) => setCustomSettings({ ...customSettings, pageBackgroundColor: v })} />
                               <ColorPickerField label="Page Border Color" value={customSettings.pageBorderColor || '#e5e7eb'} onChange={(v) => setCustomSettings({ ...customSettings, pageBorderColor: v })} />
-                            </>
+                            </div>
                           )}
                           {acc.id === 'progress' && (
-                            <>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-4">
                               <ColorPickerField label="Progress Fill Color" value={customSettings.progressFillColor || '#2d6fa8'} onChange={(v) => setCustomSettings({ ...customSettings, progressFillColor: v })} />
                               <ColorPickerField label="Progress Background Color" value={customSettings.progressBackgroundColor || '#e5e7eb'} onChange={(v) => setCustomSettings({ ...customSettings, progressBackgroundColor: v })} />
                               <ColorPickerField label="Progress Border Color" value={customSettings.progressBorderColor || '#d1d5db'} onChange={(v) => setCustomSettings({ ...customSettings, progressBorderColor: v })} />
-                            </>
+                            </div>
                           )}
                           {acc.id === 'navigation' && (
-                            <>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-4">
                               <ColorPickerField label="Navigation Background" value={customSettings.navBackground || '#ffffff'} onChange={(v) => setCustomSettings({ ...customSettings, navBackground: v })} />
                               <ColorPickerField label="Navigation Text Color" value={customSettings.navTextColor || '#111827'} onChange={(v) => setCustomSettings({ ...customSettings, navTextColor: v })} />
                               <ColorPickerField label="Navigation Border Color" value={customSettings.navBorderColor || '#e5e7eb'} onChange={(v) => setCustomSettings({ ...customSettings, navBorderColor: v })} />
                               <ColorPickerField label="Navigation Hover Color" value={customSettings.navHoverColor || '#f9fafb'} onChange={(v) => setCustomSettings({ ...customSettings, navHoverColor: v })} />
-                            </>
+                            </div>
                           )}
                           {acc.id === 'menu' && (
-                            <>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-4">
                               <ColorPickerField label="Menu Background" value={customSettings.menuBackground || '#ffffff'} onChange={(v) => setCustomSettings({ ...customSettings, menuBackground: v })} />
                               <ColorPickerField label="Menu Text Color" value={customSettings.menuTextColor || '#111827'} onChange={(v) => setCustomSettings({ ...customSettings, menuTextColor: v })} />
                               <ColorPickerField label="Menu Hover Background" value={customSettings.menuHoverBackground || '#f9fafb'} onChange={(v) => setCustomSettings({ ...customSettings, menuHoverBackground: v })} />
                               <ColorPickerField label="Menu Active Color" value={customSettings.menuActiveColor || '#2d6fa8'} onChange={(v) => setCustomSettings({ ...customSettings, menuActiveColor: v })} />
-                            </>
+                            </div>
                           )}
                           {acc.id === 'feedback' && (
-                            <>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-4">
                               <ColorPickerField label="Success Color" value={customSettings.successColor || '#22c55e'} onChange={(v) => setCustomSettings({ ...customSettings, successColor: v })} />
                               <ColorPickerField label="Error Color" value={customSettings.errorColor || '#ef4444'} onChange={(v) => setCustomSettings({ ...customSettings, errorColor: v })} />
                               <ColorPickerField label="Warning Color" value={customSettings.warningColor || '#f59e0b'} onChange={(v) => setCustomSettings({ ...customSettings, warningColor: v })} />
                               <ColorPickerField label="Info Color" value={customSettings.infoColor || '#3b82f6'} onChange={(v) => setCustomSettings({ ...customSettings, infoColor: v })} />
-                            </>
+                            </div>
                           )}
                           {acc.id === 'overlays' && (
-                            <>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-4">
                               <ColorPickerField label="Overlay Background" value={customSettings.overlayBackground || 'rgba(0, 0, 0, 0.5)'} onChange={(v) => setCustomSettings({ ...customSettings, overlayBackground: v })} />
                               <ColorPickerField label="Modal Background" value={customSettings.modalBackground || '#ffffff'} onChange={(v) => setCustomSettings({ ...customSettings, modalBackground: v })} />
                               <ColorPickerField label="Modal Border Color" value={customSettings.modalBorderColor || '#e5e7eb'} onChange={(v) => setCustomSettings({ ...customSettings, modalBorderColor: v })} />
                               <ColorPickerField label="Modal Shadow Color" value={customSettings.modalShadowColor || 'rgba(0, 0, 0, 0.1)'} onChange={(v) => setCustomSettings({ ...customSettings, modalShadowColor: v })} />
-                            </>
+                            </div>
                           )}
                         </div>
                       )}
