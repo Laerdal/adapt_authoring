@@ -1635,9 +1635,9 @@ function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
       {/* Custom Theme Settings — only shown when Custom is selected */}
       {selected === "custom" && (
         <div className="border border-[#e5e7eb] rounded-xl p-6 bg-white mt-2">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Left column: Breadcrumb + Accordions */}
-            <div className="lg:col-span-2 space-y-4">
+            <div className="space-y-4">
               <div className="text-xs text-[#6b7280]">
                 <span className="font-semibold">Theme</span>
                 {activeCustomAccordion && (
@@ -1746,7 +1746,7 @@ function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
             </div>
 
             {/* Right column: Live Preview (Sticky) */}
-            <div className="lg:col-span-1">
+            <div>
               <div className="sticky top-6">
                 <LivePreview />
               </div>
