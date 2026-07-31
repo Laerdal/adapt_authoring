@@ -5,7 +5,7 @@ import AiAssistant from "../components/common/AiAssistant";
 import CourseStructureMapView from "../components/course/CourseStructureMapView";
 import CourseStructureTree from "../components/course/CourseStructureTree";
 import AddComponentDrawer from "../components/course/AddComponentDrawer";
-import { getCourseBootstrapData } from "../api/adaptAuthoring";
+import { getCourseBootstrapData, saveThemeForCourse, saveThemeVariables, getThemePresets, saveThemePreset, applyThemePreset, type ThemePreset } from "../api/adaptAuthoring";
 import { useCourseStructure } from "../hooks/useCourseStructure";
 import { STRUCTURE_LABELS } from "../types/structure";
 
@@ -1082,8 +1082,89 @@ const VANILLA_ACCORDION_DEFS: { id: string; label: string; fields: string[] }[] 
   },
 ];
 
-function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
+function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, courseId }: {
+  initialThemeName?: string;
+  initialThemeVariables?: Record<string, unknown>;
+  initialPresetId?: string;
+  courseId?: string;
+}) {
   const [selected, setSelected] = useState<string | null>(mapThemeNameToId(initialThemeName));
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Presets
+  const [presets, setPresets] = useState<ThemePreset[]>([]);
+  const [selectedPresetId, setSelectedPresetId] = useState(initialPresetId ?? '');
+  const [newPresetName, setNewPresetName] = useState('');
+  const [showPresetNameInput, setShowPresetNameInput] = useState(false);
+
+  // Load presets for the selected theme slug
+  useEffect(() => {
+    const themeSlugMap: Record<string, string> = { life: 'lifetheme', vanilla: 'vanillatheme', custom: 'customtheme' };
+    const slug = selected ? themeSlugMap[selected] : undefined;
+    if (!slug) { setPresets([]); return; }
+    getThemePresets(slug).then(setPresets).catch(() => setPresets([]));
+  }, [selected]);
+
+  async function handleSave() {
+    if (!courseId || !selected) return;
+    const labelMap: Record<string, string> = { life: 'LIFE Theme', vanilla: 'Vanilla Theme', custom: 'Custom Theme' };
+    const themeLabel = labelMap[selected];
+    if (!themeLabel) return;
+    setSaving(true);
+    setSaveError(null);
+    setSaveSuccess(false);
+    try {
+      await saveThemeForCourse(courseId, themeLabel);
+      // Build themeVariables payload — always include component checkbox settings for LIFE/Custom
+      let vars: Record<string, unknown> = {};
+      if (selected === 'custom') vars = { ...customSettings };
+      else if (selected === 'vanilla') vars = { ...vanillaColors };
+      // Component configuration checkboxes (field names from theme schema)
+      if (selected === 'life' || selected === 'custom') {
+        vars._components = {
+          _canShowFinalMarking: checkNotFinal,
+          _hidePartiallyDisplayMarking: checkUnanswered,
+          _hideFeedbackFirstAttempt: checkHideFeedback,
+          _hidePartiallyFeedback: checkHidePartial,
+        };
+      }
+      await saveThemeVariables(courseId, vars);
+      // Apply preset if one is selected
+      if (selectedPresetId) await applyThemePreset(selectedPresetId, courseId);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 3000);
+    } catch {
+      setSaveError('Failed to save. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSavePreset() {
+    if (!newPresetName.trim() || !selected || !courseId) return;
+    const themeSlugMap: Record<string, string> = { life: 'lifetheme', vanilla: 'vanillatheme', custom: 'customtheme' };
+    const slug = themeSlugMap[selected];
+    let vars: Record<string, unknown> = {};
+    if (selected === 'custom') vars = { ...customSettings };
+    else if (selected === 'vanilla') vars = { ...vanillaColors };
+    if (selected === 'life' || selected === 'custom') {
+      vars._components = {
+        _canShowFinalMarking: checkNotFinal,
+        _hidePartiallyDisplayMarking: checkUnanswered,
+        _hideFeedbackFirstAttempt: checkHideFeedback,
+        _hidePartiallyFeedback: checkHidePartial,
+      };
+    }
+    try {
+      const created = await saveThemePreset(newPresetName.trim(), slug, vars);
+      setPresets((prev) => [...prev, created]);
+      setSelectedPresetId(created._id);
+      setNewPresetName('');
+      setShowPresetNameInput(false);
+    } catch { /* silent */ }
+  }
   const [checkNotFinal, setCheckNotFinal] = useState(false);
   const [checkUnanswered, setCheckUnanswered] = useState(false);
   const [checkHideFeedback, setCheckHideFeedback] = useState(false);
@@ -1092,7 +1173,6 @@ function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
   const [activeVanillaAccordion, setActiveVanillaAccordion] = useState<string | null>('global');
   const [vanillaColors, setVanillaColors] = useState<Record<string, string>>({});
   const [activeCustomAccordion, setActiveCustomAccordion] = useState<string | null>('global');
-  const [previewDarkMode, setPreviewDarkMode] = useState(false);
   const [customSettings, setCustomSettings] = useState({
     primaryColor: '#2d6fa8',
     secondaryColor: '#5aad78',
@@ -1130,6 +1210,35 @@ function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
     setSelected(mapThemeNameToId(initialThemeName));
   }, [initialThemeName]);
 
+  // Load saved themeVariables into customSettings / vanillaColors / checkboxes
+  useEffect(() => {
+    if (!initialThemeVariables || Object.keys(initialThemeVariables).length === 0) return;
+    const v = initialThemeVariables;
+    // Custom theme fields
+    const customKeys = ['primaryColor','secondaryColor','headingFont','paragraphFont','fontColor',
+      'headingFontColor','instructionColor','linkFontColor','pageTitleSize','pageBackgroundColor',
+      'pageBorderColor','progressFillColor','progressBackgroundColor','progressBorderColor',
+      'navBackground','navTextColor','navBorderColor','navHoverColor','menuBackground',
+      'menuTextColor','menuHoverBackground','menuActiveColor','successColor','errorColor',
+      'warningColor','infoColor','overlayBackground','modalBackground','modalBorderColor','modalShadowColor'];
+    const customPatch: Record<string, string> = {};
+    customKeys.forEach((k) => { if (typeof v[k] === 'string') customPatch[k] = v[k] as string; });
+    if (Object.keys(customPatch).length) setCustomSettings((prev) => ({ ...prev, ...customPatch }));
+    // Vanilla colors are keyed like 'global::Font colour'
+    const vanillaPatch: Record<string, string> = {};
+    Object.keys(v).forEach((k) => { if (k.includes('::') && typeof v[k] === 'string') vanillaPatch[k] = v[k] as string; });
+    if (Object.keys(vanillaPatch).length) setVanillaColors(vanillaPatch);
+    // Component configuration checkboxes (restored from _components section of themeVariables)
+    const comp = v._components as Record<string, unknown> | undefined;
+    if (comp) {
+      if (typeof comp._canShowFinalMarking === 'boolean') setCheckNotFinal(comp._canShowFinalMarking);
+      if (typeof comp._hidePartiallyDisplayMarking === 'boolean') setCheckUnanswered(comp._hidePartiallyDisplayMarking);
+      if (typeof comp._hideFeedbackFirstAttempt === 'boolean') setCheckHideFeedback(comp._hideFeedbackFirstAttempt);
+      if (typeof comp._hidePartiallyFeedback === 'boolean') setCheckHidePartial(comp._hidePartiallyFeedback);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Color Picker Component
   const ColorPickerField = ({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) => (
     <div>
@@ -1156,7 +1265,7 @@ function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
 
   // Live Preview Component
   const LivePreview = () => {
-    const darkMode = previewDarkMode;
+    const [darkMode, setDarkMode] = useState(false);
     const previewBg = darkMode ? '#1a1a1a' : '#f8f8f8';
     const textColor = darkMode ? '#e8e8e8' : customSettings.fontColor;
     const headingColor = darkMode ? '#ffffff' : customSettings.headingFontColor;
@@ -1164,6 +1273,17 @@ function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
 
     return (
       <div className="border border-[#e5e7eb] rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)' }}>
+        <div className="flex items-center justify-between px-3 py-2 bg-white border-b border-[#e5e7eb]">
+          <div className="flex items-center gap-2">
+            <div style={{ width: '13px', height: '13px', backgroundColor: customSettings.primaryColor, borderRadius: '2px' }} />
+            <span className="text-xs font-bold text-[#111827]">Live Preview</span>
+          </div>
+          <div className="flex gap-1">
+            <button onClick={() => setDarkMode(!darkMode)} className="w-7 h-7 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded text-[#6b7280] hover:bg-[#f9fafb]" title="Toggle dark mode">
+              {darkMode ? '☀' : '🌙'}
+            </button>
+          </div>
+        </div>
         <div style={{ backgroundColor: previewBg, fontSize: '13px' }}>
           <div style={{ height: '4px', background: `linear-gradient(to right, ${customSettings.primaryColor} 60%, ${darkMode ? '#333' : '#e0e0e0'} 60%)` }} />
           <div style={{ background: customSettings.primaryColor, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -1283,11 +1403,25 @@ function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
   return (
     // <div className="max-w-3xl w-full px-6 py-6">
     <div className=" w-full px-6 py-6">
-      <div className="mb-6">
-        <h2 className="text-base font-semibold text-[#111827]">
-          Select Theme <span className="text-red-500">*</span>
-        </h2>
-        <p className="text-sm text-[#6b7280] mt-0.5">Choose a theme for your course.</p>
+      <div className="flex items-start justify-between mb-6">
+        <div>
+          <h2 className="text-base font-semibold text-[#111827]">
+            Select Theme <span className="text-red-500">*</span>
+          </h2>
+          <p className="text-sm text-[#6b7280] mt-0.5">Choose a theme for your course.</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          {saveError && <span className="text-xs text-[#ef4444]">{saveError}</span>}
+          {saveSuccess && <span className="text-xs text-[#22c55e] font-medium">Saved!</span>}
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={saving || !selected || !courseId}
+            className="px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
+          >
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1336,19 +1470,43 @@ function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
         <div className="flex items-center gap-2">
           <span className="text-xs font-bold text-[#111827]">Preset:</span>
           <select
+            value={selectedPresetId}
+            onChange={(e) => setSelectedPresetId(e.target.value)}
             className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md bg-white text-[#111827] cursor-pointer outline-none focus:border-[#2d6fa8]"
           >
-            <option>No preset</option>
-            <option>Preset 1</option>
-            <option>Preset 2</option>
+            <option value="">No preset</option>
+            {presets.map((p) => (
+              <option key={p._id} value={p._id}>{p.displayName}</option>
+            ))}
           </select>
         </div>
-        <button className="text-xs font-semibold px-5 py-1.5 border border-[#2d6fa8] text-[#2d6fa8] rounded-md hover:bg-[#f0f7ff] transition-colors">
-          Save preset
-        </button>
-        <button className="text-xs font-semibold px-5 py-1.5 border border-[#d1d5db] text-[#111827] bg-white rounded-md hover:bg-[#f9fafb] transition-colors">
-          Manage presets
-        </button>
+        {showPresetNameInput ? (
+          <div className="flex items-center gap-1.5">
+            <input
+              type="text"
+              value={newPresetName}
+              onChange={(e) => setNewPresetName(e.target.value)}
+              placeholder="Preset name"
+              className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md focus:border-[#2d6fa8] outline-none"
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSavePreset(); if (e.key === 'Escape') { setShowPresetNameInput(false); setNewPresetName(''); } }}
+              autoFocus
+            />
+            <button onClick={handleSavePreset} className="text-xs font-semibold px-3 py-1.5 bg-[#2d6fa8] text-white rounded-md hover:bg-[#245c8f] transition-colors">
+              OK
+            </button>
+            <button onClick={() => { setShowPresetNameInput(false); setNewPresetName(''); }} className="text-xs px-3 py-1.5 border border-[#d1d5db] text-[#6b7280] rounded-md hover:bg-[#f9fafb] transition-colors">
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowPresetNameInput(true)}
+            disabled={!selected}
+            className="text-xs font-semibold px-5 py-1.5 border border-[#2d6fa8] text-[#2d6fa8] rounded-md hover:bg-[#f0f7ff] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Save preset
+          </button>
+        )}
       </div>
 
       <p className="text-xs text-[#6b7280] mb-5 leading-relaxed">
@@ -1738,16 +1896,6 @@ function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
             {/* Right column: Live Preview (Sticky) */}
             <div>
               <div className="sticky top-6">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-sm font-bold text-[#111827]">Live Preview</span>
-                  <button
-                    onClick={() => setPreviewDarkMode(v => !v)}
-                    className="w-7 h-7 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded text-[#6b7280] hover:bg-[#f9fafb]"
-                    title="Toggle dark mode"
-                  >
-                    {previewDarkMode ? '☀' : '🌙'}
-                  </button>
-                </div>
                 <LivePreview />
               </div>
             </div>
@@ -6285,6 +6433,8 @@ function CourseCreationCenterContent() {
   const [description, setDescription] = useState(initialDescription);
   const [savedThemeName, setSavedThemeName] = useState("");
   const [savedMenuName, setSavedMenuName] = useState("");
+  const [savedThemeVariables, setSavedThemeVariables] = useState<Record<string, unknown>>({});
+  const [savedPresetId, setSavedPresetId] = useState("");
 
   const [activeNav, setActiveNav] = useState("overview");
   const [collapsed, setCollapsed] = useState(false);
@@ -6295,6 +6445,8 @@ function CourseCreationCenterContent() {
       setDescription(initialDescription);
       setSavedThemeName("");
       setSavedMenuName("");
+      setSavedThemeVariables({});
+      setSavedPresetId("");
       return;
     }
     let cancelled = false;
@@ -6307,12 +6459,16 @@ function CourseCreationCenterContent() {
         setDescription(data.description || initialDescription);
         setSavedThemeName(data.themeName || "");
         setSavedMenuName(data.menuName || "");
+        setSavedThemeVariables(data.themeVariables || {});
+        setSavedPresetId(data.themePresetId || "");
       } catch {
         if (cancelled) return;
         setTitle(initialTitle);
         setDescription(initialDescription);
         setSavedThemeName("");
         setSavedMenuName("");
+        setSavedThemeVariables({});
+        setSavedPresetId("");
       }
     })();
 
@@ -6335,7 +6491,7 @@ function CourseCreationCenterContent() {
           }
         />
       );
-    if (activeNav === "theme") return <ThemePanel initialThemeName={savedThemeName} />;
+    if (activeNav === "theme") return <ThemePanel initialThemeName={savedThemeName} initialThemeVariables={savedThemeVariables} initialPresetId={savedPresetId} courseId={courseId} />;
     if (activeNav === "menu") return <MenuPanel initialMenuName={savedMenuName} />;
     if (activeNav === "navigation") return <NavigationPanel />;
     if (activeNav === "accessibility") return <AccessibilityPanel />;

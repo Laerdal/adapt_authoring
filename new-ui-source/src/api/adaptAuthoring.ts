@@ -212,12 +212,22 @@ interface EngineCourseDetails {
   title?: string;
   displayTitle?: string;
   description?: string;
+  themeVariables?: Record<string, unknown>;
+  _themePreset?: string;
 }
 
 interface EngineConfigDetails {
   _courseId?: string;
   _theme?: string;
   _menu?: string;
+  _themePreset?: string;
+}
+
+export interface ThemePreset {
+  _id: string;
+  displayName: string;
+  parentTheme: string;
+  properties: Record<string, unknown>;
 }
 
 export interface CourseBootstrapData {
@@ -226,6 +236,8 @@ export interface CourseBootstrapData {
   description: string;
   themeName: string;
   menuName: string;
+  themeVariables: Record<string, unknown>;
+  themePresetId: string;
 }
 
 function normalize(v?: string): string {
@@ -300,6 +312,47 @@ async function applyThemeToCourse(courseId: string, themeId: string): Promise<vo
   await apiClient.post(`/api/theme/${themeId}/makeitso/${courseId}`);
 }
 
+/** Resolve a theme label (e.g. "Custom Theme") to its plugin ID and apply it to the course. */
+export async function saveThemeForCourse(courseId: string, themeLabel: string): Promise<void> {
+  const themes = await getThemeTypes();
+  const themeId = resolvePluginId(themes, themeLabel, "theme");
+  if (themeId) await applyThemeToCourse(courseId, themeId);
+}
+
+/** Persist themeVariables into course.themeVariables via PUT /api/content/course/:id */
+export async function saveThemeVariables(
+  courseId: string,
+  themeVariables: Record<string, unknown>
+): Promise<void> {
+  await apiClient.put(`/api/content/course/${courseId}`, { themeVariables });
+}
+
+/** Fetch all theme presets (optionally filter by parentTheme slug). */
+export async function getThemePresets(parentTheme?: string): Promise<ThemePreset[]> {
+  try {
+    const rows = await apiClient.get<ThemePreset[]>("/api/themepreset");
+    const all = Array.isArray(rows) ? rows : [];
+    if (!parentTheme) return all;
+    return all.filter((p) => p.parentTheme === parentTheme);
+  } catch {
+    return [];
+  }
+}
+
+/** Save a new preset for the current theme. */
+export async function saveThemePreset(
+  displayName: string,
+  parentTheme: string,
+  properties: Record<string, unknown>
+): Promise<ThemePreset> {
+  return apiClient.post<ThemePreset>("/api/themepreset", { displayName, parentTheme, properties });
+}
+
+/** Apply an existing preset to the course. */
+export async function applyThemePreset(presetId: string, courseId: string): Promise<void> {
+  await apiClient.post(`/api/themepreset/${presetId}/makeitso/${courseId}`);
+}
+
 async function applyMenuToCourse(courseId: string, menuId: string): Promise<void> {
   await apiClient.post(`/api/menu/${menuId}/makeitso/${courseId}`);
 }
@@ -351,6 +404,8 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
     description: course.description || "",
     themeName: config._theme || "",
     menuName: config._menu || "",
+    themeVariables: (course.themeVariables as Record<string, unknown>) || {},
+    themePresetId: config._themePreset || "",
   };
 }
 
