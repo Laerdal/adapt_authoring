@@ -2062,10 +2062,53 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
     const instructionColor = getCustomSetting('_global', 'instruction-color') || '#1f1f1f';
     const linkColor = getCustomSetting('_global', 'link') || '#2e7fa1';
     const titleSizeRaw = getCustomSetting('_global', 'page-heading-font-size') || '3rem';
-    const previewBg = darkMode ? '#1a1a1a' : '#f8f8f8';
+    const pageBgColor = getCustomSetting('_pageStructure', 'page-bg-color') || '#f8f8f8';
+    const articleBgColor = getCustomSetting('_pageStructure', 'article-bg-color') || '#ffffff';
+    const blockBgColor = getCustomSetting('_pageStructure', 'block-bg-color') || '#ffffff';
+    const componentBgColor = getCustomSetting('_pageStructure', 'component-bg-color') || '#ffffff';
+    const pageHeaderBg = getCustomSetting('_pageStructure', 'page-header-background-color') || primaryColor;
+    const pageHeaderTitleColor = getCustomSetting('_pageStructure', 'page-header-title-color') || '#ffffff';
+    const pageHeaderSubtitleColor = getCustomSetting('_pageStructure', 'page-header-subtitle-color') || 'rgba(255,255,255,0.8)';
+    const pageHeaderBodyColor = getCustomSetting('_pageStructure', 'page-header-body-color') || 'rgba(255,255,255,0.85)';
+    const pageHeaderInstructionColor = getCustomSetting('_pageStructure', 'page-header-instruction-color') || instructionColor;
+    const articleTopPadding = getCustomSetting('_pageStructure', 'article-top-padding') || 'standard';
+    const articleBottomPadding = getCustomSetting('_pageStructure', 'article-bottom-padding') || 'standard';
+    const blockTopPadding = getCustomSetting('_pageStructure', 'block-top-padding') || 'standard';
+    const blockBottomPadding = getCustomSetting('_pageStructure', 'block-bottom-padding') || 'standard';
+
+    const progressFill = getCustomSetting('_progress', 'progress') || primaryColor;
+    const progressBackground = getCustomSetting('_progress', 'progress-inverted') || '#e5e5e5';
+    const progressBorder = getCustomSetting('_progress', 'progress-border') || 'transparent';
+
+    const menuHeaderBg = getCustomSetting('_menu', 'menu-header-background-color') || '#ffffff';
+    const menuItemColor = getCustomSetting('_menu', 'menu-item') || headingColorTheme;
+    const menuItemProgress = getCustomSetting('_menu', 'menu-item-progress') || primaryColor;
+
+    const navBg = getCustomSetting('_nav', 'nav') || pageHeaderBg;
+    const navProgress = getCustomSetting('_nav', 'nav-progress') || progressFill;
+
+    const notifyBg = getCustomSetting('_notify', 'notify') || '#ffffff';
+    const drawerBg = getCustomSetting('_notify', 'drawer') || '#ffffff';
+    const notifyTitleColor = getCustomSetting('_notify', 'notify-title-color') || headingColorTheme;
+
+    const validationSuccess = getCustomSetting('_validation', 'validation-success') || '#065f28';
+    const validationError = getCustomSetting('_validation', 'validation-error') || '#ff0000';
+
+    const spacingScale: Record<string, number> = {
+      remove: 0,
+      half: 8,
+      standard: 16,
+      double: 24,
+    };
+
+    const previewBg = darkMode ? '#1a1a1a' : pageBgColor;
     const textColor = darkMode ? '#e8e8e8' : fontColor;
     const headingColor = darkMode ? '#ffffff' : headingColorTheme;
     const titleSize = titleSizeRaw;
+    const articleTop = spacingScale[articleTopPadding] ?? spacingScale.standard;
+    const articleBottom = spacingScale[articleBottomPadding] ?? spacingScale.standard;
+    const blockTop = spacingScale[blockTopPadding] ?? spacingScale.standard;
+    const blockBottom = spacingScale[blockBottomPadding] ?? spacingScale.standard;
 
     return (
       <div className="border border-[#e5e7eb] rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)' }}>
@@ -2081,35 +2124,71 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
           </div>
         </div>
         <div style={{ backgroundColor: previewBg, fontSize: '13px' }}>
-          <div style={{ height: '4px', background: `linear-gradient(to right, ${primaryColor} 60%, ${darkMode ? '#333' : '#e0e0e0'} 60%)` }} />
-          <div style={{ background: primaryColor, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: '11px' }}>☰</span>
-            <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '11px', color: 'rgba(255,255,255,0.85)', flex: 1 }}>
+          <div style={{ height: '4px', borderTop: `1px solid ${progressBorder}`, borderBottom: `1px solid ${progressBorder}`, background: `linear-gradient(to right, ${progressFill} 60%, ${progressBackground} 60%)` }} />
+          <div style={{ background: navBg, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ color: pageHeaderSubtitleColor, fontSize: '11px' }}>☰</span>
+            <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '11px', color: pageHeaderBodyColor, flex: 1 }}>
               New Course Title <span style={{ opacity: 0.6 }}>/ Page Title</span>
             </span>
-            <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '11px' }}>🔍</span>
+            <span style={{ color: pageHeaderSubtitleColor, fontSize: '11px' }}>🔍</span>
           </div>
-          <div style={{ padding: '20px 18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: titleSize || '3rem', fontWeight: 700, color: headingColor, lineHeight: 1.2 }}>
-              New Menu/Page Title
-            </div>
-            <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.85rem', color: textColor, lineHeight: 1.5 }}>Body text</div>
-            <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.85rem', color: linkColor, textDecoration: 'underline', cursor: 'pointer' }}>
-              This is a sample link
-            </div>
-            <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: instructionColor, fontStyle: 'italic' }}>
-              Choose one option then select Submit.
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {[{ label: 'Correct', selected: true }, { label: 'Incorrect', selected: false }].map(opt => (
-                <div key={opt.label} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ width: '14px', height: '14px', borderRadius: '50%', flexShrink: 0, border: `2px solid ${opt.selected ? secondaryColor : (darkMode ? '#555' : '#ccc')}`, background: opt.selected ? secondaryColor : 'transparent' }} />
-                  <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: textColor }}>{opt.label}</span>
+          <div style={{ padding: '20px 18px', display: 'grid', gridTemplateColumns: '1fr 220px', gap: '12px' }}>
+            <div style={{ background: articleBgColor, border: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}`, borderRadius: '8px', paddingTop: `${articleTop}px`, paddingBottom: `${articleBottom}px`, paddingLeft: '14px', paddingRight: '14px' }}>
+              <div style={{ background: pageHeaderBg, borderRadius: '6px', padding: '10px 12px', marginBottom: '10px' }}>
+                <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: titleSize || '3rem', fontWeight: 700, color: pageHeaderTitleColor, lineHeight: 1.2 }}>
+                  New Menu/Page Title
                 </div>
-              ))}
+                <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: pageHeaderSubtitleColor, fontSize: '0.8rem', marginTop: '4px' }}>Page subtitle</div>
+                <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: pageHeaderBodyColor, fontSize: '0.78rem', marginTop: '3px' }}>Page intro body text</div>
+                <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: pageHeaderInstructionColor, fontSize: '0.76rem', fontStyle: 'italic', marginTop: '4px' }}>Page instruction text</div>
+              </div>
+              <div style={{ background: blockBgColor, border: `1px solid ${darkMode ? '#4b4b4b' : '#e5e7eb'}`, borderRadius: '6px', paddingTop: `${blockTop}px`, paddingBottom: `${blockBottom}px`, paddingLeft: '10px', paddingRight: '10px' }}>
+                <div style={{ background: componentBgColor, border: `1px solid ${darkMode ? '#5a5a5a' : '#e5e7eb'}`, borderRadius: '6px', padding: '10px' }}>
+                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.9rem', color: headingColor, lineHeight: 1.2, marginBottom: '6px' }}>
+                    New Component Title
+                  </div>
+                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.85rem', color: textColor, lineHeight: 1.5 }}>Body text</div>
+                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.85rem', color: linkColor, textDecoration: 'underline', cursor: 'pointer' }}>
+                    This is a sample link
+                  </div>
+                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: instructionColor, fontStyle: 'italic' }}>
+                    Choose one option then select Submit.
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
+                    {[{ label: 'Correct', selected: true }, { label: 'Incorrect', selected: false }].map(opt => (
+                      <div key={opt.label} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <div style={{ width: '14px', height: '14px', borderRadius: '50%', flexShrink: 0, border: `2px solid ${opt.selected ? secondaryColor : (darkMode ? '#555' : '#ccc')}`, background: opt.selected ? secondaryColor : 'transparent' }} />
+                        <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: textColor }}>{opt.label}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ alignSelf: 'flex-start', display: 'inline-block', marginTop: '9px', background: primaryColor, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
+                    Submit
+                  </div>
+                </div>
+              </div>
             </div>
-            <div style={{ alignSelf: 'flex-start', background: primaryColor, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
-              Submit
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ background: menuHeaderBg, border: `1px solid ${darkMode ? '#474747' : '#e5e7eb'}`, borderRadius: '8px', padding: '8px' }}>
+                <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.78rem', color: menuItemColor, marginBottom: '6px' }}>Menu Preview</div>
+                {[1, 2, 3].map((n) => (
+                  <div key={n} style={{ marginBottom: n === 3 ? 0 : '6px' }}>
+                    <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.74rem', color: menuItemColor, marginBottom: '3px' }}>Menu item {n}</div>
+                    <div style={{ height: '3px', borderRadius: '2px', background: `linear-gradient(to right, ${menuItemProgress} ${35 + (n * 18)}%, ${progressBackground} ${35 + (n * 18)}%)` }} />
+                  </div>
+                ))}
+              </div>
+              <div style={{ background: drawerBg, border: `1px solid ${darkMode ? '#474747' : '#e5e7eb'}`, borderRadius: '8px', padding: '8px' }}>
+                <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.78rem', color: notifyTitleColor, marginBottom: '5px' }}>Drawer / Notify</div>
+                <div style={{ background: notifyBg, border: `1px solid ${darkMode ? '#575757' : '#e5e7eb'}`, borderRadius: '6px', padding: '6px' }}>
+                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.72rem', color: textColor }}>This is a notification.</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ flex: 1, background: validationSuccess, color: '#fff', borderRadius: '6px', padding: '6px 8px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.72rem' }}>Validation success</div>
+                <div style={{ flex: 1, background: validationError, color: '#fff', borderRadius: '6px', padding: '6px 8px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.72rem' }}>Validation error</div>
+              </div>
+              <div style={{ height: '4px', borderRadius: '2px', background: `linear-gradient(to right, ${navProgress} 70%, ${progressBackground} 70%)`, border: `1px solid ${progressBorder}` }} />
             </div>
           </div>
         </div>
