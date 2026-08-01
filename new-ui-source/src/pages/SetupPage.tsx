@@ -1246,6 +1246,15 @@ const LIFE_STYLING_ACCORDIONS = [
     ],
   },
   {
+    id: "_pullQuote",
+    label: "Pull Quote",
+    fields: [
+      { key: "pull-quote", label: "Pull quote background colour", defaultValue: "" },
+      { key: "pull-quote-inverted", label: "Pull quote text colour", defaultValue: "" },
+      { key: "pull-quote-border", label: "Pull quote border colour", defaultValue: "" },
+    ],
+  },
+  {
     id: "_misc",
     label: "Styling: Misc",
     fields: [
@@ -1253,6 +1262,7 @@ const LIFE_STYLING_ACCORDIONS = [
       { key: "background-inverted", label: "Background colour - inverted", defaultValue: "#ffffff" },
       { key: "shadow", label: "Shadow background colour (loading / pop up background)", defaultValue: "#000000" },
       { key: "shadow-inverted", label: "Shadow background colour - inverted", defaultValue: "#ffffff" },
+      { key: "shadow-opacity", label: "Shadow opacity", defaultValue: "", inputType: "text" },
       { key: "loading", label: "Loading animation background colour", defaultValue: "" },
       { key: "loading-inverted", label: "Loading animation colour - inverted", defaultValue: "" },
     ],
@@ -1959,25 +1969,50 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
                   {isOpen && (
                     <div className="px-4 py-4 bg-white border-t border-[#e5e7eb]">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {acc.fields.map((field) => (
-                          <ColorPickerField
-                            key={field.key}
-                            label={field.label}
-                            value={(() => {
-                              const raw = lifeStyling[acc.id][field.key];
-                              return /^#[0-9A-Fa-f]{6}$/.test(raw) ? raw : "#ffffff";
-                            })()}
-                            onChange={(value) => {
-                              setLifeStyling((prev) => ({
-                                ...prev,
-                                [acc.id]: {
-                                  ...prev[acc.id],
-                                  [field.key]: value,
-                                },
-                              }));
-                            }}
-                          />
-                        ))}
+                        {acc.fields.map((field) => {
+                          const rawValue = lifeStyling[acc.id][field.key] ?? "";
+                          const isTextField = "inputType" in field && field.inputType === "text";
+                          if (isTextField) {
+                            return (
+                              <div key={field.key}>
+                                <p className="text-xs font-bold text-[#111827] mb-2">{field.label}</p>
+                                <input
+                                  type="text"
+                                  value={rawValue}
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    setLifeStyling((prev) => ({
+                                      ...prev,
+                                      [acc.id]: {
+                                        ...prev[acc.id],
+                                        [field.key]: value,
+                                      },
+                                    }));
+                                  }}
+                                  className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1 text-[#111827] focus:border-[#2d6fa8] outline-none"
+                                  placeholder="e.g. 50%"
+                                />
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <ColorPickerField
+                              key={field.key}
+                              label={field.label}
+                              value={/^#[0-9A-Fa-f]{6}$/.test(rawValue) ? rawValue : "#ffffff"}
+                              onChange={(value) => {
+                                setLifeStyling((prev) => ({
+                                  ...prev,
+                                  [acc.id]: {
+                                    ...prev[acc.id],
+                                    [field.key]: value,
+                                  },
+                                }));
+                              }}
+                            />
+                          );
+                        })}
                       </div>
                     </div>
                   )}
