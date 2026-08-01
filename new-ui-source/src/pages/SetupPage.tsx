@@ -1298,6 +1298,7 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
   const [selectedPresetId, setSelectedPresetId] = useState(initialPresetId ?? '');
   const [newPresetName, setNewPresetName] = useState('');
   const [showPresetNameInput, setShowPresetNameInput] = useState(false);
+  const [dbThemeVariables, setDbThemeVariables] = useState<Record<string, unknown>>(initialThemeVariables ?? {});
 
   // Load presets for the selected theme slug
   useEffect(() => {
@@ -1306,6 +1307,10 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
     if (!slug) { setPresets([]); return; }
     getThemePresets(slug).then(setPresets).catch(() => setPresets([]));
   }, [selected]);
+
+  useEffect(() => {
+    setDbThemeVariables(initialThemeVariables ?? {});
+  }, [initialThemeVariables]);
 
   async function handleSave() {
     if (!courseId || !selected) return;
@@ -1322,10 +1327,7 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
       if (selected === 'custom') vars = { ...customSettings };
       else if (selected === 'vanilla') vars = { ...vanillaColors };
       else if (selected === 'life') {
-        vars = (Object.keys(lifeStyling) as LifeStylingSectionId[]).reduce<Record<string, unknown>>((acc, sectionKey) => {
-          acc[sectionKey] = { ...lifeStyling[sectionKey] };
-          return acc;
-        }, {});
+        vars = buildMergedLifeThemeVariables(dbThemeVariables);
       }
       // Component configuration checkboxes (field names from theme schema)
       if (selected === 'life' || selected === 'custom') {
@@ -1337,6 +1339,7 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
         };
       }
       await saveThemeVariables(courseId, vars);
+      setDbThemeVariables(vars);
       // Apply preset if one is selected
       if (selectedPresetId) await applyThemePreset(selectedPresetId, courseId);
       setSaveSuccess(true);
@@ -1419,6 +1422,21 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
     modalBorderColor: '#e5e7eb',
     modalShadowColor: 'rgba(0, 0, 0, 0.1)',
   });
+
+  const buildMergedLifeThemeVariables = useCallback((baseVars: Record<string, unknown>) => {
+    const merged: Record<string, unknown> = { ...(baseVars ?? {}) };
+    (Object.keys(lifeStyling) as LifeStylingSectionId[]).forEach((sectionKey) => {
+      const existing = merged[sectionKey];
+      const existingSection = (existing && typeof existing === 'object' && !Array.isArray(existing))
+        ? { ...(existing as Record<string, unknown>) }
+        : {};
+      Object.entries(lifeStyling[sectionKey]).forEach(([fieldKey, fieldValue]) => {
+        existingSection[fieldKey] = fieldValue;
+      });
+      merged[sectionKey] = existingSection;
+    });
+    return merged;
+  }, [lifeStyling]);
 
   useEffect(() => {
     setSelected(mapThemeNameToId(initialThemeName));
