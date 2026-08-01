@@ -1082,6 +1082,196 @@ const VANILLA_ACCORDION_DEFS: { id: string; label: string; fields: string[] }[] 
   },
 ];
 
+const LIFE_STYLING_ACCORDIONS = [
+  {
+    id: "_global",
+    label: "Styling: Global",
+    fields: [
+      { key: "font-color", label: "Font colour", defaultValue: "#1f1f1f" },
+      { key: "font-color-inverted", label: "Font colour inverted", defaultValue: "#ffffff" },
+      { key: "link", label: "Link font colour", defaultValue: "" },
+      { key: "link-inverted", label: "Link font colour - inverted", defaultValue: "" },
+      { key: "link-hover", label: "Link font colour - hover", defaultValue: "" },
+      { key: "link-inverted-hover", label: "Link font colour - inverted hover", defaultValue: "" },
+      { key: "heading-color", label: "Heading colour", defaultValue: "#333333" },
+      { key: "heading-color-inverted", label: "Heading colour - inverted", defaultValue: "#ffffff" },
+    ],
+  },
+  {
+    id: "_blockStyles",
+    label: "Styling: Blocks",
+    fields: [
+      { key: "block-bg-color", label: "Background colour", defaultValue: "" },
+    ],
+  },
+  {
+    id: "_items",
+    label: "Styling: Components",
+    fields: [
+      { key: "component-bg-color", label: "Background colour", defaultValue: "" },
+      { key: "item-color", label: "Item colour", defaultValue: "#edfcfb" },
+      { key: "item-color-inverted", label: "Item colour - inverted", defaultValue: "#23716d" },
+      { key: "item-color-hover", label: "Item colour - hover", defaultValue: "" },
+      { key: "item-color-inverted-hover", label: "Item colour - inverted hover", defaultValue: "" },
+      { key: "item-color-selected", label: "Item colour - selected", defaultValue: "" },
+      { key: "item-color-inverted-selected", label: "Item colour - inverted selected", defaultValue: "" },
+      { key: "visited", label: "Visited colour", defaultValue: "#edfcfb" },
+      { key: "visited-inverted", label: "Visited colour - inverted", defaultValue: "#23716d" },
+    ],
+  },
+  {
+    id: "_buttons",
+    label: "Styling: Buttons",
+    fields: [
+      { key: "btn-color", label: "Button colour", defaultValue: "#2e7fa1" },
+      { key: "btn-color-inverted", label: "Button colour - inverted", defaultValue: "#ffffff" },
+      { key: "btn-color-hover", label: "Button colour - hover", defaultValue: "" },
+      { key: "btn-color-inverted-hover", label: "Button colour - inverted hover", defaultValue: "" },
+      { key: "disabled", label: "Disabled colour", defaultValue: "#dddddd" },
+      { key: "disabled-inverted", label: "Disabled colour - inverted", defaultValue: "#000000" },
+    ],
+  },
+  {
+    id: "_validation",
+    label: "Styling: Validation states",
+    fields: [
+      { key: "validation-success", label: "Validation success colour", defaultValue: "#065f28" },
+      { key: "validation-success-inverted", label: "Validation success colour - inverted", defaultValue: "#ffffff" },
+      { key: "validation-error", label: "Validation error colour", defaultValue: "#ff0000" },
+      { key: "validation-error-inverted", label: "Validation error colour - inverted", defaultValue: "#ffffff" },
+    ],
+  },
+  {
+    id: "_progress",
+    label: "Styling: Progress",
+    fields: [
+      { key: "progress", label: "Progress fill colour", defaultValue: "#2e7fa1" },
+      { key: "progress-inverted", label: "Progress background colour", defaultValue: "#e5e5e5" },
+      { key: "progress-border", label: "Progress border colour", defaultValue: "transparent" },
+    ],
+  },
+  {
+    id: "_page",
+    label: "Page",
+    fields: [
+      { key: "page-header-background-color", label: "Page header background colour", defaultValue: "" },
+      { key: "page-header-title-color", label: "Page header title colour", defaultValue: "" },
+      { key: "page-header-subtitle-color", label: "Page header subtitle colour", defaultValue: "" },
+      { key: "page-header-body-color", label: "Page header body colour", defaultValue: "" },
+      { key: "page-header-instruction-color", label: "Page header instruction colour", defaultValue: "" },
+    ],
+  },
+  {
+    id: "_menu",
+    label: "Styling: Menu",
+    fields: [
+      { key: "menu-header-background-color", label: "Menu header background colour", defaultValue: "" },
+      { key: "menu-header-title-color", label: "Menu header title colour", defaultValue: "" },
+      { key: "menu-header-subtitle-color", label: "Menu header subtitle colour", defaultValue: "#949494" },
+      { key: "menu-header-body-color", label: "Menu header body colour", defaultValue: "" },
+      { key: "menu-header-instruction-color", label: "Menu header instruction colour", defaultValue: "" },
+      { key: "menu-item", label: "Menu item colour", defaultValue: "" },
+      { key: "menu-item-inverted", label: "Menu item colour - inverted", defaultValue: "" },
+      { key: "menu-item-border-color", label: "Menu item border colour", defaultValue: "" },
+      { key: "menu-item-progress", label: "Menu item progress fill colour", defaultValue: "" },
+      { key: "menu-item-progress-inverted", label: "Menu item progress background colour", defaultValue: "" },
+      { key: "menu-item-progress-border", label: "Menu item progress border colour", defaultValue: "" },
+      { key: "menu-item-btn-color", label: "Menu item button background colour", defaultValue: "" },
+      { key: "menu-item-btn-color-inverted", label: "Menu item button background colour - inverted", defaultValue: "" },
+      { key: "menu-item-btn-color-hover", label: "Menu item button background colour - hover", defaultValue: "" },
+      { key: "menu-item-btn-color-inverted-hover", label: "Menu item button background colour - inverted hover", defaultValue: "" },
+    ],
+  },
+  {
+    id: "_nav",
+    label: "Styling: Navigation",
+    fields: [
+      { key: "nav", label: "Navigation background colour", defaultValue: "#ffffff" },
+      { key: "nav-inverted", label: "Navigation background colour - inverted", defaultValue: "#9096a0" },
+      { key: "nav-icon", label: "Navigation button background colour", defaultValue: "" },
+      { key: "nav-icon-inverted", label: "Navigation button background colour - inverted", defaultValue: "" },
+      { key: "nav-icon-hover", label: "Navigation button background colour - hover", defaultValue: "" },
+      { key: "nav-icon-inverted-hover", label: "Navigation button background colour - inverted hover", defaultValue: "" },
+      { key: "nav-progress", label: "Navigation progress fill color", defaultValue: "" },
+      { key: "nav-progress-inverted", label: "Navigation progress background color - inverted", defaultValue: "" },
+      { key: "nav-progress-border", label: "Navigation progress border colour", defaultValue: "" },
+      { key: "nav-progress-hover", label: "Navigation progress fill color - hover", defaultValue: "" },
+      { key: "nav-progress-inverted-hover", label: "Navigation progress background color - inverted hover", defaultValue: "" },
+      { key: "nav-progress-border-hover", label: "Navigation progress border colour - hover", defaultValue: "" },
+    ],
+  },
+  {
+    id: "_notify",
+    label: "Styling: Notify (pop up)",
+    fields: [
+      { key: "notify", label: "Notify background colour", defaultValue: "#ffffff" },
+      { key: "notify-inverted", label: "Notify background colour - inverted", defaultValue: "#333333" },
+      { key: "notify-title-color", label: "Notify title colour", defaultValue: "" },
+      { key: "notify-link", label: "Notify link font colour", defaultValue: "" },
+      { key: "notify-link-hover", label: "Notify link font colour - hover", defaultValue: "" },
+      { key: "notify-btn", label: "Notify button background colour", defaultValue: "" },
+      { key: "notify-btn-inverted", label: "Notify button background colour - inverted", defaultValue: "" },
+      { key: "notify-btn-hover", label: "Notify button background colour - hover", defaultValue: "" },
+      { key: "notify-btn-inverted-hover", label: "Notify button background colour - inverted hover", defaultValue: "" },
+      { key: "notify-icon", label: "Notify icon button background colour", defaultValue: "" },
+      { key: "notify-icon-inverted", label: "Notify icon button background colour - inverted", defaultValue: "" },
+      { key: "notify-icon-hover", label: "Notify icon button background colour - hover", defaultValue: "" },
+      { key: "notify-icon-inverted-hover", label: "Notify icon button background colour - inverted hover", defaultValue: "" },
+    ],
+  },
+  {
+    id: "_drawer",
+    label: "Styling: Drawer",
+    fields: [
+      { key: "drawer", label: "Drawer background colour", defaultValue: "#ffffff" },
+      { key: "drawer-inverted", label: "Drawer background colour - inverted", defaultValue: "#333333" },
+      { key: "drawer-link", label: "Drawer link font colour", defaultValue: "" },
+      { key: "drawer-link-hover", label: "Drawer link font colour - hover", defaultValue: "" },
+      { key: "drawer-icon", label: "Drawer icon button background colour", defaultValue: "" },
+      { key: "drawer-icon-inverted", label: "Drawer icon button background colour - inverted", defaultValue: "" },
+      { key: "drawer-icon-hover", label: "Drawer icon button background colour - hover", defaultValue: "" },
+      { key: "drawer-icon-inverted-hover", label: "Drawer icon button background colour - inverted hover", defaultValue: "" },
+      { key: "drawer-item", label: "Drawer item background colour", defaultValue: "" },
+      { key: "drawer-item-inverted", label: "Drawer item background colour - inverted", defaultValue: "" },
+      { key: "drawer-item-hover", label: "Drawer item background colour - hover", defaultValue: "" },
+      { key: "drawer-item-inverted-hover", label: "Drawer item background colour - inverted hover", defaultValue: "" },
+      { key: "drawer-item-selected", label: "Drawer item background colour - selected", defaultValue: "" },
+      { key: "drawer-item-inverted-selected", label: "Drawer item background colour - inverted selected", defaultValue: "" },
+      { key: "drawer-progress", label: "Drawer progress fill colour", defaultValue: "" },
+      { key: "drawer-progress-inverted", label: "Drawer progress background colour", defaultValue: "" },
+      { key: "drawer-progress-border", label: "Drawer progress border colour", defaultValue: "" },
+      { key: "drawer-progress-hover", label: "Drawer progress colour - hover", defaultValue: "" },
+      { key: "drawer-progress-inverted-hover", label: "Drawer progress colour - inverted hover", defaultValue: "" },
+      { key: "drawer-progress-border-hover", label: "Drawer progress border colour - hover", defaultValue: "" },
+    ],
+  },
+  {
+    id: "_misc",
+    label: "Styling: Misc",
+    fields: [
+      { key: "background", label: "Background colour", defaultValue: "#000000" },
+      { key: "background-inverted", label: "Background colour - inverted", defaultValue: "#ffffff" },
+      { key: "shadow", label: "Shadow background colour (loading / pop up background)", defaultValue: "#000000" },
+      { key: "shadow-inverted", label: "Shadow background colour - inverted", defaultValue: "#ffffff" },
+      { key: "loading", label: "Loading animation background colour", defaultValue: "" },
+      { key: "loading-inverted", label: "Loading animation colour - inverted", defaultValue: "" },
+    ],
+  },
+] as const;
+
+type LifeStylingSection = typeof LIFE_STYLING_ACCORDIONS[number];
+type LifeStylingSectionId = LifeStylingSection["id"];
+type LifeStylingValues = Record<LifeStylingSectionId, Record<string, string>>;
+
+const LIFE_STYLING_DEFAULTS: LifeStylingValues = LIFE_STYLING_ACCORDIONS.reduce((acc, section) => {
+  const values: Record<string, string> = {};
+  section.fields.forEach((field) => {
+    values[field.key] = field.defaultValue ?? "";
+  });
+  acc[section.id] = values;
+  return acc;
+}, {} as LifeStylingValues);
+
 function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, courseId }: {
   initialThemeName?: string;
   initialThemeVariables?: Record<string, unknown>;
@@ -1121,6 +1311,12 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
       let vars: Record<string, unknown> = {};
       if (selected === 'custom') vars = { ...customSettings };
       else if (selected === 'vanilla') vars = { ...vanillaColors };
+      else if (selected === 'life') {
+        vars = (Object.keys(lifeStyling) as LifeStylingSectionId[]).reduce<Record<string, unknown>>((acc, sectionKey) => {
+          acc[sectionKey] = { ...lifeStyling[sectionKey] };
+          return acc;
+        }, {});
+      }
       // Component configuration checkboxes (field names from theme schema)
       if (selected === 'life' || selected === 'custom') {
         vars._components = {
@@ -1149,6 +1345,12 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
     let vars: Record<string, unknown> = {};
     if (selected === 'custom') vars = { ...customSettings };
     else if (selected === 'vanilla') vars = { ...vanillaColors };
+    else if (selected === 'life') {
+      vars = (Object.keys(lifeStyling) as LifeStylingSectionId[]).reduce<Record<string, unknown>>((acc, sectionKey) => {
+        acc[sectionKey] = { ...lifeStyling[sectionKey] };
+        return acc;
+      }, {});
+    }
     if (selected === 'life' || selected === 'custom') {
       vars._components = {
         _canShowFinalMarking: checkNotFinal,
@@ -1170,6 +1372,8 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
   const [checkHideFeedback, setCheckHideFeedback] = useState(false);
   const [checkHidePartial, setCheckHidePartial] = useState(false);
   const [activeAccordion, setActiveAccordion] = useState<string | null>(null);
+  const [activeLifeStylingAccordion, setActiveLifeStylingAccordion] = useState<LifeStylingSectionId | null>("_global");
+  const [lifeStyling, setLifeStyling] = useState<LifeStylingValues>(LIFE_STYLING_DEFAULTS);
   const [activeVanillaAccordion, setActiveVanillaAccordion] = useState<string | null>('global');
   const [vanillaColors, setVanillaColors] = useState<Record<string, string>>({});
   const [activeCustomAccordion, setActiveCustomAccordion] = useState<string | null>('global');
@@ -1228,6 +1432,31 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
     const vanillaPatch: Record<string, string> = {};
     Object.keys(v).forEach((k) => { if (k.includes('::') && typeof v[k] === 'string') vanillaPatch[k] = v[k] as string; });
     if (Object.keys(vanillaPatch).length) setVanillaColors(vanillaPatch);
+    // LIFE styling sections are nested per section id
+    const lifePatch: Partial<LifeStylingValues> = {};
+    (Object.keys(LIFE_STYLING_DEFAULTS) as LifeStylingSectionId[]).forEach((sectionKey) => {
+      const section = v[sectionKey];
+      if (!section || typeof section !== 'object' || Array.isArray(section)) return;
+      const sectionRecord = section as Record<string, unknown>;
+      const patch: Record<string, string> = {};
+      Object.keys(LIFE_STYLING_DEFAULTS[sectionKey]).forEach((fieldKey) => {
+        if (typeof sectionRecord[fieldKey] === 'string') {
+          patch[fieldKey] = sectionRecord[fieldKey] as string;
+        }
+      });
+      if (Object.keys(patch).length) {
+        lifePatch[sectionKey] = {
+          ...LIFE_STYLING_DEFAULTS[sectionKey],
+          ...patch,
+        };
+      }
+    });
+    if (Object.keys(lifePatch).length) {
+      setLifeStyling((prev) => ({
+        ...prev,
+        ...lifePatch,
+      }));
+    }
     // Component configuration checkboxes (restored from _components section of themeVariables)
     const comp = v._components as Record<string, unknown> | undefined;
     if (comp) {
@@ -1702,6 +1931,62 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
           </div>
         </ThemeAccordion>
       </div>
+
+      {/* LIFE Theme Styling — only shown when LIFE is selected */}
+      {selected === "life" && (
+        <div className="border border-[#e5e7eb] rounded-xl p-6 bg-white mt-2">
+          <h3 className="text-sm font-bold text-[#111827] mb-4">LIFE Theme Styling</h3>
+          <div className="space-y-2">
+            {LIFE_STYLING_ACCORDIONS.map((acc) => {
+              const isOpen = activeLifeStylingAccordion === acc.id;
+              return (
+                <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setActiveLifeStylingAccordion(isOpen ? null : acc.id)}
+                    className={`w-full flex items-center justify-between px-4 py-3 transition-colors border-b border-[#e5e7eb] ${isOpen ? 'bg-[#f9fafb]' : 'bg-white hover:bg-[#f9fafb]'}`}
+                  >
+                    <span className="text-xs font-bold text-[#111827]">{acc.label}</span>
+                    <svg
+                      className={`w-4 h-4 text-[#6b7280] transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </svg>
+                  </button>
+                  {isOpen && (
+                    <div className="px-4 py-4 bg-white border-t border-[#e5e7eb]">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {acc.fields.map((field) => (
+                          <ColorPickerField
+                            key={field.key}
+                            label={field.label}
+                            value={(() => {
+                              const raw = lifeStyling[acc.id][field.key];
+                              return /^#[0-9A-Fa-f]{6}$/.test(raw) ? raw : "#ffffff";
+                            })()}
+                            onChange={(value) => {
+                              setLifeStyling((prev) => ({
+                                ...prev,
+                                [acc.id]: {
+                                  ...prev[acc.id],
+                                  [field.key]: value,
+                                },
+                              }));
+                            }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Vanilla Theme Settings — only shown when Vanilla is selected */}
       {selected === "vanilla" && (
