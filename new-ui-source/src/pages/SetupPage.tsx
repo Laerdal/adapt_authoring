@@ -1302,6 +1302,75 @@ const DEFAULT_LIFE_BLOCKS_CONFIG: LifeBlocksConfig = {
   _paddingBottom: "",
 };
 
+function LifeListField({
+  title,
+  description,
+  items,
+  onAdd,
+  onRemove,
+  onChange,
+  idLabel,
+  idKey,
+}: {
+  title: string;
+  description: string;
+  items: Array<LifeSpriteSheet | LifeSingleIcon>;
+  onAdd: () => void;
+  onRemove: (index: number) => void;
+  onChange: (index: number, key: string, value: string) => void;
+  idLabel: string;
+  idKey: '_spriteSheetId' | 'iconId';
+}) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <p className="text-xs font-semibold text-[#111827] mb-1.5">{title}</p>
+        <p className="text-xs text-[#6b7280] leading-relaxed">{description}</p>
+      </div>
+      <div className="space-y-3">
+        {items.map((item, index) => (
+          <div key={`${idKey}-${index}`} className="border border-[#e5e7eb] rounded-lg p-3 space-y-3 bg-[#fafafa]">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs font-semibold text-[#111827] mb-2">{idLabel}</p>
+                <input
+                  type="text"
+                  value={idKey === '_spriteSheetId' ? (item as LifeSpriteSheet)._spriteSheetId : (item as LifeSingleIcon).iconId}
+                  onChange={(e) => onChange(index, idKey, e.target.value)}
+                  className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1.5 text-[#111827] focus:border-[#2d6fa8] outline-none"
+                />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-[#111827] mb-2">External Source</p>
+                <input
+                  type="text"
+                  value={item.src}
+                  onChange={(e) => onChange(index, 'src', e.target.value)}
+                  className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1.5 text-[#111827] focus:border-[#2d6fa8] outline-none"
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => onRemove(index)}
+              className="text-xs font-semibold px-3 py-1.5 border border-[#ef4444] text-[#ef4444] rounded-md hover:bg-[#fef2f2] transition-colors"
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={onAdd}
+        className="px-5 py-2 text-xs font-semibold text-white bg-[#2d6fa8] rounded-md hover:bg-[#1e5a96] transition-colors"
+      >
+        Add
+      </button>
+    </div>
+  );
+}
+
 function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, courseId }: {
   initialThemeName?: string;
   initialThemeVariables?: Record<string, unknown>;
@@ -1598,73 +1667,6 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
       <select value={value} onChange={e => onChange(e.target.value)} className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:border-[#2d6fa8] outline-none">
         {FONT_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
       </select>
-    </div>
-  );
-
-  const LifeListField = ({
-    title,
-    description,
-    items,
-    onAdd,
-    onRemove,
-    onChange,
-    idLabel,
-    idKey,
-  }: {
-    title: string;
-    description: string;
-    items: Array<LifeSpriteSheet | LifeSingleIcon>;
-    onAdd: () => void;
-    onRemove: (index: number) => void;
-    onChange: (index: number, key: string, value: string) => void;
-    idLabel: string;
-    idKey: '_spriteSheetId' | 'iconId';
-  }) => (
-    <div className="space-y-3">
-      <div>
-        <p className="text-xs font-semibold text-[#111827] mb-1.5">{title}</p>
-        <p className="text-xs text-[#6b7280] leading-relaxed">{description}</p>
-      </div>
-      <div className="space-y-3">
-        {items.map((item, index) => (
-          <div key={`${idKey}-${index}`} className="border border-[#e5e7eb] rounded-lg p-3 space-y-3 bg-[#fafafa]">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <p className="text-xs font-semibold text-[#111827] mb-2">{idLabel}</p>
-                <input
-                  type="text"
-                  value={idKey === '_spriteSheetId' ? (item as LifeSpriteSheet)._spriteSheetId : (item as LifeSingleIcon).iconId}
-                  onChange={(e) => onChange(index, idKey, e.target.value)}
-                  className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1.5 text-[#111827] focus:border-[#2d6fa8] outline-none"
-                />
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-[#111827] mb-2">External Source</p>
-                <input
-                  type="text"
-                  value={item.src}
-                  onChange={(e) => onChange(index, 'src', e.target.value)}
-                  className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1.5 text-[#111827] focus:border-[#2d6fa8] outline-none"
-                />
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => onRemove(index)}
-              className="text-xs font-semibold px-3 py-1.5 border border-[#ef4444] text-[#ef4444] rounded-md hover:bg-[#fef2f2] transition-colors"
-            >
-              Remove
-            </button>
-          </div>
-        ))}
-      </div>
-      <button
-        type="button"
-        onClick={onAdd}
-        className="px-5 py-2 text-xs font-semibold text-white bg-[#2d6fa8] rounded-md hover:bg-[#1e5a96] transition-colors"
-      >
-        Add
-      </button>
     </div>
   );
 
