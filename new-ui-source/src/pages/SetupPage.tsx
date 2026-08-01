@@ -984,100 +984,245 @@ const ACCORDION_DEFS = [
   { id: 'overlays', label: 'Overlays Styling' },
 ];
 
-const VANILLA_ACCORDION_DEFS: { id: string; label: string; fields: string[] }[] = [
+const VANILLA_ACCORDION_DEFS: { id: string; label: string; fields: { key: string; label: string }[] }[] = [
   {
-    id: 'global', label: 'Global',
+    id: '_global', label: 'Global',
     fields: [
-      'Font colour', 'Font colour inverted', 'Link font colour',
-      'Link font colour - inverted', 'Link font colour - hover',
-      'Link font colour - inverted hover', 'Heading colour', 'Heading colour - inverted',
+      { key: 'font-color', label: 'Font colour' },
+      { key: 'font-color-inverted', label: 'Font colour inverted' },
+      { key: 'link', label: 'Link font colour' },
+      { key: 'link-inverted', label: 'Link font colour - inverted' },
+      { key: 'link-hover', label: 'Link font colour - hover' },
+      { key: 'link-inverted-hover', label: 'Link font colour - inverted hover' },
+      { key: 'heading-color', label: 'Heading colour' },
+      { key: 'heading-color-inverted', label: 'Heading colour - inverted' },
+      { key: 'body-background-color', label: 'Body background colour' },
     ],
   },
   {
-    id: 'items', label: 'Items (Components)',
+    id: '_items', label: 'Content Items',
     fields: [
-      'Item colour', 'Item colour - inverted', 'Item colour - hover',
-      'Item colour - inverted hover', 'Item colour - selected',
-      'Item colour - inverted selected', 'Visited colour', 'Visited colour - inverted',
+      { key: 'item-color', label: 'Item colour' },
+      { key: 'item-color-inverted', label: 'Item colour - inverted' },
+      { key: 'item-color-hover', label: 'Item colour - hover' },
+      { key: 'item-color-inverted-hover', label: 'Item colour - inverted hover' },
+      { key: 'item-color-focus', label: 'Item colour - focus' },
+      { key: 'item-color-inverted-focus', label: 'Item colour - inverted focus' },
+      { key: 'item-color-selected', label: 'Item colour - selected' },
+      { key: 'item-color-inverted-selected', label: 'Item colour - inverted selected' },
+      { key: 'visited', label: 'Item colour - visited' },
+      { key: 'visited-inverted', label: 'Item colour - inverted visited' },
+      { key: 'item-color-disabled', label: 'Item colour - disabled' },
+      { key: 'item-color-inverted-disabled', label: 'Item colour - inverted disabled' },
     ],
   },
   {
-    id: 'buttons', label: 'Buttons',
+    id: '_itemsUi', label: 'Content Items UI',
     fields: [
-      'Button colour', 'Button colour - inverted', 'Button colour - hover',
-      'Button colour - inverted hover', 'Button icon colour', 'Button icon colour - inverted',
-      'Button icon colour - hover', 'Button icon colour - inverted hover',
-      'Disabled colour', 'Disabled colour - inverted',
+      { key: 'item-ui-color', label: 'Item UI colour' },
+      { key: 'item-ui-color-inverted', label: 'Item UI colour - inverted' },
+      { key: 'item-ui-color-hover', label: 'Item UI colour - hover' },
+      { key: 'item-ui-color-inverted-hover', label: 'Item UI colour - inverted hover' },
+      { key: 'item-ui-color-focus', label: 'Item UI colour - focus' },
+      { key: 'item-ui-color-inverted-focus', label: 'Item UI colour - inverted focus' },
+      { key: 'item-ui-color-selected', label: 'Item UI colour - selected' },
+      { key: 'item-ui-color-inverted-selected', label: 'Item UI colour - inverted selected' },
+      { key: 'item-ui-color-visited', label: 'Item UI colour - visited' },
+      { key: 'item-ui-color-inverted-visited', label: 'Item UI colour - inverted visited' },
+      { key: 'item-ui-color-locked', label: 'Item UI colour - locked' },
+      { key: 'item-ui-color-inverted-locked', label: 'Item UI colour - inverted locked' },
+      { key: 'item-ui-color-disabled', label: 'Item UI colour - disabled' },
+      { key: 'item-ui-color-inverted-disabled', label: 'Item UI colour - inverted disabled' },
     ],
   },
   {
-    id: 'validation', label: 'Validation States',
+    id: '_buttons', label: 'Buttons',
     fields: [
-      'Validation success colour', 'Validation success colour - inverted',
-      'Validation error colour', 'Validation error colour - inverted',
+      { key: 'btn-color', label: 'Button colour' },
+      { key: 'btn-color-inverted', label: 'Button colour - inverted' },
+      { key: 'btn-color-hover', label: 'Button colour - hover' },
+      { key: 'btn-color-inverted-hover', label: 'Button colour - inverted hover' },
+      { key: 'btn-color-focus', label: 'Button colour - focus' },
+      { key: 'btn-color-inverted-focus', label: 'Button colour - inverted focus' },
+      { key: 'btn-color-selected', label: 'Button colour - selected' },
+      { key: 'btn-color-inverted-selected', label: 'Button colour - inverted selected' },
+      { key: 'btn-color-locked', label: 'Button colour - locked' },
+      { key: 'btn-color-inverted-locked', label: 'Button colour - inverted locked' },
+      { key: 'disabled', label: 'Button colour - disabled' },
+      { key: 'disabled-inverted', label: 'Button colour - inverted disabled' },
+      { key: 'btn-icon-color', label: 'Button icon colour' },
+      { key: 'btn-icon-color-inverted', label: 'Button icon colour - inverted' },
+      { key: 'btn-icon-color-hover', label: 'Button icon colour - hover' },
+      { key: 'btn-icon-color-inverted-hover', label: 'Button icon colour - inverted hover' },
     ],
   },
   {
-    id: 'progress', label: 'Progress',
+    id: '_globalUi', label: 'Global UI',
     fields: [
-      'Progress fill colour', 'Progress background colour', 'Progress border colour',
+      { key: 'ui-color', label: 'UI colour' },
+      { key: 'ui-color-inverted', label: 'UI colour - inverted' },
     ],
   },
   {
-    id: 'menu', label: 'Menu',
+    id: '_validation', label: 'Validation States',
     fields: [
-      'Menu header background colour', 'Menu header title colour', 'Menu header subtitle colour',
-      'Menu header body colour', 'Menu header instruction colour', 'Menu item colour',
-      'Menu item colour - inverted', 'Menu item border colour',
-      'Menu item progress fill colour', 'Menu item progress background colour',
-      'Menu item progress border colour', 'Menu item button background colour',
-      'Menu item button background colour - inverted', 'Menu item button background colour - hover',
-      'Menu item button background colour - inverted hover',
+      { key: 'validation-success', label: 'Validation success colour' },
+      { key: 'validation-success-inverted', label: 'Validation success colour - inverted' },
+      { key: 'validation-error', label: 'Validation error colour' },
+      { key: 'validation-error-inverted', label: 'Validation error colour - inverted' },
     ],
   },
   {
-    id: 'navigation', label: 'Navigation',
+    id: '_progress', label: 'Progress',
     fields: [
-      'Navigation background colour', 'Navigation background colour - inverted',
-      'Navigation button background colour', 'Navigation button background colour - inverted',
-      'Navigation button background colour - hover', 'Navigation button background colour - inverted hover',
-      'Navigation progress fill colour', 'Navigation progress background colour - inverted',
-      'Navigation progress border colour', 'Navigation progress fill colour - hover',
-      'Navigation progress background colour - inverted hover', 'Navigation progress border colour - hover',
+      { key: 'progress', label: 'Progress fill colour' },
+      { key: 'progress-inverted', label: 'Progress background colour' },
+      { key: 'progress-border', label: 'Progress border colour' },
     ],
   },
   {
-    id: 'notify', label: 'Notify (Pop up)',
+    id: '_page', label: 'Page',
     fields: [
-      'Notify background colour', 'Notify background colour - inverted',
-      'Notify link font colour', 'Notify link font colour - hover',
-      'Notify button background colour', 'Notify button background colour - inverted',
-      'Notify button background colour - hover', 'Notify button background colour - inverted hover',
-      'Notify icon button background colour', 'Notify icon button background colour - inverted',
-      'Notify icon button background colour - hover', 'Notify icon button background colour - inverted hover',
+      { key: 'page-header-background-color', label: 'Page header background colour' },
+      { key: 'page-header-title-color', label: 'Page header title colour' },
+      { key: 'page-header-subtitle-color', label: 'Page header subtitle colour' },
+      { key: 'page-header-body-color', label: 'Page header body colour' },
+      { key: 'page-header-instruction-color', label: 'Page header instruction colour' },
     ],
   },
   {
-    id: 'drawer', label: 'Drawer',
+    id: '_menu', label: 'Menu',
     fields: [
-      'Drawer background colour', 'Drawer background colour - inverted',
-      'Drawer link font colour', 'Drawer link font colour - hover',
-      'Drawer icon button background colour', 'Drawer icon button background colour - inverted',
-      'Drawer icon button background colour - hover', 'Drawer icon button background colour - inverted hover',
-      'Drawer item background colour', 'Drawer item background colour - inverted',
-      'Drawer item background colour - hover', 'Drawer item background colour - inverted hover',
-      'Drawer item background colour - selected', 'Drawer item background colour - inverted selected',
-      'Drawer progress fill colour', 'Drawer progress background colour', 'Drawer progress border colour',
-      'Drawer progress colour - hover', 'Drawer progress colour - inverted hover',
-      'Drawer progress border colour - hover',
+      { key: 'menu-header-background-color', label: 'Menu header background colour' },
+      { key: 'menu-header-title-color', label: 'Menu header title colour' },
+      { key: 'menu-header-subtitle-color', label: 'Menu header subtitle colour' },
+      { key: 'menu-header-body-color', label: 'Menu header body colour' },
+      { key: 'menu-header-instruction-color', label: 'Menu header instruction colour' },
+      { key: 'menu-item', label: 'Menu item colour' },
+      { key: 'menu-item-inverted', label: 'Menu item colour - inverted' },
+      { key: 'menu-item-border-color', label: 'Menu item border colour' },
+      { key: 'menu-item-progress', label: 'Menu item progress fill colour' },
+      { key: 'menu-item-progress-inverted', label: 'Menu item progress background colour' },
+      { key: 'menu-item-progress-border', label: 'Menu item progress border colour' },
+      { key: 'menu-item-btn-color', label: 'Menu item button background colour' },
+      { key: 'menu-item-btn-color-inverted', label: 'Menu item button background colour - inverted' },
+      { key: 'menu-item-btn-color-hover', label: 'Menu item button background colour - hover' },
+      { key: 'menu-item-btn-color-inverted-hover', label: 'Menu item button background colour - inverted hover' },
+      { key: 'menu-item-btn-color-focus', label: 'Menu item button background colour - focus' },
+      { key: 'menu-item-btn-color-inverted-focus', label: 'Menu item button background colour - inverted focus' },
+      { key: 'menu-item-btn-color-locked', label: 'Menu item button background colour - locked' },
+      { key: 'menu-item-btn-color-inverted-locked', label: 'Menu item button background colour - inverted locked' },
     ],
   },
   {
-    id: 'misc', label: 'Misc',
+    id: '_nav', label: 'Navigation',
     fields: [
-      'Background colour', 'Background colour - inverted',
-      'Shadow background colour (loading / pop up background)', 'Shadow background colour - inverted',
-      'Loading animation background colour', 'Loading animation colour - inverted',
+      { key: 'nav', label: 'Navigation background colour' },
+      { key: 'nav-inverted', label: 'Navigation background colour - inverted' },
+      { key: 'nav-icon', label: 'Navigation button background colour' },
+      { key: 'nav-icon-inverted', label: 'Navigation button background colour - inverted' },
+      { key: 'nav-icon-hover', label: 'Navigation button background colour - hover' },
+      { key: 'nav-icon-inverted-hover', label: 'Navigation button background colour - inverted hover' },
+      { key: 'nav-icon-focus', label: 'Navigation button background colour - focus' },
+      { key: 'nav-icon-inverted-focus', label: 'Navigation button background colour - inverted focus' },
+      { key: 'nav-icon-locked', label: 'Navigation button background colour - locked' },
+      { key: 'nav-icon-inverted-locked', label: 'Navigation button background colour - inverted locked' },
+      { key: 'nav-icon-disabled', label: 'Navigation button background colour - disabled' },
+      { key: 'nav-icon-inverted-disabled', label: 'Navigation button background colour - inverted disabled' },
+      { key: 'nav-progress', label: 'Navigation progress fill color' },
+      { key: 'nav-progress-inverted', label: 'Navigation progress background color - inverted' },
+      { key: 'nav-progress-border', label: 'Navigation progress border colour' },
+      { key: 'nav-progress-hover', label: 'Navigation progress fill color - hover' },
+      { key: 'nav-progress-inverted-hover', label: 'Navigation progress background color - inverted hover' },
+      { key: 'nav-progress-border-hover', label: 'Navigation progress border colour - hover' },
+    ],
+  },
+  {
+    id: '_notify', label: 'Notify (Pop up)',
+    fields: [
+      { key: 'notify', label: 'Notify background colour' },
+      { key: 'notify-inverted', label: 'Notify background colour - inverted' },
+      { key: 'notify-link', label: 'Notify link font colour' },
+      { key: 'notify-link-hover', label: 'Notify link font colour - hover' },
+      { key: 'notify-icon', label: 'Notify icon button background colour' },
+      { key: 'notify-icon-inverted', label: 'Notify icon button background colour - inverted' },
+      { key: 'notify-icon-hover', label: 'Notify icon button background colour - hover' },
+      { key: 'notify-icon-inverted-hover', label: 'Notify icon button background colour - inverted hover' },
+      { key: 'notify-icon-focus', label: 'Notify icon button background colour - focus' },
+      { key: 'notify-icon-inverted-focus', label: 'Notify icon button background colour - inverted focus' },
+      { key: 'notify-icon-disabled', label: 'Notify icon button background colour - disabled' },
+      { key: 'notify-icon-inverted-disabled', label: 'Notify icon button background colour - inverted disabled' },
+      { key: 'notify-btn', label: 'Notify button background colour' },
+      { key: 'notify-btn-inverted', label: 'Notify button background colour - inverted' },
+      { key: 'notify-btn-hover', label: 'Notify button background colour - hover' },
+      { key: 'notify-btn-inverted-hover', label: 'Notify button background colour - inverted hover' },
+      { key: 'notify-btn-focus', label: 'Notify button background colour - focus' },
+      { key: 'notify-btn-inverted-focus', label: 'Notify button background colour - inverted focus' },
+      { key: 'notify-btn-selected', label: 'Notify button background colour - selected' },
+      { key: 'notify-btn-inverted-selected', label: 'Notify button background colour - inverted selected' },
+      { key: 'notify-btn-locked', label: 'Notify button background colour - locked' },
+      { key: 'notify-btn-inverted-locked', label: 'Notify button background colour - inverted locked' },
+      { key: 'notify-btn-disabled', label: 'Notify button background colour - disabled' },
+      { key: 'notify-btn-inverted-disabled', label: 'Notify button background colour - inverted disabled' },
+    ],
+  },
+  {
+    id: '_drawer', label: 'Drawer',
+    fields: [
+      { key: 'drawer', label: 'Drawer background colour' },
+      { key: 'drawer-inverted', label: 'Drawer background colour - inverted' },
+      { key: 'drawer-link', label: 'Drawer link font colour' },
+      { key: 'drawer-link-hover', label: 'Drawer link font colour - hover' },
+      { key: 'drawer-icon', label: 'Drawer icon button background colour' },
+      { key: 'drawer-icon-inverted', label: 'Drawer icon button background colour - inverted' },
+      { key: 'drawer-icon-hover', label: 'Drawer icon button background colour - hover' },
+      { key: 'drawer-icon-inverted-hover', label: 'Drawer icon button background colour - inverted hover' },
+      { key: 'drawer-icon-focus', label: 'Drawer icon button background colour - focus' },
+      { key: 'drawer-icon-inverted-focus', label: 'Drawer icon button background colour - inverted focus' },
+      { key: 'drawer-item', label: 'Drawer item background colour' },
+      { key: 'drawer-item-inverted', label: 'Drawer item background colour - inverted' },
+      { key: 'drawer-item-hover', label: 'Drawer item background colour - hover' },
+      { key: 'drawer-item-inverted-hover', label: 'Drawer item background colour - inverted hover' },
+      { key: 'drawer-item-focus', label: 'Drawer item background colour - focus' },
+      { key: 'drawer-item-inverted-focus', label: 'Drawer item background colour - inverted focus' },
+      { key: 'drawer-item-selected', label: 'Drawer item background colour - selected' },
+      { key: 'drawer-item-inverted-selected', label: 'Drawer item background colour - inverted selected' },
+      { key: 'drawer-item-selected-underline', label: 'Drawer item colour - selected underline' },
+      { key: 'drawer-item-locked', label: 'Drawer item background colour - locked' },
+      { key: 'drawer-item-inverted-locked', label: 'Drawer item background colour - inverted locked' },
+      { key: 'drawer-progress', label: 'Drawer progress fill colour' },
+      { key: 'drawer-progress-inverted', label: 'Drawer progress background colour' },
+      { key: 'drawer-progress-border', label: 'Drawer progress border colour' },
+      { key: 'drawer-progress-hover', label: 'Drawer progress colour - hover' },
+      { key: 'drawer-progress-inverted-hover', label: 'Drawer progress colour - inverted hover' },
+      { key: 'drawer-progress-border-hover', label: 'Drawer progress border colour - hover' },
+    ],
+  },
+  {
+    id: '_pullQuote', label: 'Pull Quotes',
+    fields: [
+      { key: 'pull-quote', label: 'Pull quote background colour' },
+      { key: 'pull-quote-inverted', label: 'Pull quote text colour' },
+      { key: 'pull-quote-border', label: 'Pull quote border colour' },
+    ],
+  },
+  {
+    id: '_misc', label: 'Misc',
+    fields: [
+      { key: 'background', label: 'Background colour' },
+      { key: 'background-inverted', label: 'Background colour - inverted' },
+      { key: 'shadow', label: 'Shadow background colour (loading / popup background)' },
+      { key: 'shadow-inverted', label: 'Shadow background colour - inverted' },
+      { key: 'shadow-opacity', label: 'Shadow opacity' },
+      { key: 'loading', label: 'Loading animation background colour' },
+      { key: 'loading-inverted', label: 'Loading animation colour - inverted' },
+    ],
+  },
+  {
+    id: '_tooltip', label: 'Tooltip',
+    fields: [
+      { key: 'tooltip-color', label: 'Tooltip background colour' },
+      { key: 'tooltip-text-color', label: 'Tooltip text colour' },
     ],
   },
 ];
@@ -1428,7 +1573,7 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
       // Build themeVariables payload — always include component checkbox settings for LIFE/Custom
       let vars: Record<string, unknown> = {};
       if (selected === 'custom') vars = { ...customSettings };
-      else if (selected === 'vanilla') vars = { ...vanillaColors };
+      else if (selected === 'vanilla') vars = buildMergedVanillaThemeVariables(dbThemeVariables);
       else if (selected === 'life') {
         vars = buildMergedLifeThemeVariables(dbThemeVariables);
       }
@@ -1458,7 +1603,7 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
     const slug = themeSlugMap[selected];
     let vars: Record<string, unknown> = {};
     if (selected === 'custom') vars = { ...customSettings };
-    else if (selected === 'vanilla') vars = { ...vanillaColors };
+    else if (selected === 'vanilla') vars = buildMergedVanillaThemeVariables({});
     else if (selected === 'life') {
       vars = buildMergedLifeThemeVariables({});
     }
@@ -1487,7 +1632,7 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
   const [lifeStyling, setLifeStyling] = useState<LifeStylingValues>(LIFE_STYLING_DEFAULTS);
   const [lifeCourseConfig, setLifeCourseConfig] = useState<LifeCourseConfig>(DEFAULT_LIFE_COURSE_CONFIG);
   const [lifeBlocksConfig, setLifeBlocksConfig] = useState<LifeBlocksConfig>(DEFAULT_LIFE_BLOCKS_CONFIG);
-  const [activeVanillaAccordion, setActiveVanillaAccordion] = useState<string | null>('global');
+  const [activeVanillaAccordion, setActiveVanillaAccordion] = useState<string | null>('_global');
   const [vanillaColors, setVanillaColors] = useState<Record<string, string>>({});
   const [activeCustomAccordion, setActiveCustomAccordion] = useState<string | null>('global');
   const [customSettings, setCustomSettings] = useState({
@@ -1558,6 +1703,26 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
     return merged;
   }, [lifeBlocksConfig, lifeCourseConfig, lifeStyling]);
 
+  const buildMergedVanillaThemeVariables = useCallback((baseVars: Record<string, unknown>) => {
+    const merged: Record<string, unknown> = { ...(baseVars ?? {}) };
+
+    VANILLA_ACCORDION_DEFS.forEach((section) => {
+      const existing = merged[section.id];
+      const existingSection = (existing && typeof existing === 'object' && !Array.isArray(existing))
+        ? { ...(existing as Record<string, unknown>) }
+        : {};
+
+      section.fields.forEach((field) => {
+        const uiKey = `${section.id}::${field.key}`;
+        existingSection[field.key] = vanillaColors[uiKey] ?? '';
+      });
+
+      merged[section.id] = existingSection;
+    });
+
+    return merged;
+  }, [vanillaColors]);
+
   useEffect(() => {
     setSelected(mapThemeNameToId(initialThemeName));
   }, [initialThemeName]);
@@ -1576,9 +1741,31 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
     const customPatch: Record<string, string> = {};
     customKeys.forEach((k) => { if (typeof v[k] === 'string') customPatch[k] = v[k] as string; });
     if (Object.keys(customPatch).length) setCustomSettings((prev) => ({ ...prev, ...customPatch }));
-    // Vanilla colors are keyed like 'global::Font colour'
+    // Vanilla colors: prefer nested old-ui schema keys; also accept legacy flat keys.
     const vanillaPatch: Record<string, string> = {};
-    Object.keys(v).forEach((k) => { if (k.includes('::') && typeof v[k] === 'string') vanillaPatch[k] = v[k] as string; });
+    VANILLA_ACCORDION_DEFS.forEach((section) => {
+      const sectionValue = v[section.id];
+      const sectionRecord = (sectionValue && typeof sectionValue === 'object' && !Array.isArray(sectionValue))
+        ? sectionValue as Record<string, unknown>
+        : undefined;
+
+      section.fields.forEach((field) => {
+        const uiKey = `${section.id}::${field.key}`;
+        if (sectionRecord && typeof sectionRecord[field.key] === 'string') {
+          vanillaPatch[uiKey] = sectionRecord[field.key] as string;
+          return;
+        }
+
+        const legacyCandidates = [
+          `${section.id}::${field.label}`,
+          `${section.id.replace(/^_/, '')}::${field.label}`,
+          uiKey,
+        ];
+
+        const legacyKey = legacyCandidates.find((candidate) => typeof v[candidate] === 'string');
+        if (legacyKey) vanillaPatch[uiKey] = v[legacyKey] as string;
+      });
+    });
     if (Object.keys(vanillaPatch).length) setVanillaColors(vanillaPatch);
     // LIFE styling sections are nested per section id
     const lifePatch: Partial<LifeStylingValues> = {};
@@ -2273,12 +2460,12 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
                     <div className="px-4 py-4 bg-white border-t border-[#e5e7eb]">
                       <div className="flex flex-col gap-4">
                         {acc.fields.map((field) => {
-                          const key = `${acc.id}::${field}`;
+                          const key = `${acc.id}::${field.key}`;
                           const colorVal = vanillaColors[key] ?? '';
                           const isEmpty = !colorVal;
                           return (
-                            <div key={field}>
-                              <p className="text-xs text-[#111827] mb-2 leading-snug">{field}</p>
+                            <div key={field.key}>
+                              <p className="text-xs text-[#111827] mb-2 leading-snug">{field.label}</p>
                               <label
                                 style={{
                                   display: 'block',
