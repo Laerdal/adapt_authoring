@@ -974,15 +974,150 @@ function mapMenuNameToStyle(menuName?: string): string {
   return "";
 }
 
-const ACCORDION_DEFS = [
-  { id: 'global', label: 'Global Theme' },
-  { id: 'page', label: 'Page Structure' },
-  { id: 'progress', label: 'Progress Styling' },
-  { id: 'navigation', label: 'Navigation Styling' },
-  { id: 'menu', label: 'Menu Styling' },
-  { id: 'feedback', label: 'Feedback & Validation' },
-  { id: 'overlays', label: 'Overlays Styling' },
+type CustomFieldDef = {
+  key: string;
+  label: string;
+  inputType: 'color' | 'select';
+  options?: { value: string; label: string }[];
+};
+
+type CustomSectionDef = {
+  id: string;
+  label: string;
+  fields: CustomFieldDef[];
+};
+
+const CUSTOM_SELECT_PADDING_OPTIONS = [
+  { value: 'standard', label: 'Standard' },
+  { value: 'double', label: 'Double' },
+  { value: 'half', label: 'Half' },
+  { value: 'remove', label: 'Remove' },
 ];
+
+const CUSTOM_SELECT_PAGE_TITLE_SIZE_OPTIONS = [
+  { value: '3.5rem', label: '3.5rem' },
+  { value: '3rem', label: '3rem (Default)' },
+  { value: '2.5rem', label: '2.5rem' },
+  { value: '2.25rem', label: '2.25rem' },
+];
+
+const CUSTOM_ACCORDION_DEFS: CustomSectionDef[] = [
+  {
+    id: '_global',
+    label: 'Global Theme',
+    fields: [
+      { key: '_primaryBrandColor', label: 'Primary colour', inputType: 'color' },
+      { key: '_secondaryBrandColor', label: 'Secondary colour', inputType: 'color' },
+      { key: 'heading-font-family', label: 'Heading font', inputType: 'select', options: FONT_OPTIONS.map((font) => ({ value: font, label: font })) },
+      { key: 'paragraph-font-family', label: 'Paragraph font', inputType: 'select', options: FONT_OPTIONS.map((font) => ({ value: font, label: font })) },
+      { key: 'font-color', label: 'Font colour', inputType: 'color' },
+      { key: 'heading-color', label: 'Heading font colour', inputType: 'color' },
+      { key: 'instruction-color', label: 'Instruction colour', inputType: 'color' },
+      { key: 'link', label: 'Link font colour', inputType: 'color' },
+      { key: 'page-heading-font-size', label: 'Page Title Size (H1)', inputType: 'select', options: CUSTOM_SELECT_PAGE_TITLE_SIZE_OPTIONS },
+    ],
+  },
+  {
+    id: '_pageStructure',
+    label: 'Page Structure',
+    fields: [
+      { key: 'page-bg-color', label: 'Page background', inputType: 'color' },
+      { key: 'article-bg-color', label: 'Article background', inputType: 'color' },
+      { key: 'block-bg-color', label: 'Block background', inputType: 'color' },
+      { key: 'component-bg-color', label: 'Component background', inputType: 'color' },
+      { key: 'page-header-background-color', label: 'Page header background colour', inputType: 'color' },
+      { key: 'page-header-title-color', label: 'Page header title colour', inputType: 'color' },
+      { key: 'page-header-subtitle-color', label: 'Page header subtitle colour', inputType: 'color' },
+      { key: 'page-header-body-color', label: 'Page header body colour', inputType: 'color' },
+      { key: 'page-header-instruction-color', label: 'Page header instruction colour', inputType: 'color' },
+      { key: 'article-top-padding', label: 'Article top padding', inputType: 'select', options: CUSTOM_SELECT_PADDING_OPTIONS },
+      { key: 'article-bottom-padding', label: 'Article bottom padding', inputType: 'select', options: CUSTOM_SELECT_PADDING_OPTIONS },
+      { key: 'block-top-padding', label: 'Block top padding', inputType: 'select', options: CUSTOM_SELECT_PADDING_OPTIONS },
+      { key: 'block-bottom-padding', label: 'Block bottom padding', inputType: 'select', options: CUSTOM_SELECT_PADDING_OPTIONS },
+    ],
+  },
+  {
+    id: '_validation',
+    label: 'Feedback & Validation',
+    fields: [
+      { key: 'validation-success', label: 'Validation success colour', inputType: 'color' },
+      { key: 'validation-error', label: 'Validation error colour', inputType: 'color' },
+    ],
+  },
+  {
+    id: '_progress',
+    label: 'Progress Styling',
+    fields: [
+      { key: 'progress', label: 'Progress fill colour', inputType: 'color' },
+      { key: 'progress-inverted', label: 'Progress background colour', inputType: 'color' },
+      { key: 'progress-border', label: 'Progress border colour', inputType: 'color' },
+    ],
+  },
+  {
+    id: '_menu',
+    label: 'Menu Styling',
+    fields: [
+      { key: 'menu-header-background-color', label: 'Menu header background colour', inputType: 'color' },
+      { key: 'menu-item', label: 'Menu item colour', inputType: 'color' },
+      { key: 'menu-item-progress', label: 'Menu item progress fill colour', inputType: 'color' },
+    ],
+  },
+  {
+    id: '_nav',
+    label: 'Navigation Styling',
+    fields: [
+      { key: 'nav', label: 'Navigation background colour', inputType: 'color' },
+      { key: 'nav-progress', label: 'Navigation progress fill colour', inputType: 'color' },
+    ],
+  },
+  {
+    id: '_notify',
+    label: 'Overlays Styling',
+    fields: [
+      { key: 'notify', label: 'Notify background colour', inputType: 'color' },
+      { key: 'drawer', label: 'Drawer background colour', inputType: 'color' },
+      { key: 'notify-title-color', label: 'Notify title colour', inputType: 'color' },
+    ],
+  },
+];
+
+const CUSTOM_FIELD_DEFAULTS: Record<string, string> = {
+  '_global::_primaryBrandColor': '#2e7fa1',
+  '_global::_secondaryBrandColor': '#25837e',
+  '_global::heading-font-family': 'Lato',
+  '_global::paragraph-font-family': 'Lato',
+  '_global::font-color': '#1f1f1f',
+  '_global::heading-color': '#333333',
+  '_global::instruction-color': '#1f1f1f',
+  '_global::link': '#2e7fa1',
+  '_global::page-heading-font-size': '3rem',
+  '_pageStructure::page-bg-color': '',
+  '_pageStructure::article-bg-color': '',
+  '_pageStructure::block-bg-color': '',
+  '_pageStructure::component-bg-color': '',
+  '_pageStructure::page-header-background-color': '',
+  '_pageStructure::page-header-title-color': '',
+  '_pageStructure::page-header-subtitle-color': '',
+  '_pageStructure::page-header-body-color': '',
+  '_pageStructure::page-header-instruction-color': '',
+  '_pageStructure::article-top-padding': 'standard',
+  '_pageStructure::article-bottom-padding': 'standard',
+  '_pageStructure::block-top-padding': 'standard',
+  '_pageStructure::block-bottom-padding': 'standard',
+  '_validation::validation-success': '#065f28',
+  '_validation::validation-error': '#ff0000',
+  '_progress::progress': '#2e7fa1',
+  '_progress::progress-inverted': '#e5e5e5',
+  '_progress::progress-border': 'transparent',
+  '_menu::menu-header-background-color': '',
+  '_menu::menu-item': '',
+  '_menu::menu-item-progress': '',
+  '_nav::nav': '#FFFFFF',
+  '_nav::nav-progress': '#2e7fa1',
+  '_notify::notify': '#ffffff',
+  '_notify::drawer': '#ffffff',
+  '_notify::notify-title-color': '',
+};
 
 const VANILLA_ACCORDION_DEFS: { id: string; label: string; fields: { key: string; label: string }[] }[] = [
   {
@@ -1570,15 +1705,15 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
           // Non-fatal: continue saving current values.
         }
       }
-      // Build themeVariables payload — always include component checkbox settings for LIFE/Custom
+      // Build themeVariables payload — keep schema nesting to preserve old/new UI parity.
       let vars: Record<string, unknown> = {};
-      if (selected === 'custom') vars = { ...customSettings };
+      if (selected === 'custom') vars = buildMergedCustomThemeVariables(dbThemeVariables);
       else if (selected === 'vanilla') vars = buildMergedVanillaThemeVariables(dbThemeVariables);
       else if (selected === 'life') {
         vars = buildMergedLifeThemeVariables(dbThemeVariables);
       }
-      // Component configuration checkboxes (field names from theme schema)
-      if (selected === 'life' || selected === 'custom') {
+      // LIFE uses _components; Custom uses _componentConfig (handled in builder).
+      if (selected === 'life') {
         vars._components = {
           _canShowFinalMarking: checkNotFinal,
           _hidePartiallyDisplayMarking: checkUnanswered,
@@ -1602,12 +1737,12 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
     const themeSlugMap: Record<string, string> = { life: 'lifetheme', vanilla: 'vanillatheme', custom: 'customtheme' };
     const slug = themeSlugMap[selected];
     let vars: Record<string, unknown> = {};
-    if (selected === 'custom') vars = { ...customSettings };
+    if (selected === 'custom') vars = buildMergedCustomThemeVariables({});
     else if (selected === 'vanilla') vars = buildMergedVanillaThemeVariables({});
     else if (selected === 'life') {
       vars = buildMergedLifeThemeVariables({});
     }
-    if (selected === 'life' || selected === 'custom') {
+    if (selected === 'life') {
       vars._components = {
         _canShowFinalMarking: checkNotFinal,
         _hidePartiallyDisplayMarking: checkUnanswered,
@@ -1634,39 +1769,8 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
   const [lifeBlocksConfig, setLifeBlocksConfig] = useState<LifeBlocksConfig>(DEFAULT_LIFE_BLOCKS_CONFIG);
   const [activeVanillaAccordion, setActiveVanillaAccordion] = useState<string | null>('_global');
   const [vanillaColors, setVanillaColors] = useState<Record<string, string>>({});
-  const [activeCustomAccordion, setActiveCustomAccordion] = useState<string | null>('global');
-  const [customSettings, setCustomSettings] = useState({
-    primaryColor: '#2d6fa8',
-    secondaryColor: '#5aad78',
-    headingFont: 'Lato',
-    paragraphFont: 'Lato',
-    fontColor: '#111827',
-    headingFontColor: '#111827',
-    instructionColor: '#6b7280',
-    linkFontColor: '#2d6fa8',
-    pageTitleSize: 'H1',
-    pageBackgroundColor: '#ffffff',
-    pageBorderColor: '#e5e7eb',
-    progressFillColor: '#2d6fa8',
-    progressBackgroundColor: '#e5e7eb',
-    progressBorderColor: '#d1d5db',
-    navBackground: '#ffffff',
-    navTextColor: '#111827',
-    navBorderColor: '#e5e7eb',
-    navHoverColor: '#f9fafb',
-    menuBackground: '#ffffff',
-    menuTextColor: '#111827',
-    menuHoverBackground: '#f9fafb',
-    menuActiveColor: '#2d6fa8',
-    successColor: '#22c55e',
-    errorColor: '#ef4444',
-    warningColor: '#f59e0b',
-    infoColor: '#3b82f6',
-    overlayBackground: 'rgba(0, 0, 0, 0.5)',
-    modalBackground: '#ffffff',
-    modalBorderColor: '#e5e7eb',
-    modalShadowColor: 'rgba(0, 0, 0, 0.1)',
-  });
+  const [activeCustomAccordion, setActiveCustomAccordion] = useState<string | null>('_global');
+  const [customSettings, setCustomSettings] = useState<Record<string, string>>(CUSTOM_FIELD_DEFAULTS);
 
   const buildMergedLifeThemeVariables = useCallback((baseVars: Record<string, unknown>) => {
     const merged: Record<string, unknown> = { ...(baseVars ?? {}) };
@@ -1723,6 +1827,50 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
     return merged;
   }, [vanillaColors]);
 
+  const buildMergedCustomThemeVariables = useCallback((baseVars: Record<string, unknown>) => {
+    const merged: Record<string, unknown> = { ...(baseVars ?? {}) };
+
+    CUSTOM_ACCORDION_DEFS.forEach((section) => {
+      const existing = merged[section.id];
+      const existingSection = (existing && typeof existing === 'object' && !Array.isArray(existing))
+        ? { ...(existing as Record<string, unknown>) }
+        : {};
+
+      section.fields.forEach((field) => {
+        const uiKey = `${section.id}::${field.key}`;
+        existingSection[field.key] = customSettings[uiKey] ?? '';
+      });
+
+      merged[section.id] = existingSection;
+    });
+
+    merged._course = {
+      ...(merged._course && typeof merged._course === 'object' && !Array.isArray(merged._course)
+        ? merged._course as Record<string, unknown>
+        : {}),
+      _svgSpriteSheets: lifeCourseConfig._svgSpriteSheets.map((item) => ({
+        _spriteSheetId: item._spriteSheetId,
+        src: item.src,
+      })),
+      _singleIcons: lifeCourseConfig._singleIcons.map((item) => ({
+        iconId: item.iconId,
+        src: item.src,
+      })),
+    };
+
+    merged._componentConfig = {
+      ...(merged._componentConfig && typeof merged._componentConfig === 'object' && !Array.isArray(merged._componentConfig)
+        ? merged._componentConfig as Record<string, unknown>
+        : {}),
+      _canShowFinalMarking: checkNotFinal,
+      _hidePartiallyDisplayMarking: checkUnanswered,
+      _hideFeedbackFirstAttempt: checkHideFeedback,
+      _hidePartiallyFeedback: checkHidePartial,
+    };
+
+    return merged;
+  }, [checkHideFeedback, checkHidePartial, checkNotFinal, checkUnanswered, customSettings, lifeCourseConfig]);
+
   useEffect(() => {
     setSelected(mapThemeNameToId(initialThemeName));
   }, [initialThemeName]);
@@ -1731,16 +1879,56 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
   useEffect(() => {
     if (!initialThemeVariables || Object.keys(initialThemeVariables).length === 0) return;
     const v = initialThemeVariables;
-    // Custom theme fields
-    const customKeys = ['primaryColor','secondaryColor','headingFont','paragraphFont','fontColor',
-      'headingFontColor','instructionColor','linkFontColor','pageTitleSize','pageBackgroundColor',
-      'pageBorderColor','progressFillColor','progressBackgroundColor','progressBorderColor',
-      'navBackground','navTextColor','navBorderColor','navHoverColor','menuBackground',
-      'menuTextColor','menuHoverBackground','menuActiveColor','successColor','errorColor',
-      'warningColor','infoColor','overlayBackground','modalBackground','modalBorderColor','modalShadowColor'];
+    // Custom fields: use nested schema keys, with legacy flat fallbacks.
     const customPatch: Record<string, string> = {};
-    customKeys.forEach((k) => { if (typeof v[k] === 'string') customPatch[k] = v[k] as string; });
-    if (Object.keys(customPatch).length) setCustomSettings((prev) => ({ ...prev, ...customPatch }));
+    const legacyCustomMap: Record<string, string[]> = {
+      '_global::_primaryBrandColor': ['primaryColor'],
+      '_global::_secondaryBrandColor': ['secondaryColor'],
+      '_global::heading-font-family': ['headingFont'],
+      '_global::paragraph-font-family': ['paragraphFont'],
+      '_global::font-color': ['fontColor'],
+      '_global::heading-color': ['headingFontColor'],
+      '_global::instruction-color': ['instructionColor'],
+      '_global::link': ['linkFontColor'],
+      '_global::page-heading-font-size': ['pageTitleSize'],
+      '_pageStructure::page-bg-color': ['pageBackgroundColor'],
+      '_progress::progress': ['progressFillColor'],
+      '_progress::progress-inverted': ['progressBackgroundColor'],
+      '_progress::progress-border': ['progressBorderColor'],
+      '_menu::menu-header-background-color': ['menuBackground'],
+      '_menu::menu-item': ['menuTextColor'],
+      '_menu::menu-item-progress': ['menuActiveColor'],
+      '_validation::validation-success': ['successColor'],
+      '_validation::validation-error': ['errorColor'],
+      '_notify::notify': ['modalBackground'],
+      '_notify::drawer': ['overlayBackground'],
+      '_notify::notify-title-color': ['modalBorderColor'],
+      '_nav::nav': ['navBackground'],
+      '_nav::nav-progress': ['navHoverColor'],
+    };
+
+    CUSTOM_ACCORDION_DEFS.forEach((section) => {
+      const sectionValue = v[section.id];
+      const sectionRecord = (sectionValue && typeof sectionValue === 'object' && !Array.isArray(sectionValue))
+        ? sectionValue as Record<string, unknown>
+        : undefined;
+
+      section.fields.forEach((field) => {
+        const uiKey = `${section.id}::${field.key}`;
+        if (sectionRecord && typeof sectionRecord[field.key] === 'string') {
+          customPatch[uiKey] = sectionRecord[field.key] as string;
+          return;
+        }
+
+        const legacyFlatKeys = legacyCustomMap[uiKey] ?? [];
+        const legacyKey = legacyFlatKeys.find((legacy) => typeof v[legacy] === 'string');
+        if (legacyKey) customPatch[uiKey] = v[legacyKey] as string;
+      });
+    });
+
+    if (Object.keys(customPatch).length) {
+      setCustomSettings((prev) => ({ ...prev, ...customPatch }));
+    }
     // Vanilla colors: prefer nested old-ui schema keys; also accept legacy flat keys.
     const vanillaPatch: Record<string, string> = {};
     VANILLA_ACCORDION_DEFS.forEach((section) => {
@@ -1822,8 +2010,8 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
         _paddingBottom: typeof blocks._paddingBottom === 'string' ? blocks._paddingBottom : '',
       });
     }
-    // Component configuration checkboxes (restored from _components section of themeVariables)
-    const comp = v._components as Record<string, unknown> | undefined;
+    // Component configuration checkboxes: custom uses _componentConfig, LIFE uses _components.
+    const comp = (v._componentConfig as Record<string, unknown> | undefined) ?? (v._components as Record<string, unknown> | undefined);
     if (comp) {
       if (typeof comp._canShowFinalMarking === 'boolean') setCheckNotFinal(comp._canShowFinalMarking);
       if (typeof comp._hidePartiallyDisplayMarking === 'boolean') setCheckUnanswered(comp._hidePartiallyDisplayMarking);
@@ -1857,19 +2045,33 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
     </div>
   );
 
+  const getCustomSetting = (sectionId: string, fieldKey: string): string => {
+    const key = `${sectionId}::${fieldKey}`;
+    return customSettings[key] ?? CUSTOM_FIELD_DEFAULTS[key] ?? '';
+  };
+
   // Live Preview Component
   const LivePreview = () => {
     const [darkMode, setDarkMode] = useState(false);
+    const primaryColor = getCustomSetting('_global', '_primaryBrandColor') || '#2e7fa1';
+    const secondaryColor = getCustomSetting('_global', '_secondaryBrandColor') || '#25837e';
+    const paragraphFont = getCustomSetting('_global', 'paragraph-font-family') || 'Lato';
+    const headingFont = getCustomSetting('_global', 'heading-font-family') || 'Lato';
+    const fontColor = getCustomSetting('_global', 'font-color') || '#1f1f1f';
+    const headingColorTheme = getCustomSetting('_global', 'heading-color') || '#333333';
+    const instructionColor = getCustomSetting('_global', 'instruction-color') || '#1f1f1f';
+    const linkColor = getCustomSetting('_global', 'link') || '#2e7fa1';
+    const titleSizeRaw = getCustomSetting('_global', 'page-heading-font-size') || '3rem';
     const previewBg = darkMode ? '#1a1a1a' : '#f8f8f8';
-    const textColor = darkMode ? '#e8e8e8' : customSettings.fontColor;
-    const headingColor = darkMode ? '#ffffff' : customSettings.headingFontColor;
-    const titleSize = PREVIEW_TITLE_SIZE[customSettings.pageTitleSize];
+    const textColor = darkMode ? '#e8e8e8' : fontColor;
+    const headingColor = darkMode ? '#ffffff' : headingColorTheme;
+    const titleSize = titleSizeRaw;
 
     return (
       <div className="border border-[#e5e7eb] rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)' }}>
         <div className="flex items-center justify-between px-3 py-2 bg-white border-b border-[#e5e7eb]">
           <div className="flex items-center gap-2">
-            <div style={{ width: '13px', height: '13px', backgroundColor: customSettings.primaryColor, borderRadius: '2px' }} />
+            <div style={{ width: '13px', height: '13px', backgroundColor: primaryColor, borderRadius: '2px' }} />
             <span className="text-xs font-bold text-[#111827]">Live Preview</span>
           </div>
           <div className="flex gap-1">
@@ -1879,34 +2081,34 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
           </div>
         </div>
         <div style={{ backgroundColor: previewBg, fontSize: '13px' }}>
-          <div style={{ height: '4px', background: `linear-gradient(to right, ${customSettings.primaryColor} 60%, ${darkMode ? '#333' : '#e0e0e0'} 60%)` }} />
-          <div style={{ background: customSettings.primaryColor, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ height: '4px', background: `linear-gradient(to right, ${primaryColor} 60%, ${darkMode ? '#333' : '#e0e0e0'} 60%)` }} />
+          <div style={{ background: primaryColor, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
             <span style={{ color: 'rgba(255,255,255,0.8)', fontSize: '11px' }}>☰</span>
-            <span style={{ fontFamily: `${customSettings.paragraphFont}, sans-serif`, fontSize: '11px', color: 'rgba(255,255,255,0.85)', flex: 1 }}>
+            <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '11px', color: 'rgba(255,255,255,0.85)', flex: 1 }}>
               New Course Title <span style={{ opacity: 0.6 }}>/ Page Title</span>
             </span>
             <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: '11px' }}>🔍</span>
           </div>
           <div style={{ padding: '20px 18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ fontFamily: `${customSettings.headingFont}, sans-serif`, fontSize: titleSize ?? '1rem', fontWeight: 700, color: headingColor, lineHeight: 1.2 }}>
-              {customSettings.pageTitleSize === 'H6' ? '—' : 'New Menu/Page Title'}
+            <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: titleSize || '3rem', fontWeight: 700, color: headingColor, lineHeight: 1.2 }}>
+              New Menu/Page Title
             </div>
-            <div style={{ fontFamily: `${customSettings.paragraphFont}, sans-serif`, fontSize: '0.85rem', color: textColor, lineHeight: 1.5 }}>Body text</div>
-            <div style={{ fontFamily: `${customSettings.paragraphFont}, sans-serif`, fontSize: '0.85rem', color: customSettings.linkFontColor, textDecoration: 'underline', cursor: 'pointer' }}>
+            <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.85rem', color: textColor, lineHeight: 1.5 }}>Body text</div>
+            <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.85rem', color: linkColor, textDecoration: 'underline', cursor: 'pointer' }}>
               This is a sample link
             </div>
-            <div style={{ fontFamily: `${customSettings.paragraphFont}, sans-serif`, fontSize: '0.82rem', color: customSettings.instructionColor, fontStyle: 'italic' }}>
+            <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: instructionColor, fontStyle: 'italic' }}>
               Choose one option then select Submit.
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {[{ label: 'Correct', selected: true }, { label: 'Incorrect', selected: false }].map(opt => (
                 <div key={opt.label} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ width: '14px', height: '14px', borderRadius: '50%', flexShrink: 0, border: `2px solid ${opt.selected ? customSettings.secondaryColor : (darkMode ? '#555' : '#ccc')}`, background: opt.selected ? customSettings.secondaryColor : 'transparent' }} />
-                  <span style={{ fontFamily: `${customSettings.paragraphFont}, sans-serif`, fontSize: '0.82rem', color: textColor }}>{opt.label}</span>
+                  <div style={{ width: '14px', height: '14px', borderRadius: '50%', flexShrink: 0, border: `2px solid ${opt.selected ? secondaryColor : (darkMode ? '#555' : '#ccc')}`, background: opt.selected ? secondaryColor : 'transparent' }} />
+                  <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: textColor }}>{opt.label}</span>
                 </div>
               ))}
             </div>
-            <div style={{ alignSelf: 'flex-start', background: customSettings.primaryColor, borderRadius: '6px', padding: '7px 16px', fontFamily: `${customSettings.paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
+            <div style={{ alignSelf: 'flex-start', background: primaryColor, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
               Submit
             </div>
           </div>
@@ -1930,7 +2132,7 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
         </div>
 
         <div className="space-y-2">
-          {ACCORDION_DEFS.map((acc) => {
+          {CUSTOM_ACCORDION_DEFS.map((acc) => {
             const isOpen = activeCustomAccordion === acc.id;
             return (
               <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-hidden">
@@ -2112,7 +2314,7 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
 
       {/* Configuration Accordions - shown based on selected theme */}
       <div className="space-y-2">
-        {/* Configuration: Course - LIFE and Custom only */}
+        {/* Configuration: Course - LIFE and Custom */}
         {selected !== "vanilla" && (
           <ThemeAccordion
             label="Configuration: Course"
@@ -2120,7 +2322,7 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
             onToggle={() => setActiveAccordion(activeAccordion === "Configuration: Course" ? null : "Configuration: Course")}
           >
             <div className="space-y-6">
-              {selected === 'life' ? (
+              {selected === 'life' || selected === 'custom' ? (
                 <>
                   <LifeListField
                     title="Custom Icons: Sprite Sheets"
@@ -2165,57 +2367,49 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
                     }))}
                   />
                 </>
-              ) : (
-                <p className="text-xs text-[#6b7280] leading-relaxed">Course configuration for this theme is not yet exposed in the new UI.</p>
-              )}
+              ) : null}
             </div>
           </ThemeAccordion>
         )}
 
-        {/* Configuration: Blocks - LIFE and Custom only */}
-        {selected !== "vanilla" && (
+        {/* Configuration: Blocks - LIFE only */}
+        {selected === "life" && (
           <ThemeAccordion
             label="Configuration: Blocks"
             isOpen={activeAccordion === "Configuration: Blocks"}
             onToggle={() => setActiveAccordion(activeAccordion === "Configuration: Blocks" ? null : "Configuration: Blocks")}
           >
             <div className="space-y-5">
-              {selected === 'life' ? (
-                <>
-                  <div>
-                    <p className="text-xs font-semibold text-[#111827] mb-2">Spacing top</p>
-                    <select
-                      value={lifeBlocksConfig._paddingTop}
-                      onChange={(e) => setLifeBlocksConfig((prev) => ({ ...prev, _paddingTop: e.target.value }))}
-                      className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md bg-white text-[#111827] cursor-pointer outline-none focus:border-[#2d6fa8]"
-                      style={{ minWidth: "110px" }}
-                    >
-                      <option value=""></option>
-                      <option value="double">Double</option>
-                      <option value="half">Half</option>
-                      <option value="remove">Remove</option>
-                      <option value="standard">Standard</option>
-                    </select>
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-[#111827] mb-2">Spacing bottom</p>
-                    <select
-                      value={lifeBlocksConfig._paddingBottom}
-                      onChange={(e) => setLifeBlocksConfig((prev) => ({ ...prev, _paddingBottom: e.target.value }))}
-                      className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md bg-white text-[#111827] cursor-pointer outline-none focus:border-[#2d6fa8]"
-                      style={{ minWidth: "110px" }}
-                    >
-                      <option value=""></option>
-                      <option value="double">Double</option>
-                      <option value="half">Half</option>
-                      <option value="remove">Remove</option>
-                      <option value="standard">Standard</option>
-                    </select>
-                  </div>
-                </>
-              ) : (
-                <p className="text-xs text-[#6b7280] leading-relaxed">Block configuration for this theme is not yet exposed in the new UI.</p>
-              )}
+              <div>
+                <p className="text-xs font-semibold text-[#111827] mb-2">Spacing top</p>
+                <select
+                  value={lifeBlocksConfig._paddingTop}
+                  onChange={(e) => setLifeBlocksConfig((prev) => ({ ...prev, _paddingTop: e.target.value }))}
+                  className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md bg-white text-[#111827] cursor-pointer outline-none focus:border-[#2d6fa8]"
+                  style={{ minWidth: "110px" }}
+                >
+                  <option value=""></option>
+                  <option value="double">Double</option>
+                  <option value="half">Half</option>
+                  <option value="remove">Remove</option>
+                  <option value="standard">Standard</option>
+                </select>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-[#111827] mb-2">Spacing bottom</p>
+                <select
+                  value={lifeBlocksConfig._paddingBottom}
+                  onChange={(e) => setLifeBlocksConfig((prev) => ({ ...prev, _paddingBottom: e.target.value }))}
+                  className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md bg-white text-[#111827] cursor-pointer outline-none focus:border-[#2d6fa8]"
+                  style={{ minWidth: "110px" }}
+                >
+                  <option value=""></option>
+                  <option value="double">Double</option>
+                  <option value="half">Half</option>
+                  <option value="remove">Remove</option>
+                  <option value="standard">Standard</option>
+                </select>
+              </div>
             </div>
           </ThemeAccordion>
         )}
@@ -2520,13 +2714,13 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
                 {activeCustomAccordion && (
                   <>
                     <span className="mx-1.5">/</span>
-                    <span className="font-semibold">{ACCORDION_DEFS.find(a => a.id === activeCustomAccordion)?.label}</span>
+                    <span className="font-semibold">{CUSTOM_ACCORDION_DEFS.find(a => a.id === activeCustomAccordion)?.label}</span>
                   </>
                 )}
               </div>
 
               <div className="space-y-2">
-                {ACCORDION_DEFS.map((acc) => {
+                {CUSTOM_ACCORDION_DEFS.map((acc) => {
                   const isOpen = activeCustomAccordion === acc.id;
                   return (
                     <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-hidden">
@@ -2547,73 +2741,38 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
                       </button>
                       {isOpen && (
                         <div className="px-4 py-4 bg-white border-t border-[#e5e7eb]">
-                          {acc.id === 'global' && (
-                            <>
-                              <div className="grid grid-cols-2 gap-x-4 gap-y-4 mb-4">
-                                <ColorPickerField label="Primary Color" value={customSettings.primaryColor} onChange={(v) => setCustomSettings({ ...customSettings, primaryColor: v })} />
-                                <ColorPickerField label="Secondary Color" value={customSettings.secondaryColor} onChange={(v) => setCustomSettings({ ...customSettings, secondaryColor: v })} />
-                                <ColorPickerField label="Font Color" value={customSettings.fontColor} onChange={(v) => setCustomSettings({ ...customSettings, fontColor: v })} />
-                                <ColorPickerField label="Heading Font Color" value={customSettings.headingFontColor} onChange={(v) => setCustomSettings({ ...customSettings, headingFontColor: v })} />
-                                <ColorPickerField label="Instruction Color" value={customSettings.instructionColor} onChange={(v) => setCustomSettings({ ...customSettings, instructionColor: v })} />
-                                <ColorPickerField label="Link Font Color" value={customSettings.linkFontColor} onChange={(v) => setCustomSettings({ ...customSettings, linkFontColor: v })} />
-                              </div>
-                              <div className="grid grid-cols-2 gap-x-4 gap-y-4">
-                                <FontDropdownField label="Heading Font" value={customSettings.headingFont} onChange={(v) => setCustomSettings({ ...customSettings, headingFont: v })} />
-                                <FontDropdownField label="Paragraph Font" value={customSettings.paragraphFont} onChange={(v) => setCustomSettings({ ...customSettings, paragraphFont: v })} />
-                              </div>
-                            </>
-                          )}
-                          {acc.id === 'page' && (
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-4">
-                              <div className="col-span-2">
-                                <p className="text-xs font-bold text-[#111827] mb-2">Page Title Size</p>
-                                <select value={customSettings.pageTitleSize} onChange={(e) => setCustomSettings({ ...customSettings, pageTitleSize: e.target.value })} className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:border-[#2d6fa8] outline-none">
-                                  {PAGE_TITLE_OPTIONS.map(opt => <option key={opt} value={opt}>{PAGE_TITLE_LABELS[opt]}</option>)}
-                                </select>
-                              </div>
-                              <ColorPickerField label="Page Background Color" value={customSettings.pageBackgroundColor || '#ffffff'} onChange={(v) => setCustomSettings({ ...customSettings, pageBackgroundColor: v })} />
-                              <ColorPickerField label="Page Border Color" value={customSettings.pageBorderColor || '#e5e7eb'} onChange={(v) => setCustomSettings({ ...customSettings, pageBorderColor: v })} />
-                            </div>
-                          )}
-                          {acc.id === 'progress' && (
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-4">
-                              <ColorPickerField label="Progress Fill Color" value={customSettings.progressFillColor || '#2d6fa8'} onChange={(v) => setCustomSettings({ ...customSettings, progressFillColor: v })} />
-                              <ColorPickerField label="Progress Background Color" value={customSettings.progressBackgroundColor || '#e5e7eb'} onChange={(v) => setCustomSettings({ ...customSettings, progressBackgroundColor: v })} />
-                              <ColorPickerField label="Progress Border Color" value={customSettings.progressBorderColor || '#d1d5db'} onChange={(v) => setCustomSettings({ ...customSettings, progressBorderColor: v })} />
-                            </div>
-                          )}
-                          {acc.id === 'navigation' && (
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-4">
-                              <ColorPickerField label="Navigation Background" value={customSettings.navBackground || '#ffffff'} onChange={(v) => setCustomSettings({ ...customSettings, navBackground: v })} />
-                              <ColorPickerField label="Navigation Text Color" value={customSettings.navTextColor || '#111827'} onChange={(v) => setCustomSettings({ ...customSettings, navTextColor: v })} />
-                              <ColorPickerField label="Navigation Border Color" value={customSettings.navBorderColor || '#e5e7eb'} onChange={(v) => setCustomSettings({ ...customSettings, navBorderColor: v })} />
-                              <ColorPickerField label="Navigation Hover Color" value={customSettings.navHoverColor || '#f9fafb'} onChange={(v) => setCustomSettings({ ...customSettings, navHoverColor: v })} />
-                            </div>
-                          )}
-                          {acc.id === 'menu' && (
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-4">
-                              <ColorPickerField label="Menu Background" value={customSettings.menuBackground || '#ffffff'} onChange={(v) => setCustomSettings({ ...customSettings, menuBackground: v })} />
-                              <ColorPickerField label="Menu Text Color" value={customSettings.menuTextColor || '#111827'} onChange={(v) => setCustomSettings({ ...customSettings, menuTextColor: v })} />
-                              <ColorPickerField label="Menu Hover Background" value={customSettings.menuHoverBackground || '#f9fafb'} onChange={(v) => setCustomSettings({ ...customSettings, menuHoverBackground: v })} />
-                              <ColorPickerField label="Menu Active Color" value={customSettings.menuActiveColor || '#2d6fa8'} onChange={(v) => setCustomSettings({ ...customSettings, menuActiveColor: v })} />
-                            </div>
-                          )}
-                          {acc.id === 'feedback' && (
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-4">
-                              <ColorPickerField label="Success Color" value={customSettings.successColor || '#22c55e'} onChange={(v) => setCustomSettings({ ...customSettings, successColor: v })} />
-                              <ColorPickerField label="Error Color" value={customSettings.errorColor || '#ef4444'} onChange={(v) => setCustomSettings({ ...customSettings, errorColor: v })} />
-                              <ColorPickerField label="Warning Color" value={customSettings.warningColor || '#f59e0b'} onChange={(v) => setCustomSettings({ ...customSettings, warningColor: v })} />
-                              <ColorPickerField label="Info Color" value={customSettings.infoColor || '#3b82f6'} onChange={(v) => setCustomSettings({ ...customSettings, infoColor: v })} />
-                            </div>
-                          )}
-                          {acc.id === 'overlays' && (
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-4">
-                              <ColorPickerField label="Overlay Background" value={customSettings.overlayBackground || 'rgba(0, 0, 0, 0.5)'} onChange={(v) => setCustomSettings({ ...customSettings, overlayBackground: v })} />
-                              <ColorPickerField label="Modal Background" value={customSettings.modalBackground || '#ffffff'} onChange={(v) => setCustomSettings({ ...customSettings, modalBackground: v })} />
-                              <ColorPickerField label="Modal Border Color" value={customSettings.modalBorderColor || '#e5e7eb'} onChange={(v) => setCustomSettings({ ...customSettings, modalBorderColor: v })} />
-                              <ColorPickerField label="Modal Shadow Color" value={customSettings.modalShadowColor || 'rgba(0, 0, 0, 0.1)'} onChange={(v) => setCustomSettings({ ...customSettings, modalShadowColor: v })} />
-                            </div>
-                          )}
+                          <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+                            {acc.fields.map((field) => {
+                              const key = `${acc.id}::${field.key}`;
+                              const value = customSettings[key] ?? CUSTOM_FIELD_DEFAULTS[key] ?? '';
+
+                              if (field.inputType === 'select') {
+                                return (
+                                  <div key={field.key}>
+                                    <p className="text-xs font-bold text-[#111827] mb-2">{field.label}</p>
+                                    <select
+                                      value={value}
+                                      onChange={(e) => setCustomSettings((prev) => ({ ...prev, [key]: e.target.value }))}
+                                      className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:border-[#2d6fa8] outline-none"
+                                    >
+                                      {(field.options ?? []).map((option) => (
+                                        <option key={option.value} value={option.value}>{option.label}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                );
+                              }
+
+                              return (
+                                <ColorPickerField
+                                  key={field.key}
+                                  label={field.label}
+                                  value={value || '#ffffff'}
+                                  onChange={(nextValue) => setCustomSettings((prev) => ({ ...prev, [key]: nextValue }))}
+                                />
+                              );
+                            })}
+                          </div>
                         </div>
                       )}
                     </div>
