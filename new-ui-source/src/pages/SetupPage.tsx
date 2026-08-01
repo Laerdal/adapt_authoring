@@ -1553,19 +1553,19 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
               <div>
                 <p className="text-xs font-semibold text-[#111827] mb-2">Spacing top</p>
                 <select className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md bg-white text-[#111827] cursor-pointer outline-none focus:border-[#2d6fa8]" style={{ minWidth: "110px" }}>
-                  <option>None</option>
-                  <option>Single</option>
                   <option>Double</option>
-                  <option>Triple</option>
+                  <option>Half</option>
+                  <option>Remove</option>
+                  <option>Standard</option>
                 </select>
               </div>
               <div>
                 <p className="text-xs font-semibold text-[#111827] mb-2">Spacing bottom</p>
                 <select className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md bg-white text-[#111827] cursor-pointer outline-none focus:border-[#2d6fa8]" style={{ minWidth: "110px" }}>
-                  <option>None</option>
-                  <option>Single</option>
                   <option>Double</option>
-                  <option>Triple</option>
+                  <option>Half</option>
+                  <option>Remove</option>
+                  <option>Standard</option>
                 </select>
               </div>
             </div>
