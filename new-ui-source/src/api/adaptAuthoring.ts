@@ -205,6 +205,7 @@ interface EnginePluginType {
   _id: string;
   name?: string;
   displayName?: string;
+  theme?: string;
 }
 
 interface EngineCourseDetails {
@@ -273,12 +274,34 @@ function scorePluginMatch(plugin: EnginePluginType, label: string, kind: "theme"
 }
 
 function resolvePluginId(options: EnginePluginType[], label: string, kind: "theme" | "menu"): string | null {
+  const target = normalize(label);
   let best: { id: string; score: number } | null = null;
+  let bestOption: EnginePluginType | null = null;
   for (const option of options) {
     const score = scorePluginMatch(option, label, kind);
     if (!option._id || score <= 0) continue;
+
     if (!best || score > best.score) {
       best = { id: option._id, score };
+      bestOption = option;
+      continue;
+    }
+
+    if (kind === "theme" && target === "lifetheme" && best && score === best.score && bestOption) {
+      const curName = normalize(bestOption.name);
+      const curDisplay = normalize(bestOption.displayName);
+      const curTheme = normalize(bestOption.theme);
+      const nextName = normalize(option.name);
+      const nextDisplay = normalize(option.displayName);
+      const nextTheme = normalize(option.theme);
+
+      const curIsV2 = curName.includes("v2") || curDisplay.includes("v2") || curTheme.includes("v2") || curDisplay.includes("alpha");
+      const nextIsV2 = nextName.includes("v2") || nextDisplay.includes("v2") || nextTheme.includes("v2") || nextDisplay.includes("alpha");
+
+      if (curIsV2 && !nextIsV2) {
+        best = { id: option._id, score };
+        bestOption = option;
+      }
     }
   }
   return best?.id ?? null;

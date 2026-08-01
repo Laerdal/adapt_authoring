@@ -1288,7 +1288,8 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
   initialPresetId?: string;
   courseId?: string;
 }) {
-  const [selected, setSelected] = useState<string | null>(mapThemeNameToId(initialThemeName));
+  const initialSelectedThemeId = mapThemeNameToId(initialThemeName);
+  const [selected, setSelected] = useState<string | null>(initialSelectedThemeId);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -1321,7 +1322,20 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
     setSaveError(null);
     setSaveSuccess(false);
     try {
-      await saveThemeForCourse(courseId, themeLabel);
+      // Avoid re-applying the same theme family on every save, which can
+      // accidentally switch between similarly named LIFE variants.
+      if (selected !== initialSelectedThemeId) {
+        await saveThemeForCourse(courseId, themeLabel);
+      }
+      // If a preset is selected, apply it first so config linkage is preserved,
+      // then write current editor values last to keep new->old reflection correct.
+      if (selectedPresetId) {
+        try {
+          await applyThemePreset(selectedPresetId, courseId);
+        } catch {
+          // Non-fatal: continue saving current values.
+        }
+      }
       // Build themeVariables payload — always include component checkbox settings for LIFE/Custom
       let vars: Record<string, unknown> = {};
       if (selected === 'custom') vars = { ...customSettings };
@@ -1340,8 +1354,6 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
       }
       await saveThemeVariables(courseId, vars);
       setDbThemeVariables(vars);
-      // Apply preset if one is selected
-      if (selectedPresetId) await applyThemePreset(selectedPresetId, courseId);
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch {
