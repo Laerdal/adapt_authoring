@@ -1272,6 +1272,16 @@ const LIFE_STYLING_ACCORDIONS = [
 type LifeStylingSection = typeof LIFE_STYLING_ACCORDIONS[number];
 type LifeStylingSectionId = LifeStylingSection["id"];
 type LifeStylingValues = Record<LifeStylingSectionId, Record<string, string>>;
+type LifeSpriteSheet = { _spriteSheetId: string; src: string };
+type LifeSingleIcon = { iconId: string; src: string };
+type LifeCourseConfig = {
+  _svgSpriteSheets: LifeSpriteSheet[];
+  _singleIcons: LifeSingleIcon[];
+};
+type LifeBlocksConfig = {
+  _paddingTop: string;
+  _paddingBottom: string;
+};
 
 const LIFE_STYLING_DEFAULTS: LifeStylingValues = LIFE_STYLING_ACCORDIONS.reduce((acc, section) => {
   const values: Record<string, string> = {};
@@ -1281,6 +1291,16 @@ const LIFE_STYLING_DEFAULTS: LifeStylingValues = LIFE_STYLING_ACCORDIONS.reduce(
   acc[section.id] = values;
   return acc;
 }, {} as LifeStylingValues);
+
+const DEFAULT_LIFE_COURSE_CONFIG: LifeCourseConfig = {
+  _svgSpriteSheets: [],
+  _singleIcons: [],
+};
+
+const DEFAULT_LIFE_BLOCKS_CONFIG: LifeBlocksConfig = {
+  _paddingTop: "",
+  _paddingBottom: "",
+};
 
 function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, courseId }: {
   initialThemeName?: string;
@@ -1371,10 +1391,7 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
     if (selected === 'custom') vars = { ...customSettings };
     else if (selected === 'vanilla') vars = { ...vanillaColors };
     else if (selected === 'life') {
-      vars = (Object.keys(lifeStyling) as LifeStylingSectionId[]).reduce<Record<string, unknown>>((acc, sectionKey) => {
-        acc[sectionKey] = { ...lifeStyling[sectionKey] };
-        return acc;
-      }, {});
+      vars = buildMergedLifeThemeVariables({});
     }
     if (selected === 'life' || selected === 'custom') {
       vars._components = {
@@ -1399,6 +1416,8 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
   const [activeAccordion, setActiveAccordion] = useState<string | null>(null);
   const [activeLifeStylingAccordion, setActiveLifeStylingAccordion] = useState<LifeStylingSectionId | null>("_global");
   const [lifeStyling, setLifeStyling] = useState<LifeStylingValues>(LIFE_STYLING_DEFAULTS);
+  const [lifeCourseConfig, setLifeCourseConfig] = useState<LifeCourseConfig>(DEFAULT_LIFE_COURSE_CONFIG);
+  const [lifeBlocksConfig, setLifeBlocksConfig] = useState<LifeBlocksConfig>(DEFAULT_LIFE_BLOCKS_CONFIG);
   const [activeVanillaAccordion, setActiveVanillaAccordion] = useState<string | null>('global');
   const [vanillaColors, setVanillaColors] = useState<Record<string, string>>({});
   const [activeCustomAccordion, setActiveCustomAccordion] = useState<string | null>('global');
@@ -1447,8 +1466,28 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
       });
       merged[sectionKey] = existingSection;
     });
+    merged._course = {
+      ...(merged._course && typeof merged._course === 'object' && !Array.isArray(merged._course)
+        ? merged._course as Record<string, unknown>
+        : {}),
+      _svgSpriteSheets: lifeCourseConfig._svgSpriteSheets.map((item) => ({
+        _spriteSheetId: item._spriteSheetId,
+        src: item.src,
+      })),
+      _singleIcons: lifeCourseConfig._singleIcons.map((item) => ({
+        iconId: item.iconId,
+        src: item.src,
+      })),
+    };
+    merged._blocks = {
+      ...(merged._blocks && typeof merged._blocks === 'object' && !Array.isArray(merged._blocks)
+        ? merged._blocks as Record<string, unknown>
+        : {}),
+      _paddingTop: lifeBlocksConfig._paddingTop,
+      _paddingBottom: lifeBlocksConfig._paddingBottom,
+    };
     return merged;
-  }, [lifeStyling]);
+  }, [lifeBlocksConfig, lifeCourseConfig, lifeStyling]);
 
   useEffect(() => {
     setSelected(mapThemeNameToId(initialThemeName));
@@ -1497,6 +1536,36 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
         ...lifePatch,
       }));
     }
+    const course = v._course as Record<string, unknown> | undefined;
+    if (course && typeof course === 'object' && !Array.isArray(course)) {
+      const spriteSheets = Array.isArray(course._svgSpriteSheets)
+        ? course._svgSpriteSheets
+            .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item))
+            .map((item) => ({
+              _spriteSheetId: typeof item._spriteSheetId === 'string' ? item._spriteSheetId : '',
+              src: typeof item.src === 'string' ? item.src : '',
+            }))
+        : [];
+      const singleIcons = Array.isArray(course._singleIcons)
+        ? course._singleIcons
+            .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object' && !Array.isArray(item))
+            .map((item) => ({
+              iconId: typeof item.iconId === 'string' ? item.iconId : '',
+              src: typeof item.src === 'string' ? item.src : '',
+            }))
+        : [];
+      setLifeCourseConfig({
+        _svgSpriteSheets: spriteSheets,
+        _singleIcons: singleIcons,
+      });
+    }
+    const blocks = v._blocks as Record<string, unknown> | undefined;
+    if (blocks && typeof blocks === 'object' && !Array.isArray(blocks)) {
+      setLifeBlocksConfig({
+        _paddingTop: typeof blocks._paddingTop === 'string' ? blocks._paddingTop : '',
+        _paddingBottom: typeof blocks._paddingBottom === 'string' ? blocks._paddingBottom : '',
+      });
+    }
     // Component configuration checkboxes (restored from _components section of themeVariables)
     const comp = v._components as Record<string, unknown> | undefined;
     if (comp) {
@@ -1529,6 +1598,73 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
       <select value={value} onChange={e => onChange(e.target.value)} className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:border-[#2d6fa8] outline-none">
         {FONT_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
       </select>
+    </div>
+  );
+
+  const LifeListField = ({
+    title,
+    description,
+    items,
+    onAdd,
+    onRemove,
+    onChange,
+    idLabel,
+    idKey,
+  }: {
+    title: string;
+    description: string;
+    items: Array<LifeSpriteSheet | LifeSingleIcon>;
+    onAdd: () => void;
+    onRemove: (index: number) => void;
+    onChange: (index: number, key: string, value: string) => void;
+    idLabel: string;
+    idKey: '_spriteSheetId' | 'iconId';
+  }) => (
+    <div className="space-y-3">
+      <div>
+        <p className="text-xs font-semibold text-[#111827] mb-1.5">{title}</p>
+        <p className="text-xs text-[#6b7280] leading-relaxed">{description}</p>
+      </div>
+      <div className="space-y-3">
+        {items.map((item, index) => (
+          <div key={`${idKey}-${index}`} className="border border-[#e5e7eb] rounded-lg p-3 space-y-3 bg-[#fafafa]">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs font-semibold text-[#111827] mb-2">{idLabel}</p>
+                <input
+                  type="text"
+                  value={idKey === '_spriteSheetId' ? (item as LifeSpriteSheet)._spriteSheetId : (item as LifeSingleIcon).iconId}
+                  onChange={(e) => onChange(index, idKey, e.target.value)}
+                  className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1.5 text-[#111827] focus:border-[#2d6fa8] outline-none"
+                />
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-[#111827] mb-2">External Source</p>
+                <input
+                  type="text"
+                  value={item.src}
+                  onChange={(e) => onChange(index, 'src', e.target.value)}
+                  className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1.5 text-[#111827] focus:border-[#2d6fa8] outline-none"
+                />
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => onRemove(index)}
+              className="text-xs font-semibold px-3 py-1.5 border border-[#ef4444] text-[#ef4444] rounded-md hover:bg-[#fef2f2] transition-colors"
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+      <button
+        type="button"
+        onClick={onAdd}
+        className="px-5 py-2 text-xs font-semibold text-white bg-[#2d6fa8] rounded-md hover:bg-[#1e5a96] transition-colors"
+      >
+        Add
+      </button>
     </div>
   );
 
@@ -1794,19 +1930,55 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
             isOpen={activeAccordion === "Configuration: Course"}
             onToggle={() => setActiveAccordion(activeAccordion === "Configuration: Course" ? null : "Configuration: Course")}
           >
-            <div className="space-y-5">
-              <div>
-                <p className="text-xs font-semibold text-[#111827] mb-2.5">Custom Icons: Sprite Sheets</p>
-                <button className="px-5 py-2 text-xs font-semibold text-white bg-[#2d6fa8] rounded-md hover:bg-[#1e5a96] transition-colors">
-                  Add
-                </button>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-[#111827] mb-2.5">Custom Icons: Single Icons</p>
-                <button className="px-5 py-2 text-xs font-semibold text-white bg-[#2d6fa8] rounded-md hover:bg-[#1e5a96] transition-colors">
-                  Add
-                </button>
-              </div>
+            <div className="space-y-6">
+              {selected === 'life' ? (
+                <>
+                  <LifeListField
+                    title="Custom Icons: Sprite Sheets"
+                    description="Add a reference to an external sprite sheet with icons that can be used in the course."
+                    items={lifeCourseConfig._svgSpriteSheets}
+                    idLabel="Icon Set Name"
+                    idKey="_spriteSheetId"
+                    onAdd={() => setLifeCourseConfig((prev) => ({
+                      ...prev,
+                      _svgSpriteSheets: [...prev._svgSpriteSheets, { _spriteSheetId: '', src: '' }],
+                    }))}
+                    onRemove={(index) => setLifeCourseConfig((prev) => ({
+                      ...prev,
+                      _svgSpriteSheets: prev._svgSpriteSheets.filter((_, itemIndex) => itemIndex !== index),
+                    }))}
+                    onChange={(index, key, value) => setLifeCourseConfig((prev) => ({
+                      ...prev,
+                      _svgSpriteSheets: prev._svgSpriteSheets.map((item, itemIndex) => (
+                        itemIndex === index ? { ...item, [key]: value } : item
+                      )),
+                    }))}
+                  />
+                  <LifeListField
+                    title="Custom Icons: Single Icons"
+                    description="Add a reference to an external individual icon that can be used in the course."
+                    items={lifeCourseConfig._singleIcons}
+                    idLabel="Icon Id"
+                    idKey="iconId"
+                    onAdd={() => setLifeCourseConfig((prev) => ({
+                      ...prev,
+                      _singleIcons: [...prev._singleIcons, { iconId: '', src: '' }],
+                    }))}
+                    onRemove={(index) => setLifeCourseConfig((prev) => ({
+                      ...prev,
+                      _singleIcons: prev._singleIcons.filter((_, itemIndex) => itemIndex !== index),
+                    }))}
+                    onChange={(index, key, value) => setLifeCourseConfig((prev) => ({
+                      ...prev,
+                      _singleIcons: prev._singleIcons.map((item, itemIndex) => (
+                        itemIndex === index ? { ...item, [key]: value } : item
+                      )),
+                    }))}
+                  />
+                </>
+              ) : (
+                <p className="text-xs text-[#6b7280] leading-relaxed">Course configuration for this theme is not yet exposed in the new UI.</p>
+              )}
             </div>
           </ThemeAccordion>
         )}
@@ -1819,24 +1991,42 @@ function ThemePanel({ initialThemeName, initialThemeVariables, initialPresetId, 
             onToggle={() => setActiveAccordion(activeAccordion === "Configuration: Blocks" ? null : "Configuration: Blocks")}
           >
             <div className="space-y-5">
-              <div>
-                <p className="text-xs font-semibold text-[#111827] mb-2">Spacing top</p>
-                <select className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md bg-white text-[#111827] cursor-pointer outline-none focus:border-[#2d6fa8]" style={{ minWidth: "110px" }}>
-                  <option>Double</option>
-                  <option>Half</option>
-                  <option>Remove</option>
-                  <option>Standard</option>
-                </select>
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-[#111827] mb-2">Spacing bottom</p>
-                <select className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md bg-white text-[#111827] cursor-pointer outline-none focus:border-[#2d6fa8]" style={{ minWidth: "110px" }}>
-                  <option>Double</option>
-                  <option>Half</option>
-                  <option>Remove</option>
-                  <option>Standard</option>
-                </select>
-              </div>
+              {selected === 'life' ? (
+                <>
+                  <div>
+                    <p className="text-xs font-semibold text-[#111827] mb-2">Spacing top</p>
+                    <select
+                      value={lifeBlocksConfig._paddingTop}
+                      onChange={(e) => setLifeBlocksConfig((prev) => ({ ...prev, _paddingTop: e.target.value }))}
+                      className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md bg-white text-[#111827] cursor-pointer outline-none focus:border-[#2d6fa8]"
+                      style={{ minWidth: "110px" }}
+                    >
+                      <option value=""></option>
+                      <option value="double">Double</option>
+                      <option value="half">Half</option>
+                      <option value="remove">Remove</option>
+                      <option value="standard">Standard</option>
+                    </select>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-[#111827] mb-2">Spacing bottom</p>
+                    <select
+                      value={lifeBlocksConfig._paddingBottom}
+                      onChange={(e) => setLifeBlocksConfig((prev) => ({ ...prev, _paddingBottom: e.target.value }))}
+                      className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md bg-white text-[#111827] cursor-pointer outline-none focus:border-[#2d6fa8]"
+                      style={{ minWidth: "110px" }}
+                    >
+                      <option value=""></option>
+                      <option value="double">Double</option>
+                      <option value="half">Half</option>
+                      <option value="remove">Remove</option>
+                      <option value="standard">Standard</option>
+                    </select>
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-[#6b7280] leading-relaxed">Block configuration for this theme is not yet exposed in the new UI.</p>
+              )}
             </div>
           </ThemeAccordion>
         )}
