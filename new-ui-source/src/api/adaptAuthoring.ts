@@ -358,8 +358,8 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
 // ── Technical Settings ─────────────────────────────────────────────────────────
 // Interfaces for course configuration and technical settings.
 export interface CourseTechnicalSettings {
-  _id: string;
-  _courseId: string;
+  _id?: string;
+  _courseId?: string;
   screenSize?: {
     small?: number;
     medium?: number;
