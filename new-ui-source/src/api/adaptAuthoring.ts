@@ -355,6 +355,75 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
   };
 }
 
+// ── Technical Settings ─────────────────────────────────────────────────────────
+// Interfaces for course configuration and technical settings.
+export interface CourseTechnicalSettings {
+  _id: string;
+  _courseId: string;
+  screenSize?: {
+    small?: number;
+    medium?: number;
+    large?: number;
+    xlarge?: number;
+  };
+  _generateSourcemap?: boolean;
+  _scrollingContainer?: {
+    _isEnabled?: boolean;
+    _limitToSelector?: string;
+  };
+  _logging?: {
+    _isEnabled?: boolean;
+    _level?: string;
+    _console?: boolean;
+    _warnFirstOnly?: boolean;
+  };
+  build?: {
+    strictMode?: boolean;
+    targets?: string;
+  };
+}
+
+export interface CourseCustomStyle {
+  customStyle?: string;
+}
+
+// Fetch technical settings for a course by courseId
+export async function getCourseTechnicalSettings(courseId: string): Promise<CourseTechnicalSettings> {
+  try {
+    const result = await apiClient.get<CourseTechnicalSettings>(
+      `/api/content/config/${courseId}`
+    );
+    return result ?? ({} as CourseTechnicalSettings);
+  } catch (err) {
+    console.warn("Failed to fetch technical settings", err);
+    return {} as CourseTechnicalSettings;
+  }
+}
+
+// Update technical settings — PATCH only changed fields, matching old authoring tool approach
+export async function updateCourseTechnicalSettings(
+  configId: string,
+  settings: Partial<CourseTechnicalSettings>
+): Promise<unknown> {
+  return apiClient.patch(`/api/content/config/${configId}`, settings);
+}
+
+// Update custom CSS/LESS style in course
+export async function updateCourseCustomStyle(courseId: string, customStyle: string): Promise<unknown> {
+  return apiClient.put(`/api/content/course/${courseId}`, { customStyle });
+}
+
+// Fetch custom CSS/LESS from course
+export async function getCourseCstyle(courseId: string): Promise<string> {
+  try {
+    const result = await apiClient.get<CourseCustomStyle>(`/api/content/course/${courseId}`);
+    return result?.customStyle || "";
+  } catch (err) {
+    console.warn("Failed to fetch custom style", err);
+    return "";
+  }
+}
+
 // ── Course structure (modules / topics / sections / content groups / components)
 // The Course Structure screen maps the real Adapt content hierarchy onto a
 // 5-level model (see src/types/structure.ts):

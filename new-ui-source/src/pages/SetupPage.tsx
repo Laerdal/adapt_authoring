@@ -9,6 +9,7 @@ import AddComponentDrawer from "../components/course/AddComponentDrawer";
 import { getCourseBootstrapData } from "../api/adaptAuthoring";
 import { useCourseStructure } from "../hooks/useCourseStructure";
 import { STRUCTURE_LABELS } from "../types/structure";
+import { TechnicalSettingPage } from "./setup/technicalSettingPage";
 
 const ICON_BASE = "/new/assets/icons";
 
@@ -572,7 +573,7 @@ function Accordion({ title, icon, children, defaultOpen = false }: { title: stri
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
-      {open && <div className="px-4 pb-5 pt-1 border-t border-[#f3f4f6] bg-white">{children}</div>}
+      {open && <div className="px-[22px] py-[20px] border-t border-[#f3f4f6] bg-white">{children}</div>}
     </div>
   );
 }
@@ -3988,7 +3989,7 @@ function LeAccordion({
         </svg>
       </button>
       {open && (
-        <div className="px-4 pb-5 pt-1 border-t border-[#f3f4f6] bg-white space-y-4">
+        <div className="px-[22px] py-[20px] border-t border-[#f3f4f6] bg-white space-y-4">
           {children}
         </div>
       )}
@@ -4697,219 +4698,6 @@ function LearnerExperiencePanel() {
   );
 }
 
-/* ── Technical Settings panel ── */
-const SCREEN_SIZE_OPTIONS = ["Small", "Medium", "Large", "Extra Large"];
-const LOG_LEVEL_OPTIONS   = ["Info", "Debug", "Warn", "Error", "None"];
-
-function TsAccordion({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="border border-[#e5e7eb] rounded-xl overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between px-5 py-4 bg-white hover:bg-[#f9fafb] transition-colors"
-      >
-        <span className="text-sm font-semibold text-[#111827]">{title}</span>
-        <svg
-          width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280"
-          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-          className={`transition-transform ${open ? "rotate-180" : ""}`}
-        >
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
-      </button>
-      {open && <div className="px-5 pb-5 pt-2 border-t border-[#f3f4f6] bg-white flex flex-col gap-4">{children}</div>}
-    </div>
-  );
-}
-
-function TsDropdown({ label, value, options, onChange }: {
-  label: string; value: string; options: string[]; onChange: (v: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-sm font-medium text-[#374151]">{label}</label>
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          className="w-full flex items-center justify-between px-3 py-2.5 border border-[#d1d5db] rounded-lg bg-white text-sm text-[#374151] hover:border-[#9ca3af] transition-colors"
-        >
-          <span>{value}</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${open ? "rotate-180" : ""}`}>
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </button>
-        {open && (
-          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-20 py-1 overflow-hidden">
-            {options.map((opt) => (
-              <button
-                key={opt} type="button"
-                onClick={() => { onChange(opt); setOpen(false); }}
-                className={`w-full text-left px-3 py-2.5 text-sm flex items-center justify-between transition-colors ${
-                  value === opt ? "bg-[#dbeeff] text-[#2d6fa8] font-medium" : "text-[#374151] hover:bg-[#f9fafb]"
-                }`}
-              >
-                {opt}
-                {value === opt && (
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function TsCheckbox({ id, label, checked, onChange }: { id: string; label: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <label htmlFor={id} className="flex items-center gap-3 cursor-pointer select-none group">
-      <div
-        className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors shrink-0 ${
-          checked ? "bg-[#2d6fa8] border-[#2d6fa8]" : "bg-white border-[#d1d5db] group-hover:border-[#93c5fd]"
-        }`}
-        onClick={() => onChange(!checked)}
-      >
-        {checked && (
-          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-        )}
-      </div>
-      <input id={id} type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="sr-only" />
-      <span className="text-sm text-[#374151]">{label}</span>
-    </label>
-  );
-}
-
-function TechnicalSettingsPanel() {
-  const [screenSize, setScreenSize]   = useState("Medium");
-  const [smallBp, setSmallBp]         = useState("");
-  const [mediumBp, setMediumBp]       = useState("");
-  const [largeBp, setLargeBp]         = useState("");
-  const [xlBp, setXlBp]               = useState("");
-
-  const [optimizedScroll, setOptimizedScroll] = useState(false);
-  const [sourceMaps, setSourceMaps]           = useState(false);
-  const [screenReader, setScreenReader]       = useState(false);
-
-  const [enableLogging, setEnableLogging] = useState(false);
-  const [logLevel, setLogLevel]           = useState("Info");
-  const [strictMode, setStrictMode]       = useState(false);
-
-  const [customCss, setCustomCss]     = useState("");
-  const [cssExpanded, setCssExpanded] = useState(false);
-
-  const taClass = "w-full text-sm text-[#374151] border border-[#d1d5db] rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent placeholder-[#9ca3af]";
-
-  return (
-    <div className="max-w-2xl w-full">
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-[#111827]">Technical Settings</h2>
-        <p className="text-sm text-[#6b7280] mt-0.5">Advanced configuration settings for developers and advanced users</p>
-      </div>
-
-      <div className="flex flex-col gap-4">
-
-        {/* Display & Responsiveness */}
-        <TsAccordion title="Display & Responsiveness" defaultOpen>
-          <TsDropdown label="Screen Size" value={screenSize} options={SCREEN_SIZE_OPTIONS} onChange={setScreenSize} />
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[#374151]">Small</label>
-            <textarea rows={2} value={smallBp} onChange={(e) => setSmallBp(e.target.value)} placeholder="Small breakpoint CSS" className={taClass} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[#374151]">Medium</label>
-            <textarea rows={2} value={mediumBp} onChange={(e) => setMediumBp(e.target.value)} placeholder="Medium breakpoint CSS" className={taClass} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[#374151]">Large</label>
-            <textarea rows={2} value={largeBp} onChange={(e) => setLargeBp(e.target.value)} placeholder="Large breakpoint CSS" className={taClass} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[#374151]">Extra Large</label>
-            <textarea rows={2} value={xlBp} onChange={(e) => setXlBp(e.target.value)} placeholder="Extra large breakpoint CSS" className={taClass} />
-          </div>
-        </TsAccordion>
-
-        {/* Accessibility & Embedding */}
-        <TsAccordion title="Accessibility & Embedding">
-          <p className="text-sm text-[#6b7280] -mt-1">Control how your course behaves in assistive and embedded environments.</p>
-          <div className="flex flex-col gap-3">
-            <TsCheckbox id="ts-opt-scroll" label="Enable optimized scrolling in iFrames" checked={optimizedScroll} onChange={setOptimizedScroll} />
-            <TsCheckbox id="ts-src-maps"   label="Generate source maps"                  checked={sourceMaps}      onChange={setSourceMaps} />
-          </div>
-          <div className="pt-3 border-t border-[#f3f4f6] flex flex-col gap-2">
-            <p className="text-sm font-semibold text-[#374151]">Accessibility</p>
-            <TsCheckbox id="ts-screen-reader" label="Enable screen reader support" checked={screenReader} onChange={setScreenReader} />
-          </div>
-        </TsAccordion>
-
-        {/* Runtime Behavior */}
-        <TsAccordion title="Runtime Behavior">
-          <p className="text-sm text-[#6b7280] -mt-1">Configure how your course operates when run.</p>
-          <div className="flex flex-col gap-3">
-            <TsCheckbox id="ts-logging" label="Enable logging" checked={enableLogging} onChange={setEnableLogging} />
-            {enableLogging && (
-              <TsDropdown label="Log Level" value={logLevel} options={LOG_LEVEL_OPTIONS} onChange={setLogLevel} />
-            )}
-            <TsCheckbox id="ts-strict" label="Use strict mode?" checked={strictMode} onChange={setStrictMode} />
-          </div>
-        </TsAccordion>
-
-        {/* Custom CSS/LESS */}
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-[#374151]">Custom CSS/LESS</label>
-            <button
-              type="button"
-              aria-label={cssExpanded ? "Collapse CSS editor" : "Expand CSS editor"}
-              onClick={() => setCssExpanded((o) => !o)}
-              className="w-7 h-7 flex items-center justify-center rounded text-[#9ca3af] hover:text-[#374151] hover:bg-[#f3f4f6] transition-colors"
-            >
-              {cssExpanded ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
-                </svg>
-              ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-                </svg>
-              )}
-            </button>
-          </div>
-          <div className={`border border-[#d1d5db] rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-[#2d6fa8] focus-within:border-transparent ${cssExpanded ? "fixed inset-8 z-50 shadow-2xl flex flex-col bg-white" : ""}`}>
-            {cssExpanded && (
-              <div className="flex items-center justify-between px-4 py-3 border-b border-[#e5e7eb] bg-[#f9fafb] shrink-0">
-                <span className="text-sm font-semibold text-[#374151]">Custom CSS/LESS</span>
-                <button type="button" aria-label="Close expanded editor" onClick={() => setCssExpanded(false)} className="w-7 h-7 flex items-center justify-center rounded text-[#9ca3af] hover:text-[#374151] hover:bg-[#e5e7eb] transition-colors">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              </div>
-            )}
-            <textarea
-              value={customCss}
-              onChange={(e) => setCustomCss(e.target.value)}
-              placeholder="/* Add your custom CSS or LESS here */"
-              spellCheck={false}
-              className={`w-full text-sm text-[#374151] px-4 py-3 resize-none focus:outline-none placeholder-[#9ca3af] bg-white font-mono ${cssExpanded ? "flex-1 h-0" : "h-48"}`}
-            />
-          </div>
-        </div>
-
-      </div>
-    </div>
-  );
-}
-
 /* ── Export Panel ── */
 function AssetOrUrlPicker({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   const [tab, setTab] = useState<"asset" | "url">("asset");
@@ -5553,6 +5341,9 @@ function CourseCreationCenterContent() {
     Object.fromEntries(NAV_GROUPS.map((group) => [group.id, true]))
   );
 
+  // Tracks requested navigation when on a panel with unsaved changes
+  const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
+
   useEffect(() => {
     if (!courseId) {
       setTitle(initialTitle);
@@ -5595,6 +5386,18 @@ function CourseCreationCenterContent() {
     }));
   }
 
+  // Smart navigation handler - used by sidebar items
+  // When on technical-settings, the panel intercepts via pendingNavigation state
+  function handleNavigation(nextPanel: string) {
+    if (activeNav === "technical-settings") {
+      // Signal to TechnicalSettingPage that navigation is requested
+      // The panel decides whether to show a confirmation modal or allow navigation
+      setPendingNavigation(nextPanel);
+    } else {
+      setActiveNav(nextPanel);
+    }
+  }
+
   function renderPanel() {
     if (activeNav === "overview") return <CourseOverviewPanel title={title} description={description} />;
     if (activeNav === "structure")
@@ -5614,7 +5417,7 @@ function CourseCreationCenterContent() {
     if (activeNav === "tracking") return <TrackingAnalyticsPanel />;
     if (activeNav === "completion") return <CompletionProgressPanel />;
     if (activeNav === "learner-experience") return <LearnerExperiencePanel />;
-    if (activeNav === "technical-settings") return <TechnicalSettingsPanel />;
+    if (activeNav === "technical-settings") return <TechnicalSettingPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "publish") return <PublishPanel />;
     return <ComingSoonPanel label={activeItem?.label ?? (activeNav === "storyboarding" ? "Storyboarding" : "")} />;
   }
@@ -5637,7 +5440,7 @@ function CourseCreationCenterContent() {
           <div className="min-w-0 flex items-center gap-3">
             <p className="text-[15px] leading-none font-semibold text-[#1f2937] tracking-tight hidden lg:block">Adapt Studio</p>
             <div className="hidden lg:block w-px h-5 bg-[#d8dde6]" />
-            <p className="text-[13px] font-medium text-[#1a1a1a] truncate max-w-[260px]">{title}</p>
+            <p className="text-[15px] font-[700] text-[#1a1a1a] truncate max-w-[260px]">{title}</p>
           </div>
         </div>
 
@@ -5652,7 +5455,7 @@ function CourseCreationCenterContent() {
 
           <button
             type="button"
-            onClick={() => setActiveNav("storyboarding")}
+            onClick={() => handleNavigation("storyboarding")}
             className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold border-2 rounded-[8px] transition-colors cursor-pointer bg-white ${activeNav === "storyboarding" ? "border-[var(--life-primary-800)] text-[var(--life-primary-800)]" : "border-[var(--life-neutral-200)] text-[var(--life-base-black)] hover:border-[var(--life-primary-700)] hover:text-[var(--life-primary-700)] active:border-[var(--life-primary-800)] active:text-[var(--life-primary-800)]"}`}
           >
             <SidebarMaskIcon file="storyboard-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
@@ -5678,7 +5481,7 @@ function CourseCreationCenterContent() {
 
           <button
             type="button"
-            onClick={() => setActiveNav("publish")}
+            onClick={() => handleNavigation("publish")}
             className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold rounded-[8px] transition-colors active:bg-[var(--life-primary-800)] cursor-pointer ${activeNav === "publish" ? "bg-[var(--life-primary-700)] text-[var(--life-base-white)]" : "bg-[var(--life-primary-500)] text-[var(--life-base-white)] hover:bg-[var(--life-primary-700)]"}`}
           >
             <SidebarMaskIcon file="publish-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
@@ -5739,7 +5542,7 @@ function CourseCreationCenterContent() {
                       <button
                         key={item.id}
                         type="button"
-                        onClick={() => setActiveNav(item.id)}
+                        onClick={() => handleNavigation(item.id)}
                         title={item.label}
                         className="relative flex items-center justify-center w-full py-1.5 transition-colors cursor-pointer"
                       >
@@ -5789,7 +5592,7 @@ function CourseCreationCenterContent() {
                         <button
                           key={item.id}
                           type="button"
-                          onClick={() => setActiveNav(item.id)}
+                          onClick={() => handleNavigation(item.id)}
                           className={`relative flex items-center gap-3 px-5 py-2 text-left w-full font-[var(--font-family-primary)] font-[400] transition-colors cursor-pointer ${
                             isActive
                               ? "bg-[var(--life-primary-100)] text-[#236585]"
