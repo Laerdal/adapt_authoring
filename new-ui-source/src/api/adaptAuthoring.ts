@@ -25,6 +25,46 @@ export function logout(): Promise<unknown> {
   return apiClient.post("/api/logout");
 }
 
+// ── User lookup ──────────────────────────────────────────────────────────────
+
+export interface UserSummary {
+  _id: string;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+}
+
+/**
+ * Find a user by exact email address.
+ * Uses GET /api/user?search[email]=... which does a case-insensitive regex search;
+ * we then filter client-side for an exact match.
+ * Returns null if no user found or on error.
+ */
+export async function findUserByEmail(email: string): Promise<UserSummary | null> {
+  try {
+    const users = await apiClient.get<UserSummary[]>(
+      `/api/user?search[email]=${encodeURIComponent(email)}`
+    );
+    if (!Array.isArray(users)) return null;
+    return users.find((u) => u.email?.toLowerCase() === email.toLowerCase()) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch a single user by their ObjectId.
+ * Uses GET /api/user/:id
+ */
+export async function getUserById(userId: string): Promise<UserSummary | null> {
+  try {
+    const user = await apiClient.get<UserSummary>(`/api/user/${userId}`);
+    return user ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // Instance display name for the header. Reads `domainName` from the client config
 // (GET /config/config.json). Falls back to "Local Instance" when unset (local/dev).
 export async function getInstanceName(): Promise<string> {
@@ -161,6 +201,8 @@ export async function updateCourse(
     body?: string;
     heroAssetId?: string | null;
     tags?: string[];
+    isShared?: boolean;
+    shareWithUserIds?: string[];
   }
 ): Promise<unknown> {
   const updateData: Record<string, unknown> = {};
@@ -174,6 +216,8 @@ export async function updateCourse(
   if (patch.tags !== undefined) {
     updateData.tags = await resolveOrCreateTagIds(patch.tags);
   }
+  if (patch.isShared !== undefined) updateData._isShared = patch.isShared;
+  if (patch.shareWithUserIds !== undefined) updateData._shareWithUsers = patch.shareWithUserIds;
   return apiClient.put(`/api/content/course/${backendId}`, updateData);
 }
 
@@ -219,6 +263,8 @@ interface EngineCourseDetails {
   body?: string;
   heroImage?: string | null;
   tags?: Array<string | { _id: string; title?: string }>;
+  _isShared?: boolean;
+  _shareWithUsers?: string[];
 }
 
 interface EngineConfigDetails {
@@ -235,6 +281,8 @@ export interface CourseBootstrapData {
   body: string;
   heroAssetId: string | null;
   tags: string[];
+  isShared: boolean;
+  shareWithUserIds: string[];
   themeName: string;
   menuName: string;
 }
@@ -372,6 +420,10 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
     body: course.body || "",
     heroAssetId,
     tags,
+    isShared: course._isShared ?? false,
+    shareWithUserIds: Array.isArray(course._shareWithUsers)
+      ? course._shareWithUsers.filter((id): id is string => typeof id === "string")
+      : [],
     themeName: config._theme || "",
     menuName: config._menu || "",
   };

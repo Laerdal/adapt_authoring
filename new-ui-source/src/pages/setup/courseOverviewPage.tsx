@@ -1,5 +1,5 @@
 ﻿import { useEffect, useRef, useState } from "react";
-import { getCourseBootstrapData, updateCourse, uploadAsset } from "../../api/adaptAuthoring";
+import { findUserByEmail, getCourseBootstrapData, getUserById, updateCourse, uploadAsset } from "../../api/adaptAuthoring";
 
 interface CourseOverviewPageProps {
   courseId: string;
@@ -33,8 +33,9 @@ const LANGUAGES: { label: string; iso: string }[] = [
 const ROLE_OPTIONS = ["Viewer", "Editor", "Admin"];
 
 interface Collaborator {
+  userId: string;   // ObjectId on the server
   email: string;
-  role: string;
+  role: string;     // UI-only — not persisted to engine (no per-user role in engine)
 }
 
 export function CourseOverviewPage({
@@ -54,6 +55,8 @@ export function CourseOverviewPage({
   const [savedBody, setSavedBody] = useState("");
   const [savedTags, setSavedTags] = useState<string[]>([]);
   const [savedHeroAssetId, setSavedHeroAssetId] = useState<string | null>(null);
+  const [savedIsShared, setSavedIsShared] = useState(false);
+  const [savedCollaborators, setSavedCollaborators] = useState<Collaborator[]>([]);
 
   // Live form values
   const [formTitle, setFormTitle] = useState(initialTitle);
@@ -67,21 +70,26 @@ export function CourseOverviewPage({
   const [imageUploading, setImageUploading] = useState(false);
   const [language, setLanguage] = useState("");
 
-  // Collaboration (local state — no dedicated backend endpoint yet)
+  // Collaboration — wired to _isShared and _shareWithUsers on the engine
   const [shareMode, setShareMode] = useState<"all" | "specific">("specific");
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [emailInput, setEmailInput] = useState("");
+  const [emailSearching, setEmailSearching] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
 
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  // Detect unsaved changes (core fields only)
+  // Detect unsaved changes (core fields + sharing)
   const isDirty =
     formTitle !== savedTitle ||
     formDisplayTitle !== savedDisplayTitle ||
     formDesc !== savedDesc ||
     formBody !== savedBody ||
     heroAssetId !== savedHeroAssetId ||
-    JSON.stringify(tags) !== JSON.stringify(savedTags);
+    JSON.stringify(tags) !== JSON.stringify(savedTags) ||
+    (shareMode === "all") !== savedIsShared ||
+    JSON.stringify(collaborators.map(c => c.userId).sort()) !==
+      JSON.stringify(savedCollaborators.map(c => c.userId).sort());
 
   // Load full course data on mount
   useEffect(() => {
@@ -105,6 +113,24 @@ export function CourseOverviewPage({
         setTags(data.tags);
         setHeroAssetId(data.heroAssetId);
         setHeroPreviewUrl(data.heroAssetId ? `/api/asset/serve/${data.heroAssetId}` : null);
+
+        // Load sharing state
+        const isShared = data.isShared;
+        setSavedIsShared(isShared);
+        setShareMode(isShared ? "all" : "specific");
+
+        // Resolve user IDs to email addresses for the collaborator list
+        if (data.shareWithUserIds.length > 0) {
+          const resolved = await Promise.all(
+            data.shareWithUserIds.map(async (uid) => {
+              const user = await getUserById(uid);
+              return user ? { userId: uid, email: user.email, role: "Editor" } : null;
+            })
+          );
+          const validCollabs = resolved.filter((c): c is Collaborator => c !== null);
+          setSavedCollaborators(validCollabs);
+          setCollaborators(validCollabs);
+        }
       } catch {
         // keep initial values
       } finally {
@@ -151,18 +177,36 @@ export function CourseOverviewPage({
     if (imageInputRef.current) imageInputRef.current.value = "";
   }
 
-  function handleAddEmail() {
+  async function handleAddEmail() {
     const email = emailInput.trim();
-    if (email && !collaborators.find((c) => c.email === email)) {
-      setCollaborators((prev) => [...prev, { email, role: "Editor" }]);
+    if (!email) return;
+    if (collaborators.find((c) => c.email.toLowerCase() === email.toLowerCase())) {
+      setEmailError("This user is already in the list.");
+      return;
     }
-    setEmailInput("");
+    setEmailSearching(true);
+    setEmailError(null);
+    try {
+      const user = await findUserByEmail(email);
+      if (!user) {
+        setEmailError(`No user found with email "${email}". Make sure the user has an account first.`);
+        return;
+      }
+      setCollaborators((prev) => [...prev, { userId: user._id, email: user.email, role: "Editor" }]);
+      setEmailInput("");
+      markDirty();
+    } catch {
+      setEmailError("Failed to look up user. Please try again.");
+    } finally {
+      setEmailSearching(false);
+    }
   }
-  function handleRemoveCollaborator(email: string) {
-    setCollaborators((prev) => prev.filter((c) => c.email !== email));
+  function handleRemoveCollaborator(userId: string) {
+    setCollaborators((prev) => prev.filter((c) => c.userId !== userId));
+    markDirty();
   }
-  function handleRoleChange(email: string, role: string) {
-    setCollaborators((prev) => prev.map((c) => (c.email === email ? { ...c, role } : c)));
+  function handleRoleChange(userId: string, role: string) {
+    setCollaborators((prev) => prev.map((c) => (c.userId === userId ? { ...c, role } : c)));
   }
 
   async function handleSave() {
@@ -175,6 +219,7 @@ export function CourseOverviewPage({
     setSaveError(null);
     setSaveSuccess(false);
     try {
+      const isSharedAll = shareMode === "all";
       await updateCourse(courseId, {
         title: formTitle.trim(),
         displayTitle: formDisplayTitle.trim() || formTitle.trim(),
@@ -182,6 +227,8 @@ export function CourseOverviewPage({
         body: formBody.trim(),
         heroAssetId,
         tags,
+        isShared: isSharedAll,
+        shareWithUserIds: isSharedAll ? [] : collaborators.map((c) => c.userId),
       });
       setSavedTitle(formTitle.trim());
       setSavedDisplayTitle(formDisplayTitle.trim());
@@ -189,6 +236,8 @@ export function CourseOverviewPage({
       setSavedBody(formBody.trim());
       setSavedTags(tags);
       setSavedHeroAssetId(heroAssetId);
+      setSavedIsShared(isSharedAll);
+      setSavedCollaborators(collaborators);
       setSaveSuccess(true);
     } catch {
       setSaveError("Failed to save changes. Please try again.");
@@ -206,6 +255,10 @@ export function CourseOverviewPage({
     setHeroAssetId(savedHeroAssetId);
     setHeroPreviewUrl(savedHeroAssetId ? `/api/asset/serve/${savedHeroAssetId}` : null);
     setTagInput("");
+    setShareMode(savedIsShared ? "all" : "specific");
+    setCollaborators(savedCollaborators);
+    setEmailInput("");
+    setEmailError(null);
     setSaveError(null);
     setSaveSuccess(false);
   }
@@ -541,51 +594,57 @@ export function CourseOverviewPage({
 
         {/* Email input for specific sharing */}
         {shareMode === "specific" && (
-          <div style={{ marginBottom: 14, display: "flex", gap: 8 }}>
-            <input
-              type="email"
-              value={emailInput}
-              onChange={(e) => setEmailInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddEmail(); } }}
-              placeholder="colleague@laerdal.com"
-              style={{ ...inputBase, flex: 1 }}
-              onFocus={focusIn}
-              onBlur={focusOut}
-            />
-            <button
-              type="button"
-              onClick={handleAddEmail}
-              disabled={!emailInput.trim()}
-              style={{ height: 44, padding: "0 18px", background: "var(--life-primary-500)", border: "none", borderRadius: 8, cursor: emailInput.trim() ? "pointer" : "not-allowed", fontFamily: '"Lato", sans-serif', fontSize: 14, fontWeight: 700, color: "#ffffff", opacity: emailInput.trim() ? 1 : 0.4, flexShrink: 0, transition: "opacity 0.15s" } as React.CSSProperties}
-              onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.opacity = "0.88"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.opacity = emailInput.trim() ? "1" : "0.4"; }}
-            >
-              Add
-            </button>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ display: "flex", gap: 8, marginBottom: emailError ? 6 : 0 }}>
+              <input
+                type="email"
+                value={emailInput}
+                onChange={(e) => { setEmailInput(e.target.value); setEmailError(null); }}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddEmail(); } }}
+                placeholder="colleague@laerdal.com"
+                disabled={emailSearching}
+                style={{ ...inputBase, flex: 1 }}
+                onFocus={focusIn}
+                onBlur={focusOut}
+              />
+              <button
+                type="button"
+                onClick={handleAddEmail}
+                disabled={!emailInput.trim() || emailSearching}
+                style={{ height: 44, padding: "0 18px", background: "var(--life-primary-500)", border: "none", borderRadius: 8, cursor: (emailInput.trim() && !emailSearching) ? "pointer" : "not-allowed", fontFamily: '"Lato", sans-serif', fontSize: 14, fontWeight: 700, color: "#ffffff", opacity: (emailInput.trim() && !emailSearching) ? 1 : 0.4, flexShrink: 0, transition: "opacity 0.15s" } as React.CSSProperties}
+              >
+                {emailSearching ? "Searching…" : "Add"}
+              </button>
+            </div>
+            {emailError && (
+              <div style={{ fontFamily: '"Lato", sans-serif', fontSize: 12, color: "var(--life-critical-600)", marginTop: 4, lineHeight: 1.4 }}>
+                {emailError}
+              </div>
+            )}
           </div>
         )}
 
         {/* Collaborator list */}
         {collaborators.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {collaborators.map(({ email, role }) => {
+            {collaborators.map(({ userId, email, role }) => {
               const initials = email.slice(0, 2).toUpperCase();
               return (
-                <div key={email} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 8, border: "1px solid var(--life-neutral-200)", background: "var(--life-neutral-020)" }}>
+                <div key={userId} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 8, border: "1px solid var(--life-neutral-200)", background: "var(--life-neutral-020)" }}>
                   <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--life-primary-500)", color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: '"Lato", sans-serif', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
                     {initials}
                   </div>
                   <span style={{ flex: 1, fontFamily: '"Lato", sans-serif', fontSize: 14, color: "var(--life-base-black)" }}>{email}</span>
                   <select
                     value={role}
-                    onChange={(e) => handleRoleChange(email, e.target.value)}
+                    onChange={(e) => handleRoleChange(userId, e.target.value)}
                     style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-base-black)", background: "#ffffff", border: "1px solid var(--life-neutral-200)", borderRadius: 6, padding: "4px 10px", cursor: "pointer", outline: "none" }}
                   >
                     {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
                   </select>
                   <button
                     type="button"
-                    onClick={() => handleRemoveCollaborator(email)}
+                    onClick={() => handleRemoveCollaborator(userId)}
                     style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--life-neutral-400)", display: "flex", alignItems: "center", padding: 4 }}
                     onMouseEnter={(e) => (e.currentTarget.style.color = "var(--life-critical-500)")}
                     onMouseLeave={(e) => (e.currentTarget.style.color = "var(--life-neutral-400)")}
