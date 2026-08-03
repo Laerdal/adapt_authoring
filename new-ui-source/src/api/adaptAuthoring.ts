@@ -308,6 +308,39 @@ function resolvePluginId(options: EnginePluginType[], label: string, kind: "them
   return best?.id ?? null;
 }
 
+function resolveBestPluginOption(options: EnginePluginType[], label: string, kind: "theme" | "menu"): EnginePluginType | null {
+  let best: { score: number; option: EnginePluginType } | null = null;
+  const target = normalize(label);
+
+  for (const option of options) {
+    const score = scorePluginMatch(option, label, kind);
+    if (score <= 0) continue;
+
+    if (!best || score > best.score) {
+      best = { score, option };
+      continue;
+    }
+
+    if (kind === "theme" && target === "lifetheme" && score === best.score) {
+      const curName = normalize(best.option.name);
+      const curDisplay = normalize(best.option.displayName);
+      const curTheme = normalize(best.option.theme);
+      const nextName = normalize(option.name);
+      const nextDisplay = normalize(option.displayName);
+      const nextTheme = normalize(option.theme);
+
+      const curIsV2 = curName.includes("v2") || curDisplay.includes("v2") || curTheme.includes("v2") || curDisplay.includes("alpha");
+      const nextIsV2 = nextName.includes("v2") || nextDisplay.includes("v2") || nextTheme.includes("v2") || nextDisplay.includes("alpha");
+
+      if (curIsV2 && !nextIsV2) {
+        best = { score, option };
+      }
+    }
+  }
+
+  return best?.option ?? null;
+}
+
 async function getThemeTypes(): Promise<EnginePluginType[]> {
   const rows = await apiClient.get<EnginePluginType[]>("/api/themetype");
   return Array.isArray(rows) ? rows : [];
@@ -343,6 +376,14 @@ export async function saveThemeForCourse(courseId: string, themeLabel: string): 
   if (themeId) await applyThemeToCourse(courseId, themeId);
 }
 
+/** Resolve the same parentTheme key old UI uses for theme presets. */
+export async function getThemePresetParentTheme(themeLabel: string): Promise<string | null> {
+  const themes = await getThemeTypes();
+  const bestTheme = resolveBestPluginOption(themes, themeLabel, "theme");
+  if (!bestTheme) return null;
+  return bestTheme.theme || null;
+}
+
 /** Persist themeVariables into course.themeVariables via PUT /api/content/course/:id */
 export async function saveThemeVariables(
   courseId: string,
@@ -354,7 +395,7 @@ export async function saveThemeVariables(
 /** Fetch all theme presets (optionally filter by parentTheme slug). */
 export async function getThemePresets(parentTheme?: string): Promise<ThemePreset[]> {
   try {
-    const rows = await apiClient.get<ThemePreset[]>("/api/themepreset");
+    const rows = await apiClient.get<ThemePreset[]>("/api/content/themepreset");
     const all = Array.isArray(rows) ? rows : [];
     if (!parentTheme) return all;
     return all.filter((p) => p.parentTheme === parentTheme);
@@ -369,7 +410,7 @@ export async function saveThemePreset(
   parentTheme: string,
   properties: Record<string, unknown>
 ): Promise<ThemePreset> {
-  return apiClient.post<ThemePreset>("/api/themepreset", { displayName, parentTheme, properties });
+  return apiClient.post<ThemePreset>("/api/content/themepreset", { displayName, parentTheme, properties });
 }
 
 /** Apply an existing preset to the course. */
