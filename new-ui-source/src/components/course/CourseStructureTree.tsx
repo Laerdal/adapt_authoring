@@ -236,11 +236,6 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
           </div>
 
           <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-            {p.onOpen && (
-              <button type="button" aria-label={`Open ${p.title} in Page Editor`} title="Open in Page Editor" onClick={p.onOpen} className="p-1 rounded hover:bg-[#e5e7eb] text-[#9ca3af] hover:text-[#2d6fa8]">
-                <ArrowRight />
-              </button>
-            )}
             <button type="button" aria-label={`Delete ${p.title}`} onClick={() => setDeleteId(p.id)} className="p-1 rounded hover:bg-[#fee2e2] text-[#9ca3af] hover:text-[#dc2626]">
               <Trash />
             </button>

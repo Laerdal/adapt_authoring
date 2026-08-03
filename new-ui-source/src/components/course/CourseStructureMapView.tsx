@@ -245,6 +245,8 @@ export default function CourseStructureMapView(props: Props) {
         </button>
       </div>
 
+      <div className="mb-2">{mapNote}</div>
+
       <div className="w-full bg-[#fbfbfc] border border-[#e5e7eb] rounded-xl overflow-auto max-h-[560px]">
         {!fullscreen && treeBody}
       </div>
