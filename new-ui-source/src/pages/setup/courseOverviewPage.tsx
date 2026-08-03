@@ -211,20 +211,21 @@ export function CourseOverviewPage({
   }
 
   const labelStyle: React.CSSProperties = {
-    fontFamily: "var(--font-family-primary)",
+    fontFamily: '"Lato", sans-serif',
     fontSize: 13,
     fontWeight: 700,
-    color: "var(--foreground)",
+    color: "var(--life-base-black)",   // #1A1A1A
     display: "block",
     marginBottom: 6,
   };
 
+  // Input field border = life-neutral-400 (#949494) — matches Figma border weight
   const inputBase: React.CSSProperties = {
-    fontFamily: "var(--font-family-primary)",
+    fontFamily: '"Lato", sans-serif',
     fontSize: 14,
-    color: "var(--foreground)",
-    background: "var(--background)",
-    border: "1px solid var(--life-color-border-default, var(--border))",
+    color: "var(--life-base-black)",           // #1A1A1A
+    background: "#ffffff",
+    border: "1px solid var(--life-neutral-400)", // #949494 — matches Figma
     borderRadius: 8,
     padding: "10px 14px",
     height: 44,
@@ -241,22 +242,22 @@ export function CourseOverviewPage({
   };
 
   function focusIn(e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
-    e.currentTarget.style.borderColor = "var(--primary)";
+    e.currentTarget.style.borderColor = "var(--life-primary-500)"; // #2E7FA1
   }
   function focusOut(e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
-    e.currentTarget.style.borderColor = "var(--life-color-border-default, var(--border))";
+    e.currentTarget.style.borderColor = "var(--life-neutral-400)"; // #949494
   }
 
   return (
-    <div style={{ maxWidth: 672, fontFamily: "var(--font-family-primary)" }}>
+    <div style={{ maxWidth: 672, fontFamily: '"Lato", sans-serif' }}>
 
       {/* ── Header ───────────────────────────────────────────────── */}
       <div style={{ marginBottom: 28, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
         <div>
-          <h4 style={{ fontFamily: "var(--font-family-primary)", fontSize: 20, fontWeight: 700, color: "var(--foreground)", margin: 0 }}>
+          <h4 style={{ fontFamily: '"Lato", sans-serif', fontSize: 20, fontWeight: 700, color: "var(--life-base-black)", margin: 0 }}>
             Course Overview
           </h4>
-          <p style={{ fontFamily: "var(--font-family-primary)", fontSize: 13, color: "var(--muted-foreground)", margin: "4px 0 0" }}>
+          <p style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-neutral-400)", margin: "4px 0 0" }}>
             Click any field to review and edit its content inline.
           </p>
         </div>
@@ -266,8 +267,8 @@ export function CourseOverviewPage({
             <button
               type="button"
               onClick={handleDiscard}
-              style={{ height: 36, padding: "0 16px", background: "transparent", border: "1px solid var(--border)", borderRadius: 8, cursor: "pointer", fontFamily: "var(--font-family-primary)", fontSize: 14, fontWeight: 600, color: "var(--foreground)", transition: "background 0.15s" }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--muted)")}
+              style={{ height: 36, padding: "0 16px", background: "transparent", border: "1px solid var(--life-neutral-200)", borderRadius: 8, cursor: "pointer", fontFamily: '"Lato", sans-serif', fontSize: 14, fontWeight: 600, color: "var(--life-base-black)", transition: "background 0.15s" }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--life-neutral-050)")}
               onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
             >
               Discard
@@ -277,8 +278,8 @@ export function CourseOverviewPage({
             type="button"
             onClick={handleSave}
             disabled={!courseId || !isDirty || saving || imageUploading || loading}
-            style={{ height: 36, padding: "0 18px", background: "var(--primary)", border: "none", borderRadius: 8, cursor: (!courseId || !isDirty || saving) ? "not-allowed" : "pointer", fontFamily: "var(--font-family-primary)", fontSize: 14, fontWeight: 700, color: "var(--primary-foreground)", opacity: (!courseId || !isDirty || saving || imageUploading || loading) ? 0.4 : 1, display: "flex", alignItems: "center", gap: 8, transition: "opacity 0.15s" } as React.CSSProperties}
-            onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.opacity = "0.88"; }}
+            style={{ height: 36, padding: "0 18px", background: "var(--life-primary-500)", border: "none", borderRadius: 8, cursor: (!courseId || !isDirty || saving) ? "not-allowed" : "pointer", fontFamily: '"Lato", sans-serif', fontSize: 14, fontWeight: 700, color: "#ffffff", opacity: (!courseId || !isDirty || saving || imageUploading || loading) ? 0.4 : 1, display: "flex", alignItems: "center", gap: 8, transition: "opacity 0.15s" } as React.CSSProperties}
+          onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.opacity = "0.88"; }}
             onMouseLeave={(e) => { e.currentTarget.style.opacity = (!courseId || !isDirty || saving || imageUploading || loading) ? "0.4" : "1"; }}
           >
             {saving ? "Saving…" : "Save Changes"}
@@ -288,12 +289,12 @@ export function CourseOverviewPage({
 
       {/* ── Banners ──────────────────────────────────────────────── */}
       {saveError && (
-        <div style={{ marginBottom: 20, padding: "10px 14px", borderRadius: 8, background: "var(--life-color-bg-surface-critical, #fef2f2)", border: "1px solid var(--life-color-border-critical, #fecaca)", fontFamily: "var(--font-family-primary)", fontSize: 13, color: "var(--life-color-text-critical, #b91c1c)" }}>
+        <div style={{ marginBottom: 20, padding: "10px 14px", borderRadius: 8, background: "var(--life-critical-050)", border: "1px solid var(--life-critical-500)", fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-critical-600)" }}>
           {saveError}
         </div>
       )}
       {saveSuccess && !isDirty && (
-        <div style={{ marginBottom: 20, padding: "10px 14px", borderRadius: 8, background: "var(--life-color-bg-surface-positive, #f0fdf4)", border: "1px solid var(--life-color-border-positive, #bbf7d0)", fontFamily: "var(--font-family-primary)", fontSize: 13, color: "var(--life-color-text-positive, #166534)" }}>
+        <div style={{ marginBottom: 20, padding: "10px 14px", borderRadius: 8, background: "var(--life-positive-050)", border: "1px solid var(--life-positive-400)", fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-positive-500)" }}>
           Changes saved successfully.
         </div>
       )}
@@ -304,7 +305,7 @@ export function CourseOverviewPage({
         {/* Title */}
         <div>
           <label style={labelStyle}>
-            Title <span style={{ color: "var(--destructive, #ef4444)", fontWeight: 400 }}>*</span>
+            Title <span style={{ color: "var(--life-critical-500)", fontWeight: 400 }}>*</span>
           </label>
           <input
             value={formTitle}
@@ -369,15 +370,15 @@ export function CourseOverviewPage({
             className="group relative cursor-pointer overflow-hidden"
             style={{
               width: "100%", height: 128,
-              border: heroPreviewUrl ? "none" : "2px dashed var(--border)",
+              border: heroPreviewUrl ? "none" : "2px dashed var(--life-neutral-300)",
               borderRadius: 8,
-              background: heroPreviewUrl ? "transparent" : "var(--muted)",
+              background: heroPreviewUrl ? "transparent" : "var(--life-neutral-050)",
               display: "flex", alignItems: "center", justifyContent: "center",
               flexDirection: "column", gap: 8,
               transition: "border-color 0.15s, background 0.15s",
             }}
-            onMouseEnter={(e) => { if (!heroPreviewUrl) { e.currentTarget.style.borderColor = "var(--primary)"; } }}
-            onMouseLeave={(e) => { if (!heroPreviewUrl) { e.currentTarget.style.borderColor = "var(--border)"; } }}
+            onMouseEnter={(e) => { if (!heroPreviewUrl) { e.currentTarget.style.borderColor = "var(--life-primary-500)"; } }}
+            onMouseLeave={(e) => { if (!heroPreviewUrl) { e.currentTarget.style.borderColor = "var(--life-neutral-300)"; } }}
           >
             {heroPreviewUrl ? (
               <>
@@ -391,23 +392,23 @@ export function CourseOverviewPage({
                     <polyline points="17 8 12 3 7 8" />
                     <line x1="12" y1="3" x2="12" y2="15" />
                   </svg>
-                  <span style={{ fontFamily: "var(--font-family-primary)", fontSize: 13, color: "#fff", fontWeight: 700 }}>Replace Image</span>
+                  <span style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, color: "#fff", fontWeight: 700 }}>Replace Image</span>
                 </div>
               </>
             ) : imageUploading ? (
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ color: "var(--muted-foreground)", animation: "spin 1s linear infinite" }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ color: "var(--life-neutral-400)", animation: "spin 1s linear infinite" }}>
                 <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
               </svg>
             ) : (
               <>
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--muted-foreground)" }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--life-neutral-400)" }}>
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                   <polyline points="17 8 12 3 7 8" />
                   <line x1="12" y1="3" x2="12" y2="15" />
                 </svg>
-                <span style={{ fontFamily: "var(--font-family-primary)", fontSize: 13, color: "var(--muted-foreground)" }}>Choose a cover image</span>
-                <span style={{ fontFamily: "var(--font-family-primary)", fontSize: 11, color: "var(--muted-foreground)" }}>JPG, PNG or WebP · 16:9 aspect ratio recommended</span>
+                <span style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-neutral-400)" }}>Choose a cover image</span>
+                <span style={{ fontFamily: '"Lato", sans-serif', fontSize: 11, color: "var(--life-neutral-400)" }}>JPG, PNG or WebP · 16:9 aspect ratio recommended</span>
               </>
             )}
             <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} aria-label="Upload course image" />
@@ -416,9 +417,9 @@ export function CourseOverviewPage({
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); setHeroAssetId(null); setHeroPreviewUrl(null); markDirty(); }}
-              style={{ marginTop: 6, background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-family-primary)", fontSize: 12, color: "var(--muted-foreground)", padding: 0 }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--destructive, #ef4444)")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--muted-foreground)")}
+              style={{ marginTop: 6, background: "none", border: "none", cursor: "pointer", fontFamily: '"Lato", sans-serif', fontSize: 12, color: "var(--life-neutral-400)", padding: 0 }}
+              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--life-critical-500)")}
+              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--life-neutral-400)")}
             >
               Remove image
             </button>
@@ -445,15 +446,15 @@ export function CourseOverviewPage({
               {tags.map((tag) => (
                 <span
                   key={tag}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 12px", borderRadius: 999, background: "var(--muted)", fontFamily: "var(--font-family-primary)", fontSize: 13, color: "var(--foreground)", border: "1px solid var(--border)" }}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 12px", borderRadius: 999, background: "var(--life-neutral-050)", fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-base-black)", border: "1px solid var(--life-neutral-200)" }}
                 >
                   {tag}
                   <button
                     type="button"
                     onClick={() => handleRemoveTag(tag)}
-                    style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--muted-foreground)", lineHeight: 1, padding: 0, display: "flex", alignItems: "center" }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = "var(--destructive, #ef4444)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = "var(--muted-foreground)")}
+                    style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--life-neutral-400)", lineHeight: 1, padding: 0, display: "flex", alignItems: "center" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = "var(--life-critical-500)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = "var(--life-neutral-400)")}
                     aria-label={`Remove tag ${tag}`}
                   >
                     <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M9 3L3 9M3 3l6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
@@ -471,7 +472,7 @@ export function CourseOverviewPage({
             <select
               value={language}
               onChange={(e) => setLanguage(e.target.value)}
-              style={{ ...inputBase, appearance: "none", WebkitAppearance: "none", paddingRight: 36, cursor: "pointer", color: language ? "var(--foreground)" : "var(--muted-foreground)" } as React.CSSProperties}
+              style={{ ...inputBase, appearance: "none", WebkitAppearance: "none", paddingRight: 36, cursor: "pointer", color: language ? "var(--life-base-black)" : "var(--life-neutral-400)" } as React.CSSProperties}
               onFocus={focusIn}
               onBlur={focusOut}
             >
@@ -482,7 +483,7 @@ export function CourseOverviewPage({
                 </option>
               ))}
             </select>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "var(--muted-foreground)" }}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "var(--life-neutral-400)" }}>
               <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
@@ -491,15 +492,15 @@ export function CourseOverviewPage({
       </div>
 
       {/* ── Divider ───────────────────────────────────────────────── */}
-      <div style={{ height: 1, background: "var(--border)", margin: "28px 0" }} />
+      <div style={{ height: 1, background: "var(--life-neutral-200)", margin: "28px 0" }} />
 
       {/* ── Collaboration — Shared With ────────────────────────────── */}
       <div>
         <div style={{ marginBottom: 16 }}>
-          <h5 style={{ fontFamily: "var(--font-family-primary)", fontSize: 16, fontWeight: 700, color: "var(--foreground)", margin: 0 }}>
+          <h5 style={{ fontFamily: '"Lato", sans-serif', fontSize: 16, fontWeight: 700, color: "var(--life-base-black)", margin: 0 }}>
             Collaboration — Shared With
           </h5>
-          <p style={{ fontFamily: "var(--font-family-primary)", fontSize: 13, color: "var(--muted-foreground)", marginTop: 4, marginBottom: 0 }}>
+          <p style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-neutral-400)", marginTop: 4, marginBottom: 0 }}>
             Collaborators in the instance who have access to this course.
           </p>
         </div>
@@ -514,9 +515,9 @@ export function CourseOverviewPage({
                 value={mode}
                 checked={shareMode === mode}
                 onChange={() => setShareMode(mode)}
-                style={{ accentColor: "var(--primary)", width: 16, height: 16, cursor: "pointer", flexShrink: 0 }}
+                style={{ accentColor: "var(--life-primary-500)", width: 16, height: 16, cursor: "pointer", flexShrink: 0 }}
               />
-              <span style={{ fontFamily: "var(--font-family-primary)", fontSize: 14, color: "var(--foreground)" }}>
+              <span style={{ fontFamily: '"Lato", sans-serif', fontSize: 14, color: "var(--life-base-black)" }}>
                 {mode === "all" ? "Share with All" : "Share with"}
               </span>
             </label>
@@ -525,14 +526,14 @@ export function CourseOverviewPage({
 
         {/* Share with All banner */}
         {shareMode === "all" && (
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 8, background: "var(--life-color-bg-surface-primary-subtle, #eff6ff)", border: "1px solid var(--life-color-border-primary, #bfdbfe)", marginBottom: 12 }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 8, background: "var(--life-primary-020)", border: "1px solid var(--life-primary-300)", marginBottom: 12 }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--life-primary-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
               <circle cx="9" cy="7" r="4" />
               <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
               <path d="M16 3.13a4 4 0 0 1 0 7.75" />
             </svg>
-            <span style={{ fontFamily: "var(--font-family-primary)", fontSize: 13, color: "var(--primary)", lineHeight: 1.4 }}>
+            <span style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-primary-600)", lineHeight: 1.4 }}>
               All members of your organization will have access to this course.
             </span>
           </div>
@@ -555,7 +556,7 @@ export function CourseOverviewPage({
               type="button"
               onClick={handleAddEmail}
               disabled={!emailInput.trim()}
-              style={{ height: 44, padding: "0 18px", background: "var(--primary)", border: "none", borderRadius: 8, cursor: emailInput.trim() ? "pointer" : "not-allowed", fontFamily: "var(--font-family-primary)", fontSize: 14, fontWeight: 700, color: "var(--primary-foreground)", opacity: emailInput.trim() ? 1 : 0.4, flexShrink: 0, transition: "opacity 0.15s" } as React.CSSProperties}
+              style={{ height: 44, padding: "0 18px", background: "var(--life-primary-500)", border: "none", borderRadius: 8, cursor: emailInput.trim() ? "pointer" : "not-allowed", fontFamily: '"Lato", sans-serif', fontSize: 14, fontWeight: 700, color: "#ffffff", opacity: emailInput.trim() ? 1 : 0.4, flexShrink: 0, transition: "opacity 0.15s" } as React.CSSProperties}
               onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.opacity = "0.88"; }}
               onMouseLeave={(e) => { e.currentTarget.style.opacity = emailInput.trim() ? "1" : "0.4"; }}
             >
@@ -570,24 +571,24 @@ export function CourseOverviewPage({
             {collaborators.map(({ email, role }) => {
               const initials = email.slice(0, 2).toUpperCase();
               return (
-                <div key={email} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--life-color-bg-surface-subtle, var(--muted))" }}>
-                  <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--primary)", color: "var(--primary-foreground)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "var(--font-family-primary)", fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
+                <div key={email} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 8, border: "1px solid var(--life-neutral-200)", background: "var(--life-neutral-020)" }}>
+                  <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--life-primary-500)", color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: '"Lato", sans-serif', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
                     {initials}
                   </div>
-                  <span style={{ flex: 1, fontFamily: "var(--font-family-primary)", fontSize: 14, color: "var(--foreground)" }}>{email}</span>
+                  <span style={{ flex: 1, fontFamily: '"Lato", sans-serif', fontSize: 14, color: "var(--life-base-black)" }}>{email}</span>
                   <select
                     value={role}
                     onChange={(e) => handleRoleChange(email, e.target.value)}
-                    style={{ fontFamily: "var(--font-family-primary)", fontSize: 13, color: "var(--foreground)", background: "var(--background)", border: "1px solid var(--border)", borderRadius: 6, padding: "4px 10px", cursor: "pointer", outline: "none" }}
+                    style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-base-black)", background: "#ffffff", border: "1px solid var(--life-neutral-200)", borderRadius: 6, padding: "4px 10px", cursor: "pointer", outline: "none" }}
                   >
                     {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
                   </select>
                   <button
                     type="button"
                     onClick={() => handleRemoveCollaborator(email)}
-                    style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--muted-foreground)", display: "flex", alignItems: "center", padding: 4 }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = "var(--destructive, #ef4444)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = "var(--muted-foreground)")}
+                    style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--life-neutral-400)", display: "flex", alignItems: "center", padding: 4 }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = "var(--life-critical-500)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = "var(--life-neutral-400)")}
                     aria-label={`Remove ${email}`}
                   >
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 3L3 11M3 3l8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
