@@ -31,6 +31,8 @@ export interface CourseStructureTreeProps {
   onRemove: (level: StructureLevel, id: string) => void;
   // Drag-and-drop: move `id` under `newParentId`, before `beforeId` (null = append).
   onMove: (level: StructureLevel, id: string, newParentId: string, beforeId: string | null) => void;
+  // Open a topic in the Page Editor (the "→" affordance on topic rows).
+  onOpenTopic: (topicId: string) => void;
 }
 
 interface Dragged { level: StructureLevel; id: string; }
@@ -300,7 +302,7 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
   function renderTopic(topic: STopic, containerId: string, parentLevel: ContainerLevel) {
     return (
       <div key={topic.id}>
-        {renderRow({ level: 'topic', id: topic.id, title: topic.title, parentId: containerId, parentLevel, expandable: true })}
+        {renderRow({ level: 'topic', id: topic.id, title: topic.title, parentId: containerId, parentLevel, expandable: true, onOpen: () => props.onOpenTopic(topic.id) })}
         {isOpen(topic.id) && renderSections(topic.sections, topic.id)}
       </div>
     );

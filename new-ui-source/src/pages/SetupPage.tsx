@@ -2096,14 +2096,18 @@ function NavigationPanel({ courseId }: { courseId: string }) {
       ...prev,
       start: { ...prev.start, _startIds: prev.start._startIds.map((it, idx) => (idx === i ? { ...it, ...p } : it)) },
     }));
-  const addStartId = () =>
+  const addStartId = () => {
+    // Require at least one page: a start entry's _id must point to a real page,
+    // so don't append an entry with an empty _id (that would save invalid settings).
+    if (!pages.length) return;
     setS((prev) => ({
       ...prev,
       start: {
         ...prev.start,
-        _startIds: [...prev.start._startIds, { _id: pages[0]?.id ?? "", _skipIfComplete: false, _className: "" }],
+        _startIds: [...prev.start._startIds, { _id: pages[0].id, _skipIfComplete: false, _className: "" }],
       },
     }));
+  };
   const removeStartId = (i: number) =>
     setS((prev) => ({ ...prev, start: { ...prev.start, _startIds: prev.start._startIds.filter((_, idx) => idx !== i) } }));
   const setNav = (p: Partial<NavigationSettings["navigation"]>) =>
@@ -2213,13 +2217,18 @@ function NavigationPanel({ courseId }: { courseId: string }) {
                       <button
                         type="button"
                         onClick={addStartId}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] rounded-lg transition-colors"
+                        disabled={!pages.length}
+                        title={!pages.length ? "Add a page to the course first" : undefined}
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:opacity-50 disabled:cursor-not-allowed rounded-lg transition-colors"
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                           <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
                         </svg>
                         Add
                       </button>
+                      {!pages.length && (
+                        <p className="text-[11px] text-[#9ca3af] mt-1.5">Add a page to the course before choosing a start page.</p>
+                      )}
                     </div>
                   </div>
                 )}
@@ -2336,7 +2345,7 @@ function NavigationPanel({ courseId }: { courseId: string }) {
                     { value: "top", label: "top" },
                     { value: "bottom", label: "bottom" },
                   ]}
-                  help="The CSS selector that determines where the navigation bar is displayed. Must be a selector targeting the HTML element."
+                  help="Where the primary navigation bar is displayed relative to the course content."
                 />
                 <CheckboxRow
                   checked={s.navigation.isBottomOnTouchDevices}
