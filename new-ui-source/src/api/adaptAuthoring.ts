@@ -156,6 +156,7 @@ export async function updateCourse(
   backendId: string,
   patch: {
     title?: string;
+    displayTitle?: string;
     description?: string;
     body?: string;
     heroAssetId?: string | null;
@@ -163,10 +164,10 @@ export async function updateCourse(
   }
 ): Promise<unknown> {
   const updateData: Record<string, unknown> = {};
-  if (patch.title !== undefined) {
-    updateData.title = patch.title;
-    updateData.displayTitle = patch.title;
-  }
+  if (patch.title !== undefined) updateData.title = patch.title;
+  if (patch.displayTitle !== undefined) updateData.displayTitle = patch.displayTitle;
+  // Keep title and displayTitle in sync when only one is provided
+  if (patch.title !== undefined && patch.displayTitle === undefined) updateData.displayTitle = patch.title;
   if (patch.description !== undefined) updateData.description = patch.description;
   if (patch.body !== undefined) updateData.body = patch.body;
   if (patch.heroAssetId !== undefined) updateData.heroImage = patch.heroAssetId;
@@ -229,6 +230,7 @@ interface EngineConfigDetails {
 export interface CourseBootstrapData {
   courseId: string;
   title: string;
+  displayTitle: string;
   description: string;
   body: string;
   heroAssetId: string | null;
@@ -364,7 +366,8 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
 
   return {
     courseId,
-    title: course.displayTitle || course.title || "Untitled Course",
+    title: course.title || "Untitled Course",
+    displayTitle: course.displayTitle || course.title || "",
     description: course.description || "",
     body: course.body || "",
     heroAssetId,
