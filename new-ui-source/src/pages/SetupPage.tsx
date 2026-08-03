@@ -10,7 +10,7 @@ import { getCourseBootstrapData } from "../api/adaptAuthoring";
 import { useCourseStructure } from "../hooks/useCourseStructure";
 import { STRUCTURE_LABELS } from "../types/structure";
 import { TechnicalSettingPage } from "./setup/technicalSettingPage";
-import SelectThemePage from "./setup/SelectThemePage";
+import SelectThemePage from "./setup/themePage";
 
 const ICON_BASE = "/new/assets/icons";
 
