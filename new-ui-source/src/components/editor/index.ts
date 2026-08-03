@@ -12,4 +12,3 @@ export { default as ArticleSettingsPanel } from "./ArticleSettingsPanel";
 export { default as BlockSettingsPanel } from "./BlockSettingsPanel";
 export { default as ComponentSettingsPanel } from "./ComponentSettingsPanel";
 export { default as ComponentSelector } from "./ComponentSelector";
-export { default as CourseSettingsPanel } from "./CourseSettingsPanel";

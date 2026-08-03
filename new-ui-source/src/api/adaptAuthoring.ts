@@ -10,6 +10,7 @@ import { apiClient } from "./client";
 export interface CurrentUser {
   _id: string;
   email: string;
+  username?: string;
   firstName?: string;
   lastName?: string;
   rolesAsName?: string[];

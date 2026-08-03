@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback, useDeferredValue, memo } from "react";
 import { getAssets, trashAsset } from "@/api/adaptAuthoring";
 
 type AssetFormat = "image" | "audio" | "video" | "other";
@@ -78,6 +78,7 @@ interface FileValidation {
 
 interface UploadFormErrors {
   title?: string;
+  description?: string;
 }
 
 interface UploadState {
@@ -144,11 +145,12 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function validateUploadForm(title: string): UploadFormErrors {
+function validateUploadForm(title: string, description: string): UploadFormErrors {
   const errors: UploadFormErrors = {};
   if (!title.trim()) errors.title = "Title is required.";
   else if (title.trim().length < 3) errors.title = "Title must be at least 3 characters.";
   else if (title.trim().length > 120) errors.title = "Title must be 120 characters or fewer.";
+  if (!description.trim()) errors.description = "Description is required.";
   return errors;
 }
 
@@ -175,6 +177,164 @@ const EMPTY_EDIT = (a: Asset): EditModalState => ({
 let nextId = INITIAL_ASSETS.length + 1;
 
 function formatBytes(raw: string) { return raw; }
+
+// List-item components live at module scope (not inside AssetManagementPage) so
+// their identity is stable across renders. Declaring them inside the page made
+// React remount the entire asset list on every keystroke (search/upload/edit
+// state all live on the page), which caused the visible typing lag. memo() then
+// skips re-rendering a card whose asset/handlers are unchanged.
+interface AssetItemProps {
+  asset: Asset;
+  onEdit: (asset: Asset) => void;
+  onDelete: (asset: Asset) => void;
+}
+
+const AssetCardItem = memo(function AssetCardItem({ asset, onEdit, onDelete }: AssetItemProps) {
+  return (
+    <div className="bg-white border border-[#e5e7eb] rounded-xl overflow-hidden hover:shadow-md transition-shadow flex flex-col group">
+      {/* Thumbnail */}
+      <div className={`h-32 ${THUMBNAIL_COLORS[asset.format]} flex items-center justify-center`}>
+        <span className={`${FORMAT_COLORS[asset.format].split(" ")[1]} opacity-60`}>
+          <svg width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.2}>
+            {asset.format === "image" && <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />}
+            {asset.format === "audio" && <path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />}
+            {asset.format === "video" && <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />}
+            {asset.format === "other" && <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />}
+          </svg>
+        </span>
+      </div>
+
+      {/* Body */}
+      <div className="p-4 flex flex-col gap-2 flex-1">
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="text-sm font-semibold text-[#111827] leading-tight line-clamp-2">{asset.title}</h3>
+          <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${FORMAT_COLORS[asset.format]}`}>
+            {FORMAT_ICONS[asset.format]}
+            {asset.format}
+          </span>
+        </div>
+
+        <p className="text-xs text-[#6b7280] line-clamp-2 leading-relaxed">{asset.description || "No description."}</p>
+
+        <div className="flex items-center gap-3 text-xs text-[#9ca3af] mt-auto pt-1">
+          <span className="flex items-center gap-1">
+            <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+            </svg>
+            {formatBytes(asset.size)}
+          </span>
+        </div>
+
+        {asset.tags.length > 0 && (
+          <div className="flex flex-wrap gap-1 pt-1">
+            {asset.tags.slice(0, 3).map((t) => (
+              <span key={t} className="px-1.5 py-0.5 bg-[#f3f4f6] text-[#6b7280] rounded text-[10px]">#{t}</span>
+            ))}
+            {asset.tags.length > 3 && <span className="px-1.5 py-0.5 text-[10px] text-[#9ca3af]">+{asset.tags.length - 3}</span>}
+          </div>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className="px-4 py-3 border-t border-[#f3f4f6] flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onEdit(asset)}
+          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#374151] border border-[#e5e7eb] rounded-lg hover:bg-[#f9fafb] transition-colors"
+        >
+          <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+          </svg>
+          Edit
+        </button>
+        <button
+          type="button"
+          onClick={() => onDelete(asset)}
+          className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#ef4444] border border-[#fecaca] rounded-lg hover:bg-[#fef2f2] transition-colors"
+        >
+          <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+            <path d="M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+          </svg>
+          Delete
+        </button>
+      </div>
+    </div>
+  );
+});
+
+const AssetListItem = memo(function AssetListItem({ asset, onEdit, onDelete }: AssetItemProps) {
+  return (
+    <tr className="border-b border-[#f3f4f6] hover:bg-[#fafafa] transition-colors group/row">
+      {/* Icon + Title */}
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-3">
+          <div className={`w-8 h-8 rounded-lg ${THUMBNAIL_COLORS[asset.format]} flex items-center justify-center shrink-0`}>
+            <span className={`${FORMAT_COLORS[asset.format].split(" ")[1]} opacity-70`}>{FORMAT_ICONS[asset.format]}</span>
+          </div>
+          <span className="text-sm font-medium text-[#111827]">{asset.title}</span>
+        </div>
+      </td>
+
+      {/* Description */}
+      <td className="px-4 py-3 max-w-xs">
+        <p className="text-sm text-[#6b7280] truncate">{asset.description || "—"}</p>
+      </td>
+
+      {/* Size */}
+      <td className="px-4 py-3 text-sm text-[#6b7280] whitespace-nowrap">{asset.size}</td>
+
+      {/* Format */}
+      <td className="px-4 py-3">
+        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${FORMAT_COLORS[asset.format]}`}>
+          {FORMAT_ICONS[asset.format]}
+          {asset.format}
+        </span>
+      </td>
+
+      {/* Tags */}
+      <td className="px-4 py-3">
+        <div className="flex flex-wrap gap-1">
+          {asset.tags.slice(0, 2).map((t) => (
+            <span key={t} className="px-1.5 py-0.5 bg-[#f3f4f6] text-[#6b7280] rounded text-[10px]">#{t}</span>
+          ))}
+          {asset.tags.length > 2 && <span className="text-[10px] text-[#9ca3af]">+{asset.tags.length - 2}</span>}
+        </div>
+      </td>
+
+      {/* Actions */}
+      <td className="px-4 py-3">
+        <div className="flex items-center justify-end gap-1">
+          <button
+            type="button"
+            onClick={() => onEdit(asset)}
+            title="Edit asset"
+            className="p-1.5 rounded-lg text-[#9ca3af] hover:text-[#2d6fa8] hover:bg-[#dbeeff] transition-colors"
+          >
+            <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            onClick={() => onDelete(asset)}
+            title="Delete asset"
+            className="p-1.5 rounded-lg text-[#9ca3af] hover:text-[#ef4444] hover:bg-[#fef2f2] transition-colors"
+          >
+            <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6" />
+              <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+              <path d="M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+            </svg>
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+});
 
 export default function AssetManagementPage() {
   const [assets, setAssets]             = useState<Asset[]>([]);
@@ -232,8 +392,9 @@ export default function AssetManagementPage() {
     return () => { if (progressTimer.current) clearInterval(progressTimer.current); };
   }, []);
 
+  const deferredSearch = useDeferredValue(search);
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = deferredSearch.trim().toLowerCase();
     return assets.filter((a) => {
       const matchSearch =
         q === "" ||
@@ -242,7 +403,7 @@ export default function AssetManagementPage() {
       const matchFormat = formatFilter === "All" || a.format === formatFilter;
       return matchSearch && matchFormat;
     });
-  }, [assets, search, formatFilter]);
+  }, [assets, deferredSearch, formatFilter]);
 
   // ── Upload: step "pick" ───────────────────────────────────────────────────
   const handleUploadFile = useCallback((f: File | null) => {
@@ -266,7 +427,7 @@ export default function AssetManagementPage() {
 
   // ── Upload: validate → upload ─────────────────────────────────────────────
   function startUpload() {
-    const errors = validateUploadForm(upload.title);
+    const errors = validateUploadForm(upload.title, upload.description);
     if (Object.keys(errors).length > 0) {
       setUpload((prev) => ({ ...prev, formErrors: errors }));
       return;
@@ -316,7 +477,7 @@ export default function AssetManagementPage() {
 
   // ── Edit ────────────────────────────────────────────────────────────────
   function saveEdit() {
-    if (!editState?.asset || !editState.title.trim()) return;
+    if (!editState?.asset || !editState.title.trim() || !editState.description.trim()) return;
     setAssets((prev) => prev.map((a) =>
       a.id === editState.asset!.id
         ? {
@@ -361,152 +522,9 @@ export default function AssetManagementPage() {
 
   const FORMATS: (AssetFormat | "All")[] = ["All", "image", "audio", "video", "other"];
 
-  function AssetCardItem({ asset }: { asset: Asset }) {
-    return (
-      <div className="bg-white border border-[#e5e7eb] rounded-xl overflow-hidden hover:shadow-md transition-shadow flex flex-col group">
-        {/* Thumbnail */}
-        <div className={`h-32 ${THUMBNAIL_COLORS[asset.format]} flex items-center justify-center`}>
-          <span className={`${FORMAT_COLORS[asset.format].split(" ")[1]} opacity-60`}>
-            <svg width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.2}>
-              {asset.format === "image" && <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />}
-              {asset.format === "audio" && <path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />}
-              {asset.format === "video" && <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />}
-              {asset.format === "other" && <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />}
-            </svg>
-          </span>
-        </div>
-
-        {/* Body */}
-        <div className="p-4 flex flex-col gap-2 flex-1">
-          <div className="flex items-start justify-between gap-2">
-            <h3 className="text-sm font-semibold text-[#111827] leading-tight line-clamp-2">{asset.title}</h3>
-            <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${FORMAT_COLORS[asset.format]}`}>
-              {FORMAT_ICONS[asset.format]}
-              {asset.format}
-            </span>
-          </div>
-
-          <p className="text-xs text-[#6b7280] line-clamp-2 leading-relaxed">{asset.description || "No description."}</p>
-
-          <div className="flex items-center gap-3 text-xs text-[#9ca3af] mt-auto pt-1">
-            <span className="flex items-center gap-1">
-              <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-              </svg>
-              {formatBytes(asset.size)}
-            </span>
-          </div>
-
-          {asset.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 pt-1">
-              {asset.tags.slice(0, 3).map((t) => (
-                <span key={t} className="px-1.5 py-0.5 bg-[#f3f4f6] text-[#6b7280] rounded text-[10px]">#{t}</span>
-              ))}
-              {asset.tags.length > 3 && <span className="px-1.5 py-0.5 text-[10px] text-[#9ca3af]">+{asset.tags.length - 3}</span>}
-            </div>
-          )}
-        </div>
-
-        {/* Actions */}
-        <div className="px-4 py-3 border-t border-[#f3f4f6] flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setEditState(EMPTY_EDIT(asset))}
-            className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#374151] border border-[#e5e7eb] rounded-lg hover:bg-[#f9fafb] transition-colors"
-          >
-            <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-            </svg>
-            Edit
-          </button>
-          <button
-            type="button"
-            onClick={() => setDeleteTarget(asset)}
-            className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#ef4444] border border-[#fecaca] rounded-lg hover:bg-[#fef2f2] transition-colors"
-          >
-            <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-              <path d="M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
-            </svg>
-            Delete
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  function AssetListItem({ asset }: { asset: Asset }) {
-    return (
-      <tr className="border-b border-[#f3f4f6] hover:bg-[#fafafa] transition-colors group/row">
-        {/* Icon + Title */}
-        <td className="px-4 py-3">
-          <div className="flex items-center gap-3">
-            <div className={`w-8 h-8 rounded-lg ${THUMBNAIL_COLORS[asset.format]} flex items-center justify-center shrink-0`}>
-              <span className={`${FORMAT_COLORS[asset.format].split(" ")[1]} opacity-70`}>{FORMAT_ICONS[asset.format]}</span>
-            </div>
-            <span className="text-sm font-medium text-[#111827]">{asset.title}</span>
-          </div>
-        </td>
-
-        {/* Description */}
-        <td className="px-4 py-3 max-w-xs">
-          <p className="text-sm text-[#6b7280] truncate">{asset.description || "—"}</p>
-        </td>
-
-        {/* Size */}
-        <td className="px-4 py-3 text-sm text-[#6b7280] whitespace-nowrap">{asset.size}</td>
-
-        {/* Format */}
-        <td className="px-4 py-3">
-          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${FORMAT_COLORS[asset.format]}`}>
-            {FORMAT_ICONS[asset.format]}
-            {asset.format}
-          </span>
-        </td>
-
-        {/* Tags */}
-        <td className="px-4 py-3">
-          <div className="flex flex-wrap gap-1">
-            {asset.tags.slice(0, 2).map((t) => (
-              <span key={t} className="px-1.5 py-0.5 bg-[#f3f4f6] text-[#6b7280] rounded text-[10px]">#{t}</span>
-            ))}
-            {asset.tags.length > 2 && <span className="text-[10px] text-[#9ca3af]">+{asset.tags.length - 2}</span>}
-          </div>
-        </td>
-
-        {/* Actions */}
-        <td className="px-4 py-3">
-          <div className="flex items-center justify-end gap-1">
-            <button
-              type="button"
-              onClick={() => setEditState(EMPTY_EDIT(asset))}
-              title="Edit asset"
-              className="p-1.5 rounded-lg text-[#9ca3af] hover:text-[#2d6fa8] hover:bg-[#dbeeff] transition-colors"
-            >
-              <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={() => setDeleteTarget(asset)}
-              title="Delete asset"
-              className="p-1.5 rounded-lg text-[#9ca3af] hover:text-[#ef4444] hover:bg-[#fef2f2] transition-colors"
-            >
-              <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-                <path d="M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
-              </svg>
-            </button>
-          </div>
-        </td>
-      </tr>
-    );
-  }
+  // Stable handlers so the memoized list items don't re-render on every keystroke.
+  const handleEditAsset   = useCallback((asset: Asset) => setEditState(EMPTY_EDIT(asset)), []);
+  const handleDeleteAsset = useCallback((asset: Asset) => setDeleteTarget(asset), []);
 
   return (
     <div className="flex flex-col h-full">
@@ -669,7 +687,7 @@ export default function AssetManagementPage() {
           </div>
         ) : view === "grid" ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filtered.map((a) => <AssetCardItem key={a.id} asset={a} />)}
+            {filtered.map((a) => <AssetCardItem key={a.id} asset={a} onEdit={handleEditAsset} onDelete={handleDeleteAsset} />)}
           </div>
         ) : (
           <div className="rounded-xl border border-[#e5e7eb] overflow-hidden bg-white">
@@ -685,7 +703,7 @@ export default function AssetManagementPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((a) => <AssetListItem key={a.id} asset={a} />)}
+                {filtered.map((a) => <AssetListItem key={a.id} asset={a} onEdit={handleEditAsset} onDelete={handleDeleteAsset} />)}
               </tbody>
             </table>
           </div>
@@ -824,14 +842,29 @@ export default function AssetManagementPage() {
 
                   {/* Description */}
                   <div>
-                    <label className="block text-xs font-semibold text-[#374151] mb-1.5">Description</label>
+                    <label className="block text-xs font-semibold text-[#374151] mb-1.5">
+                      Description <span className="text-[#ef4444]">*</span>
+                    </label>
                     <textarea
                       value={upload.description}
-                      onChange={(e) => setUpload((p) => ({ ...p, description: e.target.value }))}
+                      onChange={(e) => setUpload((p) => ({ ...p, description: e.target.value, formErrors: { ...p.formErrors, description: undefined } }))}
                       placeholder="Describe what this asset is and how it should be used…"
                       rows={3}
-                      className="w-full px-3 py-2 text-sm border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent placeholder-[#9ca3af] resize-none"
+                      aria-invalid={upload.formErrors.description ? "true" : "false"}
+                      className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent placeholder-[#9ca3af] resize-none transition-colors ${
+                        upload.formErrors.description
+                          ? "border-[#ef4444] focus:ring-[#ef4444]"
+                          : "border-[#e5e7eb] focus:ring-[#2d6fa8]"
+                      }`}
                     />
+                    {upload.formErrors.description && (
+                      <p className="text-xs text-[#ef4444] flex items-center gap-1 mt-1">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                        </svg>
+                        {upload.formErrors.description}
+                      </p>
+                    )}
                   </div>
 
                   {/* Tags */}
@@ -1009,14 +1042,24 @@ export default function AssetManagementPage() {
 
               {/* Description */}
               <div>
-                <label className="block text-xs font-semibold text-[#374151] mb-1.5">Description</label>
+                <label className="block text-xs font-semibold text-[#374151] mb-1.5">
+                  Description <span className="text-[#ef4444]">*</span>
+                </label>
                 <textarea
                   value={editState.description}
                   onChange={(e) => setEditState((p) => p ? { ...p, description: e.target.value } : p)}
                   placeholder="Describe this asset…"
                   rows={3}
-                  className="w-full px-3 py-2 text-sm border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent placeholder-[#9ca3af] resize-none"
+                  aria-invalid={!editState.description.trim() ? "true" : "false"}
+                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent placeholder-[#9ca3af] resize-none transition-colors ${
+                    !editState.description.trim()
+                      ? "border-[#ef4444] focus:ring-[#ef4444]"
+                      : "border-[#e5e7eb] focus:ring-[#2d6fa8]"
+                  }`}
                 />
+                {!editState.description.trim() && (
+                  <p className="text-xs text-[#ef4444] mt-1">Description is required.</p>
+                )}
               </div>
 
               {/* Tags */}
@@ -1045,7 +1088,7 @@ export default function AssetManagementPage() {
               <button
                 type="button"
                 onClick={saveEdit}
-                disabled={!editState.title.trim()}
+                disabled={!editState.title.trim() || !editState.description.trim()}
                 className="px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 Save Changes
