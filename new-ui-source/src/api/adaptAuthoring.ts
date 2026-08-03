@@ -303,6 +303,61 @@ export async function getAuthoringMenuOptions(): Promise<string[]> {
   return rows.map(toOptionLabel).filter(Boolean);
 }
 
+export interface ThemePreset {
+  _id: string;
+  displayName: string;
+  parentTheme: string;
+  properties: Record<string, unknown>;
+}
+
+// Applies a theme plugin to the course by resolving human-readable theme label.
+export async function saveThemeForCourse(courseId: string, themeLabel: string): Promise<void> {
+  const themes = await getThemeTypes();
+  const themeId = resolvePluginId(themes, themeLabel, "theme");
+  if (themeId) {
+    await applyThemeToCourse(courseId, themeId);
+  }
+}
+
+// Returns the legacy parentTheme key used by preset APIs.
+export async function getThemePresetParentTheme(themeLabel: string): Promise<string | null> {
+  const label = normalize(themeLabel);
+  if (label.includes("life")) return "lifetheme";
+  if (label.includes("vanilla")) return "vanillatheme";
+  if (label.includes("custom")) return "customtheme";
+  return null;
+}
+
+export async function saveThemeVariables(
+  courseId: string,
+  themeVariables: Record<string, unknown>
+): Promise<void> {
+  await apiClient.put(`/api/content/course/${courseId}`, { themeVariables });
+}
+
+export async function getThemePresets(parentTheme?: string): Promise<ThemePreset[]> {
+  try {
+    const rows = await apiClient.get<ThemePreset[]>("/api/content/themepreset");
+    const all = Array.isArray(rows) ? rows : [];
+    if (!parentTheme) return all;
+    return all.filter((preset) => preset.parentTheme === parentTheme);
+  } catch {
+    return [];
+  }
+}
+
+export async function saveThemePreset(
+  displayName: string,
+  parentTheme: string,
+  properties: Record<string, unknown>
+): Promise<ThemePreset> {
+  return apiClient.post<ThemePreset>("/api/content/themepreset", { displayName, parentTheme, properties });
+}
+
+export async function applyThemePreset(presetId: string, courseId: string): Promise<void> {
+  await apiClient.post(`/api/themepreset/${presetId}/makeitso/${courseId}`);
+}
+
 async function applyThemeToCourse(courseId: string, themeId: string): Promise<void> {
   await apiClient.post(`/api/theme/${themeId}/makeitso/${courseId}`);
 }
