@@ -206,6 +206,7 @@ interface EnginePluginType {
   _id: string;
   name?: string;
   displayName?: string;
+  theme?: string;
 }
 
 interface EngineCourseDetails {
@@ -213,18 +214,22 @@ interface EngineCourseDetails {
   title?: string;
   displayTitle?: string;
   description?: string;
+  themeVariables?: Record<string, unknown>;
+  _themePreset?: string;
 }
 
 interface EngineConfigDetails {
-  _id?: string;
   _courseId?: string;
   _theme?: string;
   _menu?: string;
-  // Map of installed extensions, keyed by the plugin's bower `extension` field
-  // (e.g. "course-menu"); each entry carries the full bower `name`.
-  _enabledExtensions?: Record<string, { _id: string; name: string; version?: string; targetAttribute?: string }>;
-  // Config-location extension settings (enable toggles etc.).
-  _extensions?: Record<string, unknown>;
+  _themePreset?: string;
+}
+
+export interface ThemePreset {
+  _id: string;
+  displayName: string;
+  parentTheme: string;
+  properties: Record<string, unknown>;
 }
 
 export interface CourseBootstrapData {
@@ -233,6 +238,8 @@ export interface CourseBootstrapData {
   description: string;
   themeName: string;
   menuName: string;
+  themeVariables: Record<string, unknown>;
+  themePresetId: string;
 }
 
 function normalize(v?: string): string {
@@ -268,15 +275,70 @@ function scorePluginMatch(plugin: EnginePluginType, label: string, kind: "theme"
 }
 
 function resolvePluginId(options: EnginePluginType[], label: string, kind: "theme" | "menu"): string | null {
+  const target = normalize(label);
   let best: { id: string; score: number } | null = null;
+  let bestOption: EnginePluginType | null = null;
   for (const option of options) {
     const score = scorePluginMatch(option, label, kind);
     if (!option._id || score <= 0) continue;
+
     if (!best || score > best.score) {
       best = { id: option._id, score };
+      bestOption = option;
+      continue;
+    }
+
+    if (kind === "theme" && target === "lifetheme" && best && score === best.score && bestOption) {
+      const curName = normalize(bestOption.name);
+      const curDisplay = normalize(bestOption.displayName);
+      const curTheme = normalize(bestOption.theme);
+      const nextName = normalize(option.name);
+      const nextDisplay = normalize(option.displayName);
+      const nextTheme = normalize(option.theme);
+
+      const curIsV2 = curName.includes("v2") || curDisplay.includes("v2") || curTheme.includes("v2") || curDisplay.includes("alpha");
+      const nextIsV2 = nextName.includes("v2") || nextDisplay.includes("v2") || nextTheme.includes("v2") || nextDisplay.includes("alpha");
+
+      if (curIsV2 && !nextIsV2) {
+        best = { id: option._id, score };
+        bestOption = option;
+      }
     }
   }
   return best?.id ?? null;
+}
+
+function resolveBestPluginOption(options: EnginePluginType[], label: string, kind: "theme" | "menu"): EnginePluginType | null {
+  let best: { score: number; option: EnginePluginType } | null = null;
+  const target = normalize(label);
+
+  for (const option of options) {
+    const score = scorePluginMatch(option, label, kind);
+    if (score <= 0) continue;
+
+    if (!best || score > best.score) {
+      best = { score, option };
+      continue;
+    }
+
+    if (kind === "theme" && target === "lifetheme" && score === best.score) {
+      const curName = normalize(best.option.name);
+      const curDisplay = normalize(best.option.displayName);
+      const curTheme = normalize(best.option.theme);
+      const nextName = normalize(option.name);
+      const nextDisplay = normalize(option.displayName);
+      const nextTheme = normalize(option.theme);
+
+      const curIsV2 = curName.includes("v2") || curDisplay.includes("v2") || curTheme.includes("v2") || curDisplay.includes("alpha");
+      const nextIsV2 = nextName.includes("v2") || nextDisplay.includes("v2") || nextTheme.includes("v2") || nextDisplay.includes("alpha");
+
+      if (curIsV2 && !nextIsV2) {
+        best = { score, option };
+      }
+    }
+  }
+
+  return best?.option ?? null;
 }
 
 async function getThemeTypes(): Promise<EnginePluginType[]> {
@@ -305,6 +367,55 @@ export async function getAuthoringMenuOptions(): Promise<string[]> {
 
 async function applyThemeToCourse(courseId: string, themeId: string): Promise<void> {
   await apiClient.post(`/api/theme/${themeId}/makeitso/${courseId}`);
+}
+
+/** Resolve a theme label (e.g. "Custom Theme") to its plugin ID and apply it to the course. */
+export async function saveThemeForCourse(courseId: string, themeLabel: string): Promise<void> {
+  const themes = await getThemeTypes();
+  const themeId = resolvePluginId(themes, themeLabel, "theme");
+  if (themeId) await applyThemeToCourse(courseId, themeId);
+}
+
+/** Resolve the same parentTheme key old UI uses for theme presets. */
+export async function getThemePresetParentTheme(themeLabel: string): Promise<string | null> {
+  const themes = await getThemeTypes();
+  const bestTheme = resolveBestPluginOption(themes, themeLabel, "theme");
+  if (!bestTheme) return null;
+  return bestTheme.theme || null;
+}
+
+/** Persist themeVariables into course.themeVariables via PUT /api/content/course/:id */
+export async function saveThemeVariables(
+  courseId: string,
+  themeVariables: Record<string, unknown>
+): Promise<void> {
+  await apiClient.put(`/api/content/course/${courseId}`, { themeVariables });
+}
+
+/** Fetch all theme presets (optionally filter by parentTheme slug). */
+export async function getThemePresets(parentTheme?: string): Promise<ThemePreset[]> {
+  try {
+    const rows = await apiClient.get<ThemePreset[]>("/api/content/themepreset");
+    const all = Array.isArray(rows) ? rows : [];
+    if (!parentTheme) return all;
+    return all.filter((p) => p.parentTheme === parentTheme);
+  } catch {
+    return [];
+  }
+}
+
+/** Save a new preset for the current theme. */
+export async function saveThemePreset(
+  displayName: string,
+  parentTheme: string,
+  properties: Record<string, unknown>
+): Promise<ThemePreset> {
+  return apiClient.post<ThemePreset>("/api/content/themepreset", { displayName, parentTheme, properties });
+}
+
+/** Apply an existing preset to the course. */
+export async function applyThemePreset(presetId: string, courseId: string): Promise<void> {
+  await apiClient.post(`/api/themepreset/${presetId}/makeitso/${courseId}`);
 }
 
 async function applyMenuToCourse(courseId: string, menuId: string): Promise<void> {
@@ -358,328 +469,9 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
     description: course.description || "",
     themeName: config._theme || "",
     menuName: config._menu || "",
+    themeVariables: (course.themeVariables as Record<string, unknown>) || {},
+    themePresetId: config._themePreset || "",
   };
-}
-
-// ── Navigation Settings ───────────────────────────────────────────────────────
-// The Adapt Studio "Navigation" panel edits a mix of CORE course fields and three
-// togglable extensions, spread across two engine documents:
-//   • course._start / course._lockType / course._navigation            (core)
-//   • course._extensions._topbarLogos._items                            (adapt-topbar-logos)
-//   • course._extensions._navigationFooter.*                            (adapt-navigation-footer)
-//   • config._extensions._courseMenu.*                                  (adapt-course-menu)
-//   • config._extensions._{topbarLogos,navigationFooter}._isEnabled     (enable toggles)
-// Config is retrieved by courseId (the config plugin swaps :id→_courseId on read)
-// but UPDATED by its own _id (only `retrieve` is overridden server-side), so we
-// PUT config to `/api/content/config/<config._id>`.
-// Extensions are auto-installed on demand via POST /api/extension/enable/:courseId.
-//
-// "Installed" detection: config._enabledExtensions is keyed by the plugin's bower
-// `extension` field ("course-menu", not "_courseMenu"), and each entry stores the
-// full bower `name`. We match on `name` so we don't depend on the exact key format.
-
-const EXTENSION_NAME_BY_KEY: Record<string, string> = {
-  _courseMenu: "adapt-course-menu",
-  _topbarLogos: "adapt-topbar-logos",
-  _navigationFooter: "adapt-navigation-footer",
-};
-
-function isExtensionInstalled(config: EngineConfigDetails, extensionName: string): boolean {
-  const map = config._enabledExtensions ?? {};
-  return Object.values(map).some((e) => e && e.name === extensionName);
-}
-
-export interface NavStartId {
-  _id: string;
-  _skipIfComplete: boolean;
-  _className: string;
-}
-
-export interface NavFooterButton {
-  _isEnabled: boolean;
-  btnText: string;
-  _classes: string;
-}
-
-export type NavFooterButtonKey = "_home" | "_up" | "_previous" | "_next" | "_close" | "_custom";
-
-export interface NavigationSettings {
-  start: {
-    _isEnabled: boolean;
-    _startIds: NavStartId[];
-    _force: boolean;
-    _isMenuDisabled: boolean;
-  };
-  lockType: "" | "custom" | "lockLast" | "sequential" | "unlockFirst";
-  courseMenu: {
-    enabled: boolean;
-    includeSubmenuInNavigation: boolean;
-  };
-  headerLogo: {
-    enabled: boolean;
-    src: string;
-    tooltip: string;
-  };
-  navigation: {
-    isDefaultNavigationDisabled: boolean;
-    navigationAlignment: "top" | "bottom";
-    isBottomOnTouchDevices: boolean;
-    showLabel: boolean;
-    showLabelAtWidth: "any" | "small" | "medium" | "large";
-    labelPosition: "auto" | "top" | "bottom" | "left" | "right";
-  };
-  navFooter: {
-    enabled: boolean;
-    footerText: string;
-    btnNotifyPopupText: string;
-    isLogicalBackNavigation: boolean;
-    includeSubmenuInNavigation: boolean;
-    buttons: Record<NavFooterButtonKey, NavFooterButton>;
-  };
-}
-
-// Schema defaults for the six footer buttons (adapt-navigation-footer/properties.schema).
-function defaultFooterButtons(): Record<NavFooterButtonKey, NavFooterButton> {
-  return {
-    _home: { _isEnabled: true, btnText: "", _classes: "" },
-    _up: { _isEnabled: true, btnText: "Up", _classes: "btn-secondary" },
-    _previous: { _isEnabled: true, btnText: "Previous", _classes: "btn-secondary" },
-    _next: { _isEnabled: true, btnText: "Next", _classes: "" },
-    _close: { _isEnabled: false, btnText: "Close", _classes: "" },
-    _custom: { _isEnabled: false, btnText: "Custom", _classes: "" },
-  };
-}
-
-export function defaultNavigationSettings(): NavigationSettings {
-  return {
-    start: { _isEnabled: false, _startIds: [], _force: false, _isMenuDisabled: false },
-    lockType: "",
-    courseMenu: { enabled: false, includeSubmenuInNavigation: false },
-    headerLogo: { enabled: false, src: "", tooltip: "" },
-    navigation: {
-      isDefaultNavigationDisabled: false,
-      navigationAlignment: "top",
-      isBottomOnTouchDevices: false,
-      showLabel: false,
-      showLabelAtWidth: "medium",
-      labelPosition: "auto",
-    },
-    navFooter: {
-      enabled: false,
-      footerText: "",
-      btnNotifyPopupText: "Need to complete current page",
-      isLogicalBackNavigation: false,
-      includeSubmenuInNavigation: false,
-      buttons: defaultFooterButtons(),
-    },
-  };
-}
-
-// Pages (page-type contentobjects) for the Start-page picker.
-export interface CoursePageOption {
-  id: string;
-  title: string;
-}
-
-export async function getCoursePages(courseId: string): Promise<CoursePageOption[]> {
-  const rows = await apiClient.get<EngineContentNode[]>(`/api/content/contentobject?_courseId=${courseId}`);
-  return (Array.isArray(rows) ? rows : [])
-    .filter((r) => r._type === "page")
-    .sort(bySortOrder)
-    .map((r) => ({ id: r._id, title: r.displayTitle || r.title || "Untitled Page" }));
-}
-
-type AnyRecord = Record<string, unknown>;
-function obj(v: unknown): AnyRecord {
-  return v && typeof v === "object" ? (v as AnyRecord) : {};
-}
-function bool(v: unknown, fallback: boolean): boolean {
-  return typeof v === "boolean" ? v : fallback;
-}
-function str(v: unknown, fallback = ""): string {
-  return typeof v === "string" ? v : fallback;
-}
-
-export async function getNavigationSettings(courseId: string): Promise<NavigationSettings> {
-  const [course, config] = await Promise.all([
-    apiClient.get<AnyRecord>(`/api/content/course/${courseId}`),
-    apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`),
-  ]);
-
-  const d = defaultNavigationSettings();
-  const courseExt = obj(course._extensions);
-  const cfgExt = obj(config._extensions);
-
-  // Start settings (core)
-  const start = obj(course._start);
-  const startIds = Array.isArray(start._startIds) ? (start._startIds as AnyRecord[]) : [];
-  d.start = {
-    _isEnabled: bool(start._isEnabled, false),
-    _startIds: startIds.map((it) => ({
-      _id: str(it._id),
-      _skipIfComplete: bool(it._skipIfComplete, false),
-      _className: str(it._className),
-    })),
-    _force: bool(start._force, false),
-    _isMenuDisabled: bool(start._isMenuDisabled, false),
-  };
-
-  // Menu lock (core)
-  d.lockType = str(course._lockType) as NavigationSettings["lockType"];
-
-  // Core navigation bar
-  const nav = obj(course._navigation);
-  d.navigation = {
-    isDefaultNavigationDisabled: bool(nav._isDefaultNavigationDisabled, false),
-    navigationAlignment: (str(nav._navigationAlignment, "top") as "top" | "bottom"),
-    isBottomOnTouchDevices: bool(nav._isBottomOnTouchDevices, false),
-    showLabel: bool(nav._showLabel, false),
-    showLabelAtWidth: (str(nav._showLabelAtWidth, "medium") as NavigationSettings["navigation"]["showLabelAtWidth"]),
-    labelPosition: (str(nav._labelPosition, "auto") as NavigationSettings["navigation"]["labelPosition"]),
-  };
-
-  // Course menu extension (config location)
-  const courseMenu = obj(cfgExt._courseMenu);
-  d.courseMenu = {
-    enabled: isExtensionInstalled(config, EXTENSION_NAME_BY_KEY._courseMenu) && bool(courseMenu._isEnabled, true),
-    includeSubmenuInNavigation: bool(courseMenu._includeSubmenuInNavigation, false),
-  };
-
-  // Header logo extension (enable in config, item in course)
-  const topbarCfg = obj(cfgExt._topbarLogos);
-  const topbar = obj(courseExt._topbarLogos);
-  const firstLogo = Array.isArray(topbar._items) && topbar._items[0] ? obj(topbar._items[0]) : {};
-  d.headerLogo = {
-    enabled: isExtensionInstalled(config, EXTENSION_NAME_BY_KEY._topbarLogos) && bool(topbarCfg._isEnabled, true),
-    src: str(firstLogo.src),
-    tooltip: str(firstLogo.tooltip),
-  };
-
-  // Navigation footer extension (enable in config, settings in course)
-  const nfCfg = obj(cfgExt._navigationFooter);
-  const nf = obj(courseExt._navigationFooter);
-  const toggle = obj(nf._toggleNavigation);
-  const footerText = obj(nf._footerText);
-  const buttons = obj(nf._buttons);
-  const mergedButtons = defaultFooterButtons();
-  (Object.keys(mergedButtons) as NavFooterButtonKey[]).forEach((k) => {
-    const b = obj(buttons[k]);
-    mergedButtons[k] = {
-      _isEnabled: bool(b._isEnabled, mergedButtons[k]._isEnabled),
-      btnText: str(b.btnText, mergedButtons[k].btnText),
-      _classes: str(b._classes, mergedButtons[k]._classes),
-    };
-  });
-  d.navFooter = {
-    enabled: isExtensionInstalled(config, EXTENSION_NAME_BY_KEY._navigationFooter) && bool(nfCfg._isEnabled, true),
-    footerText: str(footerText.text),
-    btnNotifyPopupText: str(footerText._btnNotifyPopupText, "Need to complete current page"),
-    isLogicalBackNavigation: bool(toggle._isLogicalBackNavigation, false),
-    includeSubmenuInNavigation: bool(toggle._includeSubmenuInNavigation, false),
-    buttons: mergedButtons,
-  };
-
-  return d;
-}
-
-async function resolveExtensionTypeIds(names: string[]): Promise<string[]> {
-  const rows = await apiClient.get<{ _id: string; name?: string }[]>("/api/extensiontype");
-  const byName = new Map((Array.isArray(rows) ? rows : []).map((r) => [r.name, r._id] as const));
-  return names.map((n) => byName.get(n)).filter((x): x is string => !!x);
-}
-
-export async function saveNavigationSettings(courseId: string, s: NavigationSettings): Promise<void> {
-  let course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
-  let config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
-
-  // 1. Auto-install any extension whose section was switched on but isn't installed yet.
-  //    This is the "create + initialize plugin settings when missing" path.
-  const toEnable: string[] = [];
-  if (s.courseMenu.enabled && !isExtensionInstalled(config, EXTENSION_NAME_BY_KEY._courseMenu))
-    toEnable.push(EXTENSION_NAME_BY_KEY._courseMenu);
-  if (s.headerLogo.enabled && !isExtensionInstalled(config, EXTENSION_NAME_BY_KEY._topbarLogos))
-    toEnable.push(EXTENSION_NAME_BY_KEY._topbarLogos);
-  if (s.navFooter.enabled && !isExtensionInstalled(config, EXTENSION_NAME_BY_KEY._navigationFooter))
-    toEnable.push(EXTENSION_NAME_BY_KEY._navigationFooter);
-
-  if (toEnable.length) {
-    const ids = await resolveExtensionTypeIds(toEnable);
-    if (ids.length) {
-      await apiClient.post(`/api/extension/enable/${courseId}`, { extensions: ids });
-      // Re-read: enabling seeds schema-default _extensions objects + updates _enabledExtensions.
-      course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
-      config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
-    }
-  }
-  const hasCourseMenu = isExtensionInstalled(config, EXTENSION_NAME_BY_KEY._courseMenu);
-  const hasTopbarLogos = isExtensionInstalled(config, EXTENSION_NAME_BY_KEY._topbarLogos);
-  const hasNavFooter = isExtensionInstalled(config, EXTENSION_NAME_BY_KEY._navigationFooter);
-
-  // 2. Config document: merge onto existing _extensions so other plugins survive.
-  const cfgExt: AnyRecord = { ...obj(config._extensions) };
-  if (hasCourseMenu) {
-    cfgExt._courseMenu = {
-      ...obj(cfgExt._courseMenu),
-      _isEnabled: s.courseMenu.enabled,
-      _includeSubmenuInNavigation: s.courseMenu.includeSubmenuInNavigation,
-    };
-  }
-  if (hasTopbarLogos) {
-    cfgExt._topbarLogos = { ...obj(cfgExt._topbarLogos), _isEnabled: s.headerLogo.enabled };
-  }
-  if (hasNavFooter) {
-    cfgExt._navigationFooter = { ...obj(cfgExt._navigationFooter), _isEnabled: s.navFooter.enabled };
-  }
-  if (config._id) {
-    // Include _courseId: the config update's permission check (hasCoursePermission)
-    // resolves the owning course from the delta; without it the check falls back to
-    // the config _id as a course id, fails the lookup, and returns "not permitted".
-    await apiClient.put(`/api/content/config/${config._id}`, { _courseId: courseId, _extensions: cfgExt });
-  }
-
-  // 3. Course document: core fields + course-location extension settings.
-  const courseExt: AnyRecord = { ...obj(course._extensions) };
-  if (hasTopbarLogos) {
-    const src = s.headerLogo.src.trim();
-    courseExt._topbarLogos = {
-      ...obj(courseExt._topbarLogos),
-      _items: src ? [{ src, tooltip: s.headerLogo.tooltip }] : [],
-    };
-  }
-  if (hasNavFooter) {
-    courseExt._navigationFooter = {
-      ...obj(courseExt._navigationFooter),
-      _toggleNavigation: {
-        _isLogicalBackNavigation: s.navFooter.isLogicalBackNavigation,
-        _includeSubmenuInNavigation: s.navFooter.includeSubmenuInNavigation,
-      },
-      _footerText: {
-        text: s.navFooter.footerText,
-        _btnNotifyPopupText: s.navFooter.btnNotifyPopupText,
-      },
-      _buttons: s.navFooter.buttons,
-    };
-  }
-
-  await apiClient.put(`/api/content/course/${courseId}`, {
-    _start: {
-      _isEnabled: s.start._isEnabled,
-      // Drop any entry without a page reference — a start id must point to a page.
-      _startIds: s.start._startIds.filter((it) => !!it._id),
-      _force: s.start._force,
-      _isMenuDisabled: s.start._isMenuDisabled,
-    },
-    _lockType: s.lockType,
-    _navigation: {
-      _isDefaultNavigationDisabled: s.navigation.isDefaultNavigationDisabled,
-      _navigationAlignment: s.navigation.navigationAlignment,
-      _isBottomOnTouchDevices: s.navigation.isBottomOnTouchDevices,
-      _showLabel: s.navigation.showLabel,
-      _showLabelAtWidth: s.navigation.showLabelAtWidth,
-      _labelPosition: s.navigation.labelPosition,
-    },
-    _extensions: courseExt,
-  });
 }
 
 // ── Technical Settings ─────────────────────────────────────────────────────────

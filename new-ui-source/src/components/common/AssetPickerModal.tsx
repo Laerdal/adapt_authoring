@@ -56,26 +56,9 @@ export default function AssetPickerModal({ onSelect, onClose }: AssetPickerModal
     }
   }
 
-  // Build the served URL WITH the file extension. `/api/asset/serve/:id` strips a
-  // trailing extension server-side (assetmanager.serveAsset), so `<id>.png` resolves
-  // to the same asset — but keeping the extension in the stored value matters for
-  // consumers like the topbar-logos plugin and for exported courses.
-  function assetExtension(asset?: Asset): string {
-    if (!asset) return "";
-    const name = asset.filename || asset.title || "";
-    const dot = name.lastIndexOf(".");
-    if (dot > -1 && dot < name.length - 1) return name.slice(dot).toLowerCase();
-    // Fallback: derive from the mime subtype (e.g. "image/png" → ".png").
-    const sub = (asset.mimeType || "").split("/")[1];
-    if (!sub) return "";
-    const map: Record<string, string> = { jpeg: "jpg", "svg+xml": "svg" };
-    return "." + (map[sub] || sub);
-  }
-
   function handleConfirm() {
     if (!selected) return;
-    const asset = assets.find((a) => a._id === selected);
-    onSelect({ id: selected, url: `/api/asset/serve/${selected}${assetExtension(asset)}` });
+    onSelect({ id: selected, url: `/api/asset/serve/${selected}` });
   }
 
   return (

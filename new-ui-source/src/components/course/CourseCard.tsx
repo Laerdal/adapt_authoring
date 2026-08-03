@@ -34,7 +34,6 @@ export default function CourseCard({
   const [cropSrc, setCropSrc]               = useState<string | null>(null);
   const [assetPickerOpen, setAssetPickerOpen] = useState(false);
   const menuRef                             = useRef<HTMLDivElement>(null);
-  const trimmedTitle = editTitle.trim();
 
   function addTag() {
     const t = tagInput.trim();
@@ -59,8 +58,7 @@ export default function CourseCard({
   }
 
   function handleSave() {
-    if (!trimmedTitle) return; // reject empty / whitespace-only titles
-    onUpdate({ title: trimmedTitle, description: editDesc.trim(), heroAssetId: editHeroAssetId, tags: editTags });
+    onUpdate({ title: editTitle, description: editDesc, heroAssetId: editHeroAssetId, tags: editTags });
     setModalOpen(false);
   }
 
@@ -187,7 +185,7 @@ export default function CourseCard({
           {/* Body */}
           <div className="px-4 pt-3 pb-4 flex flex-col flex-1 gap-2">
             <div className="flex items-start justify-between gap-2">
-              <h3 title={title} className="font-bold text-[#111827] text-sm leading-snug line-clamp-2 flex-1">{title}</h3>
+              <h3 className="font-bold text-[#111827] text-sm leading-snug line-clamp-2 flex-1">{title}</h3>
               {/* 3-dot menu — grid */}
               <div className="relative shrink-0 -mt-0.5">
                 <button
@@ -203,7 +201,7 @@ export default function CourseCard({
                 {menuOpen && <MoreMenu />}
               </div>
             </div>
-            <p title={description} className="text-xs text-[#6b7280] leading-relaxed line-clamp-2 flex-1">{description}</p>
+            <p className="text-xs text-[#6b7280] leading-relaxed line-clamp-2 flex-1">{description}</p>
             {tags.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {tags.slice(0, 3).map((tag) => (
@@ -242,8 +240,8 @@ export default function CourseCard({
 
           {/* Main content */}
           <div className="flex-1 min-w-0">
-            <h3 title={title} className="font-semibold text-[#111827] text-sm leading-snug truncate">{title}</h3>
-            <p title={description} className="text-xs text-[#6b7280] mt-0.5 line-clamp-1 leading-relaxed">{description}</p>
+            <h3 className="font-semibold text-[#111827] text-sm leading-snug truncate">{title}</h3>
+            <p className="text-xs text-[#6b7280] mt-0.5 line-clamp-1 leading-relaxed">{description}</p>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
               <div className="flex items-center gap-1 text-xs text-[#9ca3af]">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -365,15 +363,10 @@ export default function CourseCard({
               </div>
 
               <div>
-                <label htmlFor={`course-title-${id}`} className="block text-sm font-medium text-[#374151] mb-1.5">Course Title</label>
-                <input type="text" id={`course-title-${id}`} value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
-                  aria-invalid={!trimmedTitle}
-                  aria-describedby={!trimmedTitle ? `course-title-error-${id}` : undefined}
-                  className={`w-full px-3 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent text-[#111827] ${!trimmedTitle ? "border-[#ef4444] focus:ring-[#ef4444]" : "border-[#d1d5db] focus:ring-[#2d6fa8]"}`}
+                <label className="block text-sm font-medium text-[#374151] mb-1.5">Course Title</label>
+                <input type="text" value={editTitle} onChange={(e) => setEditTitle(e.target.value)}
+                  className="w-full px-3 py-2.5 text-sm border border-[#d1d5db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent text-[#111827]"
                   placeholder="Enter course title" />
-                {!trimmedTitle && (
-                  <p id={`course-title-error-${id}`} className="mt-1 text-xs text-[#ef4444]">Course title is required.</p>
-                )}
               </div>
 
               <div>
@@ -430,7 +423,7 @@ export default function CourseCard({
               <button type="button" onClick={() => setModalOpen(false)} className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors">
                 Cancel
               </button>
-              <button type="button" onClick={handleSave} disabled={!trimmedTitle} className="px-4 py-2 text-sm font-medium text-white bg-[#2d6fa8] hover:bg-[#245c8f] disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors">
+              <button type="button" onClick={handleSave} className="px-4 py-2 text-sm font-medium text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors">
                 Save Changes
               </button>
             </div>
