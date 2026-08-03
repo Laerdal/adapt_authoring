@@ -5,7 +5,7 @@ import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationG
 
 // Extracted from SetupPage to keep select-theme feature isolated with no behavior changes.
 
-/* GöÇGöÇ Theme panel helpers GöÇGöÇ */
+/* Theme panel helpers */
 const THEMES = [
   {
     id: "life",
@@ -35,9 +35,9 @@ const FONT_OPTIONS = [
 const PAGE_TITLE_OPTIONS = ["H1", "H2", "H3", "H4", "H5", "H6", "Paragraph"];
 
 const PAGE_TITLE_LABELS: Record<string, string> = {
-  H1: "H1 GÇö 3.5rem", H2: "H2 GÇö 3rem", H3: "H3 GÇö 2.5rem",
-  H4: "H4 GÇö 2rem", H5: "H5 GÇö 1.5rem", H6: "H6 GÇö GÇö",
-  Paragraph: "Paragraph GÇö 1.125rem",
+  H1: "H1 - 3.5rem", H2: "H2 - 3rem", H3: "H3 - 2.5rem",
+  H4: "H4 - 2rem", H5: "H5 - 1.5rem", H6: "H6 - -",
+  Paragraph: "Paragraph - 1.125rem",
 };
 
 const PREVIEW_TITLE_SIZE: Record<string, string | null> = {
@@ -56,13 +56,13 @@ const CALC_VALUES = [
 ];
 
 const H1_SIZE_OPTIONS = [
-  { label: "H1 GÇö 3.5rem", value: "3.5rem" },
-  { label: "H2 GÇö 3rem",   value: "3rem" },
-  { label: "H3 GÇö 2.5rem", value: "2.5rem" },
-  { label: "H4 GÇö 2rem",   value: "2rem" },
-  { label: "H5 GÇö 1.5rem", value: "1.5rem" },
-  { label: "H6 GÇö GÇö",      value: "h6" },
-  { label: "Paragraph GÇö 1.125rem", value: "1.125rem" },
+  { label: "H1 - 3.5rem", value: "3.5rem" },
+  { label: "H2 - 3rem",   value: "3rem" },
+  { label: "H3 - 2.5rem", value: "2.5rem" },
+  { label: "H4 - 2rem",   value: "2rem" },
+  { label: "H5 - 1.5rem", value: "1.5rem" },
+  { label: "H6 - -",      value: "h6" },
+  { label: "Paragraph - 1.125rem", value: "1.125rem" },
 ];
 
 type CustomThemeValues = {
@@ -211,7 +211,7 @@ function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
 
           <div className="p-4">
             {/* page title */}
-            <h1 className="font-bold mb-3" style={{ ...headingStyle, fontSize: h1Size }}>{cfg.pageTitleSize === "h6" ? "GÇö" : "New Menu/Page Title"}</h1>
+            <h1 className="font-bold mb-3" style={{ ...headingStyle, fontSize: h1Size }}>{cfg.pageTitleSize === "h6" ? "-" : "New Menu/Page Title"}</h1>
 
             {/* article block */}
             <div className="border border-[#e5e7eb] rounded-lg p-3 mb-3">
@@ -253,7 +253,7 @@ function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
   );
 }
 
-/* GöÇGöÇ Global Theme accordion content GöÇGöÇ */
+/* Global Theme accordion content */
 function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (v: CustomThemeValues) => void }) {
   const set = <K extends keyof CustomThemeValues>(k: K, v: CustomThemeValues[K]) => setCfg({ ...cfg, [k]: v });
 
@@ -333,7 +333,7 @@ function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (
   );
 }
 
-/* GöÇGöÇ Custom theme full editor GöÇGöÇ */
+/* Custom theme full editor */
 function CustomThemeEditor({ onBack }: { onBack: () => void }) {
   const [cfg, setCfg] = useState<CustomThemeValues>(DEFAULT_CUSTOM);
 
@@ -435,7 +435,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
           <span className="text-xs text-[#374151] font-medium">Custom Theme</span>
         </div>
-        {/* GöÇGöÇ Custom Icons: Sprite Sheets GöÇGöÇ */}
+        {/* Custom Icons: Sprite Sheets */}
         <div className="px-5 pt-4 pb-5 border-b border-[#f3f4f6]">
           <p className="text-xs font-semibold text-[#374151] mb-1">Custom Icons: Sprite Sheets</p>
           <p className="text-xs text-[#6b7280] mb-3 leading-relaxed">Upload an SVG sprite sheet to replace default icons across the course.</p>
@@ -448,7 +448,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
           </label>
         </div>
 
-        {/* GöÇGöÇ Custom Icons: Single Icons GöÇGöÇ */}
+        {/* Custom Icons: Single Icons */}
         <div className="px-5 pt-4 pb-5 border-b border-[#f3f4f6]">
           <p className="text-xs font-semibold text-[#374151] mb-1">Custom Icons: Single Icons</p>
           <p className="text-xs text-[#6b7280] mb-3 leading-relaxed">Upload individual SVG icon files to override specific icons in the course.</p>
@@ -461,7 +461,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
           </label>
         </div>
 
-        {/* GöÇGöÇ Configuration: Component GöÇGöÇ */}
+        {/* Configuration: Component */}
         <div className="px-5 pt-4 pb-5 border-b border-[#f3f4f6]">
           <p className="text-xs font-semibold text-[#374151] mb-0.5">Configuration: Component</p>
           <p className="text-xs text-[#6b7280] mb-3 leading-relaxed">Component-level behavior and feedback configuration.</p>
@@ -493,7 +493,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
           </div>
         </div>
 
-        {/* GöÇGöÇ Accordions GöÇGöÇ */}
+        {/* Accordions */}
         <div className="px-4 pb-6 space-y-2 mt-3">
           {ACCORDIONS.map((a) => (
             <Accordion key={a.id} title={a.title} icon={a.icon} defaultOpen={a.defaultOpen}>
@@ -511,7 +511,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
   );
 }
 
-/* GöÇGöÇ Theme selection panel GöÇGöÇ */
+/* Theme selection panel */
 function normalizeName(v?: string): string {
   return (v ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -1339,7 +1339,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           // Non-fatal: continue saving current values.
         }
       }
-      // Build themeVariables payload GÇö keep schema nesting to preserve old/new UI parity.
+      // Build themeVariables payload - keep schema nesting to preserve old/new UI parity.
       let vars: Record<string, unknown> = {};
       if (selected === 'custom') vars = buildMergedCustomThemeVariables(dbThemeVariables);
       else if (selected === 'vanilla') vars = buildMergedVanillaThemeVariables(dbThemeVariables);
@@ -1881,18 +1881,18 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           </div>
           <div className="flex gap-1">
             <button onClick={() => setDarkMode(!darkMode)} className="w-7 h-7 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded text-[#6b7280] hover:bg-[#f9fafb]" title="Toggle dark mode">
-              {darkMode ? 'GÿÇ' : '=ƒîÖ'}
+              {darkMode ? 'L' : 'D'}
             </button>
           </div>
         </div>
         <div style={{ backgroundColor: previewBg, fontSize: '13px' }}>
           <div style={{ height: '4px', borderTop: `1px solid ${progressBorder}`, borderBottom: `1px solid ${progressBorder}`, background: `linear-gradient(to right, ${progressFill} 60%, ${progressBackground} 60%)` }} />
           <div style={{ background: navBg, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ color: pageHeaderSubtitleColor, fontSize: '11px' }}>Gÿ¦</span>
+            <span style={{ color: pageHeaderSubtitleColor, fontSize: '11px' }}>{'<'}</span>
             <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '11px', color: pageHeaderBodyColor, flex: 1 }}>
               New Course Title <span style={{ opacity: 0.6 }}>/ Page Title</span>
             </span>
-            <span style={{ color: pageHeaderSubtitleColor, fontSize: '11px' }}>=ƒöì</span>
+            <span style={{ color: pageHeaderSubtitleColor, fontSize: '11px' }}>{'>'}</span>
           </div>
           <div style={{ padding: '20px 18px', display: 'grid', gridTemplateColumns: '1fr 220px', gap: '12px' }}>
             <div style={{ background: articleBgColor, border: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}`, borderRadius: '8px', paddingTop: `${articleTop}px`, paddingBottom: `${articleBottom}px`, paddingLeft: '14px', paddingRight: '14px' }}>
@@ -1965,10 +1965,10 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       <div className="space-y-5">
         <div className="flex items-center gap-1">
           <button onClick={onBack} className="flex items-center gap-1 bg-none border-none cursor-pointer text-[var(--life-primary-500)] hover:opacity-75 p-0">
-            <span>GåÉ</span>
+            <span>{'<'}</span>
             <span className="text-xs font-semibold">Theme</span>
           </button>
-          <span className="text-[#6b7280]">GÇ¦</span>
+          <span className="text-[#6b7280]">/</span>
           <span className="text-xs font-bold text-[#111827]">Custom Theme</span>
         </div>
 
@@ -2056,7 +2056,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
             disabled={saving || !selected || !courseId}
             className="px-4 py-2 text-sm font-semibold text-white bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
           >
-            {saving ? 'SavingGÇª' : 'Save'}
+            {saving ? 'Saving...' : 'Save'}
           </button>
         </div>
       </div>
@@ -2385,7 +2385,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         </ThemeAccordion>
       </div>
 
-      {/* LIFE Theme Styling GÇö only shown when LIFE is selected */}
+      {/* LIFE Theme Styling - only shown when LIFE is selected */}
       {selected === "life" && (
         <div className="border border-[#e5e7eb] rounded-xl p-6 bg-white mt-2">
           <h3 className="text-sm font-bold text-[#111827] mb-4">LIFE Theme Styling</h3>
@@ -2466,7 +2466,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         </div>
       )}
 
-      {/* Vanilla Theme Settings GÇö only shown when Vanilla is selected */}
+      {/* Vanilla Theme Settings - only shown when Vanilla is selected */}
       {selected === "vanilla" && (
         <div className="border border-[#e5e7eb] rounded-xl p-6 bg-white mt-2">
           <h3 className="text-sm font-bold text-[#111827] mb-4">Vanilla Theme Settings</h3>
@@ -2543,7 +2543,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         </div>
       )}
 
-      {/* Custom Theme Settings GÇö only shown when Custom is selected */}
+      {/* Custom Theme Settings - only shown when Custom is selected */}
       {selected === "custom" && (
         <div className="mt-2">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -2649,7 +2649,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   );
 }
 
-/* GöÇGöÇ Theme Accordion Component GöÇGöÇ */
+/* Theme Accordion Component */
 function ThemeAccordion({
   label,
   children,
