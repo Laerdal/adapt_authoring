@@ -5333,7 +5333,7 @@ function CourseCreationCenterContent() {
   }
 
   function renderPanel() {
-    if (activeNav === "overview") return <CourseOverviewPage title={title} description={description} />;
+    if (activeNav === "overview") return <CourseOverviewPage courseId={courseId} title={title} description={description} />;
     if (activeNav === "structure")
       return (
         <CourseStructurePanel

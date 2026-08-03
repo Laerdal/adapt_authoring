@@ -157,6 +157,7 @@ export async function updateCourse(
   patch: {
     title?: string;
     description?: string;
+    body?: string;
     heroAssetId?: string | null;
     tags?: string[];
   }
@@ -167,6 +168,7 @@ export async function updateCourse(
     updateData.displayTitle = patch.title;
   }
   if (patch.description !== undefined) updateData.description = patch.description;
+  if (patch.body !== undefined) updateData.body = patch.body;
   if (patch.heroAssetId !== undefined) updateData.heroImage = patch.heroAssetId;
   if (patch.tags !== undefined) {
     updateData.tags = await resolveOrCreateTagIds(patch.tags);
@@ -213,6 +215,9 @@ interface EngineCourseDetails {
   title?: string;
   displayTitle?: string;
   description?: string;
+  body?: string;
+  heroImage?: string | null;
+  tags?: Array<string | { _id: string; title?: string }>;
 }
 
 interface EngineConfigDetails {
@@ -225,6 +230,9 @@ export interface CourseBootstrapData {
   courseId: string;
   title: string;
   description: string;
+  body: string;
+  heroAssetId: string | null;
+  tags: string[];
   themeName: string;
   menuName: string;
 }
@@ -346,10 +354,21 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
     apiClient.get<EngineConfigDetails>(`/api/content/config/${courseId}`),
   ]);
 
+  const rawHero = course.heroImage ?? null;
+  const heroAssetId = rawHero && OBJECT_ID.test(rawHero) ? rawHero : null;
+  const tags = Array.isArray(course.tags)
+    ? course.tags
+        .map((t) => (typeof t === "string" ? t : t?.title ?? ""))
+        .filter((s): s is string => !!s && !OBJECT_ID.test(s))
+    : [];
+
   return {
     courseId,
     title: course.displayTitle || course.title || "Untitled Course",
     description: course.description || "",
+    body: course.body || "",
+    heroAssetId,
+    tags,
     themeName: config._theme || "",
     menuName: config._menu || "",
   };
