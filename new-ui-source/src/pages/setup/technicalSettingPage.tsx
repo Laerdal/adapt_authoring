@@ -7,7 +7,7 @@ import {
   updateCourseTechnicalSettings,
   type CourseTechnicalSettings,
 } from "../../api/adaptAuthoring";
-import { UnsavedChangesModal } from "./UnsavedChangesModal";
+import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
 const LOG_LEVEL_OPTIONS = ["debug", "info", "warn", "error", "fatal"];
@@ -200,6 +200,7 @@ export function TechnicalSettingPage({
   const {
     showConfirmModal,
     consumePendingNavigation,
+    clearPendingNavigation,
   } = useUnsavedChangesNavigationGuard({
     hasChanges,
     pendingNavigation,
@@ -470,6 +471,7 @@ export function TechnicalSettingPage({
             isSaving={isSaving}
             onDiscard={handleDiscard}
             onSave={handleSave}
+            onClose={clearPendingNavigation}
           />
         </>
       )}
