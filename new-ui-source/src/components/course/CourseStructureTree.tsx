@@ -31,7 +31,6 @@ export interface CourseStructureTreeProps {
   onRemove: (level: StructureLevel, id: string) => void;
   // Drag-and-drop: move `id` under `newParentId`, before `beforeId` (null = append).
   onMove: (level: StructureLevel, id: string, newParentId: string, beforeId: string | null) => void;
-  onOpenTopic: (topicId: string) => void;
 }
 
 interface Dragged { level: StructureLevel; id: string; }
@@ -78,13 +77,6 @@ function Grip() {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" className="text-[#9ca3af]">
       <circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" /><circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" /><circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" />
-    </svg>
-  );
-}
-function Pencil() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
     </svg>
   );
 }
@@ -135,9 +127,6 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
     parentId: string;
     parentLevel: ContainerLevel;
     expandable?: boolean;
-    navigateTopicId?: string;
-    quickAddLabel?: string;
-    onQuickAdd?: () => void;
     deleteWarning?: string;
   }
 
@@ -218,12 +207,15 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
                 aria-label="Edit title"
                 className="flex-1 min-w-0 text-sm border border-[#2d6fa8] rounded px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
-            ) : p.navigateTopicId ? (
-              <button type="button" onClick={() => props.onOpenTopic(p.navigateTopicId!)} className="min-w-0 truncate text-left text-sm font-semibold text-[#111827] hover:text-[#2d6fa8] hover:underline" title="Open in editor">
+            ) : (
+              <button
+                type="button"
+                onClick={() => startRename(p.id, p.title)}
+                title="Click to rename"
+                className={`min-w-0 truncate text-left text-sm hover:text-[#2d6fa8] ${isModule ? 'font-bold uppercase tracking-wide text-[#374151]' : p.level === 'topic' ? 'font-semibold text-[#111827]' : 'text-[#374151]'}`}
+              >
                 {p.title}
               </button>
-            ) : (
-              <span className={`min-w-0 truncate text-sm ${isModule ? 'font-bold uppercase tracking-wide text-[#374151]' : 'text-[#374151]'}`}>{p.title}</span>
             )}
 
             {!editing && (isModule ? (
@@ -234,14 +226,6 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
           </div>
 
           <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-            {p.onQuickAdd && (
-              <button type="button" aria-label={p.quickAddLabel} title={p.quickAddLabel} onClick={p.onQuickAdd} className="p-1 rounded hover:bg-[#e5e7eb] text-[#9ca3af] hover:text-[#2d6fa8]">
-                <Plus />
-              </button>
-            )}
-            <button type="button" aria-label={`Rename ${p.title}`} onClick={() => startRename(p.id, p.title)} className="p-1 rounded hover:bg-[#e5e7eb] text-[#9ca3af] hover:text-[#2d6fa8]">
-              <Pencil />
-            </button>
             <button type="button" aria-label={`Delete ${p.title}`} onClick={() => setDeleteId(p.id)} className="p-1 rounded hover:bg-[#fee2e2] text-[#9ca3af] hover:text-[#dc2626]">
               <Trash />
             </button>
@@ -282,7 +266,7 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
       <div className={indent}>
         {groups.map((cg) => (
           <div key={cg.id}>
-            {renderRow({ level: 'contentGroup', id: cg.id, title: cg.title, parentId: sectionId, parentLevel: 'section', expandable: true, quickAddLabel: `Add ${labels.component}`, onQuickAdd: cg.components.length < 2 ? () => props.onAddComponent(cg.id) : undefined })}
+            {renderRow({ level: 'contentGroup', id: cg.id, title: cg.title, parentId: sectionId, parentLevel: 'section', expandable: true })}
             {isOpen(cg.id) && renderComponents(cg.components, cg.id)}
           </div>
         ))}
@@ -296,7 +280,7 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
       <div className={indent}>
         {sections.map((sec) => (
           <div key={sec.id}>
-            {renderRow({ level: 'section', id: sec.id, title: sec.title, parentId: topicId, parentLevel: 'topic', navigateTopicId: topicId, expandable: true, quickAddLabel: `Add ${labels.contentGroup}`, onQuickAdd: () => props.onAddContentGroup(sec.id) })}
+            {renderRow({ level: 'section', id: sec.id, title: sec.title, parentId: topicId, parentLevel: 'topic', expandable: true })}
             {isOpen(sec.id) && renderContentGroups(sec.contentGroups, sec.id)}
           </div>
         ))}
@@ -308,7 +292,7 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
   function renderTopic(topic: STopic, containerId: string, parentLevel: ContainerLevel) {
     return (
       <div key={topic.id}>
-        {renderRow({ level: 'topic', id: topic.id, title: topic.title, parentId: containerId, parentLevel, navigateTopicId: topic.id, expandable: true, quickAddLabel: `Add ${labels.section}`, onQuickAdd: () => props.onAddSection(topic.id) })}
+        {renderRow({ level: 'topic', id: topic.id, title: topic.title, parentId: containerId, parentLevel, expandable: true })}
         {isOpen(topic.id) && renderSections(topic.sections, topic.id)}
       </div>
     );
@@ -317,7 +301,7 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
   function renderModule(mod: SModule, containerId: string, parentLevel: ContainerLevel) {
     return (
       <div key={mod.id}>
-        {renderRow({ level: 'module', id: mod.id, title: mod.title, parentId: containerId, parentLevel, expandable: true, quickAddLabel: `Add ${labels.topic}`, onQuickAdd: () => props.onAddTopic(mod.id) })}
+        {renderRow({ level: 'module', id: mod.id, title: mod.title, parentId: containerId, parentLevel, expandable: true })}
         {isOpen(mod.id) && (
           <div className={indent}>
             {renderChildren(mod.id, mod.modules, mod.topics, 'module')}
