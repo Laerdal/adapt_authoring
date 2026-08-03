@@ -206,6 +206,7 @@ interface EnginePluginType {
   _id: string;
   name?: string;
   displayName?: string;
+  theme?: string;
 }
 
 interface EngineCourseDetails {
@@ -213,6 +214,8 @@ interface EngineCourseDetails {
   title?: string;
   displayTitle?: string;
   description?: string;
+  themeVariables?: Record<string, unknown>;
+  _themePreset?: string;
 }
 
 interface EngineConfigDetails {
@@ -220,6 +223,7 @@ interface EngineConfigDetails {
   _courseId?: string;
   _theme?: string;
   _menu?: string;
+  _themePreset?: string;
   // Map of installed extensions, keyed by the plugin's bower `extension` field
   // (e.g. "course-menu"); each entry carries the full bower `name`.
   _enabledExtensions?: Record<string, { _id: string; name: string; version?: string; targetAttribute?: string }>;
@@ -233,6 +237,8 @@ export interface CourseBootstrapData {
   description: string;
   themeName: string;
   menuName: string;
+  themeVariables: Record<string, unknown>;
+  themePresetId: string;
 }
 
 function normalize(v?: string): string {
@@ -279,6 +285,21 @@ function resolvePluginId(options: EnginePluginType[], label: string, kind: "them
   return best?.id ?? null;
 }
 
+function resolveBestPluginOption(options: EnginePluginType[], label: string, kind: "theme" | "menu"): EnginePluginType | null {
+  let best: { score: number; option: EnginePluginType } | null = null;
+
+  for (const option of options) {
+    const score = scorePluginMatch(option, label, kind);
+    if (score <= 0) continue;
+
+    if (!best || score > best.score) {
+      best = { score, option };
+    }
+  }
+
+  return best?.option ?? null;
+}
+
 async function getThemeTypes(): Promise<EnginePluginType[]> {
   const rows = await apiClient.get<EnginePluginType[]>("/api/themetype");
   return Array.isArray(rows) ? rows : [];
@@ -321,11 +342,10 @@ export async function saveThemeForCourse(courseId: string, themeLabel: string): 
 
 // Returns the legacy parentTheme key used by preset APIs.
 export async function getThemePresetParentTheme(themeLabel: string): Promise<string | null> {
-  const label = normalize(themeLabel);
-  if (label.includes("life")) return "lifetheme";
-  if (label.includes("vanilla")) return "vanillatheme";
-  if (label.includes("custom")) return "customtheme";
-  return null;
+  const themes = await getThemeTypes();
+  const bestTheme = resolveBestPluginOption(themes, themeLabel, "theme");
+  if (!bestTheme) return null;
+  return bestTheme.theme || null;
 }
 
 export async function saveThemeVariables(
@@ -413,6 +433,8 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
     description: course.description || "",
     themeName: config._theme || "",
     menuName: config._menu || "",
+    themeVariables: (course.themeVariables as Record<string, unknown>) || {},
+    themePresetId: config._themePreset || "",
   };
 }
 

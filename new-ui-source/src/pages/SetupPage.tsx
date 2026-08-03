@@ -5087,6 +5087,8 @@ function CourseCreationCenterContent() {
   const [description, setDescription] = useState(initialDescription);
   const [savedThemeName, setSavedThemeName] = useState("");
   const [savedMenuName, setSavedMenuName] = useState("");
+  const [savedThemeVariables, setSavedThemeVariables] = useState<Record<string, unknown>>({});
+  const [savedPresetId, setSavedPresetId] = useState("");
 
   const [activeNav, setActiveNav] = useState("overview");
   const [collapsed, setCollapsed] = useState(false);
@@ -5104,6 +5106,8 @@ function CourseCreationCenterContent() {
       setDescription(initialDescription);
       setSavedThemeName("");
       setSavedMenuName("");
+      setSavedThemeVariables({});
+      setSavedPresetId("");
       return;
     }
     let cancelled = false;
@@ -5116,12 +5120,16 @@ function CourseCreationCenterContent() {
         setDescription(data.description || initialDescription);
         setSavedThemeName(data.themeName || "");
         setSavedMenuName(data.menuName || "");
+        setSavedThemeVariables(data.themeVariables || {});
+        setSavedPresetId(data.themePresetId || "");
       } catch {
         if (cancelled) return;
         setTitle(initialTitle);
         setDescription(initialDescription);
         setSavedThemeName("");
         setSavedMenuName("");
+        setSavedThemeVariables({});
+        setSavedPresetId("");
       }
     })();
 
@@ -5143,7 +5151,7 @@ function CourseCreationCenterContent() {
   // Smart navigation handler - used by sidebar items
   // When on technical-settings, the panel intercepts via pendingNavigation state
   function handleNavigation(nextPanel: string) {
-    if (activeNav === "technical-settings") {
+    if (activeNav === "technical-settings" || activeNav === "theme") {
       // Signal to TechnicalSettingPage that navigation is requested
       // The panel decides whether to show a confirmation modal or allow navigation
       setPendingNavigation(nextPanel);
@@ -5165,7 +5173,7 @@ function CourseCreationCenterContent() {
           onOpenStoryboard={() => setActiveNav("storyboarding")}
         />
       );
-    if (activeNav === "theme") return <SelectThemePage initialThemeName={savedThemeName} courseId={courseId} />;
+    if (activeNav === "theme") return <SelectThemePage initialThemeName={savedThemeName} initialThemeVariables={savedThemeVariables} initialPresetId={savedPresetId} courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} onThemeSaved={({ themeName, themeVariables, themePresetId }) => { setSavedThemeName(themeName); setSavedThemeVariables(themeVariables); setSavedPresetId(themePresetId); }} />;
     if (activeNav === "menu") return <MenuPanel initialMenuName={savedMenuName} />;
     if (activeNav === "navigation") return <NavigationPage courseId={courseId} />;
     if (activeNav === "accessibility") return <AccessibilityPanel />;
