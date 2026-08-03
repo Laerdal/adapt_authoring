@@ -217,6 +217,16 @@ export default function CourseStructureMapView(props: Props) {
     </div>
   );
 
+  // Map view is a read-only visualization; editing/reordering lives in Tree view.
+  const mapNote = (
+    <div className="flex items-center gap-2 rounded-lg bg-[#eff6ff] border border-[#bfdbfe] px-3.5 py-2 text-sm text-[#1e5a91]">
+      <svg className="shrink-0" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
+      </svg>
+      <span>This Map shows your current course structure. Drag-and-drop reordering is available in <span className="font-medium">Tree view</span>.</span>
+    </div>
+  );
+
   return (
     <>
       <style>{TREE_CSS}</style>
@@ -234,6 +244,8 @@ export default function CourseStructureMapView(props: Props) {
           Fullscreen
         </button>
       </div>
+
+      <div className="mb-2">{mapNote}</div>
 
       <div className="w-full bg-[#fbfbfc] border border-[#e5e7eb] rounded-xl overflow-auto max-h-[560px]">
         {!fullscreen && treeBody}
@@ -259,6 +271,7 @@ export default function CourseStructureMapView(props: Props) {
               </svg>
             </button>
           </div>
+          <div className="px-4 pt-3">{mapNote}</div>
           <div className="flex-1 overflow-auto">{treeBody}</div>
         </div>
       )}
