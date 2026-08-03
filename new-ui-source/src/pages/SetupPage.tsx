@@ -299,14 +299,17 @@ function CourseStructurePanel({
   courseId,
   courseTitle,
   onOpenEditor,
+  onOpenStoryboard,
 }: {
   courseId: string;
   courseTitle: string;
   onOpenEditor: (topicId: string) => void;
+  onOpenStoryboard: () => void;
 }) {
   const [viewMode, setViewMode] = useState<"tree" | "map">("tree");
   // Content-group id whose Add Component drawer is open (null = closed).
   const [addComponentBlockId, setAddComponentBlockId] = useState<string | null>(null);
+  const [hintDismissed, setHintDismissed] = useState(false);
   const {
     state,
     loading,
@@ -374,10 +377,21 @@ function CourseStructurePanel({
         </div>
       </div>
 
-      {/* Info / rules banner */}
-      <div className="mb-5 p-3.5 rounded-lg bg-[#f0faf8] border border-[#99e6de] text-sm text-[#0d7377]">
+      {/* Rules banner (top) */}
+      <div className="mb-3 p-3.5 rounded-lg bg-[#f0faf8] border border-[#99e6de] text-sm text-[#0d7377]">
         Organize your course into modules, topics, sections, content groups and components. At least one topic
         is mandatory at the course level, and every module must contain at least one topic.
+      </div>
+
+      {/* Tip (top) — view-specific info text, styled like the app's Tip callouts */}
+      <div className="mb-5 flex items-start gap-2.5 rounded-lg bg-[#fff7ed] border border-[#fed7aa] px-4 py-3">
+        <span className="text-base leading-none mt-0.5" aria-hidden="true">💡</span>
+        <p className="text-sm text-[#9a3412] leading-snug">
+          <span className="font-semibold">Tip:</span>{" "}
+          {viewMode === "tree"
+            ? "Create and organize the learning journey using the tree view. Click any field to edit content directly, and open a topic in the Page Editor (→) for advanced editing and settings."
+            : "Explore the entire course structure in a visual format. Use Map View to review content coverage and learning flow across topics. To create, edit, or reorganize content, switch to Tree View."}
+        </p>
       </div>
 
       {error && (
@@ -429,6 +443,44 @@ function CourseStructurePanel({
               onRename={rename}
             />
           )}
+        </div>
+      )}
+
+      {/* Hint (bottom, dismissible) — styled per design */}
+      {!hintDismissed && (
+        <div className="relative mt-5 rounded-xl border border-[#bfdbeb] bg-[#eaf4fb] p-4 pr-10">
+          <button
+            type="button"
+            onClick={() => setHintDismissed(true)}
+            aria-label="Dismiss"
+            className="absolute top-3 right-3 p-1 rounded text-[#9ca3af] hover:text-[#374151] hover:bg-white/60 transition-colors"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+          <div className="flex items-start gap-3">
+            <svg className="shrink-0 mt-0.5 text-[#2d6fa8]" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+            <div>
+              <p className="text-sm font-semibold text-[#111827]">Your structure is ready</p>
+              <p className="text-sm text-[#5b7c93] mt-1">
+                Open Storyboard to review and refine the content flow, or select a topic to continue building in the
+                Page Editor with content, layouts, interactions, and learner experience settings.
+              </p>
+              <button
+                type="button"
+                onClick={onOpenStoryboard}
+                className="mt-3 inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] rounded-lg hover:bg-[#255d8f] transition-colors"
+              >
+                Open Storyboard
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+                </svg>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -5408,6 +5460,7 @@ function CourseCreationCenterContent() {
           onOpenEditor={(pageId) =>
             navigate(`/course/${courseId}`, { state: { pageId } })
           }
+          onOpenStoryboard={() => setActiveNav("storyboarding")}
         />
       );
     if (activeNav === "theme") return <ThemePanel initialThemeName={savedThemeName} />;
