@@ -29,6 +29,9 @@
   --life-accent1-100: #C8EEEC;
   --life-accent1-050: #E4F6F6;
 
+  /* Accent 2 / Purple (used in menu tile visuals) */
+  --life-accent2-500: #7C6FCD;
+
   /* Neutral (color.neutral.*) */
   --life-neutral-850: #262626;
   --life-neutral-800: #333333;

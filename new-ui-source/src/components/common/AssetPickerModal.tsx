@@ -3,8 +3,15 @@ import { queryImages, uploadAsset } from "@/api/adaptAuthoring";
 import type { Asset } from "@/api/adaptAuthoring";
 
 interface AssetPickerModalProps {
-  onSelect: (asset: { id: string; url: string }) => void;
+  onSelect: (asset: { id: string; url: string; assetLink: string }) => void;
   onClose: () => void;
+}
+
+function toAssetLink(asset: Asset): string {
+  const path = (asset.path || "").trim().replace(/^\/+/, "");
+  if (path.startsWith("course/assets/")) return path;
+  if (asset.filename) return `course/assets/${asset.filename}`;
+  return `/api/asset/serve/${asset._id}`;
 }
 
 export default function AssetPickerModal({ onSelect, onClose }: AssetPickerModalProps) {
@@ -74,8 +81,12 @@ export default function AssetPickerModal({ onSelect, onClose }: AssetPickerModal
 
   function handleConfirm() {
     if (!selected) return;
-    const asset = assets.find((a) => a._id === selected);
-    onSelect({ id: selected, url: `/api/asset/serve/${selected}${assetExtension(asset)}` });
+    const selectedAsset = assets.find((asset) => asset._id === selected);
+    onSelect({
+      id: selected,
+      url: `/api/asset/serve/${selected}`,
+      assetLink: selectedAsset ? toAssetLink(selectedAsset) : `/api/asset/serve/${selected}`,
+    });
   }
 
   return (
