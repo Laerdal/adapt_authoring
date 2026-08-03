@@ -57,7 +57,7 @@ export function UnsavedChangesModal({
             type="button"
             onClick={onSave}
             disabled={isSaving}
-            className="flex-1 px-3 py-2.5 rounded-lg text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#235694] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex-1 px-3 py-2.5 rounded-lg text-sm font-semibold text-white bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSaving ? savingLabel : saveLabel}
           </button>

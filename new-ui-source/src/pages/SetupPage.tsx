@@ -10,6 +10,7 @@ import { getCourseBootstrapData } from "../api/adaptAuthoring";
 import { useCourseStructure } from "../hooks/useCourseStructure";
 import { STRUCTURE_LABELS } from "../types/structure";
 import { TechnicalSettingPage } from "./setup/technicalSettingPage";
+import SelectThemePage from "./setup/themePage";
 import { NavigationPage } from "./setup/navigationPage";
 
 const ICON_BASE = "/new/assets/icons";
@@ -498,114 +499,19 @@ function CourseStructurePanel({
   );
 }
 
-/* ── Theme panel helpers ── */
-const THEMES = [
-  {
-    id: "life",
-    name: "LIFE Theme",
-    description: "Use the pre-designed LIFE theme with standardized branding and layout",
-    swatches: ["#1b3a4b", "#2d6a8f", "#dbeeff"],
-  },
-  {
-    id: "custom",
-    name: "Custom Theme",
-    description: "Create your own custom theme with personalized colors and branding",
-    swatches: ["#7c6fcd", "#5aad78", "#e06c4a"],
-  },
-  {
-    id: "vanilla",
-    name: "Vanilla Theme",
-    description: "A clean, minimal theme with neutral tones and no preset branding",
-    swatches: ["#f5f5f0", "#e8e4d4", "#c8c0a0"],
-  },
-];
-
-const FONT_OPTIONS = [
-  "Lato", "Georgia", "Helvetica Neue", "Inter", "Merriweather",
-  "Montserrat", "Open Sans", "Poppins", "Roboto", "Source Sans Pro",
-];
-
-const H1_SIZE_OPTIONS = [
-  { label: "H1 — 3.5rem", value: "3.5rem" },
-  { label: "H2 — 3rem",   value: "3rem" },
-  { label: "H3 — 2.5rem", value: "2.5rem" },
-  { label: "H4 — 2rem",   value: "2rem" },
-  { label: "H5 — 1.5rem", value: "1.5rem" },
-  { label: "H6 — —",      value: "h6" },
-  { label: "Paragraph — 1.125rem", value: "1.125rem" },
-];
-
-type CustomThemeValues = {
-  primaryColor: string;
-  secondaryColor: string;
-  headingFont: string;
-  paragraphFont: string;
-  fontColor: string;
-  headingFontColor: string;
-  instructionColor: string;
-  linkFontColor: string;
-  pageTitleSize: string;
-};
-
-const DEFAULT_CUSTOM: CustomThemeValues = {
-  primaryColor: "#4a90a4",
-  secondaryColor: "#3a8a7a",
-  headingFont: "Lato",
-  paragraphFont: "Lato",
-  fontColor: "#111111",
-  headingFontColor: "#111111",
-  instructionColor: "#111111",
-  linkFontColor: "#4a90a4",
-  pageTitleSize: "3.5rem",
-};
-
-/* colour swatch picker row */
-function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-medium text-[#374151] flex items-center gap-1">
-        {label}
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-        </svg>
-      </span>
-      <label className="w-11 h-11 rounded-lg border-2 border-[#e5e7eb] overflow-hidden cursor-pointer hover:border-[#2d6fa8] transition-colors block">
-        <input type="color" value={value} onChange={(e) => onChange(e.target.value)} aria-label={label} title={label} className="w-full h-full opacity-0 absolute" />
-        <span className="w-full h-full block rounded-md" style={{ backgroundColor: value }} />
-      </label>
-    </div>
-  );
+function normalizeName(v?: string): string {
+  return (v ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
-/* font dropdown */
-function FontSelect({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-medium text-[#374151] flex items-center gap-1">
-        {label}
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-        </svg>
-      </span>
-      <div className="relative">
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          aria-label={label}
-          title={label}
-          className="w-full border border-[#e5e7eb] rounded-lg px-3 py-2.5 text-sm text-[#111827] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent pr-8"
-        >
-          {FONT_OPTIONS.map((f) => <option key={f} value={f}>{f}</option>)}
-        </select>
-        <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
-      </div>
-    </div>
-  );
+function mapMenuNameToStyle(menuName?: string): string {
+  const n = normalizeName(menuName);
+  if (!n) return "";
+  if (n.includes("life")) return "life";
+  if (n.includes("overview")) return "overview";
+  if (n.includes("box")) return "box";
+  return "";
 }
 
-/* accordion wrapper */
 function Accordion({ title, icon, children, defaultOpen = false }: { title: string; icon: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
@@ -626,452 +532,14 @@ function Accordion({ title, icon, children, defaultOpen = false }: { title: stri
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
-      {open && <div className="px-[22px] py-[20px] border-t border-[#f3f4f6] bg-white">{children}</div>}
-    </div>
-  );
-}
-
-/* live preview pane */
-function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
-  const headingStyle = { fontFamily: cfg.headingFont, color: cfg.headingFontColor };
-  const bodyStyle    = { fontFamily: cfg.paragraphFont, color: cfg.fontColor };
-  const h1Size = cfg.pageTitleSize === "h6" ? "1rem" : cfg.pageTitleSize;
-
-  return (
-    <div className="flex flex-col h-full bg-[#f0f4f8]">
-      {/* preview header */}
-      <div className="h-10 bg-white border-b border-[#e5e7eb] flex items-center justify-between px-4 shrink-0">
-        <span className="text-xs font-semibold text-[#111827] flex items-center gap-1.5">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill={cfg.primaryColor} stroke="none"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-          Live Preview
-        </span>
-        <div className="flex items-center gap-1.5">
-          <button type="button" title="Toggle dark mode" aria-label="Toggle dark mode" className="p-1.5 rounded-lg border border-[#e5e7eb] hover:bg-[#f3f4f6] transition-colors">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-            </svg>
-          </button>
-          <button type="button" title="Expand preview" aria-label="Expand preview" className="p-1.5 rounded-lg border border-[#e5e7eb] hover:bg-[#f3f4f6] transition-colors">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      {/* simulated course shell */}
-      <div className="flex-1 overflow-y-auto p-4">
-        <div className="bg-white rounded-xl border border-[#e5e7eb] overflow-hidden shadow-sm">
-          {/* progress bar */}
-          <div className="h-1" style={{ backgroundColor: cfg.primaryColor }} />
-
-          {/* course nav bar */}
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-[#f3f4f6]" style={{ backgroundColor: cfg.primaryColor }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M19 12H5M12 19l-7-7 7-7"/>
-            </svg>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
-            </svg>
-            <span className="text-xs text-white flex-1" style={{ fontFamily: cfg.headingFont }}>New Course Title / New Menu/Page Title</span>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-          </div>
-
-          <div className="p-4">
-            {/* page title */}
-            <h1 className="font-bold mb-3" style={{ ...headingStyle, fontSize: h1Size }}>{cfg.pageTitleSize === "h6" ? "—" : "New Menu/Page Title"}</h1>
-
-            {/* article block */}
-            <div className="border border-[#e5e7eb] rounded-lg p-3 mb-3">
-              <h2 className="font-semibold text-sm mb-1" style={headingStyle}>New Article Title</h2>
-              <div className="border border-[#e5e7eb] rounded-md p-3">
-                <h3 className="font-semibold text-xs mb-1" style={headingStyle}>New Block Title</h3>
-                <div className="border border-[#e5e7eb] rounded p-3">
-                  <p className="font-semibold text-xs mb-1" style={headingStyle}>New Component Title</p>
-                  <p className="text-xs mb-1" style={bodyStyle}>Body text</p>
-                  <a href="#" className="text-xs underline block mb-1" style={{ color: cfg.linkFontColor, fontFamily: cfg.paragraphFont }}>This is a sample link</a>
-                  <p className="text-xs italic mb-3" style={{ color: cfg.instructionColor, fontFamily: cfg.paragraphFont }}>Choose one option then select Submit.</p>
-
-                  {/* MCQ */}
-                  <div className="space-y-2 mb-3">
-                    {["Correct", "Incorrect"].map((opt, i) => (
-                      <div key={opt} className="flex items-center gap-2 border border-[#e5e7eb] rounded-md px-3 py-2" style={{ backgroundColor: i === 0 ? cfg.secondaryColor + "22" : "" }}>
-                        <div className="w-5 h-5 rounded flex items-center justify-center shrink-0" style={{ backgroundColor: cfg.secondaryColor }}>
-                          {i === 0 && <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>}
-                        </div>
-                        <span className="text-xs" style={bodyStyle}>{opt}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  <button type="button" className="px-4 py-1.5 rounded text-xs font-semibold text-white" style={{ backgroundColor: cfg.primaryColor, fontFamily: cfg.paragraphFont }}>Submit</button>
-                </div>
-              </div>
-            </div>
-
-            {/* nav buttons */}
-            <div className="flex justify-end gap-2 mt-3">
-              <button type="button" className="px-4 py-1.5 rounded text-xs font-medium border" style={{ borderColor: cfg.primaryColor, color: cfg.primaryColor, fontFamily: cfg.paragraphFont }}>Previous</button>
-              <button type="button" className="px-4 py-1.5 rounded text-xs font-semibold text-white" style={{ backgroundColor: cfg.primaryColor, fontFamily: cfg.paragraphFont }}>Next</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── Global Theme accordion content ── */
-function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (v: CustomThemeValues) => void }) {
-  const set = <K extends keyof CustomThemeValues>(k: K, v: CustomThemeValues[K]) => setCfg({ ...cfg, [k]: v });
-
-  const calcSizes = () => {
-    const base = cfg.pageTitleSize === "h6" ? null : parseFloat(cfg.pageTitleSize);
-    if (!base) return null;
-    return [
-      { label: "H1 (Page Title)", size: base, px: Math.round(base * 16) },
-      { label: "H2", size: +(base - 0.5).toFixed(1), px: Math.round((base - 0.5) * 16) },
-      { label: "H3", size: +(base - 1).toFixed(1), px: Math.round((base - 1) * 16) },
-      { label: "H4", size: +(base - 1.5).toFixed(1), px: Math.round((base - 1.5) * 16) },
-      { label: "H5", size: +(base - 2).toFixed(1), px: Math.round((base - 2) * 16) },
-      { label: "Paragraph", size: 1.125, px: 18 },
-    ];
-  };
-
-  const sizes = calcSizes();
-
-  return (
-    <div className="space-y-5 mt-4">
-      {/* colours row 1 */}
-      <div className="grid grid-cols-2 gap-x-6 gap-y-5">
-        <ColorField label="Primary colour" value={cfg.primaryColor} onChange={(v) => set("primaryColor", v)} />
-        <ColorField label="Secondary colour" value={cfg.secondaryColor} onChange={(v) => set("secondaryColor", v)} />
-      </div>
-      {/* fonts */}
-      <div className="grid grid-cols-2 gap-x-6 gap-y-5">
-        <FontSelect label="Heading font" value={cfg.headingFont} onChange={(v) => set("headingFont", v)} />
-        <FontSelect label="Paragraph font" value={cfg.paragraphFont} onChange={(v) => set("paragraphFont", v)} />
-      </div>
-      {/* font colours */}
-      <div className="grid grid-cols-2 gap-x-6 gap-y-5">
-        <ColorField label="Font colour" value={cfg.fontColor} onChange={(v) => set("fontColor", v)} />
-        <ColorField label="Heading font colour" value={cfg.headingFontColor} onChange={(v) => set("headingFontColor", v)} />
-      </div>
-      <div className="grid grid-cols-2 gap-x-6 gap-y-5">
-        <ColorField label="Instruction colour" value={cfg.instructionColor} onChange={(v) => set("instructionColor", v)} />
-        <ColorField label="Link font colour" value={cfg.linkFontColor} onChange={(v) => set("linkFontColor", v)} />
-      </div>
-      {/* page title size */}
-      <div className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium text-[#374151] flex items-center gap-1">
-          Page Title Size (H1)
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-          </svg>
-          <button type="button" onClick={() => set("pageTitleSize", DEFAULT_CUSTOM.pageTitleSize)} title="Reset" className="ml-1 text-[#9ca3af] hover:text-[#6b7280]">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>
-            </svg>
-          </button>
-        </span>
-        <div className="relative max-w-xs">
-          <select
-            value={cfg.pageTitleSize}
-            onChange={(e) => set("pageTitleSize", e.target.value)}
-            aria-label="Page Title Size (H1)"
-            title="Page Title Size (H1)"
-            className="w-full border-2 border-[#2d6fa8] rounded-lg px-3 py-2.5 text-sm text-[#111827] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] pr-8"
-          >
-            {H1_SIZE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-          <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
-        </div>
-        {sizes && (
-          <div className="mt-2 rounded-lg bg-[#f0f7ff] border-l-4 border-[#2d6fa8] px-4 py-3 text-xs text-[#374151] space-y-0.5">
-            <p className="font-semibold text-[#111827] mb-1">Calculated values for Desktop:</p>
-            {sizes.map((s) => (
-              <p key={s.label}><span className="font-semibold">{s.label}:</span> {s.size}rem ({s.px}px)</p>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ── Custom theme full editor ── */
-function CustomThemeEditor({ onBack }: { onBack: () => void }) {
-  const [cfg, setCfg] = useState<CustomThemeValues>(DEFAULT_CUSTOM);
-
-  const [componentConfig, setComponentConfig] = useState({
-    markingNotFinal: false,
-    markingUnansweredCorrect: false,
-    hideFeedbackFirstAttempt: false,
-    hidePartiallyCorrect: false,
-  });
-
-  const toggleConfig = (key: keyof typeof componentConfig) =>
-    setComponentConfig((prev) => ({ ...prev, [key]: !prev[key] }));
-
-  const ACCORDIONS = [
-    {
-      id: "global",
-      title: "Global Theme",
-      defaultOpen: true,
-      icon: (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
-        </svg>
-      ),
-      content: <GlobalThemeSection cfg={cfg} setCfg={setCfg} />,
-    },
-    {
-      id: "page",
-      title: "Page Structure",
-      icon: (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>
-        </svg>
-      ),
-      content: <div className="pt-4 text-sm text-[#9ca3af] italic">Page structure options coming soon.</div>,
-    },
-    {
-      id: "progress",
-      title: "Progress Styling",
-      icon: (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/>
-        </svg>
-      ),
-      content: <div className="pt-4 text-sm text-[#9ca3af] italic">Progress styling options coming soon.</div>,
-    },
-    {
-      id: "navigation",
-      title: "Navigation Styling",
-      icon: (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <polygon points="3 11 22 2 13 21 11 13 3 11"/>
-        </svg>
-      ),
-      content: <div className="pt-4 text-sm text-[#9ca3af] italic">Navigation styling options coming soon.</div>,
-    },
-    {
-      id: "menu",
-      title: "Menu Styling",
-      icon: (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
-        </svg>
-      ),
-      content: <div className="pt-4 text-sm text-[#9ca3af] italic">Menu styling options coming soon.</div>,
-    },
-    {
-      id: "feedback",
-      title: "Feedback & Validation",
-      icon: (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
-        </svg>
-      ),
-      content: <div className="pt-4 text-sm text-[#9ca3af] italic">Feedback & validation options coming soon.</div>,
-    },
-    {
-      id: "overlays",
-      title: "Overlays Styling",
-      icon: (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/>
-        </svg>
-      ),
-      content: <div className="pt-4 text-sm text-[#9ca3af] italic">Overlays styling options coming soon.</div>,
-    },
-  ];
-
-  return (
-    <div className="flex h-full overflow-hidden">
-      {/* left: accordion editor */}
-      <div className="w-1/2 h-full overflow-y-auto border-r border-[#e5e7eb] bg-white">
-        <div className="flex items-center gap-2 px-5 py-3 border-b border-[#f3f4f6] shrink-0">
-          <button type="button" onClick={onBack} className="text-xs text-[#2d6fa8] hover:underline flex items-center gap-1">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M19 12H5M12 19l-7-7 7-7"/>
-            </svg>
-            Theme
-          </button>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
-          <span className="text-xs text-[#374151] font-medium">Custom Theme</span>
-        </div>
-        {/* ── Custom Icons: Sprite Sheets ── */}
-        <div className="px-5 pt-4 pb-5 border-b border-[#f3f4f6]">
-          <p className="text-xs font-semibold text-[#374151] mb-1">Custom Icons: Sprite Sheets</p>
-          <p className="text-xs text-[#6b7280] mb-3 leading-relaxed">Upload an SVG sprite sheet to replace default icons across the course.</p>
-          <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed border-[#d1d5db] rounded-xl cursor-pointer hover:border-[#2d6fa8] hover:bg-[#f0f7ff] transition-colors group">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="group-hover:stroke-[#2d6fa8] transition-colors mb-1">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-            </svg>
-            <span className="text-xs text-[#6b7280] group-hover:text-[#2d6fa8] transition-colors">Click to upload sprite sheet (.svg)</span>
-            <input type="file" accept=".svg" aria-label="Upload SVG sprite sheet" className="hidden" />
-          </label>
-        </div>
-
-        {/* ── Custom Icons: Single Icons ── */}
-        <div className="px-5 pt-4 pb-5 border-b border-[#f3f4f6]">
-          <p className="text-xs font-semibold text-[#374151] mb-1">Custom Icons: Single Icons</p>
-          <p className="text-xs text-[#6b7280] mb-3 leading-relaxed">Upload individual SVG icon files to override specific icons in the course.</p>
-          <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-dashed border-[#d1d5db] rounded-xl cursor-pointer hover:border-[#2d6fa8] hover:bg-[#f0f7ff] transition-colors group">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="group-hover:stroke-[#2d6fa8] transition-colors mb-1">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-            </svg>
-            <span className="text-xs text-[#6b7280] group-hover:text-[#2d6fa8] transition-colors">Click to upload icons (.svg)</span>
-            <input type="file" accept=".svg" multiple aria-label="Upload single SVG icons" className="hidden" />
-          </label>
-        </div>
-
-        {/* ── Configuration: Component ── */}
-        <div className="px-5 pt-4 pb-5 border-b border-[#f3f4f6]">
-          <p className="text-xs font-semibold text-[#374151] mb-0.5">Configuration: Component</p>
-          <p className="text-xs text-[#6b7280] mb-3 leading-relaxed">Component-level behavior and feedback configuration.</p>
-          <div className="space-y-1">
-            {(
-              [
-                { key: "markingNotFinal",          label: "Display marking for not-final attempts" },
-                { key: "markingUnansweredCorrect",  label: "Display marking for unanswered correct responses" },
-                { key: "hideFeedbackFirstAttempt",  label: "Hide feedback on first attempt on assessments" },
-                { key: "hidePartiallyCorrect",      label: "Hide partially correct feedback on the question and result page" },
-              ] as { key: keyof typeof componentConfig; label: string }[]
-            ).map(({ key, label }) => (
-              <label key={key} className="flex items-start gap-3 py-2 px-2 rounded-lg hover:bg-[#f9fafb] cursor-pointer group">
-                <div
-                  onClick={() => toggleConfig(key)}
-                  className={`mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
-                    componentConfig[key] ? "bg-[#2d6fa8] border-[#2d6fa8]" : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
-                  }`}
-                >
-                  {componentConfig[key] && (
-                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12"/>
-                    </svg>
-                  )}
-                </div>
-                <span className="text-xs text-[#374151] leading-snug">{label}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {/* ── Accordions ── */}
-        <div className="px-4 pb-6 space-y-2 mt-3">
-          {ACCORDIONS.map((a) => (
-            <Accordion key={a.id} title={a.title} icon={a.icon} defaultOpen={a.defaultOpen}>
-              {a.content}
-            </Accordion>
-          ))}
-        </div>
-      </div>
-
-      {/* right: live preview */}
-      <div className="w-1/2 h-full overflow-hidden">
-        <ThemePreview cfg={cfg} />
-      </div>
-    </div>
-  );
-}
-
-/* ── Theme selection panel ── */
-function normalizeName(v?: string): string {
-  return (v ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
-function mapThemeNameToId(themeName?: string): string | null {
-  const n = normalizeName(themeName);
-  if (!n) return null;
-  if (n.includes("life")) return "life";
-  if (n.includes("vanilla")) return "vanilla";
-  if (n.includes("custom")) return "custom";
-  return null;
-}
-
-function mapMenuNameToStyle(menuName?: string): string {
-  const n = normalizeName(menuName);
-  if (!n) return "";
-  if (n.includes("life")) return "life";
-  if (n.includes("overview")) return "overview";
-  if (n.includes("box")) return "box";
-  return "";
-}
-
-function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
-  const [selected, setSelected] = useState<string | null>(mapThemeNameToId(initialThemeName));
-
-  useEffect(() => {
-    setSelected(mapThemeNameToId(initialThemeName));
-  }, [initialThemeName]);
-
-  if (selected === "custom") {
-    return (
-      <div className="h-full w-full overflow-hidden">
-        <CustomThemeEditor onBack={() => setSelected(null)} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-3xl w-full px-6 py-6">
-      <div className="mb-6">
-        <h2 className="text-base font-semibold text-[#111827]">
-          Select Theme <span className="text-red-500">*</span>
-        </h2>
-        <p className="text-sm text-[#6b7280] mt-0.5">Choose a theme for your course.</p>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {THEMES.map((theme) => {
-          const isSelected = selected === theme.id;
-          return (
-            <button
-              key={theme.id}
-              type="button"
-              onClick={() => setSelected(theme.id)}
-              className={`text-left rounded-xl border-2 p-5 transition-all cursor-pointer focus:outline-none ${
-                isSelected
-                  ? "border-[#2d6fa8] bg-[#f0f7ff] shadow-sm"
-                  : "border-[#e5e7eb] bg-white hover:border-[#93c5fd] hover:shadow-sm"
-              }`}
-            >
-              <p className="font-semibold text-[#111827] text-sm mb-1">{theme.name}</p>
-              <p className="text-xs text-[#6b7280] leading-snug mb-4">{theme.description}</p>
-              <div className="flex gap-2">
-                {theme.swatches.map((color) => (
-                  <span
-                    key={color}
-                    className="w-8 h-8 rounded-md border border-black/10 inline-block"
-                    style={{ backgroundColor: color }}
-                  />
-                ))}
-              </div>
-              {isSelected && (
-                <div className="mt-3 flex items-center gap-1 text-xs font-medium text-[#2d6fa8]">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                  Selected
-                </div>
-              )}
-            </button>
-          );
-        })}
-      </div>
+      {open && <div className="px-4 pb-5 pt-1 border-t border-[#f3f4f6] bg-white">{children}</div>}
     </div>
   );
 }
 
 /* ─────────────────────────────────────────────────────────────
-   MENU PANEL — types, thumbnails, live preview, settings
-   ───────────────────────────────────────────────────────────── */
+  MENU PANEL — types, thumbnails, live preview, settings
+  ───────────────────────────────────────────────────────────── */
 
 type BgRepeat   = "no-repeat" | "repeat-x" | "repeat-y" | "repeat";
 type BgSize     = "auto" | "cover" | "contain" | "100% 100%";
@@ -5086,6 +4554,8 @@ function CourseCreationCenterContent() {
   const [description, setDescription] = useState(initialDescription);
   const [savedThemeName, setSavedThemeName] = useState("");
   const [savedMenuName, setSavedMenuName] = useState("");
+  const [savedThemeVariables, setSavedThemeVariables] = useState<Record<string, unknown>>({});
+  const [savedPresetId, setSavedPresetId] = useState("");
 
   const [activeNav, setActiveNav] = useState("overview");
   const [collapsed, setCollapsed] = useState(false);
@@ -5103,6 +4573,8 @@ function CourseCreationCenterContent() {
       setDescription(initialDescription);
       setSavedThemeName("");
       setSavedMenuName("");
+      setSavedThemeVariables({});
+      setSavedPresetId("");
       return;
     }
     let cancelled = false;
@@ -5115,12 +4587,16 @@ function CourseCreationCenterContent() {
         setDescription(data.description || initialDescription);
         setSavedThemeName(data.themeName || "");
         setSavedMenuName(data.menuName || "");
+        setSavedThemeVariables(data.themeVariables || {});
+        setSavedPresetId(data.themePresetId || "");
       } catch {
         if (cancelled) return;
         setTitle(initialTitle);
         setDescription(initialDescription);
         setSavedThemeName("");
         setSavedMenuName("");
+        setSavedThemeVariables({});
+        setSavedPresetId("");
       }
     })();
 
@@ -5142,7 +4618,7 @@ function CourseCreationCenterContent() {
   // Smart navigation handler - used by sidebar items
   // When on technical-settings, the panel intercepts via pendingNavigation state
   function handleNavigation(nextPanel: string) {
-    if (activeNav === "technical-settings") {
+    if (activeNav === "technical-settings" || activeNav === "theme") {
       // Signal to TechnicalSettingPage that navigation is requested
       // The panel decides whether to show a confirmation modal or allow navigation
       setPendingNavigation(nextPanel);
@@ -5164,7 +4640,7 @@ function CourseCreationCenterContent() {
           onOpenStoryboard={() => setActiveNav("storyboarding")}
         />
       );
-    if (activeNav === "theme") return <ThemePanel initialThemeName={savedThemeName} />;
+    if (activeNav === "theme") return <SelectThemePage initialThemeName={savedThemeName} initialThemeVariables={savedThemeVariables} initialPresetId={savedPresetId} courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} onThemeSaved={({ themeName, themeVariables, themePresetId }) => { setSavedThemeName(themeName); setSavedThemeVariables(themeVariables); setSavedPresetId(themePresetId); }} />;
     if (activeNav === "menu") return <MenuPanel initialMenuName={savedMenuName} />;
     if (activeNav === "navigation") return <NavigationPage courseId={courseId} />;
     if (activeNav === "accessibility") return <AccessibilityPanel />;
