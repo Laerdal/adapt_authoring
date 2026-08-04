@@ -108,6 +108,7 @@ function A11yLeafInput({ leaf, onChange }: { leaf: A11yLeaf; onChange: (path: st
       <span className="text-xs font-semibold text-[#374151]">{leaf.label}</span>
       <input
         type="text"
+        aria-label={leaf.label}
         value={leaf.value}
         onChange={(e) => onChange(leaf.path, e.target.value)}
         className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors"
@@ -200,14 +201,20 @@ const ARIA_LEVELS: { key: string; label: string; def: number }[] = [
   { key: "_notify", label: "Notify popup title ARIA level", def: 1 },
 ];
 
+// ARIA heading levels must be valid HTML heading levels: integers 1–6. Anything
+// else (0, negative, decimal, blank, non-numeric) falls back to the default.
+function toAriaLevel(v: unknown, def: number): number {
+  const n = v === "" || v === null || v === undefined ? NaN : Number(v);
+  return Number.isInteger(n) && n >= 1 && n <= 6 ? n : def;
+}
+
 // Merge the stored config `_accessibility` with the ARIA-level defaults so every
 // field shows a value; preserves any other flags already on the object.
 function buildAccessibilityConfig(raw: Record<string, unknown>): Record<string, unknown> {
   const ariaRaw = asObj(raw._ariaLevels) ?? {};
   const _ariaLevels: Record<string, number> = {};
   for (const { key, def } of ARIA_LEVELS) {
-    const v = ariaRaw[key];
-    _ariaLevels[key] = typeof v === "number" && Number.isFinite(v) ? v : def;
+    _ariaLevels[key] = toAriaLevel(ariaRaw[key], def);
   }
   return {
     ...raw,
@@ -234,10 +241,7 @@ function normalizeAccessibilityConfig(acc: Record<string, unknown>): Record<stri
   const ariaRaw = asObj(acc._ariaLevels) ?? {};
   const _ariaLevels: Record<string, number> = {};
   for (const { key, def } of ARIA_LEVELS) {
-    const raw = ariaRaw[key];
-    // Treat blank/null as "use default" rather than coercing "" → 0.
-    const n = raw === "" || raw === null || raw === undefined ? NaN : Number(raw);
-    _ariaLevels[key] = Number.isFinite(n) ? n : def;
+    _ariaLevels[key] = toAriaLevel(ariaRaw[key], def);
   }
   return { ...acc, _ariaLevels };
 }
@@ -283,6 +287,10 @@ function A11yNumberField({
       <span className="text-xs font-semibold text-[#374151]">{label}</span>
       <input
         type="number"
+        aria-label={label}
+        min={1}
+        max={6}
+        step={1}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors"
@@ -309,6 +317,7 @@ function A11yJsonField({
       <span className="text-sm font-bold text-[#111827]">{label}</span>
       {help && <span className="text-[13px] text-[#9ca3af] leading-snug mb-1">{help}</span>}
       <textarea
+        aria-label={label}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         spellCheck={false}
@@ -346,6 +355,9 @@ export function AccessibilityPage({
   const [savedOptionsText, setSavedOptionsText] = useState("{}");
   const [configId, setConfigId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // Set when the initial load fails. Saving is blocked while true so a failed load
+  // can never overwrite stored settings with defaults/empty (data loss).
+  const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
@@ -358,6 +370,7 @@ export function AccessibilityPage({
     let cancelled = false;
     (async () => {
       setLoading(true);
+      setLoadError(false);
       try {
         const [loaded, cfg] = await Promise.all([
           getCourseGlobalsMerged(courseId),
@@ -375,6 +388,8 @@ export function AccessibilityPage({
         setConfigId(cfg.configId);
       } catch (err) {
         console.error("Failed to load accessibility settings", err);
+        // Don't leave partial/empty state that a later save could persist.
+        if (!cancelled) setLoadError(true);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -436,6 +451,20 @@ export function AccessibilityPage({
 
   async function persist(): Promise<boolean> {
     if (!courseId || saving) return false;
+
+    // Never save on top of a failed load — the in-memory state isn't the real
+    // stored data, so writing it back could clobber existing settings.
+    if (loadError) {
+      setToast({ type: "error", message: "Settings didn't load. Reload the page before saving." });
+      return false;
+    }
+
+    // Config changes exist but the config record never loaded (configId is null):
+    // saving would silently drop them, so block and tell the user.
+    if (cfgDirty && !configId) {
+      setToast({ type: "error", message: "Accessibility configuration didn't load. Reload before saving." });
+      return false;
+    }
 
     // Validate/parse the Extended Options JSON before hitting the backend.
     let parsedOptions: unknown = {};
@@ -561,6 +590,11 @@ export function AccessibilityPage({
       ) : !courseId ? (
         <div className="rounded-lg border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b]">
           No course is associated with this setup flow, so accessibility settings cannot be loaded.
+        </div>
+      ) : loadError ? (
+        <div className="rounded-lg border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b]">
+          Couldn't load the accessibility settings. Reload the page to try again — saving is disabled until they load
+          successfully to avoid overwriting your existing settings.
         </div>
       ) : !hasAnything ? (
         <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-4 py-3 text-sm text-[#6b7280]">

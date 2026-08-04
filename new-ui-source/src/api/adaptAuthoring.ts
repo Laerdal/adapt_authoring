@@ -847,14 +847,13 @@ export async function updateCourseMenuSettings(courseId: string, menuSettings: C
 export type GlobalsObject = { [key: string]: unknown };
 
 export async function getCourseGlobals(courseId: string): Promise<GlobalsObject> {
-  try {
-    const course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
-    const g = course?._globals;
-    return g && typeof g === "object" ? (g as GlobalsObject) : {};
-  } catch (err) {
-    console.warn("Failed to fetch course globals", err);
-    return {};
-  }
+  // Deliberately does NOT swallow errors: the Accessibility panel writes `_globals`
+  // back wholesale, so if a transient fetch failure returned {} here, the next save
+  // would overwrite the stored globals with defaults/empty (data loss). Let the
+  // caller catch the failure and block saving until globals load successfully.
+  const course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+  const g = course?._globals;
+  return g && typeof g === "object" ? (g as GlobalsObject) : {};
 }
 
 export async function saveCourseGlobals(courseId: string, globals: GlobalsObject): Promise<unknown> {
