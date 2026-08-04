@@ -295,7 +295,7 @@ function CourseOverviewPanel({ title, description }: { title: string; descriptio
 
         <div className="border-t border-[#e5e7eb] pt-5">
           <div className="mb-1">
-            <p className="text-sm font-semibold text-[#111827]">Collaboration G�� Shared With</p>
+            <p className="text-sm font-semibold text-[#111827]">Collaboration — Shared With</p>
             <p className="text-xs text-[#6b7280] mt-0.5">Collaborators who have access to this course</p>
           </div>
           <div className="mt-3">
