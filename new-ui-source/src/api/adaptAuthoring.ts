@@ -213,6 +213,7 @@ interface EngineCourseDetails {
   title?: string;
   displayTitle?: string;
   description?: string;
+  menuSettings?: CourseMenuSettings;
 }
 
 interface EngineConfigDetails {
@@ -309,6 +310,15 @@ async function applyThemeToCourse(courseId: string, themeId: string): Promise<vo
 
 async function applyMenuToCourse(courseId: string, menuId: string): Promise<void> {
   await apiClient.post(`/api/menu/${menuId}/makeitso/${courseId}`);
+}
+
+export async function applyMenuSelectionToCourse(courseId: string, menuLabel: string): Promise<void> {
+  const label = (menuLabel || "").trim();
+  if (!label) return;
+  const menus = await getMenuTypes();
+  const menuId = resolvePluginId(menus, label, "menu");
+  if (!menuId) return;
+  await applyMenuToCourse(courseId, menuId);
 }
 
 async function applyCourseSelections(courseId: string, themeLabel?: string, menuLabel?: string): Promise<void> {
@@ -714,6 +724,59 @@ export interface CourseCustomStyle {
   customStyle?: string;
 }
 
+export interface CourseMenuSettingsEntry {
+  _graphic?: {
+    _src?: string;
+    alt?: string;
+  };
+  _skipSubmenuView?: boolean;
+  lockedNotification?: string;
+  _backgroundImage?: {
+    _xlarge?: string;
+    _large?: string;
+    _medium?: string;
+    _small?: string;
+  };
+  _backgroundStyles?: {
+    _backgroundRepeat?: string | null;
+    _backgroundSize?: string | null;
+    _backgroundPosition?: string | null;
+  };
+  _menuHeader?: {
+    _displayAboveHeader?: boolean;
+    _textAlignment?: {
+      _title?: string;
+      _subtitle?: string;
+      _body?: string;
+      _instruction?: string;
+    };
+    _backgroundImage?: {
+      _xlarge?: string;
+      _large?: string;
+      _medium?: string;
+      _small?: string;
+    };
+    _backgroundStyles?: {
+      _backgroundRepeat?: string | null;
+      _backgroundSize?: string | null;
+      _backgroundPosition?: string | null;
+    };
+    _minimumHeights?: {
+      _xlarge?: number | null;
+      _large?: number | null;
+      _medium?: number | null;
+      _small?: number | null;
+    };
+  };
+}
+
+export interface CourseMenuSettings {
+  _boxMenu?: CourseMenuSettingsEntry;
+  _lifeMenu?: CourseMenuSettingsEntry;
+  _overviewMenu?: CourseMenuSettingsEntry;
+  [key: string]: CourseMenuSettingsEntry | undefined;
+}
+
 // Fetch technical settings for a course by courseId
 export async function getCourseTechnicalSettings(courseId: string): Promise<CourseTechnicalSettings> {
   try {
@@ -749,6 +812,66 @@ export async function getCourseCstyle(courseId: string): Promise<string> {
     console.warn("Failed to fetch custom style", err);
     return "";
   }
+}
+
+export async function getCourseMenuSettings(courseId: string): Promise<CourseMenuSettings> {
+  try {
+    const result = await apiClient.get<EngineCourseDetails>(`/api/content/course/${courseId}`);
+    return result?.menuSettings ?? {};
+  } catch (err) {
+    console.warn("Failed to fetch course menu settings", err);
+    return {};
+  }
+}
+
+export async function updateCourseMenuSettings(courseId: string, menuSettings: CourseMenuSettings): Promise<unknown> {
+  return apiClient.put(`/api/content/course/${courseId}`, { menuSettings });
+}
+
+interface CourseAssetRecord {
+  _id: string;
+  _fieldName?: string;
+  _assetId?: string;
+}
+
+export async function getCourseAssetMappings(courseId: string): Promise<Record<string, string>> {
+  const records = await apiClient.get<CourseAssetRecord[]>(
+    `/api/content/courseasset?_contentTypeId=${encodeURIComponent(courseId)}&_contentType=course`
+  );
+
+  if (!Array.isArray(records)) return {};
+
+  const mappings: Record<string, string> = {};
+  for (const record of records) {
+    if (!record?._fieldName || !record?._assetId) continue;
+    mappings[record._fieldName] = record._assetId;
+  }
+  return mappings;
+}
+
+export async function createCourseAssetMapping(courseId: string, fieldName: string, assetId: string): Promise<void> {
+  await apiClient.post("/api/content/courseasset", {
+    _courseId: courseId,
+    _contentType: "course",
+    _contentTypeId: courseId,
+    _fieldName: fieldName,
+    _assetId: assetId,
+    _contentTypeParentId: courseId,
+  });
+}
+
+export async function removeCourseAssetMappings(courseId: string, fieldName: string): Promise<void> {
+  const records = await apiClient.get<CourseAssetRecord[]>(
+    `/api/content/courseasset?_contentTypeId=${encodeURIComponent(courseId)}&_contentType=course&_fieldName=${encodeURIComponent(fieldName)}`
+  );
+
+  if (!Array.isArray(records) || records.length === 0) return;
+
+  await Promise.all(
+    records
+      .filter((r): r is CourseAssetRecord & { _id: string } => !!r?._id)
+      .map((r) => apiClient.delete(`/api/content/courseasset/${r._id}`))
+  );
 }
 
 // ── Course structure (modules / topics / sections / content groups / components)

@@ -391,14 +391,14 @@ export function NavigationPage({ courseId }: { courseId: string }) {
                           <button
                             type="button"
                             onClick={() => setAssetPickerOpen(true)}
-                            className="text-xs px-2.5 py-1.5 border border-[var(--life-primary-500)] rounded-lg text-[var(--life-primary-500)] hover:bg-[var(--life-primary-050)] transition-colors"
+                            className="text-xs px-2.5 py-1.5 border border-[var(--life-primary-500)] rounded-[8px] text-[var(--life-primary-500)] hover:bg-[var(--life-primary-050)] transition-colors"
                           >
                             Change
                           </button>
                           <button
                             type="button"
                             onClick={() => setHeaderLogo({ src: "" })}
-                            className="text-xs px-2.5 py-1.5 border border-[var(--life-critical-500)] rounded-lg text-[var(--life-critical-500)] hover:bg-[var(--life-critical-050)] transition-colors"
+                            className="text-xs px-2.5 py-1.5 border border-[var(--life-critical-500)] rounded-[8px] text-[var(--life-critical-500)] hover:bg-[var(--life-critical-050)] transition-colors"
                           >
                             Remove
                           </button>
