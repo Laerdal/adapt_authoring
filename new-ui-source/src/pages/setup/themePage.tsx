@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react";
-import { saveThemeForCourse, saveThemeVariables, getThemePresets, saveThemePreset, applyThemePreset, getThemePresetParentTheme, type ThemePreset } from "../../api/adaptAuthoring";
+import { saveThemeForCourse, saveThemeVariables, getThemePresets, saveThemePreset, applyThemePreset, getThemePresetParentTheme, renameThemePreset, deleteThemePreset, type ThemePreset } from "../../api/adaptAuthoring";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
@@ -1232,6 +1232,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   const [selectedPresetId, setSelectedPresetId] = useState(initialPresetId ?? '');
   const [newPresetName, setNewPresetName] = useState('');
   const [showPresetNameInput, setShowPresetNameInput] = useState(false);
+  const [showManagePresetsModal, setShowManagePresetsModal] = useState(false);
   const [dbThemeVariables, setDbThemeVariables] = useState<Record<string, unknown>>(initialThemeVariables ?? {});
   const [selectedPresetParentTheme, setSelectedPresetParentTheme] = useState<string>("");
   const hasMountedWithInitialTheme = useRef(false);
@@ -1376,6 +1377,14 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleDiscardChanges() {
+    setSelected(mapThemeNameToId(initialThemeName));
+    setSelectedPresetId(initialPresetId ?? '');
+    hydrateThemeVariablesIntoEditors(dbThemeVariables);
+    // Re-anchor the snapshot so hasChanges becomes false
+    setLastSavedStateSnapshot('');
   }
 
   async function handleSavePreset() {
@@ -2047,18 +2056,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           </h2>
           <p className="text-sm text-[var(--life-neutral-300)] mt-0.5">Choose a theme for your course.</p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {saveError && <span className="text-xs text-[#ef4444]">{saveError}</span>}
-          {saveSuccess && <span className="text-xs text-[#22c55e] font-medium">Saved!</span>}
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving || !selected || !courseId}
-            className="px-4 py-2 text-sm font-semibold text-white bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
-          >
-            {saving ? 'Saving...' : 'Save'}
-          </button>
-        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -2143,7 +2140,31 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
             Save preset
           </button>
         )}
+        {presets.length > 0 && !showPresetNameInput && (
+          <button
+            type="button"
+            onClick={() => setShowManagePresetsModal(true)}
+            disabled={!selected}
+            className="text-xs font-semibold px-5 py-1.5 border border-[#d1d5db] text-[#374151] rounded-md hover:bg-[#f9fafb] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Manage presets
+          </button>
+        )}
       </div>
+
+      {showManagePresetsModal && (
+        <ManagePresetsModal
+          presets={presets}
+          onClose={() => setShowManagePresetsModal(false)}
+          onPresetRenamed={(updated) => {
+            setPresets((prev) => prev.map((p) => (p._id === updated._id ? updated : p)));
+          }}
+          onPresetDeleted={(deletedId) => {
+            setPresets((prev) => prev.filter((p) => p._id !== deletedId));
+            if (selectedPresetId === deletedId) setSelectedPresetId('');
+          }}
+        />
+      )}
 
       <p className="text-xs text-[#6b7280] mb-5 leading-relaxed">
         <strong className="text-[#111827]">Tip:</strong> You can save your selections as a 'preset' for quick access later.
@@ -2636,20 +2657,261 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         isSaving={saving}
         onSave={handleSave}
         onDiscard={() => {
+          handleDiscardChanges();
           const navTarget = consumePendingNavigation();
           if (navTarget) onNavigationRequest?.(navTarget);
         }}
         onClose={clearPendingNavigation}
-        title="Unsaved Theme Changes"
-        message="You have unsaved theme changes. Do you want to save them before leaving this page?"
-        saveLabel="Save"
-        discardLabel="Discard"
       />
+
+      {/* Floating "Unsaved changes" bar — only while the form is dirty */}
+      {hasChanges && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-3 rounded-xl bg-white border border-[var(--life-warning-100)] shadow-lg animate-fade-in-down">
+          <span className="flex items-center gap-2 text-sm text-[#374151]">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-warning-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            Unsaved changes
+          </span>
+          {saveError && <span className="text-xs text-[#ef4444] max-w-[180px] truncate">{saveError}</span>}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleDiscardChanges}
+              disabled={saving}
+              className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] disabled:opacity-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || !selected || !courseId}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:opacity-50 rounded-lg transition-colors"
+            >
+              {saving && (
+                <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                </svg>
+              )}
+              {saving ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 /* Theme Accordion Component */
+/* Manage Presets Modal */
+function ManagePresetsModal({
+  presets,
+  onClose,
+  onPresetRenamed,
+  onPresetDeleted,
+}: {
+  presets: ThemePreset[];
+  onClose: () => void;
+  onPresetRenamed: (preset: ThemePreset) => void;
+  onPresetDeleted: (presetId: string) => void;
+}) {
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
+  const [editError, setEditError] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  function startEdit(preset: ThemePreset) {
+    setEditingId(preset._id);
+    setEditingName(preset.displayName);
+    setEditError(null);
+    setConfirmDeleteId(null);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditingName('');
+    setEditError(null);
+  }
+
+  async function saveEdit(preset: ThemePreset) {
+    const trimmed = editingName.trim();
+    if (!trimmed) {
+      setEditError('Name is required.');
+      return;
+    }
+    const duplicate = presets.some(
+      (p) => p._id !== preset._id && p.displayName.trim().toLowerCase() === trimmed.toLowerCase()
+    );
+    if (duplicate) {
+      setEditError('A preset with this name already exists.');
+      return;
+    }
+    try {
+      await renameThemePreset(preset._id, trimmed);
+      onPresetRenamed({ ...preset, displayName: trimmed });
+      setEditingId(null);
+      setEditingName('');
+      setEditError(null);
+    } catch {
+      setEditError('Failed to rename preset.');
+    }
+  }
+
+  async function confirmDelete(preset: ThemePreset) {
+    setDeletingId(preset._id);
+    setErrorMsg(null);
+    try {
+      await deleteThemePreset(preset._id);
+      onPresetDeleted(preset._id);
+      setConfirmDeleteId(null);
+    } catch {
+      setErrorMsg('Failed to delete preset.');
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#e5e7eb]">
+          <h3 className="text-sm font-bold text-[#111827]">Manage presets</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-[#f3f4f6] text-[#6b7280] transition-colors"
+            aria-label="Close"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Description */}
+        <p className="text-xs text-[#6b7280] px-5 pt-4 pb-2 leading-relaxed">
+          You can view, rename and delete the saved presets for the chosen theme here.
+        </p>
+
+        {errorMsg && (
+          <p className="text-xs text-[#ef4444] px-5 pb-2">{errorMsg}</p>
+        )}
+
+        {/* Preset list */}
+        <div className="px-5 pb-5 space-y-2 max-h-80 overflow-y-auto">
+          {presets.length === 0 && (
+            <p className="text-xs text-[#6b7280] italic py-3">No presets available.</p>
+          )}
+          {presets.map((preset) => (
+            <div key={preset._id} className="border border-[#e5e7eb] rounded-lg px-3 py-2.5 bg-[#fafafa] space-y-2">
+              {editingId === preset._id ? (
+                /* Edit mode */
+                <div className="space-y-1.5">
+                  <input
+                    type="text"
+                    value={editingName}
+                    onChange={(e) => { setEditingName(e.target.value); setEditError(null); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(preset); if (e.key === 'Escape') cancelEdit(); }}
+                    autoFocus
+                    className="text-xs w-full border border-[#d1d5db] rounded-md px-2.5 py-1.5 text-[#111827] focus:ring-2 focus:ring-[var(--life-primary-500)] focus:border-transparent outline-none"
+                  />
+                  {editError && <p className="text-xs text-[#ef4444]">{editError}</p>}
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => saveEdit(preset)}
+                      className="text-xs font-semibold px-3 py-1.5 bg-[var(--life-primary-500)] text-white rounded-md hover:bg-[var(--life-primary-700)] transition-colors"
+                    >
+                      Save
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelEdit}
+                      className="text-xs px-3 py-1.5 border border-[#d1d5db] text-[#6b7280] rounded-md hover:bg-[#f9fafb] transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : confirmDeleteId === preset._id ? (
+                /* Delete confirmation */
+                <div className="space-y-1.5">
+                  <p className="text-xs text-[#374151] leading-snug">
+                    Delete preset <strong>"{preset.displayName}"</strong>?{' '}
+                    <span className="font-semibold text-[#ef4444]">This will affect any existing courses using this preset.</span>
+                  </p>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => confirmDelete(preset)}
+                      disabled={deletingId === preset._id}
+                      className="text-xs font-semibold px-3 py-1.5 bg-[#ef4444] text-white rounded-md hover:bg-[#dc2626] disabled:opacity-50 transition-colors"
+                    >
+                      {deletingId === preset._id ? 'Deleting…' : 'Delete'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteId(null)}
+                      className="text-xs px-3 py-1.5 border border-[#d1d5db] text-[#6b7280] rounded-md hover:bg-[#f9fafb] transition-colors"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Normal row */
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs text-[#111827] truncate flex-1">{preset.displayName}</span>
+                  <div className="flex gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(preset)}
+                      title="Rename preset"
+                      className="p-1.5 rounded-md border border-[#e5e7eb] text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[var(--life-primary-500)] transition-colors"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setConfirmDeleteId(preset._id); cancelEdit(); }}
+                      title="Delete preset"
+                      className="p-1.5 rounded-md border border-[#e5e7eb] text-[#6b7280] hover:bg-[#fef2f2] hover:text-[#ef4444] hover:border-[#ef4444] transition-colors"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 py-4 border-t border-[#e5e7eb] flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-xs font-semibold px-4 py-2 bg-[var(--life-primary-500)] text-white rounded-lg hover:bg-[var(--life-primary-700)] transition-colors"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ThemeAccordion({
   label,
   children,
