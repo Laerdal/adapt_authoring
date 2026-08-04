@@ -9,6 +9,8 @@ import {
   type CoursePageOption,
   type NavFooterButtonKey,
 } from "../../api/adaptAuthoring";
+import { UnsavedChangesModal } from "./unsavedChangesModal";
+import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
 /* ── Shared checkbox row (local copy; mirrors SetupPage's) ── */
 function CheckboxRow({
@@ -163,7 +165,17 @@ const FOOTER_BUTTON_META: { key: NavFooterButtonKey; label: string }[] = [
   { key: "_custom",   label: "Custom" },
 ];
 
-export function NavigationPage({ courseId }: { courseId: string }) {
+export function NavigationPage({
+  courseId,
+  onNavigationRequest,
+  pendingNavigation,
+  onPendingNavigationHandled,
+}: {
+  courseId: string;
+  onNavigationRequest?: (nav: string) => void;
+  pendingNavigation?: string | null;
+  onPendingNavigationHandled?: () => void;
+}) {
   const [s, setS] = useState<NavigationSettings>(defaultNavigationSettings());
   // Last-persisted snapshot: drives the "Unsaved changes" bar + Cancel (revert).
   const [savedSnapshot, setSavedSnapshot] = useState<NavigationSettings>(defaultNavigationSettings());
@@ -265,6 +277,38 @@ export function NavigationPage({ courseId }: { courseId: string }) {
     } finally {
       setSaving(false);
     }
+  }
+
+  // Confirm-before-leave when there are unsaved changes (mirrors Technical Settings).
+  const { showConfirmModal, consumePendingNavigation, clearPendingNavigation } =
+    useUnsavedChangesNavigationGuard({
+      hasChanges: dirty,
+      pendingNavigation,
+      onPendingNavigationHandled,
+      onNavigate: onNavigationRequest,
+    });
+
+  async function handleConfirmSave() {
+    if (!courseId || saving) return;
+    setSaving(true);
+    setToast(null);
+    try {
+      await saveNavigationSettings(courseId, s);
+      setSavedSnapshot(s);
+      const navTarget = consumePendingNavigation();
+      setToast({ type: "success", message: "Changes saved successfully" });
+      if (navTarget) onNavigationRequest?.(navTarget);
+    } catch {
+      setToast({ type: "error", message: "Couldn't save. Please try again." });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleConfirmDiscard() {
+    setS(savedSnapshot);
+    const navTarget = consumePendingNavigation();
+    if (navTarget) onNavigationRequest?.(navTarget);
   }
 
   const pageOptions = [
@@ -637,6 +681,14 @@ export function NavigationPage({ courseId }: { courseId: string }) {
           }}
         />
       )}
+
+      <UnsavedChangesModal
+        isOpen={showConfirmModal}
+        isSaving={saving}
+        onDiscard={handleConfirmDiscard}
+        onSave={handleConfirmSave}
+        onClose={clearPendingNavigation}
+      />
     </div>
   );
 }

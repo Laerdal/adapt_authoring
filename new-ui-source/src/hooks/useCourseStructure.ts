@@ -1,8 +1,7 @@
-// Loads and mutates a course's real content structure (modules / sub-modules /
-// topics / sections / content groups / components) through the engine's
-// /api/content/* routes. Used by the Course Structure panel in the Course Setup
-// flow. Menus (modules) nest recursively; within any container the direct
-// children (menus + pages) are ordered by _sortOrder.
+// Course Structure editing model. Edits are staged in a local DRAFT and only
+// written to the backend when the caller invokes save(). `discard()` reverts to
+// the last-saved state. Menus (modules) nest recursively; within a container the
+// direct children (menus + pages) are ordered by _sortOrder.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -11,6 +10,7 @@ import {
   type STopic,
   type SSection,
   type SContentGroup,
+  type SComponent,
   type StructureLevel,
   type ContainerLevel,
   mergedChildren,
@@ -18,21 +18,56 @@ import {
 } from "../types/structure";
 import {
   getCourseStructure,
-  seedDefaultStructure,
-  seedDefaultTopic,
   createModule,
+  createTopic,
   createArticle,
   createBlock,
   createComponent,
   renameStructureNode,
   deleteStructureNode,
-  reorderStructureNodes,
   moveContentNode,
   updateComponentLayout,
+  getAvailableComponents,
   type ComponentTypeOption,
 } from "../api/adaptAuthoring";
 
 const EMPTY: CourseStructure = { courseTitle: "Course", modules: [], topics: [] };
+
+// ── Temp ids for locally-created (unsaved) nodes ──────────────────────────────
+let tmpCounter = 0;
+const tmpId = () => `tmp-${++tmpCounter}`;
+const isTmp = (id: string) => id.startsWith("tmp-");
+
+// ── Local node builders (no backend) ──────────────────────────────────────────
+const newComponent = (title = "Text", key = "text"): SComponent => ({ id: tmpId(), title, componentKey: key });
+const newContentGroup = (withComponent: boolean): SContentGroup => ({
+  id: tmpId(),
+  title: "New Content Group",
+  components: withComponent ? [newComponent()] : [],
+});
+const newSection = (withComponent: boolean): SSection => ({
+  id: tmpId(),
+  title: "New Section",
+  contentGroups: [newContentGroup(withComponent)],
+});
+const newTopic = (sortOrder: number): STopic => ({
+  id: tmpId(),
+  title: "New Topic",
+  sortOrder,
+  sections: [newSection(true)],
+});
+const newModule = (sortOrder: number): SModule => ({
+  id: tmpId(),
+  title: "New Module",
+  sortOrder,
+  modules: [],
+  topics: [newTopic(1)], // a module must contain at least one topic
+});
+const buildStarterDraft = (courseTitle: string): CourseStructure => ({
+  courseTitle,
+  modules: [],
+  topics: [newTopic(1)],
+});
 
 // ── Recursive tree walkers ────────────────────────────────────────────────────
 function allModules(s: CourseStructure): SModule[] {
@@ -68,11 +103,7 @@ function findGroupOfComponent(s: CourseStructure, componentId: string): SContent
 function moduleContainingTopic(s: CourseStructure, topicId: string): SModule | undefined {
   return allModules(s).find((m) => m.topics.some((t) => t.id === topicId));
 }
-// The {modules, topics} arrays of a container (course or a menu), by reference.
-function container(s: CourseStructure, containerId: string, courseId: string): {
-  modules: SModule[];
-  topics: STopic[];
-} {
+function container(s: CourseStructure, containerId: string, courseId: string): { modules: SModule[]; topics: STopic[] } {
   if (containerId === courseId) return { modules: s.modules, topics: s.topics };
   const m = findModule(s, containerId);
   return { modules: m?.modules ?? [], topics: m?.topics ?? [] };
@@ -109,29 +140,85 @@ function setTitleById(s: CourseStructure, id: string, title: string): void {
   }
 }
 
-export function useCourseStructure(courseId: string, courseTitle = "Course") {
-  const [state, setState] = useState<CourseStructure>({ ...EMPTY, courseTitle });
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const seededFor = useRef<string | null>(null);
+// ── Move helpers (operate on a cloned CourseStructure) ────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function detachNode(s: CourseStructure, level: StructureLevel, id: string, courseId: string): { node: any; oldParentId: string } | null {
+  if (level === "component") {
+    for (const g of allGroups(s)) { const i = g.components.findIndex((c) => c.id === id); if (i >= 0) return { node: g.components.splice(i, 1)[0], oldParentId: g.id }; }
+  } else if (level === "contentGroup") {
+    for (const sec of allSections(s)) { const i = sec.contentGroups.findIndex((c) => c.id === id); if (i >= 0) return { node: sec.contentGroups.splice(i, 1)[0], oldParentId: sec.id }; }
+  } else if (level === "section") {
+    for (const t of allTopics(s)) { const i = t.sections.findIndex((x) => x.id === id); if (i >= 0) return { node: t.sections.splice(i, 1)[0], oldParentId: t.id }; }
+  } else if (level === "topic") {
+    for (const c of allContainers(s, courseId)) { const i = c.topics.findIndex((x) => x.id === id); if (i >= 0) return { node: c.topics.splice(i, 1)[0], oldParentId: c.id }; }
+  } else if (level === "module") {
+    for (const c of allContainers(s, courseId)) { const i = c.modules.findIndex((x) => x.id === id); if (i >= 0) return { node: c.modules.splice(i, 1)[0], oldParentId: c.id }; }
+  }
+  return null;
+}
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getChildArray(s: CourseStructure, level: StructureLevel, parentId: string): any[] | null {
+  if (level === "component") return findContentGroup(s, parentId)?.components ?? null;
+  if (level === "contentGroup") return findSection(s, parentId)?.contentGroups ?? null;
+  if (level === "section") return findTopic(s, parentId)?.sections ?? null;
+  return null;
+}
 
-  const load = useCallback(async () => {
-    if (!courseId) {
-      setState({ ...EMPTY, courseTitle });
-      setLoading(false);
-      return;
-    }
+// ── Reconciliation (save) helpers ─────────────────────────────────────────────
+interface NodeDesc {
+  level: StructureLevel;
+  id: string;
+  title: string;
+  parentId: string; // courseId for top-level module/topic
+  order: number; // 1-based position among siblings
+  componentKey?: string;
+  layout?: "left" | "right";
+}
+// Depth-first, parents before children — safe order for creates.
+function flatten(s: CourseStructure, courseId: string): NodeDesc[] {
+  const out: NodeDesc[] = [];
+  const walkContainer = (containerId: string, modules: SModule[], topics: STopic[]) => {
+    mergedChildren(modules, topics).forEach((child, i) => {
+      if (child.kind === "module") {
+        out.push({ level: "module", id: child.node.id, title: child.node.title, parentId: containerId, order: i + 1 });
+        walkContainer(child.node.id, child.node.modules, child.node.topics);
+      } else {
+        const topic = child.node;
+        out.push({ level: "topic", id: topic.id, title: topic.title, parentId: containerId, order: i + 1 });
+        topic.sections.forEach((sec, si) => {
+          out.push({ level: "section", id: sec.id, title: sec.title, parentId: topic.id, order: si + 1 });
+          sec.contentGroups.forEach((cg, ci) => {
+            out.push({ level: "contentGroup", id: cg.id, title: cg.title, parentId: sec.id, order: ci + 1 });
+            cg.components.forEach((comp, coi) => {
+              out.push({ level: "component", id: comp.id, title: comp.title, parentId: cg.id, order: coi + 1, componentKey: comp.componentKey, layout: coi === 0 ? "left" : "right" });
+            });
+          });
+        });
+      }
+    });
+  };
+  walkContainer(courseId, s.modules, s.topics);
+  return out;
+}
+
+export function useCourseStructure(courseId: string, courseTitle = "Course") {
+  const [draft, setDraft] = useState<CourseStructure>({ ...EMPTY, courseTitle });
+  const [saved, setSaved] = useState<CourseStructure>({ ...EMPTY, courseTitle });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+  // Cache of installed component types, resolved lazily for save().
+  const componentsRef = useRef<ComponentTypeOption[] | null>(null);
+
+  // Load the backend structure; an empty course shows an UNSAVED starter draft.
+  const reload = useCallback(async () => {
+    if (!courseId) { setDraft({ ...EMPTY, courseTitle }); setSaved({ ...EMPTY, courseTitle }); setLoading(false); return; }
     setLoading(true);
     try {
-      let next = await getCourseStructure(courseId, courseTitle);
-      const isEmpty = next.modules.length === 0 && next.topics.length === 0;
-      if (isEmpty && seededFor.current !== courseId) {
-        seededFor.current = courseId;
-        await seedDefaultStructure(courseId);
-        next = await getCourseStructure(courseId, courseTitle);
-      }
-      setState(next);
+      const fetched = await getCourseStructure(courseId, courseTitle);
+      const isEmpty = fetched.modules.length === 0 && fetched.topics.length === 0;
+      setSaved(fetched);
+      setDraft(isEmpty ? buildStarterDraft(courseTitle) : structuredClone(fetched));
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err : new Error("Failed to load course structure"));
@@ -140,246 +227,199 @@ export function useCourseStructure(courseId: string, courseTitle = "Course") {
     }
   }, [courseId, courseTitle]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void reload(); }, [reload]);
 
-  const refresh = useCallback(async () => {
-    if (!courseId) return;
-    try {
-      setState(await getCourseStructure(courseId, courseTitle));
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error("Failed to refresh course structure"));
-    }
-  }, [courseId, courseTitle]);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(saved);
 
-  const mutate = useCallback(
-    async (fn: () => Promise<unknown>, failMsg: string) => {
-      if (!courseId) return;
-      setBusy(true);
-      try {
-        await fn();
-        await refresh();
-      } catch (err) {
-        setError(err instanceof Error ? err : new Error(failMsg));
-        await refresh();
-      } finally {
-        setBusy(false);
-      }
-    },
-    [courseId, refresh]
-  );
+  // Apply a local, in-memory edit to the draft (no backend).
+  const edit = useCallback((mutator: (d: CourseStructure) => void) => {
+    setDraft((prev) => { const next = structuredClone(prev); mutator(next); return next; });
+  }, []);
 
-  const addModuleAt = useCallback(
-    (parentId: string) =>
-      mutate(async () => {
-        const order = childCount(state, parentId, courseId) + 1;
-        const moduleId = await createModule(courseId, parentId, "New Module", order);
-        await seedDefaultTopic(courseId, moduleId, "New Topic", 1);
-      }, "Failed to add module"),
-    [mutate, state, courseId]
-  );
+  const addModuleAt = useCallback((parentId: string) => {
+    edit((d) => {
+      const c = container(d, parentId, courseId);
+      c.modules.push(newModule(c.modules.length + c.topics.length + 1));
+    });
+  }, [edit, courseId]);
   const addModule = useCallback(() => addModuleAt(courseId), [addModuleAt, courseId]);
   const addSubModule = useCallback((parentModuleId: string) => addModuleAt(parentModuleId), [addModuleAt]);
 
-  const addTopic = useCallback(
-    (parentId?: string | null) =>
-      mutate(async () => {
-        const parent = parentId || courseId;
-        const order = childCount(state, parent, courseId) + 1;
-        await seedDefaultTopic(courseId, parent, "New Topic", order);
-      }, "Failed to add topic"),
-    [mutate, state, courseId]
-  );
+  const addTopic = useCallback((parentId?: string | null) => {
+    const parent = parentId || courseId;
+    edit((d) => {
+      const c = container(d, parent, courseId);
+      c.topics.push(newTopic(c.modules.length + c.topics.length + 1));
+    });
+  }, [edit, courseId]);
 
-  const addSection = useCallback(
-    (topicId: string) =>
-      mutate(async () => {
-        const order = (findTopic(state, topicId)?.sections.length ?? 0) + 1;
-        const articleId = await createArticle(courseId, topicId, "New Section", order);
-        await createBlock(courseId, articleId, "New Content Group", 1);
-      }, "Failed to add section"),
-    [mutate, state, courseId]
-  );
+  const addSection = useCallback((topicId: string) => {
+    edit((d) => { findTopic(d, topicId)?.sections.push(newSection(false)); });
+  }, [edit]);
 
-  const addContentGroup = useCallback(
-    (sectionId: string) =>
-      mutate(async () => {
-        const order = (findSection(state, sectionId)?.contentGroups.length ?? 0) + 1;
-        await createBlock(courseId, sectionId, "New Content Group", order);
-      }, "Failed to add content group"),
-    [mutate, state, courseId]
-  );
+  const addContentGroup = useCallback((sectionId: string) => {
+    edit((d) => { findSection(d, sectionId)?.contentGroups.push(newContentGroup(false)); });
+  }, [edit]);
 
-  const addComponent = useCallback(
-    (blockId: string, componentType: ComponentTypeOption) => {
-      const count = findContentGroup(state, blockId)?.components.length ?? 0;
-      if (count >= 2) {
-        setError(new Error("A content group can contain at most two components (left and right)."));
-        return Promise.resolve();
-      }
-      const layout = count === 0 ? "left" : "right";
-      return mutate(() => createComponent(courseId, blockId, componentType, count + 1, layout), "Failed to add component");
-    },
-    [mutate, state, courseId]
-  );
+  const addComponent = useCallback((blockId: string, componentType: ComponentTypeOption) => {
+    if ((findContentGroup(draft, blockId)?.components.length ?? 0) >= 2) {
+      setError(new Error("A content group can contain at most two components (left and right)."));
+      return;
+    }
+    edit((d) => { findContentGroup(d, blockId)?.components.push(newComponent(componentType.displayName, componentType.component)); });
+  }, [edit, draft]);
 
-  const rename = useCallback(
-    async (level: StructureLevel, id: string, title: string) => {
-      setState((prev) => { const next = structuredClone(prev); setTitleById(next, id, title); return next; });
-      try {
-        await renameStructureNode(level, id, title);
-      } catch (err) {
-        setError(err instanceof Error ? err : new Error("Failed to rename item"));
-        await refresh();
-      }
-    },
-    [refresh]
-  );
+  const rename = useCallback((_level: StructureLevel, id: string, title: string) => {
+    edit((d) => setTitleById(d, id, title));
+  }, [edit]);
 
-  const remove = useCallback(
-    (level: StructureLevel, id: string) => {
-      if (level === "topic") {
-        const inModule = moduleContainingTopic(state, id);
-        if (inModule && inModule.topics.length <= 1) {
-          setError(new Error("Each module must contain at least one topic."));
-          return Promise.resolve();
-        }
-        if (!inModule && state.topics.length <= 1) {
-          setError(new Error("At least one topic is required at the course level."));
-          return Promise.resolve();
-        }
-      }
-      if (level === "component") {
-        // Any component may be deleted — including the last one (the block may
-        // become empty; the Tree warns the user first). If two existed, the
-        // survivor becomes the single (left) component.
-        const survivor = findGroupOfComponent(state, id)?.components.find((c) => c.id !== id);
-        return mutate(async () => {
-          await deleteStructureNode("component", id);
-          if (survivor) await updateComponentLayout(survivor.id, "left");
-        }, "Failed to delete item");
-      }
-      return mutate(() => deleteStructureNode(level, id), "Failed to delete item");
-    },
-    [mutate, state]
-  );
+  const remove = useCallback((level: StructureLevel, id: string) => {
+    if (level === "topic") {
+      const inModule = moduleContainingTopic(draft, id);
+      if (inModule && inModule.topics.length <= 1) { setError(new Error("Each module must contain at least one topic.")); return; }
+      if (!inModule && draft.topics.length <= 1) { setError(new Error("At least one topic is required at the course level.")); return; }
+    }
+    // Any component may be removed (a block may be left empty; the Tree warns
+    // first). A surviving single component becomes "left" automatically — save()
+    // recomputes _layout from position.
+    edit((d) => { detachNode(d, level, id, courseId); });
+  }, [edit, draft, courseId]);
 
-  // Drag-and-drop move. `beforeId` = insert before that sibling (reorder / move
-  // as sibling); null = append into the new parent. Validates the target level,
-  // module cycles, the two-component cap, and the mandatory-topic rules.
-  const moveNode = useCallback(
-    (level: StructureLevel, id: string, newParentId: string, beforeId: string | null) => {
-      const s = state;
-      const newParentLevel = containerLevelOf(s, newParentId, courseId);
-      if (!newParentLevel || !acceptsChild(newParentLevel, level)) {
-        setError(new Error("That item can't be placed there."));
-        return Promise.resolve();
-      }
-      // Prevent dropping a module into itself or one of its descendants.
-      if (level === "module") {
-        const banned = new Set<string>();
-        const collect = (m: SModule) => { banned.add(m.id); m.modules.forEach(collect); };
-        const dragged = findModule(s, id);
-        if (dragged) collect(dragged);
-        if (banned.has(newParentId)) {
-          setError(new Error("A module can't be moved inside itself."));
-          return Promise.resolve();
-        }
-      }
-      // A content group holds at most two components.
-      if (level === "component") {
-        const target = findContentGroup(s, newParentId);
-        const source = findGroupOfComponent(s, id);
-        if (target && source && target.id !== source.id && target.components.length >= 2) {
-          setError(new Error("A content group can contain at most two components."));
-          return Promise.resolve();
-        }
-      }
-      // Mandatory-topic rules must survive a move-out.
-      if (level === "topic") {
-        const srcModule = moduleContainingTopic(s, id);
-        if (srcModule && srcModule.id !== newParentId && srcModule.topics.length <= 1) {
-          setError(new Error("Each module must contain at least one topic."));
-          return Promise.resolve();
-        }
-        if (!srcModule && newParentId !== courseId && s.topics.length <= 1) {
-          setError(new Error("At least one topic is required at the course level."));
-          return Promise.resolve();
-        }
-      }
+  // Drag-and-drop move — reparent/reorder within the draft (no backend).
+  const moveNode = useCallback((level: StructureLevel, id: string, newParentId: string, beforeId: string | null) => {
+    const newParentLevel = containerLevelOf(draft, newParentId, courseId);
+    if (!newParentLevel || !acceptsChild(newParentLevel, level)) { setError(new Error("That item can't be placed there.")); return; }
+    if (level === "module") {
+      const banned = new Set<string>();
+      const collect = (m: SModule) => { banned.add(m.id); m.modules.forEach(collect); };
+      const dragged = findModule(draft, id); if (dragged) collect(dragged);
+      if (banned.has(newParentId)) { setError(new Error("A module can't be moved inside itself.")); return; }
+    }
+    if (level === "component") {
+      const target = findContentGroup(draft, newParentId);
+      const source = findGroupOfComponent(draft, id);
+      if (target && source && target.id !== source.id && target.components.length >= 2) { setError(new Error("A content group can contain at most two components.")); return; }
+    }
+    if (level === "topic") {
+      const srcModule = moduleContainingTopic(draft, id);
+      if (srcModule && srcModule.id !== newParentId && srcModule.topics.length <= 1) { setError(new Error("Each module must contain at least one topic.")); return; }
+      if (!srcModule && newParentId !== courseId && draft.topics.length <= 1) { setError(new Error("At least one topic is required at the course level.")); return; }
+    }
 
-      // ── Optimistic reparent ──
-      const next = structuredClone(s);
+    edit((next) => {
       const detached = detachNode(next, level, id, courseId);
-      if (!detached) return Promise.resolve();
-      const { node, oldParentId } = detached;
-
-      let reorderLevel: StructureLevel;
-      let newIds: string[];
-      let oldIds: string[] | null = null;
-
+      if (!detached) return;
+      const { node } = detached;
       if (level === "module" || level === "topic") {
-        reorderLevel = "module"; // both are contentobjects
         const c = container(next, newParentId, courseId);
-        // Desired merged order with the node inserted before `beforeId`.
         let ids = mergedChildren(c.modules, c.topics).map((x) => x.node.id).filter((x) => x !== node.id);
-        if (beforeId && ids.includes(beforeId)) ids.splice(ids.indexOf(beforeId), 0, node.id);
-        else ids.push(node.id);
+        if (beforeId && ids.includes(beforeId)) ids.splice(ids.indexOf(beforeId), 0, node.id); else ids.push(node.id);
         (level === "module" ? c.modules : c.topics).push(node as SModule & STopic);
         const byId = new Map<string, SModule | STopic>([...c.modules, ...c.topics].map((n) => [n.id, n]));
         ids.forEach((cid, i) => { const n = byId.get(cid); if (n) n.sortOrder = i + 1; });
-        newIds = ids;
-        if (oldParentId !== newParentId) {
-          const oc = container(next, oldParentId, courseId);
-          const oids = mergedChildren(oc.modules, oc.topics).map((x) => x.node.id);
-          const obyId = new Map<string, SModule | STopic>([...oc.modules, ...oc.topics].map((n) => [n.id, n]));
-          oids.forEach((cid, i) => { const n = obyId.get(cid); if (n) n.sortOrder = i + 1; });
-          oldIds = oids;
-        }
       } else {
-        reorderLevel = level;
         const arr = getChildArray(next, level, newParentId);
-        if (!arr) return Promise.resolve();
-        if (beforeId) {
-          const i = arr.findIndex((x) => x.id === beforeId);
-          if (i >= 0) arr.splice(i, 0, node); else arr.push(node);
-        } else arr.push(node);
-        newIds = arr.map((x) => x.id);
-        if (oldParentId !== newParentId) {
-          const oarr = getChildArray(next, level, oldParentId);
-          oldIds = oarr ? oarr.map((x) => x.id) : null;
+        if (!arr) return;
+        if (beforeId) { const i = arr.findIndex((x) => x.id === beforeId); if (i >= 0) arr.splice(i, 0, node); else arr.push(node); } else arr.push(node);
+      }
+    });
+  }, [edit, draft, courseId]);
+
+  const discard = useCallback(() => { void reload(); }, [reload]);
+
+  // Persist the whole draft to the backend, then re-sync from the canonical tree.
+  // Returns true on success (used by the leave-guard to navigate only if saved).
+  const save = useCallback(async (): Promise<boolean> => {
+    if (!courseId || saving) return false;
+    setSaving(true);
+    setError(null);
+    try {
+      if (!componentsRef.current) componentsRef.current = await getAvailableComponents();
+      const compByKey = new Map(componentsRef.current.map((c) => [c.component, c]));
+
+      const draftDescs = flatten(draft, courseId);
+      const savedDescs = flatten(saved, courseId);
+      const savedById = new Map(savedDescs.map((d) => [d.id, d]));
+      const draftIds = new Set(draftDescs.map((d) => d.id));
+
+      // 1. Creates (parents first) — map temp ids → real ids.
+      const idMap = new Map<string, string>();
+      const real = (id: string) => idMap.get(id) ?? id;
+      for (const d of draftDescs) {
+        if (!isTmp(d.id)) continue;
+        const parent = real(d.parentId);
+        let realId: string | undefined;
+        if (d.level === "module") realId = await createModule(courseId, parent, d.title, d.order);
+        else if (d.level === "topic") realId = await createTopic(courseId, parent, d.title, d.order);
+        else if (d.level === "section") realId = await createArticle(courseId, parent, d.title, d.order);
+        else if (d.level === "contentGroup") realId = await createBlock(courseId, parent, d.title, d.order);
+        else if (d.level === "component") {
+          const type = d.componentKey ? compByKey.get(d.componentKey) : undefined;
+          if (!type) { console.warn(`[CourseStructure] Unknown component type "${d.componentKey}" — skipped`); continue; }
+          realId = await createComponent(courseId, parent, type, d.order, d.layout ?? "full");
+          // createComponent titles from the component type; honor a custom title.
+          if (d.title && d.title !== type.displayName) await renameStructureNode("component", realId, d.title);
+        }
+        if (realId) idMap.set(d.id, realId);
+      }
+
+      // 2. Renames for existing nodes whose title changed.
+      for (const d of draftDescs) {
+        if (isTmp(d.id)) continue;
+        const prev = savedById.get(d.id);
+        if (prev && prev.title !== d.title) await renameStructureNode(d.level, d.id, d.title);
+      }
+
+      // 3. Reparent / reorder existing nodes whose parent or order changed.
+      for (const d of draftDescs) {
+        if (isTmp(d.id)) continue;
+        const prev = savedById.get(d.id);
+        if (!prev) continue;
+        const newParent = real(d.parentId);
+        if (prev.parentId !== newParent || prev.order !== d.order) {
+          await moveContentNode(d.level, d.id, newParent, d.order);
+        }
+        if (d.level === "component" && prev.layout !== d.layout && d.layout) {
+          await updateComponentLayout(d.id, d.layout);
         }
       }
 
-      setState(next);
-
-      const movedOrder = newIds.indexOf(id) + 1;
-      const capturedOldIds = oldIds;
-      void (async () => {
-        setBusy(true);
-        try {
-          await moveContentNode(level, id, newParentId, movedOrder);
-          await reorderStructureNodes(reorderLevel, newIds);
-          if (capturedOldIds) await reorderStructureNodes(reorderLevel, capturedOldIds);
-          setError(null);
-        } catch (err) {
-          setError(err instanceof Error ? err : new Error("Failed to move item"));
-          await refresh();
-        } finally {
-          setBusy(false);
+      // 4. Deletes — nodes gone from the draft; only the top-most (delete cascades).
+      const isAncestorDeleted = (id: string): boolean => {
+        let p = savedById.get(id)?.parentId;
+        while (p && p !== courseId) {
+          if (!draftIds.has(p)) return true;
+          p = savedById.get(p)?.parentId;
         }
-      })();
-      return Promise.resolve();
-    },
-    [state, courseId, refresh]
-  );
+        return false;
+      };
+      for (const d of savedDescs) {
+        if (draftIds.has(d.id)) continue;
+        if (isAncestorDeleted(d.id)) continue; // cascaded via an ancestor delete
+        await deleteStructureNode(d.level, d.id);
+      }
+
+      await reload();
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error("Failed to save course structure"));
+      await reload();
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }, [courseId, saving, draft, saved, reload]);
 
   return {
-    state,
+    state: draft,
+    saved,
+    dirty,
     loading,
-    busy,
+    saving,
     error,
-    refresh,
+    save,
+    discard,
+    refresh: reload,
     addModule,
     addSubModule,
     addTopic,
@@ -390,51 +430,4 @@ export function useCourseStructure(courseId: string, courseTitle = "Course") {
     remove,
     moveNode,
   };
-}
-
-// ── Move helpers (operate on a cloned CourseStructure) ────────────────────────
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function detachNode(
-  s: CourseStructure,
-  level: StructureLevel,
-  id: string,
-  courseId: string
-): { node: any; oldParentId: string } | null {
-  if (level === "component") {
-    for (const g of allGroups(s)) {
-      const i = g.components.findIndex((c) => c.id === id);
-      if (i >= 0) return { node: g.components.splice(i, 1)[0], oldParentId: g.id };
-    }
-  } else if (level === "contentGroup") {
-    for (const sec of allSections(s)) {
-      const i = sec.contentGroups.findIndex((c) => c.id === id);
-      if (i >= 0) return { node: sec.contentGroups.splice(i, 1)[0], oldParentId: sec.id };
-    }
-  } else if (level === "section") {
-    for (const t of allTopics(s)) {
-      const i = t.sections.findIndex((x) => x.id === id);
-      if (i >= 0) return { node: t.sections.splice(i, 1)[0], oldParentId: t.id };
-    }
-  } else if (level === "topic") {
-    for (const c of allContainers(s, courseId)) {
-      const i = c.topics.findIndex((x) => x.id === id);
-      if (i >= 0) return { node: c.topics.splice(i, 1)[0], oldParentId: c.id };
-    }
-  } else if (level === "module") {
-    for (const c of allContainers(s, courseId)) {
-      const i = c.modules.findIndex((x) => x.id === id);
-      if (i >= 0) return { node: c.modules.splice(i, 1)[0], oldParentId: c.id };
-    }
-  }
-  return null;
-}
-
-// The single-kind child array (section / contentGroup / component) of a parent.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function getChildArray(s: CourseStructure, level: StructureLevel, parentId: string): any[] | null {
-  if (level === "component") return findContentGroup(s, parentId)?.components ?? null;
-  if (level === "contentGroup") return findSection(s, parentId)?.contentGroups ?? null;
-  if (level === "section") return findTopic(s, parentId)?.sections ?? null;
-  return null;
 }
