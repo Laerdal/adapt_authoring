@@ -12,6 +12,8 @@ import { STRUCTURE_LABELS } from "../types/structure";
 import { MenuPage } from "./setup/menuPage";
 import { TechnicalSettingPage } from "./setup/technicalSettingPage";
 import { NavigationPage } from "./setup/navigationPage";
+import { UnsavedChangesModal } from "./setup/unsavedChangesModal";
+import { useUnsavedChangesNavigationGuard } from "./setup/useUnsavedChangesNavigationGuard";
 
 const ICON_BASE = "/new/assets/icons";
 
@@ -53,6 +55,7 @@ const NAV_ITEMS = [
   {
     id: "structure",
     label: "Course Structure",
+    guarded: true,
     icon: (
       <SidebarMaskIcon file="structure-icon.svg" />
     ),
@@ -87,6 +90,7 @@ const NAV_ITEMS = [
   {
     id: "navigation",
     label: "Navigation",
+    guarded: true,
     icon: (
       <SidebarMaskIcon file="navigation-icon.svg" />
     ),
@@ -311,11 +315,17 @@ function CourseStructurePanel({
   courseTitle,
   onOpenEditor,
   onOpenStoryboard,
+  onNavigationRequest,
+  pendingNavigation,
+  onPendingNavigationHandled,
 }: {
   courseId: string;
   courseTitle: string;
   onOpenEditor: (topicId: string) => void;
   onOpenStoryboard: () => void;
+  onNavigationRequest?: (nav: string) => void;
+  pendingNavigation?: string | null;
+  onPendingNavigationHandled?: () => void;
 }) {
   const [viewMode, setViewMode] = useState<"tree" | "map">("tree");
   // Content-group id whose Add Component drawer is open (null = closed).
@@ -324,8 +334,11 @@ function CourseStructurePanel({
   const {
     state,
     loading,
-    busy,
+    dirty,
+    saving,
     error,
+    save,
+    discard,
     addModule,
     addSubModule,
     addTopic,
@@ -336,6 +349,28 @@ function CourseStructurePanel({
     remove,
     moveNode,
   } = useCourseStructure(courseId, courseTitle);
+
+  // Edits are staged locally and saved only on demand — confirm before leaving
+  // with unsaved changes (mirrors Technical Settings / Navigation).
+  const { showConfirmModal, consumePendingNavigation, clearPendingNavigation } =
+    useUnsavedChangesNavigationGuard({
+      hasChanges: dirty,
+      pendingNavigation,
+      onPendingNavigationHandled,
+      onNavigate: onNavigationRequest,
+    });
+
+  async function handleConfirmSave() {
+    const ok = await save();
+    if (!ok) return; // save failed — stay put, show the error
+    const target = consumePendingNavigation();
+    if (target) onNavigationRequest?.(target);
+  }
+  function handleConfirmDiscard() {
+    discard();
+    const target = consumePendingNavigation();
+    if (target) onNavigationRequest?.(target);
+  }
 
   return (
     <div className="max-w-5xl w-full">
@@ -405,6 +440,36 @@ function CourseStructurePanel({
         </p>
       </div>
 
+      {/* Unsaved-changes bar — edits persist only on Save Changes */}
+      {dirty && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-[#e5e7eb] bg-white shadow-sm px-4 py-2.5">
+          <div className="flex items-center gap-2">
+            <svg className="shrink-0 text-[#f59e0b]" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" />
+            </svg>
+            <span className="text-sm text-[#4b5563]">Unsaved changes</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={discard}
+              disabled={saving}
+              className="px-3 py-1.5 text-sm rounded-lg text-[#374151] bg-white border border-[#e5e7eb] hover:bg-[#f9fafb] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void save()}
+              disabled={saving}
+              className="px-3.5 py-1.5 text-sm font-semibold rounded-lg text-white bg-[#2d6fa8] hover:bg-[#235694] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {saving ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="mb-4 rounded-lg border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b]">
           {error.message}
@@ -423,7 +488,7 @@ function CourseStructurePanel({
           Loading course structure…
         </div>
       ) : (
-        <div className={busy ? "opacity-60 pointer-events-none transition-opacity" : "transition-opacity"}>
+        <div className={saving ? "opacity-60 pointer-events-none transition-opacity" : "transition-opacity"}>
           {viewMode === "tree" ? (
             <CourseStructureTree
               structure={state}
@@ -504,6 +569,14 @@ function CourseStructurePanel({
           }}
         />
       )}
+
+      <UnsavedChangesModal
+        isOpen={showConfirmModal}
+        isSaving={saving}
+        onDiscard={handleConfirmDiscard}
+        onSave={handleConfirmSave}
+        onClose={clearPendingNavigation}
+      />
     </div>
   );
 }
@@ -5177,11 +5250,14 @@ function CourseCreationCenterContent() {
             navigate(`/course/${courseId}`, { state: { pageId } })
           }
           onOpenStoryboard={() => setActiveNav("storyboarding")}
+          onNavigationRequest={setActiveNav}
+          pendingNavigation={pendingNavigation}
+          onPendingNavigationHandled={() => setPendingNavigation(null)}
         />
       );
     if (activeNav === "theme") return <ThemePanel initialThemeName={savedThemeName} />;
-    if (activeNav === "navigation") return <NavigationPage courseId={courseId} />;
     if (activeNav === "menu") return <MenuPage courseId={courseId} initialMenuName={savedMenuName} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+    if (activeNav === "navigation") return <NavigationPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "accessibility") return <AccessibilityPanel />;
     if (activeNav === "tracking") return <TrackingAnalyticsPanel />;
     if (activeNav === "completion") return <CompletionProgressPanel />;

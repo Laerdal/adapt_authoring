@@ -9,6 +9,8 @@ import {
   type CoursePageOption,
   type NavFooterButtonKey,
 } from "../../api/adaptAuthoring";
+import { UnsavedChangesModal } from "./unsavedChangesModal";
+import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
 /* ── Shared checkbox row (local copy; mirrors SetupPage's) ── */
 function CheckboxRow({
@@ -116,7 +118,7 @@ function NavSelect<T extends string>({
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </div>
-      {help && <p className="text-[11px] text-[#9ca3af] bg-[#f9fafb] border border-[#eef1f4] rounded-md px-2.5 py-1.5 leading-snug">{help}</p>}
+      {help && <p className="text-[11px] text-[var(--life-neutral-300)] leading-snug">{help}</p>}
     </div>
   );
 }
@@ -154,16 +156,90 @@ const MENU_LOCK_OPTIONS: { value: NavigationSettings["lockType"]; label: string 
   { value: "unlockFirst", label: "Unlock First" },
 ];
 
-const FOOTER_BUTTON_META: { key: NavFooterButtonKey; label: string }[] = [
-  { key: "_home",     label: "Home" },
-  { key: "_up",       label: "Up" },
-  { key: "_previous", label: "Previous" },
-  { key: "_next",     label: "Next" },
-  { key: "_close",    label: "Close" },
-  { key: "_custom",   label: "Custom" },
+// Footer buttons surfaced as an icon toggle list. "Close" is not shown here but
+// its stored value is preserved on save (see saveNavigationSettings).
+const ICON = {
+  home: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
+    </svg>
+  ),
+  previous: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
+    </svg>
+  ),
+  next: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+    </svg>
+  ),
+  up: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" />
+    </svg>
+  ),
+  custom: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="4" width="16" height="16" rx="2" /><line x1="9" y1="4" x2="9" y2="20" />
+    </svg>
+  ),
+} as const;
+
+const FOOTER_BUTTONS_DISPLAY: { key: NavFooterButtonKey; label: string; icon: React.ReactNode }[] = [
+  { key: "_home",     label: "Home",     icon: ICON.home },
+  { key: "_previous", label: "Previous", icon: ICON.previous },
+  { key: "_next",     label: "Next",     icon: ICON.next },
+  { key: "_up",       label: "Up",       icon: ICON.up },
+  { key: "_custom",   label: "Custom",   icon: ICON.custom },
 ];
 
-export function NavigationPage({ courseId }: { courseId: string }) {
+// A single footer-button toggle row: [checkbox] [icon] [label] in a bordered box.
+function FooterButtonRow({
+  checked,
+  onChange,
+  icon,
+  label,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className="w-full flex items-center gap-3 rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5 text-left hover:bg-[#f9fafb] transition-colors group"
+    >
+      <span
+        className={`w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors ${
+          checked ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]" : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
+        }`}
+      >
+        {checked && (
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        )}
+      </span>
+      <span className={`shrink-0 ${checked ? "text-[var(--life-primary-500)]" : "text-[#9ca3af]"}`}>{icon}</span>
+      <span className="text-sm text-[#374151]">{label}</span>
+    </button>
+  );
+}
+
+export function NavigationPage({
+  courseId,
+  onNavigationRequest,
+  pendingNavigation,
+  onPendingNavigationHandled,
+}: {
+  courseId: string;
+  onNavigationRequest?: (nav: string) => void;
+  pendingNavigation?: string | null;
+  onPendingNavigationHandled?: () => void;
+}) {
   const [s, setS] = useState<NavigationSettings>(defaultNavigationSettings());
   // Last-persisted snapshot: drives the "Unsaved changes" bar + Cancel (revert).
   const [savedSnapshot, setSavedSnapshot] = useState<NavigationSettings>(defaultNavigationSettings());
@@ -267,6 +343,38 @@ export function NavigationPage({ courseId }: { courseId: string }) {
     }
   }
 
+  // Confirm-before-leave when there are unsaved changes (mirrors Technical Settings).
+  const { showConfirmModal, consumePendingNavigation, clearPendingNavigation } =
+    useUnsavedChangesNavigationGuard({
+      hasChanges: dirty,
+      pendingNavigation,
+      onPendingNavigationHandled,
+      onNavigate: onNavigationRequest,
+    });
+
+  async function handleConfirmSave() {
+    if (!courseId || saving) return;
+    setSaving(true);
+    setToast(null);
+    try {
+      await saveNavigationSettings(courseId, s);
+      setSavedSnapshot(s);
+      const navTarget = consumePendingNavigation();
+      setToast({ type: "success", message: "Changes saved successfully" });
+      if (navTarget) onNavigationRequest?.(navTarget);
+    } catch {
+      setToast({ type: "error", message: "Couldn't save. Please try again." });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function handleConfirmDiscard() {
+    setS(savedSnapshot);
+    const navTarget = consumePendingNavigation();
+    if (navTarget) onNavigationRequest?.(navTarget);
+  }
+
   const pageOptions = [
     { value: "", label: pages.length ? "Select a page…" : "No pages yet" },
     ...pages.map((p) => ({ value: p.id, label: p.title })),
@@ -300,7 +408,7 @@ export function NavigationPage({ courseId }: { courseId: string }) {
                   <div className="flex flex-col gap-3">
                     <span className="text-xs font-semibold text-[#374151]">Start list</span>
                     {s.start._startIds.length === 0 && (
-                      <p className="text-[11px] text-[#9ca3af]">No start pages added yet.</p>
+                      <p className="text-[11px] text-[var(--life-neutral-300)]">No start pages added yet.</p>
                     )}
                     {s.start._startIds.map((item, i) => (
                       <div key={i} className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] p-4 flex flex-col gap-3">
@@ -342,7 +450,7 @@ export function NavigationPage({ courseId }: { courseId: string }) {
                         Add
                       </button>
                       {!pages.length && (
-                        <p className="text-[11px] text-[#9ca3af] mt-1.5">Add a page to the course before choosing a start page.</p>
+                        <p className="text-[11px] text-[var(--life-neutral-300)] mt-1.5">Add a page to the course before choosing a start page.</p>
                       )}
                     </div>
                   </div>
@@ -438,10 +546,10 @@ export function NavigationPage({ courseId }: { courseId: string }) {
                       />
                     )}
 
-                    <div className="rounded-lg bg-[#f9fafb] border border-[#eef1f4] px-3.5 py-2.5">
+                    <div className="flex flex-col gap-0.5">
                       <p className="text-xs font-semibold text-[#374151]">Logo recommendations</p>
-                      <p className="text-[11px] text-[#9ca3af] mt-0.5">Preferred aspect ratio: 4:1</p>
-                      <p className="text-[11px] text-[#9ca3af]">Use PNG with transparent background for best results</p>
+                      <p className="text-[11px] text-[var(--life-neutral-300)]">Preferred aspect ratio: 4:1</p>
+                      <p className="text-[11px] text-[var(--life-neutral-300)]">Use PNG with transparent background for best results</p>
                     </div>
 
                     <NavTextInput
@@ -469,7 +577,7 @@ export function NavigationPage({ courseId }: { courseId: string }) {
                     { value: "top", label: "top" },
                     { value: "bottom", label: "bottom" },
                   ]}
-                  help="Where the primary navigation bar is displayed relative to the course content."
+                  help="The CSS selector that determines when the navigation bar is displayed at the bottom. Must be a selector targeting the HTML element."
                 />
                 <CheckboxRow
                   checked={s.navigation.isBottomOnTouchDevices}
@@ -518,30 +626,22 @@ export function NavigationPage({ courseId }: { courseId: string }) {
 
                 {s.navFooter.enabled && (
                   <div className="flex flex-col gap-3">
-                    <NavTextInput label="Footer text" value={s.navFooter.footerText} onChange={(v) => setNavFooter({ footerText: v })} placeholder="Optional footer text" />
-                    <NavTextInput label="Button notify popup text" value={s.navFooter.btnNotifyPopupText} onChange={(v) => setNavFooter({ btnNotifyPopupText: v })} placeholder="Need to complete current page" />
-                    <CheckboxRow checked={s.navFooter.isLogicalBackNavigation} onChange={(v) => setNavFooter({ isLogicalBackNavigation: v })} label="Logical back navigation" />
-                    <CheckboxRow checked={s.navFooter.includeSubmenuInNavigation} onChange={(v) => setNavFooter({ includeSubmenuInNavigation: v })} label="Include submenu in sequential navigation" />
-
-                    <span className="text-xs font-semibold text-[#374151] mt-1">Footer buttons</span>
-                    {FOOTER_BUTTON_META.map(({ key, label }) => {
-                      const b = s.navFooter.buttons[key];
-                      return (
-                        <div key={key} className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] p-3 flex flex-col gap-2">
-                          <CheckboxRow checked={b._isEnabled} onChange={(v) => setFooterButton(key, { _isEnabled: v })} label={`${label} button`} />
-                          {b._isEnabled && (
-                            <div className="ml-7 grid grid-cols-2 gap-2.5">
-                              <NavTextInput label="Button text" value={b.btnText} onChange={(v) => setFooterButton(key, { btnText: v })} placeholder={label} />
-                              <NavTextInput label="Classes" value={b._classes} onChange={(v) => setFooterButton(key, { _classes: v })} placeholder="e.g. btn-secondary" />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-
-                    <p className="text-[11px] text-[#9ca3af] leading-snug">
-                      These footer settings apply course-wide. They can be overridden per page in the page settings.
+                    <NavTextInput label="Footer text" value={s.navFooter.footerText} onChange={(v) => setNavFooter({ footerText: v })} placeholder="Footer text" />
+                    <p className="text-[11px] text-[var(--life-neutral-300)] leading-snug">
+                      Navigation Footer settings at the course level; can be overridden at the topic/page level, if required.
                     </p>
+
+                    <div className="flex flex-col gap-2">
+                      {FOOTER_BUTTONS_DISPLAY.map(({ key, label, icon }) => (
+                        <FooterButtonRow
+                          key={key}
+                          checked={s.navFooter.buttons[key]._isEnabled}
+                          onChange={(v) => setFooterButton(key, { _isEnabled: v })}
+                          icon={icon}
+                          label={label}
+                        />
+                      ))}
+                    </div>
                   </div>
                 )}
               </NavAccordion>
@@ -637,6 +737,14 @@ export function NavigationPage({ courseId }: { courseId: string }) {
           }}
         />
       )}
+
+      <UnsavedChangesModal
+        isOpen={showConfirmModal}
+        isSaving={saving}
+        onDiscard={handleConfirmDiscard}
+        onSave={handleConfirmSave}
+        onClose={clearPendingNavigation}
+      />
     </div>
   );
 }
