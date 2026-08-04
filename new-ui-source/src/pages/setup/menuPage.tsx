@@ -999,7 +999,7 @@ function MenuPreview({ cfg, resolveUrl }: { cfg: MenuPageConfig; resolveUrl?: (v
                     )
                   ) : null}
                 </div>
-                <div className={`p-3 grid grid-cols-3 gap-2 h-[calc(100%-86px)] ${hasBackgroundPreviewImage ? "bg-transparent" : "bg-[var(--life-neutral-050)]"}`}>
+                <div className={`p-3 grid grid-cols-3 gap-2 content-start h-[calc(100%-86px)] ${hasBackgroundPreviewImage ? "bg-transparent" : "bg-[var(--life-neutral-050)]"}`}>
                   {[
                     "var(--life-primary-500)",
                     "var(--life-accent1-500)",

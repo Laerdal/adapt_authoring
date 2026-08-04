@@ -73,6 +73,7 @@ const NAV_ITEMS = [
   {
     id: "menu",
     label: "Menu",
+    guarded: true,
     icon: (
       <SidebarMaskIcon file="menu-icon.svg" />
     ),
@@ -133,6 +134,7 @@ const NAV_ITEMS = [
   {
     id: "technical-settings",
     label: "Technical Settings",
+    guarded: true,
     icon: (
       <SidebarMaskIcon file="setting-icon.svg" />
     ),
@@ -176,6 +178,13 @@ const NAV_GROUPS = NAV_ITEMS.reduce<{ id: string; label: string; items: NavLeafI
   groups[groups.length - 1].items.push(item);
   return groups;
 }, []);
+
+// Navigation guard source of truth:
+// To guard a page in future (unsaved-changes interception), add `guarded: true`
+// on that page item in NAV_ITEMS. It will automatically be included here.
+const GUARDED_NAV_IDS = new Set(
+  NAV_ITEMS.filter((item) => item.heading !== true && item.guarded === true).map((item) => item.id)
+);
 
 /* ── Course Overview panel ── */
 function CourseOverviewPanel({ title, description }: { title: string; description: string }) {
@@ -5143,11 +5152,16 @@ function CourseCreationCenterContent() {
   // Smart navigation handler - used by sidebar items
   // When on a guarded setup panel, the page intercepts via pendingNavigation state.
   function handleNavigation(nextPanel: string) {
-    if (activeNav === "technical-settings" || activeNav === "menu") {
+    if (nextPanel === activeNav) {
+      return;
+    }
+
+    if (GUARDED_NAV_IDS.has(activeNav)) {
       // Signal to the active guarded setup page that navigation is requested.
       // The page decides whether to show a confirmation modal or allow navigation.
       setPendingNavigation(nextPanel);
     } else {
+      setPendingNavigation(null);
       setActiveNav(nextPanel);
     }
   }
