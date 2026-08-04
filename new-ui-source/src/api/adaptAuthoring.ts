@@ -687,24 +687,33 @@ export async function saveNavigationSettings(courseId: string, s: NavigationSett
   let course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
   let config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
 
-  // 1. Auto-install any extension whose section was switched on but isn't installed yet.
-  //    This is the "create + initialize plugin settings when missing" path.
+  // 1. Reconcile plugin installation with the UI toggles:
+  //      ON  + not installed → enable  (create + initialize the plugin settings)
+  //      OFF + installed     → disable (remove the plugin from the backend)
   const toEnable: string[] = [];
-  if (s.courseMenu.enabled && !isExtensionInstalled(config, EXTENSION_NAME_BY_KEY._courseMenu))
-    toEnable.push(EXTENSION_NAME_BY_KEY._courseMenu);
-  if (s.headerLogo.enabled && !isExtensionInstalled(config, EXTENSION_NAME_BY_KEY._topbarLogos))
-    toEnable.push(EXTENSION_NAME_BY_KEY._topbarLogos);
-  if (s.navFooter.enabled && !isExtensionInstalled(config, EXTENSION_NAME_BY_KEY._navigationFooter))
-    toEnable.push(EXTENSION_NAME_BY_KEY._navigationFooter);
+  const toDisable: string[] = [];
+  const reconcile = (on: boolean, name: string) => {
+    const installed = isExtensionInstalled(config, name);
+    if (on && !installed) toEnable.push(name);
+    else if (!on && installed) toDisable.push(name);
+  };
+  reconcile(s.courseMenu.enabled, EXTENSION_NAME_BY_KEY._courseMenu);
+  reconcile(s.headerLogo.enabled, EXTENSION_NAME_BY_KEY._topbarLogos);
+  reconcile(s.navFooter.enabled, EXTENSION_NAME_BY_KEY._navigationFooter);
 
-  if (toEnable.length) {
-    const ids = await resolveExtensionTypeIds(toEnable);
-    if (ids.length) {
-      await apiClient.post(`/api/extension/enable/${courseId}`, { extensions: ids });
-      // Re-read: enabling seeds schema-default _extensions objects + updates _enabledExtensions.
-      course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
-      config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+  if (toEnable.length || toDisable.length) {
+    if (toEnable.length) {
+      const ids = await resolveExtensionTypeIds(toEnable);
+      if (ids.length) await apiClient.post(`/api/extension/enable/${courseId}`, { extensions: ids });
     }
+    if (toDisable.length) {
+      const ids = await resolveExtensionTypeIds(toDisable);
+      if (ids.length) await apiClient.post(`/api/extension/disable/${courseId}`, { extensions: ids });
+    }
+    // Re-read: enable seeds schema-default _extensions; disable removes the plugin's
+    // _extensions blocks and its _enabledExtensions entry.
+    course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+    config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
   }
   const hasCourseMenu = isExtensionInstalled(config, EXTENSION_NAME_BY_KEY._courseMenu);
   const hasTopbarLogos = isExtensionInstalled(config, EXTENSION_NAME_BY_KEY._topbarLogos);
