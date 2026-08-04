@@ -379,6 +379,14 @@ export async function applyThemePreset(presetId: string, courseId: string): Prom
   await apiClient.post(`/api/themepreset/${presetId}/makeitso/${courseId}`);
 }
 
+export async function renameThemePreset(presetId: string, displayName: string): Promise<void> {
+  await apiClient.put(`/api/content/themepreset/${presetId}`, { displayName });
+}
+
+export async function deleteThemePreset(presetId: string): Promise<void> {
+  await apiClient.delete(`/api/content/themepreset/${presetId}`);
+}
+
 async function applyThemeToCourse(courseId: string, themeId: string): Promise<void> {
   await apiClient.post(`/api/theme/${themeId}/makeitso/${courseId}`);
 }
