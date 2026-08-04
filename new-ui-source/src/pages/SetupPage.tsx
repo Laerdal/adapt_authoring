@@ -67,6 +67,7 @@ const NAV_ITEMS = [
   {
     id: "theme",
     label: "Theme",
+    guarded: true,
     icon: (
       <SidebarMaskIcon file="theme-icon.svg" />
     ),
