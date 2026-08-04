@@ -82,10 +82,11 @@ export default function AssetPickerModal({ onSelect, onClose }: AssetPickerModal
   function handleConfirm() {
     if (!selected) return;
     const selectedAsset = assets.find((asset) => asset._id === selected);
+    const url = `/api/asset/serve/${selected}${assetExtension(selectedAsset)}`;
     onSelect({
       id: selected,
-      url: `/api/asset/serve/${selected}`,
-      assetLink: selectedAsset ? toAssetLink(selectedAsset) : `/api/asset/serve/${selected}`,
+      url,
+      assetLink: selectedAsset ? toAssetLink(selectedAsset) : url,
     });
   }
 
