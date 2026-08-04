@@ -305,39 +305,13 @@ export function CourseOverviewPage({
     <div style={{ maxWidth: 672, fontFamily: '"Lato", sans-serif' }}>
 
       {/* ── Header ───────────────────────────────────────────────── */}
-      <div style={{ marginBottom: 28, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
-        <div>
-          <h4 style={{ fontFamily: '"Lato", sans-serif', fontSize: 20, fontWeight: 700, color: "var(--life-base-black)", margin: 0 }}>
-            Course Overview
-          </h4>
-          <p style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-neutral-400)", margin: "4px 0 0" }}>
-            Click any field to review and edit its content inline.
-          </p>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          {isDirty && !saving && (
-            <button
-              type="button"
-              onClick={handleDiscard}
-              style={{ height: 36, padding: "0 16px", background: "transparent", border: "1px solid var(--life-neutral-200)", borderRadius: 8, cursor: "pointer", fontFamily: '"Lato", sans-serif', fontSize: 14, fontWeight: 600, color: "var(--life-base-black)", transition: "background 0.15s" }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = "var(--life-neutral-050)")}
-              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-            >
-              Discard
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!courseId || !isDirty || saving || imageUploading || loading}
-            style={{ height: 36, padding: "0 18px", background: "var(--life-primary-500)", border: "none", borderRadius: 8, cursor: (!courseId || !isDirty || saving) ? "not-allowed" : "pointer", fontFamily: '"Lato", sans-serif', fontSize: 14, fontWeight: 700, color: "#ffffff", opacity: (!courseId || !isDirty || saving || imageUploading || loading) ? 0.4 : 1, display: "flex", alignItems: "center", gap: 8, transition: "opacity 0.15s" } as React.CSSProperties}
-          onMouseEnter={(e) => { if (!e.currentTarget.disabled) e.currentTarget.style.opacity = "0.88"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.opacity = (!courseId || !isDirty || saving || imageUploading || loading) ? "0.4" : "1"; }}
-          >
-            {saving ? "Saving…" : "Save Changes"}
-          </button>
-        </div>
+      <div style={{ marginBottom: 28 }}>
+        <h4 style={{ fontFamily: '"Lato", sans-serif', fontSize: 20, fontWeight: 700, color: "var(--life-base-black)", margin: 0 }}>
+          Course Overview
+        </h4>
+        <p style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-neutral-400)", margin: "4px 0 0" }}>
+          Click any field to review and edit its content inline.
+        </p>
       </div>
 
       {/* ── Banners ──────────────────────────────────────────────── */}
@@ -658,6 +632,42 @@ export function CourseOverviewPage({
           </div>
         )}
       </div>
+
+      {/* Floating "Unsaved changes" bar — only while the form is dirty */}
+      {!loading && isDirty && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-3 rounded-xl bg-white border border-[var(--life-warning-100)] shadow-lg animate-fade-in-down">
+          <span className="flex items-center gap-2 text-sm text-[#374151]">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-warning-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            Unsaved changes
+          </span>
+          {saveError && <span className="text-xs text-[#ef4444] max-w-[180px] truncate">{saveError}</span>}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleDiscard}
+              disabled={saving}
+              className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] disabled:opacity-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={saving || !courseId || imageUploading}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:opacity-50 rounded-lg transition-colors"
+            >
+              {saving && (
+                <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                </svg>
+              )}
+              {saving ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
+        </div>
+      )}
 
     </div>
   );
