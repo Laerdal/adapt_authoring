@@ -63,6 +63,16 @@ const newModule = (sortOrder: number): SModule => ({
   modules: [],
   topics: [newTopic(1)], // a module must contain at least one topic
 });
+// Next sortOrder for a container's direct children (menus + pages share one list).
+// Use max(existing)+1 rather than array length: after a delete/move the lengths
+// can drift from the sortOrder values, and length+1 would duplicate an existing
+// sortOrder (breaking mergedChildren's ordering and save/reorder).
+const nextChildSortOrder = (c: { modules: SModule[]; topics: STopic[] }): number => {
+  let max = 0;
+  for (const m of c.modules) if (m.sortOrder > max) max = m.sortOrder;
+  for (const t of c.topics) if (t.sortOrder > max) max = t.sortOrder;
+  return max + 1;
+};
 const buildStarterDraft = (courseTitle: string): CourseStructure => ({
   courseTitle,
   modules: [],
@@ -239,7 +249,7 @@ export function useCourseStructure(courseId: string, courseTitle = "Course") {
   const addModuleAt = useCallback((parentId: string) => {
     edit((d) => {
       const c = container(d, parentId, courseId);
-      c.modules.push(newModule(c.modules.length + c.topics.length + 1));
+      c.modules.push(newModule(nextChildSortOrder(c)));
     });
   }, [edit, courseId]);
   const addModule = useCallback(() => addModuleAt(courseId), [addModuleAt, courseId]);
@@ -249,7 +259,7 @@ export function useCourseStructure(courseId: string, courseTitle = "Course") {
     const parent = parentId || courseId;
     edit((d) => {
       const c = container(d, parent, courseId);
-      c.topics.push(newTopic(c.modules.length + c.topics.length + 1));
+      c.topics.push(newTopic(nextChildSortOrder(c)));
     });
   }, [edit, courseId]);
 
@@ -402,8 +412,9 @@ export function useCourseStructure(courseId: string, courseTitle = "Course") {
       await reload();
       return true;
     } catch (err) {
+      // Keep the user's draft and surface the error so they can retry — do NOT
+      // reload(), which would revert their edits and clear the error we just set.
       setError(err instanceof Error ? err : new Error("Failed to save course structure"));
-      await reload();
       return false;
     } finally {
       setSaving(false);
