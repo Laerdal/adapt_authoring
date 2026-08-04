@@ -55,6 +55,7 @@ export function CourseOverviewPage({
   const [savedBody, setSavedBody] = useState("");
   const [savedTags, setSavedTags] = useState<string[]>([]);
   const [savedHeroAssetId, setSavedHeroAssetId] = useState<string | null>(null);
+  const [savedLanguage, setSavedLanguage] = useState("");
   const [savedIsShared, setSavedIsShared] = useState(false);
   const [savedCollaborators, setSavedCollaborators] = useState<Collaborator[]>([]);
 
@@ -79,6 +80,12 @@ export function CourseOverviewPage({
 
   const imageInputRef = useRef<HTMLInputElement>(null);
 
+  function serializeCollaborators(list: Collaborator[]) {
+    return [...list]
+      .sort((a, b) => a.userId.localeCompare(b.userId))
+      .map(({ userId, role }) => `${userId}:${role}`);
+  }
+
   // Detect unsaved changes (core fields + sharing)
   const isDirty =
     formTitle !== savedTitle ||
@@ -86,10 +93,11 @@ export function CourseOverviewPage({
     formDesc !== savedDesc ||
     formBody !== savedBody ||
     heroAssetId !== savedHeroAssetId ||
+    language !== savedLanguage ||
     JSON.stringify(tags) !== JSON.stringify(savedTags) ||
     (shareMode === "all") !== savedIsShared ||
-    JSON.stringify(collaborators.map(c => c.userId).sort()) !==
-      JSON.stringify(savedCollaborators.map(c => c.userId).sort());
+    JSON.stringify(serializeCollaborators(collaborators)) !==
+      JSON.stringify(serializeCollaborators(savedCollaborators));
 
   // Load full course data on mount
   useEffect(() => {
@@ -113,6 +121,8 @@ export function CourseOverviewPage({
         setTags(data.tags);
         setHeroAssetId(data.heroAssetId);
         setHeroPreviewUrl(data.heroAssetId ? `/api/asset/serve/${data.heroAssetId}` : null);
+        setLanguage("");
+        setSavedLanguage("");
 
         // Load sharing state
         const isShared = data.isShared;
@@ -207,6 +217,7 @@ export function CourseOverviewPage({
   }
   function handleRoleChange(userId: string, role: string) {
     setCollaborators((prev) => prev.map((c) => (c.userId === userId ? { ...c, role } : c)));
+    markDirty();
   }
 
   async function handleSave() {
@@ -236,6 +247,7 @@ export function CourseOverviewPage({
       setSavedBody(formBody.trim());
       setSavedTags(tags);
       setSavedHeroAssetId(heroAssetId);
+      setSavedLanguage(language);
       setSavedIsShared(isSharedAll);
       setSavedCollaborators(collaborators);
       setSaveSuccess(true);
@@ -254,6 +266,7 @@ export function CourseOverviewPage({
     setTags(savedTags);
     setHeroAssetId(savedHeroAssetId);
     setHeroPreviewUrl(savedHeroAssetId ? `/api/asset/serve/${savedHeroAssetId}` : null);
+    setLanguage(savedLanguage);
     setTagInput("");
     setShareMode(savedIsShared ? "all" : "specific");
     setCollaborators(savedCollaborators);
@@ -498,7 +511,7 @@ export function CourseOverviewPage({
           <div style={{ position: "relative" }}>
             <select
               value={language}
-              onChange={(e) => setLanguage(e.target.value)}
+              onChange={(e) => { setLanguage(e.target.value); markDirty(); }}
               style={{ ...inputBase, appearance: "none", WebkitAppearance: "none", paddingRight: 36, cursor: "pointer", color: language ? "var(--life-base-black)" : "var(--life-neutral-400)" } as React.CSSProperties}
               onFocus={focusIn}
               onBlur={focusOut}
