@@ -1,17 +1,49 @@
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { Suspense, useEffect, useState, useRef, useCallback } from "react";
+import { useAuth } from "../context/AuthContext";
 import AiAssistant from "../components/common/AiAssistant";
-import CourseStructureMap from "../components/course/CourseStructureMap";
-import type { CourseStructureState } from "../components/course/CourseStructureMap";
+import CourseStructureMapView from "../components/course/CourseStructureMapView";
 import CourseStructureTree from "../components/course/CourseStructureTree";
+import AddComponentDrawer from "../components/course/AddComponentDrawer";
 import { getCourseBootstrapData } from "../api/adaptAuthoring";
+import { useCourseStructure } from "../hooks/useCourseStructure";
+import { STRUCTURE_LABELS } from "../types/structure";
+import { MenuPage } from "./setup/menuPage";
+import { TechnicalSettingPage } from "./setup/technicalSettingPage";
+import { NavigationPage } from "./setup/navigationPage";
+import SelectThemePage from "./setup/themePage";
+import { AccessibilityPage } from "./setup/accessibilityPage";
+import { UnsavedChangesModal } from "./setup/unsavedChangesModal";
+import { useUnsavedChangesNavigationGuard } from "./setup/useUnsavedChangesNavigationGuard";
 
-/* ── Nav items ── */
+const ICON_BASE = "/new/assets/icons";
+
+function SidebarMaskIcon({ file, className }: { file: string; className?: string }) {
+  const iconPath = `${ICON_BASE}/${file}`;
+  return (
+    <span
+      aria-hidden="true"
+      className={className ?? "block w-[18px] h-[18px] bg-current"}
+      style={{
+        WebkitMaskImage: `url(${iconPath})`,
+        maskImage: `url(${iconPath})`,
+        WebkitMaskRepeat: "no-repeat",
+        maskRepeat: "no-repeat",
+        WebkitMaskPosition: "center",
+        maskPosition: "center",
+        WebkitMaskSize: "contain",
+        maskSize: "contain",
+      }}
+    />
+  );
+}
+
+/* -- Nav items -- */
 const NAV_ITEMS = [
   {
-    id: "heading-views",
-    label: "Views",
+    id: "heading-course-setup",
+    label: "Course Setup",
     heading: true,
     icon: null,
   },
@@ -19,112 +51,105 @@ const NAV_ITEMS = [
     id: "overview",
     label: "Course Overview",
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
-        <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-      </svg>
+      <SidebarMaskIcon file="overview-icon.svg" />
     ),
   },
   {
     id: "structure",
     label: "Course Structure",
+    guarded: true,
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <polygon points="12 2 2 7 12 12 22 7 12 2" />
-        <polyline points="2 17 12 22 22 17" />
-        <polyline points="2 12 12 17 22 12" />
-      </svg>
+      <SidebarMaskIcon file="structure-icon.svg" />
     ),
+  },
+  {
+    id: "heading-design",
+    label: "Design & Appearance",
+    heading: true,
+    icon: null,
   },
   {
     id: "theme",
     label: "Theme",
+    guarded: true,
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <path d="M8 14s1.5 2 4 2 4-2 4-2" />
-        <line x1="9" y1="9" x2="9.01" y2="9" />
-        <line x1="15" y1="9" x2="15.01" y2="9" />
-      </svg>
+      <SidebarMaskIcon file="theme-icon.svg" />
     ),
   },
   {
     id: "menu",
     label: "Menu",
+    guarded: true,
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <line x1="3" y1="6" x2="21" y2="6" />
-        <line x1="3" y1="12" x2="21" y2="12" />
-        <line x1="3" y1="18" x2="21" y2="18" />
-      </svg>
+      <SidebarMaskIcon file="menu-icon.svg" />
     ),
+  },
+  {
+    id: "heading-learning-flow",
+    label: "Learning Flow",
+    heading: true,
+    icon: null,
   },
   {
     id: "navigation",
     label: "Navigation",
+    guarded: true,
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
-      </svg>
-    ),
-  },
-  {
-    id: "accessibility",
-    label: "Accessibility",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" />
-        <path d="M12 8v4l3 3" />
-      </svg>
-    ),
-  },
-  {
-    id: "tracking",
-    label: "Tracking & Analytics",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <line x1="18" y1="20" x2="18" y2="10" />
-        <line x1="12" y1="20" x2="12" y2="4" />
-        <line x1="6" y1="20" x2="6" y2="14" />
-      </svg>
+      <SidebarMaskIcon file="navigation-icon.svg" />
     ),
   },
   {
     id: "completion",
     label: "Completion & Progress",
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-        <polyline points="22 4 12 14.01 9 11.01" />
-      </svg>
+      <SidebarMaskIcon file="completion-icon.svg" />
     ),
   },
   {
     id: "learner-experience",
     label: "Learner Experience",
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" />
-        <path d="M12 6v6l4 2.5" />
-      </svg>
+      <SidebarMaskIcon file="learner-icon.svg" />
+    ),
+  },
+  {
+    id: "heading-insights",
+    label: "Insights",
+    heading: true,
+    icon: null,
+  },
+  {
+    id: "tracking",
+    label: "Tracking & Analytics",
+    icon: (
+      <SidebarMaskIcon file="tracking-icon.svg" />
+    ),
+  },
+  {
+    id: "heading-advanced",
+    label: "Advanced",
+    heading: true,
+    icon: null,
+  },
+  {
+    id: "accessibility",
+    label: "Accessibility",
+    guarded: true,
+    icon: (
+      <SidebarMaskIcon file="preview-icon.svg" />
     ),
   },
   {
     id: "technical-settings",
     label: "Technical Settings",
+    guarded: true,
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="1" />
-        <path d="M12 1v6m0 6v6" />
-        <path d="M4.22 4.22l4.24 4.24m2.96 3.08l4.24 4.24M1 12h6m6 0h6" />
-        <path d="M4.22 19.78l4.24-4.24m2.96-3.08l4.24-4.24M19.78 4.22l-4.24 4.24m-2.96 3.08l-4.24 4.24" />
-      </svg>
+      <SidebarMaskIcon file="setting-icon.svg" />
     ),
   },
   {
     id: "heading-action",
-    label: "Action",
+    label: "Actions",
     heading: true,
     icon: null,
   },
@@ -132,46 +157,42 @@ const NAV_ITEMS = [
     id: "cdn-deployment",
     label: "CDN Deployment",
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
-        <line x1="2" y1="20" x2="22" y2="20" />
-        <line x1="6" y1="17" x2="6" y2="20" />
-        <line x1="18" y1="17" x2="18" y2="20" />
-      </svg>
-    ),
-  },
-  {
-    id: "storyboarding",
-    label: "Storyboarding",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="2" width="6" height="6" /><rect x="10" y="2" width="6" height="6" />
-        <rect x="18" y="2" width="4" height="6" /><rect x="2" y="10" width="6" height="6" />
-        <rect x="10" y="10" width="6" height="6" /><rect x="18" y="10" width="4" height="6" />
-      </svg>
-    ),
-  },
-  {
-    id: "preflight-validator",
-    label: "Preflight Validator",
-    icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-        <polyline points="22 4 12 14.01 9 11.01" />
-      </svg>
+      <SidebarMaskIcon file="cdn-icon.svg" />
     ),
   },
   {
     id: "translation",
     label: "Translation",
     icon: (
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" />
-        <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-      </svg>
+      <SidebarMaskIcon file="translation-icon.svg" />
     ),
   },
 ];
+
+type NavLeafItem = Extract<(typeof NAV_ITEMS)[number], { heading?: false }>;
+
+function isNavLeafItem(item: (typeof NAV_ITEMS)[number]): item is NavLeafItem {
+  return item.heading !== true;
+}
+
+const NAV_GROUPS = NAV_ITEMS.reduce<{ id: string; label: string; items: NavLeafItem[] }[]>((groups, item) => {
+  if (!isNavLeafItem(item)) {
+    groups.push({ id: item.id, label: item.label, items: [] });
+    return groups;
+  }
+  if (groups.length === 0) {
+    groups.push({ id: "heading-main", label: "Main", items: [] });
+  }
+  groups[groups.length - 1].items.push(item);
+  return groups;
+}, []);
+
+// Navigation guard source of truth:
+// To guard a page in future (unsaved-changes interception), add `guarded: true`
+// on that page item in NAV_ITEMS. It will automatically be included here.
+const GUARDED_NAV_IDS = new Set(
+  NAV_ITEMS.filter((item) => item.heading !== true && item.guarded === true).map((item) => item.id)
+);
 
 /* ── Course Overview panel ── */
 function CourseOverviewPanel({ title, description }: { title: string; description: string }) {
@@ -292,56 +313,75 @@ function CourseOverviewPanel({ title, description }: { title: string; descriptio
   );
 }
 
-/* ── Course Structure panel ── */
-function CourseStructurePanel() {
+/* -- Course Structure panel -- */
+function CourseStructurePanel({
+  courseId,
+  courseTitle,
+  onOpenEditor,
+  onOpenStoryboard,
+  onNavigationRequest,
+  pendingNavigation,
+  onPendingNavigationHandled,
+}: {
+  courseId: string;
+  courseTitle: string;
+  onOpenEditor: (topicId: string) => void;
+  onOpenStoryboard: () => void;
+  onNavigationRequest?: (nav: string) => void;
+  pendingNavigation?: string | null;
+  onPendingNavigationHandled?: () => void;
+}) {
   const [viewMode, setViewMode] = useState<"tree" | "map">("tree");
+  // Content-group id whose Add Component drawer is open (null = closed).
+  const [addComponentBlockId, setAddComponentBlockId] = useState<string | null>(null);
+  const [hintDismissed, setHintDismissed] = useState(false);
+  const {
+    state,
+    loading,
+    dirty,
+    saving,
+    error,
+    save,
+    discard,
+    addModule,
+    addSubModule,
+    addTopic,
+    addSection,
+    addContentGroup,
+    addComponent,
+    rename,
+    remove,
+    moveNode,
+  } = useCourseStructure(courseId, courseTitle);
 
-  const [structureState, setStructureState] = useState<CourseStructureState>({
-    courseTitle: 'Course',
-    modules: [
-      {
-        id: 'module-1',
-        title: 'Module 1: Introduction',
-        description: '',
-        colorIndex: 0,
-        topics: [
-          {
-            id: 'topic-1',
-            title: 'Topic 1.1: Basics',
-            description: '',
-            sections: [
-              {
-                id: 'section-1',
-                title: 'Welcome (Article)',
-                description: '',
-                blocks: [
-                  { id: 'block-1', title: 'Block: Title', description: '' },
-                  { id: 'block-2', title: 'Block: Content', description: '' },
-                ],
-              },
-            ],
-          },
-          { id: 'topic-2', title: 'Topic 1.2: Advanced', description: '', sections: [] },
-        ],
-      },
-      {
-        id: 'module-2',
-        title: 'Module 2: Deep Dive',
-        description: '',
-        colorIndex: 1,
-        topics: [
-          { id: 'topic-3', title: 'Topic 2.1: Details', description: '', sections: [] },
-        ],
-      },
-    ],
-  });
+  // Edits are staged locally and saved only on demand — confirm before leaving
+  // with unsaved changes (mirrors Technical Settings / Navigation).
+  const { showConfirmModal, consumePendingNavigation, clearPendingNavigation } =
+    useUnsavedChangesNavigationGuard({
+      hasChanges: dirty,
+      pendingNavigation,
+      onPendingNavigationHandled,
+      onNavigate: onNavigationRequest,
+    });
+
+  async function handleConfirmSave() {
+    const ok = await save();
+    if (!ok) return; // save failed — stay put, show the error
+    const target = consumePendingNavigation();
+    if (target) onNavigationRequest?.(target);
+  }
+  function handleConfirmDiscard() {
+    discard();
+    const target = consumePendingNavigation();
+    if (target) onNavigationRequest?.(target);
+  }
 
   return (
     <div className="max-w-5xl w-full">
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex items-start justify-between mb-4">
         <div>
           <h2 className="text-xl font-bold text-[#111827]">Course Structure</h2>
-          <p className="text-sm text-[#6b7280] mt-0.5">Organize your course content with modules, topics, sections, and components.</p>
+          <p className="text-sm text-[#6b7280] mt-0.5">Build your structure before editing.</p>
         </div>
 
         {/* View mode toggle */}
@@ -356,8 +396,12 @@ function CourseStructurePanel() {
             }`}
             title="Tree view"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="8" y1="6" x2="8" y2="18" /><path d="M8 10h4M8 14h4" /><path d="M12 6v12" />
+            {/* Tree toggle glyph - from public/assets/icons/Icon-tree.svg (currentColor so it tints per state) */}
+            <svg width="14" height="14" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.08333" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3.25 1.625V8.125" />
+              <path d="M9.75 4.875C10.6475 4.875 11.375 4.14746 11.375 3.25C11.375 2.35254 10.6475 1.625 9.75 1.625C8.85254 1.625 8.125 2.35254 8.125 3.25C8.125 4.14746 8.85254 4.875 9.75 4.875Z" />
+              <path d="M3.25 11.375C4.14746 11.375 4.875 10.6475 4.875 9.75C4.875 8.85254 4.14746 8.125 3.25 8.125C2.35254 8.125 1.625 8.85254 1.625 9.75C1.625 10.6475 2.35254 11.375 3.25 11.375Z" />
+              <path d="M9.75 4.875C9.75 6.16793 9.23639 7.40791 8.32215 8.32215C7.40791 9.23639 6.16793 9.75 4.875 9.75" />
             </svg>
             Tree
           </button>
@@ -371,32 +415,177 @@ function CourseStructurePanel() {
             }`}
             title="Course map view"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
-              <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
+            {/* Map toggle glyph - from public/assets/icons/Icon-map.svg (currentColor so it tints per state) */}
+            <svg width="14" height="14" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.08333" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="1.625" y="1.625" width="3.79167" height="3.79167" rx="0.541667" />
+              <rect x="7.5835" y="1.625" width="3.79167" height="3.79167" rx="0.541667" />
+              <rect x="7.5835" y="7.58398" width="3.79167" height="3.79167" rx="0.541667" />
+              <rect x="1.625" y="7.58398" width="3.79167" height="3.79167" rx="0.541667" />
             </svg>
             Map
           </button>
         </div>
       </div>
 
-      {viewMode === "tree" ? (
-        <CourseStructureTree state={structureState} onChange={setStructureState} />
+      {/* Rules banner (top) */}
+      <div className="mb-3 p-3.5 rounded-lg bg-[#f0faf8] border border-[#99e6de] text-sm text-[#0d7377]">
+        Organize your course into modules, topics, sections, content groups and components. At least one topic
+        is mandatory at the course level, and every module must contain at least one topic.
+      </div>
+
+      {/* Tip (top) - view-specific info text, styled like the app's Tip callouts */}
+      <div className="mb-5 flex items-start gap-2.5 rounded-lg bg-[#fff7ed] border border-[#fed7aa] px-4 py-3">
+        <span className="text-base leading-none mt-0.5" aria-hidden="true">💡</span>
+        <p className="text-sm text-[#9a3412] leading-snug">
+          <span className="font-semibold">Tip:</span>{" "}
+          {viewMode === "tree"
+            ? "Create and organize the learning journey using the tree view. Click any field to edit content directly, and open a topic in the Page Editor (→) for advanced editing and settings."
+            : "Explore the entire course structure in a visual format. Use Map View to review content coverage and learning flow across topics. To create, edit, or reorganize content, switch to Tree View."}
+        </p>
+      </div>
+
+      {/* Unsaved-changes bar — edits persist only on Save Changes */}
+      {dirty && (
+        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-[#e5e7eb] bg-white shadow-sm px-4 py-2.5">
+          <div className="flex items-center gap-2">
+            <svg className="shrink-0 text-[#f59e0b]" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" />
+            </svg>
+            <span className="text-sm text-[#4b5563]">Unsaved changes</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={discard}
+              disabled={saving}
+              className="px-3 py-1.5 text-sm rounded-lg text-[#374151] bg-white border border-[#e5e7eb] hover:bg-[#f9fafb] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void save()}
+              disabled={saving}
+              className="px-3.5 py-1.5 text-sm font-semibold rounded-lg text-white bg-[#2d6fa8] hover:bg-[#235694] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {saving ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {error && (
+        <div className="mb-4 rounded-lg border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b]">
+          {error.message}
+        </div>
+      )}
+
+      {!courseId ? (
+        <div className="rounded-lg border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b]">
+          No course is associated with this setup flow, so the structure cannot be loaded.
+        </div>
+      ) : loading ? (
+        <div className="flex items-center gap-3 text-sm text-[#6b7280] py-12 justify-center">
+          <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 12a9 9 0 1 1-6.219-8.56" strokeLinecap="round" />
+          </svg>
+          Loading course structure...
+        </div>
       ) : (
-        <CourseStructureMap
-          initialState={structureState}
-          onChange={setStructureState}
+        <div className={saving ? "opacity-60 pointer-events-none transition-opacity" : "transition-opacity"}>
+          {viewMode === "tree" ? (
+            <CourseStructureTree
+              structure={state}
+              courseId={courseId}
+              labels={STRUCTURE_LABELS}
+              onAddModule={addModule}
+              onAddSubModule={addSubModule}
+              onAddTopic={addTopic}
+              onAddSection={addSection}
+              onAddContentGroup={addContentGroup}
+              onAddComponent={(blockId) => setAddComponentBlockId(blockId)}
+              onRename={rename}
+              onRemove={remove}
+              onMove={moveNode}
+              onOpenTopic={onOpenEditor}
+            />
+          ) : (
+            <CourseStructureMapView
+              structure={state}
+              labels={STRUCTURE_LABELS}
+              onOpenTopic={onOpenEditor}
+              onAddModule={addModule}
+              onAddSubModule={addSubModule}
+              onAddTopic={addTopic}
+              onAddSection={addSection}
+              onAddContentGroup={addContentGroup}
+              onAddComponent={(blockId) => setAddComponentBlockId(blockId)}
+              onRename={rename}
+            />
+          )}
+        </div>
+      )}
+
+      {/* Hint (bottom, dismissible) - styled per design */}
+      {!hintDismissed && (
+        <div className="relative mt-5 rounded-xl border border-[#bfdbeb] bg-[#eaf4fb] p-4 pr-10">
+          <button
+            type="button"
+            onClick={() => setHintDismissed(true)}
+            aria-label="Dismiss"
+            className="absolute top-3 right-3 p-1 rounded text-[#9ca3af] hover:text-[#374151] hover:bg-white/60 transition-colors"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+          <div className="flex items-start gap-3">
+            <svg className="shrink-0 mt-0.5 text-[#2d6fa8]" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+            <div>
+              <p className="text-sm font-semibold text-[#111827]">Your structure is ready</p>
+              <p className="text-sm text-[#5b7c93] mt-1">
+                Open Storyboard to review and refine the content flow, or select a topic to continue building in the
+                Page Editor with content, layouts, interactions, and learner experience settings.
+              </p>
+              <button
+                type="button"
+                onClick={onOpenStoryboard}
+                className="mt-3 inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] rounded-lg hover:bg-[#255d8f] transition-colors"
+              >
+                Open Storyboard
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {addComponentBlockId && (
+        <AddComponentDrawer
+          onClose={() => setAddComponentBlockId(null)}
+          onSelect={(componentType) => {
+            addComponent(addComponentBlockId, componentType);
+            setAddComponentBlockId(null);
+          }}
         />
       )}
 
-      <div className="mt-6 p-4 rounded-lg bg-[#f0faf8] border border-[#99e6de] text-sm text-[#0d7377]">
-        <p className="font-medium">Build your structure here to organize content before editing.</p>
-      </div>
+      <UnsavedChangesModal
+        isOpen={showConfirmModal}
+        isSaving={saving}
+        onDiscard={handleConfirmDiscard}
+        onSave={handleConfirmSave}
+        onClose={clearPendingNavigation}
+      />
     </div>
   );
 }
 
-/* ── Theme panel helpers ── */
+/* -- Theme panel helpers -- */
 const THEMES = [
   {
     id: "life",
@@ -424,13 +613,13 @@ const FONT_OPTIONS = [
 ];
 
 const H1_SIZE_OPTIONS = [
-  { label: "H1 — 3.5rem", value: "3.5rem" },
-  { label: "H2 — 3rem",   value: "3rem" },
-  { label: "H3 — 2.5rem", value: "2.5rem" },
-  { label: "H4 — 2rem",   value: "2rem" },
-  { label: "H5 — 1.5rem", value: "1.5rem" },
-  { label: "H6 — —",      value: "h6" },
-  { label: "Paragraph — 1.125rem", value: "1.125rem" },
+  { label: "H1 - 3.5rem", value: "3.5rem" },
+  { label: "H2 - 3rem",   value: "3rem" },
+  { label: "H3 - 2.5rem", value: "2.5rem" },
+  { label: "H4 - 2rem",   value: "2rem" },
+  { label: "H5 - 1.5rem", value: "1.5rem" },
+  { label: "H6 - -",      value: "h6" },
+  { label: "Paragraph - 1.125rem", value: "1.125rem" },
 ];
 
 type CustomThemeValues = {
@@ -524,7 +713,7 @@ function Accordion({ title, icon, children, defaultOpen = false }: { title: stri
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </button>
-      {open && <div className="px-4 pb-5 pt-1 border-t border-[#f3f4f6] bg-white">{children}</div>}
+      {open && <div className="px-[22px] py-[20px] border-t border-[#f3f4f6] bg-white">{children}</div>}
     </div>
   );
 }
@@ -579,7 +768,7 @@ function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
 
           <div className="p-4">
             {/* page title */}
-            <h1 className="font-bold mb-3" style={{ ...headingStyle, fontSize: h1Size }}>{cfg.pageTitleSize === "h6" ? "—" : "New Menu/Page Title"}</h1>
+            <h1 className="font-bold mb-3" style={{ ...headingStyle, fontSize: h1Size }}>{cfg.pageTitleSize === "h6" ? "-" : "New Menu/Page Title"}</h1>
 
             {/* article block */}
             <div className="border border-[#e5e7eb] rounded-lg p-3 mb-3">
@@ -621,7 +810,7 @@ function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
   );
 }
 
-/* ── Global Theme accordion content ── */
+/* -- Global Theme accordion content -- */
 function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (v: CustomThemeValues) => void }) {
   const set = <K extends keyof CustomThemeValues>(k: K, v: CustomThemeValues[K]) => setCfg({ ...cfg, [k]: v });
 
@@ -701,7 +890,7 @@ function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (
   );
 }
 
-/* ── Custom theme full editor ── */
+/* -- Custom theme full editor -- */
 function CustomThemeEditor({ onBack }: { onBack: () => void }) {
   const [cfg, setCfg] = useState<CustomThemeValues>(DEFAULT_CUSTOM);
 
@@ -803,7 +992,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
           <span className="text-xs text-[#374151] font-medium">Custom Theme</span>
         </div>
-        {/* ── Custom Icons: Sprite Sheets ── */}
+        {/* -- Custom Icons: Sprite Sheets -- */}
         <div className="px-5 pt-4 pb-5 border-b border-[#f3f4f6]">
           <p className="text-xs font-semibold text-[#374151] mb-1">Custom Icons: Sprite Sheets</p>
           <p className="text-xs text-[#6b7280] mb-3 leading-relaxed">Upload an SVG sprite sheet to replace default icons across the course.</p>
@@ -816,7 +1005,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
           </label>
         </div>
 
-        {/* ── Custom Icons: Single Icons ── */}
+        {/* -- Custom Icons: Single Icons -- */}
         <div className="px-5 pt-4 pb-5 border-b border-[#f3f4f6]">
           <p className="text-xs font-semibold text-[#374151] mb-1">Custom Icons: Single Icons</p>
           <p className="text-xs text-[#6b7280] mb-3 leading-relaxed">Upload individual SVG icon files to override specific icons in the course.</p>
@@ -829,7 +1018,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
           </label>
         </div>
 
-        {/* ── Configuration: Component ── */}
+        {/* -- Configuration: Component -- */}
         <div className="px-5 pt-4 pb-5 border-b border-[#f3f4f6]">
           <p className="text-xs font-semibold text-[#374151] mb-0.5">Configuration: Component</p>
           <p className="text-xs text-[#6b7280] mb-3 leading-relaxed">Component-level behavior and feedback configuration.</p>
@@ -861,7 +1050,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
           </div>
         </div>
 
-        {/* ── Accordions ── */}
+        {/* -- Accordions -- */}
         <div className="px-4 pb-6 space-y-2 mt-3">
           {ACCORDIONS.map((a) => (
             <Accordion key={a.id} title={a.title} icon={a.icon} defaultOpen={a.defaultOpen}>
@@ -879,7 +1068,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
   );
 }
 
-/* ── Theme selection panel ── */
+/* -- Theme selection panel -- */
 function normalizeName(v?: string): string {
   return (v ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -967,9 +1156,9 @@ function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
   );
 }
 
-/* ─────────────────────────────────────────────────────────────
-   MENU PANEL — types, thumbnails, live preview, settings
-   ───────────────────────────────────────────────────────────── */
+/* -------------------------------------------------------------
+   MENU PANEL - types, thumbnails, live preview, settings
+   ------------------------------------------------------------- */
 
 type BgRepeat   = "no-repeat" | "repeat-x" | "repeat-y" | "repeat";
 type BgSize     = "auto" | "cover" | "contain" | "100% 100%";
@@ -1008,7 +1197,7 @@ const DEFAULT_MENU_CFG: MenuConfig = {
   headerImageUrl: null, headerImageOrder: "above",
 };
 
-/* ── Card thumbnail illustrations (matching the screenshot) ── */
+/* -- Card thumbnail illustrations (matching the screenshot) -- */
 
 function ThumbLife() {
   return (
@@ -1100,7 +1289,7 @@ const MENU_OPTIONS = [
   },
 ];
 
-/* ── Live preview rendered in the right panel ── */
+/* -- Live preview rendered in the right panel -- */
 function MenuLivePreview({ cfg }: { cfg: MenuConfig }) {
   const bgStyle: React.CSSProperties = cfg.bgType === "image" && cfg.bgImageUrl
     ? { backgroundImage: `url(${cfg.bgImageUrl})`, backgroundRepeat: cfg.bgRepeat, backgroundSize: cfg.bgSize, backgroundPosition: cfg.bgPosition }
@@ -1108,7 +1297,7 @@ function MenuLivePreview({ cfg }: { cfg: MenuConfig }) {
 
   const alignClass = { left: "items-start text-left", center: "items-center text-center", right: "items-end text-right" }[cfg.titleAlign];
 
-  /* header block (logo, title, description, header image) — no background, rendered on top of bgStyle container */
+  /* header block (logo, title, description, header image) - no background, rendered on top of bgStyle container */
   const titleHasContent = cfg.menuTitle.replace(/<[^>]*>/g, "").trim().length > 0;
   const descHasContent  = cfg.menuDescription.replace(/<[^>]*>/g, "").trim().length > 0;
 
@@ -1149,7 +1338,7 @@ function MenuLivePreview({ cfg }: { cfg: MenuConfig }) {
           <div className="h-1.5 w-24 bg-white/40 rounded-full" />
         </div>
         <div className="flex flex-1 overflow-hidden">
-          {/* sidebar — inherits background from parent, adds border only */}
+          {/* sidebar - inherits background from parent, adds border only */}
           <div className="w-40 flex flex-col shrink-0 overflow-hidden border-r border-white/15">
             <div className={`flex flex-col py-3 gap-1 border-b border-white/10 px-2 ${alignClass}`}>
               {cfg.headerImageOrder === "above" && cfg.headerImageUrl && (
@@ -1183,7 +1372,7 @@ function MenuLivePreview({ cfg }: { cfg: MenuConfig }) {
               ))}
             </div>
           </div>
-          {/* content area — semi-transparent overlay so background shows through */}
+          {/* content area - semi-transparent overlay so background shows through */}
           <div className="flex-1 bg-white/10 backdrop-blur-sm p-4 flex flex-col gap-2">
             <div className="h-2.5 w-2/5 bg-white/60 rounded-full" />
             <div className="h-1.5 w-4/5 bg-white/30 rounded-full" />
@@ -1207,7 +1396,7 @@ function MenuLivePreview({ cfg }: { cfg: MenuConfig }) {
         <div className={`flex flex-col gap-1.5 px-4 py-4 w-full shrink-0 ${alignClass}`}>
           {menuHeaderContent}
         </div>
-        {/* module list — semi-transparent card over background */}
+        {/* module list - semi-transparent card over background */}
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
           {[100, 60, 20, 0].map((p, i) => (
             <div key={i} className="bg-white/20 backdrop-blur-sm border border-white/25 rounded-xl px-3 py-2.5 flex items-center gap-2.5">
@@ -1264,7 +1453,7 @@ function MenuLivePreview({ cfg }: { cfg: MenuConfig }) {
   );
 }
 
-/* ── Shared helpers ── */
+/* -- Shared helpers -- */
 function MenuFieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
   return (
     <span className="text-xs font-semibold text-[#374151]">
@@ -1273,7 +1462,7 @@ function MenuFieldLabel({ children, required }: { children: React.ReactNode; req
   );
 }
 
-/* ── Rich text editor with formatting toolbar ── */
+/* -- Rich text editor with formatting toolbar -- */
 const FONT_SIZE_OPTIONS = [
   { label: "Small",    value: "12px" },
   { label: "Default",  value: "14px" },
@@ -1306,13 +1495,13 @@ function RichTextEditor({
   const editorRef = useRef<HTMLDivElement>(null);
   const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set());
 
-  // Set innerHTML only on mount — never re-set during typing (avoids cursor reset / reversed text)
+  // Set innerHTML only on mount - never re-set during typing (avoids cursor reset / reversed text)
   const initRef = useCallback((node: HTMLDivElement | null) => {
     if (node) {
       node.innerHTML = html;
       (editorRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
     }
-  // intentionally empty deps — run once on mount only
+  // intentionally empty deps - run once on mount only
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1369,7 +1558,7 @@ function RichTextEditor({
       <MenuFieldLabel>{label}</MenuFieldLabel>
       <div className="border border-[#d1d5db] rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-[#2d6fa8] focus-within:border-transparent">
 
-        {/* ── toolbar ── */}
+        {/* -- toolbar -- */}
         <div className="flex items-center flex-wrap gap-0.5 px-2 py-1.5 border-b border-[#e5e7eb] bg-[#f9fafb]">
 
           {/* bold / italic / underline / strikethrough */}
@@ -1387,7 +1576,7 @@ function RichTextEditor({
 
           <div className="w-px h-4 bg-[#e5e7eb] mx-1 shrink-0" />
 
-          {/* font size dropdown — directly controls the cfg field, no execCommand */}
+          {/* font size dropdown - directly controls the cfg field, no execCommand */}
           <div className="relative">
             <select
               value={fontSize}
@@ -1408,7 +1597,7 @@ function RichTextEditor({
 
           <div className="w-px h-4 bg-[#e5e7eb] mx-1 shrink-0" />
 
-          {/* text color — directly controls the cfg field, anchored label for correct picker position */}
+          {/* text color - directly controls the cfg field, anchored label for correct picker position */}
           <label
             title="Text color"
             className="relative w-7 h-7 flex flex-col items-center justify-center gap-0.5 rounded hover:bg-[#e5e7eb] transition-colors cursor-pointer"
@@ -1430,7 +1619,7 @@ function RichTextEditor({
 
         </div>
 
-        {/* ── editable area — uncontrolled, innerHTML set once on mount ── */}
+        {/* -- editable area - uncontrolled, innerHTML set once on mount -- */}
         <div
           ref={initRef}
           contentEditable
@@ -1488,7 +1677,7 @@ function MenuSelect<T extends string>({ label, value, options, onChange }: {
   );
 }
 
-/* ── Main MenuPanel component ── */
+/* -- Main MenuPanel component -- */
 function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
   const [cfg, setCfg] = useState<MenuConfig>({
     ...DEFAULT_MENU_CFG,
@@ -1538,7 +1727,7 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
   return (
     <div className="flex h-full w-full overflow-hidden">
 
-      {/* ══ LEFT: settings (50%) ══ */}
+      {/* -- LEFT: settings (50%) -- */}
       <div className="w-1/2 h-full overflow-y-auto border-r border-[#e5e7eb] bg-white">
 
         <div className="px-6 py-5 border-b border-[#e5e7eb]">
@@ -1548,7 +1737,7 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
 
         <div className="flex flex-col divide-y divide-[#f3f4f6]">
 
-          {/* ── 1. Menu Style ── */}
+          {/* -- 1. Menu Style -- */}
           <section className="px-6 py-5 flex flex-col gap-3">
             <MenuFieldLabel required>Menu Style</MenuFieldLabel>
             <div className="grid grid-cols-3 gap-3">
@@ -1586,7 +1775,7 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
             </div>
           </section>
 
-          {/* ── 2. Logo ── */}
+          {/* -- 2. Logo -- */}
           <section className="px-6 py-5 flex flex-col gap-2.5">
             <MenuFieldLabel>Logo</MenuFieldLabel>
             {cfg.logoUrl ? (
@@ -1638,7 +1827,7 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
             </div>
           </section>
 
-          {/* ── 3. Menu Title + Description ── */}
+          {/* -- 3. Menu Title + Description -- */}
           <section className="px-6 py-5 flex flex-col gap-4">
             {/* Title */}
             <RichTextEditor
@@ -1667,7 +1856,7 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
             />
           </section>
 
-          {/* ── 4. Header Image ── */}
+          {/* -- 4. Header Image -- */}
           <section className="px-6 py-5 flex flex-col gap-2.5">
             <MenuFieldLabel>Header Image</MenuFieldLabel>
             <p className="text-[11px] text-[#6b7280] -mt-1">Shown above or below the menu title.</p>
@@ -1703,7 +1892,7 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
             )}
           </section>
 
-          {/* ── 5. Background ── */}
+          {/* -- 5. Background -- */}
           <section className="px-6 py-5 flex flex-col gap-3">
             <MenuFieldLabel>Background</MenuFieldLabel>
 
@@ -1760,7 +1949,7 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
         </div>
       </div>
 
-      {/* ══ RIGHT: live preview (50%) ══ */}
+      {/* -- RIGHT: live preview (50%) -- */}
       <div className="w-1/2 h-full bg-[#f3f4f6] flex flex-col overflow-hidden">
         <div className="h-10 bg-white border-b border-[#e5e7eb] flex items-center px-5 shrink-0 gap-2">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2d6fa8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1784,7 +1973,7 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
   );
 }
 
-/* ── Shared checkbox row used across panels ── */
+/* -- Shared checkbox row used across panels -- */
 function CheckboxRow({
   checked,
   onChange,
@@ -1801,7 +1990,7 @@ function CheckboxRow({
       <div
         onClick={() => !disabled && onChange(!checked)}
         className={`mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors ${
-          checked ? "bg-[#2d6fa8] border-[#2d6fa8]" : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
+          checked ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]" : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
         }`}
       >
         {checked && (
@@ -1815,697 +2004,28 @@ function CheckboxRow({
   );
 }
 
-/* ── Navigation Panel ── */
-interface NavigationConfig {
-  enableCourseMenu: boolean;
-  includeSubMenuInNavigation: boolean;
-  enableHeaderLogo: boolean;
-  headerLogoSource: "asset" | "url";
-  headerLogoUrl: string;
-  headerLogoAssetUrl: string | null;
-  headerLogoTooltip: string;
-  enableNavigationFooter: boolean;
-  footerLabels: {
-    home: string;
-    previous: string;
-    next: string;
-    up: string;
-    close: string;
-    custom: string;
-  };
-  startTopicId: string;
-  skipTopicWhenViewed: boolean;
-  forceRoutingFromTopicId: boolean;
-  preventNavigationToMainMenu: boolean;
-  menuLock: "custom" | "locklast" | "sequential" | "unlockfirst";
-}
-
-const DEFAULT_NAV_CFG: NavigationConfig = {
-  enableCourseMenu: true,
-  includeSubMenuInNavigation: false,
-  enableHeaderLogo: false,
-  headerLogoSource: "url",
-  headerLogoUrl: "",
-  headerLogoAssetUrl: null,
-  headerLogoTooltip: "",
-  enableNavigationFooter: true,
-  footerLabels: {
-    home: "Home",
-    previous: "Previous",
-    next: "Next",
-    up: "Up",
-    close: "Close",
-    custom: "Custom",
-  },
-  startTopicId: "",
-  skipTopicWhenViewed: false,
-  forceRoutingFromTopicId: false,
-  preventNavigationToMainMenu: false,
-  menuLock: "sequential",
-};
-
-function NavSectionHeading({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-xs font-semibold uppercase tracking-wider text-[#9ca3af] mb-1 mt-1">{children}</p>
-  );
-}
-
-function NavTextInput({
-  label,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-}) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-semibold text-[#374151]">{label}</span>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors"
-      />
-    </div>
-  );
-}
-
-function NavigationPanel() {
-  const [cfg, setCfg] = useState<NavigationConfig>(DEFAULT_NAV_CFG);
-
-  function set<K extends keyof NavigationConfig>(k: K, v: NavigationConfig[K]) {
-    setCfg((prev) => ({ ...prev, [k]: v }));
-  }
-
-  function setFooter(k: keyof NavigationConfig["footerLabels"], v: string) {
-    setCfg((prev) => ({ ...prev, footerLabels: { ...prev.footerLabels, [k]: v } }));
-  }
-
-  function pickLogoAsset() {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = "image/*";
-    input.onchange = () => {
-      const f = input.files?.[0];
-      if (f) set("headerLogoAssetUrl", URL.createObjectURL(f));
-    };
-    input.click();
-  }
-
-  const MENU_LOCK_OPTIONS: { value: NavigationConfig["menuLock"]; label: string }[] = [
-    { value: "custom",      label: "Custom" },
-    { value: "locklast",    label: "Lock Last" },
-    { value: "sequential",  label: "Sequential" },
-    { value: "unlockfirst", label: "Unlock First" },
-  ];
-
-  const FOOTER_FIELDS: { key: keyof NavigationConfig["footerLabels"]; label: string }[] = [
-    { key: "home",     label: "Home" },
-    { key: "previous", label: "Previous" },
-    { key: "next",     label: "Next" },
-    { key: "up",       label: "Up" },
-    { key: "close",    label: "Close" },
-    { key: "custom",   label: "Custom" },
-  ];
-
-  return (
-    <div className="flex h-full w-full overflow-hidden">
-
-      {/* ══ LEFT: settings ══ */}
-      <div className="w-full max-w-2xl h-full overflow-y-auto border-r border-[#e5e7eb] bg-white">
-
-        <div className="px-6 py-5 border-b border-[#e5e7eb]">
-          <h2 className="text-xl font-bold text-[#111827]">Navigation</h2>
-          <p className="text-sm text-[#6b7280] mt-0.5">Configure how learners move through your course.</p>
-        </div>
-
-        <div className="flex flex-col divide-y divide-[#f3f4f6]">
-
-          {/* ── Navigation Settings ── */}
-          <section className="px-6 py-5 flex flex-col gap-1">
-            <NavSectionHeading>Navigation Settings</NavSectionHeading>
-
-            <CheckboxRow
-              checked={cfg.enableCourseMenu}
-              onChange={(v) => set("enableCourseMenu", v)}
-              label="Enable Course Menu"
-            />
-
-            <CheckboxRow
-              checked={cfg.includeSubMenuInNavigation}
-              onChange={(v) => set("includeSubMenuInNavigation", v)}
-              label="Include SubMenu in Navigation"
-            />
-
-            {/* Header Logo */}
-            <CheckboxRow
-              checked={cfg.enableHeaderLogo}
-              onChange={(v) => set("enableHeaderLogo", v)}
-              label="Enable Header Logo"
-            />
-
-            {cfg.enableHeaderLogo && (
-              <div className="ml-7 mt-1 mb-1 flex flex-col gap-3 p-4 rounded-lg bg-[#f9fafb] border border-[#e5e7eb]">
-                {/* Asset / URL toggle */}
-                <div className="flex rounded-lg border border-[#d1d5db] overflow-hidden">
-                  {(["asset", "url"] as const).map((src, i) => (
-                    <button
-                      key={src}
-                      type="button"
-                      onClick={() => set("headerLogoSource", src)}
-                      className={`flex-1 py-1.5 text-xs font-medium transition-colors ${cfg.headerLogoSource === src ? "bg-[#2d6fa8] text-white" : "bg-white text-[#6b7280] hover:bg-[#f3f4f6]"} ${i > 0 ? "border-l border-[#d1d5db]" : ""}`}
-                    >
-                      {src === "asset" ? "Upload Asset" : "URL"}
-                    </button>
-                  ))}
-                </div>
-
-                {cfg.headerLogoSource === "url" ? (
-                  <NavTextInput
-                    label="Logo URL"
-                    value={cfg.headerLogoUrl}
-                    onChange={(v) => set("headerLogoUrl", v)}
-                    placeholder="https://example.com/logo.png"
-                  />
-                ) : (
-                  <div className="flex flex-col gap-1.5">
-                    <span className="text-xs font-semibold text-[#374151]">Logo Asset</span>
-                    {cfg.headerLogoAssetUrl ? (
-                      <div className="flex items-center gap-3 p-2 border border-[#e5e7eb] rounded-lg bg-white">
-                        <img src={cfg.headerLogoAssetUrl} alt="logo" className="h-8 max-w-[64px] object-contain rounded" />
-                        <div className="flex gap-1.5 ml-auto shrink-0">
-                          <button type="button" onClick={pickLogoAsset} className="text-xs px-2 py-1 border border-[#d1d5db] rounded text-[#374151] hover:bg-[#f3f4f6]">Replace</button>
-                          <button type="button" onClick={() => set("headerLogoAssetUrl", null)} className="text-xs px-2 py-1 border border-[#fca5a5] rounded text-[#dc2626] hover:bg-[#fef2f2]">Remove</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <label className="flex flex-col items-center justify-center h-16 border-2 border-dashed border-[#d1d5db] rounded-lg cursor-pointer hover:border-[#2d6fa8] hover:bg-[#f0f7ff] transition-colors group">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="group-hover:stroke-[#2d6fa8] mb-0.5">
-                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
-                        </svg>
-                        <span className="text-[11px] text-[#6b7280] group-hover:text-[#2d6fa8]">Click to upload logo</span>
-                        <input type="file" accept="image/*" aria-label="Upload logo asset" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) set("headerLogoAssetUrl", URL.createObjectURL(f)); e.target.value = ""; }} />
-                      </label>
-                    )}
-                  </div>
-                )}
-
-                <NavTextInput
-                  label="Tooltip Text"
-                  value={cfg.headerLogoTooltip}
-                  onChange={(v) => set("headerLogoTooltip", v)}
-                  placeholder="e.g. Go to homepage"
-                />
-              </div>
-            )}
-
-            {/* Navigation Footer */}
-            <CheckboxRow
-              checked={cfg.enableNavigationFooter}
-              onChange={(v) => set("enableNavigationFooter", v)}
-              label="Enable Navigation Footer"
-            />
-
-            {cfg.enableNavigationFooter && (
-              <div className="ml-7 mt-1 mb-1 p-4 rounded-lg bg-[#f9fafb] border border-[#e5e7eb] flex flex-col gap-3">
-                <p className="text-xs font-semibold text-[#374151]">Button Labels</p>
-                <div className="grid grid-cols-2 gap-3">
-                  {FOOTER_FIELDS.map(({ key, label }) => (
-                    <NavTextInput
-                      key={key}
-                      label={label}
-                      value={cfg.footerLabels[key]}
-                      onChange={(v) => setFooter(key, v)}
-                      placeholder={label}
-                    />
-                  ))}
-                </div>
-
-                {/* Conditional: Include submenu in sequential navigation — only when includeSubMenuInNavigation is on */}
-                <CheckboxRow
-                  checked={cfg.includeSubMenuInNavigation}
-                  onChange={(v) => set("includeSubMenuInNavigation", v)}
-                  label="Include submenu in sequential navigation"
-                  disabled={!cfg.includeSubMenuInNavigation}
-                />
-                {!cfg.includeSubMenuInNavigation && (
-                  <p className="text-[11px] text-[#9ca3af] -mt-1 ml-7">Enable "Include SubMenu in Navigation" above to unlock this option.</p>
-                )}
-              </div>
-            )}
-          </section>
-
-          {/* ── Start Settings ── */}
-          <section className="px-6 py-5 flex flex-col gap-3">
-            <NavSectionHeading>Start Settings</NavSectionHeading>
-
-            <NavTextInput
-              label="Topic ID"
-              value={cfg.startTopicId}
-              onChange={(v) => set("startTopicId", v)}
-              placeholder="e.g. topic-1"
-            />
-
-            <div className="flex flex-col gap-0.5">
-              <CheckboxRow
-                checked={cfg.skipTopicWhenViewed}
-                onChange={(v) => set("skipTopicWhenViewed", v)}
-                label="Skip the topic when already viewed or completed"
-              />
-              <CheckboxRow
-                checked={cfg.forceRoutingFromTopicId}
-                onChange={(v) => set("forceRoutingFromTopicId", v)}
-                label="Enable to force the routing from the Topic ID defined here"
-              />
-              <CheckboxRow
-                checked={cfg.preventNavigationToMainMenu}
-                onChange={(v) => set("preventNavigationToMainMenu", v)}
-                label="Prevent the user from navigating to the main menu"
-              />
-            </div>
-
-            {/* Menu Lock dropdown */}
-            <div className="flex flex-col gap-1.5 mt-1">
-              <span className="text-xs font-semibold text-[#374151]">Menu Lock</span>
-              <div className="relative">
-                <select
-                  value={cfg.menuLock}
-                  onChange={(e) => set("menuLock", e.target.value as NavigationConfig["menuLock"])}
-                  aria-label="Menu Lock"
-                  className="w-full border border-[#e5e7eb] rounded-lg px-3 py-2.5 text-sm text-[#111827] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent pr-8"
-                >
-                  {MENU_LOCK_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
-                <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
-              </div>
-            </div>
-          </section>
-
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── Accessibility Panel ── */
-
-function A11yTextInput({
-  label,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-xs font-semibold text-[#374151]">{label}</span>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors"
-      />
-    </div>
-  );
-}
-
-function A11yNumberInput({
-  label,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-}) {
-  return (
-    <div className="flex flex-col gap-1">
-      <span className="text-xs font-semibold text-[#374151]">{label}</span>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors"
-      />
-    </div>
-  );
-}
-
-function A11ySectionHeading({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-xs font-semibold uppercase tracking-wider text-[#9ca3af] mb-2 mt-1">{children}</p>
-  );
-}
-
-function A11ySubHeading({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-xs font-semibold text-[#6b7280] mb-2 mt-1 flex items-center gap-1.5">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="9 18 15 12 9 6" />
-      </svg>
-      {children}
-    </p>
-  );
-}
-
-interface A11yGlobal {
-  skipToMainContentLabel: string;
-  answeredIncorrectly: string;
-  answeredCorrectly: string;
-  selectedAnswer: string;
-  unselectedAnswer: string;
-  skipNavigation: string;
-  previous: string;
-  navigationDrawer: string;
-  close: string;
-  closeDrawer: string;
-  closeResources: string;
-  drawer: string;
-  closePopup: string;
-  next: string;
-  done: string;
-  complete: string;
-  incomplete: string;
-  incorrect: string;
-  correct: string;
-  locked: string;
-  visited: string;
-  required: string;
-  optional: string;
-  topOfContentObject: string;
-  course: string;
-  menu: string;
-  page: string;
-  alternativeFeedbackTitle: string;
-}
-
-interface A11yExtensions {
-  resourcesAriaRegion: string;
-  resourcesLabel: string;
-  trickleIncompleteContent: string;
-  bookmarkingResumeButtonText: string;
-  bookmarkingResumeAriaLabel: string;
-  tutorHideFeedback: string;
-  plpLabel: string;
-  plpIndicatorBar: string;
-  plpMenuBar: string;
-  plpEnd: string;
-  plpOptionalContent: string;
-  courseNotesShow: string;
-  drawerNavBarOrder: string;
-  drawerNavTooltip: boolean;
-  drawerText: string;
-  skipNavNavBarOrder: string;
-  backNavBarOrder: string;
-  backNavTooltip: boolean;
-  backText: string;
-}
-
-interface A11yComponents {
-  youtubeAriaRegion: string;
-  youtubeSkipToTranscript: string;
-}
-
-const DEFAULT_A11Y_GLOBAL: A11yGlobal = {
-  skipToMainContentLabel: "Skip navigation",
-  answeredIncorrectly: "You answered incorrectly",
-  answeredCorrectly: "You answered correctly",
-  selectedAnswer: "selected",
-  unselectedAnswer: "not selected",
-  skipNavigation: "Skip Navigation",
-  previous: "back",
-  navigationDrawer: "Open course resources.",
-  close: "Close",
-  closeDrawer: "Close Drawer",
-  closeResources: "Close Resources",
-  drawer: "Top of side drawer",
-  closePopup: "Close Popup",
-  next: "Next",
-  done: "Done",
-  complete: "Complete",
-  incomplete: "Incomplete",
-  incorrect: "Incorrect",
-  correct: "Correct",
-  locked: "Locked",
-  visited: "Visited",
-  required: "Required",
-  optional: "Optional",
-  topOfContentObject: "-",
-  course: "Main menu",
-  menu: "sub Menu",
-  page: "Page",
-  alternativeFeedbackTitle: "Feedback",
-};
-
-const DEFAULT_A11Y_EXTENSIONS: A11yExtensions = {
-  resourcesAriaRegion: "-",
-  resourcesLabel: "Additional resources",
-  trickleIncompleteContent: "There is incomplete content above. You must complete this before you can proceed through the course",
-  bookmarkingResumeButtonText: "Resume",
-  bookmarkingResumeAriaLabel: "Navigate to your furthest point of progress",
-  tutorHideFeedback: "Hide feedback",
-  plpLabel: "Page sections",
-  plpIndicatorBar: "Page progress. Use this to listen to the list of regions in this topic and whether they're completed. You can jump directly to any that are incomplete or which sound particularly interesting. {{percentageComplete}}%",
-  plpMenuBar: "Page completion {{percentageComplete}}%",
-  plpEnd: "You have reached the end of the list of page sections.",
-  plpOptionalContent: "Optional content",
-  courseNotesShow: "Course notes",
-  drawerNavBarOrder: "100",
-  drawerNavTooltip: true,
-  drawerText: "-",
-  skipNavNavBarOrder: "-100",
-  backNavBarOrder: "0",
-  backNavTooltip: true,
-  backText: "-",
-};
-
-const DEFAULT_A11Y_COMPONENTS: A11yComponents = {
-  youtubeAriaRegion: "This is a media component which displays a YouTube video. Select the play / pause button to watch it.",
-  youtubeSkipToTranscript: "Skip to transcript",
-};
-
-function AccessibilityPanel() {
-  const [global, setGlobal] = useState<A11yGlobal>(DEFAULT_A11Y_GLOBAL);
-  const [extensions, setExtensions] = useState<A11yExtensions>(DEFAULT_A11Y_EXTENSIONS);
-  const [components, setComponents] = useState<A11yComponents>(DEFAULT_A11Y_COMPONENTS);
-
-  function setG<K extends keyof A11yGlobal>(k: K, v: A11yGlobal[K]) {
-    setGlobal((prev) => ({ ...prev, [k]: v }));
-  }
-  function setE<K extends keyof A11yExtensions>(k: K, v: A11yExtensions[K]) {
-    setExtensions((prev) => ({ ...prev, [k]: v }));
-  }
-  function setC<K extends keyof A11yComponents>(k: K, v: A11yComponents[K]) {
-    setComponents((prev) => ({ ...prev, [k]: v }));
-  }
-
-  return (
-    <div className="max-w-2xl w-full">
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-[#111827]">Accessibility</h2>
-        <p className="text-sm text-[#6b7280] mt-0.5">Configure ARIA labels and accessible text used throughout the course.</p>
-      </div>
-
-      <div className="flex flex-col gap-6">
-
-        {/* ── Category: Global ── */}
-        <div className="border border-[#e5e7eb] rounded-xl overflow-hidden">
-          <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#e5e7eb]">
-            <A11ySectionHeading>Global</A11ySectionHeading>
-          </div>
-          <div className="px-4 py-4 grid grid-cols-1 gap-3">
-            <A11yTextInput label="Skip to main content label" value={global.skipToMainContentLabel} onChange={(v) => setG("skipToMainContentLabel", v)} placeholder="Skip navigation" />
-            <A11yTextInput label="Answered Incorrectly" value={global.answeredIncorrectly} onChange={(v) => setG("answeredIncorrectly", v)} placeholder="You answered incorrectly" />
-            <A11yTextInput label="Answered Correctly" value={global.answeredCorrectly} onChange={(v) => setG("answeredCorrectly", v)} placeholder="You answered correctly" />
-            <A11yTextInput label="Selected Answer" value={global.selectedAnswer} onChange={(v) => setG("selectedAnswer", v)} placeholder="selected" />
-            <A11yTextInput label="Unselected Answer" value={global.unselectedAnswer} onChange={(v) => setG("unselectedAnswer", v)} placeholder="not selected" />
-            <A11yTextInput label="Skip Navigation" value={global.skipNavigation} onChange={(v) => setG("skipNavigation", v)} placeholder="Skip Navigation" />
-            <A11yTextInput label="Previous" value={global.previous} onChange={(v) => setG("previous", v)} placeholder="back" />
-            <A11yTextInput label="Navigation Drawer" value={global.navigationDrawer} onChange={(v) => setG("navigationDrawer", v)} placeholder="Open course resources." />
-            <A11yTextInput label="Close" value={global.close} onChange={(v) => setG("close", v)} placeholder="Close" />
-            <A11yTextInput label="Close Drawer" value={global.closeDrawer} onChange={(v) => setG("closeDrawer", v)} placeholder="Close Drawer" />
-            <A11yTextInput label="Close Resources" value={global.closeResources} onChange={(v) => setG("closeResources", v)} placeholder="Close Resources" />
-            <A11yTextInput label="Drawer" value={global.drawer} onChange={(v) => setG("drawer", v)} placeholder="Top of side drawer" />
-            <A11yTextInput label="Close Popup" value={global.closePopup} onChange={(v) => setG("closePopup", v)} placeholder="Close Popup" />
-            <A11yTextInput label="Next" value={global.next} onChange={(v) => setG("next", v)} placeholder="Next" />
-            <A11yTextInput label="Done" value={global.done} onChange={(v) => setG("done", v)} placeholder="Done" />
-            <A11yTextInput label="Complete" value={global.complete} onChange={(v) => setG("complete", v)} placeholder="Complete" />
-            <A11yTextInput label="Incomplete" value={global.incomplete} onChange={(v) => setG("incomplete", v)} placeholder="Incomplete" />
-            <A11yTextInput label="Incorrect" value={global.incorrect} onChange={(v) => setG("incorrect", v)} placeholder="Incorrect" />
-            <A11yTextInput label="Correct" value={global.correct} onChange={(v) => setG("correct", v)} placeholder="Correct" />
-            <A11yTextInput label="Locked" value={global.locked} onChange={(v) => setG("locked", v)} placeholder="Locked" />
-            <A11yTextInput label="Visited" value={global.visited} onChange={(v) => setG("visited", v)} placeholder="Visited" />
-            <A11yTextInput label="Required" value={global.required} onChange={(v) => setG("required", v)} placeholder="Required" />
-            <A11yTextInput label="Optional" value={global.optional} onChange={(v) => setG("optional", v)} placeholder="Optional" />
-            <A11yTextInput label="Top Of Content Object" value={global.topOfContentObject} onChange={(v) => setG("topOfContentObject", v)} placeholder="-" />
-            <A11yTextInput label="Course" value={global.course} onChange={(v) => setG("course", v)} placeholder="Main menu" />
-            <A11yTextInput label="Menu" value={global.menu} onChange={(v) => setG("menu", v)} placeholder="sub Menu" />
-            <A11yTextInput label="Page" value={global.page} onChange={(v) => setG("page", v)} placeholder="Page" />
-            <A11yTextInput label="Alternative Feedback Title" value={global.alternativeFeedbackTitle} onChange={(v) => setG("alternativeFeedbackTitle", v)} placeholder="Feedback" />
-          </div>
-        </div>
-
-        {/* ── Category: Extensions ── */}
-        <div className="border border-[#e5e7eb] rounded-xl overflow-hidden">
-          <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#e5e7eb]">
-            <A11ySectionHeading>Extensions</A11ySectionHeading>
-          </div>
-          <div className="px-4 py-4 flex flex-col gap-5">
-
-            {/* Resources */}
-            <div>
-              <A11ySubHeading>Resources</A11ySubHeading>
-              <div className="grid grid-cols-1 gap-3">
-                <A11yTextInput label="Aria Region" value={extensions.resourcesAriaRegion} onChange={(v) => setE("resourcesAriaRegion", v)} placeholder="-" />
-                <A11yTextInput label="Resources" value={extensions.resourcesLabel} onChange={(v) => setE("resourcesLabel", v)} placeholder="Additional resources" />
-              </div>
-            </div>
-
-            {/* Trickle */}
-            <div>
-              <A11ySubHeading>Trickle</A11ySubHeading>
-              <div className="grid grid-cols-1 gap-3">
-                <A11yTextInput label="Incomplete Content" value={extensions.trickleIncompleteContent} onChange={(v) => setE("trickleIncompleteContent", v)} placeholder="There is incomplete content above. You must complete this before you can proceed through the course" />
-              </div>
-            </div>
-
-            {/* Bookmarking */}
-            <div>
-              <A11ySubHeading>Bookmarking</A11ySubHeading>
-              <div className="grid grid-cols-1 gap-3">
-                <A11yTextInput label="Resume button text" value={extensions.bookmarkingResumeButtonText} onChange={(v) => setE("bookmarkingResumeButtonText", v)} placeholder="Resume" />
-                <A11yTextInput label="Resume ARIA label" value={extensions.bookmarkingResumeAriaLabel} onChange={(v) => setE("bookmarkingResumeAriaLabel", v)} placeholder="Navigate to your furthest point of progress" />
-              </div>
-            </div>
-
-            {/* Tutor */}
-            <div>
-              <A11ySubHeading>Tutor</A11ySubHeading>
-              <div className="grid grid-cols-1 gap-3">
-                <A11yTextInput label="Hide feedback" value={extensions.tutorHideFeedback} onChange={(v) => setE("tutorHideFeedback", v)} placeholder="Hide feedback" />
-              </div>
-            </div>
-
-            {/* Laerdal Page Level Progress */}
-            <div>
-              <A11ySubHeading>Laerdal Page Level Progress</A11ySubHeading>
-              <div className="grid grid-cols-1 gap-3">
-                <A11yTextInput label="Laerdal Page Level Progress" value={extensions.plpLabel} onChange={(v) => setE("plpLabel", v)} placeholder="Page sections" />
-                <A11yTextInput label="Page Level Progress Indicator Bar" value={extensions.plpIndicatorBar} onChange={(v) => setE("plpIndicatorBar", v)} placeholder="Page progress. ... {{percentageComplete}}%" />
-                <A11yTextInput label="Page Level Progress Menu Bar" value={extensions.plpMenuBar} onChange={(v) => setE("plpMenuBar", v)} placeholder="Page completion {{percentageComplete}}%" />
-                <A11yTextInput label="Page Level Progress End" value={extensions.plpEnd} onChange={(v) => setE("plpEnd", v)} placeholder="You have reached the end of the list of page sections." />
-                <A11yTextInput label="Optional Content" value={extensions.plpOptionalContent} onChange={(v) => setE("plpOptionalContent", v)} placeholder="Optional content" />
-              </div>
-            </div>
-
-            {/* Course Notes */}
-            <div>
-              <A11ySubHeading>Course Notes</A11ySubHeading>
-              <div className="grid grid-cols-1 gap-3">
-                <A11yTextInput label="Show Course notes" value={extensions.courseNotesShow} onChange={(v) => setE("courseNotesShow", v)} placeholder="Course notes" />
-              </div>
-            </div>
-
-            {/* Drawer */}
-            <div>
-              <A11ySubHeading>Drawer</A11ySubHeading>
-              <div className="grid grid-cols-1 gap-3">
-                <A11yNumberInput label="Navigation bar order" value={extensions.drawerNavBarOrder} onChange={(v) => setE("drawerNavBarOrder", v)} placeholder="100" />
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs font-semibold text-[#374151]">Navigation tooltip</span>
-                  <CheckboxRow checked={extensions.drawerNavTooltip} onChange={(v) => setE("drawerNavTooltip", v)} label="Checkbox" />
-                </div>
-                <A11yTextInput label="Text" value={extensions.drawerText} onChange={(v) => setE("drawerText", v)} placeholder="-" />
-              </div>
-            </div>
-
-            {/* Skip navigation button */}
-            <div>
-              <A11ySubHeading>Skip navigation button</A11ySubHeading>
-              <div className="grid grid-cols-1 gap-3">
-                <A11yNumberInput label="Navigation bar order" value={extensions.skipNavNavBarOrder} onChange={(v) => setE("skipNavNavBarOrder", v)} placeholder="-100" />
-              </div>
-            </div>
-
-            {/* Back button */}
-            <div>
-              <A11ySubHeading>Back button</A11ySubHeading>
-              <div className="grid grid-cols-1 gap-3">
-                <A11yNumberInput label="Navigation bar order" value={extensions.backNavBarOrder} onChange={(v) => setE("backNavBarOrder", v)} placeholder="0" />
-                <div className="flex flex-col gap-1">
-                  <span className="text-xs font-semibold text-[#374151]">Back tooltip</span>
-                  <CheckboxRow checked={extensions.backNavTooltip} onChange={(v) => setE("backNavTooltip", v)} label="Checkbox" />
-                </div>
-                <A11yTextInput label="Text" value={extensions.backText} onChange={(v) => setE("backText", v)} placeholder="-" />
-              </div>
-            </div>
-
-          </div>
-        </div>
-
-        {/* ── Category: Components ── */}
-        <div className="border border-[#e5e7eb] rounded-xl overflow-hidden">
-          <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#e5e7eb]">
-            <A11ySectionHeading>Components</A11ySectionHeading>
-          </div>
-          <div className="px-4 py-4 flex flex-col gap-5">
-
-            {/* YouTube */}
-            <div>
-              <A11ySubHeading>YouTube</A11ySubHeading>
-              <div className="grid grid-cols-1 gap-3">
-                <A11yTextInput label="ARIA region" value={components.youtubeAriaRegion} onChange={(v) => setC("youtubeAriaRegion", v)} placeholder="This is a media component which displays a YouTube video. Select the play / pause button to watch it." />
-                <A11yTextInput label="Skip To Transcript" value={components.youtubeSkipToTranscript} onChange={(v) => setC("youtubeSkipToTranscript", v)} placeholder="Skip to transcript" />
-              </div>
-            </div>
-
-          </div>
-        </div>
-
-      </div>
-    </div>
-  );
-}
-
 /* ── Tracking & Analytics Panel ── */
 
 interface TrackingState {
-  /* Heading 1 — Tracking */
+  /* Heading 1 - Tracking */
   trackingStandard: "scorm" | "xapi" | "hyperbridge" | "";
 
-  /* Category 1 — Basic Settings */
+  /* Category 1 - Basic Settings */
   submitCompletionOnEveryAttempt: boolean;
   submitScoreToLms: boolean;
 
-  /* Sub-category 1 — Tracking */
+  /* Sub-category 1 - Tracking */
   storeQuestionState: boolean;
   storeQuestionAttemptState: boolean;
   recordInteractions: boolean;
   recordObjectives: boolean;
   shouldCompressData: boolean;
 
-  /* Sub-category 2 — Reporting */
+  /* Sub-category 2 - Reporting */
   trackingSuccessStatus: string;
   assessmentFailureStatus: string;
 
-  /* Category 2 — Advanced Settings */
+  /* Category 2 - Advanced Settings */
   scormVersion: string;
   scormDebugWindow: boolean;
   commitDataOnStatusChange: boolean;
@@ -2514,11 +2034,11 @@ interface TrackingState {
   maxCommitRetries: string;
   commitRetryDelay: string;
 
-  /* Heading 2 — Analytics */
+  /* Heading 2 - Analytics */
   enableAnalytics: boolean;
   analyticsProvider: string;
 
-  /* Advanced Settings — Analytics */
+  /* Advanced Settings - Analytics */
   projectTag: string;
   portfolio: string;
   resourceLinkId: string;
@@ -2688,9 +2208,9 @@ function TrackingAnalyticsPanel() {
 
       <div className="flex flex-col gap-4">
 
-        {/* ══════════════════════════════════════════════
-            HEADING 1 — Tracking (Accordion)
-        ══════════════════════════════════════════════ */}
+        {/* ----------------------------------------------
+            HEADING 1 - Tracking (Accordion)
+        ---------------------------------------------- */}
         <Accordion
           defaultOpen
           title="Tracking"
@@ -2732,7 +2252,7 @@ function TrackingAnalyticsPanel() {
             </div>
           </div>
 
-          {/* ── Category 1 — Basic Settings ── */}
+          {/* -- Category 1 - Basic Settings -- */}
           <div className="mt-5">
             <TrackingSectionLabel>Basic Settings</TrackingSectionLabel>
             <div className="flex flex-col gap-0.5">
@@ -2749,7 +2269,7 @@ function TrackingAnalyticsPanel() {
             </div>
           </div>
 
-          {/* ── Sub-category 1 — Tracking ── */}
+          {/* -- Sub-category 1 - Tracking -- */}
           <div className="mt-4 ml-4 pl-3 border-l-2 border-[#e5e7eb]">
             <TrackingSubLabel>Tracking</TrackingSubLabel>
             <div className="flex flex-col gap-0.5">
@@ -2761,7 +2281,7 @@ function TrackingAnalyticsPanel() {
             </div>
           </div>
 
-          {/* ── Sub-category 2 — Reporting ── */}
+          {/* -- Sub-category 2 - Reporting -- */}
           <div className="mt-4 ml-4 pl-3 border-l-2 border-[#e5e7eb]">
             <TrackingSubLabel>Reporting</TrackingSubLabel>
             <div className="flex flex-col gap-3">
@@ -2780,7 +2300,7 @@ function TrackingAnalyticsPanel() {
             </div>
           </div>
 
-          {/* ── Category 2 — Advanced Settings ── */}
+          {/* -- Category 2 - Advanced Settings -- */}
           <div className="mt-5">
             <TrackingSectionLabel>Advanced Settings</TrackingSectionLabel>
             <div className="flex flex-col gap-3">
@@ -2815,9 +2335,9 @@ function TrackingAnalyticsPanel() {
           </div>
         </Accordion>
 
-        {/* ══════════════════════════════════════════════
-            HEADING 2 — Analytics (Accordion)
-        ══════════════════════════════════════════════ */}
+        {/* ----------------------------------------------
+            HEADING 2 - Analytics (Accordion)
+        ---------------------------------------------- */}
         <Accordion
           title="Analytics"
           icon={
@@ -2932,9 +2452,9 @@ function TrackingAnalyticsPanel() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════════
+/* ---------------------------------------------------------------
    COMPLETION & PROGRESS PANEL
-   ═══════════════════════════════════════════════════════════════ */
+   --------------------------------------------------------------- */
 
 /* shared primitives re-used across sub-sections */
 function CpSectionHeading({ children }: { children: React.ReactNode }) {
@@ -3118,15 +2638,15 @@ type ProgressType = "pages" | "questions";
 type ProgressFormat = "bar" | "stepper" | "percentage";
 
 interface CompletionProgressState {
-  /* 1 – Completion Rules */
+  /* 1 - Completion Rules */
   pageCompletionRule: "all-content" | "required-interaction";
   courseCompletionRule: "all-content" | "assessment";
 
-  /* 2 – Completion Feedback */
+  /* 2 - Completion Feedback */
   notifierLine1: string;
   notifierLine2: string;
 
-  /* 3 – Resume & Bookmarking */
+  /* 3 - Resume & Bookmarking */
   bookmarkingEnabled: boolean;
   bookmarkingLevel: BookmarkLocation;
   bookmarkingReturn: BookmarkReturn;
@@ -3134,12 +2654,12 @@ interface CompletionProgressState {
   resumeTitle: string;
   resumeMessage: string;
 
-  /* 4 – Progress Indicators */
+  /* 4 - Progress Indicators */
   progressIndicators: string[];
   progressType: ProgressType;
   progressFormat: ProgressFormat;
 
-  /* 5 – Time Estimate */
+  /* 5 - Time Estimate */
   timeIconClass: string;
   timeTextBefore: string;
   timeTextAfter: string;
@@ -3174,15 +2694,15 @@ function CompletionProgressPanel() {
   return (
     <div className="max-w-2xl w-full">
 
-      {/* ── Page header ── */}
+      {/* -- Page header -- */}
       <div className="mb-6">
         <h2 className="text-xl font-bold text-[#111827]">Completion &amp; Progress</h2>
         <p className="text-sm text-[#6b7280] mt-0.5">Configure how course and page completion is tracked and displayed to learners.</p>
       </div>
 
-      {/* ════════════════════════════════════
-          H1 — COMPLETION RULES
-      ════════════════════════════════════ */}
+      {/* ------------------------------------
+          H1 - COMPLETION RULES
+      ------------------------------------ */}
       <section>
         <CpSectionHeading>Completion Rules</CpSectionHeading>
         <p className="text-sm text-[#6b7280] mb-5">Define what counts as a completed page and a completed course.</p>
@@ -3226,9 +2746,9 @@ function CompletionProgressPanel() {
 
       <CpDivider />
 
-      {/* ════════════════════════════════════
-          H2 — COMPLETION FEEDBACK
-      ════════════════════════════════════ */}
+      {/* ------------------------------------
+          H2 - COMPLETION FEEDBACK
+      ------------------------------------ */}
       <section>
         <CpSectionHeading>Completion Feedback</CpSectionHeading>
         <p className="text-sm text-[#6b7280] mb-5">Customise the message shown to learners when they complete the course.</p>
@@ -3257,9 +2777,9 @@ function CompletionProgressPanel() {
 
       <CpDivider />
 
-      {/* ════════════════════════════════════
-          H3 — RESUME & BOOKMARKING
-      ════════════════════════════════════ */}
+      {/* ------------------------------------
+          H3 - RESUME & BOOKMARKING
+      ------------------------------------ */}
       <section>
         <CpSectionHeading>Resume and Bookmarking</CpSectionHeading>
         <p className="text-sm text-[#6b7280] mb-5">Control where learners return to when they re-enter the course.</p>
@@ -3289,7 +2809,7 @@ function CompletionProgressPanel() {
               <CpInfoNote>Bookmarking done at component level will be the most accurate.</CpInfoNote>
 
               <CpSelect<BookmarkReturn>
-                label="Bookmarking location — learner is taken back to"
+                label="Bookmarking location - learner is taken back to"
                 hint="Location: where the learner is returned on re-entry"
                 value={cfg.bookmarkingReturn}
                 onChange={(v) => set("bookmarkingReturn", v)}
@@ -3336,9 +2856,9 @@ function CompletionProgressPanel() {
 
       <CpDivider />
 
-      {/* ════════════════════════════════════
-          H3 — PROGRESS INDICATORS
-      ════════════════════════════════════ */}
+      {/* ------------------------------------
+          H3 - PROGRESS INDICATORS
+      ------------------------------------ */}
       <section>
         <CpSectionHeading>Progress Indicators</CpSectionHeading>
         <p className="text-sm text-[#6b7280] mb-5">Choose which progress elements are visible to learners.</p>
@@ -3388,9 +2908,9 @@ function CompletionProgressPanel() {
 
       <CpDivider />
 
-      {/* ════════════════════════════════════
-          H4 — TIME ESTIMATE
-      ════════════════════════════════════ */}
+      {/* ------------------------------------
+          H4 - TIME ESTIMATE
+      ------------------------------------ */}
       <section>
         <CpSectionHeading>Time Estimate</CpSectionHeading>
         <p className="text-sm text-[#6b7280] mb-5">Configure the time estimate display shown to learners.</p>
@@ -3445,9 +2965,9 @@ function CompletionProgressPanel() {
   );
 }
 
-/* ─────────────────────────────────────────────────────────────
-   LEARNER EXPERIENCE PANEL — Learning Resources accordion
-   ───────────────────────────────────────────────────────────── */
+/* -------------------------------------------------------------
+   LEARNER EXPERIENCE PANEL - Learning Resources accordion
+   ------------------------------------------------------------- */
 
 type ResourceFormat = "document" | "media" | "link" | "custom";
 
@@ -3612,7 +3132,7 @@ function AddResourceDialog({
             />
           </LrField>
 
-          {/* Source — asset vs URL tabs */}
+          {/* Source - asset vs URL tabs */}
           <LrField label="Source">
             <div className="flex rounded-lg border border-[#e5e7eb] overflow-hidden mb-2">
               {(["asset", "url"] as const).map((t) => (
@@ -3636,7 +3156,7 @@ function AddResourceDialog({
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
                 </svg>
-                {res.assetValue ? res.assetValue : "Browse assets…"}
+                {res.assetValue ? res.assetValue : "Browse assets..."}
               </button>
             ) : (
               <input
@@ -3703,7 +3223,7 @@ function ResourceFormatIcon({ format }: { format: ResourceFormat }) {
   );
 }
 
-/* ── Course Feedback types ── */
+/* -- Course Feedback types -- */
 type CourseFeedbackOption = "autoOpen" | "hideAfterSubmit";
 
 interface CourseFeedbackState {
@@ -3723,7 +3243,7 @@ const COURSE_FEEDBACK_OPTIONS: { value: CourseFeedbackOption; label: string }[] 
   { value: "hideAfterSubmit", label: "Hide button after submission" },
 ];
 
-/* ── Ask AI Tutor types ── */
+/* -- Ask AI Tutor types -- */
 type AiTutorCapability = "allPages" | "answerFromContent" | "useLearnerNotes" | "stepByStep";
 type AiTutorKnowledge  = "concise" | "detailed";
 type AiTutorControl    = "drawer" | "floating";
@@ -3761,7 +3281,7 @@ const AI_TUTOR_CONTROL_OPTIONS: { value: AiTutorControl; label: string }[] = [
   { value: "floating", label: "Floating button" },
 ];
 
-/* ── Learner Notes types ── */
+/* -- Learner Notes types -- */
 type NotesAvailability = "all" | "selected";
 type NotesFeature = "create" | "upload" | "download" | "search";
 
@@ -3786,7 +3306,7 @@ const NOTES_FEATURES: { value: NotesFeature; label: string }[] = [
   { value: "search",   label: "Enable search" },
 ];
 
-/* ── Learner Search types ── */
+/* -- Learner Search types -- */
 type SearchMatchRule =
   | "begins"
   | "contains"
@@ -3940,7 +3460,7 @@ function LeAccordion({
         </svg>
       </button>
       {open && (
-        <div className="px-4 pb-5 pt-1 border-t border-[#f3f4f6] bg-white space-y-4">
+        <div className="px-[22px] py-[20px] border-t border-[#f3f4f6] bg-white space-y-4">
           {children}
         </div>
       )}
@@ -3949,7 +3469,7 @@ function LeAccordion({
 }
 
 function LearnerExperiencePanel() {
-  /* ── Learning Resources state ── */
+  /* -- Learning Resources state -- */
   const [lrState, setLrState] = useState<LearningResourcesState>({
     enabled: false,
     sectionTitle: "",
@@ -3971,7 +3491,7 @@ function LearnerExperiencePanel() {
     setLrState((prev) => ({ ...prev, resources: prev.resources.filter((r) => r.id !== id) }));
   }
 
-  /* ── Learner Search state ── */
+  /* -- Learner Search state -- */
   const [lsOpen, setLsOpen] = useState(false);
   const [lsState, setLsState] = useState<LearnerSearchState>({
     enabled: false,
@@ -3988,7 +3508,7 @@ function LearnerExperiencePanel() {
   const setLs = <K extends keyof LearnerSearchState>(k: K, v: LearnerSearchState[K]) =>
     setLsState((prev) => ({ ...prev, [k]: v }));
 
-  /* ── Learner Notes state ── */
+  /* -- Learner Notes state -- */
   const [lnOpen, setLnOpen] = useState(false);
   const [lnState, setLnState] = useState<LearnerNotesState>({
     enabled: false,
@@ -4002,7 +3522,7 @@ function LearnerExperiencePanel() {
   const setLn = <K extends keyof LearnerNotesState>(k: K, v: LearnerNotesState[K]) =>
     setLnState((prev) => ({ ...prev, [k]: v }));
 
-  /* ── Ask AI Tutor state ── */
+  /* -- Ask AI Tutor state -- */
   const [atOpen, setAtOpen] = useState(false);
   const [atState, setAtState] = useState<AiTutorState>({
     enabled: false,
@@ -4018,7 +3538,7 @@ function LearnerExperiencePanel() {
   const setAt = <K extends keyof AiTutorState>(k: K, v: AiTutorState[K]) =>
     setAtState((prev) => ({ ...prev, [k]: v }));
 
-  /* ── Course Feedback state ── */
+  /* -- Course Feedback state -- */
   const [cfOpen, setCfOpen] = useState(false);
   const [cfState, setCfState] = useState<CourseFeedbackState>({
     enabled: false,
@@ -4064,7 +3584,7 @@ function LearnerExperiencePanel() {
 
       <div className="space-y-3">
 
-        {/* ── Learning Resources accordion ── */}
+        {/* -- Learning Resources accordion -- */}
         <LeAccordion
           open={lrOpen}
           onToggle={() => setLrOpen((o) => !o)}
@@ -4150,7 +3670,7 @@ function LearnerExperiencePanel() {
           )}
         </LeAccordion>
 
-        {/* ── Learner Search accordion ── */}
+        {/* -- Learner Search accordion -- */}
         <LeAccordion
           open={lsOpen}
           onToggle={() => setLsOpen((o) => !o)}
@@ -4194,7 +3714,7 @@ function LearnerExperiencePanel() {
                 />
               </LrField>
 
-              {/* Search Scope ── Match On Rules */}
+              {/* Search Scope -- Match On Rules */}
               <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
                 <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
                   <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Search Scope</p>
@@ -4240,7 +3760,7 @@ function LearnerExperiencePanel() {
                   type="text"
                   value={lsState.searchPlaceholder}
                   onChange={(e) => setLs("searchPlaceholder", e.target.value)}
-                  placeholder="e.g. Type to search…"
+                  placeholder="e.g. Type to search..."
                   className={LR_INPUT}
                 />
               </LrField>
@@ -4262,7 +3782,7 @@ function LearnerExperiencePanel() {
                   type="text"
                   value={lsState.loadingMessage}
                   onChange={(e) => setLs("loadingMessage", e.target.value)}
-                  placeholder="e.g. Searching…"
+                  placeholder="e.g. Searching..."
                   className={LR_INPUT}
                 />
               </LrField>
@@ -4270,7 +3790,7 @@ function LearnerExperiencePanel() {
           )}
         </LeAccordion>
 
-        {/* ── Learner Notes accordion ── */}
+        {/* -- Learner Notes accordion -- */}
         <LeAccordion
           open={lnOpen}
           onToggle={() => setLnOpen((o) => !o)}
@@ -4366,7 +3886,7 @@ function LearnerExperiencePanel() {
                   type="text"
                   value={lnState.editorPlaceholder}
                   onChange={(e) => setLn("editorPlaceholder", e.target.value)}
-                  placeholder="e.g. Start typing your notes here…"
+                  placeholder="e.g. Start typing your notes here..."
                   className={LR_INPUT}
                 />
               </LrField>
@@ -4374,7 +3894,7 @@ function LearnerExperiencePanel() {
           )}
         </LeAccordion>
 
-        {/* ── Ask AI Tutor accordion ── */}
+        {/* -- Ask AI Tutor accordion -- */}
         <LeAccordion
           open={atOpen}
           onToggle={() => setAtOpen((o) => !o)}
@@ -4510,7 +4030,7 @@ function LearnerExperiencePanel() {
                 <textarea
                   value={atState.promptPlaceholder}
                   onChange={(e) => setAt("promptPlaceholder", e.target.value)}
-                  placeholder="e.g. Ask me anything about this course…"
+                  placeholder="e.g. Ask me anything about this course..."
                   rows={3}
                   className={LR_TEXTAREA}
                 />
@@ -4519,7 +4039,7 @@ function LearnerExperiencePanel() {
           )}
         </LeAccordion>
 
-        {/* ── Course Feedback accordion ── */}
+        {/* -- Course Feedback accordion -- */}
         <LeAccordion
           open={cfOpen}
           onToggle={() => setCfOpen((o) => !o)}
@@ -4541,7 +4061,7 @@ function LearnerExperiencePanel() {
 
           {cfState.enabled && (
             <>
-              {/* Options — multi-select */}
+              {/* Options - multi-select */}
               <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
                 <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
                   <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Options</p>
@@ -4615,7 +4135,7 @@ function LearnerExperiencePanel() {
                 <textarea
                   value={cfState.commentPlaceholder}
                   onChange={(e) => setCf("commentPlaceholder", e.target.value)}
-                  placeholder="e.g. Share your thoughts…"
+                  placeholder="e.g. Share your thoughts..."
                   rows={2}
                   className={LR_TEXTAREA}
                 />
@@ -4649,220 +4169,7 @@ function LearnerExperiencePanel() {
   );
 }
 
-/* ── Technical Settings panel ── */
-const SCREEN_SIZE_OPTIONS = ["Small", "Medium", "Large", "Extra Large"];
-const LOG_LEVEL_OPTIONS   = ["Info", "Debug", "Warn", "Error", "None"];
-
-function TsAccordion({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="border border-[#e5e7eb] rounded-xl overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between px-5 py-4 bg-white hover:bg-[#f9fafb] transition-colors"
-      >
-        <span className="text-sm font-semibold text-[#111827]">{title}</span>
-        <svg
-          width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280"
-          strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-          className={`transition-transform ${open ? "rotate-180" : ""}`}
-        >
-          <polyline points="6 9 12 15 18 9" />
-        </svg>
-      </button>
-      {open && <div className="px-5 pb-5 pt-2 border-t border-[#f3f4f6] bg-white flex flex-col gap-4">{children}</div>}
-    </div>
-  );
-}
-
-function TsDropdown({ label, value, options, onChange }: {
-  label: string; value: string; options: string[]; onChange: (v: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-sm font-medium text-[#374151]">{label}</label>
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          className="w-full flex items-center justify-between px-3 py-2.5 border border-[#d1d5db] rounded-lg bg-white text-sm text-[#374151] hover:border-[#9ca3af] transition-colors"
-        >
-          <span>{value}</span>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${open ? "rotate-180" : ""}`}>
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </button>
-        {open && (
-          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-20 py-1 overflow-hidden">
-            {options.map((opt) => (
-              <button
-                key={opt} type="button"
-                onClick={() => { onChange(opt); setOpen(false); }}
-                className={`w-full text-left px-3 py-2.5 text-sm flex items-center justify-between transition-colors ${
-                  value === opt ? "bg-[#dbeeff] text-[#2d6fa8] font-medium" : "text-[#374151] hover:bg-[#f9fafb]"
-                }`}
-              >
-                {opt}
-                {value === opt && (
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function TsCheckbox({ id, label, checked, onChange }: { id: string; label: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <label htmlFor={id} className="flex items-center gap-3 cursor-pointer select-none group">
-      <div
-        className={`w-4 h-4 rounded border-2 flex items-center justify-center transition-colors shrink-0 ${
-          checked ? "bg-[#2d6fa8] border-[#2d6fa8]" : "bg-white border-[#d1d5db] group-hover:border-[#93c5fd]"
-        }`}
-        onClick={() => onChange(!checked)}
-      >
-        {checked && (
-          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-        )}
-      </div>
-      <input id={id} type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="sr-only" />
-      <span className="text-sm text-[#374151]">{label}</span>
-    </label>
-  );
-}
-
-function TechnicalSettingsPanel() {
-  const [screenSize, setScreenSize]   = useState("Medium");
-  const [smallBp, setSmallBp]         = useState("");
-  const [mediumBp, setMediumBp]       = useState("");
-  const [largeBp, setLargeBp]         = useState("");
-  const [xlBp, setXlBp]               = useState("");
-
-  const [optimizedScroll, setOptimizedScroll] = useState(false);
-  const [sourceMaps, setSourceMaps]           = useState(false);
-  const [screenReader, setScreenReader]       = useState(false);
-
-  const [enableLogging, setEnableLogging] = useState(false);
-  const [logLevel, setLogLevel]           = useState("Info");
-  const [strictMode, setStrictMode]       = useState(false);
-
-  const [customCss, setCustomCss]     = useState("");
-  const [cssExpanded, setCssExpanded] = useState(false);
-
-  const taClass = "w-full text-sm text-[#374151] border border-[#d1d5db] rounded-lg px-3 py-2.5 resize-none focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent placeholder-[#9ca3af]";
-
-  return (
-    <div className="max-w-2xl w-full">
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-[#111827]">Technical Settings</h2>
-        <p className="text-sm text-[#6b7280] mt-0.5">Advanced configuration settings for developers and advanced users</p>
-      </div>
-
-      <div className="flex flex-col gap-4">
-
-        {/* Display & Responsiveness */}
-        <TsAccordion title="Display & Responsiveness" defaultOpen>
-          <TsDropdown label="Screen Size" value={screenSize} options={SCREEN_SIZE_OPTIONS} onChange={setScreenSize} />
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[#374151]">Small</label>
-            <textarea rows={2} value={smallBp} onChange={(e) => setSmallBp(e.target.value)} placeholder="Small breakpoint CSS" className={taClass} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[#374151]">Medium</label>
-            <textarea rows={2} value={mediumBp} onChange={(e) => setMediumBp(e.target.value)} placeholder="Medium breakpoint CSS" className={taClass} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[#374151]">Large</label>
-            <textarea rows={2} value={largeBp} onChange={(e) => setLargeBp(e.target.value)} placeholder="Large breakpoint CSS" className={taClass} />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[#374151]">Extra Large</label>
-            <textarea rows={2} value={xlBp} onChange={(e) => setXlBp(e.target.value)} placeholder="Extra large breakpoint CSS" className={taClass} />
-          </div>
-        </TsAccordion>
-
-        {/* Accessibility & Embedding */}
-        <TsAccordion title="Accessibility & Embedding">
-          <p className="text-sm text-[#6b7280] -mt-1">Control how your course behaves in assistive and embedded environments.</p>
-          <div className="flex flex-col gap-3">
-            <TsCheckbox id="ts-opt-scroll" label="Enable optimized scrolling in iFrames" checked={optimizedScroll} onChange={setOptimizedScroll} />
-            <TsCheckbox id="ts-src-maps"   label="Generate source maps"                  checked={sourceMaps}      onChange={setSourceMaps} />
-          </div>
-          <div className="pt-3 border-t border-[#f3f4f6] flex flex-col gap-2">
-            <p className="text-sm font-semibold text-[#374151]">Accessibility</p>
-            <TsCheckbox id="ts-screen-reader" label="Enable screen reader support" checked={screenReader} onChange={setScreenReader} />
-          </div>
-        </TsAccordion>
-
-        {/* Runtime Behavior */}
-        <TsAccordion title="Runtime Behavior">
-          <p className="text-sm text-[#6b7280] -mt-1">Configure how your course operates when run.</p>
-          <div className="flex flex-col gap-3">
-            <TsCheckbox id="ts-logging" label="Enable logging" checked={enableLogging} onChange={setEnableLogging} />
-            {enableLogging && (
-              <TsDropdown label="Log Level" value={logLevel} options={LOG_LEVEL_OPTIONS} onChange={setLogLevel} />
-            )}
-            <TsCheckbox id="ts-strict" label="Use strict mode?" checked={strictMode} onChange={setStrictMode} />
-          </div>
-        </TsAccordion>
-
-        {/* Custom CSS/LESS */}
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center justify-between">
-            <label className="text-sm font-medium text-[#374151]">Custom CSS/LESS</label>
-            <button
-              type="button"
-              aria-label={cssExpanded ? "Collapse CSS editor" : "Expand CSS editor"}
-              onClick={() => setCssExpanded((o) => !o)}
-              className="w-7 h-7 flex items-center justify-center rounded text-[#9ca3af] hover:text-[#374151] hover:bg-[#f3f4f6] transition-colors"
-            >
-              {cssExpanded ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
-                </svg>
-              ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-                </svg>
-              )}
-            </button>
-          </div>
-          <div className={`border border-[#d1d5db] rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-[#2d6fa8] focus-within:border-transparent ${cssExpanded ? "fixed inset-8 z-50 shadow-2xl flex flex-col bg-white" : ""}`}>
-            {cssExpanded && (
-              <div className="flex items-center justify-between px-4 py-3 border-b border-[#e5e7eb] bg-[#f9fafb] shrink-0">
-                <span className="text-sm font-semibold text-[#374151]">Custom CSS/LESS</span>
-                <button type="button" aria-label="Close expanded editor" onClick={() => setCssExpanded(false)} className="w-7 h-7 flex items-center justify-center rounded text-[#9ca3af] hover:text-[#374151] hover:bg-[#e5e7eb] transition-colors">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              </div>
-            )}
-            <textarea
-              value={customCss}
-              onChange={(e) => setCustomCss(e.target.value)}
-              placeholder="/* Add your custom CSS or LESS here */"
-              spellCheck={false}
-              className={`w-full text-sm text-[#374151] px-4 py-3 resize-none focus:outline-none placeholder-[#9ca3af] bg-white font-mono ${cssExpanded ? "flex-1 h-0" : "h-48"}`}
-            />
-          </div>
-        </div>
-
-      </div>
-    </div>
-  );
-}
-
-/* ── Export Panel ── */
+/* -- Export Panel -- */
 function AssetOrUrlPicker({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   const [tab, setTab] = useState<"asset" | "url">("asset");
   return (
@@ -5014,7 +4321,7 @@ function PdfExportForm() {
           <ExportTextField label="PDF Title"     placeholder="e.g. Introduction to Digital Marketing" value={pdfTitle}     onChange={setPdfTitle} />
           <ExportTextField label="PDF Author"    placeholder="e.g. Laerdal Medical"                    value={pdfAuthor}   onChange={setPdfAuthor} />
           <ExportTextField label="PDF Subject"   placeholder="e.g. Healthcare Training"                value={pdfSubject}  onChange={setPdfSubject} />
-          <ExportTextField label="PDF Copyright" placeholder="e.g. © 2026 Laerdal Medical"             value={pdfCopyright} onChange={setPdfCopyright} />
+          <ExportTextField label="PDF Copyright" placeholder="e.g. (©) 2026 Laerdal Medical"           value={pdfCopyright} onChange={setPdfCopyright} />
         </div>
       </ExportSection>
 
@@ -5212,7 +4519,47 @@ function ExportPanel() {
   );
 }
 
-/* ── Publish Panel ── */
+function ExportDialog({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4" onMouseDown={onClose}>
+      <div
+        className="w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-2xl border border-[#e5e7eb] flex flex-col"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Export dialog"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#f3f4f6] shrink-0">
+          <div>
+            <h3 className="text-base font-semibold text-[#111827]">Export</h3>
+            <p className="text-sm text-[#6b7280] mt-0.5">Choose how you'd like to export this course.</p>
+          </div>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#f3f4f6] transition-colors" aria-label="Close export dialog">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 md:p-6 bg-[#f8fafc]">
+          <ExportPanel />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* -- Publish Panel -- */
 function PublishCheckbox({ checked, onChange, children }: { checked: boolean; onChange: (v: boolean) => void; children: React.ReactNode }) {
   return (
     <label className="flex items-start gap-3 cursor-pointer select-none group">
@@ -5429,7 +4776,7 @@ function PublishPanel() {
   );
 }
 
-/* ── Placeholder panel for sections not yet built ── */
+/* -- Placeholder panel for sections not yet built -- */
 function ComingSoonPanel({ label }: { label: string }) {
   return (
     <div className="max-w-2xl w-full flex flex-col items-center justify-center py-24 text-center">
@@ -5444,10 +4791,11 @@ function ComingSoonPanel({ label }: { label: string }) {
   );
 }
 
-/* ── Main page ── */
+/* -- Main page -- */
 function CourseCreationCenterContent() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const initialTitle = params.get("title") ?? "Untitled Course";
   const initialDescription = params.get("description") ?? "";
   const courseId = params.get("courseId") ?? "";
@@ -5456,9 +4804,18 @@ function CourseCreationCenterContent() {
   const [description, setDescription] = useState(initialDescription);
   const [savedThemeName, setSavedThemeName] = useState("");
   const [savedMenuName, setSavedMenuName] = useState("");
+  const [savedThemeVariables, setSavedThemeVariables] = useState<Record<string, unknown>>({});
+  const [savedPresetId, setSavedPresetId] = useState("");
 
   const [activeNav, setActiveNav] = useState("overview");
   const [collapsed, setCollapsed] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(NAV_GROUPS.map((group) => [group.id, true]))
+  );
+
+  // Tracks requested navigation when on a panel with unsaved changes
+  const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
 
   useEffect(() => {
     if (!courseId) {
@@ -5466,6 +4823,8 @@ function CourseCreationCenterContent() {
       setDescription(initialDescription);
       setSavedThemeName("");
       setSavedMenuName("");
+      setSavedThemeVariables({});
+      setSavedPresetId("");
       return;
     }
     let cancelled = false;
@@ -5478,12 +4837,16 @@ function CourseCreationCenterContent() {
         setDescription(data.description || initialDescription);
         setSavedThemeName(data.themeName || "");
         setSavedMenuName(data.menuName || "");
+        setSavedThemeVariables(data.themeVariables || {});
+        setSavedPresetId(data.themePresetId || "");
       } catch {
         if (cancelled) return;
         setTitle(initialTitle);
         setDescription(initialDescription);
         setSavedThemeName("");
         setSavedMenuName("");
+        setSavedThemeVariables({});
+        setSavedPresetId("");
       }
     })();
 
@@ -5492,170 +4855,289 @@ function CourseCreationCenterContent() {
     };
   }, [courseId, initialDescription, initialTitle]);
 
-  const activeItem = NAV_ITEMS.find((n) => !n.heading && n.id === activeNav)!;
+  const activeItem = NAV_ITEMS.find((n) => !n.heading && n.id === activeNav);
+  const loginName = user?.username || user?.email || "Not signed in";
+
+  function toggleGroup(groupId: string) {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [groupId]: !prev[groupId],
+    }));
+  }
+
+  // Smart navigation handler - used by sidebar items
+  // When on a guarded setup panel, the page intercepts via pendingNavigation state.
+  function handleNavigation(nextPanel: string) {
+    if (nextPanel === activeNav) {
+      return;
+    }
+
+    if (GUARDED_NAV_IDS.has(activeNav)) {
+      // Signal to the active guarded setup page that navigation is requested.
+      // The page decides whether to show a confirmation modal or allow navigation.
+      setPendingNavigation(nextPanel);
+    } else {
+      setPendingNavigation(null);
+      setActiveNav(nextPanel);
+    }
+  }
 
   function renderPanel() {
     if (activeNav === "overview") return <CourseOverviewPanel title={title} description={description} />;
-    if (activeNav === "structure") return <CourseStructurePanel />;
-    if (activeNav === "theme") return <ThemePanel initialThemeName={savedThemeName} />;
-    if (activeNav === "menu") return <MenuPanel initialMenuName={savedMenuName} />;
-    if (activeNav === "navigation") return <NavigationPanel />;
-    if (activeNav === "accessibility") return <AccessibilityPanel />;
+    if (activeNav === "structure")
+      return (
+        <CourseStructurePanel
+          courseId={courseId}
+          courseTitle={title}
+          onOpenEditor={(pageId) =>
+            navigate(`/course/${courseId}`, { state: { pageId } })
+          }
+          onOpenStoryboard={() => setActiveNav("storyboarding")}
+          onNavigationRequest={setActiveNav}
+          pendingNavigation={pendingNavigation}
+          onPendingNavigationHandled={() => setPendingNavigation(null)}
+        />
+      );
+    if (activeNav === "theme") return <SelectThemePage initialThemeName={savedThemeName} initialThemeVariables={savedThemeVariables} initialPresetId={savedPresetId} courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} onThemeSaved={({ themeName, themeVariables, themePresetId }) => { setSavedThemeName(themeName); setSavedThemeVariables(themeVariables); setSavedPresetId(themePresetId); }} />;
+    if (activeNav === "menu") return <MenuPage courseId={courseId} initialMenuName={savedMenuName} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+    if (activeNav === "navigation") return <NavigationPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+    if (activeNav === "accessibility") return <AccessibilityPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "tracking") return <TrackingAnalyticsPanel />;
     if (activeNav === "completion") return <CompletionProgressPanel />;
     if (activeNav === "learner-experience") return <LearnerExperiencePanel />;
-    if (activeNav === "technical-settings") return <TechnicalSettingsPanel />;
-    if (activeNav === "export") return <ExportPanel />;
+    if (activeNav === "technical-settings") return <TechnicalSettingPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "publish") return <PublishPanel />;
-    return <ComingSoonPanel label={activeItem?.label ?? ""} />;
+    return <ComingSoonPanel label={activeItem?.label ?? (activeNav === "storyboarding" ? "Storyboarding" : "")} />;
+  }
+
+  function openExportDialog() {
+    setShowExportDialog(true);
   }
 
   return (
-    <div className="flex flex-col h-screen bg-white overflow-hidden">
+    <div className="flex flex-col h-screen bg-[#f8fafc] overflow-hidden">
       {!courseId && (
         <div className="mx-4 mt-4 rounded-xl border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b]">
           No backend course was initialized for this setup flow. Start from Create New Course on the dashboard.
         </div>
       )}
-      {/* ── Header ── */}
-      <header className="h-14 bg-white border-b border-[#e5e7eb] flex items-center shrink-0 px-4 relative z-10">
-        {/* Left: logo + back */}
-        <div className="flex items-center gap-3 w-56 shrink-0">
-          <img src="/adapt-logo.jpeg" alt="Adapt logo" width={32} height={32} className="rounded-lg shrink-0" />
-          <span className="font-semibold text-[#111827] text-sm tracking-tight">Adapt Studio</span>
+      {/* -- Header -- */}
+      <header className="h-[56px] bg-white border-b border-[#d8dde6] flex items-center shrink-0 px-4 md:px-6 gap-3 relative z-10">
+        <div className="flex items-center gap-3 md:gap-4 min-w-0">
+          <img src="/adapt-logo.jpeg" alt="Adapt logo" width={34} height={34} className="rounded-lg shrink-0" />
+          <div className="min-w-0 flex items-center gap-3">
+            <p className="text-[15px] leading-none font-semibold text-[#1f2937] tracking-tight hidden lg:block">Adapt Studio</p>
+            <div className="hidden lg:block w-px h-5 bg-[#d8dde6]" />
+            <p className="text-[15px] font-[700] text-[#1a1a1a] truncate max-w-[260px]">{title}</p>
+          </div>
         </div>
 
-        {/* Center: page title */}
-        <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2">
-          <span className="text-sm font-semibold text-[#111827]">Course Creation Center</span>
-          <span className="text-[#d1d5db]">|</span>
-          <span className="text-sm text-[#6b7280] truncate max-w-[200px]">{title}</span>
-        </div>
-
-        {/* Right: actions */}
         <div className="ml-auto flex items-center gap-2">
           <Link
             to="/"
-            className="flex items-center gap-1.5 px-3 py-2 text-sm text-[#6b7280] hover:text-[#111827] hover:bg-[#f3f4f6] rounded-lg transition-colors"
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold text-[#4b5563] border border-transparent rounded-[8px] hover:bg-[#f3f4f6] hover:text-[#111827] transition-colors cursor-pointer"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M19 12H5M12 19l-7-7 7-7" />
-            </svg>
-            Back
+            <SidebarMaskIcon file="back-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+            <span className="hidden md:inline">Back</span>
           </Link>
-          <button type="button" className="flex items-center gap-2 px-3.5 py-2 text-sm text-[#374151] border border-[#e5e7eb] rounded-lg hover:bg-[#f9fafb] transition-colors">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
-            </svg>
-            Preview
-          </button>
+
           <button
             type="button"
-            onClick={() => setActiveNav("export")}
-            className={`flex items-center gap-2 px-3.5 py-2 text-sm border rounded-lg transition-colors ${activeNav === "export" ? "border-[#2d6fa8] bg-[#dbeeff] text-[#2d6fa8] font-medium" : "text-[#374151] border-[#e5e7eb] hover:bg-[#f9fafb]"}`}
+            onClick={() => handleNavigation("storyboarding")}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold border-2 rounded-[8px] transition-colors cursor-pointer bg-white ${activeNav === "storyboarding" ? "border-[var(--life-primary-800)] text-[var(--life-primary-800)]" : "border-[var(--life-neutral-200)] text-[var(--life-base-black)] hover:border-[var(--life-primary-700)] hover:text-[var(--life-primary-700)] active:border-[var(--life-primary-800)] active:text-[var(--life-primary-800)]"}`}
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            Export
+            <SidebarMaskIcon file="storyboard-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+            <span className="hidden lg:inline">Storyboard</span>
           </button>
+
+          <button type="button" className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold border-2 border-[var(--life-neutral-200)] text-[var(--life-base-black)] rounded-[8px] bg-white hover:border-[var(--life-primary-700)] hover:text-[var(--life-primary-700)] active:border-[var(--life-primary-800)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer">
+            <SidebarMaskIcon file="preview-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+            <span className="hidden lg:inline">Preview</span>
+          </button>
+
           <button
             type="button"
-            onClick={() => setActiveNav("publish")}
-            className={`flex items-center gap-2 px-3.5 py-2 text-sm font-semibold rounded-lg transition-colors ${activeNav === "publish" ? "border border-[#2d6fa8] bg-[#dbeeff] text-[#2d6fa8]" : "text-white bg-[#2E7FA1] hover:bg-[#266580]"}`}
+            onClick={openExportDialog}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold border-2 border-[var(--life-neutral-200)] bg-white text-[var(--life-base-black)] rounded-[8px] hover:border-[var(--life-primary-700)] hover:text-[var(--life-primary-700)] active:border-[var(--life-primary-800)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer"
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+            <SidebarMaskIcon file="export-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+            <span className="hidden lg:inline">Export</span>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+              <polyline points="6 9 12 15 18 9" />
             </svg>
-            Publish
           </button>
+
+          <button
+            type="button"
+            onClick={() => handleNavigation("publish")}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold rounded-[8px] transition-colors active:bg-[var(--life-primary-800)] cursor-pointer ${activeNav === "publish" ? "bg-[var(--life-primary-700)] text-[var(--life-base-white)]" : "bg-[var(--life-primary-500)] text-[var(--life-base-white)] hover:bg-[var(--life-primary-700)]"}`}
+          >
+            <SidebarMaskIcon file="publish-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+            <span className="hidden lg:inline">Publish</span>
+          </button>
+
+          <div className="hidden xl:flex items-center pl-3 border-l border-[#d8dde6]">
+            <span className="max-w-[260px] truncate text-[13px] font-medium text-[#9ca3af] select-none">
+              {loginName}
+            </span>
+          </div>
         </div>
       </header>
 
-      {/* ── Body ── */}
+      {/* -- Body -- */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* ── Left panel ── */}
+        {/* -- Left panel -- */}
         <aside
-          className={`h-full bg-white border-r border-[#e5e7eb] flex flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-14" : "w-56"}`}
+          className={`h-full bg-white border-r border-[#d8dde6] flex flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-16" : "w-[256px]"}`}
         >
           {/* Collapse toggle */}
-          <div className={`flex items-center h-12 border-b border-[#e5e7eb] px-2 shrink-0 ${collapsed ? "justify-center" : "justify-end"}`}>
-            <button
-              type="button"
-              onClick={() => setCollapsed((c) => !c)}
-              aria-label={collapsed ? "Expand panel" : "Collapse panel"}
-              title={collapsed ? "Expand panel" : "Collapse panel"}
-              className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#f3f4f6] transition-colors"
-            >
-              <svg
-                width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                className={`transition-transform duration-200 ${collapsed ? "rotate-180" : ""}`}
+          <div className={`flex items-center h-14 border-b border-[#d8dde6] px-4 shrink-0 ${collapsed ? "justify-center" : "justify-between"}`}>
+            {!collapsed && (
+              <div>
+                <p className="text-[13px] leading-none font-bold text-[#1f1f1f] tracking-tight">Course Configuration</p>
+              </div>
+            )}
+            <div className="relative group">
+              <button
+                type="button"
+                onClick={() => setCollapsed((c) => !c)}
+                aria-label={collapsed ? "Expand panel" : "Collapse panel"}
+                className="w-9 h-9 rounded-lg text-[#9ca3af] hover:bg-[var(--life-neutral-100)] transition-colors flex items-center justify-center cursor-pointer"
               >
-                <path d="M15 18l-6-6 6-6" />
-              </svg>
-            </button>
+                <svg
+                  width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                  className={`transition-transform duration-200 ${collapsed ? "rotate-180" : ""}`}
+                >
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+              </button>
+              <span className="pointer-events-none absolute left-full top-1/2 z-20 ml-2 -translate-y-1/2 whitespace-nowrap rounded-[8px] bg-[#215369] px-3 py-1 text-[11px] font-medium text-[#ffffff] opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+                {collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              </span>
+            </div>
           </div>
 
           {/* Nav items */}
-          <nav className="flex flex-col gap-0.5 px-2 pt-3 flex-1 overflow-y-auto pb-4">
-            {NAV_ITEMS.map((item) => {
-              if (item.heading) {
-                return collapsed ? (
-                  <div key={item.id} className="mx-2 my-1 border-t border-[#e5e7eb]" />
-                ) : (
-                  <p key={item.id} className="px-2 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-[#9ca3af]">
-                    {item.label}
-                  </p>
+          <nav className="flex flex-col gap-0.5 px-0 pt-2 flex-1 overflow-y-auto pb-4">
+            {collapsed ? (
+              NAV_GROUPS.map((group) => (
+                <div key={group.id}>
+                  <div className="mx-3 my-2 border-t border-[#e5e7eb]" />
+                  {group.items.map((item) => {
+                    const isActive = activeNav === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => handleNavigation(item.id)}
+                        title={item.label}
+                        className="relative flex items-center justify-center w-full py-1.5 transition-colors cursor-pointer"
+                      >
+                        <span
+                          className={`flex h-10 w-10 items-center justify-center rounded-lg transition-colors ${
+                            isActive ? "bg-[var(--life-primary-100)] text-[#236585]" : "text-[#6b7280] hover:bg-[var(--life-neutral-100)]"
+                          }`}
+                        >
+                          <span className="shrink-0">{item.icon}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))
+            ) : (
+              NAV_GROUPS.map((group) => {
+                const groupExpanded = expandedGroups[group.id] ?? true;
+                const groupIsActive = group.items.some((item) => item.id === activeNav);
+                return (
+                  <div key={group.id} className="pt-1">
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(group.id)}
+                      className={`w-full px-5 py-2 flex items-center justify-between text-left font-[var(--font-family-primary)] text-[11px] leading-none font-[700] uppercase tracking-[0.08em] transition-colors cursor-pointer ${groupIsActive ? "text-[#2e7fa1]" : "text-[#6b7280]"}`}
+                      style={{ fontWeight: 700 }}
+                    >
+                      <span>{group.label}</span>
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className={`transition-transform duration-200 ${groupExpanded ? "" : "-rotate-90"}`}
+                      >
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </button>
+
+                    {groupExpanded && group.items.map((item) => {
+                      const isActive = activeNav === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => handleNavigation(item.id)}
+                          className={`relative flex items-center gap-3 px-5 py-2 text-left w-full font-[var(--font-family-primary)] font-[400] transition-colors cursor-pointer ${
+                            isActive
+                              ? "bg-[var(--life-primary-100)] text-[#236585]"
+                              : "text-[#5b6674] hover:bg-[var(--life-neutral-100)] hover:text-[#374151]"
+                          }`}
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={`absolute left-0 top-0 h-full w-[3px] rounded-r-sm transition-opacity ${isActive ? "bg-[var(--life-primary-500)] opacity-100" : "opacity-0"}`}
+                          />
+                          <span className="shrink-0">{item.icon}</span>
+                          <span className="font-[var(--font-family-primary)] text-[var(--text-p)] font-[var(--font-weight-regular)] leading-[1.5] whitespace-nowrap overflow-hidden text-ellipsis">{item.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 );
-              }
-              const isActive = activeNav === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setActiveNav(item.id)}
-                  title={collapsed ? item.label : undefined}
-                  className={`flex items-center gap-3 px-2 py-2.5 rounded-lg text-sm transition-colors text-left w-full ${
-                    isActive
-                      ? "bg-[#dbeeff] text-[#2d6fa8] font-semibold"
-                      : "text-[#6b7280] hover:bg-[#f3f4f6] hover:text-[#374151]"
-                  }`}
-                >
-                  <span className="shrink-0">{item.icon}</span>
-                  {!collapsed && (
-                    <span className="truncate leading-tight">{item.label}</span>
-                  )}
-                </button>
-              );
-            })}
+              })
+            )}
           </nav>
 
-          {/* Skip to editor — bottom */}
+          {/* Skip to editor - bottom */}
           {!collapsed && (
-            <div className="px-3 pb-4 border-t border-[#e5e7eb] pt-3 shrink-0">
+            <div className="px-4 pb-4 border-t border-[#e5e7eb] pt-3 shrink-0">
               <button
                 type="button"
                 disabled={!courseId}
                 onClick={() => navigate(`/course/${courseId}`)}
-                className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-medium text-[#6b7280] hover:text-[#2d6fa8] hover:bg-[#f3f4f6] rounded-lg transition-colors border border-[#e5e7eb]"
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Skip to Editor
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M5 12h14M12 5l7 7-7 7" />
-                </svg>
+                <SidebarMaskIcon file="chevron-right.svg" className="block w-[13px] h-[13px] shrink-0 bg-current" />
+              </button>
+            </div>
+          )}
+          {collapsed && (
+            <div className="px-2 pb-3 border-t border-[#e5e7eb] pt-3 shrink-0">
+              <button
+                type="button"
+                disabled={!courseId}
+                onClick={() => navigate(`/course/${courseId}`)}
+                aria-label="Skip to Editor"
+                title="Skip to Editor"
+                className="w-full h-10 flex items-center justify-center rounded-lg text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <SidebarMaskIcon file="chevron-right.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
               </button>
             </div>
           )}
         </aside>
 
-        {/* ── Right content panel ── */}
-        <main className={`flex-1 overflow-hidden ${activeNav === "menu" || activeNav === "navigation" ? "" : "overflow-y-auto px-8 py-8 min-h-0"}`}>
+        {/* -- Right content panel -- */}
+        <main className={`flex-1 overflow-hidden bg-[#f8fafc] ${activeNav === "menu" || activeNav === "navigation" ? "" : "overflow-y-auto px-8 py-8 min-h-0"}`}>
           {renderPanel()}
         </main>
       </div>
+      {showExportDialog && <ExportDialog onClose={() => setShowExportDialog(false)} />}
       <AiAssistant context="Course Creation Center" suggestions={[
         'How do I set up my course structure?',
         'What does the Preflight Validator check?',

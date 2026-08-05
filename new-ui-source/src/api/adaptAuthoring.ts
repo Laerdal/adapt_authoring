@@ -10,6 +10,7 @@ import { apiClient } from "./client";
 export interface CurrentUser {
   _id: string;
   email: string;
+  username?: string;
   firstName?: string;
   lastName?: string;
   rolesAsName?: string[];
@@ -205,6 +206,7 @@ interface EnginePluginType {
   _id: string;
   name?: string;
   displayName?: string;
+  theme?: string;
 }
 
 interface EngineCourseDetails {
@@ -212,12 +214,22 @@ interface EngineCourseDetails {
   title?: string;
   displayTitle?: string;
   description?: string;
+  themeVariables?: Record<string, unknown>;
+  _themePreset?: string;
+  menuSettings?: CourseMenuSettings;
 }
 
 interface EngineConfigDetails {
+  _id?: string;
   _courseId?: string;
   _theme?: string;
   _menu?: string;
+  _themePreset?: string;
+  // Map of installed extensions, keyed by the plugin's bower `extension` field
+  // (e.g. "course-menu"); each entry carries the full bower `name`.
+  _enabledExtensions?: Record<string, { _id: string; name: string; version?: string; targetAttribute?: string }>;
+  // Config-location extension settings (enable toggles etc.).
+  _extensions?: Record<string, unknown>;
 }
 
 export interface CourseBootstrapData {
@@ -226,6 +238,8 @@ export interface CourseBootstrapData {
   description: string;
   themeName: string;
   menuName: string;
+  themeVariables: Record<string, unknown>;
+  themePresetId: string;
 }
 
 function normalize(v?: string): string {
@@ -272,6 +286,21 @@ function resolvePluginId(options: EnginePluginType[], label: string, kind: "them
   return best?.id ?? null;
 }
 
+function resolveBestPluginOption(options: EnginePluginType[], label: string, kind: "theme" | "menu"): EnginePluginType | null {
+  let best: { score: number; option: EnginePluginType } | null = null;
+
+  for (const option of options) {
+    const score = scorePluginMatch(option, label, kind);
+    if (score <= 0) continue;
+
+    if (!best || score > best.score) {
+      best = { score, option };
+    }
+  }
+
+  return best?.option ?? null;
+}
+
 async function getThemeTypes(): Promise<EnginePluginType[]> {
   const rows = await apiClient.get<EnginePluginType[]>("/api/themetype");
   return Array.isArray(rows) ? rows : [];
@@ -296,12 +325,83 @@ export async function getAuthoringMenuOptions(): Promise<string[]> {
   return rows.map(toOptionLabel).filter(Boolean);
 }
 
+export interface ThemePreset {
+  _id: string;
+  displayName: string;
+  parentTheme: string;
+  properties: Record<string, unknown>;
+}
+
+// Applies a theme plugin to the course by resolving human-readable theme label.
+export async function saveThemeForCourse(courseId: string, themeLabel: string): Promise<void> {
+  const themes = await getThemeTypes();
+  const themeId = resolvePluginId(themes, themeLabel, "theme");
+  if (themeId) {
+    await applyThemeToCourse(courseId, themeId);
+  }
+}
+
+// Returns the legacy parentTheme key used by preset APIs.
+export async function getThemePresetParentTheme(themeLabel: string): Promise<string | null> {
+  const themes = await getThemeTypes();
+  const bestTheme = resolveBestPluginOption(themes, themeLabel, "theme");
+  if (!bestTheme) return null;
+  return bestTheme.theme || null;
+}
+
+export async function saveThemeVariables(
+  courseId: string,
+  themeVariables: Record<string, unknown>
+): Promise<void> {
+  await apiClient.put(`/api/content/course/${courseId}`, { themeVariables });
+}
+
+export async function getThemePresets(parentTheme?: string): Promise<ThemePreset[]> {
+  try {
+    const rows = await apiClient.get<ThemePreset[]>("/api/content/themepreset");
+    const all = Array.isArray(rows) ? rows : [];
+    if (!parentTheme) return all;
+    return all.filter((preset) => preset.parentTheme === parentTheme);
+  } catch {
+    return [];
+  }
+}
+
+export async function saveThemePreset(
+  displayName: string,
+  parentTheme: string,
+  properties: Record<string, unknown>
+): Promise<ThemePreset> {
+  return apiClient.post<ThemePreset>("/api/content/themepreset", { displayName, parentTheme, properties });
+}
+
+export async function applyThemePreset(presetId: string, courseId: string): Promise<void> {
+  await apiClient.post(`/api/themepreset/${presetId}/makeitso/${courseId}`);
+}
+
+export async function renameThemePreset(presetId: string, displayName: string): Promise<void> {
+  await apiClient.put(`/api/content/themepreset/${presetId}`, { displayName });
+}
+
+export async function deleteThemePreset(presetId: string): Promise<void> {
+  await apiClient.delete(`/api/content/themepreset/${presetId}`);
+}
+
 async function applyThemeToCourse(courseId: string, themeId: string): Promise<void> {
   await apiClient.post(`/api/theme/${themeId}/makeitso/${courseId}`);
 }
 
 async function applyMenuToCourse(courseId: string, menuId: string): Promise<void> {
   await apiClient.post(`/api/menu/${menuId}/makeitso/${courseId}`);
+}
+
+export async function applyMenuSelectionToCourse(courseId: string, menuLabel: string): Promise<void> {
+  const label = (menuLabel || "").trim();
+  if (!label) return;
+  const menus = await getMenuTypes();
+  const menuId = resolvePluginId(menus, label, "menu");
+  if (!menuId) return;
+  await applyMenuToCourse(courseId, menuId);
 }
 
 async function applyCourseSelections(courseId: string, themeLabel?: string, menuLabel?: string): Promise<void> {
@@ -351,7 +451,1046 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
     description: course.description || "",
     themeName: config._theme || "",
     menuName: config._menu || "",
+    themeVariables: (course.themeVariables as Record<string, unknown>) || {},
+    themePresetId: config._themePreset || "",
   };
+}
+
+// ── Navigation Settings ───────────────────────────────────────────────────────
+// The Adapt Studio "Navigation" panel edits a mix of CORE course fields and three
+// togglable extensions, spread across two engine documents:
+//   • course._start / course._lockType / course._navigation            (core)
+//   • course._extensions._topbarLogos._items                            (adapt-topbar-logos)
+//   • course._extensions._navigationFooter.*                            (adapt-navigation-footer)
+//   • config._extensions._courseMenu.*                                  (adapt-course-menu)
+//   • config._extensions._{topbarLogos,navigationFooter}._isEnabled     (enable toggles)
+// Config is retrieved by courseId (the config plugin swaps :id→_courseId on read)
+// but UPDATED by its own _id (only `retrieve` is overridden server-side), so we
+// PUT config to `/api/content/config/<config._id>`.
+// Extensions are auto-installed on demand via POST /api/extension/enable/:courseId.
+//
+// "Installed" detection: config._enabledExtensions is keyed by the plugin's bower
+// `extension` field ("course-menu", not "_courseMenu"), and each entry stores the
+// full bower `name`. We match on `name` so we don't depend on the exact key format.
+
+const EXTENSION_NAME_BY_KEY: Record<string, string> = {
+  _courseMenu: "adapt-course-menu",
+  _topbarLogos: "adapt-topbar-logos",
+  _navigationFooter: "adapt-navigation-footer",
+};
+
+function isExtensionInstalled(config: EngineConfigDetails, extensionName: string): boolean {
+  const map = config._enabledExtensions ?? {};
+  return Object.values(map).some((e) => e && e.name === extensionName);
+}
+
+export interface NavStartId {
+  _id: string;
+  _skipIfComplete: boolean;
+  _className: string;
+}
+
+export interface NavFooterButton {
+  _isEnabled: boolean;
+  btnText: string;
+  _classes: string;
+}
+
+export type NavFooterButtonKey = "_home" | "_up" | "_previous" | "_next" | "_close" | "_custom";
+
+export interface NavigationSettings {
+  start: {
+    _isEnabled: boolean;
+    _startIds: NavStartId[];
+    _force: boolean;
+    _isMenuDisabled: boolean;
+  };
+  lockType: "" | "custom" | "lockLast" | "sequential" | "unlockFirst";
+  courseMenu: {
+    enabled: boolean;
+    includeSubmenuInNavigation: boolean;
+  };
+  headerLogo: {
+    enabled: boolean;
+    src: string;
+    tooltip: string;
+  };
+  navigation: {
+    isDefaultNavigationDisabled: boolean;
+    navigationAlignment: "top" | "bottom";
+    isBottomOnTouchDevices: boolean;
+    showLabel: boolean;
+    showLabelAtWidth: "any" | "small" | "medium" | "large";
+    labelPosition: "auto" | "top" | "bottom" | "left" | "right";
+  };
+  navFooter: {
+    enabled: boolean;
+    footerText: string;
+    btnNotifyPopupText: string;
+    isLogicalBackNavigation: boolean;
+    includeSubmenuInNavigation: boolean;
+    buttons: Record<NavFooterButtonKey, NavFooterButton>;
+  };
+}
+
+// Schema defaults for the six footer buttons (adapt-navigation-footer/properties.schema).
+function defaultFooterButtons(): Record<NavFooterButtonKey, NavFooterButton> {
+  return {
+    _home: { _isEnabled: true, btnText: "", _classes: "" },
+    _up: { _isEnabled: true, btnText: "Up", _classes: "btn-secondary" },
+    _previous: { _isEnabled: true, btnText: "Previous", _classes: "btn-secondary" },
+    _next: { _isEnabled: true, btnText: "Next", _classes: "" },
+    _close: { _isEnabled: false, btnText: "Close", _classes: "" },
+    _custom: { _isEnabled: false, btnText: "Custom", _classes: "" },
+  };
+}
+
+export function defaultNavigationSettings(): NavigationSettings {
+  return {
+    start: { _isEnabled: false, _startIds: [], _force: false, _isMenuDisabled: false },
+    lockType: "",
+    courseMenu: { enabled: false, includeSubmenuInNavigation: false },
+    headerLogo: { enabled: false, src: "", tooltip: "" },
+    navigation: {
+      isDefaultNavigationDisabled: false,
+      navigationAlignment: "top",
+      isBottomOnTouchDevices: false,
+      showLabel: false,
+      showLabelAtWidth: "medium",
+      labelPosition: "auto",
+    },
+    navFooter: {
+      enabled: false,
+      footerText: "",
+      btnNotifyPopupText: "Need to complete current page",
+      isLogicalBackNavigation: false,
+      includeSubmenuInNavigation: false,
+      buttons: defaultFooterButtons(),
+    },
+  };
+}
+
+// Pages (page-type contentobjects) for the Start-page picker.
+export interface CoursePageOption {
+  id: string;
+  title: string;
+}
+
+export async function getCoursePages(courseId: string): Promise<CoursePageOption[]> {
+  const rows = await apiClient.get<EngineContentNode[]>(`/api/content/contentobject?_courseId=${courseId}`);
+  return (Array.isArray(rows) ? rows : [])
+    .filter((r) => r._type === "page")
+    .sort(bySortOrder)
+    .map((r) => ({ id: r._id, title: r.displayTitle || r.title || "Untitled Page" }));
+}
+
+type AnyRecord = Record<string, unknown>;
+function obj(v: unknown): AnyRecord {
+  return v && typeof v === "object" ? (v as AnyRecord) : {};
+}
+function bool(v: unknown, fallback: boolean): boolean {
+  return typeof v === "boolean" ? v : fallback;
+}
+function str(v: unknown, fallback = ""): string {
+  return typeof v === "string" ? v : fallback;
+}
+
+export async function getNavigationSettings(courseId: string): Promise<NavigationSettings> {
+  const [course, config] = await Promise.all([
+    apiClient.get<AnyRecord>(`/api/content/course/${courseId}`),
+    apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`),
+  ]);
+
+  const d = defaultNavigationSettings();
+  const courseExt = obj(course._extensions);
+  const cfgExt = obj(config._extensions);
+
+  // Start settings (core)
+  const start = obj(course._start);
+  const startIds = Array.isArray(start._startIds) ? (start._startIds as AnyRecord[]) : [];
+  d.start = {
+    _isEnabled: bool(start._isEnabled, false),
+    _startIds: startIds.map((it) => ({
+      _id: str(it._id),
+      _skipIfComplete: bool(it._skipIfComplete, false),
+      _className: str(it._className),
+    })),
+    _force: bool(start._force, false),
+    _isMenuDisabled: bool(start._isMenuDisabled, false),
+  };
+
+  // Menu lock (core)
+  d.lockType = str(course._lockType) as NavigationSettings["lockType"];
+
+  // Core navigation bar
+  const nav = obj(course._navigation);
+  d.navigation = {
+    isDefaultNavigationDisabled: bool(nav._isDefaultNavigationDisabled, false),
+    navigationAlignment: (str(nav._navigationAlignment, "top") as "top" | "bottom"),
+    isBottomOnTouchDevices: bool(nav._isBottomOnTouchDevices, false),
+    showLabel: bool(nav._showLabel, false),
+    showLabelAtWidth: (str(nav._showLabelAtWidth, "medium") as NavigationSettings["navigation"]["showLabelAtWidth"]),
+    labelPosition: (str(nav._labelPosition, "auto") as NavigationSettings["navigation"]["labelPosition"]),
+  };
+
+  // Course menu extension (config location)
+  const courseMenu = obj(cfgExt._courseMenu);
+  d.courseMenu = {
+    enabled: isExtensionInstalled(config, EXTENSION_NAME_BY_KEY._courseMenu) && bool(courseMenu._isEnabled, true),
+    includeSubmenuInNavigation: bool(courseMenu._includeSubmenuInNavigation, false),
+  };
+
+  // Header logo extension (enable in config, item in course)
+  const topbarCfg = obj(cfgExt._topbarLogos);
+  const topbar = obj(courseExt._topbarLogos);
+  const firstLogo = Array.isArray(topbar._items) && topbar._items[0] ? obj(topbar._items[0]) : {};
+  d.headerLogo = {
+    enabled: isExtensionInstalled(config, EXTENSION_NAME_BY_KEY._topbarLogos) && bool(topbarCfg._isEnabled, true),
+    src: str(firstLogo.src),
+    tooltip: str(firstLogo.tooltip),
+  };
+
+  // Navigation footer extension (enable in config, settings in course)
+  const nfCfg = obj(cfgExt._navigationFooter);
+  const nf = obj(courseExt._navigationFooter);
+  const toggle = obj(nf._toggleNavigation);
+  const footerText = obj(nf._footerText);
+  const buttons = obj(nf._buttons);
+  const mergedButtons = defaultFooterButtons();
+  (Object.keys(mergedButtons) as NavFooterButtonKey[]).forEach((k) => {
+    const b = obj(buttons[k]);
+    mergedButtons[k] = {
+      _isEnabled: bool(b._isEnabled, mergedButtons[k]._isEnabled),
+      btnText: str(b.btnText, mergedButtons[k].btnText),
+      _classes: str(b._classes, mergedButtons[k]._classes),
+    };
+  });
+  d.navFooter = {
+    enabled: isExtensionInstalled(config, EXTENSION_NAME_BY_KEY._navigationFooter) && bool(nfCfg._isEnabled, true),
+    footerText: str(footerText.text),
+    btnNotifyPopupText: str(footerText._btnNotifyPopupText, "Need to complete current page"),
+    isLogicalBackNavigation: bool(toggle._isLogicalBackNavigation, false),
+    includeSubmenuInNavigation: bool(toggle._includeSubmenuInNavigation, false),
+    buttons: mergedButtons,
+  };
+
+  return d;
+}
+
+async function resolveExtensionTypeIds(names: string[]): Promise<string[]> {
+  const rows = await apiClient.get<{ _id: string; name?: string }[]>("/api/extensiontype");
+  const byName = new Map((Array.isArray(rows) ? rows : []).map((r) => [r.name, r._id] as const));
+  return names.map((n) => byName.get(n)).filter((x): x is string => !!x);
+}
+
+export async function saveNavigationSettings(courseId: string, s: NavigationSettings): Promise<void> {
+  let course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+  let config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+
+  // 1. Reconcile plugin installation with the UI toggles:
+  //      ON  + not installed → enable  (create + initialize the plugin settings)
+  //      OFF + installed     → disable (remove the plugin from the backend)
+  const toEnable: string[] = [];
+  const toDisable: string[] = [];
+  const reconcile = (on: boolean, name: string) => {
+    const installed = isExtensionInstalled(config, name);
+    if (on && !installed) toEnable.push(name);
+    else if (!on && installed) toDisable.push(name);
+  };
+  reconcile(s.courseMenu.enabled, EXTENSION_NAME_BY_KEY._courseMenu);
+  reconcile(s.headerLogo.enabled, EXTENSION_NAME_BY_KEY._topbarLogos);
+  reconcile(s.navFooter.enabled, EXTENSION_NAME_BY_KEY._navigationFooter);
+
+  if (toEnable.length || toDisable.length) {
+    if (toEnable.length) {
+      const ids = await resolveExtensionTypeIds(toEnable);
+      if (ids.length) await apiClient.post(`/api/extension/enable/${courseId}`, { extensions: ids });
+    }
+    if (toDisable.length) {
+      const ids = await resolveExtensionTypeIds(toDisable);
+      if (ids.length) await apiClient.post(`/api/extension/disable/${courseId}`, { extensions: ids });
+    }
+    // Re-read: enable seeds schema-default _extensions; disable removes the plugin's
+    // _extensions blocks and its _enabledExtensions entry.
+    course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+    config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+  }
+  const hasCourseMenu = isExtensionInstalled(config, EXTENSION_NAME_BY_KEY._courseMenu);
+  const hasTopbarLogos = isExtensionInstalled(config, EXTENSION_NAME_BY_KEY._topbarLogos);
+  const hasNavFooter = isExtensionInstalled(config, EXTENSION_NAME_BY_KEY._navigationFooter);
+
+  // 2. Config document: merge onto existing _extensions so other plugins survive.
+  const cfgExt: AnyRecord = { ...obj(config._extensions) };
+  if (hasCourseMenu) {
+    cfgExt._courseMenu = {
+      ...obj(cfgExt._courseMenu),
+      _isEnabled: s.courseMenu.enabled,
+      _includeSubmenuInNavigation: s.courseMenu.includeSubmenuInNavigation,
+    };
+  }
+  if (hasTopbarLogos) {
+    cfgExt._topbarLogos = { ...obj(cfgExt._topbarLogos), _isEnabled: s.headerLogo.enabled };
+  }
+  if (hasNavFooter) {
+    cfgExt._navigationFooter = { ...obj(cfgExt._navigationFooter), _isEnabled: s.navFooter.enabled };
+  }
+  if (config._id) {
+    // Include _courseId: the config update's permission check (hasCoursePermission)
+    // resolves the owning course from the delta; without it the check falls back to
+    // the config _id as a course id, fails the lookup, and returns "not permitted".
+    await apiClient.put(`/api/content/config/${config._id}`, { _courseId: courseId, _extensions: cfgExt });
+  }
+
+  // 3. Course document: core fields + course-location extension settings.
+  const courseExt: AnyRecord = { ...obj(course._extensions) };
+  if (hasTopbarLogos) {
+    const src = s.headerLogo.src.trim();
+    courseExt._topbarLogos = {
+      ...obj(courseExt._topbarLogos),
+      _items: src ? [{ src, tooltip: s.headerLogo.tooltip }] : [],
+    };
+  }
+  if (hasNavFooter) {
+    courseExt._navigationFooter = {
+      ...obj(courseExt._navigationFooter),
+      _toggleNavigation: {
+        _isLogicalBackNavigation: s.navFooter.isLogicalBackNavigation,
+        _includeSubmenuInNavigation: s.navFooter.includeSubmenuInNavigation,
+      },
+      _footerText: {
+        text: s.navFooter.footerText,
+        _btnNotifyPopupText: s.navFooter.btnNotifyPopupText,
+      },
+      _buttons: s.navFooter.buttons,
+    };
+  }
+
+  await apiClient.put(`/api/content/course/${courseId}`, {
+    _start: {
+      _isEnabled: s.start._isEnabled,
+      // Drop any entry without a page reference — a start id must point to a page.
+      _startIds: s.start._startIds.filter((it) => !!it._id),
+      _force: s.start._force,
+      _isMenuDisabled: s.start._isMenuDisabled,
+    },
+    _lockType: s.lockType,
+    _navigation: {
+      _isDefaultNavigationDisabled: s.navigation.isDefaultNavigationDisabled,
+      _navigationAlignment: s.navigation.navigationAlignment,
+      _isBottomOnTouchDevices: s.navigation.isBottomOnTouchDevices,
+      _showLabel: s.navigation.showLabel,
+      _showLabelAtWidth: s.navigation.showLabelAtWidth,
+      _labelPosition: s.navigation.labelPosition,
+    },
+    _extensions: courseExt,
+  });
+}
+
+// ── Technical Settings ─────────────────────────────────────────────────────────
+// Interfaces for course configuration and technical settings.
+export interface CourseTechnicalSettings {
+  _id?: string;
+  _courseId?: string;
+  screenSize?: {
+    small?: number;
+    medium?: number;
+    large?: number;
+    xlarge?: number;
+  };
+  _generateSourcemap?: boolean;
+  _scrollingContainer?: {
+    _isEnabled?: boolean;
+    _limitToSelector?: string;
+  };
+  _logging?: {
+    _isEnabled?: boolean;
+    _level?: string;
+    _console?: boolean;
+    _warnFirstOnly?: boolean;
+  };
+  build?: {
+    strictMode?: boolean;
+    targets?: string;
+  };
+}
+
+export interface CourseCustomStyle {
+  customStyle?: string;
+}
+
+export interface CourseMenuSettingsEntry {
+  _graphic?: {
+    _src?: string;
+    alt?: string;
+  };
+  _skipSubmenuView?: boolean;
+  lockedNotification?: string;
+  _backgroundImage?: {
+    _xlarge?: string;
+    _large?: string;
+    _medium?: string;
+    _small?: string;
+  };
+  _backgroundStyles?: {
+    _backgroundRepeat?: string | null;
+    _backgroundSize?: string | null;
+    _backgroundPosition?: string | null;
+  };
+  _menuHeader?: {
+    _displayAboveHeader?: boolean;
+    _textAlignment?: {
+      _title?: string;
+      _subtitle?: string;
+      _body?: string;
+      _instruction?: string;
+    };
+    _backgroundImage?: {
+      _xlarge?: string;
+      _large?: string;
+      _medium?: string;
+      _small?: string;
+    };
+    _backgroundStyles?: {
+      _backgroundRepeat?: string | null;
+      _backgroundSize?: string | null;
+      _backgroundPosition?: string | null;
+    };
+    _minimumHeights?: {
+      _xlarge?: number | null;
+      _large?: number | null;
+      _medium?: number | null;
+      _small?: number | null;
+    };
+  };
+}
+
+export interface CourseMenuSettings {
+  _boxMenu?: CourseMenuSettingsEntry;
+  _lifeMenu?: CourseMenuSettingsEntry;
+  _overviewMenu?: CourseMenuSettingsEntry;
+  [key: string]: CourseMenuSettingsEntry | undefined;
+}
+
+// Fetch technical settings for a course by courseId
+export async function getCourseTechnicalSettings(courseId: string): Promise<CourseTechnicalSettings> {
+  try {
+    const result = await apiClient.get<CourseTechnicalSettings>(
+      `/api/content/config/${courseId}`
+    );
+    return result ?? ({} as CourseTechnicalSettings);
+  } catch (err) {
+    console.warn("Failed to fetch technical settings", err);
+    return {} as CourseTechnicalSettings;
+  }
+}
+
+// Update technical settings — PATCH only changed fields, matching old authoring tool approach
+export async function updateCourseTechnicalSettings(
+  configId: string,
+  settings: Partial<CourseTechnicalSettings>
+): Promise<unknown> {
+  return apiClient.patch(`/api/content/config/${configId}`, settings);
+}
+
+// Update custom CSS/LESS style in course
+export async function updateCourseCustomStyle(courseId: string, customStyle: string): Promise<unknown> {
+  return apiClient.put(`/api/content/course/${courseId}`, { customStyle });
+}
+
+// Fetch custom CSS/LESS from course
+export async function getCourseCstyle(courseId: string): Promise<string> {
+  try {
+    const result = await apiClient.get<CourseCustomStyle>(`/api/content/course/${courseId}`);
+    return result?.customStyle || "";
+  } catch (err) {
+    console.warn("Failed to fetch custom style", err);
+    return "";
+  }
+}
+
+export async function getCourseMenuSettings(courseId: string): Promise<CourseMenuSettings> {
+  try {
+    const result = await apiClient.get<EngineCourseDetails>(`/api/content/course/${courseId}`);
+    return result?.menuSettings ?? {};
+  } catch (err) {
+    console.warn("Failed to fetch course menu settings", err);
+    return {};
+  }
+}
+
+export async function updateCourseMenuSettings(courseId: string, menuSettings: CourseMenuSettings): Promise<unknown> {
+  return apiClient.put(`/api/content/course/${courseId}`, { menuSettings });
+}
+
+// ── Accessibility (_globals) ─────────────────────────────────────────────────
+// Every accessibility text override lives in the course document's `_globals`
+// object: core ARIA labels + instructions under `_accessibility`, plus per-plugin
+// strings the framework injects under `_globals._extensions._<name>` and
+// `_globals._components._<name>` when a plugin is installed. We read the whole
+// object and write it back wholesale (a plain object, keyed exactly as stored) so
+// no existing key is lost and no other subsystem (config, extensions) is touched.
+export type GlobalsObject = { [key: string]: unknown };
+
+export async function getCourseGlobals(courseId: string): Promise<GlobalsObject> {
+  // Deliberately does NOT swallow errors: the Accessibility panel writes `_globals`
+  // back wholesale, so if a transient fetch failure returned {} here, the next save
+  // would overwrite the stored globals with defaults/empty (data loss). Let the
+  // caller catch the failure and block saving until globals load successfully.
+  const course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+  const g = course?._globals;
+  return g && typeof g === "object" ? (g as GlobalsObject) : {};
+}
+
+export async function saveCourseGlobals(courseId: string, globals: GlobalsObject): Promise<unknown> {
+  return apiClient.put(`/api/content/course/${courseId}`, { _globals: globals });
+}
+
+// ── Accessibility config (config document `_accessibility`) ──────────────────
+// Distinct from the `_globals` text: the config doc holds the accessibility
+// feature toggle (`_isEnabled`) and the ARIA heading levels (`_ariaLevels`).
+// Loaded/saved via /api/content/config, mirroring getCourseTechnicalSettings. The
+// caller passes the FULL `_accessibility` object back so unrelated flags (e.g.
+// _shouldSupportLegacyBrowsers) are preserved regardless of merge semantics.
+export interface AccessibilityConfigResult {
+  configId: string | null;
+  accessibility: Record<string, unknown>;
+}
+
+export async function getAccessibilityConfig(courseId: string): Promise<AccessibilityConfigResult> {
+  try {
+    const cfg = await apiClient.get<AnyRecord>(`/api/content/config/${courseId}`);
+    const acc = cfg?._accessibility;
+    return {
+      configId: typeof cfg?._id === "string" ? (cfg._id as string) : null,
+      accessibility: acc && typeof acc === "object" ? (acc as Record<string, unknown>) : {},
+    };
+  } catch (err) {
+    console.warn("Failed to fetch accessibility config", err);
+    return { configId: null, accessibility: {} };
+  }
+}
+
+export async function saveAccessibilityConfig(
+  configId: string,
+  courseId: string,
+  accessibility: Record<string, unknown>
+): Promise<unknown> {
+  // Include _courseId so the config permission check can resolve the owning course
+  // (same requirement as updateCourseTechnicalSettings / the navigation config PUT).
+  return apiClient.patch(`/api/content/config/${configId}`, {
+    _id: configId,
+    _courseId: courseId,
+    _accessibility: accessibility,
+  });
+}
+
+interface CourseAssetRecord {
+  _id: string;
+  _fieldName?: string;
+  _assetId?: string;
+}
+
+export async function getCourseAssetMappings(courseId: string): Promise<Record<string, string>> {
+  const records = await apiClient.get<CourseAssetRecord[]>(
+    `/api/content/courseasset?_contentTypeId=${encodeURIComponent(courseId)}&_contentType=course`
+  );
+
+  if (!Array.isArray(records)) return {};
+
+  const mappings: Record<string, string> = {};
+  for (const record of records) {
+    if (!record?._fieldName || !record?._assetId) continue;
+    mappings[record._fieldName] = record._assetId;
+  }
+  return mappings;
+}
+
+export async function createCourseAssetMapping(courseId: string, fieldName: string, assetId: string): Promise<void> {
+  await apiClient.post("/api/content/courseasset", {
+    _courseId: courseId,
+    _contentType: "course",
+    _contentTypeId: courseId,
+    _fieldName: fieldName,
+    _assetId: assetId,
+    _contentTypeParentId: courseId,
+  });
+}
+
+export async function removeCourseAssetMappings(courseId: string, fieldName: string): Promise<void> {
+  const records = await apiClient.get<CourseAssetRecord[]>(
+    `/api/content/courseasset?_contentTypeId=${encodeURIComponent(courseId)}&_contentType=course&_fieldName=${encodeURIComponent(fieldName)}`
+  );
+
+  if (!Array.isArray(records) || records.length === 0) return;
+
+  await Promise.all(
+    records
+      .filter((r): r is CourseAssetRecord & { _id: string } => !!r?._id)
+      .map((r) => apiClient.delete(`/api/content/courseasset/${r._id}`))
+  );
+}
+
+// ── Course structure (modules / topics / sections / content groups / components)
+// The Course Structure screen maps the real Adapt content hierarchy onto a
+// 5-level model (see src/types/structure.ts):
+//   Module        → menu contentobject (_type:'menu')
+//   Topic         → page contentobject (_type:'page'; child of course or a module)
+//   Section       → article
+//   Content Group → block
+//   Component     → component (_component / _componentType)
+// Everything persists through the generic /api/content/:type CRUD routes.
+import {
+  LEVEL_TO_CONTENT_TYPE,
+  type StructureLevel,
+  type CourseStructure,
+  type SModule,
+  type STopic,
+  type SSection,
+  type SContentGroup,
+  type SComponent,
+} from "../types/structure";
+
+interface EngineContentNode {
+  _id: string;
+  _courseId?: string;
+  _parentId?: string;
+  _type?: string;
+  title?: string;
+  displayTitle?: string;
+  _sortOrder?: number;
+  _component?: string;
+  _componentType?: string;
+  _layout?: string;
+}
+
+// A component type installed on the instance (GET /api/componenttype).
+export interface ComponentTypeOption {
+  component: string; // engine `_component` key, e.g. 'text'
+  displayName: string;
+  description: string;
+  icon: string | null;
+  _id: string; // componenttype ObjectId (→ component._componentType)
+  version?: string; // omitted when the backend doesn't provide one
+  properties: Record<string, unknown>;
+}
+
+const bySortOrder = (a: EngineContentNode, b: EngineContentNode): number =>
+  (a._sortOrder ?? 0) - (b._sortOrder ?? 0);
+
+async function getContentByCourse(
+  type: string,
+  courseId: string
+): Promise<EngineContentNode[]> {
+  const rows = await apiClient.get<EngineContentNode[]>(
+    `/api/content/${type}?_courseId=${courseId}`
+  );
+  return Array.isArray(rows) ? rows : [];
+}
+
+// Fetch the whole course tree and assemble it into the 5-level structure model.
+export async function getCourseStructure(
+  courseId: string,
+  courseTitle = "Course"
+): Promise<CourseStructure> {
+  const [contentObjects, articles, blocks, components] = await Promise.all([
+    getContentByCourse("contentobject", courseId),
+    getContentByCourse("article", courseId),
+    getContentByCourse("block", courseId),
+    getContentByCourse("component", courseId),
+  ]);
+
+  const label = (n: EngineContentNode): string =>
+    n.displayTitle || n.title || "Untitled";
+  const childrenOf = (rows: EngineContentNode[], parentId: string) =>
+    rows.filter((r) => r._parentId === parentId).sort(bySortOrder);
+
+  const menus = contentObjects.filter((c) => c._type === "menu");
+  const pages = contentObjects.filter((c) => c._type === "page");
+  const childMenus = (parentId: string) =>
+    menus.filter((m) => m._parentId === parentId).sort(bySortOrder);
+  const childPages = (parentId: string) =>
+    pages.filter((p) => p._parentId === parentId).sort(bySortOrder);
+
+  const buildTopic = (page: EngineContentNode): STopic => ({
+    id: page._id,
+    title: label(page),
+    sortOrder: page._sortOrder ?? 0,
+    sections: childrenOf(articles, page._id).map(
+      (article): SSection => ({
+        id: article._id,
+        title: label(article),
+        contentGroups: childrenOf(blocks, article._id).map(
+          (block): SContentGroup => ({
+            id: block._id,
+            title: label(block),
+            components: childrenOf(components, block._id).map(
+              (comp): SComponent => ({
+                id: comp._id,
+                title: label(comp),
+                componentKey: comp._component || "",
+              })
+            ),
+          })
+        ),
+      })
+    ),
+  });
+
+  // Menus nest recursively; each carries its child menus (sub-modules) + pages.
+  const buildModule = (menu: EngineContentNode): SModule => ({
+    id: menu._id,
+    title: label(menu),
+    sortOrder: menu._sortOrder ?? 0,
+    modules: childMenus(menu._id).map(buildModule),
+    topics: childPages(menu._id).map(buildTopic),
+  });
+
+  return {
+    courseTitle,
+    modules: childMenus(courseId).map(buildModule),
+    topics: childPages(courseId).map(buildTopic),
+  };
+}
+
+// ── Component types (Add Component drawer) ──────────────────────────────────
+export async function getAvailableComponents(): Promise<ComponentTypeOption[]> {
+  const rows = await apiClient.get<
+    Array<Partial<ComponentTypeOption> & { component?: string }>
+  >("/api/componenttype");
+  return (Array.isArray(rows) ? rows : [])
+    .filter((c) => c && c.component)
+    .map((c) => ({
+      component: c.component as string,
+      displayName: c.displayName || (c.component as string),
+      description: c.description || "",
+      icon: c.icon || null,
+      _id: c._id as string,
+      version: c.version, // leave undefined if absent — server applies its default
+      properties: c.properties || {},
+    }));
+}
+
+// Merged content schemas keyed by component name (GET /api/content/schema),
+// cached for the session. Used to pre-populate a new component's defaults so
+// question components (e.g. mcq) get a valid _buttons sub-tree at runtime.
+// Ported from adapt-preview-edit/js/contentEditView.js (fetchMergedComponentSchema).
+let mergedSchemaCache: Record<string, { properties?: Record<string, unknown> }> | null = null;
+
+async function fetchMergedComponentSchema(
+  componentKey: string
+): Promise<{ properties?: Record<string, unknown> } | null> {
+  if (!componentKey) return null;
+  try {
+    if (!mergedSchemaCache) {
+      mergedSchemaCache = await apiClient.get("/api/content/schema");
+    }
+    return mergedSchemaCache?.[componentKey] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Walk a schema `properties` object, producing each property's default value.
+// Ported from adapt-preview-edit/js/contentEditView.js (buildSchemaDefaults).
+function buildSchemaDefaults(
+  schemaProperties: Record<string, unknown> | undefined
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (!schemaProperties || typeof schemaProperties !== "object") return out;
+
+  for (const key of Object.keys(schemaProperties)) {
+    const prop = schemaProperties[key] as {
+      type?: string;
+      default?: unknown;
+      properties?: Record<string, unknown>;
+    };
+    if (!prop || typeof prop !== "object") continue;
+
+    if (prop.type === "object" && prop.properties) {
+      let base: Record<string, unknown> = {};
+      if (prop.default && typeof prop.default === "object") {
+        try {
+          base = JSON.parse(JSON.stringify(prop.default));
+        } catch {
+          base = {};
+        }
+      }
+      const nested = buildSchemaDefaults(prop.properties);
+      const merged = { ...nested, ...base }; // schema-declared default wins
+      if (Object.keys(merged).length) out[key] = merged;
+      continue;
+    }
+
+    if (prop.default !== undefined) {
+      try {
+        out[key] = JSON.parse(JSON.stringify(prop.default));
+      } catch {
+        out[key] = prop.default;
+      }
+      continue;
+    }
+
+    if (prop.type === "array") out[key] = [];
+  }
+  return out;
+}
+
+// ── Accessibility globals defaults (schema-seeded) ──────────────────────────
+// A freshly created course has no `_globals` persisted yet; the legacy settings
+// form still shows every field because it applies the course schema defaults.
+// Mirror that here: seed from `/api/content/schema` (course._globals, which the
+// server builds with core + per-plugin globals merged in) and overlay the stored
+// values, so all Global/Extensions/Components strings are visible and editable —
+// and get persisted on the next save.
+function deepMergeGlobals(base: GlobalsObject, override: GlobalsObject): GlobalsObject {
+  const out: GlobalsObject = { ...base };
+  for (const [k, v] of Object.entries(override)) {
+    const b = out[k];
+    if (v && typeof v === "object" && !Array.isArray(v) && b && typeof b === "object" && !Array.isArray(b)) {
+      out[k] = deepMergeGlobals(b as GlobalsObject, v as GlobalsObject);
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+export async function getGlobalsDefaults(): Promise<GlobalsObject> {
+  try {
+    if (!mergedSchemaCache) {
+      mergedSchemaCache = await apiClient.get("/api/content/schema");
+    }
+    // The filtered course schema exposes `_globals` directly; guard the alternate
+    // `.properties._globals` shape too, in case the server response changes.
+    const courseSchema = (mergedSchemaCache as Record<string, unknown> | null)?.course as
+      | {
+          _globals?: { properties?: Record<string, unknown> };
+          properties?: { _globals?: { properties?: Record<string, unknown> } };
+        }
+      | undefined;
+    const globalsNode = courseSchema?._globals ?? courseSchema?.properties?._globals;
+    return buildSchemaDefaults(globalsNode?.properties) as GlobalsObject;
+  } catch (err) {
+    console.warn("Failed to fetch globals schema defaults", err);
+    return {};
+  }
+}
+
+// Course `_globals` prepared for editing: schema defaults as the base, the stored
+// course values overlaid on top (stored wins). This is what the Accessibility
+// panel loads so a never-saved course still shows the full field set.
+export async function getCourseGlobalsMerged(courseId: string): Promise<GlobalsObject> {
+  const [stored, defaults] = await Promise.all([getCourseGlobals(courseId), getGlobalsDefaults()]);
+  return deepMergeGlobals(defaults, stored);
+}
+
+interface CreateContentResult { _id: string }
+
+// _sortOrder is 1-based and appended to the end of the sibling list.
+async function createContentNode(
+  type: string,
+  body: Record<string, unknown>
+): Promise<string> {
+  const res = await apiClient.post<CreateContentResult>(`/api/content/${type}`, body);
+  return res._id;
+}
+
+// Module / Sub-Module = menu contentobject. `parentId` is the course (top-level
+// module) or another menu (sub-module).
+export function createModule(
+  courseId: string,
+  parentId: string,
+  title: string,
+  sortOrder: number
+): Promise<string> {
+  return createContentNode("contentobject", {
+    _courseId: courseId,
+    _parentId: parentId,
+    _type: "menu",
+    title,
+    displayTitle: title,
+    _sortOrder: sortOrder,
+  });
+}
+
+// Topic = page contentobject; parent is the course (top-level) or a module.
+export function createTopic(
+  courseId: string,
+  parentId: string,
+  title: string,
+  sortOrder: number
+): Promise<string> {
+  return createContentNode("contentobject", {
+    _courseId: courseId,
+    _parentId: parentId,
+    _type: "page",
+    title,
+    displayTitle: title,
+    _sortOrder: sortOrder,
+  });
+}
+
+export function createArticle(
+  courseId: string,
+  parentId: string,
+  title: string,
+  sortOrder: number
+): Promise<string> {
+  return createContentNode("article", {
+    _courseId: courseId,
+    _parentId: parentId,
+    title,
+    displayTitle: title,
+    _sortOrder: sortOrder,
+  });
+}
+
+export function createBlock(
+  courseId: string,
+  parentId: string,
+  title: string,
+  sortOrder: number
+): Promise<string> {
+  return createContentNode("block", {
+    _courseId: courseId,
+    _parentId: parentId,
+    title,
+    displayTitle: title,
+    _sortOrder: sortOrder,
+  });
+}
+
+// Create a component of the given type inside a content group (block), applying
+// schema defaults + a defensive PUT (mirrors adapt-preview-edit contentEditView).
+export async function createComponent(
+  courseId: string,
+  blockId: string,
+  componentType: ComponentTypeOption,
+  sortOrder: number,
+  layout: "full" | "left" | "right" = "full"
+): Promise<string> {
+  const merged = await fetchMergedComponentSchema(componentType.component);
+  const schemaSource =
+    (merged && merged.properties) || componentType.properties || {};
+  const schemaDefaults = buildSchemaDefaults(
+    schemaSource as Record<string, unknown>
+  );
+
+  const body: Record<string, unknown> = {
+    ...schemaDefaults,
+    _courseId: courseId,
+    _parentId: blockId,
+    _type: "component",
+    _component: componentType.component,
+    _componentType: componentType._id,
+    _componentTypeDisplayName: componentType.displayName,
+    _layout: layout,
+    title: componentType.displayName,
+    displayTitle: componentType.displayName,
+    _sortOrder: sortOrder,
+  };
+  // Only send version when known; otherwise let the server's default apply.
+  if (componentType.version) body.version = componentType.version;
+
+  const id = await createContentNode("component", body);
+
+  // Defensive: some POST handlers strip componenttype-specific fields on create;
+  // re-apply the schema defaults so nested sub-trees (e.g. _buttons) persist.
+  if (Object.keys(schemaDefaults).length) {
+    try {
+      await apiClient.put(`/api/content/component/${id}`, schemaDefaults);
+    } catch {
+      /* non-fatal */
+    }
+  }
+  return id;
+}
+
+// Resolve the "text" component type (for default seeding). Cached.
+let textComponentPromise: Promise<ComponentTypeOption | null> | null = null;
+function getTextComponentType(): Promise<ComponentTypeOption | null> {
+  if (!textComponentPromise) {
+    textComponentPromise = getAvailableComponents()
+      .then(
+        (list) =>
+          list.find((c) => c.component.toLowerCase() === "text") ?? null
+      )
+      .catch(() => null);
+  }
+  return textComponentPromise;
+}
+
+// Seed a Topic → Section → Content Group → text Component under `parentId`
+// (the course, or a module). Returns the new topic id.
+export async function seedDefaultTopic(
+  courseId: string,
+  parentId: string,
+  topicTitle = "Untitled Topic",
+  sortOrder = 1
+): Promise<string> {
+  const topicId = await createTopic(courseId, parentId, topicTitle, sortOrder);
+  const articleId = await createArticle(courseId, topicId, "Untitled Section", 1);
+  const blockId = await createBlock(courseId, articleId, "Untitled Content Group", 1);
+  const text = await getTextComponentType();
+  // A single component is placed on the left (see design).
+  if (text) await createComponent(courseId, blockId, text, 1, "left");
+  return topicId;
+}
+
+// Change a component's column layout (left | right | full).
+export function updateComponentLayout(
+  id: string,
+  layout: "full" | "left" | "right"
+): Promise<unknown> {
+  return apiClient.put(`/api/content/component/${id}`, { _layout: layout });
+}
+
+// Fresh-course default: one top-level topic with a starter text component.
+export function seedDefaultStructure(courseId: string): Promise<string> {
+  return seedDefaultTopic(courseId, courseId, "Untitled Topic", 1);
+}
+
+// title == displayTitle (the two are kept in sync — see developer notes).
+export function renameStructureNode(
+  level: StructureLevel,
+  id: string,
+  title: string
+): Promise<unknown> {
+  return apiClient.put(`/api/content/${LEVEL_TO_CONTENT_TYPE[level]}/${id}`, {
+    title,
+    displayTitle: title,
+  });
+}
+
+export function deleteStructureNode(level: StructureLevel, id: string): Promise<unknown> {
+  return apiClient.delete(`/api/content/${LEVEL_TO_CONTENT_TYPE[level]}/${id}`);
+}
+
+// Re-parent a node (drag-and-drop across the hierarchy): set its _parentId and
+// _sortOrder. The engine's generic PUT accepts a partial update.
+export function moveContentNode(
+  level: StructureLevel,
+  id: string,
+  newParentId: string,
+  sortOrder: number
+): Promise<unknown> {
+  return apiClient.put(`/api/content/${LEVEL_TO_CONTENT_TYPE[level]}/${id}`, {
+    _parentId: newParentId,
+    _sortOrder: sortOrder,
+  });
+}
+
+// Persist a new sibling order by re-numbering _sortOrder (1-based) for each id.
+export async function reorderStructureNodes(
+  level: StructureLevel,
+  orderedIds: string[]
+): Promise<void> {
+  const type = LEVEL_TO_CONTENT_TYPE[level];
+  await Promise.all(
+    orderedIds.map((id, i) =>
+      apiClient.put(`/api/content/${type}/${id}`, { _sortOrder: i + 1 })
+    )
+  );
 }
 
 function fmtDate(v?: string): string {

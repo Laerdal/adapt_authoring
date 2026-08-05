@@ -3,8 +3,15 @@ import { queryImages, uploadAsset } from "@/api/adaptAuthoring";
 import type { Asset } from "@/api/adaptAuthoring";
 
 interface AssetPickerModalProps {
-  onSelect: (asset: { id: string; url: string }) => void;
+  onSelect: (asset: { id: string; url: string; assetLink: string }) => void;
   onClose: () => void;
+}
+
+function toAssetLink(asset: Asset): string {
+  const path = (asset.path || "").trim().replace(/^\/+/, "");
+  if (path.startsWith("course/assets/")) return path;
+  if (asset.filename) return `course/assets/${asset.filename}`;
+  return `/api/asset/serve/${asset._id}`;
 }
 
 export default function AssetPickerModal({ onSelect, onClose }: AssetPickerModalProps) {
@@ -56,9 +63,31 @@ export default function AssetPickerModal({ onSelect, onClose }: AssetPickerModal
     }
   }
 
+  // Build the served URL WITH the file extension. `/api/asset/serve/:id` strips a
+  // trailing extension server-side (assetmanager.serveAsset), so `<id>.png` resolves
+  // to the same asset — but keeping the extension in the stored value matters for
+  // consumers like the topbar-logos plugin and for exported courses.
+  function assetExtension(asset?: Asset): string {
+    if (!asset) return "";
+    const name = asset.filename || asset.title || "";
+    const dot = name.lastIndexOf(".");
+    if (dot > -1 && dot < name.length - 1) return name.slice(dot).toLowerCase();
+    // Fallback: derive from the mime subtype (e.g. "image/png" → ".png").
+    const sub = (asset.mimeType || "").split("/")[1];
+    if (!sub) return "";
+    const map: Record<string, string> = { jpeg: "jpg", "svg+xml": "svg" };
+    return "." + (map[sub] || sub);
+  }
+
   function handleConfirm() {
     if (!selected) return;
-    onSelect({ id: selected, url: `/api/asset/serve/${selected}` });
+    const selectedAsset = assets.find((asset) => asset._id === selected);
+    const url = `/api/asset/serve/${selected}${assetExtension(selectedAsset)}`;
+    onSelect({
+      id: selected,
+      url,
+      assetLink: selectedAsset ? toAssetLink(selectedAsset) : url,
+    });
   }
 
   return (
