@@ -39,7 +39,7 @@ function SidebarMaskIcon({ file, className }: { file: string; className?: string
   );
 }
 
-/* G��G�� Nav items G��G�� */
+/* -- Nav items -- */
 const NAV_ITEMS = [
   {
     id: "heading-course-setup",
@@ -313,7 +313,7 @@ function CourseOverviewPanel({ title, description }: { title: string; descriptio
   );
 }
 
-/* G��G�� Course Structure panel G��G�� */
+/* -- Course Structure panel -- */
 function CourseStructurePanel({
   courseId,
   courseTitle,
@@ -396,7 +396,7 @@ function CourseStructurePanel({
             }`}
             title="Tree view"
           >
-            {/* Tree toggle glyph G�� from public/assets/icons/Icon-tree.svg (currentColor so it tints per state) */}
+            {/* Tree toggle glyph - from public/assets/icons/Icon-tree.svg (currentColor so it tints per state) */}
             <svg width="14" height="14" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.08333" strokeLinecap="round" strokeLinejoin="round">
               <path d="M3.25 1.625V8.125" />
               <path d="M9.75 4.875C10.6475 4.875 11.375 4.14746 11.375 3.25C11.375 2.35254 10.6475 1.625 9.75 1.625C8.85254 1.625 8.125 2.35254 8.125 3.25C8.125 4.14746 8.85254 4.875 9.75 4.875Z" />
@@ -415,7 +415,7 @@ function CourseStructurePanel({
             }`}
             title="Course map view"
           >
-            {/* Map toggle glyph G�� from public/assets/icons/Icon-map.svg (currentColor so it tints per state) */}
+            {/* Map toggle glyph - from public/assets/icons/Icon-map.svg (currentColor so it tints per state) */}
             <svg width="14" height="14" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.08333" strokeLinecap="round" strokeLinejoin="round">
               <rect x="1.625" y="1.625" width="3.79167" height="3.79167" rx="0.541667" />
               <rect x="7.5835" y="1.625" width="3.79167" height="3.79167" rx="0.541667" />
@@ -433,13 +433,13 @@ function CourseStructurePanel({
         is mandatory at the course level, and every module must contain at least one topic.
       </div>
 
-      {/* Tip (top) G�� view-specific info text, styled like the app's Tip callouts */}
+      {/* Tip (top) - view-specific info text, styled like the app's Tip callouts */}
       <div className="mb-5 flex items-start gap-2.5 rounded-lg bg-[#fff7ed] border border-[#fed7aa] px-4 py-3">
-        <span className="text-base leading-none mt-0.5" aria-hidden="true">=���</span>
+        <span className="text-base leading-none mt-0.5" aria-hidden="true">i</span>
         <p className="text-sm text-[#9a3412] leading-snug">
           <span className="font-semibold">Tip:</span>{" "}
           {viewMode === "tree"
-            ? "Create and organize the learning journey using the tree view. Click any field to edit content directly, and open a topic in the Page Editor (G��) for advanced editing and settings."
+            ? "Create and organize the learning journey using the tree view. Click any field to edit content directly, and open a topic in the Page Editor (-) for advanced editing and settings."
             : "Explore the entire course structure in a visual format. Use Map View to review content coverage and learning flow across topics. To create, edit, or reorganize content, switch to Tree View."}
         </p>
       </div>
@@ -526,7 +526,7 @@ function CourseStructurePanel({
         </div>
       )}
 
-      {/* Hint (bottom, dismissible) G�� styled per design */}
+      {/* Hint (bottom, dismissible) - styled per design */}
       {!hintDismissed && (
         <div className="relative mt-5 rounded-xl border border-[#bfdbeb] bg-[#eaf4fb] p-4 pr-10">
           <button
@@ -585,7 +585,7 @@ function CourseStructurePanel({
   );
 }
 
-/* G��G�� Theme panel helpers G��G�� */
+/* -- Theme panel helpers -- */
 const THEMES = [
   {
     id: "life",
@@ -613,13 +613,13 @@ const FONT_OPTIONS = [
 ];
 
 const H1_SIZE_OPTIONS = [
-  { label: "H1 G�� 3.5rem", value: "3.5rem" },
-  { label: "H2 G�� 3rem",   value: "3rem" },
-  { label: "H3 G�� 2.5rem", value: "2.5rem" },
-  { label: "H4 G�� 2rem",   value: "2rem" },
-  { label: "H5 G�� 1.5rem", value: "1.5rem" },
-  { label: "H6 G�� G��",      value: "h6" },
-  { label: "Paragraph G�� 1.125rem", value: "1.125rem" },
+  { label: "H1 - 3.5rem", value: "3.5rem" },
+  { label: "H2 - 3rem",   value: "3rem" },
+  { label: "H3 - 2.5rem", value: "2.5rem" },
+  { label: "H4 - 2rem",   value: "2rem" },
+  { label: "H5 - 1.5rem", value: "1.5rem" },
+  { label: "H6 - -",      value: "h6" },
+  { label: "Paragraph - 1.125rem", value: "1.125rem" },
 ];
 
 type CustomThemeValues = {
@@ -768,7 +768,7 @@ function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
 
           <div className="p-4">
             {/* page title */}
-            <h1 className="font-bold mb-3" style={{ ...headingStyle, fontSize: h1Size }}>{cfg.pageTitleSize === "h6" ? "G��" : "New Menu/Page Title"}</h1>
+            <h1 className="font-bold mb-3" style={{ ...headingStyle, fontSize: h1Size }}>{cfg.pageTitleSize === "h6" ? "-" : "New Menu/Page Title"}</h1>
 
             {/* article block */}
             <div className="border border-[#e5e7eb] rounded-lg p-3 mb-3">
@@ -810,7 +810,7 @@ function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
   );
 }
 
-/* G��G�� Global Theme accordion content G��G�� */
+/* -- Global Theme accordion content -- */
 function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (v: CustomThemeValues) => void }) {
   const set = <K extends keyof CustomThemeValues>(k: K, v: CustomThemeValues[K]) => setCfg({ ...cfg, [k]: v });
 
@@ -890,7 +890,7 @@ function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (
   );
 }
 
-/* G��G�� Custom theme full editor G��G�� */
+/* -- Custom theme full editor -- */
 function CustomThemeEditor({ onBack }: { onBack: () => void }) {
   const [cfg, setCfg] = useState<CustomThemeValues>(DEFAULT_CUSTOM);
 
@@ -992,7 +992,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="2"><path d="M9 18l6-6-6-6"/></svg>
           <span className="text-xs text-[#374151] font-medium">Custom Theme</span>
         </div>
-        {/* G��G�� Custom Icons: Sprite Sheets G��G�� */}
+        {/* -- Custom Icons: Sprite Sheets -- */}
         <div className="px-5 pt-4 pb-5 border-b border-[#f3f4f6]">
           <p className="text-xs font-semibold text-[#374151] mb-1">Custom Icons: Sprite Sheets</p>
           <p className="text-xs text-[#6b7280] mb-3 leading-relaxed">Upload an SVG sprite sheet to replace default icons across the course.</p>
@@ -1005,7 +1005,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
           </label>
         </div>
 
-        {/* G��G�� Custom Icons: Single Icons G��G�� */}
+        {/* -- Custom Icons: Single Icons -- */}
         <div className="px-5 pt-4 pb-5 border-b border-[#f3f4f6]">
           <p className="text-xs font-semibold text-[#374151] mb-1">Custom Icons: Single Icons</p>
           <p className="text-xs text-[#6b7280] mb-3 leading-relaxed">Upload individual SVG icon files to override specific icons in the course.</p>
@@ -1018,7 +1018,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
           </label>
         </div>
 
-        {/* G��G�� Configuration: Component G��G�� */}
+        {/* -- Configuration: Component -- */}
         <div className="px-5 pt-4 pb-5 border-b border-[#f3f4f6]">
           <p className="text-xs font-semibold text-[#374151] mb-0.5">Configuration: Component</p>
           <p className="text-xs text-[#6b7280] mb-3 leading-relaxed">Component-level behavior and feedback configuration.</p>
@@ -1050,7 +1050,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
           </div>
         </div>
 
-        {/* G��G�� Accordions G��G�� */}
+        {/* -- Accordions -- */}
         <div className="px-4 pb-6 space-y-2 mt-3">
           {ACCORDIONS.map((a) => (
             <Accordion key={a.id} title={a.title} icon={a.icon} defaultOpen={a.defaultOpen}>
@@ -1068,7 +1068,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
   );
 }
 
-/* G��G�� Theme selection panel G��G�� */
+/* -- Theme selection panel -- */
 function normalizeName(v?: string): string {
   return (v ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -1156,9 +1156,9 @@ function ThemePanel({ initialThemeName }: { initialThemeName?: string }) {
   );
 }
 
-/* G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
-   MENU PANEL G�� types, thumbnails, live preview, settings
-   G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G�� */
+/* -------------------------------------------------------------
+   MENU PANEL - types, thumbnails, live preview, settings
+   ------------------------------------------------------------- */
 
 type BgRepeat   = "no-repeat" | "repeat-x" | "repeat-y" | "repeat";
 type BgSize     = "auto" | "cover" | "contain" | "100% 100%";
@@ -1197,7 +1197,7 @@ const DEFAULT_MENU_CFG: MenuConfig = {
   headerImageUrl: null, headerImageOrder: "above",
 };
 
-/* G��G�� Card thumbnail illustrations (matching the screenshot) G��G�� */
+/* -- Card thumbnail illustrations (matching the screenshot) -- */
 
 function ThumbLife() {
   return (
@@ -1289,7 +1289,7 @@ const MENU_OPTIONS = [
   },
 ];
 
-/* G��G�� Live preview rendered in the right panel G��G�� */
+/* -- Live preview rendered in the right panel -- */
 function MenuLivePreview({ cfg }: { cfg: MenuConfig }) {
   const bgStyle: React.CSSProperties = cfg.bgType === "image" && cfg.bgImageUrl
     ? { backgroundImage: `url(${cfg.bgImageUrl})`, backgroundRepeat: cfg.bgRepeat, backgroundSize: cfg.bgSize, backgroundPosition: cfg.bgPosition }
@@ -1297,7 +1297,7 @@ function MenuLivePreview({ cfg }: { cfg: MenuConfig }) {
 
   const alignClass = { left: "items-start text-left", center: "items-center text-center", right: "items-end text-right" }[cfg.titleAlign];
 
-  /* header block (logo, title, description, header image) G�� no background, rendered on top of bgStyle container */
+  /* header block (logo, title, description, header image) - no background, rendered on top of bgStyle container */
   const titleHasContent = cfg.menuTitle.replace(/<[^>]*>/g, "").trim().length > 0;
   const descHasContent  = cfg.menuDescription.replace(/<[^>]*>/g, "").trim().length > 0;
 
@@ -1338,7 +1338,7 @@ function MenuLivePreview({ cfg }: { cfg: MenuConfig }) {
           <div className="h-1.5 w-24 bg-white/40 rounded-full" />
         </div>
         <div className="flex flex-1 overflow-hidden">
-          {/* sidebar G�� inherits background from parent, adds border only */}
+          {/* sidebar - inherits background from parent, adds border only */}
           <div className="w-40 flex flex-col shrink-0 overflow-hidden border-r border-white/15">
             <div className={`flex flex-col py-3 gap-1 border-b border-white/10 px-2 ${alignClass}`}>
               {cfg.headerImageOrder === "above" && cfg.headerImageUrl && (
@@ -1372,7 +1372,7 @@ function MenuLivePreview({ cfg }: { cfg: MenuConfig }) {
               ))}
             </div>
           </div>
-          {/* content area G�� semi-transparent overlay so background shows through */}
+          {/* content area - semi-transparent overlay so background shows through */}
           <div className="flex-1 bg-white/10 backdrop-blur-sm p-4 flex flex-col gap-2">
             <div className="h-2.5 w-2/5 bg-white/60 rounded-full" />
             <div className="h-1.5 w-4/5 bg-white/30 rounded-full" />
@@ -1396,7 +1396,7 @@ function MenuLivePreview({ cfg }: { cfg: MenuConfig }) {
         <div className={`flex flex-col gap-1.5 px-4 py-4 w-full shrink-0 ${alignClass}`}>
           {menuHeaderContent}
         </div>
-        {/* module list G�� semi-transparent card over background */}
+        {/* module list - semi-transparent card over background */}
         <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-2">
           {[100, 60, 20, 0].map((p, i) => (
             <div key={i} className="bg-white/20 backdrop-blur-sm border border-white/25 rounded-xl px-3 py-2.5 flex items-center gap-2.5">
@@ -1453,7 +1453,7 @@ function MenuLivePreview({ cfg }: { cfg: MenuConfig }) {
   );
 }
 
-/* G��G�� Shared helpers G��G�� */
+/* -- Shared helpers -- */
 function MenuFieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
   return (
     <span className="text-xs font-semibold text-[#374151]">
@@ -1462,7 +1462,7 @@ function MenuFieldLabel({ children, required }: { children: React.ReactNode; req
   );
 }
 
-/* G��G�� Rich text editor with formatting toolbar G��G�� */
+/* -- Rich text editor with formatting toolbar -- */
 const FONT_SIZE_OPTIONS = [
   { label: "Small",    value: "12px" },
   { label: "Default",  value: "14px" },
@@ -1495,13 +1495,13 @@ function RichTextEditor({
   const editorRef = useRef<HTMLDivElement>(null);
   const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set());
 
-  // Set innerHTML only on mount G�� never re-set during typing (avoids cursor reset / reversed text)
+  // Set innerHTML only on mount - never re-set during typing (avoids cursor reset / reversed text)
   const initRef = useCallback((node: HTMLDivElement | null) => {
     if (node) {
       node.innerHTML = html;
       (editorRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
     }
-  // intentionally empty deps G�� run once on mount only
+  // intentionally empty deps - run once on mount only
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1558,7 +1558,7 @@ function RichTextEditor({
       <MenuFieldLabel>{label}</MenuFieldLabel>
       <div className="border border-[#d1d5db] rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-[#2d6fa8] focus-within:border-transparent">
 
-        {/* G��G�� toolbar G��G�� */}
+        {/* -- toolbar -- */}
         <div className="flex items-center flex-wrap gap-0.5 px-2 py-1.5 border-b border-[#e5e7eb] bg-[#f9fafb]">
 
           {/* bold / italic / underline / strikethrough */}
@@ -1576,7 +1576,7 @@ function RichTextEditor({
 
           <div className="w-px h-4 bg-[#e5e7eb] mx-1 shrink-0" />
 
-          {/* font size dropdown G�� directly controls the cfg field, no execCommand */}
+          {/* font size dropdown - directly controls the cfg field, no execCommand */}
           <div className="relative">
             <select
               value={fontSize}
@@ -1597,7 +1597,7 @@ function RichTextEditor({
 
           <div className="w-px h-4 bg-[#e5e7eb] mx-1 shrink-0" />
 
-          {/* text color G�� directly controls the cfg field, anchored label for correct picker position */}
+          {/* text color - directly controls the cfg field, anchored label for correct picker position */}
           <label
             title="Text color"
             className="relative w-7 h-7 flex flex-col items-center justify-center gap-0.5 rounded hover:bg-[#e5e7eb] transition-colors cursor-pointer"
@@ -1619,7 +1619,7 @@ function RichTextEditor({
 
         </div>
 
-        {/* G��G�� editable area G�� uncontrolled, innerHTML set once on mount G��G�� */}
+        {/* -- editable area - uncontrolled, innerHTML set once on mount -- */}
         <div
           ref={initRef}
           contentEditable
@@ -1677,7 +1677,7 @@ function MenuSelect<T extends string>({ label, value, options, onChange }: {
   );
 }
 
-/* G��G�� Main MenuPanel component G��G�� */
+/* -- Main MenuPanel component -- */
 function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
   const [cfg, setCfg] = useState<MenuConfig>({
     ...DEFAULT_MENU_CFG,
@@ -1727,7 +1727,7 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
   return (
     <div className="flex h-full w-full overflow-hidden">
 
-      {/* G��G�� LEFT: settings (50%) G��G�� */}
+      {/* -- LEFT: settings (50%) -- */}
       <div className="w-1/2 h-full overflow-y-auto border-r border-[#e5e7eb] bg-white">
 
         <div className="px-6 py-5 border-b border-[#e5e7eb]">
@@ -1737,7 +1737,7 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
 
         <div className="flex flex-col divide-y divide-[#f3f4f6]">
 
-          {/* G��G�� 1. Menu Style G��G�� */}
+          {/* -- 1. Menu Style -- */}
           <section className="px-6 py-5 flex flex-col gap-3">
             <MenuFieldLabel required>Menu Style</MenuFieldLabel>
             <div className="grid grid-cols-3 gap-3">
@@ -1775,7 +1775,7 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
             </div>
           </section>
 
-          {/* G��G�� 2. Logo G��G�� */}
+          {/* -- 2. Logo -- */}
           <section className="px-6 py-5 flex flex-col gap-2.5">
             <MenuFieldLabel>Logo</MenuFieldLabel>
             {cfg.logoUrl ? (
@@ -1827,7 +1827,7 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
             </div>
           </section>
 
-          {/* G��G�� 3. Menu Title + Description G��G�� */}
+          {/* -- 3. Menu Title + Description -- */}
           <section className="px-6 py-5 flex flex-col gap-4">
             {/* Title */}
             <RichTextEditor
@@ -1856,7 +1856,7 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
             />
           </section>
 
-          {/* G��G�� 4. Header Image G��G�� */}
+          {/* -- 4. Header Image -- */}
           <section className="px-6 py-5 flex flex-col gap-2.5">
             <MenuFieldLabel>Header Image</MenuFieldLabel>
             <p className="text-[11px] text-[#6b7280] -mt-1">Shown above or below the menu title.</p>
@@ -1892,7 +1892,7 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
             )}
           </section>
 
-          {/* G��G�� 5. Background G��G�� */}
+          {/* -- 5. Background -- */}
           <section className="px-6 py-5 flex flex-col gap-3">
             <MenuFieldLabel>Background</MenuFieldLabel>
 
@@ -1949,7 +1949,7 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
         </div>
       </div>
 
-      {/* G��G�� RIGHT: live preview (50%) G��G�� */}
+      {/* -- RIGHT: live preview (50%) -- */}
       <div className="w-1/2 h-full bg-[#f3f4f6] flex flex-col overflow-hidden">
         <div className="h-10 bg-white border-b border-[#e5e7eb] flex items-center px-5 shrink-0 gap-2">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#2d6fa8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1973,7 +1973,7 @@ function MenuPanel({ initialMenuName }: { initialMenuName?: string }) {
   );
 }
 
-/* G��G�� Shared checkbox row used across panels G��G�� */
+/* -- Shared checkbox row used across panels -- */
 function CheckboxRow({
   checked,
   onChange,
@@ -2007,25 +2007,25 @@ function CheckboxRow({
 /* ── Tracking & Analytics Panel ── */
 
 interface TrackingState {
-  /* Heading 1 G�� Tracking */
+  /* Heading 1 - Tracking */
   trackingStandard: "scorm" | "xapi" | "hyperbridge" | "";
 
-  /* Category 1 G�� Basic Settings */
+  /* Category 1 - Basic Settings */
   submitCompletionOnEveryAttempt: boolean;
   submitScoreToLms: boolean;
 
-  /* Sub-category 1 G�� Tracking */
+  /* Sub-category 1 - Tracking */
   storeQuestionState: boolean;
   storeQuestionAttemptState: boolean;
   recordInteractions: boolean;
   recordObjectives: boolean;
   shouldCompressData: boolean;
 
-  /* Sub-category 2 G�� Reporting */
+  /* Sub-category 2 - Reporting */
   trackingSuccessStatus: string;
   assessmentFailureStatus: string;
 
-  /* Category 2 G�� Advanced Settings */
+  /* Category 2 - Advanced Settings */
   scormVersion: string;
   scormDebugWindow: boolean;
   commitDataOnStatusChange: boolean;
@@ -2034,11 +2034,11 @@ interface TrackingState {
   maxCommitRetries: string;
   commitRetryDelay: string;
 
-  /* Heading 2 G�� Analytics */
+  /* Heading 2 - Analytics */
   enableAnalytics: boolean;
   analyticsProvider: string;
 
-  /* Advanced Settings G�� Analytics */
+  /* Advanced Settings - Analytics */
   projectTag: string;
   portfolio: string;
   resourceLinkId: string;
@@ -2208,9 +2208,9 @@ function TrackingAnalyticsPanel() {
 
       <div className="flex flex-col gap-4">
 
-        {/* G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
-            HEADING 1 G�� Tracking (Accordion)
-        G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G�� */}
+        {/* ----------------------------------------------
+            HEADING 1 - Tracking (Accordion)
+        ---------------------------------------------- */}
         <Accordion
           defaultOpen
           title="Tracking"
@@ -2252,7 +2252,7 @@ function TrackingAnalyticsPanel() {
             </div>
           </div>
 
-          {/* G��G�� Category 1 G�� Basic Settings G��G�� */}
+          {/* -- Category 1 - Basic Settings -- */}
           <div className="mt-5">
             <TrackingSectionLabel>Basic Settings</TrackingSectionLabel>
             <div className="flex flex-col gap-0.5">
@@ -2269,7 +2269,7 @@ function TrackingAnalyticsPanel() {
             </div>
           </div>
 
-          {/* G��G�� Sub-category 1 G�� Tracking G��G�� */}
+          {/* -- Sub-category 1 - Tracking -- */}
           <div className="mt-4 ml-4 pl-3 border-l-2 border-[#e5e7eb]">
             <TrackingSubLabel>Tracking</TrackingSubLabel>
             <div className="flex flex-col gap-0.5">
@@ -2281,7 +2281,7 @@ function TrackingAnalyticsPanel() {
             </div>
           </div>
 
-          {/* G��G�� Sub-category 2 G�� Reporting G��G�� */}
+          {/* -- Sub-category 2 - Reporting -- */}
           <div className="mt-4 ml-4 pl-3 border-l-2 border-[#e5e7eb]">
             <TrackingSubLabel>Reporting</TrackingSubLabel>
             <div className="flex flex-col gap-3">
@@ -2300,7 +2300,7 @@ function TrackingAnalyticsPanel() {
             </div>
           </div>
 
-          {/* G��G�� Category 2 G�� Advanced Settings G��G�� */}
+          {/* -- Category 2 - Advanced Settings -- */}
           <div className="mt-5">
             <TrackingSectionLabel>Advanced Settings</TrackingSectionLabel>
             <div className="flex flex-col gap-3">
@@ -2335,9 +2335,9 @@ function TrackingAnalyticsPanel() {
           </div>
         </Accordion>
 
-        {/* G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
-            HEADING 2 G�� Analytics (Accordion)
-        G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G�� */}
+        {/* ----------------------------------------------
+            HEADING 2 - Analytics (Accordion)
+        ---------------------------------------------- */}
         <Accordion
           title="Analytics"
           icon={
@@ -2452,9 +2452,9 @@ function TrackingAnalyticsPanel() {
   );
 }
 
-/* G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
+/* ---------------------------------------------------------------
    COMPLETION & PROGRESS PANEL
-   G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G�� */
+   --------------------------------------------------------------- */
 
 /* shared primitives re-used across sub-sections */
 function CpSectionHeading({ children }: { children: React.ReactNode }) {
@@ -2638,15 +2638,15 @@ type ProgressType = "pages" | "questions";
 type ProgressFormat = "bar" | "stepper" | "percentage";
 
 interface CompletionProgressState {
-  /* 1 G�� Completion Rules */
+  /* 1 - Completion Rules */
   pageCompletionRule: "all-content" | "required-interaction";
   courseCompletionRule: "all-content" | "assessment";
 
-  /* 2 G�� Completion Feedback */
+  /* 2 - Completion Feedback */
   notifierLine1: string;
   notifierLine2: string;
 
-  /* 3 G�� Resume & Bookmarking */
+  /* 3 - Resume & Bookmarking */
   bookmarkingEnabled: boolean;
   bookmarkingLevel: BookmarkLocation;
   bookmarkingReturn: BookmarkReturn;
@@ -2654,12 +2654,12 @@ interface CompletionProgressState {
   resumeTitle: string;
   resumeMessage: string;
 
-  /* 4 G�� Progress Indicators */
+  /* 4 - Progress Indicators */
   progressIndicators: string[];
   progressType: ProgressType;
   progressFormat: ProgressFormat;
 
-  /* 5 G�� Time Estimate */
+  /* 5 - Time Estimate */
   timeIconClass: string;
   timeTextBefore: string;
   timeTextAfter: string;
@@ -2694,15 +2694,15 @@ function CompletionProgressPanel() {
   return (
     <div className="max-w-2xl w-full">
 
-      {/* G��G�� Page header G��G�� */}
+      {/* -- Page header -- */}
       <div className="mb-6">
         <h2 className="text-xl font-bold text-[#111827]">Completion &amp; Progress</h2>
         <p className="text-sm text-[#6b7280] mt-0.5">Configure how course and page completion is tracked and displayed to learners.</p>
       </div>
 
-      {/* G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
-          H1 G�� COMPLETION RULES
-      G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G�� */}
+      {/* ------------------------------------
+          H1 - COMPLETION RULES
+      ------------------------------------ */}
       <section>
         <CpSectionHeading>Completion Rules</CpSectionHeading>
         <p className="text-sm text-[#6b7280] mb-5">Define what counts as a completed page and a completed course.</p>
@@ -2746,9 +2746,9 @@ function CompletionProgressPanel() {
 
       <CpDivider />
 
-      {/* G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
-          H2 G�� COMPLETION FEEDBACK
-      G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G�� */}
+      {/* ------------------------------------
+          H2 - COMPLETION FEEDBACK
+      ------------------------------------ */}
       <section>
         <CpSectionHeading>Completion Feedback</CpSectionHeading>
         <p className="text-sm text-[#6b7280] mb-5">Customise the message shown to learners when they complete the course.</p>
@@ -2777,9 +2777,9 @@ function CompletionProgressPanel() {
 
       <CpDivider />
 
-      {/* G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
-          H3 G�� RESUME & BOOKMARKING
-      G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G�� */}
+      {/* ------------------------------------
+          H3 - RESUME & BOOKMARKING
+      ------------------------------------ */}
       <section>
         <CpSectionHeading>Resume and Bookmarking</CpSectionHeading>
         <p className="text-sm text-[#6b7280] mb-5">Control where learners return to when they re-enter the course.</p>
@@ -2809,7 +2809,7 @@ function CompletionProgressPanel() {
               <CpInfoNote>Bookmarking done at component level will be the most accurate.</CpInfoNote>
 
               <CpSelect<BookmarkReturn>
-                label="Bookmarking location G�� learner is taken back to"
+                label="Bookmarking location - learner is taken back to"
                 hint="Location: where the learner is returned on re-entry"
                 value={cfg.bookmarkingReturn}
                 onChange={(v) => set("bookmarkingReturn", v)}
@@ -2856,9 +2856,9 @@ function CompletionProgressPanel() {
 
       <CpDivider />
 
-      {/* G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
-          H3 G�� PROGRESS INDICATORS
-      G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G�� */}
+      {/* ------------------------------------
+          H3 - PROGRESS INDICATORS
+      ------------------------------------ */}
       <section>
         <CpSectionHeading>Progress Indicators</CpSectionHeading>
         <p className="text-sm text-[#6b7280] mb-5">Choose which progress elements are visible to learners.</p>
@@ -2908,9 +2908,9 @@ function CompletionProgressPanel() {
 
       <CpDivider />
 
-      {/* G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
-          H4 G�� TIME ESTIMATE
-      G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G�� */}
+      {/* ------------------------------------
+          H4 - TIME ESTIMATE
+      ------------------------------------ */}
       <section>
         <CpSectionHeading>Time Estimate</CpSectionHeading>
         <p className="text-sm text-[#6b7280] mb-5">Configure the time estimate display shown to learners.</p>
@@ -2965,9 +2965,9 @@ function CompletionProgressPanel() {
   );
 }
 
-/* G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
-   LEARNER EXPERIENCE PANEL G�� Learning Resources accordion
-   G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G�� */
+/* -------------------------------------------------------------
+   LEARNER EXPERIENCE PANEL - Learning Resources accordion
+   ------------------------------------------------------------- */
 
 type ResourceFormat = "document" | "media" | "link" | "custom";
 
@@ -3132,7 +3132,7 @@ function AddResourceDialog({
             />
           </LrField>
 
-          {/* Source G�� asset vs URL tabs */}
+          {/* Source - asset vs URL tabs */}
           <LrField label="Source">
             <div className="flex rounded-lg border border-[#e5e7eb] overflow-hidden mb-2">
               {(["asset", "url"] as const).map((t) => (
@@ -3223,7 +3223,7 @@ function ResourceFormatIcon({ format }: { format: ResourceFormat }) {
   );
 }
 
-/* G��G�� Course Feedback types G��G�� */
+/* -- Course Feedback types -- */
 type CourseFeedbackOption = "autoOpen" | "hideAfterSubmit";
 
 interface CourseFeedbackState {
@@ -3243,7 +3243,7 @@ const COURSE_FEEDBACK_OPTIONS: { value: CourseFeedbackOption; label: string }[] 
   { value: "hideAfterSubmit", label: "Hide button after submission" },
 ];
 
-/* G��G�� Ask AI Tutor types G��G�� */
+/* -- Ask AI Tutor types -- */
 type AiTutorCapability = "allPages" | "answerFromContent" | "useLearnerNotes" | "stepByStep";
 type AiTutorKnowledge  = "concise" | "detailed";
 type AiTutorControl    = "drawer" | "floating";
@@ -3281,7 +3281,7 @@ const AI_TUTOR_CONTROL_OPTIONS: { value: AiTutorControl; label: string }[] = [
   { value: "floating", label: "Floating button" },
 ];
 
-/* G��G�� Learner Notes types G��G�� */
+/* -- Learner Notes types -- */
 type NotesAvailability = "all" | "selected";
 type NotesFeature = "create" | "upload" | "download" | "search";
 
@@ -3306,7 +3306,7 @@ const NOTES_FEATURES: { value: NotesFeature; label: string }[] = [
   { value: "search",   label: "Enable search" },
 ];
 
-/* G��G�� Learner Search types G��G�� */
+/* -- Learner Search types -- */
 type SearchMatchRule =
   | "begins"
   | "contains"
@@ -3469,7 +3469,7 @@ function LeAccordion({
 }
 
 function LearnerExperiencePanel() {
-  /* G��G�� Learning Resources state G��G�� */
+  /* -- Learning Resources state -- */
   const [lrState, setLrState] = useState<LearningResourcesState>({
     enabled: false,
     sectionTitle: "",
@@ -3491,7 +3491,7 @@ function LearnerExperiencePanel() {
     setLrState((prev) => ({ ...prev, resources: prev.resources.filter((r) => r.id !== id) }));
   }
 
-  /* G��G�� Learner Search state G��G�� */
+  /* -- Learner Search state -- */
   const [lsOpen, setLsOpen] = useState(false);
   const [lsState, setLsState] = useState<LearnerSearchState>({
     enabled: false,
@@ -3508,7 +3508,7 @@ function LearnerExperiencePanel() {
   const setLs = <K extends keyof LearnerSearchState>(k: K, v: LearnerSearchState[K]) =>
     setLsState((prev) => ({ ...prev, [k]: v }));
 
-  /* G��G�� Learner Notes state G��G�� */
+  /* -- Learner Notes state -- */
   const [lnOpen, setLnOpen] = useState(false);
   const [lnState, setLnState] = useState<LearnerNotesState>({
     enabled: false,
@@ -3522,7 +3522,7 @@ function LearnerExperiencePanel() {
   const setLn = <K extends keyof LearnerNotesState>(k: K, v: LearnerNotesState[K]) =>
     setLnState((prev) => ({ ...prev, [k]: v }));
 
-  /* G��G�� Ask AI Tutor state G��G�� */
+  /* -- Ask AI Tutor state -- */
   const [atOpen, setAtOpen] = useState(false);
   const [atState, setAtState] = useState<AiTutorState>({
     enabled: false,
@@ -3538,7 +3538,7 @@ function LearnerExperiencePanel() {
   const setAt = <K extends keyof AiTutorState>(k: K, v: AiTutorState[K]) =>
     setAtState((prev) => ({ ...prev, [k]: v }));
 
-  /* G��G�� Course Feedback state G��G�� */
+  /* -- Course Feedback state -- */
   const [cfOpen, setCfOpen] = useState(false);
   const [cfState, setCfState] = useState<CourseFeedbackState>({
     enabled: false,
@@ -3584,7 +3584,7 @@ function LearnerExperiencePanel() {
 
       <div className="space-y-3">
 
-        {/* G��G�� Learning Resources accordion G��G�� */}
+        {/* -- Learning Resources accordion -- */}
         <LeAccordion
           open={lrOpen}
           onToggle={() => setLrOpen((o) => !o)}
@@ -3670,7 +3670,7 @@ function LearnerExperiencePanel() {
           )}
         </LeAccordion>
 
-        {/* G��G�� Learner Search accordion G��G�� */}
+        {/* -- Learner Search accordion -- */}
         <LeAccordion
           open={lsOpen}
           onToggle={() => setLsOpen((o) => !o)}
@@ -3714,7 +3714,7 @@ function LearnerExperiencePanel() {
                 />
               </LrField>
 
-              {/* Search Scope G��G�� Match On Rules */}
+              {/* Search Scope -- Match On Rules */}
               <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
                 <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
                   <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Search Scope</p>
@@ -3790,7 +3790,7 @@ function LearnerExperiencePanel() {
           )}
         </LeAccordion>
 
-        {/* G��G�� Learner Notes accordion G��G�� */}
+        {/* -- Learner Notes accordion -- */}
         <LeAccordion
           open={lnOpen}
           onToggle={() => setLnOpen((o) => !o)}
@@ -3894,7 +3894,7 @@ function LearnerExperiencePanel() {
           )}
         </LeAccordion>
 
-        {/* G��G�� Ask AI Tutor accordion G��G�� */}
+        {/* -- Ask AI Tutor accordion -- */}
         <LeAccordion
           open={atOpen}
           onToggle={() => setAtOpen((o) => !o)}
@@ -4039,7 +4039,7 @@ function LearnerExperiencePanel() {
           )}
         </LeAccordion>
 
-        {/* G��G�� Course Feedback accordion G��G�� */}
+        {/* -- Course Feedback accordion -- */}
         <LeAccordion
           open={cfOpen}
           onToggle={() => setCfOpen((o) => !o)}
@@ -4061,7 +4061,7 @@ function LearnerExperiencePanel() {
 
           {cfState.enabled && (
             <>
-              {/* Options G�� multi-select */}
+              {/* Options - multi-select */}
               <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
                 <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
                   <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Options</p>
@@ -4169,7 +4169,7 @@ function LearnerExperiencePanel() {
   );
 }
 
-/* G��G�� Export Panel G��G�� */
+/* -- Export Panel -- */
 function AssetOrUrlPicker({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   const [tab, setTab] = useState<"asset" | "url">("asset");
   return (
@@ -4321,7 +4321,7 @@ function PdfExportForm() {
           <ExportTextField label="PDF Title"     placeholder="e.g. Introduction to Digital Marketing" value={pdfTitle}     onChange={setPdfTitle} />
           <ExportTextField label="PDF Author"    placeholder="e.g. Laerdal Medical"                    value={pdfAuthor}   onChange={setPdfAuthor} />
           <ExportTextField label="PDF Subject"   placeholder="e.g. Healthcare Training"                value={pdfSubject}  onChange={setPdfSubject} />
-          <ExportTextField label="PDF Copyright" placeholder="e.g. -� 2026 Laerdal Medical"             value={pdfCopyright} onChange={setPdfCopyright} />
+          <ExportTextField label="PDF Copyright" placeholder="e.g. (c) 2026 Laerdal Medical"           value={pdfCopyright} onChange={setPdfCopyright} />
         </div>
       </ExportSection>
 
@@ -4559,7 +4559,7 @@ function ExportDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-/* G��G�� Publish Panel G��G�� */
+/* -- Publish Panel -- */
 function PublishCheckbox({ checked, onChange, children }: { checked: boolean; onChange: (v: boolean) => void; children: React.ReactNode }) {
   return (
     <label className="flex items-start gap-3 cursor-pointer select-none group">
@@ -4776,7 +4776,7 @@ function PublishPanel() {
   );
 }
 
-/* G��G�� Placeholder panel for sections not yet built G��G�� */
+/* -- Placeholder panel for sections not yet built -- */
 function ComingSoonPanel({ label }: { label: string }) {
   return (
     <div className="max-w-2xl w-full flex flex-col items-center justify-center py-24 text-center">
@@ -4791,7 +4791,7 @@ function ComingSoonPanel({ label }: { label: string }) {
   );
 }
 
-/* G��G�� Main page G��G�� */
+/* -- Main page -- */
 function CourseCreationCenterContent() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -4921,7 +4921,7 @@ function CourseCreationCenterContent() {
           No backend course was initialized for this setup flow. Start from Create New Course on the dashboard.
         </div>
       )}
-      {/* G��G�� Header G��G�� */}
+      {/* -- Header -- */}
       <header className="h-[56px] bg-white border-b border-[#d8dde6] flex items-center shrink-0 px-4 md:px-6 gap-3 relative z-10">
         <div className="flex items-center gap-3 md:gap-4 min-w-0">
           <img src="/adapt-logo.jpeg" alt="Adapt logo" width={34} height={34} className="rounded-lg shrink-0" />
@@ -4984,10 +4984,10 @@ function CourseCreationCenterContent() {
         </div>
       </header>
 
-      {/* G��G�� Body G��G�� */}
+      {/* -- Body -- */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* G��G�� Left panel G��G�� */}
+        {/* -- Left panel -- */}
         <aside
           className={`h-full bg-white border-r border-[#d8dde6] flex flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-16" : "w-[256px]"}`}
         >
@@ -5102,7 +5102,7 @@ function CourseCreationCenterContent() {
             )}
           </nav>
 
-          {/* Skip to editor G�� bottom */}
+          {/* Skip to editor - bottom */}
           {!collapsed && (
             <div className="px-4 pb-4 border-t border-[#e5e7eb] pt-3 shrink-0">
               <button
@@ -5132,7 +5132,7 @@ function CourseCreationCenterContent() {
           )}
         </aside>
 
-        {/* G��G�� Right content panel G��G�� */}
+        {/* -- Right content panel -- */}
         <main className={`flex-1 overflow-hidden bg-[#f8fafc] ${activeNav === "menu" || activeNav === "navigation" ? "" : "overflow-y-auto px-8 py-8 min-h-0"}`}>
           {renderPanel()}
         </main>
