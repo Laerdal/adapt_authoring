@@ -837,6 +837,68 @@ export async function updateCourseMenuSettings(courseId: string, menuSettings: C
   return apiClient.put(`/api/content/course/${courseId}`, { menuSettings });
 }
 
+// ── Accessibility (_globals) ─────────────────────────────────────────────────
+// Every accessibility text override lives in the course document's `_globals`
+// object: core ARIA labels + instructions under `_accessibility`, plus per-plugin
+// strings the framework injects under `_globals._extensions._<name>` and
+// `_globals._components._<name>` when a plugin is installed. We read the whole
+// object and write it back wholesale (a plain object, keyed exactly as stored) so
+// no existing key is lost and no other subsystem (config, extensions) is touched.
+export type GlobalsObject = { [key: string]: unknown };
+
+export async function getCourseGlobals(courseId: string): Promise<GlobalsObject> {
+  // Deliberately does NOT swallow errors: the Accessibility panel writes `_globals`
+  // back wholesale, so if a transient fetch failure returned {} here, the next save
+  // would overwrite the stored globals with defaults/empty (data loss). Let the
+  // caller catch the failure and block saving until globals load successfully.
+  const course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+  const g = course?._globals;
+  return g && typeof g === "object" ? (g as GlobalsObject) : {};
+}
+
+export async function saveCourseGlobals(courseId: string, globals: GlobalsObject): Promise<unknown> {
+  return apiClient.put(`/api/content/course/${courseId}`, { _globals: globals });
+}
+
+// ── Accessibility config (config document `_accessibility`) ──────────────────
+// Distinct from the `_globals` text: the config doc holds the accessibility
+// feature toggle (`_isEnabled`) and the ARIA heading levels (`_ariaLevels`).
+// Loaded/saved via /api/content/config, mirroring getCourseTechnicalSettings. The
+// caller passes the FULL `_accessibility` object back so unrelated flags (e.g.
+// _shouldSupportLegacyBrowsers) are preserved regardless of merge semantics.
+export interface AccessibilityConfigResult {
+  configId: string | null;
+  accessibility: Record<string, unknown>;
+}
+
+export async function getAccessibilityConfig(courseId: string): Promise<AccessibilityConfigResult> {
+  try {
+    const cfg = await apiClient.get<AnyRecord>(`/api/content/config/${courseId}`);
+    const acc = cfg?._accessibility;
+    return {
+      configId: typeof cfg?._id === "string" ? (cfg._id as string) : null,
+      accessibility: acc && typeof acc === "object" ? (acc as Record<string, unknown>) : {},
+    };
+  } catch (err) {
+    console.warn("Failed to fetch accessibility config", err);
+    return { configId: null, accessibility: {} };
+  }
+}
+
+export async function saveAccessibilityConfig(
+  configId: string,
+  courseId: string,
+  accessibility: Record<string, unknown>
+): Promise<unknown> {
+  // Include _courseId so the config permission check can resolve the owning course
+  // (same requirement as updateCourseTechnicalSettings / the navigation config PUT).
+  return apiClient.patch(`/api/content/config/${configId}`, {
+    _id: configId,
+    _courseId: courseId,
+    _accessibility: accessibility,
+  });
+}
+
 interface CourseAssetRecord {
   _id: string;
   _fieldName?: string;
@@ -1086,6 +1148,55 @@ function buildSchemaDefaults(
     if (prop.type === "array") out[key] = [];
   }
   return out;
+}
+
+// ── Accessibility globals defaults (schema-seeded) ──────────────────────────
+// A freshly created course has no `_globals` persisted yet; the legacy settings
+// form still shows every field because it applies the course schema defaults.
+// Mirror that here: seed from `/api/content/schema` (course._globals, which the
+// server builds with core + per-plugin globals merged in) and overlay the stored
+// values, so all Global/Extensions/Components strings are visible and editable —
+// and get persisted on the next save.
+function deepMergeGlobals(base: GlobalsObject, override: GlobalsObject): GlobalsObject {
+  const out: GlobalsObject = { ...base };
+  for (const [k, v] of Object.entries(override)) {
+    const b = out[k];
+    if (v && typeof v === "object" && !Array.isArray(v) && b && typeof b === "object" && !Array.isArray(b)) {
+      out[k] = deepMergeGlobals(b as GlobalsObject, v as GlobalsObject);
+    } else {
+      out[k] = v;
+    }
+  }
+  return out;
+}
+
+export async function getGlobalsDefaults(): Promise<GlobalsObject> {
+  try {
+    if (!mergedSchemaCache) {
+      mergedSchemaCache = await apiClient.get("/api/content/schema");
+    }
+    // The filtered course schema exposes `_globals` directly; guard the alternate
+    // `.properties._globals` shape too, in case the server response changes.
+    const courseSchema = (mergedSchemaCache as Record<string, unknown> | null)?.course as
+      | {
+          _globals?: { properties?: Record<string, unknown> };
+          properties?: { _globals?: { properties?: Record<string, unknown> } };
+        }
+      | undefined;
+    const globalsNode = courseSchema?._globals ?? courseSchema?.properties?._globals;
+    return buildSchemaDefaults(globalsNode?.properties) as GlobalsObject;
+  } catch (err) {
+    console.warn("Failed to fetch globals schema defaults", err);
+    return {};
+  }
+}
+
+// Course `_globals` prepared for editing: schema defaults as the base, the stored
+// course values overlaid on top (stored wins). This is what the Accessibility
+// panel loads so a never-saved course still shows the full field set.
+export async function getCourseGlobalsMerged(courseId: string): Promise<GlobalsObject> {
+  const [stored, defaults] = await Promise.all([getCourseGlobals(courseId), getGlobalsDefaults()]);
+  return deepMergeGlobals(defaults, stored);
 }
 
 interface CreateContentResult { _id: string }
