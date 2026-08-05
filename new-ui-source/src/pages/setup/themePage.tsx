@@ -663,7 +663,7 @@ const CUSTOM_FIELD_DEFAULTS: Record<string, string> = {
   '_menu::menu-header-background-color': '',
   '_menu::menu-item': '',
   '_menu::menu-item-progress': '',
-  '_nav::nav': '#FFFFFF',
+  '_nav::nav': '#2e7fa1',
   '_nav::nav-progress': '#2e7fa1',
   '_notify::notify': '#ffffff',
   '_notify::drawer': '#ffffff',
@@ -673,7 +673,7 @@ const CUSTOM_FIELD_DEFAULTS: Record<string, string> = {
 // Mirrors linkedProperties in custom-theme properties.schema.
 // Format uses UI keys: "sectionId::fieldKey".
 const CUSTOM_LINKED_PROPERTY_MAP: Record<string, string[]> = {
-  '_global::_primaryBrandColor': ['_progress::progress', '_global::link'],
+  '_global::_primaryBrandColor': ['_progress::progress', '_global::link', '_nav::nav', '_pageStructure::page-header-background-color'],
   '_progress::progress': ['_nav::nav-progress', '_menu::menu-item-progress'],
 };
 
@@ -1627,6 +1627,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     const canvasBg = darkMode ? '#111827' : '#f0f4f8';
     const textColor = darkMode ? '#e8e8e8' : fontColor;
     const headingColor = darkMode ? '#ffffff' : headingColorTheme;
+    const navIconColor = (pageHeaderTitleColor && pageHeaderTitleColor !== 'transparent') ? pageHeaderTitleColor : '#ffffff';
+    const navTextColor = (pageHeaderBodyColor && pageHeaderBodyColor !== 'transparent') ? pageHeaderBodyColor : navIconColor;
     const titleSize = titleSizeRaw;
     const articleTop = spacingScale[articleTopPadding] ?? spacingScale.standard;
     const articleBottom = spacingScale[articleBottomPadding] ?? spacingScale.standard;
@@ -1655,6 +1657,23 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         <div style={{ maxWidth: '760px', margin: '0 auto' }}>
           <div className="overflow-hidden rounded-xl border border-[#e5e7eb]" style={{ backgroundColor: previewBg }}>
             <div style={{ height: '4px', borderTop: `1px solid ${progressBorder}`, borderBottom: `1px solid ${progressBorder}`, background: `linear-gradient(to right, ${progressFill} 60%, ${progressBackground} 60%)` }} />
+            <div style={{ background: navBg, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', borderBottom: darkMode ? '1px solid #374151' : '1px solid #f3f4f6' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={navIconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 12H5M12 19l-7-7 7-7" />
+              </svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={navIconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+              <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.76rem', color: navTextColor, flex: 1 }}>
+                New Course Title <span style={{ opacity: 0.7 }}>/ New Page Title</span>
+              </span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={navIconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+            </div>
             <div style={{ backgroundColor: previewBg, padding: '18px' }}>
               <div style={{ maxWidth: '560px', margin: '0 auto' }}>
                 <div style={{ padding: '6px 0 14px' }}>
