@@ -206,6 +206,7 @@ interface EnginePluginType {
   _id: string;
   name?: string;
   displayName?: string;
+  theme?: string;
 }
 
 interface EngineCourseDetails {
@@ -213,6 +214,8 @@ interface EngineCourseDetails {
   title?: string;
   displayTitle?: string;
   description?: string;
+  themeVariables?: Record<string, unknown>;
+  _themePreset?: string;
   menuSettings?: CourseMenuSettings;
 }
 
@@ -221,6 +224,7 @@ interface EngineConfigDetails {
   _courseId?: string;
   _theme?: string;
   _menu?: string;
+  _themePreset?: string;
   // Map of installed extensions, keyed by the plugin's bower `extension` field
   // (e.g. "course-menu"); each entry carries the full bower `name`.
   _enabledExtensions?: Record<string, { _id: string; name: string; version?: string; targetAttribute?: string }>;
@@ -234,6 +238,8 @@ export interface CourseBootstrapData {
   description: string;
   themeName: string;
   menuName: string;
+  themeVariables: Record<string, unknown>;
+  themePresetId: string;
 }
 
 function normalize(v?: string): string {
@@ -280,6 +286,21 @@ function resolvePluginId(options: EnginePluginType[], label: string, kind: "them
   return best?.id ?? null;
 }
 
+function resolveBestPluginOption(options: EnginePluginType[], label: string, kind: "theme" | "menu"): EnginePluginType | null {
+  let best: { score: number; option: EnginePluginType } | null = null;
+
+  for (const option of options) {
+    const score = scorePluginMatch(option, label, kind);
+    if (score <= 0) continue;
+
+    if (!best || score > best.score) {
+      best = { score, option };
+    }
+  }
+
+  return best?.option ?? null;
+}
+
 async function getThemeTypes(): Promise<EnginePluginType[]> {
   const rows = await apiClient.get<EnginePluginType[]>("/api/themetype");
   return Array.isArray(rows) ? rows : [];
@@ -302,6 +323,68 @@ export async function getAuthoringThemeOptions(): Promise<string[]> {
 export async function getAuthoringMenuOptions(): Promise<string[]> {
   const rows = await getMenuTypes();
   return rows.map(toOptionLabel).filter(Boolean);
+}
+
+export interface ThemePreset {
+  _id: string;
+  displayName: string;
+  parentTheme: string;
+  properties: Record<string, unknown>;
+}
+
+// Applies a theme plugin to the course by resolving human-readable theme label.
+export async function saveThemeForCourse(courseId: string, themeLabel: string): Promise<void> {
+  const themes = await getThemeTypes();
+  const themeId = resolvePluginId(themes, themeLabel, "theme");
+  if (themeId) {
+    await applyThemeToCourse(courseId, themeId);
+  }
+}
+
+// Returns the legacy parentTheme key used by preset APIs.
+export async function getThemePresetParentTheme(themeLabel: string): Promise<string | null> {
+  const themes = await getThemeTypes();
+  const bestTheme = resolveBestPluginOption(themes, themeLabel, "theme");
+  if (!bestTheme) return null;
+  return bestTheme.theme || null;
+}
+
+export async function saveThemeVariables(
+  courseId: string,
+  themeVariables: Record<string, unknown>
+): Promise<void> {
+  await apiClient.put(`/api/content/course/${courseId}`, { themeVariables });
+}
+
+export async function getThemePresets(parentTheme?: string): Promise<ThemePreset[]> {
+  try {
+    const rows = await apiClient.get<ThemePreset[]>("/api/content/themepreset");
+    const all = Array.isArray(rows) ? rows : [];
+    if (!parentTheme) return all;
+    return all.filter((preset) => preset.parentTheme === parentTheme);
+  } catch {
+    return [];
+  }
+}
+
+export async function saveThemePreset(
+  displayName: string,
+  parentTheme: string,
+  properties: Record<string, unknown>
+): Promise<ThemePreset> {
+  return apiClient.post<ThemePreset>("/api/content/themepreset", { displayName, parentTheme, properties });
+}
+
+export async function applyThemePreset(presetId: string, courseId: string): Promise<void> {
+  await apiClient.post(`/api/themepreset/${presetId}/makeitso/${courseId}`);
+}
+
+export async function renameThemePreset(presetId: string, displayName: string): Promise<void> {
+  await apiClient.put(`/api/content/themepreset/${presetId}`, { displayName });
+}
+
+export async function deleteThemePreset(presetId: string): Promise<void> {
+  await apiClient.delete(`/api/content/themepreset/${presetId}`);
 }
 
 async function applyThemeToCourse(courseId: string, themeId: string): Promise<void> {
@@ -368,6 +451,8 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
     description: course.description || "",
     themeName: config._theme || "",
     menuName: config._menu || "",
+    themeVariables: (course.themeVariables as Record<string, unknown>) || {},
+    themePresetId: config._themePreset || "",
   };
 }
 
