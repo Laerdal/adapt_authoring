@@ -435,11 +435,11 @@ function CourseStructurePanel({
 
       {/* Tip (top) - view-specific info text, styled like the app's Tip callouts */}
       <div className="mb-5 flex items-start gap-2.5 rounded-lg bg-[#fff7ed] border border-[#fed7aa] px-4 py-3">
-        <span className="text-base leading-none mt-0.5" aria-hidden="true">i</span>
+        <span className="text-base leading-none mt-0.5" aria-hidden="true">💡</span>
         <p className="text-sm text-[#9a3412] leading-snug">
           <span className="font-semibold">Tip:</span>{" "}
           {viewMode === "tree"
-            ? "Create and organize the learning journey using the tree view. Click any field to edit content directly, and open a topic in the Page Editor (-) for advanced editing and settings."
+            ? "Create and organize the learning journey using the tree view. Click any field to edit content directly, and open a topic in the Page Editor (→) for advanced editing and settings."
             : "Explore the entire course structure in a visual format. Use Map View to review content coverage and learning flow across topics. To create, edit, or reorganize content, switch to Tree View."}
         </p>
       </div>
@@ -489,7 +489,7 @@ function CourseStructurePanel({
           <svg className="animate-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21 12a9 9 0 1 1-6.219-8.56" strokeLinecap="round" />
           </svg>
-          Loading course structureGǪ
+          Loading course structure...
         </div>
       ) : (
         <div className={saving ? "opacity-60 pointer-events-none transition-opacity" : "transition-opacity"}>
@@ -3156,7 +3156,7 @@ function AddResourceDialog({
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
                 </svg>
-                {res.assetValue ? res.assetValue : "Browse assetsGǪ"}
+                {res.assetValue ? res.assetValue : "Browse assets..."}
               </button>
             ) : (
               <input
@@ -3638,7 +3638,7 @@ function LearnerExperiencePanel() {
                       </span>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-[#111827] truncate">{r.title || <span className="text-[#9ca3af] font-normal">Untitled resource</span>}</p>
-                        <p className="text-xs text-[#6b7280] capitalize">{r.format}{r.displayOnEveryPage ? " -+ Every page" : ""}</p>
+                        <p className="text-xs text-[#6b7280] capitalize">{r.format}{r.displayOnEveryPage ? " · Every page" : ""}</p>
                       </div>
                       <button
                         type="button"
@@ -3760,7 +3760,7 @@ function LearnerExperiencePanel() {
                   type="text"
                   value={lsState.searchPlaceholder}
                   onChange={(e) => setLs("searchPlaceholder", e.target.value)}
-                  placeholder="e.g. Type to searchGǪ"
+                  placeholder="e.g. Type to search..."
                   className={LR_INPUT}
                 />
               </LrField>
@@ -3782,7 +3782,7 @@ function LearnerExperiencePanel() {
                   type="text"
                   value={lsState.loadingMessage}
                   onChange={(e) => setLs("loadingMessage", e.target.value)}
-                  placeholder="e.g. SearchingGǪ"
+                  placeholder="e.g. Searching..."
                   className={LR_INPUT}
                 />
               </LrField>
@@ -3886,7 +3886,7 @@ function LearnerExperiencePanel() {
                   type="text"
                   value={lnState.editorPlaceholder}
                   onChange={(e) => setLn("editorPlaceholder", e.target.value)}
-                  placeholder="e.g. Start typing your notes hereGǪ"
+                  placeholder="e.g. Start typing your notes here..."
                   className={LR_INPUT}
                 />
               </LrField>
@@ -4030,7 +4030,7 @@ function LearnerExperiencePanel() {
                 <textarea
                   value={atState.promptPlaceholder}
                   onChange={(e) => setAt("promptPlaceholder", e.target.value)}
-                  placeholder="e.g. Ask me anything about this courseGǪ"
+                  placeholder="e.g. Ask me anything about this course..."
                   rows={3}
                   className={LR_TEXTAREA}
                 />
@@ -4135,7 +4135,7 @@ function LearnerExperiencePanel() {
                 <textarea
                   value={cfState.commentPlaceholder}
                   onChange={(e) => setCf("commentPlaceholder", e.target.value)}
-                  placeholder="e.g. Share your thoughtsGǪ"
+                  placeholder="e.g. Share your thoughts..."
                   rows={2}
                   className={LR_TEXTAREA}
                 />
@@ -4321,7 +4321,7 @@ function PdfExportForm() {
           <ExportTextField label="PDF Title"     placeholder="e.g. Introduction to Digital Marketing" value={pdfTitle}     onChange={setPdfTitle} />
           <ExportTextField label="PDF Author"    placeholder="e.g. Laerdal Medical"                    value={pdfAuthor}   onChange={setPdfAuthor} />
           <ExportTextField label="PDF Subject"   placeholder="e.g. Healthcare Training"                value={pdfSubject}  onChange={setPdfSubject} />
-          <ExportTextField label="PDF Copyright" placeholder="e.g. (c) 2026 Laerdal Medical"           value={pdfCopyright} onChange={setPdfCopyright} />
+          <ExportTextField label="PDF Copyright" placeholder="e.g. (©) 2026 Laerdal Medical"           value={pdfCopyright} onChange={setPdfCopyright} />
         </div>
       </ExportSection>
 
