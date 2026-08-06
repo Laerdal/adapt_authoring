@@ -2387,7 +2387,10 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
                               if (field.inputType === 'select') {
                                 return (
-                                  <div key={field.key}>
+                                  <div
+                                    key={field.key}
+                                    className={acc.id === '_global' && field.key === 'page-heading-font-size' ? 'col-span-2' : ''}
+                                  >
                                     <p className="text-xs font-bold text-[#111827] mb-2">{field.label}</p>
                                     <select
                                       value={value}
