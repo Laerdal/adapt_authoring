@@ -57,8 +57,8 @@ const CALC_VALUES = [
 
 function DesktopCalculatedValues() {
   return (
-    <div className="mt-2 bg-[#f0f7ff] border-l-4 border-[#2d6fa8] px-4 py-3 text-xs text-[#374151] space-y-0.5">
-      <p className="font-semibold text-[#111827] mb-1">Calculated values for Desktop:</p>
+    <div className="mt-2 px-4 py-3 text-xs text-[var(--life-neutral-500)] space-y-0.5 bg-[var(--life-primary-020)] border-l-4 border-[var(--life-primary-500)]">
+      <p className="font-semibold text-[var(--life-base-black)] mb-1">Calculated values for Desktop:</p>
       {CALC_VALUES.map((s) => (
         <p key={s.label}><span className="font-semibold">{s.label}:</span> {s.rem} ({s.px})</p>
       ))}
@@ -935,6 +935,12 @@ type LifeBlocksConfig = {
   _paddingBottom: string;
 };
 
+type OnScreenConfig = {
+  _isEnabled: boolean;
+  _classes: string;
+  _percentInviewVertical: number;
+};
+
 const DEFAULT_LIFE_COURSE_CONFIG: LifeCourseConfig = {
   _svgSpriteSheets: [],
   _singleIcons: [],
@@ -943,6 +949,12 @@ const DEFAULT_LIFE_COURSE_CONFIG: LifeCourseConfig = {
 const DEFAULT_LIFE_BLOCKS_CONFIG: LifeBlocksConfig = {
   _paddingTop: "",
   _paddingBottom: "",
+};
+
+const DEFAULT_ON_SCREEN_CONFIG: OnScreenConfig = {
+  _isEnabled: false,
+  _classes: "",
+  _percentInviewVertical: 50,
 };
 
 function LifeListField({
@@ -1245,6 +1257,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   const [activeAccordion, setActiveAccordion] = useState<string | null>(null);
   const [lifeCourseConfig, setLifeCourseConfig] = useState<LifeCourseConfig>(DEFAULT_LIFE_COURSE_CONFIG);
   const [lifeBlocksConfig, setLifeBlocksConfig] = useState<LifeBlocksConfig>(DEFAULT_LIFE_BLOCKS_CONFIG);
+  const [onScreenConfig, setOnScreenConfig] = useState<OnScreenConfig>(DEFAULT_ON_SCREEN_CONFIG);
   const [activeVanillaAccordion, setActiveVanillaAccordion] = useState<string | null>('_global');
   const [vanillaColors, setVanillaColors] = useState<Record<string, string>>({});
   const [activeCustomAccordion, setActiveCustomAccordion] = useState<string | null>('_global');
@@ -1289,6 +1302,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       checkHidePartial,
       lifeCourseConfig,
       lifeBlocksConfig,
+      onScreenConfig,
       vanillaColors: normalizeRecord(vanillaColors),
       customSettings: normalizeRecord(customSettings),
     });
@@ -1300,6 +1314,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     customSettings,
     lifeBlocksConfig,
     lifeCourseConfig,
+    onScreenConfig,
     selected,
     selectedPresetId,
     vanillaColors,
@@ -1348,8 +1363,16 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       _paddingTop: lifeBlocksConfig._paddingTop,
       _paddingBottom: lifeBlocksConfig._paddingBottom,
     };
+    merged._onScreen = {
+      ...(merged._onScreen && typeof merged._onScreen === 'object' && !Array.isArray(merged._onScreen)
+        ? merged._onScreen as Record<string, unknown>
+        : {}),
+      _isEnabled: onScreenConfig._isEnabled,
+      _classes: onScreenConfig._classes,
+      _percentInviewVertical: onScreenConfig._percentInviewVertical,
+    };
     return merged;
-  }, [lifeBlocksConfig, lifeCourseConfig]);
+  }, [lifeBlocksConfig, lifeCourseConfig, onScreenConfig]);
 
   const buildMergedVanillaThemeVariables = useCallback((baseVars: Record<string, unknown>) => {
     const merged: Record<string, unknown> = { ...(baseVars ?? {}) };
@@ -1412,8 +1435,25 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       _hidePartiallyFeedback: checkHidePartial,
     };
 
+    merged._blocks = {
+      ...(merged._blocks && typeof merged._blocks === 'object' && !Array.isArray(merged._blocks)
+        ? merged._blocks as Record<string, unknown>
+        : {}),
+      _paddingTop: lifeBlocksConfig._paddingTop,
+      _paddingBottom: lifeBlocksConfig._paddingBottom,
+    };
+
+    merged._onScreen = {
+      ...(merged._onScreen && typeof merged._onScreen === 'object' && !Array.isArray(merged._onScreen)
+        ? merged._onScreen as Record<string, unknown>
+        : {}),
+      _isEnabled: onScreenConfig._isEnabled,
+      _classes: onScreenConfig._classes,
+      _percentInviewVertical: onScreenConfig._percentInviewVertical,
+    };
+
     return merged;
-  }, [checkHideFeedback, checkHidePartial, checkNotFinal, checkUnanswered, customSettings, lifeCourseConfig]);
+  }, [checkHideFeedback, checkHidePartial, checkNotFinal, checkUnanswered, customSettings, lifeBlocksConfig, lifeCourseConfig, onScreenConfig]);
 
   useEffect(() => {
     setSelected(mapThemeNameToId(initialThemeName));
@@ -1527,6 +1567,16 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     setLifeBlocksConfig({
       _paddingTop: blocks && typeof blocks._paddingTop === 'string' ? blocks._paddingTop : '',
       _paddingBottom: blocks && typeof blocks._paddingBottom === 'string' ? blocks._paddingBottom : '',
+    });
+
+    const onScreen = v._onScreen as Record<string, unknown> | undefined;
+    setOnScreenConfig({
+      _isEnabled: !!(onScreen && typeof onScreen._isEnabled === 'boolean' && onScreen._isEnabled),
+      _classes: onScreen && typeof onScreen._classes === 'string' ? onScreen._classes : '',
+      _percentInviewVertical:
+        onScreen && typeof onScreen._percentInviewVertical === 'number'
+          ? onScreen._percentInviewVertical
+          : DEFAULT_ON_SCREEN_CONFIG._percentInviewVertical,
     });
 
     // Component configuration checkboxes: custom uses _componentConfig, LIFE uses _components.
@@ -2092,8 +2142,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           </ThemeAccordion>
         )}
 
-        {/* Configuration: Blocks - LIFE only */}
-        {selected === "life" && (
+        {/* Configuration: Blocks - LIFE and Custom */}
+        {selected !== "vanilla" && (
           <ThemeAccordion
             label="Configuration: Blocks"
             isOpen={activeAccordion === "Configuration: Blocks"}
@@ -2250,17 +2300,50 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <div className="space-y-5">
             <div className="flex items-center gap-3">
               <button
-                onClick={() => {}}
+                onClick={() => setOnScreenConfig((prev) => ({ ...prev, _isEnabled: !prev._isEnabled }))}
                 className="relative w-10 h-5.5 rounded-full border-none cursor-pointer flex-shrink-0 transition-colors"
-                style={{ backgroundColor: "#d1d5db" }}
+                style={{ backgroundColor: onScreenConfig._isEnabled ? "var(--life-primary-500)" : "#d1d5db" }}
               >
                 <span
                   className="absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-all"
-                  style={{ boxShadow: "0 1px 3px rgba(0, 0, 0, 0.25)" }}
+                  style={{
+                    boxShadow: "0 1px 3px rgba(0, 0, 0, 0.25)",
+                    transform: onScreenConfig._isEnabled ? "translateX(18px)" : "translateX(0)",
+                  }}
                 />
               </button>
               <span className="text-xs text-[#111827] font-semibold">Enable On Screen Classes</span>
             </div>
+
+            {onScreenConfig._isEnabled && (
+              <>
+                <div>
+                  <p className="text-xs font-semibold text-[#111827] mb-2">Animation class</p>
+                  <input
+                    type="text"
+                    value={onScreenConfig._classes}
+                    onChange={(e) => setOnScreenConfig((prev) => ({ ...prev, _classes: e.target.value }))}
+                    placeholder="e.g. fade-in-top"
+                    className="text-xs w-full border border-[#d1d5db] rounded-md px-2.5 py-1.5 text-[#111827] focus:border-[var(--life-primary-500)] outline-none"
+                  />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-[#111827] mb-2">Minimum vertical in-view (%)</p>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={onScreenConfig._percentInviewVertical}
+                    onChange={(e) => {
+                      const parsed = Number(e.target.value);
+                      const safeValue = Number.isFinite(parsed) ? Math.max(0, Math.min(100, parsed)) : DEFAULT_ON_SCREEN_CONFIG._percentInviewVertical;
+                      setOnScreenConfig((prev) => ({ ...prev, _percentInviewVertical: safeValue }));
+                    }}
+                    className="text-xs w-28 border border-[#d1d5db] rounded-md px-2.5 py-1.5 text-[#111827] focus:border-[var(--life-primary-500)] outline-none"
+                  />
+                </div>
+              </>
+            )}
           </div>
         </ThemeAccordion>
       </div>
