@@ -57,7 +57,7 @@ const CALC_VALUES = [
 
 function DesktopCalculatedValues() {
   return (
-    <div className="mt-2 rounded-lg bg-[#f0f7ff] border-l-4 border-[#2d6fa8] px-4 py-3 text-xs text-[#374151] space-y-0.5">
+    <div className="mt-2 bg-[#f0f7ff] border-l-4 border-[#2d6fa8] px-4 py-3 text-xs text-[#374151] space-y-0.5">
       <p className="font-semibold text-[#111827] mb-1">Calculated values for Desktop:</p>
       {CALC_VALUES.map((s) => (
         <p key={s.label}><span className="font-semibold">{s.label}:</span> {s.rem} ({s.px})</p>
