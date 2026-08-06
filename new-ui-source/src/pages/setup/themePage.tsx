@@ -693,7 +693,6 @@ const VANILLA_ACCORDION_DEFS: { id: string; label: string; fields: { key: string
       { key: 'link-inverted-hover', label: 'Link font colour - inverted hover' },
       { key: 'heading-color', label: 'Heading colour' },
       { key: 'heading-color-inverted', label: 'Heading colour - inverted' },
-      { key: 'body-background-color', label: 'Body background colour' },
     ],
   },
   {
@@ -775,16 +774,6 @@ const VANILLA_ACCORDION_DEFS: { id: string; label: string; fields: { key: string
       { key: 'progress', label: 'Progress fill colour' },
       { key: 'progress-inverted', label: 'Progress background colour' },
       { key: 'progress-border', label: 'Progress border colour' },
-    ],
-  },
-  {
-    id: '_page', label: 'Page',
-    fields: [
-      { key: 'page-header-background-color', label: 'Page header background colour' },
-      { key: 'page-header-title-color', label: 'Page header title colour' },
-      { key: 'page-header-subtitle-color', label: 'Page header subtitle colour' },
-      { key: 'page-header-body-color', label: 'Page header body colour' },
-      { key: 'page-header-instruction-color', label: 'Page header instruction colour' },
     ],
   },
   {
@@ -884,7 +873,6 @@ const VANILLA_ACCORDION_DEFS: { id: string; label: string; fields: { key: string
       { key: 'drawer-item-inverted-focus', label: 'Drawer item background colour - inverted focus' },
       { key: 'drawer-item-selected', label: 'Drawer item background colour - selected' },
       { key: 'drawer-item-inverted-selected', label: 'Drawer item background colour - inverted selected' },
-      { key: 'drawer-item-selected-underline', label: 'Drawer item colour - selected underline' },
       { key: 'drawer-item-locked', label: 'Drawer item background colour - locked' },
       { key: 'drawer-item-inverted-locked', label: 'Drawer item background colour - inverted locked' },
       { key: 'drawer-progress', label: 'Drawer progress fill colour' },
@@ -896,30 +884,14 @@ const VANILLA_ACCORDION_DEFS: { id: string; label: string; fields: { key: string
     ],
   },
   {
-    id: '_pullQuote', label: 'Pull Quotes',
-    fields: [
-      { key: 'pull-quote', label: 'Pull quote background colour' },
-      { key: 'pull-quote-inverted', label: 'Pull quote text colour' },
-      { key: 'pull-quote-border', label: 'Pull quote border colour' },
-    ],
-  },
-  {
     id: '_misc', label: 'Misc',
     fields: [
       { key: 'background', label: 'Background colour' },
       { key: 'background-inverted', label: 'Background colour - inverted' },
       { key: 'shadow', label: 'Shadow background colour (loading / popup background)' },
       { key: 'shadow-inverted', label: 'Shadow background colour - inverted' },
-      { key: 'shadow-opacity', label: 'Shadow opacity' },
       { key: 'loading', label: 'Loading animation background colour' },
       { key: 'loading-inverted', label: 'Loading animation colour - inverted' },
-    ],
-  },
-  {
-    id: '_tooltip', label: 'Tooltip',
-    fields: [
-      { key: 'tooltip-color', label: 'Tooltip background colour' },
-      { key: 'tooltip-text-color', label: 'Tooltip text colour' },
     ],
   },
 ];
