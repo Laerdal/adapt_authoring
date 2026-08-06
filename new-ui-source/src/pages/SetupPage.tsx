@@ -9,8 +9,14 @@ import AddComponentDrawer from "../components/course/AddComponentDrawer";
 import { getCourseBootstrapData } from "../api/adaptAuthoring";
 import { useCourseStructure } from "../hooks/useCourseStructure";
 import { STRUCTURE_LABELS } from "../types/structure";
+import { CourseOverviewPage } from "./setup/courseOverviewPage";
+import SelectThemePage from "./setup/themePage";
 import { MenuPage } from "./setup/menuPage";
+import { NavigationPage } from "./setup/navigationPage";
+import { AccessibilityPage } from "./setup/accessibilityPage";
 import { TechnicalSettingPage } from "./setup/technicalSettingPage";
+import { UnsavedChangesModal } from "./setup/unsavedChangesModal";
+import { useUnsavedChangesNavigationGuard } from "./setup/useUnsavedChangesNavigationGuard";
 
 const ICON_BASE = "/new/assets/icons";
 
@@ -182,9 +188,13 @@ const NAV_GROUPS = NAV_ITEMS.reduce<{ id: string; label: string; items: NavLeafI
   return groups;
 }, []);
 
+const GUARDED_NAV_IDS = new Set(
+  NAV_ITEMS.filter((item) => item.heading !== true && item.guarded).map((item) => item.id)
+);
+
 /* ── Course Overview panel ── */
 function CourseOverviewPanel({ title, description }: { title: string; description: string }) {
-  const [editing, setEditing] = useState(false);
+  const editing = true;
   const [formTitle, setFormTitle] = useState(title);
   const [formSubTitle, setFormSubTitle] = useState("");
   const [formDesc, setFormDesc] = useState(description);
@@ -202,13 +212,6 @@ function CourseOverviewPanel({ title, description }: { title: string; descriptio
           <h2 className="text-xl font-bold text-[#111827]">Course Overview</h2>
           <p className="text-sm text-[#6b7280] mt-0.5">Review and edit the core details for your course.</p>
         </div>
-        <button
-          type="button"
-          onClick={() => setEditing((e) => !e)}
-          className="px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors shrink-0"
-        >
-          {editing ? "Done" : "Edit"}
-        </button>
       </div>
 
       <div className="mt-6 flex flex-col gap-5">
