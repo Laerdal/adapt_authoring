@@ -1,5 +1,6 @@
-﻿import { useEffect, useRef, useState } from "react";
-import { findUserByEmail, getCourseBootstrapData, getUserById, updateCourse, uploadAsset } from "../../api/adaptAuthoring";
+﻿import { useEffect, useState } from "react";
+import { findUserByEmail, getCourseBootstrapData, getUserById, updateCourse } from "../../api/adaptAuthoring";
+import AssetPickerModal from "../../components/common/AssetPickerModal";
 
 interface CourseOverviewPageProps {
   courseId: string;
@@ -68,7 +69,7 @@ export function CourseOverviewPage({
   const [tagInput, setTagInput] = useState("");
   const [heroAssetId, setHeroAssetId] = useState<string | null>(null);
   const [heroPreviewUrl, setHeroPreviewUrl] = useState<string | null>(null);
-  const [imageUploading, setImageUploading] = useState(false);
+  const [isAssetPickerOpen, setIsAssetPickerOpen] = useState(false);
   const [language, setLanguage] = useState("");
 
   // Collaboration — wired to _isShared and _shareWithUsers on the engine
@@ -77,8 +78,6 @@ export function CourseOverviewPage({
   const [emailInput, setEmailInput] = useState("");
   const [emailSearching, setEmailSearching] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
-
-  const imageInputRef = useRef<HTMLInputElement>(null);
 
   function serializeCollaborators(list: Collaborator[]) {
     return [...list]
@@ -166,25 +165,6 @@ export function CourseOverviewPage({
   function handleRemoveTag(tag: string) {
     setTags((prev) => prev.filter((t) => t !== tag));
     markDirty();
-  }
-
-  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImageUploading(true);
-    setSaveError(null);
-    setSaveSuccess(false);
-    try {
-      const assetId = await uploadAsset(file, file.name);
-      setHeroAssetId(assetId);
-      setHeroPreviewUrl(`/api/asset/serve/${assetId}`);
-      markDirty();
-    } catch {
-      setSaveError("Image upload failed. Please try again.");
-    } finally {
-      setImageUploading(false);
-    }
-    if (imageInputRef.current) imageInputRef.current.value = "";
   }
 
   async function handleAddEmail() {
@@ -406,7 +386,7 @@ export function CourseOverviewPage({
         <div>
           <label style={labelStyle}>Course Image</label>
           <div
-            onClick={() => imageInputRef.current?.click()}
+            onClick={() => setIsAssetPickerOpen(true)}
             className="group relative cursor-pointer overflow-hidden"
             style={{
               width: "100%", height: 128,
@@ -428,30 +408,20 @@ export function CourseOverviewPage({
                   style={{ background: "rgba(0,0,0,0.45)", borderRadius: 8 }}
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="17 8 12 3 7 8" />
-                    <line x1="12" y1="3" x2="12" y2="15" />
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8l2 3h6a2 2 0 0 1 2 2z" />
                   </svg>
                   <span style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, color: "#fff", fontWeight: 700 }}>Replace Image</span>
                 </div>
               </>
-            ) : imageUploading ? (
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" style={{ color: "var(--life-neutral-400)", animation: "spin 1s linear infinite" }}>
-                <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-              </svg>
             ) : (
               <>
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--life-neutral-400)" }}>
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="17 8 12 3 7 8" />
-                  <line x1="12" y1="3" x2="12" y2="15" />
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8l2 3h6a2 2 0 0 1 2 2z" />
                 </svg>
                 <span style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-neutral-400)" }}>Choose a cover image</span>
                 <span style={{ fontFamily: '"Lato", sans-serif', fontSize: 11, color: "var(--life-neutral-400)" }}>JPG, PNG or WebP · 16:9 aspect ratio recommended</span>
               </>
             )}
-            <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} aria-label="Upload course image" />
           </div>
           {heroPreviewUrl && (
             <button
@@ -668,7 +638,7 @@ export function CourseOverviewPage({
             <button
               type="button"
               onClick={handleSave}
-              disabled={saving || !courseId || imageUploading}
+              disabled={saving || !courseId}
               className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:opacity-50 rounded-lg transition-colors"
             >
               {saving && (
@@ -681,6 +651,18 @@ export function CourseOverviewPage({
           </div>
         </div>
       )}
+
+      {isAssetPickerOpen ? (
+        <AssetPickerModal
+          onSelect={(asset) => {
+            setHeroAssetId(asset.id);
+            setHeroPreviewUrl(asset.url || `/api/asset/serve/${asset.id}`);
+            markDirty();
+            setIsAssetPickerOpen(false);
+          }}
+          onClose={() => setIsAssetPickerOpen(false)}
+        />
+      ) : null}
 
     </div>
   );
