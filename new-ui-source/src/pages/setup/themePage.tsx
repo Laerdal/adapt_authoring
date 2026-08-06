@@ -55,6 +55,17 @@ const CALC_VALUES = [
   { label: "Paragraph", rem: "1.125rem", px: "18px" },
 ];
 
+function DesktopCalculatedValues() {
+  return (
+    <div className="mt-2 rounded-lg bg-[#f0f7ff] border-l-4 border-[#2d6fa8] px-4 py-3 text-xs text-[#374151] space-y-0.5">
+      <p className="font-semibold text-[#111827] mb-1">Calculated values for Desktop:</p>
+      {CALC_VALUES.map((s) => (
+        <p key={s.label}><span className="font-semibold">{s.label}:</span> {s.rem} ({s.px})</p>
+      ))}
+    </div>
+  );
+}
+
 const H1_SIZE_OPTIONS = [
   { label: "H1 - 3.5rem", value: "3.5rem" },
   { label: "H2 - 3rem",   value: "3rem" },
@@ -320,14 +331,7 @@ function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (
             <polyline points="6 9 12 15 18 9"/>
           </svg>
         </div>
-        {sizes && (
-          <div className="mt-2 rounded-lg bg-[var(--life-primary-020)] border-l-4 border-[var(--life-primary-500)] px-4 py-3 text-xs text-[#374151] space-y-0.5">
-            <p className="font-semibold text-[#111827] mb-1">Calculated values for Desktop:</p>
-            {sizes.map((s) => (
-              <p key={s.label}><span className="font-semibold">{s.label}:</span> {s.size}rem ({s.px}px)</p>
-            ))}
-          </div>
-        )}
+        {sizes && <DesktopCalculatedValues />}
       </div>
     </div>
   );
@@ -1882,16 +1886,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                       <select value={customSettings.pageTitleSize} onChange={e => setCustomSettings({...customSettings, pageTitleSize: e.target.value})} className="text-xs w-full border-2 border-[var(--life-primary-500)] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:outline-none">
                         {PAGE_TITLE_OPTIONS.map(h => <option key={h} value={h}>{PAGE_TITLE_LABELS[h]}</option>)}
                       </select>
-                      {customSettings.pageTitleSize !== 'H6' && (
-                        <div className="mt-2 border-l-[3px] border-l-[var(--life-primary-500)] bg-[var(--life-primary-020)] rounded-r px-3 py-2">
-                          <p className="text-xs font-bold text-[#111827] mb-1">Calculated values for Desktop:</p>
-                          {CALC_VALUES.map(row => (
-                            <div key={row.label} className="text-xs text-[var(--life-primary-500)] leading-relaxed">
-                              {row.label}: {row.rem} ({row.px})
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      {customSettings.pageTitleSize !== 'H6' && <DesktopCalculatedValues />}
                     </div>
                   </div>
                 )}
@@ -2403,6 +2398,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                                         <option key={option.value} value={option.value}>{option.label}</option>
                                       ))}
                                     </select>
+                                    {acc.id === '_global' && field.key === 'page-heading-font-size' && <DesktopCalculatedValues />}
                                   </div>
                                 );
                               }

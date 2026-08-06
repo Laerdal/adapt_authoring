@@ -646,6 +646,26 @@ const DEFAULT_CUSTOM: CustomThemeValues = {
   pageTitleSize: "3.5rem",
 };
 
+const CALC_VALUES = [
+  { label: "H1 (Page Title)", rem: "3.5rem", px: "56px" },
+  { label: "H2", rem: "3rem", px: "48px" },
+  { label: "H3", rem: "2.5rem", px: "40px" },
+  { label: "H4", rem: "2rem", px: "32px" },
+  { label: "H5", rem: "1.5rem", px: "24px" },
+  { label: "Paragraph", rem: "1.125rem", px: "18px" },
+];
+
+function DesktopCalculatedValues() {
+  return (
+    <div className="mt-2 rounded-lg bg-[#f0f7ff] border-l-4 border-[#2d6fa8] px-4 py-3 text-xs text-[#374151] space-y-0.5">
+      <p className="font-semibold text-[#111827] mb-1">Calculated values for Desktop:</p>
+      {CALC_VALUES.map((s) => (
+        <p key={s.label}><span className="font-semibold">{s.label}:</span> {s.rem} ({s.px})</p>
+      ))}
+    </div>
+  );
+}
+
 /* colour swatch picker row */
 function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
@@ -877,14 +897,7 @@ function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (
             <polyline points="6 9 12 15 18 9"/>
           </svg>
         </div>
-        {sizes && (
-          <div className="mt-2 rounded-lg bg-[#f0f7ff] border-l-4 border-[#2d6fa8] px-4 py-3 text-xs text-[#374151] space-y-0.5">
-            <p className="font-semibold text-[#111827] mb-1">Calculated values for Desktop:</p>
-            {sizes.map((s) => (
-              <p key={s.label}><span className="font-semibold">{s.label}:</span> {s.size}rem ({s.px}px)</p>
-            ))}
-          </div>
-        )}
+        {sizes && <DesktopCalculatedValues />}
       </div>
     </div>
   );
