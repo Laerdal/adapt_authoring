@@ -935,10 +935,18 @@ type LifeBlocksConfig = {
   _paddingBottom: string;
 };
 
+type OnScreenLevelKey = 'page' | 'section' | 'contentGroup' | 'content';
+type OnScreenLevelConfig = {
+  _classes: string;
+  _percentInviewVertical: number;
+};
+type OnScreenLevelsConfig = Record<OnScreenLevelKey, OnScreenLevelConfig>;
+
 type OnScreenConfig = {
   _isEnabled: boolean;
   _classes: string;
   _percentInviewVertical: number;
+  _levels: OnScreenLevelsConfig;
 };
 
 const DEFAULT_LIFE_COURSE_CONFIG: LifeCourseConfig = {
@@ -955,7 +963,30 @@ const DEFAULT_ON_SCREEN_CONFIG: OnScreenConfig = {
   _isEnabled: false,
   _classes: "",
   _percentInviewVertical: 50,
+  _levels: {
+    page: { _classes: '', _percentInviewVertical: 50 },
+    section: { _classes: '', _percentInviewVertical: 50 },
+    contentGroup: { _classes: '', _percentInviewVertical: 50 },
+    content: { _classes: '', _percentInviewVertical: 50 },
+  },
 };
+
+const ON_SCREEN_ROW_DEFS: Array<{ key: OnScreenLevelKey; label: string }> = [
+  { key: 'page', label: 'Page' },
+  { key: 'section', label: 'Section' },
+  { key: 'contentGroup', label: 'Content Group (Block)' },
+  { key: 'content', label: 'Content (Component)' },
+];
+
+const ON_SCREEN_CLASS_OPTIONS = [
+  '',
+  'fade-in',
+  'fade-in-left',
+  'fade-in-right',
+  'fade-in-top',
+  'fade-in-bottom',
+  'fade-out',
+];
 
 function LifeListField({
   title,
@@ -1263,6 +1294,28 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   const [activeCustomAccordion, setActiveCustomAccordion] = useState<string | null>('_global');
   const [customSettings, setCustomSettings] = useState<Record<string, string>>(CUSTOM_FIELD_DEFAULTS);
 
+  const updateOnScreenRow = useCallback((rowKey: OnScreenLevelKey, patch: Partial<OnScreenLevelConfig>) => {
+    setOnScreenConfig((prev) => {
+      const nextRow = {
+        ...prev._levels[rowKey],
+        ...patch,
+      };
+      const nextLevels = {
+        ...prev._levels,
+        [rowKey]: nextRow,
+      };
+      const next = {
+        ...prev,
+        _levels: nextLevels,
+      };
+      if (rowKey === 'content') {
+        next._classes = nextRow._classes;
+        next._percentInviewVertical = nextRow._percentInviewVertical;
+      }
+      return next;
+    });
+  }, []);
+
   const setCustomSettingWithDependencies = useCallback((key: string, value: string) => {
     setCustomSettings((prev) => {
       const next = { ...prev, [key]: value };
@@ -1370,6 +1423,12 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       _isEnabled: onScreenConfig._isEnabled,
       _classes: onScreenConfig._classes,
       _percentInviewVertical: onScreenConfig._percentInviewVertical,
+      _levels: {
+        page: { ...onScreenConfig._levels.page },
+        section: { ...onScreenConfig._levels.section },
+        contentGroup: { ...onScreenConfig._levels.contentGroup },
+        content: { ...onScreenConfig._levels.content },
+      },
     };
     return merged;
   }, [lifeBlocksConfig, lifeCourseConfig, onScreenConfig]);
@@ -1450,6 +1509,12 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       _isEnabled: onScreenConfig._isEnabled,
       _classes: onScreenConfig._classes,
       _percentInviewVertical: onScreenConfig._percentInviewVertical,
+      _levels: {
+        page: { ...onScreenConfig._levels.page },
+        section: { ...onScreenConfig._levels.section },
+        contentGroup: { ...onScreenConfig._levels.contentGroup },
+        content: { ...onScreenConfig._levels.content },
+      },
     };
 
     return merged;
@@ -1570,13 +1635,36 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     });
 
     const onScreen = v._onScreen as Record<string, unknown> | undefined;
+    const legacyClasses = onScreen && typeof onScreen._classes === 'string' ? onScreen._classes : '';
+    const legacyPercent =
+      onScreen && typeof onScreen._percentInviewVertical === 'number'
+        ? onScreen._percentInviewVertical
+        : DEFAULT_ON_SCREEN_CONFIG._percentInviewVertical;
+    const levelsSource = onScreen && typeof onScreen._levels === 'object' && !Array.isArray(onScreen._levels)
+      ? onScreen._levels as Record<string, unknown>
+      : undefined;
+    const parseOnScreenLevel = (levelKey: OnScreenLevelKey): OnScreenLevelConfig => {
+      const source = levelsSource && typeof levelsSource[levelKey] === 'object' && !Array.isArray(levelsSource[levelKey])
+        ? levelsSource[levelKey] as Record<string, unknown>
+        : undefined;
+      return {
+        _classes: source && typeof source._classes === 'string' ? source._classes : legacyClasses,
+        _percentInviewVertical:
+          source && typeof source._percentInviewVertical === 'number'
+            ? source._percentInviewVertical
+            : legacyPercent,
+      };
+    };
     setOnScreenConfig({
       _isEnabled: !!(onScreen && typeof onScreen._isEnabled === 'boolean' && onScreen._isEnabled),
-      _classes: onScreen && typeof onScreen._classes === 'string' ? onScreen._classes : '',
-      _percentInviewVertical:
-        onScreen && typeof onScreen._percentInviewVertical === 'number'
-          ? onScreen._percentInviewVertical
-          : DEFAULT_ON_SCREEN_CONFIG._percentInviewVertical,
+      _classes: legacyClasses,
+      _percentInviewVertical: legacyPercent,
+      _levels: {
+        page: parseOnScreenLevel('page'),
+        section: parseOnScreenLevel('section'),
+        contentGroup: parseOnScreenLevel('contentGroup'),
+        content: parseOnScreenLevel('content'),
+      },
     });
 
     // Component configuration checkboxes: custom uses _componentConfig, LIFE uses _components.
@@ -2298,6 +2386,11 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           onToggle={() => setActiveAccordion(activeAccordion === "On Screen Classes" ? null : "On Screen Classes")}
         >
           <div className="space-y-5">
+            <p className="text-xs text-[#6b7280] leading-relaxed">
+              These settings allow you to attach classes when content is within the browser viewport.
+              Supported classes include fade-in, fade-in-left, fade-in-right, fade-in-top, and fade-in-bottom.
+            </p>
+
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setOnScreenConfig((prev) => ({ ...prev, _isEnabled: !prev._isEnabled }))}
@@ -2316,33 +2409,50 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
             </div>
 
             {onScreenConfig._isEnabled && (
-              <>
-                <div>
-                  <p className="text-xs font-semibold text-[#111827] mb-2">Animation class</p>
-                  <input
-                    type="text"
-                    value={onScreenConfig._classes}
-                    onChange={(e) => setOnScreenConfig((prev) => ({ ...prev, _classes: e.target.value }))}
-                    placeholder="e.g. fade-in-top"
-                    className="text-xs w-full border border-[#d1d5db] rounded-md px-2.5 py-1.5 text-[#111827] focus:border-[var(--life-primary-500)] outline-none"
-                  />
-                </div>
-                <div>
-                  <p className="text-xs font-semibold text-[#111827] mb-2">Minimum vertical in-view (%)</p>
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={onScreenConfig._percentInviewVertical}
-                    onChange={(e) => {
-                      const parsed = Number(e.target.value);
-                      const safeValue = Number.isFinite(parsed) ? Math.max(0, Math.min(100, parsed)) : DEFAULT_ON_SCREEN_CONFIG._percentInviewVertical;
-                      setOnScreenConfig((prev) => ({ ...prev, _percentInviewVertical: safeValue }));
-                    }}
-                    className="text-xs w-28 border border-[#d1d5db] rounded-md px-2.5 py-1.5 text-[#111827] focus:border-[var(--life-primary-500)] outline-none"
-                  />
-                </div>
-              </>
+              <div className="space-y-4 pt-1">
+                {ON_SCREEN_ROW_DEFS.map((row) => {
+                  const rowConfig = onScreenConfig._levels[row.key];
+                  return (
+                    <div key={row.key} className="bg-[#f9fafb] border border-[#e5e7eb] rounded-lg p-4 space-y-3">
+                      <span className="text-xs font-bold text-[#111827]">{row.label}</span>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <p className="text-xs font-semibold text-[#6b7280] mb-2">Classes</p>
+                          <select
+                            value={rowConfig._classes}
+                            onChange={(e) => updateOnScreenRow(row.key, { _classes: e.target.value })}
+                            className="text-xs w-full border border-[#d1d5db] rounded-md px-2.5 py-1.5 text-[#111827] bg-white focus:border-[var(--life-primary-500)] outline-none"
+                          >
+                            <option value="">Select a class</option>
+                            {ON_SCREEN_CLASS_OPTIONS.filter((option) => option !== '').map((option) => (
+                              <option key={option} value={option}>{option}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <p className="text-xs font-semibold text-[#6b7280] mb-2">Percent in view</p>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={rowConfig._percentInviewVertical}
+                            onChange={(e) => {
+                              const parsed = Number(e.target.value);
+                              const safeValue = Number.isFinite(parsed)
+                                ? Math.max(0, Math.min(100, parsed))
+                                : DEFAULT_ON_SCREEN_CONFIG._percentInviewVertical;
+                              updateOnScreenRow(row.key, { _percentInviewVertical: safeValue });
+                            }}
+                            className="text-xs w-full border border-[#d1d5db] rounded-md px-2.5 py-1.5 text-[#111827] bg-white focus:border-[var(--life-primary-500)] outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </div>
         </ThemeAccordion>
