@@ -42,8 +42,12 @@ export interface UserSummary {
  */
 export async function findUserByEmail(email: string): Promise<UserSummary | null> {
   try {
+    // Escape regex metacharacters before the backend uses this value in new RegExp().
+    // encodeURIComponent alone does not escape chars like ( ) . * + ? [ { \ ^ $ |
+    // which would cause the server's RegExp constructor to throw or enable ReDoS.
+    const escapedEmail = email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const users = await apiClient.get<UserSummary[]>(
-      `/api/user?search[email]=${encodeURIComponent(email)}`
+      `/api/user?search[email]=${encodeURIComponent(escapedEmail)}`
     );
     if (!Array.isArray(users)) return null;
     return users.find((u) => u.email?.toLowerCase() === email.toLowerCase()) ?? null;
