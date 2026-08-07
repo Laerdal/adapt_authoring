@@ -1,4 +1,12 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  defaultTrackingAnalyticsSettings,
+  getTrackingAnalyticsSettings,
+  saveTrackingAnalyticsSettings,
+  type TrackingAnalyticsSettings,
+} from "../../api/adaptAuthoring";
+import { UnsavedChangesModal } from "./unsavedChangesModal";
+import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
 function CheckboxRow({
   checked,
@@ -181,90 +189,547 @@ function PluginRadio({
 type TrackingPlugin = "scorm" | "xapi" | "hyperbridge";
 type AnalyticsPlugin = "ues" | "google" | "hotjar";
 
-export function TrackingAnalyticsPage() {
+type TrackingAnalyticsPageSnapshot = {
+  scorm: {
+    isEnabled: boolean;
+    shouldStoreResponses: boolean;
+    shouldStoreAttempts: boolean;
+    shouldRecordInteractions: boolean;
+    shouldRecordObjectives: boolean;
+    shouldCompress: boolean;
+    onTrackingCriteriaMet: string;
+    onAssessmentFailure: string;
+    scormVersion: string;
+    showDebugWindow: boolean;
+    commitOnStatusChange: boolean;
+    commitOnAnyChange: boolean;
+    timedCommitFrequency: string;
+    maxCommitRetries: string;
+    commitRetryDelay: string;
+  };
+  xapi: {
+    isEnabled: boolean;
+    specification: string;
+    activityID: string;
+    auID: string;
+    endpoint: string;
+    user: string;
+    password: string;
+    lang: string;
+    generateIds: boolean;
+    shouldTrackState: boolean;
+    shouldUseRegistration: boolean;
+    componentBlacklist: string;
+    lrsFailureBehaviour: string;
+  };
+  hyper: {
+    isEnabled: boolean;
+    shouldStoreResponses: boolean;
+    shouldStoreAttempts: boolean;
+    shouldCompress: boolean;
+    onTrackingCriteriaMet: string;
+    onAssessmentFailure: string;
+    commitOnStatusChange: boolean;
+    commitOnAnyChange: boolean;
+    commitOnAssessmentResult: boolean;
+    timedCommitFrequency: string;
+    maxCommitRetries: string;
+    commitRetryDelay: string;
+    showSuspendDataPopup: boolean;
+  };
+  ues: {
+    isEnabled: boolean;
+    isDebugMode: boolean;
+    projectTag: string;
+    portfolio: string;
+    resourceLinkId: string;
+    standard: string;
+    ecl: string;
+  };
+  google: {
+    isEnabled: boolean;
+    trackingId: string;
+  };
+  hotjar: {
+    isEnabled: boolean;
+    siteId: string;
+  };
+};
+
+const DEFAULT_SCORM_STATE: TrackingAnalyticsPageSnapshot["scorm"] = {
+  isEnabled: true,
+  shouldStoreResponses: true,
+  shouldStoreAttempts: false,
+  shouldRecordInteractions: true,
+  shouldRecordObjectives: true,
+  shouldCompress: false,
+  onTrackingCriteriaMet: "completed",
+  onAssessmentFailure: "incomplete",
+  scormVersion: "1.2",
+  showDebugWindow: false,
+  commitOnStatusChange: true,
+  commitOnAnyChange: false,
+  timedCommitFrequency: "10",
+  maxCommitRetries: "5",
+  commitRetryDelay: "2000",
+};
+
+const DEFAULT_XAPI_STATE: TrackingAnalyticsPageSnapshot["xapi"] = {
+  isEnabled: false,
+  specification: "xAPI",
+  activityID: "",
+  auID: "1",
+  endpoint: "",
+  user: "",
+  password: "",
+  lang: "en-US",
+  generateIds: false,
+  shouldTrackState: true,
+  shouldUseRegistration: true,
+  componentBlacklist: "blank,graphic",
+  lrsFailureBehaviour: "show",
+};
+
+const DEFAULT_HYPER_STATE: TrackingAnalyticsPageSnapshot["hyper"] = {
+  isEnabled: false,
+  shouldStoreResponses: true,
+  shouldStoreAttempts: false,
+  shouldCompress: false,
+  onTrackingCriteriaMet: "completed",
+  onAssessmentFailure: "incomplete",
+  commitOnStatusChange: true,
+  commitOnAnyChange: false,
+  commitOnAssessmentResult: false,
+  timedCommitFrequency: "10",
+  maxCommitRetries: "5",
+  commitRetryDelay: "2000",
+  showSuspendDataPopup: false,
+};
+
+const DEFAULT_UES_STATE: TrackingAnalyticsPageSnapshot["ues"] = {
+  isEnabled: false,
+  isDebugMode: false,
+  projectTag: "",
+  portfolio: "Adapt Course",
+  resourceLinkId: "",
+  standard: "",
+  ecl: "",
+};
+
+const DEFAULT_GOOGLE_STATE: TrackingAnalyticsPageSnapshot["google"] = {
+  isEnabled: false,
+  trackingId: "",
+};
+
+const DEFAULT_HOTJAR_STATE: TrackingAnalyticsPageSnapshot["hotjar"] = {
+  isEnabled: false,
+  siteId: "",
+};
+
+const DEFAULT_SNAPSHOT: TrackingAnalyticsPageSnapshot = {
+  scorm: DEFAULT_SCORM_STATE,
+  xapi: DEFAULT_XAPI_STATE,
+  hyper: DEFAULT_HYPER_STATE,
+  ues: DEFAULT_UES_STATE,
+  google: DEFAULT_GOOGLE_STATE,
+  hotjar: DEFAULT_HOTJAR_STATE,
+};
+
+type AnyRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): AnyRecord {
+  return value && typeof value === "object" ? (value as AnyRecord) : {};
+}
+
+function asBool(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function asString(value: unknown, fallback = ""): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+  return fallback;
+}
+
+function parseCsv(value: string): string[] {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function joinDeploymentUrls(value: unknown): string {
+  const rows = Array.isArray(value) ? value : [];
+  return rows
+    .map((row) => asString(asRecord(row)._deploymentURL).trim())
+    .filter(Boolean)
+    .join(", ");
+}
+
+function buildDeploymentItems(
+  csv: string,
+  existing: unknown,
+  includeRegion: boolean
+): Array<Record<string, string>> {
+  const urls = parseCsv(csv);
+  const prior = Array.isArray(existing) ? existing : [];
+
+  return urls.map((deploymentURL, index) => {
+    const base = asRecord(prior[index]);
+    const item: Record<string, string> = {
+      ...Object.fromEntries(Object.entries(base).filter(([, v]) => typeof v === "string")),
+      _deploymentURL: deploymentURL,
+    };
+
+    if (includeRegion && !item._region) {
+      item._region = "US";
+    }
+    if (!item._environment) {
+      item._environment = "PRODUCTION";
+    }
+    return item;
+  });
+}
+
+function buildSnapshotFromSettings(settings: TrackingAnalyticsSettings): TrackingAnalyticsPageSnapshot {
+  const spoor = asRecord(settings._spoor);
+  const spoorTracking = asRecord(spoor._tracking);
+  const spoorReporting = asRecord(spoor._reporting);
+  const spoorAdvanced = asRecord(spoor._advancedSettings);
+
+  const xapi = asRecord(settings._xapi);
+  const hyper = asRecord(settings._hyper);
+  const hyperTracking = asRecord(hyper._tracking);
+  const hyperReporting = asRecord(hyper._reporting);
+  const hyperAdvanced = asRecord(hyper._advancedSettings);
+
+  const ues = asRecord(settings._uesAnalytics);
+  const google = asRecord(settings._googleAnalytics);
+  const hotjar = asRecord(settings._hotjarAnalytics);
+
+  return {
+    scorm: {
+      isEnabled: asBool(spoor._isEnabled, DEFAULT_SCORM_STATE.isEnabled),
+      shouldStoreResponses: asBool(spoorTracking._shouldStoreResponses, DEFAULT_SCORM_STATE.shouldStoreResponses),
+      shouldStoreAttempts: asBool(spoorTracking._shouldStoreAttempts, DEFAULT_SCORM_STATE.shouldStoreAttempts),
+      shouldRecordInteractions: asBool(spoorTracking._shouldRecordInteractions, DEFAULT_SCORM_STATE.shouldRecordInteractions),
+      shouldRecordObjectives: asBool(spoorTracking._shouldRecordObjectives, DEFAULT_SCORM_STATE.shouldRecordObjectives),
+      shouldCompress: asBool(spoorTracking._shouldCompress, DEFAULT_SCORM_STATE.shouldCompress),
+      onTrackingCriteriaMet: asString(spoorReporting._onTrackingCriteriaMet, DEFAULT_SCORM_STATE.onTrackingCriteriaMet),
+      onAssessmentFailure: asString(spoorReporting._onAssessmentFailure, DEFAULT_SCORM_STATE.onAssessmentFailure),
+      scormVersion: asString(spoorAdvanced._scormVersion, DEFAULT_SCORM_STATE.scormVersion),
+      showDebugWindow: asBool(spoorAdvanced._showDebugWindow, DEFAULT_SCORM_STATE.showDebugWindow),
+      commitOnStatusChange: asBool(spoorAdvanced._commitOnStatusChange, DEFAULT_SCORM_STATE.commitOnStatusChange),
+      commitOnAnyChange: asBool(spoorAdvanced._commitOnAnyChange, DEFAULT_SCORM_STATE.commitOnAnyChange),
+      timedCommitFrequency: asString(spoorAdvanced._timedCommitFrequency, DEFAULT_SCORM_STATE.timedCommitFrequency),
+      maxCommitRetries: asString(spoorAdvanced._maxCommitRetries, DEFAULT_SCORM_STATE.maxCommitRetries),
+      commitRetryDelay: asString(spoorAdvanced._commitRetryDelay, DEFAULT_SCORM_STATE.commitRetryDelay),
+    },
+    xapi: {
+      isEnabled: asBool(xapi._isEnabled, DEFAULT_XAPI_STATE.isEnabled),
+      specification: asString(xapi._specification, DEFAULT_XAPI_STATE.specification),
+      activityID: asString(xapi._activityID, DEFAULT_XAPI_STATE.activityID),
+      auID: asString(xapi._auID, DEFAULT_XAPI_STATE.auID),
+      endpoint: asString(xapi._endpoint, DEFAULT_XAPI_STATE.endpoint),
+      user: asString(xapi._user, DEFAULT_XAPI_STATE.user),
+      password: asString(xapi._password, DEFAULT_XAPI_STATE.password),
+      lang: asString(xapi._lang, DEFAULT_XAPI_STATE.lang),
+      generateIds: asBool(xapi._generateIds, DEFAULT_XAPI_STATE.generateIds),
+      shouldTrackState: asBool(xapi._shouldTrackState, DEFAULT_XAPI_STATE.shouldTrackState),
+      shouldUseRegistration: asBool(xapi._shouldUseRegistration, DEFAULT_XAPI_STATE.shouldUseRegistration),
+      componentBlacklist: asString(xapi._componentBlacklist, DEFAULT_XAPI_STATE.componentBlacklist),
+      lrsFailureBehaviour: asString(xapi._lrsFailureBehaviour, DEFAULT_XAPI_STATE.lrsFailureBehaviour),
+    },
+    hyper: {
+      isEnabled: asBool(hyper._isEnabled, DEFAULT_HYPER_STATE.isEnabled),
+      shouldStoreResponses: asBool(hyperTracking._shouldStoreResponses, DEFAULT_HYPER_STATE.shouldStoreResponses),
+      shouldStoreAttempts: asBool(hyperTracking._shouldStoreAttempts, DEFAULT_HYPER_STATE.shouldStoreAttempts),
+      shouldCompress: asBool(hyperTracking._shouldCompress, DEFAULT_HYPER_STATE.shouldCompress),
+      onTrackingCriteriaMet: asString(hyperReporting._onTrackingCriteriaMet, DEFAULT_HYPER_STATE.onTrackingCriteriaMet),
+      onAssessmentFailure: asString(hyperReporting._onAssessmentFailure, DEFAULT_HYPER_STATE.onAssessmentFailure),
+      commitOnStatusChange: asBool(hyperAdvanced._commitOnStatusChange, DEFAULT_HYPER_STATE.commitOnStatusChange),
+      commitOnAnyChange: asBool(hyperAdvanced._commitOnAnyChange, DEFAULT_HYPER_STATE.commitOnAnyChange),
+      commitOnAssessmentResult: asBool(hyperAdvanced._commitOnAssessmentResult, DEFAULT_HYPER_STATE.commitOnAssessmentResult),
+      timedCommitFrequency: asString(hyperAdvanced._timedCommitFrequency, DEFAULT_HYPER_STATE.timedCommitFrequency),
+      maxCommitRetries: asString(hyperAdvanced._maxCommitRetries, DEFAULT_HYPER_STATE.maxCommitRetries),
+      commitRetryDelay: asString(hyperAdvanced._commitRetryDelay, DEFAULT_HYPER_STATE.commitRetryDelay),
+      showSuspendDataPopup: asBool(hyperAdvanced._showSuspendDataPopup, DEFAULT_HYPER_STATE.showSuspendDataPopup),
+    },
+    ues: {
+      isEnabled: asBool(ues._isEnabled, DEFAULT_UES_STATE.isEnabled),
+      isDebugMode: asBool(ues._isDebugMode, DEFAULT_UES_STATE.isDebugMode),
+      projectTag: asString(ues._projectTag, asString(ues._trackingId, DEFAULT_UES_STATE.projectTag)),
+      portfolio: asString(ues._portfolio, DEFAULT_UES_STATE.portfolio),
+      resourceLinkId: asString(ues._resourceLinkId, DEFAULT_UES_STATE.resourceLinkId),
+      standard: joinDeploymentUrls(ues._items),
+      ecl: joinDeploymentUrls(ues._itemsECL),
+    },
+    google: {
+      isEnabled: asBool(google._isEnabled, DEFAULT_GOOGLE_STATE.isEnabled),
+      trackingId: asString(google._trackingId, DEFAULT_GOOGLE_STATE.trackingId),
+    },
+    hotjar: {
+      isEnabled: asBool(hotjar._isEnabled, DEFAULT_HOTJAR_STATE.isEnabled),
+      siteId: asString(hotjar._siteId, DEFAULT_HOTJAR_STATE.siteId),
+    },
+  };
+}
+
+function buildSettingsFromSnapshot(
+  snapshot: TrackingAnalyticsPageSnapshot,
+  current: TrackingAnalyticsSettings
+): TrackingAnalyticsSettings {
+  const spoor = asRecord(current._spoor);
+  const spoorTracking = asRecord(spoor._tracking);
+  const spoorReporting = asRecord(spoor._reporting);
+  const spoorAdvanced = asRecord(spoor._advancedSettings);
+
+  const xapi = asRecord(current._xapi);
+  const hyper = asRecord(current._hyper);
+  const hyperTracking = asRecord(hyper._tracking);
+  const hyperReporting = asRecord(hyper._reporting);
+  const hyperAdvanced = asRecord(hyper._advancedSettings);
+
+  const ues = asRecord(current._uesAnalytics);
+  const google = asRecord(current._googleAnalytics);
+  const hotjar = asRecord(current._hotjarAnalytics);
+
+  return {
+    _spoor: {
+      ...spoor,
+      _isEnabled: snapshot.scorm.isEnabled,
+      _tracking: {
+        ...spoorTracking,
+        _shouldStoreResponses: snapshot.scorm.shouldStoreResponses,
+        _shouldStoreAttempts: snapshot.scorm.shouldStoreAttempts,
+        _shouldRecordInteractions: snapshot.scorm.shouldRecordInteractions,
+        _shouldRecordObjectives: snapshot.scorm.shouldRecordObjectives,
+        _shouldCompress: snapshot.scorm.shouldCompress,
+      },
+      _reporting: {
+        ...spoorReporting,
+        _onTrackingCriteriaMet: snapshot.scorm.onTrackingCriteriaMet,
+        _onAssessmentFailure: snapshot.scorm.onAssessmentFailure,
+      },
+      _advancedSettings: {
+        ...spoorAdvanced,
+        _scormVersion: snapshot.scorm.scormVersion,
+        _showDebugWindow: snapshot.scorm.showDebugWindow,
+        _commitOnStatusChange: snapshot.scorm.commitOnStatusChange,
+        _commitOnAnyChange: snapshot.scorm.commitOnAnyChange,
+        _timedCommitFrequency: Number(snapshot.scorm.timedCommitFrequency || 0),
+        _maxCommitRetries: Number(snapshot.scorm.maxCommitRetries || 0),
+        _commitRetryDelay: Number(snapshot.scorm.commitRetryDelay || 0),
+      },
+    },
+    _xapi: {
+      ...xapi,
+      _isEnabled: snapshot.xapi.isEnabled,
+      _specification: snapshot.xapi.specification,
+      _activityID: snapshot.xapi.activityID,
+      _auID: snapshot.xapi.auID,
+      _endpoint: snapshot.xapi.endpoint,
+      _user: snapshot.xapi.user,
+      _password: snapshot.xapi.password,
+      _lang: snapshot.xapi.lang,
+      _generateIds: snapshot.xapi.generateIds,
+      _shouldTrackState: snapshot.xapi.shouldTrackState,
+      _shouldUseRegistration: snapshot.xapi.shouldUseRegistration,
+      _componentBlacklist: snapshot.xapi.componentBlacklist,
+      _lrsFailureBehaviour: snapshot.xapi.lrsFailureBehaviour,
+    },
+    _hyper: {
+      ...hyper,
+      _isEnabled: snapshot.hyper.isEnabled,
+      _tracking: {
+        ...hyperTracking,
+        _shouldStoreResponses: snapshot.hyper.shouldStoreResponses,
+        _shouldStoreAttempts: snapshot.hyper.shouldStoreAttempts,
+        _shouldCompress: snapshot.hyper.shouldCompress,
+      },
+      _reporting: {
+        ...hyperReporting,
+        _onTrackingCriteriaMet: snapshot.hyper.onTrackingCriteriaMet,
+        _onAssessmentFailure: snapshot.hyper.onAssessmentFailure,
+      },
+      _advancedSettings: {
+        ...hyperAdvanced,
+        _commitOnStatusChange: snapshot.hyper.commitOnStatusChange,
+        _commitOnAnyChange: snapshot.hyper.commitOnAnyChange,
+        _commitOnAssessmentResult: snapshot.hyper.commitOnAssessmentResult,
+        _timedCommitFrequency: Number(snapshot.hyper.timedCommitFrequency || 0),
+        _maxCommitRetries: Number(snapshot.hyper.maxCommitRetries || 0),
+        _commitRetryDelay: Number(snapshot.hyper.commitRetryDelay || 0),
+        _showSuspendDataPopup: snapshot.hyper.showSuspendDataPopup,
+      },
+    },
+    _uesAnalytics: {
+      ...ues,
+      _isEnabled: snapshot.ues.isEnabled,
+      _isDebugMode: snapshot.ues.isDebugMode,
+      _projectTag: snapshot.ues.projectTag,
+      _trackingId: snapshot.ues.projectTag,
+      _portfolio: snapshot.ues.portfolio,
+      _resourceLinkId: snapshot.ues.resourceLinkId,
+      _items: buildDeploymentItems(snapshot.ues.standard, ues._items, true),
+      _itemsECL: buildDeploymentItems(snapshot.ues.ecl, ues._itemsECL, false),
+    },
+    _googleAnalytics: {
+      ...google,
+      _isEnabled: snapshot.google.isEnabled,
+      _trackingId: snapshot.google.trackingId,
+    },
+    _hotjarAnalytics: {
+      ...hotjar,
+      _isEnabled: snapshot.hotjar.isEnabled,
+      _siteId: snapshot.hotjar.siteId,
+    },
+  };
+}
+
+export function TrackingAnalyticsPage({
+  courseId,
+  onNavigationRequest,
+  pendingNavigation,
+  onPendingNavigationHandled,
+}: {
+  courseId?: string;
+  onNavigationRequest?: (nav: string) => void;
+  pendingNavigation?: string | null;
+  onPendingNavigationHandled?: () => void;
+}) {
   const [trackingOpen, setTrackingOpen] = useState(true);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const [trackingPlugin, setTrackingPlugin] = useState<TrackingPlugin>("scorm");
   const [analyticsPlugin, setAnalyticsPlugin] = useState<AnalyticsPlugin>("ues");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [savedSnapshot, setSavedSnapshot] = useState<TrackingAnalyticsPageSnapshot>(DEFAULT_SNAPSHOT);
+  const [sourceSettings, setSourceSettings] = useState<TrackingAnalyticsSettings>(defaultTrackingAnalyticsSettings());
 
-  const [scorm, setScorm] = useState({
-    isEnabled: true,
-    shouldStoreResponses: true,
-    shouldStoreAttempts: false,
-    shouldRecordInteractions: true,
-    shouldRecordObjectives: true,
-    shouldCompress: false,
-    onTrackingCriteriaMet: "completed",
-    onAssessmentFailure: "incomplete",
-    scormVersion: "1.2",
-    showDebugWindow: false,
-    commitOnStatusChange: true,
-    commitOnAnyChange: false,
-    timedCommitFrequency: "10",
-    maxCommitRetries: "5",
-    commitRetryDelay: "2000",
+  const [scorm, setScorm] = useState<TrackingAnalyticsPageSnapshot["scorm"]>(DEFAULT_SCORM_STATE);
+
+  const [xapi, setXapi] = useState<TrackingAnalyticsPageSnapshot["xapi"]>(DEFAULT_XAPI_STATE);
+
+  const [hyper, setHyper] = useState<TrackingAnalyticsPageSnapshot["hyper"]>(DEFAULT_HYPER_STATE);
+
+  const [ues, setUes] = useState<TrackingAnalyticsPageSnapshot["ues"]>(DEFAULT_UES_STATE);
+
+  const [google, setGoogle] = useState<TrackingAnalyticsPageSnapshot["google"]>(DEFAULT_GOOGLE_STATE);
+
+  const [hotjar, setHotjar] = useState<TrackingAnalyticsPageSnapshot["hotjar"]>(DEFAULT_HOTJAR_STATE);
+
+  const currentSnapshot = useMemo<TrackingAnalyticsPageSnapshot>(
+    () => ({
+      scorm,
+      xapi,
+      hyper,
+      ues,
+      google,
+      hotjar,
+    }),
+    [scorm, xapi, hyper, ues, google, hotjar]
+  );
+
+  const hasChanges = JSON.stringify(currentSnapshot) !== JSON.stringify(savedSnapshot);
+
+  const { showConfirmModal, consumePendingNavigation, clearPendingNavigation } = useUnsavedChangesNavigationGuard({
+    hasChanges,
+    pendingNavigation,
+    onPendingNavigationHandled,
+    onNavigate: onNavigationRequest,
   });
 
-  const [xapi, setXapi] = useState({
-    isEnabled: false,
-    specification: "xAPI",
-    activityID: "",
-    auID: "1",
-    endpoint: "",
-    user: "",
-    password: "",
-    lang: "en-US",
-    generateIds: false,
-    shouldTrackState: true,
-    shouldUseRegistration: true,
-    componentBlacklist: "blank,graphic",
-    lrsFailureBehaviour: "show",
-  });
+  const applySnapshot = (snapshot: TrackingAnalyticsPageSnapshot) => {
+    setScorm(snapshot.scorm);
+    setXapi(snapshot.xapi);
+    setHyper(snapshot.hyper);
+    setUes(snapshot.ues);
+    setGoogle(snapshot.google);
+    setHotjar(snapshot.hotjar);
 
-  const [hyper, setHyper] = useState({
-    isEnabled: false,
-    shouldStoreResponses: true,
-    shouldStoreAttempts: false,
-    shouldCompress: false,
-    onTrackingCriteriaMet: "completed",
-    onAssessmentFailure: "incomplete",
-    commitOnStatusChange: true,
-    commitOnAnyChange: false,
-    commitOnAssessmentResult: false,
-    timedCommitFrequency: "10",
-    maxCommitRetries: "5",
-    commitRetryDelay: "2000",
-    showSuspendDataPopup: false,
-  });
+    if (snapshot.scorm.isEnabled) setTrackingPlugin("scorm");
+    else if (snapshot.xapi.isEnabled) setTrackingPlugin("xapi");
+    else if (snapshot.hyper.isEnabled) setTrackingPlugin("hyperbridge");
 
-  const [ues, setUes] = useState({
-    isEnabled: false,
-    isDebugMode: false,
-    projectTag: "",
-    portfolio: "Adapt Course",
-    resourceLinkId: "",
-    standard: "",
-    ecl: "",
-  });
+    if (snapshot.ues.isEnabled) setAnalyticsPlugin("ues");
+    else if (snapshot.google.isEnabled) setAnalyticsPlugin("google");
+    else if (snapshot.hotjar.isEnabled) setAnalyticsPlugin("hotjar");
+  };
 
-  const [google, setGoogle] = useState({
-    isEnabled: false,
-    trackingId: "",
-  });
+  useEffect(() => {
+    let cancelled = false;
 
-  const [hotjar, setHotjar] = useState({
-    isEnabled: false,
-    siteId: "",
-  });
+    const load = async () => {
+      if (!courseId) {
+        const base = DEFAULT_SNAPSHOT;
+        if (cancelled) return;
+        setSourceSettings(defaultTrackingAnalyticsSettings());
+        applySnapshot(base);
+        setSavedSnapshot(base);
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const settings = await getTrackingAnalyticsSettings(courseId);
+        if (cancelled) return;
+        const snapshot = buildSnapshotFromSettings(settings);
+        setSourceSettings(settings);
+        applySnapshot(snapshot);
+        setSavedSnapshot(snapshot);
+      } catch (error) {
+        if (cancelled) return;
+        console.error("Failed to load tracking and analytics settings", error);
+        const base = DEFAULT_SNAPSHOT;
+        setSourceSettings(defaultTrackingAnalyticsSettings());
+        applySnapshot(base);
+        setSavedSnapshot(base);
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    };
+
+    load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
+
+  const handleSave = async () => {
+    if (!courseId) return;
+
+    setIsSaving(true);
+    try {
+      const nextSettings = buildSettingsFromSnapshot(currentSnapshot, sourceSettings);
+      await saveTrackingAnalyticsSettings(courseId, nextSettings);
+      setSourceSettings(nextSettings);
+      setSavedSnapshot(currentSnapshot);
+      const navTarget = consumePendingNavigation();
+      if (navTarget) onNavigationRequest?.(navTarget);
+    } catch (error) {
+      console.error("Failed to save tracking and analytics settings", error);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDiscard = () => {
+    applySnapshot(savedSnapshot);
+    const navTarget = consumePendingNavigation();
+    if (navTarget) onNavigationRequest?.(navTarget);
+  };
 
   return (
-    <div className="max-w-2xl w-full">
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-[#111827]">Tracking &amp; Analytics</h2>
-        <p className="text-sm text-[#6b7280] mt-0.5">Group and configure your existing tracking and analytics plugins for this course.</p>
-      </div>
+    <>
+      <div className="max-w-2xl w-full pb-24">
+        <div className="mb-6">
+          <h2 className="text-xl font-bold text-[#111827]">Tracking &amp; Analytics</h2>
+          <p className="text-sm text-[#6b7280] mt-0.5">Group and configure your existing tracking and analytics plugins for this course.</p>
+        </div>
 
-      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4">
         <AccordionCard
           title="Tracking"
           open={trackingOpen}
@@ -443,6 +908,50 @@ export function TrackingAnalyticsPage() {
           )}
         </AccordionCard>
       </div>
-    </div>
+
+      </div>
+
+      {!isLoading && hasChanges && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-3 rounded-xl bg-white border border-[var(--life-warning-100)] shadow-lg animate-fade-in-down">
+          <span className="flex items-center gap-2 text-sm text-[#374151]">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-warning-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            Unsaved changes
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleDiscard}
+              disabled={isSaving}
+              className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] disabled:opacity-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={isSaving || !courseId}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:opacity-50 rounded-lg transition-colors"
+            >
+              {isSaving && (
+                <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                </svg>
+              )}
+              {isSaving ? "Saving..." : "Save Changes"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <UnsavedChangesModal
+        isOpen={showConfirmModal}
+        isSaving={isSaving}
+        onDiscard={handleDiscard}
+        onSave={handleSave}
+        onClose={clearPendingNavigation}
+      />
+    </>
   );
 }
