@@ -1924,6 +1924,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <div className="fixed inset-x-0 top-14 bottom-0 z-50 overflow-y-auto bg-black/50 p-4" onClick={() => setIsExpanded(false)}>
             <div
               className="mx-auto flex min-h-full w-full max-w-6xl min-h-0 flex-col overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-2xl"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Live Preview"
               onClick={(event) => event.stopPropagation()}
             >
               <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-[#e5e7eb] shrink-0">
