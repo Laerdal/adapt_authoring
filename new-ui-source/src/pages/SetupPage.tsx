@@ -188,6 +188,10 @@ const NAV_GROUPS = NAV_ITEMS.reduce<{ id: string; label: string; items: NavLeafI
   return groups;
 }, []);
 
+// Navigation guard source of truth:
+// To guard a page in future (unsaved-changes interception), add `guarded: true`
+// on that page item in NAV_ITEMS. It will automatically be included here.
+
 const GUARDED_NAV_IDS = new Set(
   NAV_ITEMS.filter((item) => item.heading !== true && item.guarded).map((item) => item.id)
 );
