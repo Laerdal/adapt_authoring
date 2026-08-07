@@ -203,6 +203,7 @@ export async function updateCourse(
     tags?: string[];
     isShared?: boolean;
     shareWithUserIds?: string[];
+    language?: string;
   }
 ): Promise<unknown> {
   const updateData: Record<string, unknown> = {};
@@ -218,7 +219,21 @@ export async function updateCourse(
   }
   if (patch.isShared !== undefined) updateData._isShared = patch.isShared;
   if (patch.shareWithUserIds !== undefined) updateData._shareWithUsers = patch.shareWithUserIds;
-  return apiClient.put(`/api/content/course/${backendId}`, updateData);
+
+  const coursePromise = apiClient.put(`/api/content/course/${backendId}`, updateData);
+
+  // _defaultLanguage lives on the config document — fetch it by courseId to get its _id
+  if (patch.language !== undefined) {
+    const config = await apiClient.get<EngineConfigDetails>(`/api/content/config/${backendId}`);
+    if (config._id) {
+      await apiClient.put(`/api/content/config/${config._id}`, {
+        _courseId: backendId,
+        _defaultLanguage: patch.language,
+      });
+    }
+  }
+
+  return coursePromise;
 }
 
 export function duplicateCourse(backendId: string): Promise<unknown> {
@@ -277,6 +292,7 @@ interface EngineConfigDetails {
   _theme?: string;
   _menu?: string;
   _themePreset?: string;
+  _defaultLanguage?: string;
   // Map of installed extensions, keyed by the plugin's bower `extension` field
   // (e.g. "course-menu"); each entry carries the full bower `name`.
   _enabledExtensions?: Record<string, { _id: string; name: string; version?: string; targetAttribute?: string }>;
@@ -298,6 +314,7 @@ export interface CourseBootstrapData {
   menuName: string;
   themeVariables: Record<string, unknown>;
   themePresetId: string;
+  language: string;
 }
 
 function normalize(v?: string): string {
@@ -527,6 +544,7 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
     menuName: config._menu || "",
     themeVariables: (course.themeVariables as Record<string, unknown>) || {},
     themePresetId: config._themePreset || "",
+    language: config._defaultLanguage || "",
   };
 }
 

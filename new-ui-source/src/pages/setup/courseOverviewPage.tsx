@@ -120,8 +120,8 @@ export function CourseOverviewPage({
         setTags(data.tags);
         setHeroAssetId(data.heroAssetId);
         setHeroPreviewUrl(data.heroAssetId ? `/api/asset/serve/${data.heroAssetId}` : null);
-        setLanguage("");
-        setSavedLanguage("");
+        setLanguage(data.language);
+        setSavedLanguage(data.language);
 
         // Load sharing state
         const isShared = data.isShared;
@@ -220,6 +220,7 @@ export function CourseOverviewPage({
         tags,
         isShared: isSharedAll,
         shareWithUserIds: isSharedAll ? [] : collaborators.map((c) => c.userId),
+        language,
       });
       setSavedTitle(formTitle.trim());
       setSavedDisplayTitle(formDisplayTitle.trim());
