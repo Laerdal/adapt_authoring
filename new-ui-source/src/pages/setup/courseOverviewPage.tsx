@@ -560,18 +560,10 @@ export function CourseOverviewPage({
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddEmail(); } }}
                 placeholder="colleague@laerdal.com"
                 disabled={emailSearching}
-                style={{ ...inputBase, flex: 1 }}
+                style={inputBase}
                 onFocus={focusIn}
                 onBlur={focusOut}
               />
-              <button
-                type="button"
-                onClick={handleAddEmail}
-                disabled={!emailInput.trim() || emailSearching}
-                style={{ height: 44, padding: "0 18px", background: "var(--life-primary-500)", border: "none", borderRadius: 8, cursor: (emailInput.trim() && !emailSearching) ? "pointer" : "not-allowed", fontFamily: '"Lato", sans-serif', fontSize: 14, fontWeight: 700, color: "#ffffff", opacity: (emailInput.trim() && !emailSearching) ? 1 : 0.4, flexShrink: 0, transition: "opacity 0.15s" } as React.CSSProperties}
-              >
-                {emailSearching ? "Searching…" : "Add"}
-              </button>
             </div>
             {emailError && (
               <div style={{ fontFamily: '"Lato", sans-serif', fontSize: 12, color: "var(--life-critical-600)", marginTop: 4, lineHeight: 1.4 }}>
