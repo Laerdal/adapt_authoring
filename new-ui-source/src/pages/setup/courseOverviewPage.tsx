@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { findUserByEmail, getCourseBootstrapData, getUserById, updateCourse } from "../../api/adaptAuthoring";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
 
