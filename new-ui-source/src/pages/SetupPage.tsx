@@ -4717,7 +4717,7 @@ function CourseCreationCenterContent() {
       try {
         const data = await getCourseBootstrapData(courseId);
         if (cancelled) return;
-        setTitle(data.title || initialTitle);
+        setTitle(data.displayTitle || data.title || initialTitle);
         setDescription(data.description || initialDescription);
         setSavedThemeName(data.themeName || "");
         setSavedMenuName(data.menuName || "");
