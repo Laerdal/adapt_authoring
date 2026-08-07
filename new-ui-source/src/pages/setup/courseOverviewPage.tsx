@@ -587,7 +587,9 @@ export function CourseOverviewPage({
                   <select
                     value={role}
                     onChange={(e) => handleRoleChange(userId, e.target.value)}
-                    style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-base-black)", background: "#ffffff", border: "1px solid var(--life-neutral-200)", borderRadius: 6, padding: "4px 10px", cursor: "pointer", outline: "none" }}
+                    disabled
+                    title="Roles are not configurable yet"
+                    style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-base-black)", background: "#ffffff", border: "1px solid var(--life-neutral-200)", borderRadius: 6, padding: "4px 10px", cursor: "not-allowed", outline: "none", opacity: 0.7 }}
                   >
                     {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
                   </select>
