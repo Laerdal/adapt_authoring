@@ -15,6 +15,7 @@ import { MenuPage } from "./setup/menuPage";
 import { NavigationPage } from "./setup/navigationPage";
 import { AccessibilityPage } from "./setup/accessibilityPage";
 import { TechnicalSettingPage } from "./setup/technicalSettingPage";
+import { TrackingAnalyticsPage } from "./setup/trackingAnalyticsPage";
 import { UnsavedChangesModal } from "./setup/unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./setup/useUnsavedChangesNavigationGuard";
 
@@ -4831,7 +4832,7 @@ function CourseCreationCenterContent() {
     if (activeNav === "menu") return <MenuPage courseId={courseId} initialMenuName={savedMenuName} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "navigation") return <NavigationPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "accessibility") return <AccessibilityPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "tracking") return <TrackingAnalyticsPanel />;
+    if (activeNav === "tracking") return <TrackingAnalyticsPage />;
     if (activeNav === "completion") return <CompletionProgressPanel />;
     if (activeNav === "learner-experience") return <LearnerExperiencePanel />;
     if (activeNav === "technical-settings") return <TechnicalSettingPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
