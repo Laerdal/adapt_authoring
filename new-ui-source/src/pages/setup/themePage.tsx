@@ -51,13 +51,47 @@ const PAGE_TITLE_SIZE_REM: Record<string, number> = {
 };
 
 function calcDesktopSizes(baseRem: number) {
+  const MIN_INSTRUCTION_REM = 0.875;
+  const MIN_FONT_STEP_REM = 0.0625;
+  const MIN_PARAGRAPH_REM = MIN_INSTRUCTION_REM + MIN_FONT_STEP_REM;
+
+  const h1Raw = baseRem;
+  const h2Raw = baseRem - 0.5;
+  const h3Raw = baseRem - 1;
+  const h4Raw = baseRem - 1.25;
+  const h5Raw = baseRem - 1.5;
+  const h6Raw = baseRem - 1.75;
+
+  const h6 = Math.max(h6Raw, MIN_PARAGRAPH_REM);
+  const h5 = Math.max(h5Raw, h6 + MIN_FONT_STEP_REM);
+  const h4 = Math.max(h4Raw, h5 + MIN_FONT_STEP_REM);
+  const h3 = Math.max(h3Raw, h4 + MIN_FONT_STEP_REM);
+  const h2 = Math.max(h2Raw, h3 + MIN_FONT_STEP_REM);
+  const h1 = Math.max(h1Raw, h2 + MIN_FONT_STEP_REM);
+  const p = h6;
+
+  const formatSize = (rem: number) => {
+    const px = Math.round(rem * 16);
+    const formatted = rem.toFixed(4).replace(/\.?0+$/, "");
+    return { rem: formatted, px };
+  };
+
+  const h1Size = formatSize(h1);
+  const h2Size = formatSize(h2);
+  const h3Size = formatSize(h3);
+  const h4Size = formatSize(h4);
+  const h5Size = formatSize(h5);
+  const h6Size = formatSize(h6);
+  const pSize = formatSize(p);
+
   return [
-    { label: "H1 (Page Title)", size: baseRem, px: Math.round(baseRem * 16) },
-    { label: "H2", size: +(baseRem - 0.5).toFixed(3), px: Math.round((baseRem - 0.5) * 16) },
-    { label: "H3", size: +(baseRem - 1).toFixed(3), px: Math.round((baseRem - 1) * 16) },
-    { label: "H4", size: +(baseRem - 1.5).toFixed(3), px: Math.round((baseRem - 1.5) * 16) },
-    { label: "H5", size: +(baseRem - 2).toFixed(3), px: Math.round((baseRem - 2) * 16) },
-    { label: "Paragraph", size: 1.125, px: 18 },
+    { label: "H1 (Page Title)", size: h1Size.rem, px: h1Size.px },
+    { label: "H2", size: h2Size.rem, px: h2Size.px },
+    { label: "H3", size: h3Size.rem, px: h3Size.px },
+    { label: "H4", size: h4Size.rem, px: h4Size.px },
+    { label: "H5", size: h5Size.rem, px: h5Size.px },
+    { label: "H6", size: h6Size.rem, px: h6Size.px },
+    { label: "Paragraph", size: pSize.rem, px: pSize.px },
   ];
 }
 
