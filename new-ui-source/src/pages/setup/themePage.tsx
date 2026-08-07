@@ -46,21 +46,28 @@ const PREVIEW_TITLE_SIZE: Record<string, string | null> = {
   Paragraph: "0.95rem",
 };
 
-const CALC_VALUES = [
-  { label: "H1 (Page Title)", rem: "3.5rem", px: "56px" },
-  { label: "H2", rem: "3rem", px: "48px" },
-  { label: "H3", rem: "2.5rem", px: "40px" },
-  { label: "H4", rem: "2rem", px: "32px" },
-  { label: "H5", rem: "1.5rem", px: "24px" },
-  { label: "Paragraph", rem: "1.125rem", px: "18px" },
-];
+const PAGE_TITLE_SIZE_REM: Record<string, number> = {
+  H1: 3.5, H2: 3, H3: 2.5, H4: 2, H5: 1.5, Paragraph: 1.125,
+};
 
-function DesktopCalculatedValues() {
+function calcDesktopSizes(baseRem: number) {
+  return [
+    { label: "H1 (Page Title)", size: baseRem, px: Math.round(baseRem * 16) },
+    { label: "H2", size: +(baseRem - 0.5).toFixed(3), px: Math.round((baseRem - 0.5) * 16) },
+    { label: "H3", size: +(baseRem - 1).toFixed(3), px: Math.round((baseRem - 1) * 16) },
+    { label: "H4", size: +(baseRem - 1.5).toFixed(3), px: Math.round((baseRem - 1.5) * 16) },
+    { label: "H5", size: +(baseRem - 2).toFixed(3), px: Math.round((baseRem - 2) * 16) },
+    { label: "Paragraph", size: 1.125, px: 18 },
+  ];
+}
+
+function DesktopCalculatedValues({ baseRem }: { baseRem: number }) {
+  const sizes = calcDesktopSizes(baseRem);
   return (
     <div className="mt-2 px-4 py-3 text-xs text-[var(--life-neutral-500)] space-y-0.5 bg-[var(--life-primary-020)] border-l-4 border-[var(--life-primary-500)]">
       <p className="font-semibold text-[var(--life-base-black)] mb-1">Calculated values for Desktop:</p>
-      {CALC_VALUES.map((s) => (
-        <p key={s.label}><span className="font-semibold">{s.label}:</span> {s.rem} ({s.px})</p>
+      {sizes.map((s) => (
+        <p key={s.label}><span className="font-semibold">{s.label}:</span> {s.size}rem ({s.px}px)</p>
       ))}
     </div>
   );
@@ -268,21 +275,6 @@ function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
 function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (v: CustomThemeValues) => void }) {
   const set = <K extends keyof CustomThemeValues>(k: K, v: CustomThemeValues[K]) => setCfg({ ...cfg, [k]: v });
 
-  const calcSizes = () => {
-    const base = cfg.pageTitleSize === "h6" ? null : parseFloat(cfg.pageTitleSize);
-    if (!base) return null;
-    return [
-      { label: "H1 (Page Title)", size: base, px: Math.round(base * 16) },
-      { label: "H2", size: +(base - 0.5).toFixed(1), px: Math.round((base - 0.5) * 16) },
-      { label: "H3", size: +(base - 1).toFixed(1), px: Math.round((base - 1) * 16) },
-      { label: "H4", size: +(base - 1.5).toFixed(1), px: Math.round((base - 1.5) * 16) },
-      { label: "H5", size: +(base - 2).toFixed(1), px: Math.round((base - 2) * 16) },
-      { label: "Paragraph", size: 1.125, px: 18 },
-    ];
-  };
-
-  const sizes = calcSizes();
-
   return (
     <div className="space-y-5 mt-4">
       {/* colours row 1 */}
@@ -331,7 +323,7 @@ function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (
             <polyline points="6 9 12 15 18 9"/>
           </svg>
         </div>
-        {sizes && <DesktopCalculatedValues />}
+        {cfg.pageTitleSize !== "h6" && <DesktopCalculatedValues baseRem={parseFloat(cfg.pageTitleSize)} />}
       </div>
     </div>
   );
@@ -1996,7 +1988,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                       <select value={customSettings.pageTitleSize} onChange={e => setCustomSettings({...customSettings, pageTitleSize: e.target.value})} className="text-xs w-full border-2 border-[var(--life-primary-500)] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:outline-none">
                         {PAGE_TITLE_OPTIONS.map(h => <option key={h} value={h}>{PAGE_TITLE_LABELS[h]}</option>)}
                       </select>
-                      {customSettings.pageTitleSize !== 'H6' && <DesktopCalculatedValues />}
+                      {customSettings.pageTitleSize !== 'H6' && PAGE_TITLE_SIZE_REM[customSettings.pageTitleSize] != null && <DesktopCalculatedValues baseRem={PAGE_TITLE_SIZE_REM[customSettings.pageTitleSize]} />}
                     </div>
                   </div>
                 )}
@@ -2566,7 +2558,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                                         <option key={option.value} value={option.value}>{option.label}</option>
                                       ))}
                                     </select>
-                                    {acc.id === '_global' && field.key === 'page-heading-font-size' && <DesktopCalculatedValues />}
+                                    {acc.id === '_global' && field.key === 'page-heading-font-size' && parseFloat(value) > 0 && <DesktopCalculatedValues baseRem={parseFloat(value)} />}
                                   </div>
                                 );
                               }
