@@ -386,7 +386,16 @@ export function CourseOverviewPage({
         <div>
           <label style={labelStyle}>Course Image</label>
           <div
+            role="button"
+            tabIndex={0}
+            aria-label={heroPreviewUrl ? "Replace course image" : "Choose a cover image"}
             onClick={() => setIsAssetPickerOpen(true)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setIsAssetPickerOpen(true);
+              }
+            }}
             className="group relative cursor-pointer overflow-hidden"
             style={{
               width: "100%", height: 128,
