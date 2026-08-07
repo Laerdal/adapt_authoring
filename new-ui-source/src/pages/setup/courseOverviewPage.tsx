@@ -1,11 +1,16 @@
 import { useEffect, useState } from "react";
 import { findUserByEmail, getCourseBootstrapData, getUserById, updateCourse } from "../../api/adaptAuthoring";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
+import { UnsavedChangesModal } from "./unsavedChangesModal";
+import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
 interface CourseOverviewPageProps {
   courseId: string;
   title: string;
   description: string;
+  onNavigationRequest?: (nav: string) => void;
+  pendingNavigation?: string | null;
+  onPendingNavigationHandled?: () => void;
 }
 
 const LANGUAGES: { label: string; iso: string }[] = [
@@ -43,6 +48,9 @@ export function CourseOverviewPage({
   courseId,
   title: initialTitle,
   description: initialDescription,
+  onNavigationRequest,
+  pendingNavigation,
+  onPendingNavigationHandled,
 }: CourseOverviewPageProps) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -198,6 +206,26 @@ export function CourseOverviewPage({
   function handleRoleChange(userId: string, role: string) {
     setCollaborators((prev) => prev.map((c) => (c.userId === userId ? { ...c, role } : c)));
     markDirty();
+  }
+
+  const { showConfirmModal, consumePendingNavigation, clearPendingNavigation } =
+    useUnsavedChangesNavigationGuard({
+      hasChanges: isDirty,
+      pendingNavigation,
+      onPendingNavigationHandled,
+      onNavigate: onNavigationRequest,
+    });
+
+  async function handleConfirmSave() {
+    await handleSave();
+    const navTarget = consumePendingNavigation();
+    if (navTarget) onNavigationRequest?.(navTarget);
+  }
+
+  function handleConfirmDiscard() {
+    handleDiscard();
+    const navTarget = consumePendingNavigation();
+    if (navTarget) onNavigationRequest?.(navTarget);
   }
 
   async function handleSave() {
@@ -668,6 +696,13 @@ export function CourseOverviewPage({
         />
       ) : null}
 
+      <UnsavedChangesModal
+        isOpen={showConfirmModal}
+        isSaving={saving}
+        onDiscard={handleConfirmDiscard}
+        onSave={handleConfirmSave}
+        onClose={clearPendingNavigation}
+      />
     </div>
   );
 }

@@ -51,6 +51,7 @@ const NAV_ITEMS = [
   {
     id: "overview",
     label: "Course Overview",
+    guarded: true,
     icon: (
       <SidebarMaskIcon file="overview-icon.svg" />
     ),
@@ -4766,7 +4767,7 @@ function CourseCreationCenterContent() {
   }
 
   function renderPanel() {
-    if (activeNav === "overview") return <CourseOverviewPage courseId={courseId} title={title} description={description} />;
+    if (activeNav === "overview") return <CourseOverviewPage courseId={courseId} title={title} description={description} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "structure")
       return (
         <CourseStructurePanel
