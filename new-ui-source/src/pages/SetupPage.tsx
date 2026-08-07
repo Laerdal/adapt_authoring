@@ -4903,7 +4903,7 @@ function CourseCreationCenterContent() {
     if (activeNav === "menu") return <MenuPage courseId={courseId} initialMenuName={savedMenuName} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "navigation") return <NavigationPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "accessibility") return <AccessibilityPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "tracking") return <TrackingAnalyticsPage />;
+    if (activeNav === "tracking") return <TrackingAnalyticsPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "completion") return <CompletionProgressPanel />;
     if (activeNav === "learner-experience") return <LearnerExperiencePanel />;
     if (activeNav === "technical-settings") return <TechnicalSettingPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
