@@ -387,7 +387,16 @@ export function CourseOverviewPage({
         <div>
           <label style={labelStyle}>Course Image</label>
           <div
+            role="button"
+            tabIndex={0}
+            aria-label={heroPreviewUrl ? "Replace course image" : "Choose a cover image"}
             onClick={() => setIsAssetPickerOpen(true)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setIsAssetPickerOpen(true);
+              }
+            }}
             className="group relative cursor-pointer overflow-hidden"
             style={{
               width: "100%", height: 128,
@@ -588,7 +597,9 @@ export function CourseOverviewPage({
                   <select
                     value={role}
                     onChange={(e) => handleRoleChange(userId, e.target.value)}
-                    style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-base-black)", background: "#ffffff", border: "1px solid var(--life-neutral-200)", borderRadius: 6, padding: "4px 10px", cursor: "pointer", outline: "none" }}
+                    disabled
+                    title="Roles are not configurable yet"
+                    style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-base-black)", background: "#ffffff", border: "1px solid var(--life-neutral-200)", borderRadius: 6, padding: "4px 10px", cursor: "not-allowed", outline: "none", opacity: 0.7 }}
                   >
                     {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
                   </select>
