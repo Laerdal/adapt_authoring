@@ -2391,6 +2391,10 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
             <div className="flex items-center gap-3">
               <button
+                type="button"
+                role="switch"
+                aria-checked={onScreenConfig._isEnabled}
+                aria-label="Enable On Screen Classes"
                 onClick={() => setOnScreenConfig((prev) => ({ ...prev, _isEnabled: !prev._isEnabled }))}
                 className="relative w-10 h-5.5 rounded-full border-none cursor-pointer flex-shrink-0 transition-colors"
                 style={{ backgroundColor: onScreenConfig._isEnabled ? "var(--life-primary-500)" : "#d1d5db" }}
