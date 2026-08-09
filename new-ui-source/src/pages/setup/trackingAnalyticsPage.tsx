@@ -199,6 +199,7 @@ type TrackingAnalyticsPageSnapshot = {
     shouldCompress: boolean;
     onTrackingCriteriaMet: string;
     onAssessmentFailure: string;
+    resetStatusWhenLanguageChanged: boolean;
     scormVersion: string;
     showDebugWindow: boolean;
     commitOnStatusChange: boolean;
@@ -206,6 +207,20 @@ type TrackingAnalyticsPageSnapshot = {
     timedCommitFrequency: string;
     maxCommitRetries: string;
     commitRetryDelay: string;
+    suppressLmsErrors: boolean;
+    commitOnVisibilityChangeHidden: boolean;
+    manifestIdentifier: string;
+    exitStateIncomplete: string;
+    exitStateComplete: string;
+    completedWhenFailed: boolean;
+    fillInCharacterLimit: string;
+    connectionTestEnabled: boolean;
+    connectionTestOnSetValue: boolean;
+    silentRetryLimit: string;
+    silentRetryDelay: string;
+    uniqueInteractionIds: boolean;
+    showResetButton: boolean;
+    persistCookieData: boolean;
   };
   xapi: {
     isEnabled: boolean;
@@ -221,6 +236,14 @@ type TrackingAnalyticsPageSnapshot = {
     shouldUseRegistration: boolean;
     componentBlacklist: string;
     lrsFailureBehaviour: string;
+    adaptRouterMenu: boolean;
+    adaptRouterPage: boolean;
+    adaptRecordInteraction: boolean;
+    adaptAssessComplete: boolean;
+    contentObjectIsComplete: boolean;
+    articleIsComplete: boolean;
+    blockIsComplete: boolean;
+    componentIsComplete: boolean;
   };
   hyper: {
     isEnabled: boolean;
@@ -249,10 +272,14 @@ type TrackingAnalyticsPageSnapshot = {
   google: {
     isEnabled: boolean;
     trackingId: string;
+    anonymizeIp: boolean;
+    debugMode: boolean;
   };
   hotjar: {
     isEnabled: boolean;
     siteId: string;
+    version: string;
+    debugMode: boolean;
   };
 };
 
@@ -265,6 +292,7 @@ const DEFAULT_SCORM_STATE: TrackingAnalyticsPageSnapshot["scorm"] = {
   shouldCompress: false,
   onTrackingCriteriaMet: "completed",
   onAssessmentFailure: "incomplete",
+  resetStatusWhenLanguageChanged: false,
   scormVersion: "1.2",
   showDebugWindow: false,
   commitOnStatusChange: true,
@@ -272,6 +300,20 @@ const DEFAULT_SCORM_STATE: TrackingAnalyticsPageSnapshot["scorm"] = {
   timedCommitFrequency: "10",
   maxCommitRetries: "5",
   commitRetryDelay: "2000",
+  suppressLmsErrors: false,
+  commitOnVisibilityChangeHidden: true,
+  manifestIdentifier: "adapt_manifest",
+  exitStateIncomplete: "auto",
+  exitStateComplete: "auto",
+  completedWhenFailed: true,
+  fillInCharacterLimit: "0",
+  connectionTestEnabled: true,
+  connectionTestOnSetValue: true,
+  silentRetryLimit: "2",
+  silentRetryDelay: "1000",
+  uniqueInteractionIds: false,
+  showResetButton: false,
+  persistCookieData: true,
 };
 
 const DEFAULT_XAPI_STATE: TrackingAnalyticsPageSnapshot["xapi"] = {
@@ -288,6 +330,14 @@ const DEFAULT_XAPI_STATE: TrackingAnalyticsPageSnapshot["xapi"] = {
   shouldUseRegistration: true,
   componentBlacklist: "blank,graphic",
   lrsFailureBehaviour: "show",
+  adaptRouterMenu: false,
+  adaptRouterPage: false,
+  adaptRecordInteraction: true,
+  adaptAssessComplete: true,
+  contentObjectIsComplete: false,
+  articleIsComplete: false,
+  blockIsComplete: false,
+  componentIsComplete: true,
 };
 
 const DEFAULT_HYPER_STATE: TrackingAnalyticsPageSnapshot["hyper"] = {
@@ -319,11 +369,15 @@ const DEFAULT_UES_STATE: TrackingAnalyticsPageSnapshot["ues"] = {
 const DEFAULT_GOOGLE_STATE: TrackingAnalyticsPageSnapshot["google"] = {
   isEnabled: false,
   trackingId: "",
+  anonymizeIp: true,
+  debugMode: false,
 };
 
 const DEFAULT_HOTJAR_STATE: TrackingAnalyticsPageSnapshot["hotjar"] = {
   isEnabled: false,
   siteId: "",
+  version: "6",
+  debugMode: false,
 };
 
 const DEFAULT_SNAPSHOT: TrackingAnalyticsPageSnapshot = {
@@ -396,6 +450,7 @@ function buildSnapshotFromSettings(settings: TrackingAnalyticsSettings): Trackin
   const spoorTracking = asRecord(spoor._tracking);
   const spoorReporting = asRecord(spoor._reporting);
   const spoorAdvanced = asRecord(spoor._advancedSettings);
+  const spoorConnectionTest = asRecord(spoor._connectionTest);
 
   const xapi = asRecord(settings._xapi);
   const hyper = asRecord(settings._hyper);
@@ -417,6 +472,7 @@ function buildSnapshotFromSettings(settings: TrackingAnalyticsSettings): Trackin
       shouldCompress: asBool(spoorTracking._shouldCompress, DEFAULT_SCORM_STATE.shouldCompress),
       onTrackingCriteriaMet: asString(spoorReporting._onTrackingCriteriaMet, DEFAULT_SCORM_STATE.onTrackingCriteriaMet),
       onAssessmentFailure: asString(spoorReporting._onAssessmentFailure, DEFAULT_SCORM_STATE.onAssessmentFailure),
+      resetStatusWhenLanguageChanged: asBool(spoorReporting._resetStatusWhenLanguageChanged, DEFAULT_SCORM_STATE.resetStatusWhenLanguageChanged),
       scormVersion: asString(spoorAdvanced._scormVersion, DEFAULT_SCORM_STATE.scormVersion),
       showDebugWindow: asBool(spoorAdvanced._showDebugWindow, DEFAULT_SCORM_STATE.showDebugWindow),
       commitOnStatusChange: asBool(spoorAdvanced._commitOnStatusChange, DEFAULT_SCORM_STATE.commitOnStatusChange),
@@ -424,6 +480,20 @@ function buildSnapshotFromSettings(settings: TrackingAnalyticsSettings): Trackin
       timedCommitFrequency: asString(spoorAdvanced._timedCommitFrequency, DEFAULT_SCORM_STATE.timedCommitFrequency),
       maxCommitRetries: asString(spoorAdvanced._maxCommitRetries, DEFAULT_SCORM_STATE.maxCommitRetries),
       commitRetryDelay: asString(spoorAdvanced._commitRetryDelay, DEFAULT_SCORM_STATE.commitRetryDelay),
+      suppressLmsErrors: asBool(spoorAdvanced._suppressLmsErrors, DEFAULT_SCORM_STATE.suppressLmsErrors),
+      commitOnVisibilityChangeHidden: asBool(spoorAdvanced._commitOnVisibilityChangeHidden, DEFAULT_SCORM_STATE.commitOnVisibilityChangeHidden),
+      manifestIdentifier: asString(spoorAdvanced._manifestIdentifier, DEFAULT_SCORM_STATE.manifestIdentifier),
+      exitStateIncomplete: asString(spoorAdvanced._exitStateIncomplete, DEFAULT_SCORM_STATE.exitStateIncomplete),
+      exitStateComplete: asString(spoorAdvanced._exitStateComplete, DEFAULT_SCORM_STATE.exitStateComplete),
+      completedWhenFailed: asBool(spoorAdvanced._completedWhenFailed, DEFAULT_SCORM_STATE.completedWhenFailed),
+      fillInCharacterLimit: asString(spoorAdvanced._fillInCharacterLimit, DEFAULT_SCORM_STATE.fillInCharacterLimit),
+      connectionTestEnabled: asBool(spoorConnectionTest._isEnabled, DEFAULT_SCORM_STATE.connectionTestEnabled),
+      connectionTestOnSetValue: asBool(spoorConnectionTest._testOnSetValue, DEFAULT_SCORM_STATE.connectionTestOnSetValue),
+      silentRetryLimit: asString(spoorConnectionTest._silentRetryLimit, DEFAULT_SCORM_STATE.silentRetryLimit),
+      silentRetryDelay: asString(spoorConnectionTest._silentRetryDelay, DEFAULT_SCORM_STATE.silentRetryDelay),
+      uniqueInteractionIds: asBool(spoorAdvanced._uniqueInteractionIds, DEFAULT_SCORM_STATE.uniqueInteractionIds),
+      showResetButton: asBool(spoorAdvanced._showResetButton, DEFAULT_SCORM_STATE.showResetButton),
+      persistCookieData: asBool(spoorAdvanced._persistCookieData, DEFAULT_SCORM_STATE.persistCookieData),
     },
     xapi: {
       isEnabled: asBool(xapi._isEnabled, DEFAULT_XAPI_STATE.isEnabled),
@@ -439,6 +509,14 @@ function buildSnapshotFromSettings(settings: TrackingAnalyticsSettings): Trackin
       shouldUseRegistration: asBool(xapi._shouldUseRegistration, DEFAULT_XAPI_STATE.shouldUseRegistration),
       componentBlacklist: asString(xapi._componentBlacklist, DEFAULT_XAPI_STATE.componentBlacklist),
       lrsFailureBehaviour: asString(xapi._lrsFailureBehaviour, DEFAULT_XAPI_STATE.lrsFailureBehaviour),
+      adaptRouterMenu: asBool(xapi._adaptRouterMenu, DEFAULT_XAPI_STATE.adaptRouterMenu),
+      adaptRouterPage: asBool(xapi._adaptRouterPage, DEFAULT_XAPI_STATE.adaptRouterPage),
+      adaptRecordInteraction: asBool(xapi._adaptRecordInteraction, DEFAULT_XAPI_STATE.adaptRecordInteraction),
+      adaptAssessComplete: asBool(xapi._adaptAssessComplete, DEFAULT_XAPI_STATE.adaptAssessComplete),
+      contentObjectIsComplete: asBool(xapi._contentObjectIsComplete, DEFAULT_XAPI_STATE.contentObjectIsComplete),
+      articleIsComplete: asBool(xapi._articleIsComplete, DEFAULT_XAPI_STATE.articleIsComplete),
+      blockIsComplete: asBool(xapi._blockIsComplete, DEFAULT_XAPI_STATE.blockIsComplete),
+      componentIsComplete: asBool(xapi._componentIsComplete, DEFAULT_XAPI_STATE.componentIsComplete),
     },
     hyper: {
       isEnabled: asBool(hyper._isEnabled, DEFAULT_HYPER_STATE.isEnabled),
@@ -467,10 +545,14 @@ function buildSnapshotFromSettings(settings: TrackingAnalyticsSettings): Trackin
     google: {
       isEnabled: asBool(google._isEnabled, DEFAULT_GOOGLE_STATE.isEnabled),
       trackingId: asString(google._trackingId, DEFAULT_GOOGLE_STATE.trackingId),
+      anonymizeIp: asBool(google._anonymizeIp, DEFAULT_GOOGLE_STATE.anonymizeIp),
+      debugMode: asBool(google._debugMode, DEFAULT_GOOGLE_STATE.debugMode),
     },
     hotjar: {
       isEnabled: asBool(hotjar._isEnabled, DEFAULT_HOTJAR_STATE.isEnabled),
       siteId: asString(hotjar._siteId, DEFAULT_HOTJAR_STATE.siteId),
+      version: asString(hotjar._version, DEFAULT_HOTJAR_STATE.version),
+      debugMode: asBool(hotjar._debugMode, DEFAULT_HOTJAR_STATE.debugMode),
     },
   };
 }
@@ -489,6 +571,7 @@ function buildSettingsFromSnapshot(
   const hyperTracking = asRecord(hyper._tracking);
   const hyperReporting = asRecord(hyper._reporting);
   const hyperAdvanced = asRecord(hyper._advancedSettings);
+  const spoorConnectionTest = asRecord(spoor._connectionTest);
 
   const ues = asRecord(current._uesAnalytics);
   const google = asRecord(current._googleAnalytics);
@@ -510,6 +593,7 @@ function buildSettingsFromSnapshot(
         ...spoorReporting,
         _onTrackingCriteriaMet: snapshot.scorm.onTrackingCriteriaMet,
         _onAssessmentFailure: snapshot.scorm.onAssessmentFailure,
+        _resetStatusWhenLanguageChanged: snapshot.scorm.resetStatusWhenLanguageChanged,
       },
       _advancedSettings: {
         ...spoorAdvanced,
@@ -520,6 +604,23 @@ function buildSettingsFromSnapshot(
         _timedCommitFrequency: Number(snapshot.scorm.timedCommitFrequency || 0),
         _maxCommitRetries: Number(snapshot.scorm.maxCommitRetries || 0),
         _commitRetryDelay: Number(snapshot.scorm.commitRetryDelay || 0),
+        _suppressLmsErrors: snapshot.scorm.suppressLmsErrors,
+        _commitOnVisibilityChangeHidden: snapshot.scorm.commitOnVisibilityChangeHidden,
+        _manifestIdentifier: snapshot.scorm.manifestIdentifier,
+        _exitStateIncomplete: snapshot.scorm.exitStateIncomplete,
+        _exitStateComplete: snapshot.scorm.exitStateComplete,
+        _completedWhenFailed: snapshot.scorm.completedWhenFailed,
+        _fillInCharacterLimit: Number(snapshot.scorm.fillInCharacterLimit || 0),
+        _uniqueInteractionIds: snapshot.scorm.uniqueInteractionIds,
+        _showResetButton: snapshot.scorm.showResetButton,
+        _persistCookieData: snapshot.scorm.persistCookieData,
+      },
+      _connectionTest: {
+        ...spoorConnectionTest,
+        _isEnabled: snapshot.scorm.connectionTestEnabled,
+        _testOnSetValue: snapshot.scorm.connectionTestOnSetValue,
+        _silentRetryLimit: Number(snapshot.scorm.silentRetryLimit || 0),
+        _silentRetryDelay: Number(snapshot.scorm.silentRetryDelay || 0),
       },
     },
     _xapi: {
@@ -537,6 +638,14 @@ function buildSettingsFromSnapshot(
       _shouldUseRegistration: snapshot.xapi.shouldUseRegistration,
       _componentBlacklist: snapshot.xapi.componentBlacklist,
       _lrsFailureBehaviour: snapshot.xapi.lrsFailureBehaviour,
+      _adaptRouterMenu: snapshot.xapi.adaptRouterMenu,
+      _adaptRouterPage: snapshot.xapi.adaptRouterPage,
+      _adaptRecordInteraction: snapshot.xapi.adaptRecordInteraction,
+      _adaptAssessComplete: snapshot.xapi.adaptAssessComplete,
+      _contentObjectIsComplete: snapshot.xapi.contentObjectIsComplete,
+      _articleIsComplete: snapshot.xapi.articleIsComplete,
+      _blockIsComplete: snapshot.xapi.blockIsComplete,
+      _componentIsComplete: snapshot.xapi.componentIsComplete,
     },
     _hyper: {
       ...hyper,
@@ -578,11 +687,15 @@ function buildSettingsFromSnapshot(
       ...google,
       _isEnabled: snapshot.google.isEnabled,
       _trackingId: snapshot.google.trackingId,
+      _anonymizeIp: snapshot.google.anonymizeIp,
+      _debugMode: snapshot.google.debugMode,
     },
     _hotjarAnalytics: {
       ...hotjar,
       _isEnabled: snapshot.hotjar.isEnabled,
       _siteId: snapshot.hotjar.siteId,
+      _version: snapshot.hotjar.version,
+      _debugMode: snapshot.hotjar.debugMode,
     },
   };
 }
@@ -779,6 +892,11 @@ export function TrackingAnalyticsPage({
                     { value: "incomplete", label: "Incomplete" },
                   ]}
                 />
+                <CheckboxRow
+                  checked={scorm.resetStatusWhenLanguageChanged}
+                  onChange={(v) => setScorm((prev) => ({ ...prev, resetStatusWhenLanguageChanged: v }))}
+                  label="Reset status when language changed?"
+                />
               </div>
 
               <SectionLabel>Advanced Settings</SectionLabel>
@@ -794,6 +912,45 @@ export function TrackingAnalyticsPage({
               <TextField label="Frequency (mins) of automatic commits" type="number" value={scorm.timedCommitFrequency} onChange={(value) => setScorm((prev) => ({ ...prev, timedCommitFrequency: value }))} />
               <TextField label="Maximum number of commit retries" type="number" value={scorm.maxCommitRetries} onChange={(value) => setScorm((prev) => ({ ...prev, maxCommitRetries: value }))} />
               <TextField label="Commit retry delay" type="number" value={scorm.commitRetryDelay} onChange={(value) => setScorm((prev) => ({ ...prev, commitRetryDelay: value }))} />
+              <CheckboxRow checked={scorm.suppressLmsErrors} onChange={(v) => setScorm((prev) => ({ ...prev, suppressLmsErrors: v }))} label="Suppress LMS errors" />
+              <CheckboxRow checked={scorm.commitOnVisibilityChangeHidden} onChange={(v) => setScorm((prev) => ({ ...prev, commitOnVisibilityChangeHidden: v }))} label="Commit on visibility change hidden" />
+              <TextField label="Manifest identifier" value={scorm.manifestIdentifier} onChange={(value) => setScorm((prev) => ({ ...prev, manifestIdentifier: value }))} placeholder="adapt_manifest" />
+              <SelectField
+                label="Exit state if incomplete"
+                value={scorm.exitStateIncomplete}
+                onChange={(value) => setScorm((prev) => ({ ...prev, exitStateIncomplete: value }))}
+                options={[
+                  { value: "auto", label: "auto" },
+                  { value: "suspend", label: "suspend" },
+                  { value: "normal", label: "normal" },
+                  { value: "logout", label: "logout" },
+                ]}
+              />
+              <SelectField
+                label="Exit state if complete"
+                value={scorm.exitStateComplete}
+                onChange={(value) => setScorm((prev) => ({ ...prev, exitStateComplete: value }))}
+                options={[
+                  { value: "auto", label: "auto" },
+                  { value: "suspend", label: "suspend" },
+                  { value: "normal", label: "normal" },
+                  { value: "logout", label: "logout" },
+                ]}
+              />
+              <CheckboxRow checked={scorm.completedWhenFailed} onChange={(v) => setScorm((prev) => ({ ...prev, completedWhenFailed: v }))} label="Completed when failed" />
+              <TextField label="Override value for maximum character limit on fill-in type answers" type="number" value={scorm.fillInCharacterLimit} onChange={(value) => setScorm((prev) => ({ ...prev, fillInCharacterLimit: value }))} />
+
+              <SectionLabel>Connection Test</SectionLabel>
+              <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
+                <CheckboxRow checked={scorm.connectionTestEnabled} onChange={(v) => setScorm((prev) => ({ ...prev, connectionTestEnabled: v }))} label="Is Enabled" />
+                <CheckboxRow checked={scorm.connectionTestOnSetValue} onChange={(v) => setScorm((prev) => ({ ...prev, connectionTestOnSetValue: v }))} label="Test on set value" />
+                <TextField label="Silent Retry Limit" type="number" value={scorm.silentRetryLimit} onChange={(value) => setScorm((prev) => ({ ...prev, silentRetryLimit: value }))} />
+                <TextField label="Silent Retry Delay" type="number" value={scorm.silentRetryDelay} onChange={(value) => setScorm((prev) => ({ ...prev, silentRetryDelay: value }))} />
+              </div>
+
+              <CheckboxRow checked={scorm.uniqueInteractionIds} onChange={(v) => setScorm((prev) => ({ ...prev, uniqueInteractionIds: v }))} label="Unique Interaction Ids" />
+              <CheckboxRow checked={scorm.showResetButton} onChange={(v) => setScorm((prev) => ({ ...prev, showResetButton: v }))} label="Show reset button (scorm_test_harness.html only)" />
+              <CheckboxRow checked={scorm.persistCookieData} onChange={(v) => setScorm((prev) => ({ ...prev, persistCookieData: v }))} label="Persist cookie data (scorm_test_harness.html only)" />
             </div>
           )}
 
@@ -811,18 +968,56 @@ export function TrackingAnalyticsPage({
                 label="Verb language"
                 value={xapi.lang}
                 onChange={(value) => setXapi((prev) => ({ ...prev, lang: value }))}
-                options={[{ value: "de-DE", label: "de-DE" }, { value: "en-US", label: "en-US" }, { value: "fr-FR", label: "fr-FR" }, { value: "es-ES", label: "es-ES" }]}
+                options={[
+                  { value: "de-DE", label: "de-DE" },
+                  { value: "en-GB", label: "en-GB" },
+                  { value: "en-US", label: "en-US" },
+                  { value: "fr-FR", label: "fr-FR" },
+                  { value: "es-ES", label: "es-ES" },
+                  { value: "zh-CN", label: "zh-CN" },
+                ]}
               />
               <TextField label="Component blacklist" value={xapi.componentBlacklist} onChange={(value) => setXapi((prev) => ({ ...prev, componentBlacklist: value }))} placeholder="blank,graphic" />
               <SelectField
                 label="LRS connection failure behaviour"
                 value={xapi.lrsFailureBehaviour}
                 onChange={(value) => setXapi((prev) => ({ ...prev, lrsFailureBehaviour: value }))}
-                options={[{ value: "ignore", label: "Ignore errors" }, { value: "show", label: "Show errors" }]}
+                options={[
+                  { value: "ignore", label: "Ignore errors" },
+                  { value: "show", label: "Show errors" },
+                  { value: "throw", label: "Throw error" },
+                ]}
               />
               <CheckboxRow checked={xapi.generateIds} onChange={(v) => setXapi((prev) => ({ ...prev, generateIds: v }))} label="Auto-generate ID for statements" />
               <CheckboxRow checked={xapi.shouldTrackState} onChange={(v) => setXapi((prev) => ({ ...prev, shouldTrackState: v }))} label="Track state" />
               <CheckboxRow checked={xapi.shouldUseRegistration} onChange={(v) => setXapi((prev) => ({ ...prev, shouldUseRegistration: v }))} label="Use registration" />
+
+              <SectionLabel>Core Events</SectionLabel>
+              <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
+                <SubSectionLabel>Adapt</SubSectionLabel>
+                <div className="ml-4 pl-3 border-l-2 border-[#f3f4f6] flex flex-col gap-3">
+                  <CheckboxRow checked={xapi.adaptRouterMenu} onChange={(v) => setXapi((prev) => ({ ...prev, adaptRouterMenu: v }))} label="router:menu" />
+                  <CheckboxRow checked={xapi.adaptRouterPage} onChange={(v) => setXapi((prev) => ({ ...prev, adaptRouterPage: v }))} label="router:page" />
+                  <CheckboxRow checked={xapi.adaptRecordInteraction} onChange={(v) => setXapi((prev) => ({ ...prev, adaptRecordInteraction: v }))} label="questionView:recordInteraction" />
+                  <CheckboxRow checked={xapi.adaptAssessComplete} onChange={(v) => setXapi((prev) => ({ ...prev, adaptAssessComplete: v }))} label="assessments:complete" />
+                </div>
+                <SubSectionLabel>contentObjects</SubSectionLabel>
+                <div className="ml-4 pl-3 border-l-2 border-[#f3f4f6] flex flex-col gap-3">
+                  <CheckboxRow checked={xapi.contentObjectIsComplete} onChange={(v) => setXapi((prev) => ({ ...prev, contentObjectIsComplete: v }))} label="change:_isComplete" />
+                </div>
+                <SubSectionLabel>articles</SubSectionLabel>
+                <div className="ml-4 pl-3 border-l-2 border-[#f3f4f6] flex flex-col gap-3">
+                  <CheckboxRow checked={xapi.articleIsComplete} onChange={(v) => setXapi((prev) => ({ ...prev, articleIsComplete: v }))} label="change:_isComplete" />
+                </div>
+                <SubSectionLabel>blocks</SubSectionLabel>
+                <div className="ml-4 pl-3 border-l-2 border-[#f3f4f6] flex flex-col gap-3">
+                  <CheckboxRow checked={xapi.blockIsComplete} onChange={(v) => setXapi((prev) => ({ ...prev, blockIsComplete: v }))} label="change:_isComplete" />
+                </div>
+                <SubSectionLabel>components</SubSectionLabel>
+                <div className="ml-4 pl-3 border-l-2 border-[#f3f4f6] flex flex-col gap-3">
+                  <CheckboxRow checked={xapi.componentIsComplete} onChange={(v) => setXapi((prev) => ({ ...prev, componentIsComplete: v }))} label="change:_isComplete" />
+                </div>
+              </div>
             </div>
           )}
 
@@ -895,7 +1090,9 @@ export function TrackingAnalyticsPage({
             <div className="mt-4 flex flex-col gap-3">
               <SectionLabel>Google Analytics Settings</SectionLabel>
               <CheckboxRow checked={google.isEnabled} onChange={(v) => setGoogle((prev) => ({ ...prev, isEnabled: v }))} label="Enable Google Analytics" />
-              <TextField label="Tracking ID" value={google.trackingId} onChange={(value) => setGoogle((prev) => ({ ...prev, trackingId: value }))} placeholder="G-XXXXXXXXXX" />
+              <TextField label="Measurement ID" value={google.trackingId} onChange={(value) => setGoogle((prev) => ({ ...prev, trackingId: value }))} placeholder="G-XXXXXXXXXX" />
+              <CheckboxRow checked={google.anonymizeIp} onChange={(v) => setGoogle((prev) => ({ ...prev, anonymizeIp: v }))} label="Anonymize IP" />
+              <CheckboxRow checked={google.debugMode} onChange={(v) => setGoogle((prev) => ({ ...prev, debugMode: v }))} label="Debug mode" />
             </div>
           )}
 
@@ -904,6 +1101,8 @@ export function TrackingAnalyticsPage({
               <SectionLabel>Hotjar Settings</SectionLabel>
               <CheckboxRow checked={hotjar.isEnabled} onChange={(v) => setHotjar((prev) => ({ ...prev, isEnabled: v }))} label="Enable Hotjar Analytics" />
               <TextField label="Site ID" value={hotjar.siteId} onChange={(value) => setHotjar((prev) => ({ ...prev, siteId: value }))} placeholder="1234567" />
+              <TextField label="Hotjar version" value={hotjar.version} onChange={(value) => setHotjar((prev) => ({ ...prev, version: value }))} placeholder="6" />
+              <CheckboxRow checked={hotjar.debugMode} onChange={(v) => setHotjar((prev) => ({ ...prev, debugMode: v }))} label="Debug mode" />
             </div>
           )}
         </AccordionCard>
