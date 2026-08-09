@@ -1031,16 +1031,6 @@ export function TrackingAnalyticsPage({
                 ]}
               />
               <TextField label="Component blacklist" value={xapi.componentBlacklist} onChange={(value) => setXapi((prev) => ({ ...prev, componentBlacklist: value }))} placeholder="blank,graphic" />
-              <SelectField
-                label="LRS connection failure behaviour"
-                value={xapi.lrsFailureBehaviour}
-                onChange={(value) => setXapi((prev) => ({ ...prev, lrsFailureBehaviour: value }))}
-                options={[
-                  { value: "ignore", label: "Ignore errors" },
-                  { value: "show", label: "Show errors" },
-                  { value: "throw", label: "Throw error" },
-                ]}
-              />
               <CheckboxRow checked={xapi.generateIds} onChange={(v) => setXapi((prev) => ({ ...prev, generateIds: v }))} label="Auto-generate ID for statements" />
               <CheckboxRow checked={xapi.shouldTrackState} onChange={(v) => setXapi((prev) => ({ ...prev, shouldTrackState: v }))} label="Track state" />
               <CheckboxRow checked={xapi.shouldUseRegistration} onChange={(v) => setXapi((prev) => ({ ...prev, shouldUseRegistration: v }))} label="Use registration" />
@@ -1071,6 +1061,16 @@ export function TrackingAnalyticsPage({
                   <CheckboxRow checked={xapi.componentIsComplete} onChange={(v) => setXapi((prev) => ({ ...prev, componentIsComplete: v }))} label="change:_isComplete" />
                 </div>
               </div>
+
+              <SelectField
+                label="LRS connection failure behaviour"
+                value={xapi.lrsFailureBehaviour}
+                onChange={(value) => setXapi((prev) => ({ ...prev, lrsFailureBehaviour: value }))}
+                options={[
+                  { value: "ignore", label: "Ignore errors" },
+                  { value: "show", label: "Show errors" },
+                ]}
+              />
             </div>
           )}
 
