@@ -1,5 +1,6 @@
 "use client";
 
+import EditorMaskIcon from "./EditorMaskIcon";
 import type { ComponentData } from "@/components/course/CourseEditor";
 
 interface ComponentCanvasProps {
@@ -8,6 +9,7 @@ interface ComponentCanvasProps {
   onCopy?: () => void;
   onDelete?: () => void;
   isSelected: boolean;
+  previewMode?: boolean;
 }
 
 export default function ComponentCanvas({
@@ -16,6 +18,7 @@ export default function ComponentCanvas({
   onCopy,
   onDelete,
   isSelected,
+  previewMode = false,
 }: ComponentCanvasProps) {
   const getComponentPreview = () => {
     switch (component.type) {
@@ -76,19 +79,33 @@ export default function ComponentCanvas({
   };
 
   return (
-    <div className="flex-1 flex flex-col gap-1">
+    <div className="w-full flex flex-col gap-1">
       <button
         type="button"
-        onClick={onSelect}
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect();
+        }}
         className={`w-full flex flex-col items-center justify-center py-6 rounded-lg border-2 transition-all cursor-pointer ${
           isSelected
             ? "border-[#2E7FA1] bg-[#D4E9F2]"
-            : "border-[#E5E5E5] bg-white hover:border-[#ABABAB] hover:bg-[#FAFAFA]"
+            : "border-transparent bg-white hover:border-transparent hover:shadow-[0_0_5px_2px_#CBE1E6] hover:bg-[#FAFAFA]"
         }`}
       >
-        {getComponentPreview()}
+        {previewMode ? (
+          <div className="w-full text-left px-0 flex flex-col gap-3">
+            <div className="text-2xl font-normal leading-tight text-[#1f2937] font-[Lato]">
+              {component.settings.title || component.type}
+            </div>
+            <div className="text-base leading-relaxed text-[#1f2937] font-[Lato]">
+              {component.settings.description || "Add your content here..."}
+            </div>
+          </div>
+        ) : (
+          getComponentPreview()
+        )}
       </button>
-      <div className="flex items-center justify-center gap-1">
+      {!previewMode && <div className="flex items-center justify-center gap-1">
         <button
           type="button"
           aria-label="Copy component"
@@ -106,11 +123,9 @@ export default function ComponentCanvas({
           onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this component?")) onDelete?.(); }}
           className="w-6 h-6 flex items-center justify-center rounded text-[#ABABAB] hover:text-[#DC3449] hover:bg-[#FDDEE2] transition-colors"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6h16zM10 11v6M14 11v6" />
-          </svg>
+          <EditorMaskIcon file="delete-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
         </button>
-      </div>
+      </div>}
     </div>
   );
 }

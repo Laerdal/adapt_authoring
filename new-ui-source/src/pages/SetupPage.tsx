@@ -1,4 +1,4 @@
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useSearchParams, useNavigate, useParams } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { Suspense, useEffect, useState, useRef, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
@@ -4422,11 +4422,12 @@ function ComingSoonPanel({ label }: { label: string }) {
 /* -- Main page -- */
 function CourseCreationCenterContent() {
   const [params] = useSearchParams();
+  const routeParams = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
   const initialTitle = params.get("title") ?? "Untitled Course";
   const initialDescription = params.get("description") ?? "";
-  const courseId = params.get("courseId") ?? "";
+  const courseId = routeParams.id ?? params.get("courseId") ?? "";
 
   const [title, setTitle] = useState(initialTitle);
   const [description, setDescription] = useState(initialDescription);
@@ -4518,7 +4519,16 @@ function CourseCreationCenterContent() {
           courseId={courseId}
           courseTitle={title}
           onOpenEditor={(pageId) =>
-            navigate(`/course/${courseId}`, { state: { pageId } })
+            navigate(`/course/${courseId}`, {
+              state: {
+                courseId,
+                title,
+                description,
+                theme: savedThemeName,
+                menu: savedMenuName,
+                pageId,
+              },
+            })
           }
           onOpenStoryboard={() => setActiveNav("storyboarding")}
           onNavigationRequest={setActiveNav}
@@ -4736,7 +4746,17 @@ function CourseCreationCenterContent() {
               <button
                 type="button"
                 disabled={!courseId}
-                onClick={() => navigate(`/course/${courseId}`)}
+                onClick={() =>
+                  navigate(`/course/${courseId}`, {
+                    state: {
+                      courseId,
+                      title,
+                      description,
+                      theme: savedThemeName,
+                      menu: savedMenuName,
+                    },
+                  })
+                }
                 className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Skip to Editor
@@ -4749,7 +4769,17 @@ function CourseCreationCenterContent() {
               <button
                 type="button"
                 disabled={!courseId}
-                onClick={() => navigate(`/course/${courseId}`)}
+                onClick={() =>
+                  navigate(`/course/${courseId}`, {
+                    state: {
+                      courseId,
+                      title,
+                      description,
+                      theme: savedThemeName,
+                      menu: savedMenuName,
+                    },
+                  })
+                }
                 aria-label="Skip to Editor"
                 title="Skip to Editor"
                 className="w-full h-10 flex items-center justify-center rounded-lg text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
