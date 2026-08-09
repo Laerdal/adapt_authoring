@@ -25,6 +25,50 @@ export function logout(): Promise<unknown> {
   return apiClient.post("/api/logout");
 }
 
+// ── User lookup ──────────────────────────────────────────────────────────────
+
+export interface UserSummary {
+  _id: string;
+  email: string;
+  firstName?: string;
+  lastName?: string;
+}
+
+/**
+ * Find a user by exact email address.
+ * Uses GET /api/user?search[email]=... which does a case-insensitive regex search;
+ * we then filter client-side for an exact match.
+ * Returns null if no user found or on error.
+ */
+export async function findUserByEmail(email: string): Promise<UserSummary | null> {
+  try {
+    // Escape regex metacharacters before the backend uses this value in new RegExp().
+    // encodeURIComponent alone does not escape chars like ( ) . * + ? [ { \ ^ $ |
+    // which would cause the server's RegExp constructor to throw or enable ReDoS.
+    const escapedEmail = email.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const users = await apiClient.get<UserSummary[]>(
+      `/api/user?search[email]=${encodeURIComponent(escapedEmail)}`
+    );
+    if (!Array.isArray(users)) return null;
+    return users.find((u) => u.email?.toLowerCase() === email.toLowerCase()) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch a single user by their ObjectId.
+ * Uses GET /api/user/:id
+ */
+export async function getUserById(userId: string): Promise<UserSummary | null> {
+  try {
+    const user = await apiClient.get<UserSummary>(`/api/user/${userId}`);
+    return user ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // Instance display name for the header. Reads `domainName` from the client config
 // (GET /config/config.json). Falls back to "Local Instance" when unset (local/dev).
 export async function getInstanceName(): Promise<string> {
@@ -156,22 +200,44 @@ export async function updateCourse(
   backendId: string,
   patch: {
     title?: string;
+    displayTitle?: string;
     description?: string;
+    body?: string;
     heroAssetId?: string | null;
     tags?: string[];
+    isShared?: boolean;
+    shareWithUserIds?: string[];
+    language?: string;
   }
 ): Promise<unknown> {
   const updateData: Record<string, unknown> = {};
-  if (patch.title !== undefined) {
-    updateData.title = patch.title;
-    updateData.displayTitle = patch.title;
-  }
+  if (patch.title !== undefined) updateData.title = patch.title;
+  if (patch.displayTitle !== undefined) updateData.displayTitle = patch.displayTitle;
+  // Keep title and displayTitle in sync when only one is provided
+  if (patch.title !== undefined && patch.displayTitle === undefined) updateData.displayTitle = patch.title;
   if (patch.description !== undefined) updateData.description = patch.description;
+  if (patch.body !== undefined) updateData.body = patch.body;
   if (patch.heroAssetId !== undefined) updateData.heroImage = patch.heroAssetId;
   if (patch.tags !== undefined) {
     updateData.tags = await resolveOrCreateTagIds(patch.tags);
   }
-  return apiClient.put(`/api/content/course/${backendId}`, updateData);
+  if (patch.isShared !== undefined) updateData._isShared = patch.isShared;
+  if (patch.shareWithUserIds !== undefined) updateData._shareWithUsers = patch.shareWithUserIds;
+
+  const coursePromise = apiClient.put(`/api/content/course/${backendId}`, updateData);
+
+  // _defaultLanguage lives on the config document — fetch it by courseId to get its _id
+  if (patch.language !== undefined) {
+    const config = await apiClient.get<EngineConfigDetails>(`/api/content/config/${backendId}`);
+    if (config._id) {
+      await apiClient.put(`/api/content/config/${config._id}`, {
+        _courseId: backendId,
+        _defaultLanguage: patch.language,
+      });
+    }
+  }
+
+  return coursePromise;
 }
 
 export function duplicateCourse(backendId: string): Promise<unknown> {
@@ -214,6 +280,11 @@ interface EngineCourseDetails {
   title?: string;
   displayTitle?: string;
   description?: string;
+  body?: string;
+  heroImage?: string | null;
+  tags?: Array<string | { _id: string; title?: string }>;
+  _isShared?: boolean;
+  _shareWithUsers?: string[];
   themeVariables?: Record<string, unknown>;
   _themePreset?: string;
   menuSettings?: CourseMenuSettings;
@@ -225,6 +296,7 @@ interface EngineConfigDetails {
   _theme?: string;
   _menu?: string;
   _themePreset?: string;
+  _defaultLanguage?: string;
   // Map of installed extensions, keyed by the plugin's bower `extension` field
   // (e.g. "course-menu"); each entry carries the full bower `name`.
   _enabledExtensions?: Record<string, { _id: string; name: string; version?: string; targetAttribute?: string }>;
@@ -235,11 +307,18 @@ interface EngineConfigDetails {
 export interface CourseBootstrapData {
   courseId: string;
   title: string;
+  displayTitle: string;
   description: string;
+  body: string;
+  heroAssetId: string | null;
+  tags: string[];
+  isShared: boolean;
+  shareWithUserIds: string[];
   themeName: string;
   menuName: string;
   themeVariables: Record<string, unknown>;
   themePresetId: string;
+  language: string;
 }
 
 function normalize(v?: string): string {
@@ -445,14 +524,31 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
     apiClient.get<EngineConfigDetails>(`/api/content/config/${courseId}`),
   ]);
 
+  const rawHero = course.heroImage ?? null;
+  const heroAssetId = rawHero && OBJECT_ID.test(rawHero) ? rawHero : null;
+  const tags = Array.isArray(course.tags)
+    ? course.tags
+        .map((t) => (typeof t === "string" ? t : t?.title ?? ""))
+        .filter((s): s is string => !!s && !OBJECT_ID.test(s))
+    : [];
+
   return {
     courseId,
-    title: course.displayTitle || course.title || "Untitled Course",
+    title: course.title || "Untitled Course",
+    displayTitle: course.displayTitle || course.title || "",
     description: course.description || "",
+    body: course.body || "",
+    heroAssetId,
+    tags,
+    isShared: course._isShared ?? false,
+    shareWithUserIds: Array.isArray(course._shareWithUsers)
+      ? course._shareWithUsers.filter((id): id is string => typeof id === "string")
+      : [],
     themeName: config._theme || "",
     menuName: config._menu || "",
     themeVariables: (course.themeVariables as Record<string, unknown>) || {},
     themePresetId: config._themePreset || "",
+    language: config._defaultLanguage || "",
   };
 }
 
