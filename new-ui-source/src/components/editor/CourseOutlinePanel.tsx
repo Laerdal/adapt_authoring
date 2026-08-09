@@ -318,10 +318,9 @@ export default function CourseOutlinePanel({
     setActiveAddMenu(null);
   }
 
-  function handleCourseConfigClick() {
-    const params = new URLSearchParams({ courseId });
-    navigate(`/course/${courseId}/setup?${params.toString()}`);
-  }
+function handleCourseConfigClick() {
+  navigate(`/course/${courseId}/setup`);
+}
 
   return (
     <div ref={panelRef} className="w-[280px] h-full bg-white border-r border-[#d8dee6] flex flex-col shrink-0 overflow-x-hidden">
