@@ -144,10 +144,9 @@ export default function PageEditorNavigation({
           <div className="mt-auto">
             <button
               type="button"
-              onClick={() => {
-                const params = new URLSearchParams({ courseId });
-                navigate(`/course/${courseId}/setup?${params.toString()}`);
-              }}
+onClick={() => {
+  navigate(`/course/${courseId}/setup`);
+}}
               className="w-8 h-8 rounded-[6px] flex items-center justify-center bg-[var(--life-primary-500)] text-[var(--life-base-white)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] transition-colors"
               aria-label="Course Config"
               title="Course Config"
