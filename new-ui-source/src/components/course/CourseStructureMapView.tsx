@@ -147,7 +147,7 @@ export default function CourseStructureMapView(props: Props) {
         {cg.components.map((comp) => (
           <li key={comp.id}>{card("component", comp.id, comp.title)}</li>
         ))}
-        {cg.components.length < 2 && addLi(`addcomp-${cg.id}`, labels.component, () => props.onAddComponent(cg.id))}
+        {addLi(`addcomp-${cg.id}`, labels.component, () => props.onAddComponent(cg.id))}
       </ul>
     );
   }

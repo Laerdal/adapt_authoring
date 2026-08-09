@@ -511,6 +511,12 @@ async function applyCourseSelections(courseId: string, themeLabel?: string, menu
 export async function createCourse(input: CreateCourseInput): Promise<CreatedCourse> {
   const created = await apiClient.post<CreatedCourse>("/api/courses", input);
   try {
+    await seedDefaultStructure(created.id);
+  } catch (err) {
+    console.warn("Failed to seed default course structure", err);
+  }
+
+  try {
     await applyCourseSelections(created.id, input.theme, input.menuStyle);
   } catch (err) {
     console.warn("Failed to apply theme/menu selections", err);

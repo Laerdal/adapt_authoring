@@ -13,13 +13,11 @@ const AVAILABLE_COMPONENTS: { type: ComponentType; label: string; description: s
 interface ComponentSelectorProps {
   onSelectComponent: (type: ComponentType) => void;
   onClose: () => void;
-  maxComponentsReached: boolean;
 }
 
 export default function ComponentSelector({
   onSelectComponent,
   onClose,
-  maxComponentsReached,
 }: ComponentSelectorProps) {
   return (
     <div className="w-80 h-full bg-white border-l border-[#e5e7eb] flex flex-col shrink-0">
@@ -43,12 +41,6 @@ export default function ComponentSelector({
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        {maxComponentsReached && (
-          <div className="mb-4 p-3 bg-[#fef3c7] border border-[#fcd34d] rounded-lg">
-            <p className="text-xs text-[#92400e]">Maximum 2 components per block reached</p>
-          </div>
-        )}
-
         <div className="space-y-2">
           {AVAILABLE_COMPONENTS.map((comp) => (
             <button
@@ -57,12 +49,7 @@ export default function ComponentSelector({
                 onSelectComponent(comp.type);
                 onClose();
               }}
-              disabled={maxComponentsReached}
-              className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-all ${
-                maxComponentsReached
-                  ? "border-[#e5e7eb] bg-[#f9fafb] text-[#9ca3af] cursor-not-allowed"
-                  : "border-[#d1d5db] hover:border-[#2d6fa8] hover:bg-[#f0f8ff] cursor-pointer"
-              }`}
+              className="w-full text-left px-4 py-3 rounded-lg border-2 transition-all border-[#d1d5db] hover:border-[#2d6fa8] hover:bg-[#f0f8ff] cursor-pointer"
             >
               <p className="font-medium text-sm">{comp.label}</p>
               <p className="text-xs text-[#6b7280] mt-1">{comp.description}</p>
