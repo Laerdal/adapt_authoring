@@ -767,7 +767,7 @@ export function TrackingAnalyticsPage({
   const [trackingOpen, setTrackingOpen] = useState(true);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
   const [trackingPlugin, setTrackingPlugin] = useState<TrackingPlugin>("scorm");
-  const [analyticsPlugin, setAnalyticsPlugin] = useState<AnalyticsPlugin>("ues");
+  const [analyticsPlugin, setAnalyticsPlugin] = useState<AnalyticsPlugin | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [savedSnapshot, setSavedSnapshot] = useState<TrackingAnalyticsPageSnapshot>(DEFAULT_SNAPSHOT);
@@ -806,6 +806,20 @@ export function TrackingAnalyticsPage({
     onNavigate: onNavigationRequest,
   });
 
+  const handleTrackingPluginChange = (plugin: TrackingPlugin) => {
+    setTrackingPlugin(plugin);
+    setScorm((prev) => ({ ...prev, isEnabled: plugin === "scorm" }));
+    setXapi((prev) => ({ ...prev, isEnabled: plugin === "xapi" }));
+    setHyper((prev) => ({ ...prev, isEnabled: plugin === "hyperbridge" }));
+  };
+
+  const handleAnalyticsPluginChange = (plugin: AnalyticsPlugin) => {
+    setAnalyticsPlugin(plugin);
+    setUes((prev) => ({ ...prev, isEnabled: plugin === "ues" }));
+    setGoogle((prev) => ({ ...prev, isEnabled: plugin === "google" }));
+    setHotjar((prev) => ({ ...prev, isEnabled: plugin === "hotjar" }));
+  };
+
   const applySnapshot = (snapshot: TrackingAnalyticsPageSnapshot) => {
     setScorm(snapshot.scorm);
     setXapi(snapshot.xapi);
@@ -817,10 +831,12 @@ export function TrackingAnalyticsPage({
     if (snapshot.scorm.isEnabled) setTrackingPlugin("scorm");
     else if (snapshot.xapi.isEnabled) setTrackingPlugin("xapi");
     else if (snapshot.hyper.isEnabled) setTrackingPlugin("hyperbridge");
+    else setTrackingPlugin("scorm");
 
     if (snapshot.ues.isEnabled) setAnalyticsPlugin("ues");
     else if (snapshot.google.isEnabled) setAnalyticsPlugin("google");
     else if (snapshot.hotjar.isEnabled) setAnalyticsPlugin("hotjar");
+    else setAnalyticsPlugin(null);
   };
 
   useEffect(() => {
@@ -904,15 +920,14 @@ export function TrackingAnalyticsPage({
         >
           <p className="text-xs text-[#6b7280] mb-3">Select one tracking plugin and edit its existing settings.</p>
           <div className="flex flex-col gap-1.5">
-            <PluginRadio id="scorm" label="SCORM" description="adapt-contrib-spoor" selected={trackingPlugin === "scorm"} onSelect={() => setTrackingPlugin("scorm")} />
-            <PluginRadio id="xapi" label="xAPI" description="adapt-contrib-xapi" selected={trackingPlugin === "xapi"} onSelect={() => setTrackingPlugin("xapi")} />
-            <PluginRadio id="hyperbridge" label="HyperBridge" description="adapt-hyper-bridge" selected={trackingPlugin === "hyperbridge"} onSelect={() => setTrackingPlugin("hyperbridge")} />
+            <PluginRadio id="scorm" label="SCORM" description="adapt-contrib-spoor" selected={trackingPlugin === "scorm"} onSelect={() => handleTrackingPluginChange("scorm")} />
+            <PluginRadio id="xapi" label="xAPI" description="adapt-contrib-xapi" selected={trackingPlugin === "xapi"} onSelect={() => handleTrackingPluginChange("xapi")} />
+            <PluginRadio id="hyperbridge" label="HyperBridge" description="adapt-hyper-bridge" selected={trackingPlugin === "hyperbridge"} onSelect={() => handleTrackingPluginChange("hyperbridge")} />
           </div>
 
           {trackingPlugin === "scorm" && (
             <div className="mt-4 flex flex-col gap-4">
               <SectionLabel>SCORM (SPOOR) Settings</SectionLabel>
-              <CheckboxRow checked={scorm.isEnabled} onChange={(v) => setScorm((prev) => ({ ...prev, isEnabled: v }))} label="Enable SCORM plugin" />
               <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb]">
                 <SubSectionLabel>Tracking</SubSectionLabel>
                 <CheckboxRow checked={scorm.shouldStoreResponses} onChange={(v) => setScorm((prev) => ({ ...prev, shouldStoreResponses: v }))} label="Store question state" />
@@ -1010,7 +1025,6 @@ export function TrackingAnalyticsPage({
           {trackingPlugin === "xapi" && (
             <div className="mt-4 flex flex-col gap-3">
               <SectionLabel>xAPI Settings</SectionLabel>
-              <CheckboxRow checked={xapi.isEnabled} onChange={(v) => setXapi((prev) => ({ ...prev, isEnabled: v }))} label="Enable xAPI plugin" />
               <SelectField label="Specification" value={xapi.specification} onChange={(value) => setXapi((prev) => ({ ...prev, specification: value }))} options={[{ value: "xAPI", label: "xAPI" }, { value: "cmi5", label: "cmi5" }]} />
               <TextField label="Activity ID" value={xapi.activityID} onChange={(value) => setXapi((prev) => ({ ...prev, activityID: value }))} placeholder="https://your-course-url" />
               <TextField label="Assignable Unit (AU) ID" value={xapi.auID} onChange={(value) => setXapi((prev) => ({ ...prev, auID: value }))} />
@@ -1077,7 +1091,6 @@ export function TrackingAnalyticsPage({
           {trackingPlugin === "hyperbridge" && (
             <div className="mt-4 flex flex-col gap-4">
               <SectionLabel>HyperBridge Settings</SectionLabel>
-              <CheckboxRow checked={hyper.isEnabled} onChange={(v) => setHyper((prev) => ({ ...prev, isEnabled: v }))} label="Enable HyperBridge plugin" />
               <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
                 <SubSectionLabel>Tracking</SubSectionLabel>
                 <CheckboxRow checked={hyper.shouldStoreResponses} onChange={(v) => setHyper((prev) => ({ ...prev, shouldStoreResponses: v }))} label="Store question state" />
@@ -1169,17 +1182,16 @@ export function TrackingAnalyticsPage({
           onToggle={() => setAnalyticsOpen((open) => !open)}
           icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>}
         >
-          <p className="text-xs text-[#6b7280] mb-3">Select one analytics plugin and edit its existing settings.</p>
+          <p className="text-xs text-[#6b7280] mb-3">Select one analytics plugin and edit its existing settings. Select none to disable all analytics.</p>
           <div className="flex flex-col gap-1.5">
-            <PluginRadio id="ues" label="Unified Event System Analytics" description="adapt-ues-analytics" selected={analyticsPlugin === "ues"} onSelect={() => setAnalyticsPlugin("ues")} />
-            <PluginRadio id="google" label="Google Analytics" description="adapt-googleAnalytics" selected={analyticsPlugin === "google"} onSelect={() => setAnalyticsPlugin("google")} />
-            <PluginRadio id="hotjar" label="Hotjar Analytics" description="adapt-hotjarAnalytics" selected={analyticsPlugin === "hotjar"} onSelect={() => setAnalyticsPlugin("hotjar")} />
+            <PluginRadio id="ues" label="Unified Event System Analytics" description="adapt-ues-analytics" selected={analyticsPlugin === "ues"} onSelect={() => analyticsPlugin === "ues" ? (setAnalyticsPlugin(null), setUes(p => ({ ...p, isEnabled: false }))) : handleAnalyticsPluginChange("ues")} />
+            <PluginRadio id="google" label="Google Analytics" description="adapt-googleAnalytics" selected={analyticsPlugin === "google"} onSelect={() => analyticsPlugin === "google" ? (setAnalyticsPlugin(null), setGoogle(p => ({ ...p, isEnabled: false }))) : handleAnalyticsPluginChange("google")} />
+            <PluginRadio id="hotjar" label="Hotjar Analytics" description="adapt-hotjarAnalytics" selected={analyticsPlugin === "hotjar"} onSelect={() => analyticsPlugin === "hotjar" ? (setAnalyticsPlugin(null), setHotjar(p => ({ ...p, isEnabled: false }))) : handleAnalyticsPluginChange("hotjar")} />
           </div>
 
           {analyticsPlugin === "ues" && (
             <div className="mt-4 flex flex-col gap-3">
               <SectionLabel>UES Settings</SectionLabel>
-              <CheckboxRow checked={ues.isEnabled} onChange={(v) => setUes((prev) => ({ ...prev, isEnabled: v }))} label="Enable UES analytics" />
               <CheckboxRow checked={ues.isDebugMode} onChange={(v) => setUes((prev) => ({ ...prev, isDebugMode: v }))} label="Enable debug mode" />
               <TextField label="Project tag" value={ues.projectTag} onChange={(value) => setUes((prev) => ({ ...prev, projectTag: value }))} />
               <TextField label="Portfolio" value={ues.portfolio} onChange={(value) => setUes((prev) => ({ ...prev, portfolio: value }))} />
@@ -1192,7 +1204,6 @@ export function TrackingAnalyticsPage({
           {analyticsPlugin === "google" && (
             <div className="mt-4 flex flex-col gap-3">
               <SectionLabel>Google Analytics Settings</SectionLabel>
-              <CheckboxRow checked={google.isEnabled} onChange={(v) => setGoogle((prev) => ({ ...prev, isEnabled: v }))} label="Enable Google Analytics" />
               <TextField label="Measurement ID" value={google.trackingId} onChange={(value) => setGoogle((prev) => ({ ...prev, trackingId: value }))} placeholder="G-XXXXXXXXXX" />
               <CheckboxRow checked={google.anonymizeIp} onChange={(v) => setGoogle((prev) => ({ ...prev, anonymizeIp: v }))} label="Anonymize IP" />
               <CheckboxRow checked={google.debugMode} onChange={(v) => setGoogle((prev) => ({ ...prev, debugMode: v }))} label="Debug mode" />
@@ -1202,7 +1213,6 @@ export function TrackingAnalyticsPage({
           {analyticsPlugin === "hotjar" && (
             <div className="mt-4 flex flex-col gap-3">
               <SectionLabel>Hotjar Settings</SectionLabel>
-              <CheckboxRow checked={hotjar.isEnabled} onChange={(v) => setHotjar((prev) => ({ ...prev, isEnabled: v }))} label="Enable Hotjar Analytics" />
               <TextField label="Site ID" value={hotjar.siteId} onChange={(value) => setHotjar((prev) => ({ ...prev, siteId: value }))} placeholder="1234567" />
               <TextField label="Hotjar version" value={hotjar.version} onChange={(value) => setHotjar((prev) => ({ ...prev, version: value }))} placeholder="6" />
               <CheckboxRow checked={hotjar.debugMode} onChange={(v) => setHotjar((prev) => ({ ...prev, debugMode: v }))} label="Debug mode" />
