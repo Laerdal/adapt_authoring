@@ -1199,14 +1199,18 @@ async function resolveExtensionTypeIdsByNames(extensionNames: string[]): Promise
 export async function getTrackingAnalyticsSettings(courseId: string): Promise<TrackingAnalyticsSettings> {
   const cfg = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
   const defaults = defaultTrackingAnalyticsSettings();
+  // Extension configs are stored inside _extensions (Mixed type in Mongoose schema).
+  // Reading from the root-level fields (_spoor etc.) does NOT work because Mongoose's
+  // strict mode silently drops them on save. The correct location is _extensions._spoor.
+  const ext = obj(cfg._extensions);
 
   return {
-    _spoor: { ...defaults._spoor, ...obj(cfg._spoor) },
-    _xapi: { ...defaults._xapi, ...obj(cfg._xapi) },
-    _hyper: { ...defaults._hyper, ...obj(cfg._hyper) },
-    _uesAnalytics: { ...defaults._uesAnalytics, ...obj(cfg._uesAnalytics) },
-    _googleAnalytics: { ...defaults._googleAnalytics, ...obj(cfg._googleAnalytics) },
-    _hotjarAnalytics: { ...defaults._hotjarAnalytics, ...obj(cfg._hotjarAnalytics) },
+    _spoor: { ...defaults._spoor, ...obj(ext._spoor) },
+    _xapi: { ...defaults._xapi, ...obj(ext._xapi) },
+    _hyper: { ...defaults._hyper, ...obj(ext._hyper) },
+    _uesAnalytics: { ...defaults._uesAnalytics, ...obj(ext._uesAnalytics) },
+    _googleAnalytics: { ...defaults._googleAnalytics, ...obj(ext._googleAnalytics) },
+    _hotjarAnalytics: { ...defaults._hotjarAnalytics, ...obj(ext._hotjarAnalytics) },
   };
 }
 
@@ -1251,15 +1255,23 @@ export async function saveTrackingAnalyticsSettings(
     }
   }
 
+  // Merge our tracking configs into the existing _extensions object.
+  // _extensions is typed as Object (Mixed) in the Mongoose config schema, so
+  // arbitrary nested data IS persisted. Root-level fields like _spoor are NOT
+  // in the schema and would be silently dropped by Mongoose strict mode.
+  const existingExtensions = obj(config._extensions);
   await apiClient.patch(`/api/content/config/${config._id}`, {
     _id: config._id,
     _courseId: courseId,
-    _spoor: settings._spoor,
-    _xapi: settings._xapi,
-    _hyper: settings._hyper,
-    _uesAnalytics: settings._uesAnalytics,
-    _googleAnalytics: settings._googleAnalytics,
-    _hotjarAnalytics: settings._hotjarAnalytics,
+    _extensions: {
+      ...existingExtensions,
+      _spoor: settings._spoor,
+      _xapi: settings._xapi,
+      _hyper: settings._hyper,
+      _uesAnalytics: settings._uesAnalytics,
+      _googleAnalytics: settings._googleAnalytics,
+      _hotjarAnalytics: settings._hotjarAnalytics,
+    },
   });
 }
 
