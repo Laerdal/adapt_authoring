@@ -474,9 +474,18 @@ function buildSnapshotFromSettings(settings: TrackingAnalyticsSettings): Trackin
   const spoorTracking = asRecord(spoor._tracking);
   const spoorReporting = asRecord(spoor._reporting);
   const spoorAdvanced = asRecord(spoor._advancedSettings);
-  const spoorConnectionTest = asRecord(spoor._connectionTest);
+  // Connection test lives inside _advancedSettings per the extension schema
+  const spoorConnectionTest = asRecord(spoorAdvanced._connectionTest);
 
   const xapi = asRecord(settings._xapi);
+  // Core events are nested: _coreEvents.Adapt['router:menu'] etc.
+  const xapiCoreEvents = asRecord(xapi._coreEvents);
+  const xapiAdapt = asRecord(xapiCoreEvents.Adapt);
+  const xapiContentObjects = asRecord(xapiCoreEvents.contentObjects);
+  const xapiArticles = asRecord(xapiCoreEvents.articles);
+  const xapiBlocks = asRecord(xapiCoreEvents.blocks);
+  const xapiComponents = asRecord(xapiCoreEvents.components);
+
   const hyper = asRecord(settings._hyper);
   const hyperTracking = asRecord(hyper._tracking);
   const hyperReporting = asRecord(hyper._reporting);
@@ -497,7 +506,8 @@ function buildSnapshotFromSettings(settings: TrackingAnalyticsSettings): Trackin
       shouldCompress: asBool(spoorTracking._shouldCompress, DEFAULT_SCORM_STATE.shouldCompress),
       onTrackingCriteriaMet: asString(spoorReporting._onTrackingCriteriaMet, DEFAULT_SCORM_STATE.onTrackingCriteriaMet),
       onAssessmentFailure: asString(spoorReporting._onAssessmentFailure, DEFAULT_SCORM_STATE.onAssessmentFailure),
-      resetStatusWhenLanguageChanged: asBool(spoorReporting._resetStatusWhenLanguageChanged, DEFAULT_SCORM_STATE.resetStatusWhenLanguageChanged),
+      // Schema uses _resetStatusOnLanguageChange
+      resetStatusWhenLanguageChanged: asBool(spoorReporting._resetStatusOnLanguageChange, DEFAULT_SCORM_STATE.resetStatusWhenLanguageChanged),
       scormVersion: asString(spoorAdvanced._scormVersion, DEFAULT_SCORM_STATE.scormVersion),
       showDebugWindow: asBool(spoorAdvanced._showDebugWindow, DEFAULT_SCORM_STATE.showDebugWindow),
       commitOnStatusChange: asBool(spoorAdvanced._commitOnStatusChange, DEFAULT_SCORM_STATE.commitOnStatusChange),
@@ -505,20 +515,26 @@ function buildSnapshotFromSettings(settings: TrackingAnalyticsSettings): Trackin
       timedCommitFrequency: asString(spoorAdvanced._timedCommitFrequency, DEFAULT_SCORM_STATE.timedCommitFrequency),
       maxCommitRetries: asString(spoorAdvanced._maxCommitRetries, DEFAULT_SCORM_STATE.maxCommitRetries),
       commitRetryDelay: asString(spoorAdvanced._commitRetryDelay, DEFAULT_SCORM_STATE.commitRetryDelay),
-      suppressLmsErrors: asBool(spoorAdvanced._suppressLmsErrors, DEFAULT_SCORM_STATE.suppressLmsErrors),
+      // Schema uses _suppressErrors
+      suppressLmsErrors: asBool(spoorAdvanced._suppressErrors, DEFAULT_SCORM_STATE.suppressLmsErrors),
       commitOnVisibilityChangeHidden: asBool(spoorAdvanced._commitOnVisibilityChangeHidden, DEFAULT_SCORM_STATE.commitOnVisibilityChangeHidden),
       manifestIdentifier: asString(spoorAdvanced._manifestIdentifier, DEFAULT_SCORM_STATE.manifestIdentifier),
-      exitStateIncomplete: asString(spoorAdvanced._exitStateIncomplete, DEFAULT_SCORM_STATE.exitStateIncomplete),
-      exitStateComplete: asString(spoorAdvanced._exitStateComplete, DEFAULT_SCORM_STATE.exitStateComplete),
-      completedWhenFailed: asBool(spoorAdvanced._completedWhenFailed, DEFAULT_SCORM_STATE.completedWhenFailed),
-      fillInCharacterLimit: asString(spoorAdvanced._fillInCharacterLimit, DEFAULT_SCORM_STATE.fillInCharacterLimit),
+      // Schema uses _exitStateIfIncomplete/_exitStateIfComplete
+      exitStateIncomplete: asString(spoorAdvanced._exitStateIfIncomplete, DEFAULT_SCORM_STATE.exitStateIncomplete),
+      exitStateComplete: asString(spoorAdvanced._exitStateIfComplete, DEFAULT_SCORM_STATE.exitStateComplete),
+      // Schema uses _setCompletedWhenFailed
+      completedWhenFailed: asBool(spoorAdvanced._setCompletedWhenFailed, DEFAULT_SCORM_STATE.completedWhenFailed),
+      // Schema uses _maxCharLimitOverride
+      fillInCharacterLimit: asString(spoorAdvanced._maxCharLimitOverride, DEFAULT_SCORM_STATE.fillInCharacterLimit),
       connectionTestEnabled: asBool(spoorConnectionTest._isEnabled, DEFAULT_SCORM_STATE.connectionTestEnabled),
       connectionTestOnSetValue: asBool(spoorConnectionTest._testOnSetValue, DEFAULT_SCORM_STATE.connectionTestOnSetValue),
       silentRetryLimit: asString(spoorConnectionTest._silentRetryLimit, DEFAULT_SCORM_STATE.silentRetryLimit),
       silentRetryDelay: asString(spoorConnectionTest._silentRetryDelay, DEFAULT_SCORM_STATE.silentRetryDelay),
       uniqueInteractionIds: asBool(spoorAdvanced._uniqueInteractionIds, DEFAULT_SCORM_STATE.uniqueInteractionIds),
-      showResetButton: asBool(spoorAdvanced._showResetButton, DEFAULT_SCORM_STATE.showResetButton),
-      persistCookieData: asBool(spoorAdvanced._persistCookieData, DEFAULT_SCORM_STATE.persistCookieData),
+      // Schema uses _showCookieLmsResetButton at root of _spoor
+      showResetButton: asBool(spoor._showCookieLmsResetButton, DEFAULT_SCORM_STATE.showResetButton),
+      // Schema uses _shouldPersistCookieLMSData at root of _spoor
+      persistCookieData: asBool(spoor._shouldPersistCookieLMSData, DEFAULT_SCORM_STATE.persistCookieData),
     },
     xapi: {
       isEnabled: asBool(xapi._isEnabled, DEFAULT_XAPI_STATE.isEnabled),
@@ -534,14 +550,15 @@ function buildSnapshotFromSettings(settings: TrackingAnalyticsSettings): Trackin
       shouldUseRegistration: asBool(xapi._shouldUseRegistration, DEFAULT_XAPI_STATE.shouldUseRegistration),
       componentBlacklist: asString(xapi._componentBlacklist, DEFAULT_XAPI_STATE.componentBlacklist),
       lrsFailureBehaviour: asString(xapi._lrsFailureBehaviour, DEFAULT_XAPI_STATE.lrsFailureBehaviour),
-      adaptRouterMenu: asBool(xapi._adaptRouterMenu, DEFAULT_XAPI_STATE.adaptRouterMenu),
-      adaptRouterPage: asBool(xapi._adaptRouterPage, DEFAULT_XAPI_STATE.adaptRouterPage),
-      adaptRecordInteraction: asBool(xapi._adaptRecordInteraction, DEFAULT_XAPI_STATE.adaptRecordInteraction),
-      adaptAssessComplete: asBool(xapi._adaptAssessComplete, DEFAULT_XAPI_STATE.adaptAssessComplete),
-      contentObjectIsComplete: asBool(xapi._contentObjectIsComplete, DEFAULT_XAPI_STATE.contentObjectIsComplete),
-      articleIsComplete: asBool(xapi._articleIsComplete, DEFAULT_XAPI_STATE.articleIsComplete),
-      blockIsComplete: asBool(xapi._blockIsComplete, DEFAULT_XAPI_STATE.blockIsComplete),
-      componentIsComplete: asBool(xapi._componentIsComplete, DEFAULT_XAPI_STATE.componentIsComplete),
+      // Core events live in _coreEvents.Adapt/contentObjects/articles/blocks/components
+      adaptRouterMenu: asBool(xapiAdapt['router:menu'], DEFAULT_XAPI_STATE.adaptRouterMenu),
+      adaptRouterPage: asBool(xapiAdapt['router:page'], DEFAULT_XAPI_STATE.adaptRouterPage),
+      adaptRecordInteraction: asBool(xapiAdapt['questionView:recordInteraction'], DEFAULT_XAPI_STATE.adaptRecordInteraction),
+      adaptAssessComplete: asBool(xapiAdapt['assessments:complete'], DEFAULT_XAPI_STATE.adaptAssessComplete),
+      contentObjectIsComplete: asBool(xapiContentObjects['change:_isComplete'], DEFAULT_XAPI_STATE.contentObjectIsComplete),
+      articleIsComplete: asBool(xapiArticles['change:_isComplete'], DEFAULT_XAPI_STATE.articleIsComplete),
+      blockIsComplete: asBool(xapiBlocks['change:_isComplete'], DEFAULT_XAPI_STATE.blockIsComplete),
+      componentIsComplete: asBool(xapiComponents['change:_isComplete'], DEFAULT_XAPI_STATE.componentIsComplete),
     },
     hyper: {
       isEnabled: asBool(hyper._isEnabled, DEFAULT_HYPER_STATE.isEnabled),
@@ -602,6 +619,8 @@ function buildSettingsFromSnapshot(
   const spoorTracking = asRecord(spoor._tracking);
   const spoorReporting = asRecord(spoor._reporting);
   const spoorAdvanced = asRecord(spoor._advancedSettings);
+  // Connection test is inside _advancedSettings per the extension schema
+  const spoorConnectionTest = asRecord(spoorAdvanced._connectionTest);
 
   const xapi = asRecord(current._xapi);
   const hyper = asRecord(current._hyper);
@@ -609,7 +628,6 @@ function buildSettingsFromSnapshot(
   const hyperReporting = asRecord(hyper._reporting);
   const hyperAdvanced = asRecord(hyper._advancedSettings);
   const hyperConnectionTest = asRecord(hyperAdvanced._connectionTest);
-  const spoorConnectionTest = asRecord(spoor._connectionTest);
 
   const ues = asRecord(current._uesAnalytics);
   const google = asRecord(current._googleAnalytics);
@@ -631,7 +649,7 @@ function buildSettingsFromSnapshot(
         ...spoorReporting,
         _onTrackingCriteriaMet: snapshot.scorm.onTrackingCriteriaMet,
         _onAssessmentFailure: snapshot.scorm.onAssessmentFailure,
-        _resetStatusWhenLanguageChanged: snapshot.scorm.resetStatusWhenLanguageChanged,
+        _resetStatusOnLanguageChange: snapshot.scorm.resetStatusWhenLanguageChanged,
       },
       _advancedSettings: {
         ...spoorAdvanced,
@@ -642,24 +660,26 @@ function buildSettingsFromSnapshot(
         _timedCommitFrequency: Number(snapshot.scorm.timedCommitFrequency || 0),
         _maxCommitRetries: Number(snapshot.scorm.maxCommitRetries || 0),
         _commitRetryDelay: Number(snapshot.scorm.commitRetryDelay || 0),
-        _suppressLmsErrors: snapshot.scorm.suppressLmsErrors,
+        _suppressErrors: snapshot.scorm.suppressLmsErrors,
         _commitOnVisibilityChangeHidden: snapshot.scorm.commitOnVisibilityChangeHidden,
         _manifestIdentifier: snapshot.scorm.manifestIdentifier,
-        _exitStateIncomplete: snapshot.scorm.exitStateIncomplete,
-        _exitStateComplete: snapshot.scorm.exitStateComplete,
-        _completedWhenFailed: snapshot.scorm.completedWhenFailed,
-        _fillInCharacterLimit: Number(snapshot.scorm.fillInCharacterLimit || 0),
+        _exitStateIfIncomplete: snapshot.scorm.exitStateIncomplete,
+        _exitStateIfComplete: snapshot.scorm.exitStateComplete,
+        _setCompletedWhenFailed: snapshot.scorm.completedWhenFailed,
+        _maxCharLimitOverride: Number(snapshot.scorm.fillInCharacterLimit || 0),
         _uniqueInteractionIds: snapshot.scorm.uniqueInteractionIds,
-        _showResetButton: snapshot.scorm.showResetButton,
-        _persistCookieData: snapshot.scorm.persistCookieData,
+        // Connection test is nested inside _advancedSettings per the extension schema
+        _connectionTest: {
+          ...spoorConnectionTest,
+          _isEnabled: snapshot.scorm.connectionTestEnabled,
+          _testOnSetValue: snapshot.scorm.connectionTestOnSetValue,
+          _silentRetryLimit: Number(snapshot.scorm.silentRetryLimit || 0),
+          _silentRetryDelay: Number(snapshot.scorm.silentRetryDelay || 0),
+        },
       },
-      _connectionTest: {
-        ...spoorConnectionTest,
-        _isEnabled: snapshot.scorm.connectionTestEnabled,
-        _testOnSetValue: snapshot.scorm.connectionTestOnSetValue,
-        _silentRetryLimit: Number(snapshot.scorm.silentRetryLimit || 0),
-        _silentRetryDelay: Number(snapshot.scorm.silentRetryDelay || 0),
-      },
+      // These two live at the ROOT of _spoor per the extension schema
+      _showCookieLmsResetButton: snapshot.scorm.showResetButton,
+      _shouldPersistCookieLMSData: snapshot.scorm.persistCookieData,
     },
     _xapi: {
       ...xapi,
@@ -676,14 +696,33 @@ function buildSettingsFromSnapshot(
       _shouldUseRegistration: snapshot.xapi.shouldUseRegistration,
       _componentBlacklist: snapshot.xapi.componentBlacklist,
       _lrsFailureBehaviour: snapshot.xapi.lrsFailureBehaviour,
-      _adaptRouterMenu: snapshot.xapi.adaptRouterMenu,
-      _adaptRouterPage: snapshot.xapi.adaptRouterPage,
-      _adaptRecordInteraction: snapshot.xapi.adaptRecordInteraction,
-      _adaptAssessComplete: snapshot.xapi.adaptAssessComplete,
-      _contentObjectIsComplete: snapshot.xapi.contentObjectIsComplete,
-      _articleIsComplete: snapshot.xapi.articleIsComplete,
-      _blockIsComplete: snapshot.xapi.blockIsComplete,
-      _componentIsComplete: snapshot.xapi.componentIsComplete,
+      // Core events use the nested _coreEvents structure from the extension schema
+      _coreEvents: {
+        ...asRecord(xapi._coreEvents),
+        Adapt: {
+          ...asRecord(asRecord(xapi._coreEvents).Adapt),
+          'router:menu': snapshot.xapi.adaptRouterMenu,
+          'router:page': snapshot.xapi.adaptRouterPage,
+          'questionView:recordInteraction': snapshot.xapi.adaptRecordInteraction,
+          'assessments:complete': snapshot.xapi.adaptAssessComplete,
+        },
+        contentObjects: {
+          ...asRecord(asRecord(xapi._coreEvents).contentObjects),
+          'change:_isComplete': snapshot.xapi.contentObjectIsComplete,
+        },
+        articles: {
+          ...asRecord(asRecord(xapi._coreEvents).articles),
+          'change:_isComplete': snapshot.xapi.articleIsComplete,
+        },
+        blocks: {
+          ...asRecord(asRecord(xapi._coreEvents).blocks),
+          'change:_isComplete': snapshot.xapi.blockIsComplete,
+        },
+        components: {
+          ...asRecord(asRecord(xapi._coreEvents).components),
+          'change:_isComplete': snapshot.xapi.componentIsComplete,
+        },
+      },
     },
     _hyper: {
       ...hyper,
@@ -856,7 +895,13 @@ export function TrackingAnalyticsPage({
       try {
         const settings = await getTrackingAnalyticsSettings(courseId);
         if (cancelled) return;
-        const snapshot = buildSnapshotFromSettings(settings);
+        let snapshot = buildSnapshotFromSettings(settings);
+        // If no tracking plugin has ever been explicitly enabled, default SCORM to
+        // enabled so that the selected radio (SCORM) drives the _enabledExtensions
+        // entry on first save. Without this, the old UI never shows SCORM settings.
+        if (!snapshot.scorm.isEnabled && !snapshot.xapi.isEnabled && !snapshot.hyper.isEnabled) {
+          snapshot = { ...snapshot, scorm: { ...snapshot.scorm, isEnabled: true } };
+        }
         setSourceSettings(settings);
         applySnapshot(snapshot);
         setSavedSnapshot(snapshot);
