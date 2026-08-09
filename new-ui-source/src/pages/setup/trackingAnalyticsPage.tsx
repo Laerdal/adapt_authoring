@@ -252,6 +252,7 @@ type TrackingAnalyticsPageSnapshot = {
     shouldCompress: boolean;
     onTrackingCriteriaMet: string;
     onAssessmentFailure: string;
+    resetStatusWhenLanguageChanged: boolean;
     commitOnStatusChange: boolean;
     commitOnAnyChange: boolean;
     commitOnAssessmentResult: boolean;
@@ -259,6 +260,17 @@ type TrackingAnalyticsPageSnapshot = {
     maxCommitRetries: string;
     commitRetryDelay: string;
     showSuspendDataPopup: boolean;
+    suppressLmsErrors: boolean;
+    commitOnVisibilityChangeHidden: boolean;
+    manifestIdentifier: string;
+    exitStateIncomplete: string;
+    exitStateComplete: string;
+    fillInCharacterLimit: string;
+    connectionTestEnabled: boolean;
+    connectionTestOnSetValue: boolean;
+    silentRetryLimit: string;
+    silentRetryDelay: string;
+    uniqueInteractionIds: boolean;
   };
   ues: {
     isEnabled: boolean;
@@ -347,6 +359,7 @@ const DEFAULT_HYPER_STATE: TrackingAnalyticsPageSnapshot["hyper"] = {
   shouldCompress: false,
   onTrackingCriteriaMet: "completed",
   onAssessmentFailure: "incomplete",
+  resetStatusWhenLanguageChanged: false,
   commitOnStatusChange: true,
   commitOnAnyChange: false,
   commitOnAssessmentResult: false,
@@ -354,6 +367,17 @@ const DEFAULT_HYPER_STATE: TrackingAnalyticsPageSnapshot["hyper"] = {
   maxCommitRetries: "5",
   commitRetryDelay: "2000",
   showSuspendDataPopup: false,
+  suppressLmsErrors: false,
+  commitOnVisibilityChangeHidden: true,
+  manifestIdentifier: "adapt_manifest",
+  exitStateIncomplete: "auto",
+  exitStateComplete: "auto",
+  fillInCharacterLimit: "0",
+  connectionTestEnabled: true,
+  connectionTestOnSetValue: true,
+  silentRetryLimit: "2",
+  silentRetryDelay: "1000",
+  uniqueInteractionIds: false,
 };
 
 const DEFAULT_UES_STATE: TrackingAnalyticsPageSnapshot["ues"] = {
@@ -457,6 +481,7 @@ function buildSnapshotFromSettings(settings: TrackingAnalyticsSettings): Trackin
   const hyperTracking = asRecord(hyper._tracking);
   const hyperReporting = asRecord(hyper._reporting);
   const hyperAdvanced = asRecord(hyper._advancedSettings);
+  const hyperConnectionTest = asRecord(hyperAdvanced._connectionTest);
 
   const ues = asRecord(settings._uesAnalytics);
   const google = asRecord(settings._googleAnalytics);
@@ -525,6 +550,7 @@ function buildSnapshotFromSettings(settings: TrackingAnalyticsSettings): Trackin
       shouldCompress: asBool(hyperTracking._shouldCompress, DEFAULT_HYPER_STATE.shouldCompress),
       onTrackingCriteriaMet: asString(hyperReporting._onTrackingCriteriaMet, DEFAULT_HYPER_STATE.onTrackingCriteriaMet),
       onAssessmentFailure: asString(hyperReporting._onAssessmentFailure, DEFAULT_HYPER_STATE.onAssessmentFailure),
+      resetStatusWhenLanguageChanged: asBool(hyperReporting._resetStatusOnLanguageChange, DEFAULT_HYPER_STATE.resetStatusWhenLanguageChanged),
       commitOnStatusChange: asBool(hyperAdvanced._commitOnStatusChange, DEFAULT_HYPER_STATE.commitOnStatusChange),
       commitOnAnyChange: asBool(hyperAdvanced._commitOnAnyChange, DEFAULT_HYPER_STATE.commitOnAnyChange),
       commitOnAssessmentResult: asBool(hyperAdvanced._commitOnAssessmentResult, DEFAULT_HYPER_STATE.commitOnAssessmentResult),
@@ -532,6 +558,17 @@ function buildSnapshotFromSettings(settings: TrackingAnalyticsSettings): Trackin
       maxCommitRetries: asString(hyperAdvanced._maxCommitRetries, DEFAULT_HYPER_STATE.maxCommitRetries),
       commitRetryDelay: asString(hyperAdvanced._commitRetryDelay, DEFAULT_HYPER_STATE.commitRetryDelay),
       showSuspendDataPopup: asBool(hyperAdvanced._showSuspendDataPopup, DEFAULT_HYPER_STATE.showSuspendDataPopup),
+      suppressLmsErrors: asBool(hyperAdvanced._suppressErrors, DEFAULT_HYPER_STATE.suppressLmsErrors),
+      commitOnVisibilityChangeHidden: asBool(hyperAdvanced._commitOnVisibilityChangeHidden, DEFAULT_HYPER_STATE.commitOnVisibilityChangeHidden),
+      manifestIdentifier: asString(hyperAdvanced._manifestIdentifier, DEFAULT_HYPER_STATE.manifestIdentifier),
+      exitStateIncomplete: asString(hyperAdvanced._exitStateIfIncomplete, DEFAULT_HYPER_STATE.exitStateIncomplete),
+      exitStateComplete: asString(hyperAdvanced._exitStateIfComplete, DEFAULT_HYPER_STATE.exitStateComplete),
+      fillInCharacterLimit: asString(hyperAdvanced._maxCharLimitOverride, DEFAULT_HYPER_STATE.fillInCharacterLimit),
+      connectionTestEnabled: asBool(hyperConnectionTest._isEnabled, DEFAULT_HYPER_STATE.connectionTestEnabled),
+      connectionTestOnSetValue: asBool(hyperConnectionTest._testOnSetValue, DEFAULT_HYPER_STATE.connectionTestOnSetValue),
+      silentRetryLimit: asString(hyperConnectionTest._silentRetryLimit, DEFAULT_HYPER_STATE.silentRetryLimit),
+      silentRetryDelay: asString(hyperConnectionTest._silentRetryDelay, DEFAULT_HYPER_STATE.silentRetryDelay),
+      uniqueInteractionIds: asBool(hyperAdvanced._uniqueInteractionIds, DEFAULT_HYPER_STATE.uniqueInteractionIds),
     },
     ues: {
       isEnabled: asBool(ues._isEnabled, DEFAULT_UES_STATE.isEnabled),
@@ -571,6 +608,7 @@ function buildSettingsFromSnapshot(
   const hyperTracking = asRecord(hyper._tracking);
   const hyperReporting = asRecord(hyper._reporting);
   const hyperAdvanced = asRecord(hyper._advancedSettings);
+  const hyperConnectionTest = asRecord(hyperAdvanced._connectionTest);
   const spoorConnectionTest = asRecord(spoor._connectionTest);
 
   const ues = asRecord(current._uesAnalytics);
@@ -660,6 +698,7 @@ function buildSettingsFromSnapshot(
         ...hyperReporting,
         _onTrackingCriteriaMet: snapshot.hyper.onTrackingCriteriaMet,
         _onAssessmentFailure: snapshot.hyper.onAssessmentFailure,
+        _resetStatusOnLanguageChange: snapshot.hyper.resetStatusWhenLanguageChanged,
       },
       _advancedSettings: {
         ...hyperAdvanced,
@@ -670,6 +709,20 @@ function buildSettingsFromSnapshot(
         _maxCommitRetries: Number(snapshot.hyper.maxCommitRetries || 0),
         _commitRetryDelay: Number(snapshot.hyper.commitRetryDelay || 0),
         _showSuspendDataPopup: snapshot.hyper.showSuspendDataPopup,
+        _suppressErrors: snapshot.hyper.suppressLmsErrors,
+        _commitOnVisibilityChangeHidden: snapshot.hyper.commitOnVisibilityChangeHidden,
+        _manifestIdentifier: snapshot.hyper.manifestIdentifier,
+        _exitStateIfIncomplete: snapshot.hyper.exitStateIncomplete,
+        _exitStateIfComplete: snapshot.hyper.exitStateComplete,
+        _maxCharLimitOverride: Number(snapshot.hyper.fillInCharacterLimit || 0),
+        _connectionTest: {
+          ...hyperConnectionTest,
+          _isEnabled: snapshot.hyper.connectionTestEnabled,
+          _testOnSetValue: snapshot.hyper.connectionTestOnSetValue,
+          _silentRetryLimit: Number(snapshot.hyper.silentRetryLimit || 0),
+          _silentRetryDelay: Number(snapshot.hyper.silentRetryDelay || 0),
+        },
+        _uniqueInteractionIds: snapshot.hyper.uniqueInteractionIds,
       },
     },
     _uesAnalytics: {
@@ -1022,40 +1075,90 @@ export function TrackingAnalyticsPage({
           )}
 
           {trackingPlugin === "hyperbridge" && (
-            <div className="mt-4 flex flex-col gap-3">
+            <div className="mt-4 flex flex-col gap-4">
               <SectionLabel>HyperBridge Settings</SectionLabel>
               <CheckboxRow checked={hyper.isEnabled} onChange={(v) => setHyper((prev) => ({ ...prev, isEnabled: v }))} label="Enable HyperBridge plugin" />
-              <CheckboxRow checked={hyper.shouldStoreResponses} onChange={(v) => setHyper((prev) => ({ ...prev, shouldStoreResponses: v }))} label="Store question state" />
-              <CheckboxRow checked={hyper.shouldStoreAttempts} onChange={(v) => setHyper((prev) => ({ ...prev, shouldStoreAttempts: v }))} label="Store question attempt states" />
-              <CheckboxRow checked={hyper.shouldCompress} onChange={(v) => setHyper((prev) => ({ ...prev, shouldCompress: v }))} label="Should compress data" />
-              <SelectField
-                label="Tracking success status"
-                value={hyper.onTrackingCriteriaMet}
-                onChange={(value) => setHyper((prev) => ({ ...prev, onTrackingCriteriaMet: value }))}
-                options={[
-                  { value: "completed", label: "Completed" },
-                  { value: "passed", label: "Passed" },
-                  { value: "failed", label: "Failed" },
-                  { value: "incomplete", label: "Incomplete" },
-                ]}
-              />
-              <SelectField
-                label="Assessment failure status"
-                value={hyper.onAssessmentFailure}
-                onChange={(value) => setHyper((prev) => ({ ...prev, onAssessmentFailure: value }))}
-                options={[
-                  { value: "completed", label: "Completed" },
-                  { value: "failed", label: "Failed" },
-                  { value: "incomplete", label: "Incomplete" },
-                ]}
-              />
+              <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
+                <SubSectionLabel>Tracking</SubSectionLabel>
+                <CheckboxRow checked={hyper.shouldStoreResponses} onChange={(v) => setHyper((prev) => ({ ...prev, shouldStoreResponses: v }))} label="Store question state" />
+                <CheckboxRow checked={hyper.shouldStoreAttempts} onChange={(v) => setHyper((prev) => ({ ...prev, shouldStoreAttempts: v }))} label="Store question attempt states" />
+                <CheckboxRow checked={hyper.shouldCompress} onChange={(v) => setHyper((prev) => ({ ...prev, shouldCompress: v }))} label="Should compress data" />
+              </div>
+
+              <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
+                <SubSectionLabel>Reporting</SubSectionLabel>
+                <SelectField
+                  label="Tracking success status"
+                  value={hyper.onTrackingCriteriaMet}
+                  onChange={(value) => setHyper((prev) => ({ ...prev, onTrackingCriteriaMet: value }))}
+                  options={[
+                    { value: "completed", label: "Completed" },
+                    { value: "passed", label: "Passed" },
+                    { value: "failed", label: "Failed" },
+                    { value: "incomplete", label: "Incomplete" },
+                  ]}
+                />
+                <SelectField
+                  label="Assessment failure status"
+                  value={hyper.onAssessmentFailure}
+                  onChange={(value) => setHyper((prev) => ({ ...prev, onAssessmentFailure: value }))}
+                  options={[
+                    { value: "completed", label: "Completed" },
+                    { value: "failed", label: "Failed" },
+                    { value: "incomplete", label: "Incomplete" },
+                  ]}
+                />
+                <CheckboxRow
+                  checked={hyper.resetStatusWhenLanguageChanged}
+                  onChange={(v) => setHyper((prev) => ({ ...prev, resetStatusWhenLanguageChanged: v }))}
+                  label="Reset status when language changed?"
+                />
+              </div>
+
+              <SectionLabel>Advanced Settings</SectionLabel>
               <CheckboxRow checked={hyper.commitOnStatusChange} onChange={(v) => setHyper((prev) => ({ ...prev, commitOnStatusChange: v }))} label="Commit data on status change" />
+              <CheckboxRow checked={hyper.showSuspendDataPopup} onChange={(v) => setHyper((prev) => ({ ...prev, showSuspendDataPopup: v }))} label="Suspend data popup" />
               <CheckboxRow checked={hyper.commitOnAnyChange} onChange={(v) => setHyper((prev) => ({ ...prev, commitOnAnyChange: v }))} label="Commit data on any change" />
               <CheckboxRow checked={hyper.commitOnAssessmentResult} onChange={(v) => setHyper((prev) => ({ ...prev, commitOnAssessmentResult: v }))} label="Commit data on assessment results" />
-              <CheckboxRow checked={hyper.showSuspendDataPopup} onChange={(v) => setHyper((prev) => ({ ...prev, showSuspendDataPopup: v }))} label="Suspend data popup" />
               <TextField label="Frequency (mins) of automatic commits" type="number" value={hyper.timedCommitFrequency} onChange={(value) => setHyper((prev) => ({ ...prev, timedCommitFrequency: value }))} />
               <TextField label="Maximum number of commit retries" type="number" value={hyper.maxCommitRetries} onChange={(value) => setHyper((prev) => ({ ...prev, maxCommitRetries: value }))} />
               <TextField label="Commit retry delay" type="number" value={hyper.commitRetryDelay} onChange={(value) => setHyper((prev) => ({ ...prev, commitRetryDelay: value }))} />
+              <CheckboxRow checked={hyper.suppressLmsErrors} onChange={(v) => setHyper((prev) => ({ ...prev, suppressLmsErrors: v }))} label="Suppress LMS errors" />
+              <CheckboxRow checked={hyper.commitOnVisibilityChangeHidden} onChange={(v) => setHyper((prev) => ({ ...prev, commitOnVisibilityChangeHidden: v }))} label="Commit on visibility change hidden" />
+              <TextField label="Manifest identifier" value={hyper.manifestIdentifier} onChange={(value) => setHyper((prev) => ({ ...prev, manifestIdentifier: value }))} placeholder="adapt_manifest" />
+              <SelectField
+                label="Exit state if incomplete"
+                value={hyper.exitStateIncomplete}
+                onChange={(value) => setHyper((prev) => ({ ...prev, exitStateIncomplete: value }))}
+                options={[
+                  { value: "auto", label: "auto" },
+                  { value: "suspend", label: "suspend" },
+                  { value: "normal", label: "normal" },
+                  { value: "", label: "'' (empty string)" },
+                ]}
+              />
+              <SelectField
+                label="Exit state if complete"
+                value={hyper.exitStateComplete}
+                onChange={(value) => setHyper((prev) => ({ ...prev, exitStateComplete: value }))}
+                options={[
+                  { value: "auto", label: "auto" },
+                  { value: "suspend", label: "suspend" },
+                  { value: "normal", label: "normal" },
+                  { value: "", label: "'' (empty string)" },
+                ]}
+              />
+              <TextField label="Override value for maximum character limit on fill-in type answers" type="number" value={hyper.fillInCharacterLimit} onChange={(value) => setHyper((prev) => ({ ...prev, fillInCharacterLimit: value }))} />
+
+              <SectionLabel>Connection Test</SectionLabel>
+              <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
+                <CheckboxRow checked={hyper.connectionTestEnabled} onChange={(v) => setHyper((prev) => ({ ...prev, connectionTestEnabled: v }))} label="Is Enabled" />
+                <CheckboxRow checked={hyper.connectionTestOnSetValue} onChange={(v) => setHyper((prev) => ({ ...prev, connectionTestOnSetValue: v }))} label="Test on set value" />
+                <TextField label="Silent Retry Limit" type="number" value={hyper.silentRetryLimit} onChange={(value) => setHyper((prev) => ({ ...prev, silentRetryLimit: value }))} />
+                <TextField label="Silent Retry Delay" type="number" value={hyper.silentRetryDelay} onChange={(value) => setHyper((prev) => ({ ...prev, silentRetryDelay: value }))} />
+              </div>
+
+              <CheckboxRow checked={hyper.uniqueInteractionIds} onChange={(v) => setHyper((prev) => ({ ...prev, uniqueInteractionIds: v }))} label="Unique Interaction Ids" />
             </div>
           )}
         </AccordionCard>
