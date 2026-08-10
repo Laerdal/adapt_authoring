@@ -4,6 +4,13 @@
 // keep engine-specific endpoint knowledge here, not in the pages.
 
 import { apiClient } from "./client";
+export {
+  TRACKING_ANALYTICS_EXTENSION_NAME_BY_KEY,
+  defaultTrackingAnalyticsSettings,
+  getTrackingAnalyticsSettings,
+  saveTrackingAnalyticsSettings,
+} from "../helpers/trackingAnalyticsHelper";
+export type { TrackingAnalyticsSettings } from "../helpers/trackingAnalyticsHelper";
 
 // ── Current user ────────────────────────────────────────────────────────────
 // GET /api/user/me → the session user, enriched with rolesAsName by the engine.
@@ -1131,6 +1138,8 @@ export async function removeCourseAssetMappings(courseId: string, fieldName: str
       .map((r) => apiClient.delete(`/api/content/courseasset/${r._id}`))
   );
 }
+
+// Tracking/analytics helpers and API calls live in src/helpers/trackingAnalyticsHelper.ts.
 
 // ── Course structure (modules / topics / sections / content groups / components)
 // The Course Structure screen maps the real Adapt content hierarchy onto a
