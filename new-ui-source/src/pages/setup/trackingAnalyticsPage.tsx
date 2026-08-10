@@ -188,6 +188,9 @@ function PluginRadio({
 type TrackingPlugin = "scorm" | "xapi" | "hyperbridge";
 type AnalyticsPlugin = "ues" | "google" | "hotjar";
 
+type StandardDeploymentItem = { deploymentURL: string; region: string; environment: string };
+type EclDeploymentItem = { deploymentURL: string; environment: string };
+
 type TrackingAnalyticsPageSnapshot = {
   scorm: {
     isEnabled: boolean;
@@ -277,8 +280,8 @@ type TrackingAnalyticsPageSnapshot = {
     projectTag: string;
     portfolio: string;
     resourceLinkId: string;
-    standard: string;
-    ecl: string;
+    standardItems: StandardDeploymentItem[];
+    eclItems: EclDeploymentItem[];
   };
   google: {
     isEnabled: boolean;
@@ -385,8 +388,8 @@ const DEFAULT_UES_STATE: TrackingAnalyticsPageSnapshot["ues"] = {
   projectTag: "",
   portfolio: "Adapt Course",
   resourceLinkId: "",
-  standard: "",
-  ecl: "",
+  standardItems: [],
+  eclItems: [],
 };
 
 const DEFAULT_GOOGLE_STATE: TrackingAnalyticsPageSnapshot["google"] = {
@@ -426,46 +429,6 @@ function asString(value: unknown, fallback = ""): string {
   if (typeof value === "string") return value;
   if (typeof value === "number") return String(value);
   return fallback;
-}
-
-function parseCsv(value: string): string[] {
-  return value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function joinDeploymentUrls(value: unknown): string {
-  const rows = Array.isArray(value) ? value : [];
-  return rows
-    .map((row) => asString(asRecord(row)._deploymentURL).trim())
-    .filter(Boolean)
-    .join(", ");
-}
-
-function buildDeploymentItems(
-  csv: string,
-  existing: unknown,
-  includeRegion: boolean
-): Array<Record<string, string>> {
-  const urls = parseCsv(csv);
-  const prior = Array.isArray(existing) ? existing : [];
-
-  return urls.map((deploymentURL, index) => {
-    const base = asRecord(prior[index]);
-    const item: Record<string, string> = {
-      ...Object.fromEntries(Object.entries(base).filter(([, v]) => typeof v === "string")),
-      _deploymentURL: deploymentURL,
-    };
-
-    if (includeRegion && !item._region) {
-      item._region = "US";
-    }
-    if (!item._environment) {
-      item._environment = "PRODUCTION";
-    }
-    return item;
-  });
 }
 
 function buildSnapshotFromSettings(settings: TrackingAnalyticsSettings): TrackingAnalyticsPageSnapshot {
@@ -592,8 +555,25 @@ function buildSnapshotFromSettings(settings: TrackingAnalyticsSettings): Trackin
       projectTag: asString(ues._projectTag, asString(ues._trackingId, DEFAULT_UES_STATE.projectTag)),
       portfolio: asString(ues._portfolio, DEFAULT_UES_STATE.portfolio),
       resourceLinkId: asString(ues._resourceLinkId, DEFAULT_UES_STATE.resourceLinkId),
-      standard: joinDeploymentUrls(ues._items),
-      ecl: joinDeploymentUrls(ues._itemsECL),
+      standardItems: Array.isArray(ues._items)
+        ? ues._items.map((item) => {
+            const r = asRecord(item);
+            return {
+              deploymentURL: asString(r._deploymentURL),
+              region: asString(r._region, "US"),
+              environment: asString(r._environment, "PRODUCTION"),
+            };
+          })
+        : [],
+      eclItems: Array.isArray(ues._itemsECL)
+        ? ues._itemsECL.map((item) => {
+            const r = asRecord(item);
+            return {
+              deploymentURL: asString(r._deploymentURL),
+              environment: asString(r._environment, "PRODUCTION"),
+            };
+          })
+        : [],
     },
     google: {
       isEnabled: asBool(google._isEnabled, DEFAULT_GOOGLE_STATE.isEnabled),
@@ -771,8 +751,15 @@ function buildSettingsFromSnapshot(
       _trackingId: snapshot.ues.projectTag,
       _portfolio: snapshot.ues.portfolio,
       _resourceLinkId: snapshot.ues.resourceLinkId,
-      _items: buildDeploymentItems(snapshot.ues.standard, ues._items, true),
-      _itemsECL: buildDeploymentItems(snapshot.ues.ecl, ues._itemsECL, false),
+      _items: snapshot.ues.standardItems.map((item) => ({
+        _deploymentURL: item.deploymentURL,
+        _region: item.region,
+        _environment: item.environment,
+      })),
+      _itemsECL: snapshot.ues.eclItems.map((item) => ({
+        _deploymentURL: item.deploymentURL,
+        _environment: item.environment,
+      })),
     },
     _googleAnalytics: {
       ...google,
@@ -789,6 +776,157 @@ function buildSettingsFromSnapshot(
       _debugMode: snapshot.hotjar.debugMode,
     },
   };
+}
+
+function DeploymentModal({
+  type,
+  onConfirm,
+  onCancel,
+}: {
+  type: "standard" | "ecl";
+  onConfirm: (item: StandardDeploymentItem | EclDeploymentItem) => void;
+  onCancel: () => void;
+}) {
+  const [deploymentURL, setDeploymentURL] = useState("");
+  const [region, setRegion] = useState("US");
+  const [environment, setEnvironment] = useState("PRODUCTION");
+
+  const chevron = (
+    <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="6 9 12 15 18 9" />
+    </svg>
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onCancel}>
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 p-6" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-base font-semibold text-[#111827] mb-4">
+          {type === "standard" ? "Add Standard entry" : "Add ECL entry"}
+        </h3>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-semibold text-[#374151]">Deployment URL</span>
+            <input
+              type="text"
+              value={deploymentURL}
+              onChange={(e) => setDeploymentURL(e.target.value)}
+              placeholder="https://..."
+              className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
+            />
+          </div>
+          {type === "standard" && (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-semibold text-[#374151]">Region</span>
+              <div className="relative">
+                <select
+                  value={region}
+                  onChange={(e) => setRegion(e.target.value)}
+                  className="w-full border border-[#e5e7eb] rounded-lg px-3 py-2 text-sm text-[#111827] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent pr-8"
+                >
+                  <option value="US">US</option>
+                  <option value="EU">EU</option>
+                  <option value="AU">AU</option>
+                </select>
+                {chevron}
+              </div>
+            </div>
+          )}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-xs font-semibold text-[#374151]">Course data</span>
+            <div className="relative">
+              <select
+                value={environment}
+                onChange={(e) => setEnvironment(e.target.value)}
+                className="w-full border border-[#e5e7eb] rounded-lg px-3 py-2 text-sm text-[#111827] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent pr-8"
+              >
+                <option value="PRODUCTION">PRODUCTION</option>
+                <option value="TESTING">TESTING</option>
+              </select>
+              {chevron}
+            </div>
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 mt-6">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (type === "standard") {
+                onConfirm({ deploymentURL, region, environment });
+              } else {
+                onConfirm({ deploymentURL, environment });
+              }
+            }}
+            className="px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245a8a] rounded-lg transition-colors"
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeploymentListField({
+  label,
+  type,
+  items,
+  onAdd,
+  onRemove,
+}: {
+  label: string;
+  type: "standard" | "ecl";
+  items: Array<StandardDeploymentItem | EclDeploymentItem>;
+  onAdd: () => void;
+  onRemove: (index: number) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-xs font-semibold uppercase tracking-wider text-[#9ca3af]">{label}</span>
+      {items.length > 0 && (
+        <div className="flex flex-col gap-2">
+          {items.map((item, index) => (
+            <div key={index} className="border border-[#e5e7eb] rounded-lg px-3 py-2.5 bg-[#f9fafb] relative pr-8">
+              <button
+                type="button"
+                onClick={() => onRemove(index)}
+                aria-label="Remove entry"
+                className="absolute top-2 right-2 text-[#9ca3af] hover:text-[#ef4444] transition-colors p-0.5"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+              <p className="text-xs text-[#374151]">
+                <span className="font-semibold">Deployment URL:</span>{" "}
+                <span className="break-all">{item.deploymentURL || <span className="text-[#9ca3af] italic">empty</span>}</span>
+              </p>
+              {type === "standard" && "region" in item && (
+                <p className="text-xs text-[#374151] mt-0.5"><span className="font-semibold">Region:</span> {item.region}</p>
+              )}
+              <p className="text-xs text-[#374151] mt-0.5"><span className="font-semibold">Course data:</span> {item.environment}</p>
+            </div>
+          ))}
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={onAdd}
+        className="self-start inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245a8a] rounded-lg transition-colors"
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+        Add
+      </button>
+    </div>
+  );
 }
 
 export function TrackingAnalyticsPage({
@@ -822,6 +960,25 @@ export function TrackingAnalyticsPage({
   const [google, setGoogle] = useState<TrackingAnalyticsPageSnapshot["google"]>(DEFAULT_GOOGLE_STATE);
 
   const [hotjar, setHotjar] = useState<TrackingAnalyticsPageSnapshot["hotjar"]>(DEFAULT_HOTJAR_STATE);
+
+  const [deploymentModal, setDeploymentModal] = useState<"standard" | "ecl" | null>(null);
+
+  const handleDeploymentAdd = (item: StandardDeploymentItem | EclDeploymentItem) => {
+    if (deploymentModal === "standard") {
+      setUes((prev) => ({ ...prev, standardItems: [...prev.standardItems, item as StandardDeploymentItem] }));
+    } else if (deploymentModal === "ecl") {
+      setUes((prev) => ({ ...prev, eclItems: [...prev.eclItems, item as EclDeploymentItem] }));
+    }
+    setDeploymentModal(null);
+  };
+
+  const handleStandardRemove = (index: number) => {
+    setUes((prev) => ({ ...prev, standardItems: prev.standardItems.filter((_, i) => i !== index) }));
+  };
+
+  const handleEclRemove = (index: number) => {
+    setUes((prev) => ({ ...prev, eclItems: prev.eclItems.filter((_, i) => i !== index) }));
+  };
 
   const currentSnapshot = useMemo<TrackingAnalyticsPageSnapshot>(
     () => ({
@@ -1236,14 +1393,26 @@ export function TrackingAnalyticsPage({
           </div>
 
           {analyticsPlugin === "ues" && (
-            <div className="mt-4 flex flex-col gap-3">
+            <div className="mt-4 flex flex-col gap-4">
               <SectionLabel>UES Settings</SectionLabel>
               <CheckboxRow checked={ues.isDebugMode} onChange={(v) => setUes((prev) => ({ ...prev, isDebugMode: v }))} label="Enable debug mode" />
               <TextField label="Project tag" value={ues.projectTag} onChange={(value) => setUes((prev) => ({ ...prev, projectTag: value }))} />
               <TextField label="Portfolio" value={ues.portfolio} onChange={(value) => setUes((prev) => ({ ...prev, portfolio: value }))} />
               <TextField label="Resource link ID" value={ues.resourceLinkId} onChange={(value) => setUes((prev) => ({ ...prev, resourceLinkId: value }))} />
-              <TextField label="Standard deployments (comma-separated URLs)" value={ues.standard} onChange={(value) => setUes((prev) => ({ ...prev, standard: value }))} placeholder="*.rqi1stop.com" />
-              <TextField label="ECL deployments (comma-separated URLs)" value={ues.ecl} onChange={(value) => setUes((prev) => ({ ...prev, ecl: value }))} placeholder="*.example.com" />
+              <DeploymentListField
+                label="Standard"
+                type="standard"
+                items={ues.standardItems}
+                onAdd={() => setDeploymentModal("standard")}
+                onRemove={handleStandardRemove}
+              />
+              <DeploymentListField
+                label="ECL (e-Courses Library)"
+                type="ecl"
+                items={ues.eclItems}
+                onAdd={() => setDeploymentModal("ecl")}
+                onRemove={handleEclRemove}
+              />
             </div>
           )}
 
@@ -1310,6 +1479,14 @@ export function TrackingAnalyticsPage({
         onSave={handleSave}
         onClose={clearPendingNavigation}
       />
+
+      {deploymentModal && (
+        <DeploymentModal
+          type={deploymentModal}
+          onConfirm={handleDeploymentAdd}
+          onCancel={() => setDeploymentModal(null)}
+        />
+      )}
     </>
   );
 }
