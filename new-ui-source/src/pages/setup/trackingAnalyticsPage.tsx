@@ -80,6 +80,7 @@ function TextField({
     <div className="flex flex-col gap-1.5">
       <span className="text-xs font-semibold text-[#374151]">{label}</span>
       <input
+        aria-label={label}
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
