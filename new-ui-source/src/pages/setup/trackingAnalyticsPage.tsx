@@ -123,6 +123,7 @@ function AccordionCard({
     <div className="border border-[#e5e7eb] rounded-xl overflow-hidden bg-white">
       <button
         type="button"
+        aria-expanded={open}
         onClick={onToggle}
         className="w-full px-4 py-3.5 flex items-center justify-between bg-white hover:bg-[#f9fafb] transition-colors"
       >
