@@ -1,17 +1,13 @@
 "use client";
 
-import type { ComponentType } from "@/pages/editor/pageEditorWorkspace";
-
-const AVAILABLE_COMPONENTS: { type: ComponentType; label: string; description: string }[] = [
-  { type: "Image", label: "Image", description: "Add images to your content" },
-  { type: "Video", label: "Video", description: "Embed videos from YouTube or Vimeo" },
-  { type: "Accordion", label: "Accordion", description: "Create expandable accordion sections" },
-  { type: "Text", label: "Text", description: "Add formatted text content" },
-  { type: "Quiz", label: "Quiz", description: "Add quiz questions and answers" },
-];
+import { useEffect, useState } from "react";
+import {
+  getAvailableComponents,
+  type ComponentTypeOption,
+} from "@/api/adaptAuthoring";
 
 interface ComponentSelectorProps {
-  onSelectComponent: (type: ComponentType) => void;
+  onSelectComponent: (type: ComponentTypeOption) => void;
   onClose: () => void;
 }
 
@@ -19,6 +15,29 @@ export default function ComponentSelector({
   onSelectComponent,
   onClose,
 }: ComponentSelectorProps) {
+  const [components, setComponents] = useState<ComponentTypeOption[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const list = await getAvailableComponents();
+        if (!cancelled) setComponents(list);
+      } catch {
+        if (!cancelled) setError("Failed to load components.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="w-80 h-full bg-white border-l border-[#e5e7eb] flex flex-col shrink-0">
       {/* Header */}
@@ -41,21 +60,27 @@ export default function ComponentSelector({
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        <div className="space-y-2">
-          {AVAILABLE_COMPONENTS.map((comp) => (
+        {loading ? (
+          <div className="py-6 text-sm text-[#6b7280]">Loading components...</div>
+        ) : error ? (
+          <div className="py-6 text-sm text-[#991b1b]">{error}</div>
+        ) : (
+          <div className="space-y-2">
+            {components.map((comp) => (
             <button
-              key={comp.type}
+              key={comp._id}
               onClick={() => {
-                onSelectComponent(comp.type);
+                onSelectComponent(comp);
                 onClose();
               }}
               className="w-full text-left px-4 py-3 rounded-lg border-2 transition-all border-[#d1d5db] hover:border-[#2d6fa8] hover:bg-[#f0f8ff] cursor-pointer"
             >
-              <p className="font-medium text-sm">{comp.label}</p>
-              <p className="text-xs text-[#6b7280] mt-1">{comp.description}</p>
+              <p className="font-medium text-sm">{comp.displayName}</p>
+              <p className="text-xs text-[#6b7280] mt-1">{comp.description || comp.component}</p>
             </button>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

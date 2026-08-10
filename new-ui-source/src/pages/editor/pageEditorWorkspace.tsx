@@ -1,17 +1,32 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   MenuPageCanvas,
   ContentPageCanvas,
   SubPageCanvas,
   ArticleCanvas,
-  ComponentSelector,
 } from "../../components/editor/index";
+import AddComponentDrawer from "../../components/course/AddComponentDrawer";
 import CourseStructureMap from "../../components/course/CourseStructureMap";
+import { StructureIcon, STRUCTURE_ICON_COLOR_CLASS } from "../../components/course/StructureIcons";
 import PageEditorTopBar from "./pageEditorTopBar";
 import PageEditorNavigation from "./pageEditorNavigation";
-import { getCourseStructure } from "../../api/adaptAuthoring";
+import {
+  createArticle,
+  createBlock,
+  createComponent,
+  createTopic,
+  deleteStructureNode,
+  getCourseStructure,
+  type ComponentTypeOption,
+  updateStructureNode,
+} from "../../api/adaptAuthoring";
 import type { MenuPageData } from "../../components/editor/MenuPageCanvas";
 import type { Course } from "../../types/course";
+import {
+  NEW_CONTENT_GROUP_TITLE,
+  NEW_SECTION_TITLE,
+  NEW_TOPIC_TITLE,
+} from "../../constants/structureDefaults";
 
 const ICON_BASE = "/new/assets/icons";
 
@@ -73,37 +88,44 @@ function mapStructureToPages(
   const pushTopic = (topic: {
     id: string;
     title: string;
+    description?: string;
     sections: Array<{
       id: string;
       title: string;
+      description?: string;
+      instruction?: string;
       contentGroups: Array<{
         id: string;
         title: string;
-        components: Array<{ id: string; title: string; componentKey: string }>;
+        description?: string;
+        instruction?: string;
+        components: Array<{ id: string; title: string; componentKey: string; description?: string; url?: string }>;
       }>;
     }>;
   }) => {
     pages.push({
       id: topic.id,
       title: topic.title || "Untitled Page",
-      description: "",
+      description: topic.description || "",
       subPages: [],
       articles: topic.sections.map((section) => ({
         id: section.id,
         title: section.title || "Untitled Article",
-        description: "",
-        instruction: "",
+        description: section.description || "",
+        instruction: section.instruction || "",
         blocks: section.contentGroups.map((group) => ({
           id: group.id,
           title: group.title || "Untitled Block",
-          description: "",
-          instruction: "",
+          description: group.description || "",
+          instruction: group.instruction || "",
           components: group.components.map((component) => ({
             id: component.id,
             type: toComponentType(component.componentKey),
             settings: {
               title: component.title || "",
-              description: "",
+              description: component.description || "",
+              url: component.url || "",
+              componentKey: component.componentKey,
             },
           })),
         })),
@@ -205,65 +227,86 @@ export default function CourseEditor({
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
   const [hasCanvasSelection, setHasCanvasSelection] = useState(false);
+  const [addComponentTarget, setAddComponentTarget] = useState<{
+    pageId: string;
+    articleId: string;
+    blockId: string;
+  } | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadFromDatabase() {
-      if (!courseId || courseId === "new-course") {
-        setIsLoadingStructure(false);
-        return;
-      }
-
-      setIsLoadingStructure(true);
-      setStructureLoadError(null);
-
-      try {
-        const structure = await getCourseStructure(courseId, courseTitle);
-        if (cancelled) return;
-
-        const pages = mapStructureToPages(structure);
-        const firstPage = pages[0] ?? null;
-
-        setContentPages(pages);
-        setMenuPageCreated(pages.length > 0);
-        setMenuSelected(false);
-        setSelectedPageId(firstPage?.id ?? null);
-        setSelectedSubPageId(null);
-        setSelectedArticleId(null);
-        setSelectedBlockId(null);
-        setSelectedComponentId(null);
-        setHasCanvasSelection(pages.length > 0);
-        setRightPanelType("page");
-        setRightPanelOpen(pages.length > 0);
-      } catch (error) {
-        if (cancelled) return;
-        setContentPages([]);
-        setMenuPageCreated(false);
-        setMenuSelected(false);
-        setSelectedPageId(null);
-        setSelectedSubPageId(null);
-        setSelectedArticleId(null);
-        setSelectedBlockId(null);
-        setSelectedComponentId(null);
-        setHasCanvasSelection(false);
-        setRightPanelOpen(false);
-        setStructureLoadError(
-          error instanceof Error ? error.message : "Failed to load course structure"
-        );
-      } finally {
-        if (!cancelled) {
-          setIsLoadingStructure(false);
-        }
-      }
+  const loadStructureFromDatabase = useCallback(async (selection?: {
+    pageId?: string | null;
+    articleId?: string | null;
+    blockId?: string | null;
+    componentId?: string | null;
+  }) => {
+    if (!courseId || courseId === "new-course") {
+      setIsLoadingStructure(false);
+      return;
     }
 
-    void loadFromDatabase();
+    setIsLoadingStructure(true);
+    setStructureLoadError(null);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [courseId]);
+    try {
+      const structure = await getCourseStructure(courseId, courseTitle);
+      const pages = mapStructureToPages(structure);
+      const fallbackPage = pages[0] ?? null;
+      const page = pages.find((item) => item.id === selection?.pageId) ?? fallbackPage;
+      const article = selection?.articleId && page
+        ? page.articles.find((item) => item.id === selection.articleId) ?? null
+        : null;
+      const block = selection?.blockId && article
+        ? article.blocks.find((item) => item.id === selection.blockId) ?? null
+        : null;
+      const component = selection?.componentId && block
+        ? block.components.find((item) => item.id === selection.componentId) ?? null
+        : null;
+
+      setContentPages(pages);
+      setMenuPageCreated(pages.length > 0);
+      setMenuSelected(false);
+      setSelectedPageId(page?.id ?? null);
+      setSelectedSubPageId(null);
+      setSelectedArticleId(article?.id ?? null);
+      setSelectedBlockId(block?.id ?? null);
+      setSelectedComponentId(component?.id ?? null);
+
+      const nextHasSelection = !!(component || block || article || page);
+      setHasCanvasSelection(nextHasSelection);
+      setRightPanelOpen(nextHasSelection);
+      setRightPanelType(
+        component
+          ? "component"
+          : block
+            ? "block"
+            : article
+              ? "article"
+              : page
+                ? "page"
+                : "menu"
+      );
+    } catch (error) {
+      setContentPages([]);
+      setMenuPageCreated(false);
+      setMenuSelected(false);
+      setSelectedPageId(null);
+      setSelectedSubPageId(null);
+      setSelectedArticleId(null);
+      setSelectedBlockId(null);
+      setSelectedComponentId(null);
+      setHasCanvasSelection(false);
+      setRightPanelOpen(false);
+      setStructureLoadError(
+        error instanceof Error ? error.message : "Failed to load course structure"
+      );
+    } finally {
+      setIsLoadingStructure(false);
+    }
+  }, [courseId, courseTitle]);
+
+  useEffect(() => {
+    void loadStructureFromDatabase();
+  }, [loadStructureFromDatabase]);
 
   function handleMenuPageCreate() {
     setMenuPageCreated(true);
@@ -295,42 +338,23 @@ export default function CourseEditor({
     setRightPanelType("menu");
   }
 
-  function handleAddPage() {
-    const newPageId = `page-${Date.now()}`;
-    const newPage: ContentPageData = {
-      id: newPageId,
-      title: "Untitled Page",
-      description: "",
-      articles: [],
-      subPages: [],
-    };
-    setContentPages([...contentPages, newPage]);
-    setSelectedPageId(newPageId);
-    setHasCanvasSelection(true);
-    setRightPanelOpen(true);
-    setRightPanelType("page");
+  async function handleAddPage() {
+    try {
+      const newPageId = await createTopic(courseId, courseId, NEW_TOPIC_TITLE, contentPages.length + 1);
+      await loadStructureFromDatabase({ pageId: newPageId });
+    } catch (error) {
+      console.error("Failed to add topic", error);
+    }
   }
 
-  function handleAddArticle(pageId: string) {
-    const newArticleId = `article-${Date.now()}`;
-    setContentPages(
-      contentPages.map((p) =>
-        p.id === pageId
-          ? {
-              ...p,
-              articles: [
-                ...p.articles,
-                { id: newArticleId, title: "Untitled Article", description: "", instruction: "", blocks: [] },
-              ],
-            }
-          : p
-      )
-    );
-    setSelectedPageId(pageId);
-    setSelectedArticleId(newArticleId);
-    setHasCanvasSelection(true);
-    setRightPanelOpen(true);
-    setRightPanelType("article");
+  async function handleAddArticle(pageId: string) {
+    try {
+      const page = contentPages.find((item) => item.id === pageId);
+      const newArticleId = await createArticle(courseId, pageId, NEW_SECTION_TITLE, (page?.articles.length ?? 0) + 1);
+      await loadStructureFromDatabase({ pageId, articleId: newArticleId });
+    } catch (error) {
+      console.error("Failed to add section", error);
+    }
   }
 
   function handleAddSubPage(pageId: string) {
@@ -368,6 +392,9 @@ export default function CourseEditor({
           : p
       )
     );
+    void updateStructureNode("section", articleId, patch as Record<string, unknown>).catch((error) => {
+      console.error("Failed to update section", error);
+    });
   }
 
   function updateSubPage(pageId: string, subPageId: string, patch: Partial<SubPageData>) {
@@ -385,21 +412,12 @@ export default function CourseEditor({
     );
   }
 
-  function deleteArticle(pageId: string, articleId: string) {
-    setContentPages(
-      contentPages.map((p) =>
-        p.id === pageId
-          ? {
-              ...p,
-              articles: p.articles.filter((a) => a.id !== articleId),
-            }
-          : p
-      )
-    );
-    if (selectedArticleId === articleId) {
-      setSelectedArticleId(null);
-      setRightPanelType("page");
-      setRightPanelOpen(true);
+  async function deleteArticle(pageId: string, articleId: string) {
+    try {
+      await deleteStructureNode("section", articleId);
+      await loadStructureFromDatabase({ pageId });
+    } catch (error) {
+      console.error("Failed to delete section", error);
     }
   }
 
@@ -467,43 +485,28 @@ export default function CourseEditor({
     setContentPages(
       contentPages.map((p) => (p.id === pageId ? { ...p, ...patch } : p))
     );
+    void updateStructureNode("topic", pageId, patch as Record<string, unknown>).catch((error) => {
+      console.error("Failed to update topic", error);
+    });
   }
 
-  function deletePage(pageId: string) {
-    setContentPages(contentPages.filter((p) => p.id !== pageId));
-    if (selectedPageId === pageId) {
-      setSelectedPageId(null);
-      setSelectedSubPageId(null);
-      setSelectedArticleId(null);
-      setSelectedBlockId(null);
-      setSelectedComponentId(null);
-      setRightPanelType("page");
-      setRightPanelOpen(true);
+  async function deletePage(pageId: string) {
+    try {
+      await deleteStructureNode("topic", pageId);
+      await loadStructureFromDatabase();
+    } catch (error) {
+      console.error("Failed to delete topic", error);
     }
   }
 
-  function handleAddBlock(pageId: string, articleId: string) {
-    const newBlockId = `block-${Date.now()}`;
-    setContentPages(
-      contentPages.map((p) =>
-        p.id === pageId
-          ? {
-              ...p,
-              articles: p.articles.map((a) =>
-                a.id === articleId
-                  ? {
-                      ...a,
-                      blocks: [
-                        ...a.blocks,
-                        { id: newBlockId, title: "Untitled Block", description: "", instruction: "", components: [] },
-                      ],
-                    }
-                  : a
-              ),
-            }
-          : p
-      )
-    );
+  async function handleAddBlock(pageId: string, articleId: string) {
+    try {
+      const article = contentPages.find((item) => item.id === pageId)?.articles.find((item) => item.id === articleId);
+      const newBlockId = await createBlock(courseId, articleId, NEW_CONTENT_GROUP_TITLE, (article?.blocks.length ?? 0) + 1);
+      await loadStructureFromDatabase({ pageId, articleId, blockId: newBlockId });
+    } catch (error) {
+      console.error("Failed to add content group", error);
+    }
   }
 
   function updateBlock(pageId: string, articleId: string, blockId: string, patch: Partial<BlockData>) {
@@ -526,73 +529,39 @@ export default function CourseEditor({
           : p
       )
     );
+    void updateStructureNode("contentGroup", blockId, patch as Record<string, unknown>).catch((error) => {
+      console.error("Failed to update content group", error);
+    });
   }
 
-  function deleteBlock(pageId: string, articleId: string, blockId: string) {
-    setContentPages(
-      contentPages.map((p) =>
-        p.id === pageId
-          ? {
-              ...p,
-              articles: p.articles.map((a) =>
-                a.id === articleId
-                  ? {
-                      ...a,
-                      blocks: a.blocks.filter((b) => b.id !== blockId),
-                    }
-                  : a
-              ),
-            }
-          : p
-      )
-    );
-    if (selectedBlockId === blockId) {
-      setSelectedBlockId(null);
-      setSelectedComponentId(null);
-      setRightPanelType("article");
-      setRightPanelOpen(true);
+  async function deleteBlock(pageId: string, articleId: string, blockId: string) {
+    try {
+      await deleteStructureNode("contentGroup", blockId);
+      await loadStructureFromDatabase({ pageId, articleId });
+    } catch (error) {
+      console.error("Failed to delete content group", error);
     }
   }
 
-  function handleAddComponent(pageId: string, articleId: string, blockId: string, componentType: ComponentType) {
+  async function handleAddComponent(pageId: string, articleId: string, blockId: string, componentType: ComponentTypeOption) {
     const targetPage = contentPages.find((p) => p.id === pageId);
     const targetArticle = targetPage?.articles.find((a) => a.id === articleId);
     const targetBlock = targetArticle?.blocks.find((b) => b.id === blockId);
     if (!targetBlock || targetBlock.components.length >= 2) return;
 
-    const newComponentId = `component-${Date.now()}`;
-    setContentPages(
-      contentPages.map((p) =>
-        p.id === pageId
-          ? {
-              ...p,
-              articles: p.articles.map((a) =>
-                a.id === articleId
-                  ? {
-                      ...a,
-                      blocks: a.blocks.map((b) =>
-                        b.id === blockId
-                          ? {
-                              ...b,
-                              components: [
-                                ...b.components,
-                                { id: newComponentId, type: componentType, settings: {} },
-                              ],
-                            }
-                          : b
-                      ),
-                    }
-                  : a
-              ),
-            }
-          : p
-      )
-    );
-    // Automatically select the new component and open its settings panel
-    setSelectedComponentId(newComponentId);
-    setHasCanvasSelection(true);
-    setRightPanelOpen(true);
-    setRightPanelType("component");
+    try {
+      const layout = targetBlock.components.length === 0 ? "left" : "right";
+      const newComponentId = await createComponent(
+        courseId,
+        blockId,
+        componentType,
+        targetBlock.components.length + 1,
+        layout
+      );
+      await loadStructureFromDatabase({ pageId, articleId, blockId, componentId: newComponentId });
+    } catch (error) {
+      console.error("Failed to add component", error);
+    }
   }
 
   function updateComponent(pageId: string, articleId: string, blockId: string, componentId: string, patch: Partial<ComponentData>) {
@@ -622,38 +591,17 @@ export default function CourseEditor({
           : p
       )
     );
+    void updateStructureNode("component", componentId, (patch.settings ?? {}) as Record<string, unknown>).catch((error) => {
+      console.error("Failed to update component", error);
+    });
   }
 
-  function deleteComponent(pageId: string, articleId: string, blockId: string, componentId: string) {
-    setContentPages(
-      contentPages.map((p) =>
-        p.id === pageId
-          ? {
-              ...p,
-              articles: p.articles.map((a) =>
-                a.id === articleId
-                  ? {
-                      ...a,
-                      blocks: a.blocks.map((b) =>
-                        b.id === blockId
-                          ? {
-                              ...b,
-                              components: b.components.filter((c) => c.id !== componentId),
-                            }
-                          : b
-                      ),
-                    }
-                  : a
-              ),
-            }
-          : p
-      )
-    );
-
-    if (selectedComponentId === componentId) {
-      setSelectedComponentId(null);
-      setRightPanelType("block");
-      setRightPanelOpen(true);
+  async function deleteComponent(pageId: string, articleId: string, blockId: string, componentId: string) {
+    try {
+      await deleteStructureNode("component", componentId);
+      await loadStructureFromDatabase({ pageId, articleId, blockId });
+    } catch (error) {
+      console.error("Failed to delete component", error);
     }
   }
 
@@ -679,13 +627,8 @@ export default function CourseEditor({
     setSelectedComponentId(null);
     setHasCanvasSelection(true);
     setRightPanelOpen(true);
-    setRightPanelType("addComponent");
-  }
-
-  function handleComponentSelected(componentType: ComponentType) {
-    if (selectedPageId && selectedArticleId && selectedBlockId) {
-      handleAddComponent(selectedPageId, selectedArticleId, selectedBlockId, componentType);
-    }
+    setRightPanelType("block");
+    setAddComponentTarget({ pageId, articleId, blockId });
   }
 
   function copyPage(pageId: string) {
@@ -1146,10 +1089,10 @@ export default function CourseEditor({
                       : "bg-white text-[#9aa7b2] opacity-40 cursor-not-allowed"
                   }`;
 
-                const iconWrapClass = (active: boolean) =>
-                  `w-6 h-6 rounded-[4px] flex items-center justify-center shrink-0 ${
-                    active ? "bg-[#2E7FA1] text-white" : "bg-[#f3f6f9] text-[#9aa7b2]"
-                  }`;
+                const iconColorClass = (
+                  active: boolean,
+                  level: "topic" | "section" | "contentGroup" | "component"
+                ) => (active ? STRUCTURE_ICON_COLOR_CLASS[level] : "text-[#9aa7b2]");
 
                 return (
                   <>
@@ -1166,8 +1109,12 @@ export default function CourseEditor({
 
                     <button type="button" className={rowClass(activeLevel === "page")}>
                       <span className="flex items-center gap-2 text-[13px] font-semibold flex-1">
-                        <span className={iconWrapClass(activeLevel === "page")}>
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                        <span className="w-6 h-6 rounded-[4px] flex items-center justify-center shrink-0">
+                          <StructureIcon
+                            level="topic"
+                            size={14}
+                            className={iconColorClass(activeLevel === "page", "topic")}
+                          />
                         </span>
                         Topic
                       </span>
@@ -1196,8 +1143,12 @@ export default function CourseEditor({
 
                     <button type="button" className={rowClass(activeLevel === "article")}>
                       <span className="flex items-center gap-2 text-[13px] font-semibold flex-1">
-                        <span className={iconWrapClass(activeLevel === "article")}>
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        <span className="w-6 h-6 rounded-[4px] flex items-center justify-center shrink-0">
+                          <StructureIcon
+                            level="section"
+                            size={14}
+                            className={iconColorClass(activeLevel === "article", "section")}
+                          />
                         </span>
                         Section
                       </span>
@@ -1226,8 +1177,12 @@ export default function CourseEditor({
 
                     <button type="button" className={rowClass(activeLevel === "block")}>
                       <span className="flex items-center gap-2 text-[13px] font-semibold flex-1">
-                        <span className={iconWrapClass(activeLevel === "block")}>
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="3" width="8" height="8"/><rect x="3" y="13" width="8" height="8"/><rect x="13" y="13" width="8" height="8"/></svg>
+                        <span className="w-6 h-6 rounded-[4px] flex items-center justify-center shrink-0">
+                          <StructureIcon
+                            level="contentGroup"
+                            size={14}
+                            className={iconColorClass(activeLevel === "block", "contentGroup")}
+                          />
                         </span>
                         Content Group
                       </span>
@@ -1261,8 +1216,12 @@ export default function CourseEditor({
 
                     <button type="button" className={rowClass(activeLevel === "component")}>
                       <span className="flex items-center gap-2 text-[13px] font-semibold flex-1">
-                        <span className={iconWrapClass(activeLevel === "component")}>
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                        <span className="w-6 h-6 rounded-[4px] flex items-center justify-center shrink-0">
+                          <StructureIcon
+                            level="component"
+                            size={14}
+                            className={iconColorClass(activeLevel === "component", "component")}
+                          />
                         </span>
                         Component
                       </span>
@@ -1273,12 +1232,7 @@ export default function CourseEditor({
                     </button>
                     {activeLevel === "component" && (
                       <div className="px-4 py-4 border-b border-[#e6ebf0]">
-                        {rightPanelType === "addComponent" && page && article && block ? (
-                          <ComponentSelector
-                            onSelectComponent={(type) => handleAddComponent(page.id, article.id, block.id, type)}
-                            onClose={() => setRightPanelOpen(false)}
-                          />
-                        ) : component && page && article && block ? (
+                        {component && page && article && block ? (
                           <div className="space-y-3">
                             <input
                               value={component.settings.title || ""}
@@ -1321,6 +1275,21 @@ export default function CourseEditor({
               </aside>
             )}
           </>
+        )}
+
+        {addComponentTarget && (
+          <AddComponentDrawer
+            onClose={() => setAddComponentTarget(null)}
+            onSelect={(componentType) => {
+              void handleAddComponent(
+                addComponentTarget.pageId,
+                addComponentTarget.articleId,
+                addComponentTarget.blockId,
+                componentType
+              );
+              setAddComponentTarget(null);
+            }}
+          />
         )}
       </div>
     </div>

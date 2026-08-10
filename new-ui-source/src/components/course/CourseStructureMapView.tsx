@@ -6,7 +6,7 @@ import {
   type StructureLevel,
   mergedChildren,
 } from "../../types/structure";
-import { StructureIcon } from "./StructureIcons";
+import { StructureIcon, STRUCTURE_ICON_COLOR_CLASS } from "./StructureIcons";
 
 // Top-down org-chart of the real course hierarchy:
 //   Course → Module → Sub-Module → Topic → Section → Content Group → Component
@@ -66,12 +66,27 @@ export default function CourseStructureMapView(props: Props) {
     if (v) props.onRename(level, id, v);
   }
 
+  const levelTone = (level: StructureLevel | "course") => {
+    switch (level) {
+      case "topic":
+        return STRUCTURE_ICON_COLOR_CLASS.topic;
+      case "section":
+        return STRUCTURE_ICON_COLOR_CLASS.section;
+      case "contentGroup":
+        return STRUCTURE_ICON_COLOR_CLASS.contentGroup;
+      case "component":
+        return STRUCTURE_ICON_COLOR_CLASS.component;
+      default:
+        return "text-[#3d6b91]";
+    }
+  };
+
   function card(level: StructureLevel | "course", id: string, title: string, onOpen?: () => void) {
     const editing = inlineId === id;
     const levelLabel = level === "course" ? "Course" : labels[level];
     return (
       <div className={`csm-card inline-block w-[156px] rounded-xl border border-[#cfe0ef] bg-white shadow-sm overflow-hidden align-top ${onOpen ? "hover:shadow-md transition-shadow" : ""}`}>
-        <div className="h-14 bg-[#dbeaf5] flex items-center justify-center text-[#3d6b91]">
+        <div className={`h-14 bg-[#dbeaf5] flex items-center justify-center ${levelTone(level)}`}>
           {level === "course" ? (
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
               <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />

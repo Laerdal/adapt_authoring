@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
+import { StructureIcon, STRUCTURE_ICON_COLOR_CLASS } from "@/components/course/StructureIcons";
 import type { ContentPageData } from "@/pages/editor/pageEditorWorkspace";
 
 const ICON_BASE = "/new/assets/icons";
@@ -105,8 +106,8 @@ function TreeRow({
     <div
       className={`w-full h-9 flex items-center gap-[6px] text-left border-l-[3px] transition-colors group relative ${
         selected
-          ? "bg-[#d9eefb] border-[#2E7FA1] text-[#1f2937]"
-          : "border-transparent text-[#1f2937] hover:bg-[#f7fafc]"
+          ? "bg-[var(--life-primary-100)] border-[var(--life-primary-500)]"
+          : "border-transparent hover:bg-[var(--life-neutral-100)]"
       }`}
       style={{ paddingLeft, paddingRight: 6 }}
     >
@@ -152,8 +153,16 @@ function TreeRow({
           </button>
         ) : null}
 
-        <span className="w-[18px] shrink-0 flex items-center justify-center text-[#8ca0b0]">{icon}</span>
-        <span className={`text-[13px] ${selected ? "font-semibold" : "font-medium"} truncate`}>{label || "Untitled"}</span>
+        <span className="w-[18px] shrink-0 flex items-center justify-center">{icon}</span>
+        <span
+          className={`text-[13px] truncate ${
+            selected
+              ? "font-medium text-[var(--life-primary-500)]"
+              : "font-medium text-[#5b6674] group-hover:text-[#374151]"
+          }`}
+        >
+          {label || "Untitled"}
+        </span>
       </div>
 
       <div className="ml-auto flex items-center gap-1">
@@ -313,7 +322,7 @@ export default function CourseOutlinePanel({
     } else if (target.level === "section" && target.articleId) {
       onAddArticle(target.pageId);
     } else if (target.level === "group" && target.articleId && target.blockId) {
-      onAddBlock(target.pageId, target.articleId);
+      onAddComponent(target.pageId, target.articleId, target.blockId);
     }
     setActiveAddMenu(null);
   }
@@ -344,7 +353,7 @@ function handleCourseConfigClick() {
                   setActiveAddMenu(null);
                   onPageSelect(page.id);
                 }}
-                icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>}
+                icon={<StructureIcon level="topic" size={14} className={STRUCTURE_ICON_COLOR_CLASS.topic} />}
                 canExpand={true}
                 expanded={isExpanded(expandedTopics, page.id)}
                 onToggleExpand={() => setExpandedTopics((previous) => ({ ...previous, [page.id]: !isExpanded(previous, page.id) }))}
@@ -377,7 +386,7 @@ function handleCourseConfigClick() {
                         setActiveAddMenu(null);
                         onArticleSelect(page.id, article.id);
                       }}
-                      icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>}
+                      icon={<StructureIcon level="section" size={14} className={STRUCTURE_ICON_COLOR_CLASS.section} />}
                       canExpand={true}
                       expanded={isExpanded(expandedSections, article.id)}
                       onToggleExpand={() => setExpandedSections((previous) => ({ ...previous, [article.id]: !isExpanded(previous, article.id) }))}
@@ -419,7 +428,7 @@ function handleCourseConfigClick() {
                               setActiveAddMenu(null);
                               onBlockSelect(page.id, article.id, block.id);
                             }}
-                            icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="3" width="8" height="8"/><rect x="3" y="13" width="8" height="8"/><rect x="13" y="13" width="8" height="8"/></svg>}
+                            icon={<StructureIcon level="contentGroup" size={14} className={STRUCTURE_ICON_COLOR_CLASS.contentGroup} />}
                             canExpand={true}
                             expanded={isExpanded(expandedGroups, block.id)}
                             onToggleExpand={() => setExpandedGroups((previous) => ({ ...previous, [block.id]: !isExpanded(previous, block.id) }))}
@@ -450,7 +459,7 @@ function handleCourseConfigClick() {
                                 setActiveAddMenu(null);
                                 onComponentSelect(page.id, article.id, block.id, component.id);
                               }}
-                              icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>}
+                              icon={<StructureIcon level="component" size={14} className={STRUCTURE_ICON_COLOR_CLASS.component} />}
                               showDelete={true}
                               onDelete={() => {
                                 if (window.confirm("Delete this component?")) {

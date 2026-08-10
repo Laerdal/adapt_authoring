@@ -32,6 +32,12 @@
   /* Accent 2 / Purple (used in menu tile visuals) */
   --life-accent2-500: #7C6FCD;
 
+  /* Accent 3 / Orange (used in page structure visuals) */
+  --life-accent3-500: #765A24;
+
+  /* Accent 4 / Green (used in page structure visuals) */
+  --life-accent4-500: #046E23;
+
   /* Neutral (color.neutral.*) */
   --life-neutral-850: #262626;
   --life-neutral-800: #333333;

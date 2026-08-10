@@ -21,17 +21,23 @@ export interface SComponent {
   id: string;
   title: string;
   componentKey: string; // engine `_component` key, e.g. 'text' | 'mcq'
+  description?: string;
+  url?: string;
 }
 
 export interface SContentGroup {
   id: string;
   title: string;
+  description?: string;
+  instruction?: string;
   components: SComponent[];
 }
 
 export interface SSection {
   id: string;
   title: string;
+  description?: string;
+  instruction?: string;
   contentGroups: SContentGroup[];
 }
 
@@ -39,6 +45,7 @@ export interface STopic {
   id: string;
   title: string;
   sortOrder: number;
+  description?: string;
   sections: SSection[];
 }
 

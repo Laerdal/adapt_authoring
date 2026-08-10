@@ -30,6 +30,11 @@ import {
   getAvailableComponents,
   type ComponentTypeOption,
 } from "../api/adaptAuthoring";
+import {
+  NEW_CONTENT_GROUP_TITLE,
+  NEW_SECTION_TITLE,
+  NEW_TOPIC_TITLE,
+} from "../constants/structureDefaults";
 
 const EMPTY: CourseStructure = { courseTitle: "Course", modules: [], topics: [] };
 
@@ -42,17 +47,17 @@ const isTmp = (id: string) => id.startsWith("tmp-");
 const newComponent = (title = "Text", key = "text"): SComponent => ({ id: tmpId(), title, componentKey: key });
 const newContentGroup = (withComponent: boolean): SContentGroup => ({
   id: tmpId(),
-  title: "New Content Group",
+  title: NEW_CONTENT_GROUP_TITLE,
   components: withComponent ? [newComponent()] : [],
 });
 const newSection = (withComponent: boolean): SSection => ({
   id: tmpId(),
-  title: "New Section",
+  title: NEW_SECTION_TITLE,
   contentGroups: [newContentGroup(withComponent)],
 });
 const newTopic = (sortOrder: number): STopic => ({
   id: tmpId(),
-  title: "New Topic",
+  title: NEW_TOPIC_TITLE,
   sortOrder,
   sections: [newSection(true)],
 });
