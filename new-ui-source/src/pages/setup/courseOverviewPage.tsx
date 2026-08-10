@@ -86,6 +86,7 @@ export function CourseOverviewPage({
   const [emailInput, setEmailInput] = useState("");
   const [emailSearching, setEmailSearching] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
+  const [showAuthoringBanner, setShowAuthoringBanner] = useState(true);
 
   function serializeCollaborators(list: Collaborator[]) {
     return [...list]
@@ -217,7 +218,8 @@ export function CourseOverviewPage({
     });
 
   async function handleConfirmSave() {
-    await handleSave();
+    const didSave = await handleSave();
+    if (!didSave) return;
     const navTarget = consumePendingNavigation();
     if (navTarget) onNavigationRequest?.(navTarget);
   }
@@ -229,10 +231,10 @@ export function CourseOverviewPage({
   }
 
   async function handleSave() {
-    if (!courseId) return;
+    if (!courseId) return false;
     if (!formTitle.trim()) {
       setSaveError("Title is required.");
-      return;
+      return false;
     }
     setSaving(true);
     setSaveError(null);
@@ -260,11 +262,22 @@ export function CourseOverviewPage({
       setSavedIsShared(isSharedAll);
       setSavedCollaborators(collaborators);
       setSaveSuccess(true);
+      return true;
     } catch {
       setSaveError("Failed to save changes. Please try again.");
+      return false;
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleOpenCourseStructure() {
+    if (loading || !courseId) return;
+    if (isDirty) {
+      const didSave = await handleSave();
+      if (!didSave) return;
+    }
+    onNavigationRequest?.("structure");
   }
 
   function handleDiscard() {
@@ -647,6 +660,51 @@ export function CourseOverviewPage({
           </div>
         )}
       </div>
+
+      {showAuthoringBanner && (
+        <>
+          <div style={{ height: 1, background: "var(--life-neutral-200)", margin: "28px 0" }} />
+          <div style={{ position: "relative", display: "flex", alignItems: "flex-start", gap: 14, padding: "18px 20px", borderRadius: 10, background: "var(--life-primary-020)", border: "1px solid var(--life-primary-300)" }}>
+            <div style={{ flexShrink: 0, marginTop: 2 }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--life-primary-500)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6L12 2z" />
+              </svg>
+            </div>
+
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: '"Lato", sans-serif', fontSize: 15, fontWeight: 700, color: "var(--life-base-black)", marginBottom: 4 }}>
+                Ready to start authoring?
+              </div>
+              <div style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-neutral-500)", lineHeight: 1.55, marginBottom: 14 }}>
+                Nice - now start authoring by adding pages and building your course structure. We&apos;ve already scaffolded a starter tree for you.
+              </div>
+              <button
+                type="button"
+                onClick={handleOpenCourseStructure}
+                disabled={loading || saving || !courseId}
+                className="inline-flex items-center gap-2 rounded-lg bg-[var(--life-primary-500)] px-4 py-2 text-sm font-bold text-[var(--life-base-white)] transition-colors hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <span>Open Course Structure</span>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M3 7h8M7 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowAuthoringBanner(false)}
+              aria-label="Dismiss"
+              className="absolute top-[14px] right-[14px] flex items-center rounded text-[var(--life-neutral-400)] transition-colors hover:text-[var(--life-base-black)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--life-primary-500)] focus-visible:ring-offset-2"
+              style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4 }}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M11 3L3 11M3 3l8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+        </>
+      )}
 
       {/* Floating "Unsaved changes" bar — only while the form is dirty */}
       {!loading && isDirty && (
