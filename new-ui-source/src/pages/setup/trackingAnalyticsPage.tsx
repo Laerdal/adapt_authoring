@@ -964,7 +964,7 @@ export function TrackingAnalyticsPage({
           icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></svg>}
         >
           <p className="text-xs text-[#6b7280] mb-3">Select one tracking plugin and edit its existing settings.</p>
-          <div className="flex flex-col gap-1.5">
+          <div role="radiogroup" aria-label="Tracking plugin" className="flex flex-col gap-1.5">
             <PluginRadio id="scorm" label="SCORM" description="adapt-contrib-spoor" selected={trackingPlugin === "scorm"} onSelect={() => handleTrackingPluginChange("scorm")} />
             <PluginRadio id="xapi" label="xAPI" description="adapt-contrib-xapi" selected={trackingPlugin === "xapi"} onSelect={() => handleTrackingPluginChange("xapi")} />
             <PluginRadio id="hyperbridge" label="HyperBridge" description="adapt-hyper-bridge" selected={trackingPlugin === "hyperbridge"} onSelect={() => handleTrackingPluginChange("hyperbridge")} />
