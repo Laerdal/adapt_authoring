@@ -294,7 +294,7 @@ type TrackingAnalyticsPageSnapshot = {
 };
 
 const DEFAULT_SCORM_STATE: TrackingAnalyticsPageSnapshot["scorm"] = {
-  isEnabled: true,
+  isEnabled: false,
   shouldStoreResponses: true,
   shouldStoreAttempts: false,
   shouldRecordInteractions: true,
@@ -924,9 +924,9 @@ export function TrackingAnalyticsPage({
   pendingNavigation?: string | null;
   onPendingNavigationHandled?: () => void;
 }) {
-  const [trackingOpen, setTrackingOpen] = useState(true);
+  const [trackingOpen, setTrackingOpen] = useState(false);
   const [analyticsOpen, setAnalyticsOpen] = useState(false);
-  const [trackingPlugin, setTrackingPlugin] = useState<TrackingPlugin>("scorm");
+  const [trackingPlugin, setTrackingPlugin] = useState<TrackingPlugin | null>(null);
   const [analyticsPlugin, setAnalyticsPlugin] = useState<AnalyticsPlugin | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -1012,7 +1012,7 @@ export function TrackingAnalyticsPage({
     if (snapshot.scorm.isEnabled) setTrackingPlugin("scorm");
     else if (snapshot.xapi.isEnabled) setTrackingPlugin("xapi");
     else if (snapshot.hyper.isEnabled) setTrackingPlugin("hyperbridge");
-    else setTrackingPlugin("scorm");
+    else setTrackingPlugin(null);
 
     if (snapshot.ues.isEnabled) setAnalyticsPlugin("ues");
     else if (snapshot.google.isEnabled) setAnalyticsPlugin("google");
@@ -1038,12 +1038,6 @@ export function TrackingAnalyticsPage({
         const settings = await getTrackingAnalyticsSettings(courseId);
         if (cancelled) return;
         let snapshot = buildSnapshotFromSettings(settings);
-        // If no tracking plugin has ever been explicitly enabled, default SCORM to
-        // enabled so that the selected radio (SCORM) drives the _enabledExtensions
-        // entry on first save. Without this, the old UI never shows SCORM settings.
-        if (!snapshot.scorm.isEnabled && !snapshot.xapi.isEnabled && !snapshot.hyper.isEnabled) {
-          snapshot = { ...snapshot, scorm: { ...snapshot.scorm, isEnabled: true } };
-        }
         setSourceSettings(settings);
         applySnapshot(snapshot);
         setSavedSnapshot(snapshot);
@@ -1412,6 +1406,15 @@ export function TrackingAnalyticsPage({
             </div>
           )}
         </AccordionCard>
+      </div>
+
+      <div className="flex items-start gap-3 px-4 py-3 rounded-lg border border-[#fde68a] bg-[#fffbeb] mt-2">
+        <svg className="shrink-0 mt-0.5 text-[#d97706]" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+        <p className="text-sm text-[#374151]">
+          <span className="font-semibold">Tip:</span> Tracking standards report learner progress back to the LMS, while analytics providers give you aggregate usage insights. You can enable both.
+        </p>
       </div>
 
       </div>
