@@ -165,6 +165,8 @@ function PluginRadio({
   return (
     <button
       type="button"
+      role="radio"
+      aria-checked={selected}
       onClick={onSelect}
       className={`w-full flex items-start gap-3 py-2.5 px-3 rounded-lg border text-left transition-colors ${
         selected ? "border-[#2d6fa8] bg-[#f0f7ff]" : "border-[#e5e7eb] hover:border-[#93c5fd] hover:bg-[#f9fafb]"
