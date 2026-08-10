@@ -1,7 +1,7 @@
 "use client";
 
 import EditorMaskIcon from "./EditorMaskIcon";
-import type { ComponentData } from "@/components/course/CourseEditor";
+import type { ComponentData } from "@/pages/editor/pageEditorWorkspace";
 
 interface ComponentCanvasProps {
   component: ComponentData;

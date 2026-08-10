@@ -1,6 +1,6 @@
 "use client";
 
-import type { ArticleData } from "@/components/course/CourseEditor";
+import type { ArticleData } from "@/pages/editor/pageEditorWorkspace";
 import EditorMaskIcon from "./EditorMaskIcon";
 
 interface ArticleSettingsPanelProps {

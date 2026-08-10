@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import type { ContentPageData } from "@/components/course/CourseEditor";
+import type { ContentPageData } from "@/pages/editor/pageEditorWorkspace";
 
 const ICON_BASE = "/new/assets/icons";
 

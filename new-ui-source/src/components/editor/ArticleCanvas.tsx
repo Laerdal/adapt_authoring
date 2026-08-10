@@ -2,7 +2,7 @@
 
 import BlockCanvas from "./BlockCanvas";
 import EditorMaskIcon from "./EditorMaskIcon";
-import type { ArticleData, BlockData } from "@/components/course/CourseEditor";
+import type { ArticleData, BlockData } from "@/pages/editor/pageEditorWorkspace";
 
 interface ArticleCanvasProps {
   article: ArticleData;

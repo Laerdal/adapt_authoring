@@ -1,6 +1,6 @@
 "use client";
 
-import type { ComponentData } from "@/components/course/CourseEditor";
+import type { ComponentData } from "@/pages/editor/pageEditorWorkspace";
 import EditorMaskIcon from "./EditorMaskIcon";
 
 interface ComponentSettingsPanelProps {
