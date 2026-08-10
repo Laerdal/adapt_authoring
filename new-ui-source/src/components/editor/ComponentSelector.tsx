@@ -1,6 +1,6 @@
 "use client";
 
-import type { ComponentType } from "@/components/course/CourseEditor";
+import type { ComponentType } from "@/pages/editor/pageEditorWorkspace";
 
 const AVAILABLE_COMPONENTS: { type: ComponentType; label: string; description: string }[] = [
   { type: "Image", label: "Image", description: "Add images to your content" },

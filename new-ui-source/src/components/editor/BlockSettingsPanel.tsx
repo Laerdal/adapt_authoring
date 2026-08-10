@@ -1,6 +1,6 @@
 "use client";
 
-import type { BlockData } from "@/components/course/CourseEditor";
+import type { BlockData } from "@/pages/editor/pageEditorWorkspace";
 import EditorMaskIcon from "./EditorMaskIcon";
 
 interface BlockSettingsPanelProps {

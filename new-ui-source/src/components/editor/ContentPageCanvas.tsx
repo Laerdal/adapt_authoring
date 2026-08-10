@@ -1,6 +1,6 @@
 "use client";
 
-import type { ContentPageData } from "@/components/course/CourseEditor";
+import type { ContentPageData } from "@/pages/editor/pageEditorWorkspace";
 
 interface ContentPageCanvasProps {
   page: ContentPageData;

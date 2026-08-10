@@ -2,7 +2,7 @@
 
 import ComponentCanvas from "./ComponentCanvas";
 import EditorMaskIcon from "./EditorMaskIcon";
-import type { BlockData } from "@/components/course/CourseEditor";
+import type { BlockData } from "@/pages/editor/pageEditorWorkspace";
 
 const ICON_BASE = "/new/assets/icons";
 

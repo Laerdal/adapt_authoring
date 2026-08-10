@@ -1,6 +1,6 @@
 "use client";
 
-import type { SubPageData } from "@/components/course/CourseEditor";
+import type { SubPageData } from "@/pages/editor/pageEditorWorkspace";
 
 interface SubPageCanvasProps {
   subPage: SubPageData;
