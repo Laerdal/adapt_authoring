@@ -656,9 +656,9 @@ function buildSettingsFromSnapshot(
         _showDebugWindow: snapshot.scorm.showDebugWindow,
         _commitOnStatusChange: snapshot.scorm.commitOnStatusChange,
         _commitOnAnyChange: snapshot.scorm.commitOnAnyChange,
-        _timedCommitFrequency: Number(snapshot.scorm.timedCommitFrequency || 0),
-        _maxCommitRetries: Number(snapshot.scorm.maxCommitRetries || 0),
-        _commitRetryDelay: Number(snapshot.scorm.commitRetryDelay || 0),
+        _timedCommitFrequency: Number.isFinite(Number(snapshot.scorm.timedCommitFrequency)) ? Number(snapshot.scorm.timedCommitFrequency) : 0,
+        _maxCommitRetries: Number.isFinite(Number(snapshot.scorm.maxCommitRetries)) ? Number(snapshot.scorm.maxCommitRetries) : 0,
+        _commitRetryDelay: Number.isFinite(Number(snapshot.scorm.commitRetryDelay)) ? Number(snapshot.scorm.commitRetryDelay) : 0
         _suppressErrors: snapshot.scorm.suppressLmsErrors,
         _commitOnVisibilityChangeHidden: snapshot.scorm.commitOnVisibilityChangeHidden,
         _manifestIdentifier: snapshot.scorm.manifestIdentifier,
