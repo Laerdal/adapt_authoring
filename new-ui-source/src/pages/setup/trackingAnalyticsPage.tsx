@@ -18,19 +18,13 @@ function CheckboxRow({
   label: string;
 }) {
   return (
-    <label className="flex items-start gap-3 py-2 px-2 rounded-lg cursor-pointer group hover:bg-[#f9fafb]">
-      <div
-        onClick={() => onChange(!checked)}
-        className={`mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors ${
-          checked ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]" : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
-        }`}
-      >
-        {checked && (
-          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-        )}
-      </div>
+    <label className="flex items-start gap-3 py-2 px-2 rounded-lg cursor-pointer select-none group hover:bg-[#f9fafb]">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5 h-4 w-4 shrink-0 rounded border-2 border-[#d1d5db] accent-[var(--life-primary-500)] cursor-pointer"
+      />
       <span className="text-sm text-[#374151] leading-snug">{label}</span>
     </label>
   );
