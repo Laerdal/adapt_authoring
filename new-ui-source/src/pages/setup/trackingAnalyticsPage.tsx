@@ -830,7 +830,9 @@ export function TrackingAnalyticsPage({
     [scorm, xapi, hyper, ues, google, hotjar]
   );
 
-  const hasChanges = JSON.stringify(currentSnapshot) !== JSON.stringify(savedSnapshot);
+  const currentSnapshotJson = useMemo(() => JSON.stringify(currentSnapshot), [currentSnapshot]);
+  const savedSnapshotJson = useMemo(() => JSON.stringify(savedSnapshot), [savedSnapshot]);
+  const hasChanges = currentSnapshotJson !== savedSnapshotJson;
 
   const { showConfirmModal, consumePendingNavigation, clearPendingNavigation } = useUnsavedChangesNavigationGuard({
     hasChanges,
