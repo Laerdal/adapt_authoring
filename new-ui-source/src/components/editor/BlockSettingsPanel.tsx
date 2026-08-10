@@ -1,6 +1,7 @@
 "use client";
 
-import type { BlockData } from "@/components/course/CourseEditor";
+import type { BlockData } from "@/pages/editor/pageEditorWorkspace";
+import EditorMaskIcon from "./EditorMaskIcon";
 
 interface BlockSettingsPanelProps {
   block: BlockData;
@@ -96,6 +97,7 @@ export default function BlockSettingsPanel({
           onClick={onDelete}
           className="flex-1 px-3 py-2 text-sm font-medium text-[#dc2626] border border-[#fecaca] rounded-lg hover:bg-[#fee2e2] transition-colors"
         >
+          <EditorMaskIcon file="delete-icon.svg" className="inline-block w-[14px] h-[14px] mr-2 align-[-2px] shrink-0 bg-current" />
           Delete Block
         </button>
       </div>

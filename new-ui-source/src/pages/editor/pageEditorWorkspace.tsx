@@ -1,65 +1,39 @@
-import { useState, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
 import {
-  CourseOutlinePanel,
   MenuPageCanvas,
   ContentPageCanvas,
   SubPageCanvas,
   ArticleCanvas,
-  MenuSettingsPanel,
-  ContentPageSettingsPanel,
-  SubPageSettingsPanel,
-  ArticleSettingsPanel,
-  BlockSettingsPanel,
-  ComponentSettingsPanel,
   ComponentSelector,
-} from "../editor/index";
-import { CourseStructureMap } from "./index";
-import type { MenuPageData } from "../editor/MenuPageCanvas";
+} from "../../components/editor/index";
+import CourseStructureMap from "../../components/course/CourseStructureMap";
+import PageEditorTopBar from "./pageEditorTopBar";
+import PageEditorNavigation from "./pageEditorNavigation";
+import { getCourseStructure } from "../../api/adaptAuthoring";
+import type { MenuPageData } from "../../components/editor/MenuPageCanvas";
 import type { Course } from "../../types/course";
 
-const sideIcons = [
-  {
-    id: "structure",
-    label: "Structure",
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
-        <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
-      </svg>
-    ),
-  },
-  {
-    id: "theme",
-    label: "Theme",
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="13.5" cy="6.5" r="2.5" /><circle cx="17.5" cy="10.5" r="2.5" />
-        <circle cx="8.5" cy="7.5" r="2.5" /><circle cx="6.5" cy="12.5" r="2.5" />
-        <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12c0 1.6.376 3.112 1.043 4.453.178.355.237.763.134 1.148L2.5 21l3.4-.677c.385-.103.793-.044 1.148.134A9.958 9.958 0 0 0 12 22z" />
-      </svg>
-    ),
-  },
-  {
-    id: "extensions",
-    label: "Extensions",
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-      </svg>
-    ),
-  },
-  {
-    id: "settings",
-    label: "Settings",
-    icon: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-        <circle cx="12" cy="12" r="3" />
-      </svg>
-    ),
-  },
-];
+const ICON_BASE = "/new/assets/icons";
+
+function MaskIcon({ file, className }: { file: string; className?: string }) {
+  const iconPath = `${ICON_BASE}/${file}`;
+  return (
+    <span
+      aria-hidden="true"
+      className={className ?? "block w-[14px] h-[14px] shrink-0 bg-current"}
+      style={{
+        WebkitMaskImage: `url(${iconPath})`,
+        maskImage: `url(${iconPath})`,
+        WebkitMaskRepeat: "no-repeat",
+        maskRepeat: "no-repeat",
+        WebkitMaskPosition: "center",
+        maskPosition: "center",
+        WebkitMaskSize: "contain",
+        maskSize: "contain",
+      }}
+    />
+  );
+}
 
 const defaultMenuPage: MenuPageData = {
   logoUrl: null,
@@ -73,6 +47,83 @@ const defaultMenuPage: MenuPageData = {
   bgColor: "#1e3a5f",
   bgImageUrl: null,
 };
+
+function toComponentType(componentKey: string): ComponentType {
+  switch (componentKey.toLowerCase()) {
+    case "image":
+      return "Image";
+    case "video":
+      return "Video";
+    case "accordion":
+      return "Accordion";
+    case "quiz":
+    case "mcq":
+      return "Quiz";
+    case "text":
+    default:
+      return "Text";
+  }
+}
+
+function mapStructureToPages(
+  structure: Awaited<ReturnType<typeof getCourseStructure>>
+): ContentPageData[] {
+  const pages: ContentPageData[] = [];
+
+  const pushTopic = (topic: {
+    id: string;
+    title: string;
+    sections: Array<{
+      id: string;
+      title: string;
+      contentGroups: Array<{
+        id: string;
+        title: string;
+        components: Array<{ id: string; title: string; componentKey: string }>;
+      }>;
+    }>;
+  }) => {
+    pages.push({
+      id: topic.id,
+      title: topic.title || "Untitled Page",
+      description: "",
+      subPages: [],
+      articles: topic.sections.map((section) => ({
+        id: section.id,
+        title: section.title || "Untitled Article",
+        description: "",
+        instruction: "",
+        blocks: section.contentGroups.map((group) => ({
+          id: group.id,
+          title: group.title || "Untitled Block",
+          description: "",
+          instruction: "",
+          components: group.components.map((component) => ({
+            id: component.id,
+            type: toComponentType(component.componentKey),
+            settings: {
+              title: component.title || "",
+              description: "",
+            },
+          })),
+        })),
+      })),
+    });
+  };
+
+  const walkModule = (module: {
+    modules: Array<any>;
+    topics: Array<any>;
+  }) => {
+    module.topics.forEach(pushTopic);
+    module.modules.forEach(walkModule);
+  };
+
+  structure.topics.forEach(pushTopic);
+  structure.modules.forEach(walkModule);
+
+  return pages;
+}
 
 export type ComponentType = "Image" | "Video" | "Accordion" | "Text" | "Quiz";
 
@@ -133,7 +184,6 @@ export default function CourseEditor({
   initialMenu = "LIFE Menu",
 }: CourseEditorProps) {
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
-  const [activeRailIcon, setActiveRailIcon] = useState<string>("structure");
   const [courseTitle, setCourseTitle] = useState(initialTitle);
   const [courseDescription] = useState(initialDescription);
   const [courseTheme] = useState(initialTheme);
@@ -145,6 +195,8 @@ export default function CourseEditor({
   const [rightPanelType, setRightPanelType] = useState<"menu" | "page" | "subpage" | "article" | "block" | "component" | "addComponent" | "structure">("menu");
   const [showStructureMap, setShowStructureMap] = useState(false);
   const [menuData, setMenuData] = useState<MenuPageData>(defaultMenuPage);
+  const [isLoadingStructure, setIsLoadingStructure] = useState(true);
+  const [structureLoadError, setStructureLoadError] = useState<string | null>(null);
 
   const [contentPages, setContentPages] = useState<ContentPageData[]>([]);
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
@@ -152,6 +204,66 @@ export default function CourseEditor({
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
+  const [hasCanvasSelection, setHasCanvasSelection] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadFromDatabase() {
+      if (!courseId || courseId === "new-course") {
+        setIsLoadingStructure(false);
+        return;
+      }
+
+      setIsLoadingStructure(true);
+      setStructureLoadError(null);
+
+      try {
+        const structure = await getCourseStructure(courseId, courseTitle);
+        if (cancelled) return;
+
+        const pages = mapStructureToPages(structure);
+        const firstPage = pages[0] ?? null;
+
+        setContentPages(pages);
+        setMenuPageCreated(pages.length > 0);
+        setMenuSelected(false);
+        setSelectedPageId(firstPage?.id ?? null);
+        setSelectedSubPageId(null);
+        setSelectedArticleId(null);
+        setSelectedBlockId(null);
+        setSelectedComponentId(null);
+        setHasCanvasSelection(pages.length > 0);
+        setRightPanelType("page");
+        setRightPanelOpen(pages.length > 0);
+      } catch (error) {
+        if (cancelled) return;
+        setContentPages([]);
+        setMenuPageCreated(false);
+        setMenuSelected(false);
+        setSelectedPageId(null);
+        setSelectedSubPageId(null);
+        setSelectedArticleId(null);
+        setSelectedBlockId(null);
+        setSelectedComponentId(null);
+        setHasCanvasSelection(false);
+        setRightPanelOpen(false);
+        setStructureLoadError(
+          error instanceof Error ? error.message : "Failed to load course structure"
+        );
+      } finally {
+        if (!cancelled) {
+          setIsLoadingStructure(false);
+        }
+      }
+    }
+
+    void loadFromDatabase();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
 
   function handleMenuPageCreate() {
     setMenuPageCreated(true);
@@ -163,23 +275,22 @@ export default function CourseEditor({
     setMenuData((prev) => ({ ...prev, ...patch }));
   }
 
-  function handleRailClick(id: string) {
-    if (id === "structure") {
-      setShowStructureMap((prev) => !prev);
-      setActiveRailIcon(id);
-    } else {
-      setActiveRailIcon((prev) => (prev === id ? "" : id));
-    }
-  }
-
   function handleCanvasClick() {
+    if (!menuPageCreated) return;
+
     setMenuSelected(false);
+    setSelectedSubPageId(null);
+    setSelectedArticleId(null);
+    setSelectedBlockId(null);
+    setSelectedComponentId(null);
+    setHasCanvasSelection(false);
     setRightPanelOpen(false);
   }
 
   function handleMenuSelect() {
     setMenuSelected(true);
     setSelectedPageId(null);
+    setHasCanvasSelection(true);
     setRightPanelOpen(true);
     setRightPanelType("menu");
   }
@@ -195,6 +306,7 @@ export default function CourseEditor({
     };
     setContentPages([...contentPages, newPage]);
     setSelectedPageId(newPageId);
+    setHasCanvasSelection(true);
     setRightPanelOpen(true);
     setRightPanelType("page");
   }
@@ -216,6 +328,7 @@ export default function CourseEditor({
     );
     setSelectedPageId(pageId);
     setSelectedArticleId(newArticleId);
+    setHasCanvasSelection(true);
     setRightPanelOpen(true);
     setRightPanelType("article");
   }
@@ -237,6 +350,7 @@ export default function CourseEditor({
     );
     setSelectedPageId(pageId);
     setSelectedSubPageId(newSubPageId);
+    setHasCanvasSelection(true);
     setRightPanelOpen(true);
     setRightPanelType("subpage");
   }
@@ -284,7 +398,8 @@ export default function CourseEditor({
     );
     if (selectedArticleId === articleId) {
       setSelectedArticleId(null);
-      setRightPanelOpen(false);
+      setRightPanelType("page");
+      setRightPanelOpen(true);
     }
   }
 
@@ -293,6 +408,8 @@ export default function CourseEditor({
     setSelectedArticleId(articleId);
     setSelectedSubPageId(null);
     setSelectedBlockId(null);
+    setSelectedComponentId(null);
+    setHasCanvasSelection(true);
     setRightPanelOpen(true);
     setRightPanelType("article");
   }
@@ -300,7 +417,10 @@ export default function CourseEditor({
   function handleBlockSelect(pageId: string, articleId: string, blockId: string) {
     setSelectedPageId(pageId);
     setSelectedArticleId(articleId);
+    setSelectedSubPageId(null);
     setSelectedBlockId(blockId);
+    setSelectedComponentId(null);
+    setHasCanvasSelection(true);
     setRightPanelOpen(true);
     setRightPanelType("block");
   }
@@ -318,13 +438,15 @@ export default function CourseEditor({
     );
     if (selectedSubPageId === subPageId) {
       setSelectedSubPageId(null);
-      setRightPanelOpen(false);
+      setRightPanelType("page");
+      setRightPanelOpen(true);
     }
   }
 
   function handleSubPageSelect(pageId: string, subPageId: string) {
     setSelectedPageId(pageId);
     setSelectedSubPageId(subPageId);
+    setHasCanvasSelection(true);
     setRightPanelOpen(true);
     setRightPanelType("subpage");
   }
@@ -332,6 +454,11 @@ export default function CourseEditor({
   function handlePageSelect(pageId: string) {
     setSelectedPageId(pageId);
     setMenuSelected(false);
+    setSelectedSubPageId(null);
+    setSelectedArticleId(null);
+    setSelectedBlockId(null);
+    setSelectedComponentId(null);
+    setHasCanvasSelection(true);
     setRightPanelOpen(true);
     setRightPanelType("page");
   }
@@ -346,7 +473,12 @@ export default function CourseEditor({
     setContentPages(contentPages.filter((p) => p.id !== pageId));
     if (selectedPageId === pageId) {
       setSelectedPageId(null);
-      setRightPanelOpen(false);
+      setSelectedSubPageId(null);
+      setSelectedArticleId(null);
+      setSelectedBlockId(null);
+      setSelectedComponentId(null);
+      setRightPanelType("page");
+      setRightPanelOpen(true);
     }
   }
 
@@ -416,11 +548,18 @@ export default function CourseEditor({
     );
     if (selectedBlockId === blockId) {
       setSelectedBlockId(null);
-      setRightPanelOpen(false);
+      setSelectedComponentId(null);
+      setRightPanelType("article");
+      setRightPanelOpen(true);
     }
   }
 
   function handleAddComponent(pageId: string, articleId: string, blockId: string, componentType: ComponentType) {
+    const targetPage = contentPages.find((p) => p.id === pageId);
+    const targetArticle = targetPage?.articles.find((a) => a.id === articleId);
+    const targetBlock = targetArticle?.blocks.find((b) => b.id === blockId);
+    if (!targetBlock || targetBlock.components.length >= 2) return;
+
     const newComponentId = `component-${Date.now()}`;
     setContentPages(
       contentPages.map((p) =>
@@ -432,7 +571,7 @@ export default function CourseEditor({
                   ? {
                       ...a,
                       blocks: a.blocks.map((b) =>
-                        b.id === blockId && b.components.length < 2
+                        b.id === blockId
                           ? {
                               ...b,
                               components: [
@@ -451,6 +590,7 @@ export default function CourseEditor({
     );
     // Automatically select the new component and open its settings panel
     setSelectedComponentId(newComponentId);
+    setHasCanvasSelection(true);
     setRightPanelOpen(true);
     setRightPanelType("component");
   }
@@ -509,42 +649,35 @@ export default function CourseEditor({
           : p
       )
     );
+
+    if (selectedComponentId === componentId) {
+      setSelectedComponentId(null);
+      setRightPanelType("block");
+      setRightPanelOpen(true);
+    }
   }
 
-  function swapComponents(pageId: string, articleId: string, blockId: string) {
-    setContentPages(
-      contentPages.map((p) =>
-        p.id === pageId
-          ? {
-              ...p,
-              articles: p.articles.map((a) =>
-                a.id === articleId
-                  ? {
-                      ...a,
-                      blocks: a.blocks.map((b) =>
-                        b.id === blockId && b.components.length === 2
-                          ? {
-                              ...b,
-                              components: [b.components[1], b.components[0]],
-                            }
-                          : b
-                      ),
-                    }
-                  : a
-              ),
-            }
-          : p
-      )
-    );
-  }
-
-  function handleSelectComponent(blockId: string, componentId: string) {
+  function handleSelectComponent(pageId: string, articleId: string, blockId: string, componentId: string) {
+    setSelectedPageId(pageId);
+    setSelectedArticleId(articleId);
+    setSelectedBlockId(blockId);
     setSelectedComponentId(componentId);
+    setHasCanvasSelection(true);
     setRightPanelOpen(true);
     setRightPanelType("component");
   }
 
-  function handleAddComponentPanel(blockId: string) {
+  function handleAddComponentPanel(pageId: string, articleId: string, blockId: string) {
+    const targetPage = contentPages.find((p) => p.id === pageId);
+    const targetArticle = targetPage?.articles.find((a) => a.id === articleId);
+    const targetBlock = targetArticle?.blocks.find((b) => b.id === blockId);
+    if (!targetBlock || targetBlock.components.length >= 2) return;
+
+    setSelectedPageId(pageId);
+    setSelectedArticleId(articleId);
+    setSelectedBlockId(blockId);
+    setSelectedComponentId(null);
+    setHasCanvasSelection(true);
     setRightPanelOpen(true);
     setRightPanelType("addComponent");
   }
@@ -714,132 +847,68 @@ export default function CourseEditor({
 
   return (
     <div className="flex flex-col h-screen bg-white overflow-hidden">
-      {/* ── Top bar ─────────────────────────────────────────── */}
-      <header className="h-14 bg-white border-b border-[#E5E5E5] flex items-center justify-between px-3 md:px-4 shrink-0 z-10">
-        <div className="flex items-center gap-2 md:gap-3 min-w-0">
-          {/* Mobile: hamburger to open outline panel */}
-          <button
-            type="button"
-            aria-label="Open course outline"
-            onClick={() => setLeftPanelOpen((o) => !o)}
-            className="md:hidden p-2 rounded-lg text-[#474747] hover:bg-[#F2F2F2] transition-colors shrink-0"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
-            </svg>
-          </button>
-
-          <div className="hidden md:flex items-center gap-2 mr-2 shrink-0">
-            <img
-              src="/adapt-logo.jpeg"
-              alt="Adapt logo"
-              width={32}
-              height={32}
-              className="rounded-lg shrink-0"
-            />
-            <span className="font-semibold text-[#1A1A1A] text-sm tracking-tight">Adapt Studio</span>
-          </div>
-
-          <Link to="/" className="flex items-center gap-1.5 text-sm text-[#6b7280] hover:text-[#1A1A1A] transition-colors shrink-0">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M19 12H5M12 5l-7 7 7 7" />
-            </svg>
-            <span className="hidden sm:inline">Back</span>
-          </Link>
-
-          <span className="hidden sm:block text-[#d1d5db] text-lg font-light select-none">|</span>
-
-          <input
-            value={courseTitle}
-            onChange={(e) => setCourseTitle(e.target.value)}
-            className="text-sm md:text-base font-semibold text-[#1A1A1A] bg-transparent border-none outline-none focus:ring-0 min-w-0 w-32 sm:w-48 md:w-72 truncate"
-            aria-label="Course title"
-          />
-        </div>
-
-        <div className="flex items-center gap-1.5 md:gap-2 shrink-0">
-          <span className="hidden lg:flex text-xs text-[#ABABAB] items-center gap-1">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-            Saved &amp; Protected
-          </span>
-        </div>
-      </header>
+      <PageEditorTopBar
+        courseTitle={courseTitle}
+        onCourseTitleChange={setCourseTitle}
+        onToggleLeftPanel={() => setLeftPanelOpen((o) => !o)}
+      />
 
       {/* ── Body ────────────────────────────────────────────── */}
-      <div className="flex flex-1 overflow-hidden relative">
-        {/* Icon rail — hidden on mobile (hamburger replaces it) */}
-        <nav className="hidden md:flex w-12 bg-white border-r border-[#E5E5E5] flex-col items-center py-3 gap-1 shrink-0 z-10">
-          {sideIcons.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              aria-label={item.label}
-              onClick={() => handleRailClick(item.id)}
-              className={`w-9 h-9 flex items-center justify-center rounded-lg transition-colors ${
-                activeRailIcon === item.id
-                  ? "bg-[#dbeeff] text-[#2d6fa8]"
-                  : "text-[#ABABAB] hover:bg-[#F2F2F2] hover:text-[#474747]"
-              }`}
-            >
-              {item.icon}
-            </button>
-          ))}
-          <div className="flex-1" />
-          <button type="button" aria-label="Global settings" className="w-9 h-9 flex items-center justify-center rounded-lg text-[#ABABAB] hover:bg-[#F2F2F2] hover:text-[#474747] transition-colors">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-          </button>
-        </nav>
-
-        {/* Left panel — static on desktop, overlay drawer on mobile */}
-        <>
-          {/* Mobile backdrop — only show on mobile when open */}
-          {leftPanelOpen && (
-            <div
-              className="md:hidden fixed inset-0 z-30 bg-black/40"
-              onClick={() => { setLeftPanelOpen(false); setActiveRailIcon(""); }}
-              aria-hidden="true"
-            />
-          )}
-          {/* Panel is visible on desktop (md:flex), or on mobile if leftPanelOpen */}
-          <div className={`${leftPanelOpen ? 'flex' : 'hidden md:flex'} md:flex md:relative fixed inset-y-0 left-0 z-40 md:z-auto h-full md:h-auto shrink-0`}>
-            <CourseOutlinePanel
-              onClose={() => { setLeftPanelOpen(false); setActiveRailIcon(""); }}
-              menuPageCreated={menuPageCreated}
-              menuSelected={menuSelected}
-              onMenuSelect={handleMenuSelect}
-              contentPages={contentPages}
-              selectedPageId={selectedPageId}
-              selectedSubPageId={selectedSubPageId}
-              selectedArticleId={selectedArticleId}
-              onPageSelect={handlePageSelect}
-              onSubPageSelect={handleSubPageSelect}
-              onArticleSelect={handleArticleSelect}
-              onAddPage={handleAddPage}
-              onDeletePage={deletePage}
-              onAddArticle={handleAddArticle}
-              onAddSubPage={handleAddSubPage}
-            />
-          </div>
-        </>
+      <div className="flex flex-1 overflow-hidden relative min-w-0">
+        <PageEditorNavigation
+          courseId={courseId}
+          leftPanelOpen={leftPanelOpen}
+          onClosePanels={() => {
+            setLeftPanelOpen(false);
+          }}
+          onOpenPanels={() => {
+            setLeftPanelOpen(true);
+          }}
+          menuPageCreated={menuPageCreated}
+          menuSelected={menuSelected}
+          contentPages={contentPages}
+          selectedPageId={selectedPageId}
+          selectedSubPageId={selectedSubPageId}
+          selectedArticleId={selectedArticleId}
+          selectedBlockId={selectedBlockId}
+          selectedComponentId={selectedComponentId}
+          onMenuSelect={handleMenuSelect}
+          onPageSelect={handlePageSelect}
+          onSubPageSelect={handleSubPageSelect}
+          onArticleSelect={handleArticleSelect}
+          onBlockSelect={handleBlockSelect}
+          onComponentSelect={handleSelectComponent}
+          onAddPage={handleAddPage}
+          onDeletePage={deletePage}
+          onAddArticle={handleAddArticle}
+          onDeleteArticle={deleteArticle}
+          onAddSubPage={handleAddSubPage}
+          onAddBlock={handleAddBlock}
+          onDeleteBlock={deleteBlock}
+          onAddComponent={handleAddComponentPanel}
+          onDeleteComponent={deleteComponent}
+        />
 
         {/* Canvas */}
         <main
-          className="flex-1 bg-[#F2F2F2] overflow-y-auto relative"
+          className="flex-1 min-w-0 bg-[#F2F2F2] overflow-y-auto overflow-x-hidden relative"
           onClick={handleCanvasClick}
         >
-          {!menuPageCreated ? (
+          {isLoadingStructure ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-sm text-[#6b7280]">Loading course structure...</div>
+            </div>
+          ) : structureLoadError ? (
+            <div className="flex items-center justify-center h-full px-6">
+              <div className="max-w-md rounded-xl border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b] text-center">
+                {structureLoadError}
+              </div>
+            </div>
+          ) : !menuPageCreated ? (
             <div className="flex items-center justify-center h-full">
               <div className="flex flex-col items-center gap-5 text-center px-6 select-none">
                 <div className="w-20 h-20 rounded-2xl bg-white border border-[#E5E5E5] flex items-center justify-center shadow-sm">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#ABABAB" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
-                    <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
-                  </svg>
+                  <MaskIcon file="add-icon.svg" className="block w-[24px] h-[24px] shrink-0 bg-[#ababab]" />
                 </div>
                 <div className="space-y-2">
                   <h2 className="text-2xl font-bold text-[#1A1A1A] font-[Lato]">Create Your Menu Page</h2>
@@ -853,16 +922,13 @@ export default function CourseEditor({
                   onClick={(e) => { e.stopPropagation(); handleMenuPageCreate(); }}
                   className="flex items-center gap-2.5 px-6 py-3 bg-[#2E7FA1] hover:bg-[#266580] active:bg-[#1D4C60] text-white text-base font-bold rounded-lg transition-colors font-[Lato]"
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
-                    <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
-                  </svg>
+                  <MaskIcon file="add-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current" />
                   Create Menu Page
                 </button>
               </div>
             </div>
           ) : (
-            <div className="min-h-full flex flex-col items-center py-12 px-8 gap-8">
+            <div className="min-h-full flex flex-col items-center pt-6 px-6 pb-10 gap-8">
               {!selectedPageId ? (
                 <>
                   {/* Show Menu Page when no page is selected */}
@@ -899,9 +965,7 @@ export default function CourseEditor({
                         onClick={(e) => { e.stopPropagation(); handleAddPage(); }}
                         className="flex items-center gap-2 px-5 py-2.5 bg-[#2E7FA1] hover:bg-[#266580] text-white text-sm font-semibold rounded-lg transition-colors"
                       >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-                        </svg>
+                        <MaskIcon file="add-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
                         Add First Page
                       </button>
                     </div>
@@ -930,11 +994,16 @@ export default function CourseEditor({
                 </>
               ) : (
                 /* Show selected content page with articles below */
-                <div className="w-full flex flex-col gap-8">
+                <div className="w-full max-w-[760px] mx-auto flex flex-col gap-8">
                   <ContentPageCanvas
                     page={contentPages.find((p) => p.id === selectedPageId)!}
                     onUpdate={(patch) => updatePageData(selectedPageId, patch)}
                     onSelectSection={() => {
+                      setSelectedSubPageId(null);
+                      setSelectedArticleId(null);
+                      setSelectedBlockId(null);
+                      setSelectedComponentId(null);
+                      setHasCanvasSelection(true);
                       setRightPanelOpen(true);
                       setRightPanelType("page");
                     }}
@@ -942,8 +1011,15 @@ export default function CourseEditor({
                     onAddSubPage={handleAddSubPage}
                     onCopy={() => copyPage(selectedPageId)}
                     onDelete={() => deletePage(selectedPageId)}
-                    isSelected={!selectedArticleId}
+                    isSelected={
+                      hasCanvasSelection &&
+                      !selectedSubPageId &&
+                      !selectedArticleId &&
+                      !selectedBlockId &&
+                      !selectedComponentId
+                    }
                     isEditingInPanel={rightPanelOpen}
+                    previewMode={!hasCanvasSelection}
                   />
 
                   {/* Articles section */}
@@ -955,15 +1031,18 @@ export default function CourseEditor({
                         onUpdate={(patch) => updateArticle(selectedPageId, article.id, patch)}
                         onSelectSection={() => {
                           setSelectedArticleId(article.id);
+                          setSelectedSubPageId(null);
                           setSelectedBlockId(null);
+                          setSelectedComponentId(null);
+                          setHasCanvasSelection(true);
                           setRightPanelOpen(true);
                           setRightPanelType("article");
                         }}
                         onAddBlock={() => handleAddBlock(selectedPageId, article.id)}
                         onBlockUpdate={(blockId, patch) => updateBlock(selectedPageId, article.id, blockId, patch)}
                         onSelectBlock={(blockId) => handleBlockSelect(selectedPageId, article.id, blockId)}
-                        onAddComponent={(blockId) => handleAddComponentPanel(blockId)}
-                        onSelectComponent={(blockId, componentId) => handleSelectComponent(blockId, componentId)}
+                        onAddComponent={(blockId) => handleAddComponentPanel(selectedPageId, article.id, blockId)}
+                        onSelectComponent={(blockId, componentId) => handleSelectComponent(selectedPageId, article.id, blockId, componentId)}
                         onCopy={() => copyArticle(selectedPageId, article.id)}
                         onDelete={() => deleteArticle(selectedPageId, article.id)}
                         onCopyBlock={(blockId) => copyBlock(selectedPageId, article.id, blockId)}
@@ -972,14 +1051,20 @@ export default function CourseEditor({
                         onDeleteComponent={(blockId, componentId) => deleteComponent(selectedPageId, article.id, blockId, componentId)}
                         selectedBlockId={selectedBlockId}
                         selectedComponentId={selectedComponentId}
-                        isSelected={selectedArticleId === article.id}
+                        isSelected={
+                          hasCanvasSelection &&
+                          selectedArticleId === article.id &&
+                          !selectedBlockId &&
+                          !selectedComponentId
+                        }
                         isEditingInPanel={rightPanelOpen}
+                        previewMode={!hasCanvasSelection}
                       />
                     ))}
                   </div>
 
                   {/* Add Article button */}
-                  <div className="w-full max-w-3xl mx-auto">
+                  <div className="w-full max-w-[760px] mx-auto">
                     <button
                       type="button"
                       onClick={(e) => {
@@ -988,10 +1073,7 @@ export default function CourseEditor({
                       }}
                       className="flex items-center gap-2 px-4 py-2 text-sm text-[#2d6fa8] hover:bg-[#f0f8ff] rounded transition-colors"
                     >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="12" y1="5" x2="12" y2="19" />
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                      </svg>
+                      <MaskIcon file="add-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current" />
                       <span>Add Article</span>
                     </button>
                   </div>
@@ -1030,100 +1112,214 @@ export default function CourseEditor({
           </div>
         )}
 
-        {/* Right settings panel — overlay on mobile, inline on desktop */}
-        {menuPageCreated && rightPanelOpen && (
+        {/* Right properties panel — fixed until collapsed or preview mode */}
+        {menuPageCreated && (
           <>
-            {/* Mobile backdrop for right panel */}
-            <div
-              className="md:hidden fixed inset-0 z-30 bg-black/40"
-              onClick={() => setRightPanelOpen(false)}
-              aria-hidden="true"
-            />
-            <div className="fixed md:relative inset-y-0 right-0 z-40 md:z-auto h-full md:h-auto">
-            {rightPanelType === "menu" && menuSelected && (
-              <MenuSettingsPanel
-                data={menuData}
-                onUpdate={updateMenuData}
-                onClose={() => { setRightPanelOpen(false); setMenuSelected(false); }}
+            {rightPanelOpen && (
+              <div
+                className="md:hidden fixed inset-0 z-30 bg-black/40"
+                onClick={() => setRightPanelOpen(false)}
+                aria-hidden="true"
               />
             )}
-            {rightPanelType === "page" && selectedPageId && !selectedSubPageId && (
-              <ContentPageSettingsPanel
-                page={contentPages.find((p) => p.id === selectedPageId)!}
-                onUpdate={(patch) => updatePageData(selectedPageId, patch)}
-                onDelete={() => deletePage(selectedPageId)}
-                onCopy={() => copyPage(selectedPageId)}
-                onClose={() => { setRightPanelOpen(false); setSelectedPageId(null); }}
-              />
+
+            {rightPanelOpen ? (
+              <aside className="fixed md:relative inset-y-0 right-0 z-40 md:z-auto h-full w-[300px] bg-white border-l border-[#d8dee6] overflow-y-auto overflow-x-hidden shrink-0">
+                {(() => {
+                const page = selectedPageId ? contentPages.find((p) => p.id === selectedPageId) : undefined;
+                const article = page && selectedArticleId ? page.articles.find((a) => a.id === selectedArticleId) : undefined;
+                const block = article && selectedBlockId ? article.blocks.find((b) => b.id === selectedBlockId) : undefined;
+                const component = block && selectedComponentId ? block.components.find((c) => c.id === selectedComponentId) : undefined;
+
+                const activeLevel = rightPanelType === "component" || rightPanelType === "addComponent"
+                  ? "component"
+                  : rightPanelType === "block"
+                    ? "block"
+                    : rightPanelType === "article"
+                      ? "article"
+                      : "page";
+
+                const rowClass = (active: boolean) =>
+                  `w-full flex items-center gap-2 px-3.5 h-12 border-b border-[#e6ebf0] transition-colors ${
+                    active
+                      ? "bg-[#f2f8fc] text-[#1f2937]"
+                      : "bg-white text-[#9aa7b2] opacity-40 cursor-not-allowed"
+                  }`;
+
+                const iconWrapClass = (active: boolean) =>
+                  `w-6 h-6 rounded-[4px] flex items-center justify-center shrink-0 ${
+                    active ? "bg-[#2E7FA1] text-white" : "bg-[#f3f6f9] text-[#9aa7b2]"
+                  }`;
+
+                return (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setRightPanelOpen(false)}
+                      className="w-full h-[56px] border-b border-[#d8dee6] px-3.5 flex items-center gap-2 text-[#3b4753]"
+                    >
+                      <span className="w-8 h-8 rounded-[6px] flex items-center justify-center hover:bg-[#f2f5f8] transition-colors">
+                        <MaskIcon file="chevron-right.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+                      </span>
+                      <span className="text-xs tracking-[0.08em] font-semibold uppercase">Properties</span>
+                    </button>
+
+                    <button type="button" className={rowClass(activeLevel === "page")}>
+                      <span className="flex items-center gap-2 text-[13px] font-semibold flex-1">
+                        <span className={iconWrapClass(activeLevel === "page")}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                        </span>
+                        Topic
+                      </span>
+                      <MaskIcon
+                        file="chevron-right.svg"
+                        className={`block w-[13px] h-[13px] shrink-0 bg-current transition-transform ${activeLevel === "page" ? "rotate-90" : ""}`}
+                      />
+                    </button>
+                    {activeLevel === "page" && page && (
+                      <div className="px-4 py-4 border-b border-[#e6ebf0] space-y-3">
+                        <input
+                          value={page.title}
+                          onChange={(e) => updatePageData(page.id, { title: e.target.value })}
+                          className="w-full border border-[#d1d5db] rounded-md px-3 py-2 text-sm"
+                          placeholder="Topic title"
+                        />
+                        <textarea
+                          value={page.description}
+                          onChange={(e) => updatePageData(page.id, { description: e.target.value })}
+                          className="w-full border border-[#d1d5db] rounded-md px-3 py-2 text-sm resize-none"
+                          rows={3}
+                          placeholder="Topic description"
+                        />
+                      </div>
+                    )}
+
+                    <button type="button" className={rowClass(activeLevel === "article")}>
+                      <span className="flex items-center gap-2 text-[13px] font-semibold flex-1">
+                        <span className={iconWrapClass(activeLevel === "article")}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                        </span>
+                        Section
+                      </span>
+                      <MaskIcon
+                        file="chevron-right.svg"
+                        className={`block w-[13px] h-[13px] shrink-0 bg-current transition-transform ${activeLevel === "article" ? "rotate-90" : ""}`}
+                      />
+                    </button>
+                    {activeLevel === "article" && article && (
+                      <div className="px-4 py-4 border-b border-[#e6ebf0] space-y-3">
+                        <input
+                          value={article.title}
+                          onChange={(e) => updateArticle(page!.id, article.id, { title: e.target.value })}
+                          className="w-full border border-[#d1d5db] rounded-md px-3 py-2 text-sm"
+                          placeholder="Section title"
+                        />
+                        <textarea
+                          value={article.description}
+                          onChange={(e) => updateArticle(page!.id, article.id, { description: e.target.value })}
+                          className="w-full border border-[#d1d5db] rounded-md px-3 py-2 text-sm resize-none"
+                          rows={3}
+                          placeholder="Section description"
+                        />
+                      </div>
+                    )}
+
+                    <button type="button" className={rowClass(activeLevel === "block")}>
+                      <span className="flex items-center gap-2 text-[13px] font-semibold flex-1">
+                        <span className={iconWrapClass(activeLevel === "block")}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="3" width="8" height="8"/><rect x="3" y="13" width="8" height="8"/><rect x="13" y="13" width="8" height="8"/></svg>
+                        </span>
+                        Content Group
+                      </span>
+                      <MaskIcon
+                        file="chevron-right.svg"
+                        className={`block w-[13px] h-[13px] shrink-0 bg-current transition-transform ${activeLevel === "block" ? "rotate-90" : ""}`}
+                      />
+                    </button>
+                    {activeLevel === "block" && block && (
+                      <div className="border-b border-[#e6ebf0]">
+                        <div className="px-4 py-4 space-y-3">
+                          <input
+                            value={block.title}
+                            onChange={(e) => updateBlock(page!.id, article!.id, block.id, { title: e.target.value })}
+                            className="w-full border border-[#d1d5db] rounded-md px-3 py-2 text-sm"
+                            placeholder="Content Group"
+                          />
+                          <input
+                            value={block.id}
+                            readOnly
+                            className="w-full border border-[#d1d5db] rounded-md px-3 py-2 text-sm text-[#6b7280] bg-[#f8fafc]"
+                          />
+                          <p className="text-xs text-[#6b7280]">Unique identifier for this content group. Click to copy.</p>
+                        </div>
+                        <button type="button" className="w-full h-14 border-t border-[#e6ebf0] px-5 flex items-center justify-between text-[#4b5563] text-xs font-semibold tracking-wide">AVAILABILITY &amp; PROGRESSION <span>›</span></button>
+                        <button type="button" className="w-full h-14 border-t border-[#e6ebf0] px-5 flex items-center justify-between text-[#4b5563] text-xs font-semibold tracking-wide">EXTENSIONS <span>›</span></button>
+                        <button type="button" className="w-full h-14 border-t border-[#e6ebf0] px-5 flex items-center justify-between text-[#4b5563] text-xs font-semibold tracking-wide">THEME <span>›</span></button>
+                        <button type="button" className="w-full h-14 border-t border-[#e6ebf0] px-5 flex items-center justify-between text-[#4b5563] text-xs font-semibold tracking-wide">ADVANCED SETTINGS <span>›</span></button>
+                      </div>
+                    )}
+
+                    <button type="button" className={rowClass(activeLevel === "component")}>
+                      <span className="flex items-center gap-2 text-[13px] font-semibold flex-1">
+                        <span className={iconWrapClass(activeLevel === "component")}>
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                        </span>
+                        Component
+                      </span>
+                      <MaskIcon
+                        file="chevron-right.svg"
+                        className={`block w-[13px] h-[13px] shrink-0 bg-current transition-transform ${activeLevel === "component" ? "rotate-90" : ""}`}
+                      />
+                    </button>
+                    {activeLevel === "component" && (
+                      <div className="px-4 py-4 border-b border-[#e6ebf0]">
+                        {rightPanelType === "addComponent" && page && article && block ? (
+                          <ComponentSelector
+                            onSelectComponent={(type) => handleAddComponent(page.id, article.id, block.id, type)}
+                            onClose={() => setRightPanelOpen(false)}
+                          />
+                        ) : component && page && article && block ? (
+                          <div className="space-y-3">
+                            <input
+                              value={component.settings.title || ""}
+                              onChange={(e) => updateComponent(page.id, article.id, block.id, component.id, {
+                                settings: { ...component.settings, title: e.target.value },
+                              })}
+                              className="w-full border border-[#d1d5db] rounded-md px-3 py-2 text-sm"
+                              placeholder="Component title"
+                            />
+                            <textarea
+                              value={component.settings.description || ""}
+                              onChange={(e) => updateComponent(page.id, article.id, block.id, component.id, {
+                                settings: { ...component.settings, description: e.target.value },
+                              })}
+                              className="w-full border border-[#d1d5db] rounded-md px-3 py-2 text-sm resize-none"
+                              rows={3}
+                              placeholder="Component description"
+                            />
+                          </div>
+                        ) : null}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+              </aside>
+            ) : (
+              <aside className="hidden md:flex h-full w-[56px] bg-white border-l border-[#d8dee6] shrink-0 flex-col items-center py-3">
+                <div className="w-full flex flex-col items-center pb-3 border-b border-[#d8dee6]">
+                  <button
+                    type="button"
+                    onClick={() => setRightPanelOpen(true)}
+                    className="w-8 h-8 rounded-[6px] flex items-center justify-center text-[#5f6d79] hover:bg-[#f1f5f9] transition-colors"
+                    aria-label="Expand properties"
+                    title="Expand properties"
+                  >
+                    <MaskIcon file="chevron-right.svg" className="block w-[14px] h-[14px] shrink-0 bg-current rotate-180" />
+                  </button>
+                </div>
+              </aside>
             )}
-            {rightPanelType === "subpage" && selectedPageId && selectedSubPageId && (() => {
-              const page = contentPages.find((p) => p.id === selectedPageId);
-              const subPage = page?.subPages.find((s) => s.id === selectedSubPageId);
-              return subPage ? (
-                <SubPageSettingsPanel
-                  subPage={subPage}
-                  onUpdate={(patch) => updateSubPage(selectedPageId, selectedSubPageId, patch)}
-                  onDelete={() => deleteSubPage(selectedPageId, selectedSubPageId)}
-                  onClose={() => { setRightPanelOpen(false); setSelectedSubPageId(null); }}
-                />
-              ) : null;
-            })()}
-            {rightPanelType === "article" && selectedPageId && selectedArticleId && (() => {
-              const page = contentPages.find((p) => p.id === selectedPageId);
-              const article = page?.articles.find((a) => a.id === selectedArticleId);
-              return article ? (
-                <ArticleSettingsPanel
-                  article={article}
-                  onUpdate={(patch) => updateArticle(selectedPageId, selectedArticleId, patch)}
-                  onDelete={() => deleteArticle(selectedPageId, selectedArticleId)}
-                  onCopy={() => copyArticle(selectedPageId, selectedArticleId)}
-                  onClose={() => { setRightPanelOpen(false); setSelectedArticleId(null); }}
-                />
-              ) : null;
-            })()}
-            {rightPanelType === "block" && selectedPageId && selectedArticleId && selectedBlockId && (() => {
-              const page = contentPages.find((p) => p.id === selectedPageId);
-              const article = page?.articles.find((a) => a.id === selectedArticleId);
-              const block = article?.blocks.find((b) => b.id === selectedBlockId);
-              return block ? (
-                <BlockSettingsPanel
-                  block={block}
-                  onUpdate={(patch) => updateBlock(selectedPageId, selectedArticleId, selectedBlockId, patch)}
-                  onDelete={() => deleteBlock(selectedPageId, selectedArticleId, selectedBlockId)}
-                  onCopy={() => copyBlock(selectedPageId, selectedArticleId, selectedBlockId)}
-                  onClose={() => { setRightPanelOpen(false); setSelectedBlockId(null); }}
-                />
-              ) : null;
-            })()}
-            {rightPanelType === "addComponent" && selectedPageId && selectedArticleId && selectedBlockId && (() => {
-              const page = contentPages.find((p) => p.id === selectedPageId);
-              const article = page?.articles.find((a) => a.id === selectedArticleId);
-              const block = article?.blocks.find((b) => b.id === selectedBlockId);
-              return block ? (
-                <ComponentSelector
-                  onSelectComponent={(type) => handleAddComponent(selectedPageId, selectedArticleId, selectedBlockId, type)}
-                  onClose={() => { setRightPanelOpen(false); }}
-                  maxComponentsReached={block.components.length >= 2}
-                />
-              ) : null;
-            })()}
-            {rightPanelType === "component" && selectedPageId && selectedArticleId && selectedBlockId && selectedComponentId && (() => {
-              const page = contentPages.find((p) => p.id === selectedPageId);
-              const article = page?.articles.find((a) => a.id === selectedArticleId);
-              const block = article?.blocks.find((b) => b.id === selectedBlockId);
-              const component = block?.components.find((c) => c.id === selectedComponentId);
-              return component ? (
-                <ComponentSettingsPanel
-                  component={component}
-                  onUpdate={(patch) => updateComponent(selectedPageId, selectedArticleId, selectedBlockId, selectedComponentId, patch)}
-                  onDelete={() => deleteComponent(selectedPageId, selectedArticleId, selectedBlockId, selectedComponentId)}
-                  onCopy={() => copyComponent(selectedPageId, selectedArticleId, selectedBlockId, selectedComponentId)}
-                  onSwap={block && block.components.length === 2 ? () => swapComponents(selectedPageId, selectedArticleId, selectedBlockId) : undefined}
-                  onClose={() => { setRightPanelOpen(false); setSelectedComponentId(null); }}
-                />
-              ) : null;
-            })()}
-            </div>
           </>
         )}
       </div>

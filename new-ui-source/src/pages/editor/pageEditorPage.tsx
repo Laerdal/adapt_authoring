@@ -1,6 +1,6 @@
-import { useParams, useLocation } from 'react-router-dom'
-import CourseEditor from '../components/course/CourseEditor'
-import AiAssistant from '../components/common/AiAssistant'
+import { useLocation, useParams } from 'react-router-dom'
+import AiAssistant from '../../components/common/AiAssistant'
+import PageEditorWorkspace from './pageEditorWorkspace'
 
 const EDITOR_SUGGESTIONS = [
   'How do I add a new block?',
@@ -8,14 +8,23 @@ const EDITOR_SUGGESTIONS = [
   'How do I publish my course?',
 ]
 
-export default function EditorPage() {
+type EditorNavigationState = {
+  courseId?: string
+  title?: string
+  description?: string
+  theme?: string
+  menu?: string
+  pageId?: string
+}
+
+export default function PageEditorPage() {
   const { id } = useParams()
   const location = useLocation()
-  const state = location.state as any
+  const state = (location.state as EditorNavigationState | null) ?? null
 
   return (
     <>
-      <CourseEditor
+      <PageEditorWorkspace
         courseId={id || 'new-course'}
         initialTitle={state?.title}
         initialDescription={state?.description}

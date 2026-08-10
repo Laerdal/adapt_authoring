@@ -266,7 +266,7 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
             {renderRow({ level: 'component', id: c.id, title: c.title, parentId: blockId, parentLevel: 'contentGroup', deleteWarning: components.length === 1 ? `This is the only component — the ${labels.contentGroup.toLowerCase()} will be left empty.` : undefined })}
           </React.Fragment>
         ))}
-        {components.length < 2 && <div className="ml-1"><AddLink label={`Add ${labels.component}`} onClick={() => props.onAddComponent(blockId)} /></div>}
+        <div className="ml-1"><AddLink label={`Add ${labels.component}`} onClick={() => props.onAddComponent(blockId)} /></div>
       </div>
     );
   }
