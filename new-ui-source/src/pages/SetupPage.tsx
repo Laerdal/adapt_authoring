@@ -530,6 +530,21 @@ const DEFAULT_CUSTOM: CustomThemeValues = {
   pageTitleSize: "3.5rem",
 };
 
+function DesktopCalculatedValues({
+  sizes,
+}: {
+  sizes: Array<{ label: string; value: string }>;
+}) {
+  return (
+    <div className="mt-2 rounded-lg bg-[#f0f7ff] border-l-4 border-[#2d6fa8] px-4 py-3 text-xs text-[#374151] space-y-0.5">
+      <p className="font-semibold text-[#111827] mb-1">Calculated values for Desktop:</p>
+      {sizes.map((s) => (
+        <p key={s.label}><span className="font-semibold">{s.label}:</span> {s.value}</p>
+      ))}
+    </div>
+  );
+}
+
 /* colour swatch picker row */
 function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
@@ -701,13 +716,40 @@ function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (
   const calcSizes = () => {
     const base = cfg.pageTitleSize === "h6" ? null : parseFloat(cfg.pageTitleSize);
     if (!base) return null;
+
+    const MIN_INSTRUCTION_REM = 0.875;
+    const MIN_FONT_STEP_REM = 0.0625;
+    const MIN_PARAGRAPH_REM = MIN_INSTRUCTION_REM + MIN_FONT_STEP_REM;
+
+    const h1Raw = base;
+    const h2Raw = base - 0.5;
+    const h3Raw = base - 1;
+    const h4Raw = base - 1.25;
+    const h5Raw = base - 1.5;
+    const h6Raw = base - 1.75;
+
+    const h6 = Math.max(h6Raw, MIN_PARAGRAPH_REM);
+    const h5 = Math.max(h5Raw, h6 + MIN_FONT_STEP_REM);
+    const h4 = Math.max(h4Raw, h5 + MIN_FONT_STEP_REM);
+    const h3 = Math.max(h3Raw, h4 + MIN_FONT_STEP_REM);
+    const h2 = Math.max(h2Raw, h3 + MIN_FONT_STEP_REM);
+    const h1 = Math.max(h1Raw, h2 + MIN_FONT_STEP_REM);
+    const p = h6;
+
+    const formatSize = (rem: number) => {
+      const px = Math.round(rem * 16);
+      const formatted = rem.toFixed(4).replace(/\.?0+$/, "");
+      return `${formatted}rem (${px}px)`;
+    };
+
     return [
-      { label: "H1 (Page Title)", size: base, px: Math.round(base * 16) },
-      { label: "H2", size: +(base - 0.5).toFixed(1), px: Math.round((base - 0.5) * 16) },
-      { label: "H3", size: +(base - 1).toFixed(1), px: Math.round((base - 1) * 16) },
-      { label: "H4", size: +(base - 1.5).toFixed(1), px: Math.round((base - 1.5) * 16) },
-      { label: "H5", size: +(base - 2).toFixed(1), px: Math.round((base - 2) * 16) },
-      { label: "Paragraph", size: 1.125, px: 18 },
+      { label: "H1 (Page Title)", value: formatSize(h1) },
+      { label: "H2", value: formatSize(h2) },
+      { label: "H3", value: formatSize(h3) },
+      { label: "H4", value: formatSize(h4) },
+      { label: "H5", value: formatSize(h5) },
+      { label: "H6", value: formatSize(h6) },
+      { label: "Paragraph", value: formatSize(p) },
     ];
   };
 
@@ -761,14 +803,7 @@ function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (
             <polyline points="6 9 12 15 18 9"/>
           </svg>
         </div>
-        {sizes && (
-          <div className="mt-2 rounded-lg bg-[#f0f7ff] border-l-4 border-[#2d6fa8] px-4 py-3 text-xs text-[#374151] space-y-0.5">
-            <p className="font-semibold text-[#111827] mb-1">Calculated values for Desktop:</p>
-            {sizes.map((s) => (
-              <p key={s.label}><span className="font-semibold">{s.label}:</span> {s.size}rem ({s.px}px)</p>
-            ))}
-          </div>
-        )}
+        {sizes && <DesktopCalculatedValues sizes={sizes} />}
       </div>
     </div>
   );
