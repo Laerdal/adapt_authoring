@@ -695,9 +695,8 @@ export function CourseOverviewPage({
               type="button"
               onClick={() => setShowAuthoringBanner(false)}
               aria-label="Dismiss"
-              style={{ position: "absolute", top: 14, right: 14, background: "transparent", border: "none", cursor: "pointer", color: "var(--life-neutral-400)", display: "flex", alignItems: "center", padding: 4, borderRadius: 4, transition: "color 0.15s" }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--life-base-black)")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--life-neutral-400)")}
+              className="absolute top-[14px] right-[14px] flex items-center rounded text-[var(--life-neutral-400)] transition-colors hover:text-[var(--life-base-black)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--life-primary-500)] focus-visible:ring-offset-2"
+              style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4 }}
             >
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M11 3L3 11M3 3l8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
