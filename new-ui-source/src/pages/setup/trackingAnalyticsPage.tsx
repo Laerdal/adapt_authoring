@@ -1224,11 +1224,9 @@ export function TrackingAnalyticsPage({
                 onChange={(value) => setXapi((prev) => ({ ...prev, lang: value }))}
                 options={[
                   { value: "de-DE", label: "de-DE" },
-                  { value: "en-GB", label: "en-GB" },
                   { value: "en-US", label: "en-US" },
                   { value: "fr-FR", label: "fr-FR" },
                   { value: "es-ES", label: "es-ES" },
-                  { value: "zh-CN", label: "zh-CN" },
                 ]}
               />
               <TextField label="Component blacklist" value={xapi.componentBlacklist} onChange={(value) => setXapi((prev) => ({ ...prev, componentBlacklist: value }))} placeholder="blank,graphic" />
