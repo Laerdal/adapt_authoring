@@ -164,6 +164,7 @@ function PluginRadio({
 }) {
   return (
     <button
+      id={id}
       type="button"
       role="radio"
       aria-checked={selected}
