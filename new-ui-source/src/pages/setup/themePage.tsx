@@ -46,14 +46,66 @@ const PREVIEW_TITLE_SIZE: Record<string, string | null> = {
   Paragraph: "0.95rem",
 };
 
-const CALC_VALUES = [
-  { label: "H1 (Page Title)", rem: "3.5rem", px: "56px" },
-  { label: "H2", rem: "3rem", px: "48px" },
-  { label: "H3", rem: "2.5rem", px: "40px" },
-  { label: "H4", rem: "2rem", px: "32px" },
-  { label: "H5", rem: "1.5rem", px: "24px" },
-  { label: "Paragraph", rem: "1.125rem", px: "18px" },
-];
+const PAGE_TITLE_SIZE_REM: Record<string, number> = {
+  H1: 3.5, H2: 3, H3: 2.5, H4: 2, H5: 1.5, Paragraph: 1.125,
+};
+
+function calcDesktopSizes(baseRem: number) {
+  const MIN_INSTRUCTION_REM = 0.875;
+  const MIN_FONT_STEP_REM = 0.0625;
+  const MIN_PARAGRAPH_REM = MIN_INSTRUCTION_REM + MIN_FONT_STEP_REM;
+
+  const h1Raw = baseRem;
+  const h2Raw = baseRem - 0.5;
+  const h3Raw = baseRem - 1;
+  const h4Raw = baseRem - 1.25;
+  const h5Raw = baseRem - 1.5;
+  const h6Raw = baseRem - 1.75;
+
+  const h6 = Math.max(h6Raw, MIN_PARAGRAPH_REM);
+  const h5 = Math.max(h5Raw, h6 + MIN_FONT_STEP_REM);
+  const h4 = Math.max(h4Raw, h5 + MIN_FONT_STEP_REM);
+  const h3 = Math.max(h3Raw, h4 + MIN_FONT_STEP_REM);
+  const h2 = Math.max(h2Raw, h3 + MIN_FONT_STEP_REM);
+  const h1 = Math.max(h1Raw, h2 + MIN_FONT_STEP_REM);
+  const p = h6;
+
+  const formatSize = (rem: number) => {
+    const px = Math.round(rem * 16);
+    const formatted = rem.toFixed(4).replace(/\.?0+$/, "");
+    return { rem: formatted, px };
+  };
+
+  const h1Size = formatSize(h1);
+  const h2Size = formatSize(h2);
+  const h3Size = formatSize(h3);
+  const h4Size = formatSize(h4);
+  const h5Size = formatSize(h5);
+  const h6Size = formatSize(h6);
+  const pSize = formatSize(p);
+
+  return [
+    { label: "H1 (Page Title)", size: h1Size.rem, px: h1Size.px },
+    { label: "H2", size: h2Size.rem, px: h2Size.px },
+    { label: "H3", size: h3Size.rem, px: h3Size.px },
+    { label: "H4", size: h4Size.rem, px: h4Size.px },
+    { label: "H5", size: h5Size.rem, px: h5Size.px },
+    { label: "H6", size: h6Size.rem, px: h6Size.px },
+    { label: "Paragraph", size: pSize.rem, px: pSize.px },
+  ];
+}
+
+function DesktopCalculatedValues({ baseRem }: { baseRem: number }) {
+  const sizes = calcDesktopSizes(baseRem);
+  return (
+    <div className="mt-2 px-4 py-3 text-xs text-[var(--life-neutral-500)] space-y-0.5 bg-[var(--life-primary-020)] border-l-4 border-[var(--life-primary-500)]">
+      <p className="font-semibold text-[var(--life-base-black)] mb-1">Calculated values for Desktop:</p>
+      {sizes.map((s) => (
+        <p key={s.label}><span className="font-semibold">{s.label}:</span> {s.size}rem ({s.px}px)</p>
+      ))}
+    </div>
+  );
+}
 
 const H1_SIZE_OPTIONS = [
   { label: "H1 - 3.5rem", value: "3.5rem" },
@@ -257,21 +309,6 @@ function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
 function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (v: CustomThemeValues) => void }) {
   const set = <K extends keyof CustomThemeValues>(k: K, v: CustomThemeValues[K]) => setCfg({ ...cfg, [k]: v });
 
-  const calcSizes = () => {
-    const base = cfg.pageTitleSize === "h6" ? null : parseFloat(cfg.pageTitleSize);
-    if (!base) return null;
-    return [
-      { label: "H1 (Page Title)", size: base, px: Math.round(base * 16) },
-      { label: "H2", size: +(base - 0.5).toFixed(1), px: Math.round((base - 0.5) * 16) },
-      { label: "H3", size: +(base - 1).toFixed(1), px: Math.round((base - 1) * 16) },
-      { label: "H4", size: +(base - 1.5).toFixed(1), px: Math.round((base - 1.5) * 16) },
-      { label: "H5", size: +(base - 2).toFixed(1), px: Math.round((base - 2) * 16) },
-      { label: "Paragraph", size: 1.125, px: 18 },
-    ];
-  };
-
-  const sizes = calcSizes();
-
   return (
     <div className="space-y-5 mt-4">
       {/* colours row 1 */}
@@ -320,14 +357,7 @@ function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (
             <polyline points="6 9 12 15 18 9"/>
           </svg>
         </div>
-        {sizes && (
-          <div className="mt-2 rounded-lg bg-[var(--life-primary-020)] border-l-4 border-[var(--life-primary-500)] px-4 py-3 text-xs text-[#374151] space-y-0.5">
-            <p className="font-semibold text-[#111827] mb-1">Calculated values for Desktop:</p>
-            {sizes.map((s) => (
-              <p key={s.label}><span className="font-semibold">{s.label}:</span> {s.size}rem ({s.px}px)</p>
-            ))}
-          </div>
-        )}
+        {cfg.pageTitleSize !== "h6" && <DesktopCalculatedValues baseRem={parseFloat(cfg.pageTitleSize)} />}
       </div>
     </div>
   );
@@ -663,7 +693,7 @@ const CUSTOM_FIELD_DEFAULTS: Record<string, string> = {
   '_menu::menu-header-background-color': '',
   '_menu::menu-item': '',
   '_menu::menu-item-progress': '',
-  '_nav::nav': '#FFFFFF',
+  '_nav::nav': '#2e7fa1',
   '_nav::nav-progress': '#2e7fa1',
   '_notify::notify': '#ffffff',
   '_notify::drawer': '#ffffff',
@@ -673,7 +703,7 @@ const CUSTOM_FIELD_DEFAULTS: Record<string, string> = {
 // Mirrors linkedProperties in custom-theme properties.schema.
 // Format uses UI keys: "sectionId::fieldKey".
 const CUSTOM_LINKED_PROPERTY_MAP: Record<string, string[]> = {
-  '_global::_primaryBrandColor': ['_progress::progress', '_global::link'],
+  '_global::_primaryBrandColor': ['_progress::progress', '_global::link', '_nav::nav', '_pageStructure::page-header-background-color'],
   '_progress::progress': ['_nav::nav-progress', '_menu::menu-item-progress'],
 };
 
@@ -689,7 +719,6 @@ const VANILLA_ACCORDION_DEFS: { id: string; label: string; fields: { key: string
       { key: 'link-inverted-hover', label: 'Link font colour - inverted hover' },
       { key: 'heading-color', label: 'Heading colour' },
       { key: 'heading-color-inverted', label: 'Heading colour - inverted' },
-      { key: 'body-background-color', label: 'Body background colour' },
     ],
   },
   {
@@ -771,16 +800,6 @@ const VANILLA_ACCORDION_DEFS: { id: string; label: string; fields: { key: string
       { key: 'progress', label: 'Progress fill colour' },
       { key: 'progress-inverted', label: 'Progress background colour' },
       { key: 'progress-border', label: 'Progress border colour' },
-    ],
-  },
-  {
-    id: '_page', label: 'Page',
-    fields: [
-      { key: 'page-header-background-color', label: 'Page header background colour' },
-      { key: 'page-header-title-color', label: 'Page header title colour' },
-      { key: 'page-header-subtitle-color', label: 'Page header subtitle colour' },
-      { key: 'page-header-body-color', label: 'Page header body colour' },
-      { key: 'page-header-instruction-color', label: 'Page header instruction colour' },
     ],
   },
   {
@@ -880,7 +899,6 @@ const VANILLA_ACCORDION_DEFS: { id: string; label: string; fields: { key: string
       { key: 'drawer-item-inverted-focus', label: 'Drawer item background colour - inverted focus' },
       { key: 'drawer-item-selected', label: 'Drawer item background colour - selected' },
       { key: 'drawer-item-inverted-selected', label: 'Drawer item background colour - inverted selected' },
-      { key: 'drawer-item-selected-underline', label: 'Drawer item colour - selected underline' },
       { key: 'drawer-item-locked', label: 'Drawer item background colour - locked' },
       { key: 'drawer-item-inverted-locked', label: 'Drawer item background colour - inverted locked' },
       { key: 'drawer-progress', label: 'Drawer progress fill colour' },
@@ -892,224 +910,18 @@ const VANILLA_ACCORDION_DEFS: { id: string; label: string; fields: { key: string
     ],
   },
   {
-    id: '_pullQuote', label: 'Pull Quotes',
-    fields: [
-      { key: 'pull-quote', label: 'Pull quote background colour' },
-      { key: 'pull-quote-inverted', label: 'Pull quote text colour' },
-      { key: 'pull-quote-border', label: 'Pull quote border colour' },
-    ],
-  },
-  {
     id: '_misc', label: 'Misc',
     fields: [
       { key: 'background', label: 'Background colour' },
       { key: 'background-inverted', label: 'Background colour - inverted' },
       { key: 'shadow', label: 'Shadow background colour (loading / popup background)' },
       { key: 'shadow-inverted', label: 'Shadow background colour - inverted' },
-      { key: 'shadow-opacity', label: 'Shadow opacity' },
       { key: 'loading', label: 'Loading animation background colour' },
       { key: 'loading-inverted', label: 'Loading animation colour - inverted' },
     ],
   },
-  {
-    id: '_tooltip', label: 'Tooltip',
-    fields: [
-      { key: 'tooltip-color', label: 'Tooltip background colour' },
-      { key: 'tooltip-text-color', label: 'Tooltip text colour' },
-    ],
-  },
 ];
 
-const LIFE_STYLING_ACCORDIONS = [
-  {
-    id: "_global",
-    label: "Styling: Global",
-    fields: [
-      { key: "font-color", label: "Font colour", defaultValue: "#1f1f1f" },
-      { key: "font-color-inverted", label: "Font colour inverted", defaultValue: "#ffffff" },
-      { key: "link", label: "Link font colour", defaultValue: "" },
-      { key: "link-inverted", label: "Link font colour - inverted", defaultValue: "" },
-      { key: "link-hover", label: "Link font colour - hover", defaultValue: "" },
-      { key: "link-inverted-hover", label: "Link font colour - inverted hover", defaultValue: "" },
-      { key: "heading-color", label: "Heading colour", defaultValue: "#333333" },
-      { key: "heading-color-inverted", label: "Heading colour - inverted", defaultValue: "#ffffff" },
-    ],
-  },
-  {
-    id: "_blockStyles",
-    label: "Styling: Blocks",
-    fields: [
-      { key: "block-bg-color", label: "Background colour", defaultValue: "" },
-    ],
-  },
-  {
-    id: "_items",
-    label: "Styling: Components",
-    fields: [
-      { key: "component-bg-color", label: "Background colour", defaultValue: "" },
-      { key: "item-color", label: "Item colour", defaultValue: "#edfcfb" },
-      { key: "item-color-inverted", label: "Item colour - inverted", defaultValue: "#23716d" },
-      { key: "item-color-hover", label: "Item colour - hover", defaultValue: "" },
-      { key: "item-color-inverted-hover", label: "Item colour - inverted hover", defaultValue: "" },
-      { key: "item-color-selected", label: "Item colour - selected", defaultValue: "" },
-      { key: "item-color-inverted-selected", label: "Item colour - inverted selected", defaultValue: "" },
-      { key: "visited", label: "Visited colour", defaultValue: "#edfcfb" },
-      { key: "visited-inverted", label: "Visited colour - inverted", defaultValue: "#23716d" },
-    ],
-  },
-  {
-    id: "_buttons",
-    label: "Styling: Buttons",
-    fields: [
-      { key: "btn-color", label: "Button colour", defaultValue: "#2e7fa1" },
-      { key: "btn-color-inverted", label: "Button colour - inverted", defaultValue: "#ffffff" },
-      { key: "btn-color-hover", label: "Button colour - hover", defaultValue: "" },
-      { key: "btn-color-inverted-hover", label: "Button colour - inverted hover", defaultValue: "" },
-      { key: "disabled", label: "Disabled colour", defaultValue: "#dddddd" },
-      { key: "disabled-inverted", label: "Disabled colour - inverted", defaultValue: "#000000" },
-    ],
-  },
-  {
-    id: "_validation",
-    label: "Styling: Validation states",
-    fields: [
-      { key: "validation-success", label: "Validation success colour", defaultValue: "#065f28" },
-      { key: "validation-success-inverted", label: "Validation success colour - inverted", defaultValue: "#ffffff" },
-      { key: "validation-error", label: "Validation error colour", defaultValue: "#ff0000" },
-      { key: "validation-error-inverted", label: "Validation error colour - inverted", defaultValue: "#ffffff" },
-    ],
-  },
-  {
-    id: "_progress",
-    label: "Styling: Progress",
-    fields: [
-      { key: "progress", label: "Progress fill colour", defaultValue: "#2e7fa1" },
-      { key: "progress-inverted", label: "Progress background colour", defaultValue: "#e5e5e5" },
-      { key: "progress-border", label: "Progress border colour", defaultValue: "transparent" },
-    ],
-  },
-  {
-    id: "_page",
-    label: "Page",
-    fields: [
-      { key: "page-header-background-color", label: "Page header background colour", defaultValue: "" },
-      { key: "page-header-title-color", label: "Page header title colour", defaultValue: "" },
-      { key: "page-header-subtitle-color", label: "Page header subtitle colour", defaultValue: "" },
-      { key: "page-header-body-color", label: "Page header body colour", defaultValue: "" },
-      { key: "page-header-instruction-color", label: "Page header instruction colour", defaultValue: "" },
-    ],
-  },
-  {
-    id: "_menu",
-    label: "Styling: Menu",
-    fields: [
-      { key: "menu-header-background-color", label: "Menu header background colour", defaultValue: "" },
-      { key: "menu-header-title-color", label: "Menu header title colour", defaultValue: "" },
-      { key: "menu-header-subtitle-color", label: "Menu header subtitle colour", defaultValue: "#949494" },
-      { key: "menu-header-body-color", label: "Menu header body colour", defaultValue: "" },
-      { key: "menu-header-instruction-color", label: "Menu header instruction colour", defaultValue: "" },
-      { key: "menu-item", label: "Menu item colour", defaultValue: "" },
-      { key: "menu-item-inverted", label: "Menu item colour - inverted", defaultValue: "" },
-      { key: "menu-item-border-color", label: "Menu item border colour", defaultValue: "" },
-      { key: "menu-item-progress", label: "Menu item progress fill colour", defaultValue: "" },
-      { key: "menu-item-progress-inverted", label: "Menu item progress background colour", defaultValue: "" },
-      { key: "menu-item-progress-border", label: "Menu item progress border colour", defaultValue: "" },
-      { key: "menu-item-btn-color", label: "Menu item button background colour", defaultValue: "" },
-      { key: "menu-item-btn-color-inverted", label: "Menu item button background colour - inverted", defaultValue: "" },
-      { key: "menu-item-btn-color-hover", label: "Menu item button background colour - hover", defaultValue: "" },
-      { key: "menu-item-btn-color-inverted-hover", label: "Menu item button background colour - inverted hover", defaultValue: "" },
-    ],
-  },
-  {
-    id: "_nav",
-    label: "Styling: Navigation",
-    fields: [
-      { key: "nav", label: "Navigation background colour", defaultValue: "#ffffff" },
-      { key: "nav-inverted", label: "Navigation background colour - inverted", defaultValue: "#9096a0" },
-      { key: "nav-icon", label: "Navigation button background colour", defaultValue: "" },
-      { key: "nav-icon-inverted", label: "Navigation button background colour - inverted", defaultValue: "" },
-      { key: "nav-icon-hover", label: "Navigation button background colour - hover", defaultValue: "" },
-      { key: "nav-icon-inverted-hover", label: "Navigation button background colour - inverted hover", defaultValue: "" },
-      { key: "nav-progress", label: "Navigation progress fill color", defaultValue: "" },
-      { key: "nav-progress-inverted", label: "Navigation progress background color - inverted", defaultValue: "" },
-      { key: "nav-progress-border", label: "Navigation progress border colour", defaultValue: "" },
-      { key: "nav-progress-hover", label: "Navigation progress fill color - hover", defaultValue: "" },
-      { key: "nav-progress-inverted-hover", label: "Navigation progress background color - inverted hover", defaultValue: "" },
-      { key: "nav-progress-border-hover", label: "Navigation progress border colour - hover", defaultValue: "" },
-    ],
-  },
-  {
-    id: "_notify",
-    label: "Styling: Notify (pop up)",
-    fields: [
-      { key: "notify", label: "Notify background colour", defaultValue: "#ffffff" },
-      { key: "notify-inverted", label: "Notify background colour - inverted", defaultValue: "#333333" },
-      { key: "notify-title-color", label: "Notify title colour", defaultValue: "" },
-      { key: "notify-link", label: "Notify link font colour", defaultValue: "" },
-      { key: "notify-link-hover", label: "Notify link font colour - hover", defaultValue: "" },
-      { key: "notify-btn", label: "Notify button background colour", defaultValue: "" },
-      { key: "notify-btn-inverted", label: "Notify button background colour - inverted", defaultValue: "" },
-      { key: "notify-btn-hover", label: "Notify button background colour - hover", defaultValue: "" },
-      { key: "notify-btn-inverted-hover", label: "Notify button background colour - inverted hover", defaultValue: "" },
-      { key: "notify-icon", label: "Notify icon button background colour", defaultValue: "" },
-      { key: "notify-icon-inverted", label: "Notify icon button background colour - inverted", defaultValue: "" },
-      { key: "notify-icon-hover", label: "Notify icon button background colour - hover", defaultValue: "" },
-      { key: "notify-icon-inverted-hover", label: "Notify icon button background colour - inverted hover", defaultValue: "" },
-    ],
-  },
-  {
-    id: "_drawer",
-    label: "Styling: Drawer",
-    fields: [
-      { key: "drawer", label: "Drawer background colour", defaultValue: "#ffffff" },
-      { key: "drawer-inverted", label: "Drawer background colour - inverted", defaultValue: "#333333" },
-      { key: "drawer-link", label: "Drawer link font colour", defaultValue: "" },
-      { key: "drawer-link-hover", label: "Drawer link font colour - hover", defaultValue: "" },
-      { key: "drawer-icon", label: "Drawer icon button background colour", defaultValue: "" },
-      { key: "drawer-icon-inverted", label: "Drawer icon button background colour - inverted", defaultValue: "" },
-      { key: "drawer-icon-hover", label: "Drawer icon button background colour - hover", defaultValue: "" },
-      { key: "drawer-icon-inverted-hover", label: "Drawer icon button background colour - inverted hover", defaultValue: "" },
-      { key: "drawer-item", label: "Drawer item background colour", defaultValue: "" },
-      { key: "drawer-item-inverted", label: "Drawer item background colour - inverted", defaultValue: "" },
-      { key: "drawer-item-hover", label: "Drawer item background colour - hover", defaultValue: "" },
-      { key: "drawer-item-inverted-hover", label: "Drawer item background colour - inverted hover", defaultValue: "" },
-      { key: "drawer-item-selected", label: "Drawer item background colour - selected", defaultValue: "" },
-      { key: "drawer-item-inverted-selected", label: "Drawer item background colour - inverted selected", defaultValue: "" },
-      { key: "drawer-progress", label: "Drawer progress fill colour", defaultValue: "" },
-      { key: "drawer-progress-inverted", label: "Drawer progress background colour", defaultValue: "" },
-      { key: "drawer-progress-border", label: "Drawer progress border colour", defaultValue: "" },
-      { key: "drawer-progress-hover", label: "Drawer progress colour - hover", defaultValue: "" },
-      { key: "drawer-progress-inverted-hover", label: "Drawer progress colour - inverted hover", defaultValue: "" },
-      { key: "drawer-progress-border-hover", label: "Drawer progress border colour - hover", defaultValue: "" },
-    ],
-  },
-  {
-    id: "_pullQuote",
-    label: "Pull Quote",
-    fields: [
-      { key: "pull-quote", label: "Pull quote background colour", defaultValue: "" },
-      { key: "pull-quote-inverted", label: "Pull quote text colour", defaultValue: "" },
-      { key: "pull-quote-border", label: "Pull quote border colour", defaultValue: "" },
-    ],
-  },
-  {
-    id: "_misc",
-    label: "Styling: Misc",
-    fields: [
-      { key: "background", label: "Background colour", defaultValue: "#000000" },
-      { key: "background-inverted", label: "Background colour - inverted", defaultValue: "#ffffff" },
-      { key: "shadow", label: "Shadow background colour (loading / pop up background)", defaultValue: "#000000" },
-      { key: "shadow-inverted", label: "Shadow background colour - inverted", defaultValue: "#ffffff" },
-      { key: "shadow-opacity", label: "Shadow opacity", defaultValue: "", inputType: "text" },
-      { key: "loading", label: "Loading animation background colour", defaultValue: "" },
-      { key: "loading-inverted", label: "Loading animation colour - inverted", defaultValue: "" },
-    ],
-  },
-] as const;
-
-type LifeStylingSection = typeof LIFE_STYLING_ACCORDIONS[number];
-type LifeStylingSectionId = LifeStylingSection["id"];
-type LifeStylingValues = Record<LifeStylingSectionId, Record<string, string>>;
 type LifeSpriteSheet = { _spriteSheetId: string; src: string };
 type LifeSingleIcon = { iconId: string; src: string };
 type LifeCourseConfig = {
@@ -1121,14 +933,19 @@ type LifeBlocksConfig = {
   _paddingBottom: string;
 };
 
-const LIFE_STYLING_DEFAULTS: LifeStylingValues = LIFE_STYLING_ACCORDIONS.reduce((acc, section) => {
-  const values: Record<string, string> = {};
-  section.fields.forEach((field) => {
-    values[field.key] = field.defaultValue ?? "";
-  });
-  acc[section.id] = values;
-  return acc;
-}, {} as LifeStylingValues);
+type OnScreenLevelKey = 'page' | 'section' | 'contentGroup' | 'content';
+type OnScreenLevelConfig = {
+  _classes: string;
+  _percentInviewVertical: number;
+};
+type OnScreenLevelsConfig = Record<OnScreenLevelKey, OnScreenLevelConfig>;
+
+type OnScreenConfig = {
+  _isEnabled: boolean;
+  _classes: string;
+  _percentInviewVertical: number;
+  _levels: OnScreenLevelsConfig;
+};
 
 const DEFAULT_LIFE_COURSE_CONFIG: LifeCourseConfig = {
   _svgSpriteSheets: [],
@@ -1139,6 +956,35 @@ const DEFAULT_LIFE_BLOCKS_CONFIG: LifeBlocksConfig = {
   _paddingTop: "",
   _paddingBottom: "",
 };
+
+const DEFAULT_ON_SCREEN_CONFIG: OnScreenConfig = {
+  _isEnabled: false,
+  _classes: "",
+  _percentInviewVertical: 50,
+  _levels: {
+    page: { _classes: '', _percentInviewVertical: 50 },
+    section: { _classes: '', _percentInviewVertical: 50 },
+    contentGroup: { _classes: '', _percentInviewVertical: 50 },
+    content: { _classes: '', _percentInviewVertical: 50 },
+  },
+};
+
+const ON_SCREEN_ROW_DEFS: Array<{ key: OnScreenLevelKey; label: string }> = [
+  { key: 'page', label: 'Page' },
+  { key: 'section', label: 'Section' },
+  { key: 'contentGroup', label: 'Content Group (Block)' },
+  { key: 'content', label: 'Content (Component)' },
+];
+
+const ON_SCREEN_CLASS_OPTIONS = [
+  '',
+  'fade-in',
+  'fade-in-left',
+  'fade-in-right',
+  'fade-in-top',
+  'fade-in-bottom',
+  'fade-out',
+];
 
 function LifeListField({
   title,
@@ -1438,14 +1284,35 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   const [checkHideFeedback, setCheckHideFeedback] = useState(false);
   const [checkHidePartial, setCheckHidePartial] = useState(false);
   const [activeAccordion, setActiveAccordion] = useState<string | null>(null);
-  const [activeLifeStylingAccordion, setActiveLifeStylingAccordion] = useState<LifeStylingSectionId | null>("_global");
-  const [lifeStyling, setLifeStyling] = useState<LifeStylingValues>(LIFE_STYLING_DEFAULTS);
   const [lifeCourseConfig, setLifeCourseConfig] = useState<LifeCourseConfig>(DEFAULT_LIFE_COURSE_CONFIG);
   const [lifeBlocksConfig, setLifeBlocksConfig] = useState<LifeBlocksConfig>(DEFAULT_LIFE_BLOCKS_CONFIG);
+  const [onScreenConfig, setOnScreenConfig] = useState<OnScreenConfig>(DEFAULT_ON_SCREEN_CONFIG);
   const [activeVanillaAccordion, setActiveVanillaAccordion] = useState<string | null>('_global');
   const [vanillaColors, setVanillaColors] = useState<Record<string, string>>({});
   const [activeCustomAccordion, setActiveCustomAccordion] = useState<string | null>('_global');
   const [customSettings, setCustomSettings] = useState<Record<string, string>>(CUSTOM_FIELD_DEFAULTS);
+
+  const updateOnScreenRow = useCallback((rowKey: OnScreenLevelKey, patch: Partial<OnScreenLevelConfig>) => {
+    setOnScreenConfig((prev) => {
+      const nextRow = {
+        ...prev._levels[rowKey],
+        ...patch,
+      };
+      const nextLevels = {
+        ...prev._levels,
+        [rowKey]: nextRow,
+      };
+      const next = {
+        ...prev,
+        _levels: nextLevels,
+      };
+      if (rowKey === 'content') {
+        next._classes = nextRow._classes;
+        next._percentInviewVertical = nextRow._percentInviewVertical;
+      }
+      return next;
+    });
+  }, []);
 
   const setCustomSettingWithDependencies = useCallback((key: string, value: string) => {
     setCustomSettings((prev) => {
@@ -1477,13 +1344,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         return acc;
       }, {});
 
-    const normalizeLifeStyling = (styling: LifeStylingValues) => (Object.keys(styling) as LifeStylingSectionId[])
-      .sort()
-      .reduce<Record<string, Record<string, string>>>((acc, sectionKey) => {
-        acc[sectionKey] = normalizeRecord(styling[sectionKey]);
-        return acc;
-      }, {});
-
     return JSON.stringify({
       selected,
       selectedPresetId,
@@ -1491,9 +1351,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       checkUnanswered,
       checkHideFeedback,
       checkHidePartial,
-      lifeStyling: normalizeLifeStyling(lifeStyling),
       lifeCourseConfig,
       lifeBlocksConfig,
+      onScreenConfig,
       vanillaColors: normalizeRecord(vanillaColors),
       customSettings: normalizeRecord(customSettings),
     });
@@ -1505,7 +1365,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     customSettings,
     lifeBlocksConfig,
     lifeCourseConfig,
-    lifeStyling,
+    onScreenConfig,
     selected,
     selectedPresetId,
     vanillaColors,
@@ -1534,16 +1394,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
   const buildMergedLifeThemeVariables = useCallback((baseVars: Record<string, unknown>) => {
     const merged: Record<string, unknown> = { ...(baseVars ?? {}) };
-    (Object.keys(lifeStyling) as LifeStylingSectionId[]).forEach((sectionKey) => {
-      const existing = merged[sectionKey];
-      const existingSection = (existing && typeof existing === 'object' && !Array.isArray(existing))
-        ? { ...(existing as Record<string, unknown>) }
-        : {};
-      Object.entries(lifeStyling[sectionKey]).forEach(([fieldKey, fieldValue]) => {
-        existingSection[fieldKey] = fieldValue;
-      });
-      merged[sectionKey] = existingSection;
-    });
     merged._course = {
       ...(merged._course && typeof merged._course === 'object' && !Array.isArray(merged._course)
         ? merged._course as Record<string, unknown>
@@ -1564,8 +1414,22 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       _paddingTop: lifeBlocksConfig._paddingTop,
       _paddingBottom: lifeBlocksConfig._paddingBottom,
     };
+    merged._onScreen = {
+      ...(merged._onScreen && typeof merged._onScreen === 'object' && !Array.isArray(merged._onScreen)
+        ? merged._onScreen as Record<string, unknown>
+        : {}),
+      _isEnabled: onScreenConfig._isEnabled,
+      _classes: onScreenConfig._classes,
+      _percentInviewVertical: onScreenConfig._percentInviewVertical,
+      _levels: {
+        page: { ...onScreenConfig._levels.page },
+        section: { ...onScreenConfig._levels.section },
+        contentGroup: { ...onScreenConfig._levels.contentGroup },
+        content: { ...onScreenConfig._levels.content },
+      },
+    };
     return merged;
-  }, [lifeBlocksConfig, lifeCourseConfig, lifeStyling]);
+  }, [lifeBlocksConfig, lifeCourseConfig, onScreenConfig]);
 
   const buildMergedVanillaThemeVariables = useCallback((baseVars: Record<string, unknown>) => {
     const merged: Record<string, unknown> = { ...(baseVars ?? {}) };
@@ -1628,8 +1492,31 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       _hidePartiallyFeedback: checkHidePartial,
     };
 
+    merged._blocks = {
+      ...(merged._blocks && typeof merged._blocks === 'object' && !Array.isArray(merged._blocks)
+        ? merged._blocks as Record<string, unknown>
+        : {}),
+      _paddingTop: lifeBlocksConfig._paddingTop,
+      _paddingBottom: lifeBlocksConfig._paddingBottom,
+    };
+
+    merged._onScreen = {
+      ...(merged._onScreen && typeof merged._onScreen === 'object' && !Array.isArray(merged._onScreen)
+        ? merged._onScreen as Record<string, unknown>
+        : {}),
+      _isEnabled: onScreenConfig._isEnabled,
+      _classes: onScreenConfig._classes,
+      _percentInviewVertical: onScreenConfig._percentInviewVertical,
+      _levels: {
+        page: { ...onScreenConfig._levels.page },
+        section: { ...onScreenConfig._levels.section },
+        contentGroup: { ...onScreenConfig._levels.contentGroup },
+        content: { ...onScreenConfig._levels.content },
+      },
+    };
+
     return merged;
-  }, [checkHideFeedback, checkHidePartial, checkNotFinal, checkUnanswered, customSettings, lifeCourseConfig]);
+  }, [checkHideFeedback, checkHidePartial, checkNotFinal, checkUnanswered, customSettings, lifeBlocksConfig, lifeCourseConfig, onScreenConfig]);
 
   useEffect(() => {
     setSelected(mapThemeNameToId(initialThemeName));
@@ -1712,24 +1599,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     });
     setVanillaColors(vanillaPatch);
 
-    // LIFE styling sections are nested per section id
-    const lifePatch: LifeStylingValues = (Object.keys(LIFE_STYLING_DEFAULTS) as LifeStylingSectionId[]).reduce((acc, sectionKey) => {
-      acc[sectionKey] = { ...LIFE_STYLING_DEFAULTS[sectionKey] };
-      return acc;
-    }, {} as LifeStylingValues);
-
-    (Object.keys(LIFE_STYLING_DEFAULTS) as LifeStylingSectionId[]).forEach((sectionKey) => {
-      const section = v[sectionKey];
-      if (!section || typeof section !== 'object' || Array.isArray(section)) return;
-      const sectionRecord = section as Record<string, unknown>;
-      Object.keys(LIFE_STYLING_DEFAULTS[sectionKey]).forEach((fieldKey) => {
-        if (typeof sectionRecord[fieldKey] === 'string') {
-          lifePatch[sectionKey][fieldKey] = sectionRecord[fieldKey] as string;
-        }
-      });
-    });
-    setLifeStyling(lifePatch);
-
     const course = v._course as Record<string, unknown> | undefined;
     const nextLifeCourseConfig: LifeCourseConfig = {
       _svgSpriteSheets: [],
@@ -1761,6 +1630,39 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     setLifeBlocksConfig({
       _paddingTop: blocks && typeof blocks._paddingTop === 'string' ? blocks._paddingTop : '',
       _paddingBottom: blocks && typeof blocks._paddingBottom === 'string' ? blocks._paddingBottom : '',
+    });
+
+    const onScreen = v._onScreen as Record<string, unknown> | undefined;
+    const legacyClasses = onScreen && typeof onScreen._classes === 'string' ? onScreen._classes : '';
+    const legacyPercent =
+      onScreen && typeof onScreen._percentInviewVertical === 'number'
+        ? onScreen._percentInviewVertical
+        : DEFAULT_ON_SCREEN_CONFIG._percentInviewVertical;
+    const levelsSource = onScreen && typeof onScreen._levels === 'object' && !Array.isArray(onScreen._levels)
+      ? onScreen._levels as Record<string, unknown>
+      : undefined;
+    const parseOnScreenLevel = (levelKey: OnScreenLevelKey): OnScreenLevelConfig => {
+      const source = levelsSource && typeof levelsSource[levelKey] === 'object' && !Array.isArray(levelsSource[levelKey])
+        ? levelsSource[levelKey] as Record<string, unknown>
+        : undefined;
+      return {
+        _classes: source && typeof source._classes === 'string' ? source._classes : legacyClasses,
+        _percentInviewVertical:
+          source && typeof source._percentInviewVertical === 'number'
+            ? source._percentInviewVertical
+            : legacyPercent,
+      };
+    };
+    setOnScreenConfig({
+      _isEnabled: !!(onScreen && typeof onScreen._isEnabled === 'boolean' && onScreen._isEnabled),
+      _classes: legacyClasses,
+      _percentInviewVertical: legacyPercent,
+      _levels: {
+        page: parseOnScreenLevel('page'),
+        section: parseOnScreenLevel('section'),
+        contentGroup: parseOnScreenLevel('contentGroup'),
+        content: parseOnScreenLevel('content'),
+      },
     });
 
     // Component configuration checkboxes: custom uses _componentConfig, LIFE uses _components.
@@ -1824,6 +1726,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   // Live Preview Component
   const LivePreview = () => {
     const [darkMode, setDarkMode] = useState(false);
+    const [isExpanded, setIsExpanded] = useState(false);
     const primaryColor = getCustomSetting('_global', '_primaryBrandColor') || '#2e7fa1';
     const secondaryColor = getCustomSetting('_global', '_secondaryBrandColor') || '#25837e';
     const paragraphFont = getCustomSetting('_global', 'paragraph-font-family') || 'Lato';
@@ -1851,19 +1754,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     const progressBackground = getCustomSetting('_progress', 'progress-inverted') || '#e5e5e5';
     const progressBorder = getCustomSetting('_progress', 'progress-border') || 'transparent';
 
-    const menuHeaderBg = getCustomSetting('_menu', 'menu-header-background-color') || '#ffffff';
-    const menuItemColor = getCustomSetting('_menu', 'menu-item') || headingColorTheme;
-    const menuItemProgress = getCustomSetting('_menu', 'menu-item-progress') || primaryColor;
-
     const navBg = getCustomSetting('_nav', 'nav') || pageHeaderBg;
-    const navProgress = getCustomSetting('_nav', 'nav-progress') || progressFill;
-
-    const notifyBg = getCustomSetting('_notify', 'notify') || '#ffffff';
-    const drawerBg = getCustomSetting('_notify', 'drawer') || '#ffffff';
-    const notifyTitleColor = getCustomSetting('_notify', 'notify-title-color') || headingColorTheme;
-
-    const validationSuccess = getCustomSetting('_validation', 'validation-success') || '#065f28';
-    const validationError = getCustomSetting('_validation', 'validation-error') || '#ff0000';
 
     const spacingScale: Record<string, number> = {
       remove: 0,
@@ -1873,97 +1764,213 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     };
 
     const previewBg = darkMode ? '#1a1a1a' : pageBgColor;
+    const canvasBg = darkMode ? '#111827' : '#f0f4f8';
     const textColor = darkMode ? '#e8e8e8' : fontColor;
     const headingColor = darkMode ? '#ffffff' : headingColorTheme;
+    const navIconColor = (pageHeaderTitleColor && pageHeaderTitleColor !== 'transparent') ? pageHeaderTitleColor : '#ffffff';
+    const navTextColor = (pageHeaderBodyColor && pageHeaderBodyColor !== 'transparent') ? pageHeaderBodyColor : navIconColor;
     const titleSize = titleSizeRaw;
     const articleTop = spacingScale[articleTopPadding] ?? spacingScale.standard;
     const articleBottom = spacingScale[articleBottomPadding] ?? spacingScale.standard;
     const blockTop = spacingScale[blockTopPadding] ?? spacingScale.standard;
     const blockBottom = spacingScale[blockBottomPadding] ?? spacingScale.standard;
 
-    return (
-      <div className="border border-[#e5e7eb] rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)' }}>
-        <div className="flex items-center justify-between px-3 py-2 bg-white border-b border-[#e5e7eb]">
-          <div className="flex items-center gap-2">
-            <div style={{ width: '13px', height: '13px', backgroundColor: primaryColor, borderRadius: '2px' }} />
-            <span className="text-xs font-bold text-[#111827]">Live Preview</span>
-          </div>
-          <div className="flex gap-1">
-            <button onClick={() => setDarkMode(!darkMode)} className="w-7 h-7 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded text-[#6b7280] hover:bg-[#f9fafb]" title="Toggle dark mode">
-              {darkMode ? 'L' : 'D'}
-            </button>
-          </div>
-        </div>
-        <div style={{ backgroundColor: previewBg, fontSize: '13px' }}>
-          <div style={{ height: '4px', borderTop: `1px solid ${progressBorder}`, borderBottom: `1px solid ${progressBorder}`, background: `linear-gradient(to right, ${progressFill} 60%, ${progressBackground} 60%)` }} />
-          <div style={{ background: navBg, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ color: pageHeaderSubtitleColor, fontSize: '11px' }}>{'<'}</span>
-            <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '11px', color: pageHeaderBodyColor, flex: 1 }}>
-              New Course Title <span style={{ opacity: 0.6 }}>/ Page Title</span>
-            </span>
-            <span style={{ color: pageHeaderSubtitleColor, fontSize: '11px' }}>{'>'}</span>
-          </div>
-          <div style={{ padding: '20px 18px', display: 'grid', gridTemplateColumns: '1fr 220px', gap: '12px' }}>
-            <div style={{ background: articleBgColor, border: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}`, borderRadius: '8px', paddingTop: `${articleTop}px`, paddingBottom: `${articleBottom}px`, paddingLeft: '14px', paddingRight: '14px' }}>
-              <div style={{ background: pageHeaderBg, borderRadius: '6px', padding: '10px 12px', marginBottom: '10px' }}>
-                <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: titleSize || '3rem', fontWeight: 700, color: pageHeaderTitleColor, lineHeight: 1.2 }}>
-                  New Menu/Page Title
+    useEffect(() => {
+      if (!isExpanded) return;
+
+      const previousOverflow = document.body.style.overflow;
+      const onKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') setIsExpanded(false);
+      };
+
+      document.body.style.overflow = 'hidden';
+      window.addEventListener('keydown', onKeyDown);
+
+      return () => {
+        document.body.style.overflow = previousOverflow;
+        window.removeEventListener('keydown', onKeyDown);
+      };
+    }, [isExpanded]);
+
+    const previewContent = (
+      <div className="min-h-0 flex-1 overflow-y-auto p-0" style={{ fontSize: '13px' }}>
+        <div style={{ maxWidth: '760px', margin: '0 auto' }}>
+          <div className="overflow-hidden rounded-xl border border-[#e5e7eb]" style={{ backgroundColor: previewBg }}>
+            <div style={{ height: '4px', borderTop: `1px solid ${progressBorder}`, borderBottom: `1px solid ${progressBorder}`, background: `linear-gradient(to right, ${progressFill} 60%, ${progressBackground} 60%)` }} />
+            <div style={{ background: navBg, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', borderBottom: darkMode ? '1px solid #374151' : '1px solid #f3f4f6' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={navIconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 12H5M12 19l-7-7 7-7" />
+              </svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={navIconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+              <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.76rem', color: navTextColor, flex: 1 }}>
+                New Course Title <span style={{ opacity: 0.7 }}>/ New Page Title</span>
+              </span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={navIconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+            </div>
+            <div style={{ backgroundColor: previewBg, padding: '18px' }}>
+              <div style={{ maxWidth: '560px', margin: '0 auto' }}>
+                <div style={{ padding: '6px 0 14px' }}>
+                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: titleSize || '3rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '4px' }}>
+                    New Page Title
+                  </div>
+                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: textColor, fontSize: '0.88rem', lineHeight: 1.45 }}>
+                    Page subtitle
+                  </div>
                 </div>
-                <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: pageHeaderSubtitleColor, fontSize: '0.8rem', marginTop: '4px' }}>Page subtitle</div>
-                <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: pageHeaderBodyColor, fontSize: '0.78rem', marginTop: '3px' }}>Page intro body text</div>
-                <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: pageHeaderInstructionColor, fontSize: '0.76rem', fontStyle: 'italic', marginTop: '4px' }}>Page instruction text</div>
-              </div>
-              <div style={{ background: blockBgColor, border: `1px solid ${darkMode ? '#4b4b4b' : '#e5e7eb'}`, borderRadius: '6px', paddingTop: `${blockTop}px`, paddingBottom: `${blockBottom}px`, paddingLeft: '10px', paddingRight: '10px' }}>
-                <div style={{ background: componentBgColor, border: `1px solid ${darkMode ? '#5a5a5a' : '#e5e7eb'}`, borderRadius: '6px', padding: '10px' }}>
-                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.9rem', color: headingColor, lineHeight: 1.2, marginBottom: '6px' }}>
+
+                <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.84rem', color: linkColor, textDecoration: 'underline', cursor: 'pointer', marginBottom: '12px' }}>
+                  This is a sample link
+                </div>
+
+                <div style={{ border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`, borderRadius: '10px', background: articleBgColor, padding: '12px' }}>
+                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.9rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '8px' }}>
                     New Component Title
                   </div>
-                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.85rem', color: textColor, lineHeight: 1.5 }}>Body text</div>
-                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.85rem', color: linkColor, textDecoration: 'underline', cursor: 'pointer' }}>
-                    This is a sample link
-                  </div>
-                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: instructionColor, fontStyle: 'italic' }}>
+                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: instructionColor, fontStyle: 'italic', marginBottom: '10px' }}>
                     Choose one option then select Submit.
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
-                    {[{ label: 'Correct', selected: true }, { label: 'Incorrect', selected: false }].map(opt => (
-                      <div key={opt.label} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ width: '14px', height: '14px', borderRadius: '50%', flexShrink: 0, border: `2px solid ${opt.selected ? secondaryColor : (darkMode ? '#555' : '#ccc')}`, background: opt.selected ? secondaryColor : 'transparent' }} />
-                        <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: textColor }}>{opt.label}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {[{ label: 'Correct', selected: true }, { label: 'Incorrect', selected: false }].map((opt) => (
+                      <div
+                        key={opt.label}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                          borderRadius: '999px',
+                          padding: '8px 12px',
+                          background: opt.selected ? `${secondaryColor}1F` : articleBgColor,
+                        }}
+                      >
+                        <div style={{ width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0, border: `2px solid ${opt.selected ? secondaryColor : (darkMode ? '#6b7280' : '#cbd5e1')}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: componentBgColor }}>
+                          {opt.selected && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: secondaryColor }} />}
+                        </div>
+                        <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.8rem', fontWeight: 600, color: textColor }}>{opt.label}</span>
                       </div>
                     ))}
                   </div>
-                  <div style={{ alignSelf: 'flex-start', display: 'inline-block', marginTop: '9px', background: primaryColor, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
-                    Submit
+                  <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-start' }}>
+                    <div style={{ display: 'inline-block', background: primaryColor, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
+                      Submit
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '14px' }}>
+                  <div style={{ display: 'inline-block', border: `1px solid ${primaryColor}`, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 600, color: primaryColor }}>
+                    Previous
+                  </div>
+                  <div style={{ display: 'inline-block', background: primaryColor, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
+                    Next
                   </div>
                 </div>
               </div>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ background: menuHeaderBg, border: `1px solid ${darkMode ? '#474747' : '#e5e7eb'}`, borderRadius: '8px', padding: '8px' }}>
-                <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.78rem', color: menuItemColor, marginBottom: '6px' }}>Menu Preview</div>
-                {[1, 2, 3].map((n) => (
-                  <div key={n} style={{ marginBottom: n === 3 ? 0 : '6px' }}>
-                    <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.74rem', color: menuItemColor, marginBottom: '3px' }}>Menu item {n}</div>
-                    <div style={{ height: '3px', borderRadius: '2px', background: `linear-gradient(to right, ${menuItemProgress} ${35 + (n * 18)}%, ${progressBackground} ${35 + (n * 18)}%)` }} />
-                  </div>
-                ))}
-              </div>
-              <div style={{ background: drawerBg, border: `1px solid ${darkMode ? '#474747' : '#e5e7eb'}`, borderRadius: '8px', padding: '8px' }}>
-                <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.78rem', color: notifyTitleColor, marginBottom: '5px' }}>Drawer / Notify</div>
-                <div style={{ background: notifyBg, border: `1px solid ${darkMode ? '#575757' : '#e5e7eb'}`, borderRadius: '6px', padding: '6px' }}>
-                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.72rem', color: textColor }}>This is a notification.</div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <div style={{ flex: 1, background: validationSuccess, color: '#fff', borderRadius: '6px', padding: '6px 8px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.72rem' }}>Validation success</div>
-                <div style={{ flex: 1, background: validationError, color: '#fff', borderRadius: '6px', padding: '6px 8px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.72rem' }}>Validation error</div>
-              </div>
-              <div style={{ height: '4px', borderRadius: '2px', background: `linear-gradient(to right, ${navProgress} 70%, ${progressBackground} 70%)`, border: `1px solid ${progressBorder}` }} />
             </div>
           </div>
         </div>
       </div>
+    );
+
+    return (
+      <>
+        <div className="flex flex-col h-full rounded-xl overflow-hidden border border-[#e5e7eb]" style={{ backgroundColor: canvasBg }}>
+          <div className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-[#e5e7eb] shrink-0">
+            <div className="flex items-center gap-2">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill={primaryColor} stroke="none">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
+              <span className="text-xs font-semibold text-[#111827]">Live Preview</span>
+            </div>
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                className="w-8 h-8 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
+                title="Toggle dark mode"
+                aria-label="Toggle dark mode"
+                type="button"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                </svg>
+              </button>
+              <button
+                onClick={() => setIsExpanded(true)}
+                className="w-8 h-8 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
+                title="Expand preview"
+                aria-label="Expand preview"
+                type="button"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 3 21 3 21 9" />
+                  <polyline points="9 21 3 21 3 15" />
+                  <line x1="21" y1="3" x2="14" y2="10" />
+                  <line x1="3" y1="21" x2="10" y2="14" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          {previewContent}
+        </div>
+
+        {isExpanded && (
+          <div className="fixed inset-x-0 top-14 bottom-0 z-50 overflow-y-auto bg-black/50 p-4" onClick={() => setIsExpanded(false)}>
+            <div
+              className="mx-auto flex min-h-full w-full max-w-6xl min-h-0 flex-col overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-2xl"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Live Preview"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-[#e5e7eb] shrink-0">
+                <div className="flex items-center gap-2">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill={primaryColor} stroke="none">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                  </svg>
+                  <span className="text-sm font-semibold text-[#111827]">Live Preview</span>
+                </div>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => setDarkMode(!darkMode)}
+                    className="w-9 h-9 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
+                    title="Toggle dark mode"
+                    aria-label="Toggle dark mode"
+                    type="button"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => setIsExpanded(false)}
+                    className="w-9 h-9 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
+                    title="Collapse preview"
+                    aria-label="Collapse preview"
+                    type="button"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="9 3 3 3 3 9" />
+                      <polyline points="15 21 21 21 21 15" />
+                      <line x1="3" y1="3" x2="10" y2="10" />
+                      <line x1="14" y1="14" x2="21" y2="21" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div className="min-h-0 flex-1" style={{ backgroundColor: canvasBg }}>
+                {previewContent}
+              </div>
+            </div>
+          </div>
+        )}
+      </>
     );
   };
 
@@ -2018,16 +2025,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                       <select value={customSettings.pageTitleSize} onChange={e => setCustomSettings({...customSettings, pageTitleSize: e.target.value})} className="text-xs w-full border-2 border-[var(--life-primary-500)] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:outline-none">
                         {PAGE_TITLE_OPTIONS.map(h => <option key={h} value={h}>{PAGE_TITLE_LABELS[h]}</option>)}
                       </select>
-                      {customSettings.pageTitleSize !== 'H6' && (
-                        <div className="mt-2 border-l-[3px] border-l-[var(--life-primary-500)] bg-[var(--life-primary-020)] rounded-r px-3 py-2">
-                          <p className="text-xs font-bold text-[#111827] mb-1">Calculated values for Desktop:</p>
-                          {CALC_VALUES.map(row => (
-                            <div key={row.label} className="text-xs text-[var(--life-primary-500)] leading-relaxed">
-                              {row.label}: {row.rem} ({row.px})
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      {customSettings.pageTitleSize !== 'H6' && PAGE_TITLE_SIZE_REM[customSettings.pageTitleSize] != null && <DesktopCalculatedValues baseRem={PAGE_TITLE_SIZE_REM[customSettings.pageTitleSize]} />}
                     </div>
                   </div>
                 )}
@@ -2233,8 +2231,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           </ThemeAccordion>
         )}
 
-        {/* Configuration: Blocks - LIFE only */}
-        {selected === "life" && (
+        {/* Configuration: Blocks - LIFE and Custom */}
+        {selected !== "vanilla" && (
           <ThemeAccordion
             label="Configuration: Blocks"
             isOpen={activeAccordion === "Configuration: Blocks"}
@@ -2389,103 +2387,81 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           onToggle={() => setActiveAccordion(activeAccordion === "On Screen Classes" ? null : "On Screen Classes")}
         >
           <div className="space-y-5">
+            <p className="text-xs text-[#6b7280] leading-relaxed">
+              These settings allow you to attach classes when content is within the browser viewport.
+              Supported classes include fade-in, fade-in-left, fade-in-right, fade-in-top, and fade-in-bottom.
+            </p>
+
             <div className="flex items-center gap-3">
               <button
-                onClick={() => {}}
+                type="button"
+                role="switch"
+                aria-checked={onScreenConfig._isEnabled}
+                aria-label="Enable On Screen Classes"
+                onClick={() => setOnScreenConfig((prev) => ({ ...prev, _isEnabled: !prev._isEnabled }))}
                 className="relative w-10 h-5.5 rounded-full border-none cursor-pointer flex-shrink-0 transition-colors"
-                style={{ backgroundColor: "#d1d5db" }}
+                style={{ backgroundColor: onScreenConfig._isEnabled ? "var(--life-primary-500)" : "#d1d5db" }}
               >
                 <span
                   className="absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-all"
-                  style={{ boxShadow: "0 1px 3px rgba(0, 0, 0, 0.25)" }}
+                  style={{
+                    boxShadow: "0 1px 3px rgba(0, 0, 0, 0.25)",
+                    transform: onScreenConfig._isEnabled ? "translateX(18px)" : "translateX(0)",
+                  }}
                 />
               </button>
               <span className="text-xs text-[#111827] font-semibold">Enable On Screen Classes</span>
             </div>
+
+            {onScreenConfig._isEnabled && (
+              <div className="space-y-4 pt-1">
+                {ON_SCREEN_ROW_DEFS.map((row) => {
+                  const rowConfig = onScreenConfig._levels[row.key];
+                  return (
+                    <div key={row.key} className="bg-[#f9fafb] border border-[#e5e7eb] rounded-lg p-4 space-y-3">
+                      <span className="text-xs font-bold text-[#111827]">{row.label}</span>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <p className="text-xs font-semibold text-[#6b7280] mb-2">Classes</p>
+                          <select
+                            value={rowConfig._classes}
+                            onChange={(e) => updateOnScreenRow(row.key, { _classes: e.target.value })}
+                            className="text-xs w-full border border-[#d1d5db] rounded-md px-2.5 py-1.5 text-[#111827] bg-white focus:border-[var(--life-primary-500)] outline-none"
+                          >
+                            <option value="">Select a class</option>
+                            {ON_SCREEN_CLASS_OPTIONS.filter((option) => option !== '').map((option) => (
+                              <option key={option} value={option}>{option}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <p className="text-xs font-semibold text-[#6b7280] mb-2">Percent in view</p>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={rowConfig._percentInviewVertical}
+                            onChange={(e) => {
+                              const parsed = Number(e.target.value);
+                              const safeValue = Number.isFinite(parsed)
+                                ? Math.max(0, Math.min(100, parsed))
+                                : DEFAULT_ON_SCREEN_CONFIG._percentInviewVertical;
+                              updateOnScreenRow(row.key, { _percentInviewVertical: safeValue });
+                            }}
+                            className="text-xs w-full border border-[#d1d5db] rounded-md px-2.5 py-1.5 text-[#111827] bg-white focus:border-[var(--life-primary-500)] outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </ThemeAccordion>
       </div>
-
-      {/* LIFE Theme Styling - only shown when LIFE is selected */}
-      {selected === "life" && (
-        <div className="border border-[#e5e7eb] rounded-xl p-6 bg-white mt-2">
-          <h3 className="text-sm font-bold text-[#111827] mb-4">LIFE Theme Styling</h3>
-          <div className="space-y-2">
-            {LIFE_STYLING_ACCORDIONS.map((acc) => {
-              const isOpen = activeLifeStylingAccordion === acc.id;
-              return (
-                <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => setActiveLifeStylingAccordion(isOpen ? null : acc.id)}
-                    className={`w-full flex items-center justify-between px-4 py-3 transition-colors border-b border-[#e5e7eb] ${isOpen ? 'bg-[#f9fafb]' : 'bg-white hover:bg-[#f9fafb]'}`}
-                  >
-                    <span className="text-xs font-bold text-[#111827]">{acc.label}</span>
-                    <svg
-                      className={`w-4 h-4 text-[#6b7280] transition-transform ${isOpen ? 'rotate-180' : ''}`}
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <polyline points="6 9 12 15 18 9" />
-                    </svg>
-                  </button>
-                  {isOpen && (
-                    <div className="px-4 py-4 bg-white border-t border-[#e5e7eb]">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {acc.fields.map((field) => {
-                          const rawValue = lifeStyling[acc.id][field.key] ?? "";
-                          const isTextField = "inputType" in field && field.inputType === "text";
-                          if (isTextField) {
-                            return (
-                              <div key={field.key}>
-                                <p className="text-xs font-bold text-[#111827] mb-2">{field.label}</p>
-                                <input
-                                  type="text"
-                                  value={rawValue}
-                                  onChange={(e) => {
-                                    const value = e.target.value;
-                                    setLifeStyling((prev) => ({
-                                      ...prev,
-                                      [acc.id]: {
-                                        ...prev[acc.id],
-                                        [field.key]: value,
-                                      },
-                                    }));
-                                  }}
-                                  className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1 text-[#111827] focus:border-[var(--life-primary-500)] outline-none"
-                                  placeholder="e.g. 50%"
-                                />
-                              </div>
-                            );
-                          }
-
-                          return (
-                            <ColorPickerField
-                              key={field.key}
-                              label={field.label}
-                              value={/^#[0-9A-Fa-f]{6}$/.test(rawValue) ? rawValue : "#ffffff"}
-                              onChange={(value) => {
-                                setLifeStyling((prev) => ({
-                                  ...prev,
-                                  [acc.id]: {
-                                    ...prev[acc.id],
-                                    [field.key]: value,
-                                  },
-                                }));
-                              }}
-                            />
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Vanilla Theme Settings - only shown when Vanilla is selected */}
       {selected === "vanilla" && (
@@ -2609,7 +2585,10 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
                               if (field.inputType === 'select') {
                                 return (
-                                  <div key={field.key}>
+                                  <div
+                                    key={field.key}
+                                    className={acc.id === '_global' && field.key === 'page-heading-font-size' ? 'col-span-2' : ''}
+                                  >
                                     <p className="text-xs font-bold text-[#111827] mb-2">{field.label}</p>
                                     <select
                                       value={value}
@@ -2620,6 +2599,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                                         <option key={option.value} value={option.value}>{option.label}</option>
                                       ))}
                                     </select>
+                                    {acc.id === '_global' && field.key === 'page-heading-font-size' && parseFloat(value) > 0 && <DesktopCalculatedValues baseRem={parseFloat(value)} />}
                                   </div>
                                 );
                               }
