@@ -1178,7 +1178,7 @@ export function TrackingAnalyticsPage({
                   { value: "auto", label: "auto" },
                   { value: "suspend", label: "suspend" },
                   { value: "normal", label: "normal" },
-                  { value: "logout", label: "logout" },
+                  { value: "", label: "'' (empty string)" },
                 ]}
               />
               <SelectField
@@ -1189,7 +1189,7 @@ export function TrackingAnalyticsPage({
                   { value: "auto", label: "auto" },
                   { value: "suspend", label: "suspend" },
                   { value: "normal", label: "normal" },
-                  { value: "logout", label: "logout" },
+                  { value: "", label: "'' (empty string)" },
                 ]}
               />
               <CheckboxRow checked={scorm.completedWhenFailed} onChange={(v) => setScorm((prev) => ({ ...prev, completedWhenFailed: v }))} label="Completed when failed" />
