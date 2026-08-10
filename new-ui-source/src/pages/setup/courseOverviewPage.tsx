@@ -231,7 +231,7 @@ export function CourseOverviewPage({
   }
 
   async function handleSave() {
-    if (!courseId) return;
+    if (!courseId) return false;
     if (!formTitle.trim()) {
       setSaveError("Title is required.");
       return false;
