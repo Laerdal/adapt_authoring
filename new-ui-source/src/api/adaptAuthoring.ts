@@ -1133,9 +1133,9 @@ export async function removeCourseAssetMappings(courseId: string, fieldName: str
 }
 
 // ── Tracking & Analytics Settings ────────────────────────────────────────────
-// These six are pre-existing Adapt extensions whose settings live on the config
-// document root (e.g. config._spoor). We reuse the existing extension
-// enable/disable endpoints and update the same config record by _id.
+// These six are pre-existing Adapt extensions whose settings are stored under config._extensions
+// (e.g. config._extensions._spoor). We reuse the existing extension enable/disable endpoints
+// and patch the same config record by _id.
 
 const TRACKING_ANALYTICS_EXTENSION_NAME_BY_KEY: Record<string, string> = {
   _spoor: "adapt-contrib-spoor",
