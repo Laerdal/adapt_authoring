@@ -286,14 +286,10 @@ type TrackingAnalyticsPageSnapshot = {
   google: {
     isEnabled: boolean;
     trackingId: string;
-    anonymizeIp: boolean;
-    debugMode: boolean;
   };
   hotjar: {
     isEnabled: boolean;
     siteId: string;
-    version: string;
-    debugMode: boolean;
   };
 };
 
@@ -395,15 +391,11 @@ const DEFAULT_UES_STATE: TrackingAnalyticsPageSnapshot["ues"] = {
 const DEFAULT_GOOGLE_STATE: TrackingAnalyticsPageSnapshot["google"] = {
   isEnabled: false,
   trackingId: "",
-  anonymizeIp: true,
-  debugMode: false,
 };
 
 const DEFAULT_HOTJAR_STATE: TrackingAnalyticsPageSnapshot["hotjar"] = {
   isEnabled: false,
   siteId: "",
-  version: "6",
-  debugMode: false,
 };
 
 const DEFAULT_SNAPSHOT: TrackingAnalyticsPageSnapshot = {
@@ -578,14 +570,10 @@ function buildSnapshotFromSettings(settings: TrackingAnalyticsSettings): Trackin
     google: {
       isEnabled: asBool(google._isEnabled, DEFAULT_GOOGLE_STATE.isEnabled),
       trackingId: asString(google._trackingId, DEFAULT_GOOGLE_STATE.trackingId),
-      anonymizeIp: asBool(google._anonymizeIp, DEFAULT_GOOGLE_STATE.anonymizeIp),
-      debugMode: asBool(google._debugMode, DEFAULT_GOOGLE_STATE.debugMode),
     },
     hotjar: {
       isEnabled: asBool(hotjar._isEnabled, DEFAULT_HOTJAR_STATE.isEnabled),
       siteId: asString(hotjar._siteId, DEFAULT_HOTJAR_STATE.siteId),
-      version: asString(hotjar._version, DEFAULT_HOTJAR_STATE.version),
-      debugMode: asBool(hotjar._debugMode, DEFAULT_HOTJAR_STATE.debugMode),
     },
   };
 }
@@ -765,15 +753,11 @@ function buildSettingsFromSnapshot(
       ...google,
       _isEnabled: snapshot.google.isEnabled,
       _trackingId: snapshot.google.trackingId,
-      _anonymizeIp: snapshot.google.anonymizeIp,
-      _debugMode: snapshot.google.debugMode,
     },
     _hotjarAnalytics: {
       ...hotjar,
       _isEnabled: snapshot.hotjar.isEnabled,
       _siteId: snapshot.hotjar.siteId,
-      _version: snapshot.hotjar.version,
-      _debugMode: snapshot.hotjar.debugMode,
     },
   };
 }
@@ -1420,8 +1404,6 @@ export function TrackingAnalyticsPage({
             <div className="mt-4 flex flex-col gap-3">
               <SectionLabel>Google Analytics Settings</SectionLabel>
               <TextField label="Measurement ID" value={google.trackingId} onChange={(value) => setGoogle((prev) => ({ ...prev, trackingId: value }))} placeholder="G-XXXXXXXXXX" />
-              <CheckboxRow checked={google.anonymizeIp} onChange={(v) => setGoogle((prev) => ({ ...prev, anonymizeIp: v }))} label="Anonymize IP" />
-              <CheckboxRow checked={google.debugMode} onChange={(v) => setGoogle((prev) => ({ ...prev, debugMode: v }))} label="Debug mode" />
             </div>
           )}
 
@@ -1429,8 +1411,6 @@ export function TrackingAnalyticsPage({
             <div className="mt-4 flex flex-col gap-3">
               <SectionLabel>Hotjar Settings</SectionLabel>
               <TextField label="Site ID" value={hotjar.siteId} onChange={(value) => setHotjar((prev) => ({ ...prev, siteId: value }))} placeholder="1234567" />
-              <TextField label="Hotjar version" value={hotjar.version} onChange={(value) => setHotjar((prev) => ({ ...prev, version: value }))} placeholder="6" />
-              <CheckboxRow checked={hotjar.debugMode} onChange={(v) => setHotjar((prev) => ({ ...prev, debugMode: v }))} label="Debug mode" />
             </div>
           )}
         </AccordionCard>
