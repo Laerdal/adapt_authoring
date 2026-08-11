@@ -584,7 +584,7 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
   return {
     courseId,
     title: course.title || "Untitled Course",
-    displayTitle: course.displayTitle || course.title || "",
+    displayTitle: course.displayTitle ?? "",
     description: course.description || "",
     body: course.body || "",
     heroAssetId,
