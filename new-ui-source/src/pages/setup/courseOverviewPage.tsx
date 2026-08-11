@@ -1,5 +1,12 @@
-import { useEffect, useState } from "react";
-import { findUserByEmail, getCourseBootstrapData, getUserById, updateCourse } from "../../api/adaptAuthoring";
+import { useEffect, useRef, useState } from "react";
+import {
+  findUserByEmail,
+  getCourseBootstrapData,
+  getUserById,
+  searchUsersByEmailQuery,
+  updateCourse,
+  type UserSummary,
+} from "../../api/adaptAuthoring";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
@@ -86,6 +93,10 @@ export function CourseOverviewPage({
   const [emailInput, setEmailInput] = useState("");
   const [emailSearching, setEmailSearching] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailSuggestions, setEmailSuggestions] = useState<UserSummary[]>([]);
+  const [showEmailSuggestions, setShowEmailSuggestions] = useState(false);
+  const [activeEmailSuggestionIndex, setActiveEmailSuggestionIndex] = useState(-1);
+  const emailSearchRequestIdRef = useRef(0);
   const [showAuthoringBanner, setShowAuthoringBanner] = useState(true);
 
   function serializeCollaborators(list: Collaborator[]) {
@@ -165,6 +176,61 @@ export function CourseOverviewPage({
     setSaveError(null);
   }
 
+  useEffect(() => {
+    const trimmedEmailInput = emailInput.trim();
+    if (shareMode !== "specific" || trimmedEmailInput.length < 2) {
+      setEmailSuggestions([]);
+      setShowEmailSuggestions(false);
+      setActiveEmailSuggestionIndex(-1);
+      setEmailSearching(false);
+      return;
+    }
+
+    const requestId = ++emailSearchRequestIdRef.current;
+    const timeoutId = window.setTimeout(async () => {
+      setEmailSearching(true);
+      try {
+        const users = await searchUsersByEmailQuery(trimmedEmailInput);
+        if (emailSearchRequestIdRef.current !== requestId) return;
+        const existingUserIds = new Set(collaborators.map((c) => c.userId));
+        const filteredUsers = users.filter((u) => !existingUserIds.has(u._id));
+        setEmailSuggestions(filteredUsers);
+        setShowEmailSuggestions(true);
+        setActiveEmailSuggestionIndex(filteredUsers.length ? 0 : -1);
+      } catch {
+        if (emailSearchRequestIdRef.current !== requestId) return;
+        setEmailSuggestions([]);
+        setShowEmailSuggestions(false);
+      } finally {
+        if (emailSearchRequestIdRef.current === requestId) {
+          setEmailSearching(false);
+        }
+      }
+    }, 220);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [emailInput, shareMode, collaborators]);
+
+  function addCollaborator(user: UserSummary) {
+    if (collaborators.find((c) => c.userId === user._id || c.email.toLowerCase() === user.email.toLowerCase())) {
+      setEmailError("This user is already in the list.");
+      return;
+    }
+    setCollaborators((prev) => [...prev, { userId: user._id, email: user.email, role: "Editor" }]);
+    setEmailInput("");
+    setEmailSuggestions([]);
+    setShowEmailSuggestions(false);
+    setActiveEmailSuggestionIndex(-1);
+    setEmailError(null);
+    markDirty();
+  }
+
+  function handleSelectEmailSuggestion(user: UserSummary) {
+    addCollaborator(user);
+  }
+
   function handleAddTag() {
     const t = tagInput.trim();
     if (t && !tags.includes(t)) setTags((prev) => [...prev, t]);
@@ -179,10 +245,16 @@ export function CourseOverviewPage({
   async function handleAddEmail() {
     const email = emailInput.trim();
     if (!email) return;
+    if (showEmailSuggestions && activeEmailSuggestionIndex >= 0 && emailSuggestions[activeEmailSuggestionIndex]) {
+      handleSelectEmailSuggestion(emailSuggestions[activeEmailSuggestionIndex]);
+      return;
+    }
+
     if (collaborators.find((c) => c.email.toLowerCase() === email.toLowerCase())) {
       setEmailError("This user is already in the list.");
       return;
     }
+
     setEmailSearching(true);
     setEmailError(null);
     try {
@@ -191,9 +263,7 @@ export function CourseOverviewPage({
         setEmailError(`No user found with email "${email}". Make sure the user has an account first.`);
         return;
       }
-      setCollaborators((prev) => [...prev, { userId: user._id, email: user.email, role: "Editor" }]);
-      setEmailInput("");
-      markDirty();
+      addCollaborator(user);
     } catch {
       setEmailError("Failed to look up user. Please try again.");
     } finally {
@@ -293,9 +363,35 @@ export function CourseOverviewPage({
     setShareMode(savedIsShared ? "all" : "specific");
     setCollaborators(savedCollaborators);
     setEmailInput("");
+    setEmailSuggestions([]);
+    setShowEmailSuggestions(false);
+    setActiveEmailSuggestionIndex(-1);
     setEmailError(null);
     setSaveError(null);
     setSaveSuccess(false);
+  }
+
+  function handleEmailInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "ArrowDown") {
+      if (!showEmailSuggestions || emailSuggestions.length === 0) return;
+      e.preventDefault();
+      setActiveEmailSuggestionIndex((prev) => (prev + 1) % emailSuggestions.length);
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      if (!showEmailSuggestions || emailSuggestions.length === 0) return;
+      e.preventDefault();
+      setActiveEmailSuggestionIndex((prev) => (prev <= 0 ? emailSuggestions.length - 1 : prev - 1));
+      return;
+    }
+    if (e.key === "Escape") {
+      setShowEmailSuggestions(false);
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleAddEmail();
+    }
   }
 
   const labelStyle: React.CSSProperties = {
@@ -603,18 +699,86 @@ export function CourseOverviewPage({
         {/* Email input for specific sharing */}
         {shareMode === "specific" && (
           <div style={{ marginBottom: 14 }}>
-            <div style={{ display: "flex", gap: 8, marginBottom: emailError ? 6 : 0 }}>
+            <div style={{ position: "relative", display: "flex", gap: 8, marginBottom: emailError ? 6 : 0 }}>
               <input
                 type="email"
                 value={emailInput}
-                onChange={(e) => { setEmailInput(e.target.value); setEmailError(null); }}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddEmail(); } }}
+                onChange={(e) => {
+                  setEmailInput(e.target.value);
+                  setEmailError(null);
+                  if (!showEmailSuggestions) setShowEmailSuggestions(true);
+                }}
+                onKeyDown={handleEmailInputKeyDown}
                 placeholder="colleague@laerdal.com"
                 disabled={emailSearching}
                 style={inputBase}
-                onFocus={focusIn}
-                onBlur={focusOut}
+                onFocus={(e) => {
+                  focusIn(e);
+                  if (emailSuggestions.length > 0) setShowEmailSuggestions(true);
+                }}
+                onBlur={(e) => {
+                  focusOut(e);
+                  window.setTimeout(() => setShowEmailSuggestions(false), 120);
+                }}
               />
+              {showEmailSuggestions && (emailSuggestions.length > 0 || emailSearching) && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 6px)",
+                    left: 0,
+                    right: 0,
+                    zIndex: 30,
+                    background: "#ffffff",
+                    border: "1px solid var(--life-neutral-200)",
+                    borderRadius: 8,
+                    boxShadow: "0 8px 20px rgba(0,0,0,0.08)",
+                    maxHeight: 220,
+                    overflowY: "auto",
+                  }}
+                >
+                  {emailSearching && emailSuggestions.length === 0 ? (
+                    <div style={{ padding: "10px 12px", fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-neutral-400)" }}>
+                      Searching users...
+                    </div>
+                  ) : (
+                    emailSuggestions.map((user, index) => {
+                      const isActive = index === activeEmailSuggestionIndex;
+                      return (
+                        <button
+                          key={user._id}
+                          type="button"
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                            handleSelectEmailSuggestion(user);
+                          }}
+                          onMouseEnter={() => setActiveEmailSuggestionIndex(index)}
+                          style={{
+                            width: "100%",
+                            textAlign: "left",
+                            border: "none",
+                            background: isActive ? "var(--life-primary-020)" : "#ffffff",
+                            padding: "10px 12px",
+                            cursor: "pointer",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 2,
+                          }}
+                        >
+                          <span style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, fontWeight: 700, color: "var(--life-base-black)" }}>
+                            {user.email}
+                          </span>
+                          {(user.firstName || user.lastName) && (
+                            <span style={{ fontFamily: '"Lato", sans-serif', fontSize: 12, color: "var(--life-neutral-400)" }}>
+                              {[user.firstName, user.lastName].filter(Boolean).join(" ")}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
             </div>
             {emailError && (
               <div style={{ fontFamily: '"Lato", sans-serif', fontSize: 12, color: "var(--life-critical-600)", marginTop: 4, lineHeight: 1.4 }}>

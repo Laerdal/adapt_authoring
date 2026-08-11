@@ -42,6 +42,42 @@ export interface UserSummary {
 }
 
 /**
+ * Search users by partial email address within the current instance.
+ * Uses GET /api/user?search[email]=... and returns up to `limit` users.
+ */
+export async function searchUsersByEmailQuery(query: string, limit = 8): Promise<UserSummary[]> {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) return [];
+  try {
+    const escapedQuery = trimmedQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const users = await apiClient.get<UserSummary[]>(
+      `/api/user?search[email]=${encodeURIComponent(escapedQuery)}`
+    );
+    if (!Array.isArray(users)) return [];
+
+    const normalizedQuery = trimmedQuery.toLowerCase();
+    const deduped = users.filter((user, index, array) => {
+      const email = user.email?.toLowerCase();
+      if (!email) return false;
+      return array.findIndex((u) => u.email?.toLowerCase() === email) === index;
+    });
+
+    return deduped
+      .sort((a, b) => {
+        const aEmail = a.email.toLowerCase();
+        const bEmail = b.email.toLowerCase();
+        const aStartsWith = aEmail.startsWith(normalizedQuery);
+        const bStartsWith = bEmail.startsWith(normalizedQuery);
+        if (aStartsWith !== bStartsWith) return aStartsWith ? -1 : 1;
+        return aEmail.localeCompare(bEmail);
+      })
+      .slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Find a user by exact email address.
  * Uses GET /api/user?search[email]=... which does a case-insensitive regex search;
  * we then filter client-side for an exact match.
