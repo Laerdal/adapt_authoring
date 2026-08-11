@@ -710,7 +710,6 @@ export function CourseOverviewPage({
                 }}
                 onKeyDown={handleEmailInputKeyDown}
                 placeholder="colleague@laerdal.com"
-                disabled={emailSearching}
                 style={inputBase}
                 onFocus={(e) => {
                   focusIn(e);
