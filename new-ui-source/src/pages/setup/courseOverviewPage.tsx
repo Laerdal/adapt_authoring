@@ -66,7 +66,7 @@ export function CourseOverviewPage({
 
   // Committed values (server state)
   const [savedTitle, setSavedTitle] = useState(initialTitle);
-  const [savedDisplayTitle, setSavedDisplayTitle] = useState("");
+  const [savedSubtitle, setSavedSubtitle] = useState("");
   const [savedDesc, setSavedDesc] = useState(initialDescription);
   const [savedInstruction, setSavedInstruction] = useState("");
   const [savedTags, setSavedTags] = useState<string[]>([]);
@@ -77,7 +77,7 @@ export function CourseOverviewPage({
 
   // Live form values
   const [formTitle, setFormTitle] = useState(initialTitle);
-  const [formDisplayTitle, setFormDisplayTitle] = useState("");
+  const [formSubtitle, setFormSubtitle] = useState("");
   const [formDesc, setFormDesc] = useState(initialDescription);
   const [formInstruction, setFormInstruction] = useState("");
   const [tags, setTags] = useState<string[]>([]);
@@ -109,7 +109,7 @@ export function CourseOverviewPage({
   // Detect unsaved changes (core fields + sharing)
   const isDirty =
     formTitle !== savedTitle ||
-    formDisplayTitle !== savedDisplayTitle ||
+    formSubtitle !== savedSubtitle ||
     formDesc !== savedDesc ||
     formInstruction !== savedInstruction ||
     heroAssetId !== savedHeroAssetId ||
@@ -129,13 +129,13 @@ export function CourseOverviewPage({
         const data = await getCourseBootstrapData(courseId);
         if (cancelled) return;
         setSavedTitle(data.title);
-        setSavedDisplayTitle(data.subtitle);
+        setSavedSubtitle(data.subtitle);
         setSavedDesc(data.description);
         setSavedInstruction(data.instruction);
         setSavedTags(data.tags);
         setSavedHeroAssetId(data.heroAssetId);
         setFormTitle(data.title);
-        setFormDisplayTitle(data.subtitle);
+        setFormSubtitle(data.subtitle);
         setFormDesc(data.description);
         setFormInstruction(data.instruction);
         setTags(data.tags);
@@ -319,7 +319,7 @@ export function CourseOverviewPage({
       await updateCourse(courseId, {
         title: formTitle.trim(),
         displayTitle: formTitle.trim(),
-        subtitle: formDisplayTitle.trim(),
+        subtitle: formSubtitle.trim(),
         description: formDesc.trim(),
         instruction: formInstruction.trim(),
         heroAssetId,
@@ -329,7 +329,7 @@ export function CourseOverviewPage({
         language,
       });
       setSavedTitle(formTitle.trim());
-      setSavedDisplayTitle(formDisplayTitle.trim());
+      setSavedSubtitle(formSubtitle.trim());
       setSavedDesc(formDesc.trim());
       setSavedInstruction(formInstruction.trim());
       setSavedTags(tags);
@@ -367,7 +367,7 @@ export function CourseOverviewPage({
 
   function handleDiscard() {
     setFormTitle(savedTitle);
-    setFormDisplayTitle(savedDisplayTitle);
+    setFormSubtitle(savedSubtitle);
     setFormDesc(savedDesc);
     setFormInstruction(savedInstruction);
     setTags(savedTags);
@@ -495,8 +495,8 @@ export function CourseOverviewPage({
         <div>
           <label style={labelStyle}>Sub-Title</label>
           <input
-            value={formDisplayTitle}
-            onChange={(e) => { setFormDisplayTitle(e.target.value); markDirty(); }}
+            value={formSubtitle}
+            onChange={(e) => { setFormSubtitle(e.target.value); markDirty(); }}
             placeholder="A brief subtitle for your course"
             disabled={loading}
             style={inputBase}
