@@ -365,7 +365,7 @@ export interface CourseBootstrapData {
   displayTitle: string;
   subtitle: string;
   description: string;
-  body: string;
+  instruction: string;
   heroAssetId: string | null;
   tags: string[];
   isShared: boolean;
@@ -600,7 +600,7 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
     displayTitle: course.displayTitle ?? "",
     subtitle: course.subtitle ?? course._subtitle ?? "",
     description: course.description || "",
-    body: course.instruction ?? course.body ?? "",
+    instruction: course.instruction ?? "",
     heroAssetId,
     tags,
     isShared: course._isShared ?? false,

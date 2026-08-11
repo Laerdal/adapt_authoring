@@ -68,7 +68,7 @@ export function CourseOverviewPage({
   const [savedTitle, setSavedTitle] = useState(initialTitle);
   const [savedDisplayTitle, setSavedDisplayTitle] = useState("");
   const [savedDesc, setSavedDesc] = useState(initialDescription);
-  const [savedBody, setSavedBody] = useState("");
+  const [savedInstruction, setSavedInstruction] = useState("");
   const [savedTags, setSavedTags] = useState<string[]>([]);
   const [savedHeroAssetId, setSavedHeroAssetId] = useState<string | null>(null);
   const [savedLanguage, setSavedLanguage] = useState("");
@@ -79,7 +79,7 @@ export function CourseOverviewPage({
   const [formTitle, setFormTitle] = useState(initialTitle);
   const [formDisplayTitle, setFormDisplayTitle] = useState("");
   const [formDesc, setFormDesc] = useState(initialDescription);
-  const [formBody, setFormBody] = useState("");
+  const [formInstruction, setFormInstruction] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
   const [heroAssetId, setHeroAssetId] = useState<string | null>(null);
@@ -111,7 +111,7 @@ export function CourseOverviewPage({
     formTitle !== savedTitle ||
     formDisplayTitle !== savedDisplayTitle ||
     formDesc !== savedDesc ||
-    formBody !== savedBody ||
+    formInstruction !== savedInstruction ||
     heroAssetId !== savedHeroAssetId ||
     language !== savedLanguage ||
     JSON.stringify(tags) !== JSON.stringify(savedTags) ||
@@ -131,13 +131,13 @@ export function CourseOverviewPage({
         setSavedTitle(data.title);
         setSavedDisplayTitle(data.subtitle);
         setSavedDesc(data.description);
-        setSavedBody(data.body);
+        setSavedInstruction(data.instruction);
         setSavedTags(data.tags);
         setSavedHeroAssetId(data.heroAssetId);
         setFormTitle(data.title);
         setFormDisplayTitle(data.subtitle);
         setFormDesc(data.description);
-        setFormBody(data.body);
+        setFormInstruction(data.instruction);
         setTags(data.tags);
         setHeroAssetId(data.heroAssetId);
         setHeroPreviewUrl(data.heroAssetId ? `/api/asset/serve/${data.heroAssetId}` : null);
@@ -321,7 +321,7 @@ export function CourseOverviewPage({
         displayTitle: formTitle.trim(),
         subtitle: formDisplayTitle.trim(),
         description: formDesc.trim(),
-        instruction: formBody.trim(),
+        instruction: formInstruction.trim(),
         heroAssetId,
         tags,
         isShared: isSharedAll,
@@ -331,7 +331,7 @@ export function CourseOverviewPage({
       setSavedTitle(formTitle.trim());
       setSavedDisplayTitle(formDisplayTitle.trim());
       setSavedDesc(formDesc.trim());
-      setSavedBody(formBody.trim());
+      setSavedInstruction(formInstruction.trim());
       setSavedTags(tags);
       setSavedHeroAssetId(heroAssetId);
       setSavedLanguage(language);
@@ -369,7 +369,7 @@ export function CourseOverviewPage({
     setFormTitle(savedTitle);
     setFormDisplayTitle(savedDisplayTitle);
     setFormDesc(savedDesc);
-    setFormBody(savedBody);
+    setFormInstruction(savedInstruction);
     setTags(savedTags);
     setHeroAssetId(savedHeroAssetId);
     setHeroPreviewUrl(savedHeroAssetId ? `/api/asset/serve/${savedHeroAssetId}` : null);
@@ -525,8 +525,8 @@ export function CourseOverviewPage({
           <label style={labelStyle}>Instructions</label>
           <textarea
             rows={4}
-            value={formBody}
-            onChange={(e) => { setFormBody(e.target.value); markDirty(); }}
+            value={formInstruction}
+            onChange={(e) => { setFormInstruction(e.target.value); markDirty(); }}
             placeholder="Provide any special instructions for learners..."
             disabled={loading}
             style={textareaBase}
