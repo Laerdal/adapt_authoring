@@ -108,6 +108,7 @@ export default function AddTemplateDrawer({ level, onSelect, onClose }: AddTempl
           open ? "translate-x-0" : "translate-x-full"
         }`}
         role="dialog"
+        aria-modal="true"
         aria-label="Use Template"
       >
         <div className="flex items-start justify-between px-5 py-4 border-b border-[#e5e7eb] shrink-0">
