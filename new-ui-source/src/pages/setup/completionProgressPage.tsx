@@ -4,7 +4,11 @@ import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationG
 /* ─────────────────────────────────────────────────────────────
    Types
 ───────────────────────────────────────────────────────────── */
-type CourseCompletionRule = "all-content" | "assessment";
+type CourseCompletionRule =
+  | "all-content"
+  | "assessment"
+  | "submit-every-attempt"
+  | "submit-score";
 type BookmarkLocation     = "page" | "block" | "component";
 type BookmarkReturn       = "previous" | "furthest";
 type ProgressType         = "pages" | "questions";
@@ -16,7 +20,7 @@ type ProgressIndicator    =
   | "all-content-objects"
   | "course-level-nav-btn";
 interface CompletionProgressSettings {
-  courseCompletionRule: CourseCompletionRule;
+  courseCompletionRules:           CourseCompletionRule[];
   notifierLine1:        string;
   notifierLine2:        string;
   bookmarkingEnabled:   boolean;
@@ -34,7 +38,7 @@ interface CompletionProgressSettings {
   timeTextCompleted:    string;
 }
 const DEFAULT_SETTINGS: CompletionProgressSettings = {
-  courseCompletionRule: "all-content",
+  courseCompletionRules:          [],
   notifierLine1:        "",
   notifierLine2:        "",
   bookmarkingEnabled:   false,
@@ -54,6 +58,35 @@ const DEFAULT_SETTINGS: CompletionProgressSettings = {
 /* ─────────────────────────────────────────────────────────────
    Shared primitive widgets (scoped to this file)
 ───────────────────────────────────────────────────────────── */
+function CpCheckbox({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+}) {
+  return (
+    <label className="flex items-start gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-[#f9fafb] group">
+      <div
+        onClick={() => onChange(!checked)}
+        className={`mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
+          checked
+            ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]"
+            : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
+        }`}
+      >
+        {checked && (
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        )}
+      </div>
+      <span className="text-sm text-[#374151] leading-snug">{label}</span>
+    </label>
+  );
+}
 function CpSelect<T extends string>({
   label,
   hint,
@@ -332,12 +365,14 @@ function CompletionRulesContent({
   return (
     <>
       <CpInnerCard title="Course Completion" subtitle="Complete course when:">
-        <CpRadioGroup<CourseCompletionRule>
-          value={cfg.courseCompletionRule}
-          onChange={(v) => set("courseCompletionRule", v)}
+        <CpCheckboxMulti<CourseCompletionRule>
+          selected={cfg.courseCompletionRules}
+          onChange={(v) => set("courseCompletionRules", v)}
           options={[
-            { value: "all-content", label: "All content in the course must be completed" },
-            { value: "assessment",  label: "The assessment must be completed" },
+            { value: "all-content",           label: "All content in the course must be completed" },
+            { value: "assessment",             label: "The assessment must be completed" },
+            { value: "submit-every-attempt",   label: "Submit completion on every assessment attempt" },
+            { value: "submit-score",           label: "Submit score to LMS" },
           ]}
         />
       </CpInnerCard>
