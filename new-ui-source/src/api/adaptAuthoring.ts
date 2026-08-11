@@ -47,12 +47,12 @@ export interface UserSummary {
  */
 export async function searchUsersByEmailQuery(query: string, limit = 8): Promise<UserSummary[]> {
   const trimmedQuery = query.trim();
-  if (!trimmedQuery) return [];
   try {
-    const escapedQuery = trimmedQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    const users = await apiClient.get<UserSummary[]>(
-      `/api/user?search[email]=${encodeURIComponent(escapedQuery)}`
-    );
+    const users = trimmedQuery
+      ? await apiClient.get<UserSummary[]>(
+          `/api/user?search[email]=${encodeURIComponent(trimmedQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))}`
+        )
+      : await apiClient.get<UserSummary[]>("/api/user");
     if (!Array.isArray(users)) return [];
 
     const normalizedQuery = trimmedQuery.toLowerCase();

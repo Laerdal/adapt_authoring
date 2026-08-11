@@ -96,6 +96,7 @@ export function CourseOverviewPage({
   const [emailSuggestions, setEmailSuggestions] = useState<UserSummary[]>([]);
   const [showEmailSuggestions, setShowEmailSuggestions] = useState(false);
   const [activeEmailSuggestionIndex, setActiveEmailSuggestionIndex] = useState(-1);
+  const [emailInputFocused, setEmailInputFocused] = useState(false);
   const emailSearchRequestIdRef = useRef(0);
   const [showAuthoringBanner, setShowAuthoringBanner] = useState(true);
 
@@ -178,7 +179,10 @@ export function CourseOverviewPage({
 
   useEffect(() => {
     const trimmedEmailInput = emailInput.trim();
-    if (shareMode !== "specific" || trimmedEmailInput.length < 2) {
+    const shouldSearch =
+      shareMode === "specific" && (trimmedEmailInput.length > 0 || emailInputFocused);
+
+    if (!shouldSearch) {
       setEmailSuggestions([]);
       setShowEmailSuggestions(false);
       setActiveEmailSuggestionIndex(-1);
@@ -211,7 +215,7 @@ export function CourseOverviewPage({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [emailInput, shareMode, collaborators]);
+  }, [emailInput, shareMode, collaborators, emailInputFocused]);
 
   function addCollaborator(user: UserSummary) {
     if (collaborators.find((c) => c.userId === user._id || c.email.toLowerCase() === user.email.toLowerCase())) {
@@ -745,10 +749,12 @@ export function CourseOverviewPage({
                 style={inputBase}
                 onFocus={(e) => {
                   focusIn(e);
+                  setEmailInputFocused(true);
                   if (emailSuggestions.length > 0) setShowEmailSuggestions(true);
                 }}
                 onBlur={(e) => {
                   focusOut(e);
+                  setEmailInputFocused(false);
                   window.setTimeout(() => setShowEmailSuggestions(false), 120);
                 }}
               />
