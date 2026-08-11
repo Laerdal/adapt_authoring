@@ -360,6 +360,7 @@ export interface CourseBootstrapData {
   courseId: string;
   title: string;
   displayTitle: string;
+  subtitle: string;
   description: string;
   body: string;
   heroAssetId: string | null;
@@ -593,7 +594,8 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
   return {
     courseId,
     title: course.title || "Untitled Course",
-    displayTitle: course.subtitle ?? course._subtitle ?? course.displayTitle ?? "",
+    displayTitle: course.displayTitle ?? "",
+    subtitle: course.subtitle ?? course._subtitle ?? "",
     description: course.description || "",
     body: course.body || "",
     heroAssetId,
