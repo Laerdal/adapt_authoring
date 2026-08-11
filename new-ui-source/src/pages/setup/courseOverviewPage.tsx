@@ -317,7 +317,7 @@ export function CourseOverviewPage({
       const isSharedAll = shareMode === "all";
       await updateCourse(courseId, {
         title: formTitle.trim(),
-        displayTitle: formDisplayTitle.trim(),
+        subtitle: formDisplayTitle.trim(),
         description: formDesc.trim(),
         body: formBody.trim(),
         heroAssetId,

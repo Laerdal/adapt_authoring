@@ -244,6 +244,7 @@ export async function updateCourse(
   patch: {
     title?: string;
     displayTitle?: string;
+    subtitle?: string;
     description?: string;
     body?: string;
     heroAssetId?: string | null;
@@ -256,8 +257,14 @@ export async function updateCourse(
   const updateData: Record<string, unknown> = {};
   if (patch.title !== undefined) updateData.title = patch.title;
   if (patch.displayTitle !== undefined) updateData.displayTitle = patch.displayTitle;
+  if (patch.subtitle !== undefined) {
+    updateData.subtitle = patch.subtitle;
+    updateData._subtitle = patch.subtitle;
+  }
   // Keep title and displayTitle in sync when only one is provided
-  if (patch.title !== undefined && patch.displayTitle === undefined) updateData.displayTitle = patch.title;
+  if (patch.title !== undefined && patch.displayTitle === undefined && patch.subtitle === undefined) {
+    updateData.displayTitle = patch.title;
+  }
   if (patch.description !== undefined) updateData.description = patch.description;
   if (patch.body !== undefined) updateData.body = patch.body;
   if (patch.heroAssetId !== undefined) updateData.heroImage = patch.heroAssetId;
@@ -322,6 +329,8 @@ interface EngineCourseDetails {
   _id: string;
   title?: string;
   displayTitle?: string;
+  subtitle?: string;
+  _subtitle?: string;
   description?: string;
   body?: string;
   heroImage?: string | null;
@@ -584,7 +593,7 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
   return {
     courseId,
     title: course.title || "Untitled Course",
-    displayTitle: course.displayTitle ?? "",
+    displayTitle: course.subtitle ?? course._subtitle ?? course.displayTitle ?? "",
     description: course.description || "",
     body: course.body || "",
     heroAssetId,
