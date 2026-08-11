@@ -559,6 +559,40 @@ export function CourseOverviewPage({
             {heroPreviewUrl ? (
               <>
                 <img src={heroPreviewUrl} alt="Course cover" style={{ width: "100%", height: 128, objectFit: "cover", borderRadius: 8 }} />
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setHeroAssetId(null); setHeroPreviewUrl(null); markDirty(); }}
+                  aria-label="Remove image"
+                  style={{
+                    position: "absolute",
+                    top: 8,
+                    right: 8,
+                    width: 24,
+                    height: 24,
+                    borderRadius: 999,
+                    border: "none",
+                    background: "rgba(255,255,255,0.95)",
+                    color: "var(--life-neutral-500)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    zIndex: 2,
+                    padding: 0,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "#ffffff";
+                    e.currentTarget.style.color = "var(--life-critical-500)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "rgba(255,255,255,0.95)";
+                    e.currentTarget.style.color = "var(--life-neutral-500)";
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <path d="M9 3L3 9M3 3l6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </button>
                 <div
                   className="absolute inset-0 flex flex-col items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity"
                   style={{ background: "rgba(0,0,0,0.45)", borderRadius: 8 }}
@@ -579,17 +613,6 @@ export function CourseOverviewPage({
               </>
             )}
           </div>
-          {heroPreviewUrl && (
-            <button
-              type="button"
-              onClick={(e) => { e.stopPropagation(); setHeroAssetId(null); setHeroPreviewUrl(null); markDirty(); }}
-              style={{ marginTop: 6, background: "none", border: "none", cursor: "pointer", fontFamily: '"Lato", sans-serif', fontSize: 12, color: "var(--life-neutral-400)", padding: 0 }}
-              onMouseEnter={(e) => (e.currentTarget.style.color = "var(--life-critical-500)")}
-              onMouseLeave={(e) => (e.currentTarget.style.color = "var(--life-neutral-400)")}
-            >
-              Remove image
-            </button>
-          )}
         </div>
 
         {/* Tags */}
