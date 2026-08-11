@@ -320,7 +320,7 @@ export function CourseOverviewPage({
         displayTitle: formTitle.trim(),
         subtitle: formDisplayTitle.trim(),
         description: formDesc.trim(),
-        body: formBody.trim(),
+        instruction: formBody.trim(),
         heroAssetId,
         tags,
         isShared: isSharedAll,

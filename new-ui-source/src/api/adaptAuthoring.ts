@@ -247,6 +247,7 @@ export async function updateCourse(
     subtitle?: string;
     description?: string;
     body?: string;
+    instruction?: string;
     heroAssetId?: string | null;
     tags?: string[];
     isShared?: boolean;
@@ -267,6 +268,7 @@ export async function updateCourse(
   }
   if (patch.description !== undefined) updateData.description = patch.description;
   if (patch.body !== undefined) updateData.body = patch.body;
+  if (patch.instruction !== undefined) updateData.instruction = patch.instruction;
   if (patch.heroAssetId !== undefined) updateData.heroImage = patch.heroAssetId;
   if (patch.tags !== undefined) {
     updateData.tags = await resolveOrCreateTagIds(patch.tags);
@@ -333,6 +335,7 @@ interface EngineCourseDetails {
   _subtitle?: string;
   description?: string;
   body?: string;
+  instruction?: string;
   heroImage?: string | null;
   tags?: Array<string | { _id: string; title?: string }>;
   _isShared?: boolean;
@@ -597,7 +600,7 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
     displayTitle: course.displayTitle ?? "",
     subtitle: course.subtitle ?? course._subtitle ?? "",
     description: course.description || "",
-    body: course.body || "",
+    body: course.instruction ?? course.body ?? "",
     heroAssetId,
     tags,
     isShared: course._isShared ?? false,
