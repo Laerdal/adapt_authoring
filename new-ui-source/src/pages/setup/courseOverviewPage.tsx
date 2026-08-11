@@ -129,13 +129,13 @@ export function CourseOverviewPage({
         const data = await getCourseBootstrapData(courseId);
         if (cancelled) return;
         setSavedTitle(data.title);
-        setSavedDisplayTitle(data.displayTitle);
+        setSavedDisplayTitle(data.subtitle);
         setSavedDesc(data.description);
         setSavedBody(data.body);
         setSavedTags(data.tags);
         setSavedHeroAssetId(data.heroAssetId);
         setFormTitle(data.title);
-        setFormDisplayTitle(data.displayTitle);
+        setFormDisplayTitle(data.subtitle);
         setFormDesc(data.description);
         setFormBody(data.body);
         setTags(data.tags);
@@ -317,6 +317,7 @@ export function CourseOverviewPage({
       const isSharedAll = shareMode === "all";
       await updateCourse(courseId, {
         title: formTitle.trim(),
+        displayTitle: formTitle.trim(),
         subtitle: formDisplayTitle.trim(),
         description: formDesc.trim(),
         body: formBody.trim(),
