@@ -760,7 +760,7 @@ export function CourseOverviewPage({
                 }}
               />
               {showEmailSuggestions && (emailSuggestions.length > 0 || emailSearching) && (
-                <div
+                <div role="listbox" aria-label="User suggestions"
                   style={{
                     position: "absolute",
                     top: "calc(100% + 6px)",
