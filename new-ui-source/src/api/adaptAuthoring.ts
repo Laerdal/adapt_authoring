@@ -1252,6 +1252,9 @@ export async function getCourseStructure(
                 id: comp._id,
                 title: label(comp),
                 componentKey: comp._component || "",
+                layout: comp._layout === "left" || comp._layout === "right" || comp._layout === "full"
+                  ? comp._layout
+                  : undefined,
                 description: comp.description || "",
                 url: comp.url || "",
               })
@@ -1558,8 +1561,8 @@ export async function seedDefaultTopic(
   const articleId = await createArticle(courseId, topicId, NEW_SECTION_TITLE, 1);
   const blockId = await createBlock(courseId, articleId, NEW_CONTENT_GROUP_TITLE, 1);
   const text = await getTextComponentType();
-  // A single component is placed on the left (see design).
-  if (text) await createComponent(courseId, blockId, text, 1, "left");
+  // A single component should start as full-width.
+  if (text) await createComponent(courseId, blockId, text, 1, "full");
   return topicId;
 }
 
@@ -1782,6 +1785,20 @@ export function updateTemplate(
 
 export function deleteTemplate(backendId: string): Promise<unknown> {
   return apiClient.delete(`/api/content/templating/${backendId}`);
+}
+
+export interface TemplatePasteRequest {
+  objectId: string;
+  parentId: string;
+  courseId: string;
+  sortOrder?: number;
+  layout?: "full" | "left" | "right";
+}
+
+export function pasteTemplateIntoCourse(
+  payload: TemplatePasteRequest
+): Promise<{ success?: boolean }> {
+  return apiClient.post<{ success?: boolean }>("/api/templating/paste", payload);
 }
 
 // ── Assets ────────────────────────────────────────────────────────────────────

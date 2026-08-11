@@ -187,7 +187,7 @@ interface NodeDesc {
   parentId: string; // courseId for top-level module/topic
   order: number; // 1-based position among siblings
   componentKey?: string;
-  layout?: "left" | "right";
+  layout?: "full" | "left" | "right";
 }
 // Depth-first, parents before children — safe order for creates.
 function flatten(s: CourseStructure, courseId: string): NodeDesc[] {
@@ -205,7 +205,8 @@ function flatten(s: CourseStructure, courseId: string): NodeDesc[] {
           sec.contentGroups.forEach((cg, ci) => {
             out.push({ level: "contentGroup", id: cg.id, title: cg.title, parentId: sec.id, order: ci + 1 });
             cg.components.forEach((comp, coi) => {
-              out.push({ level: "component", id: comp.id, title: comp.title, parentId: cg.id, order: coi + 1, componentKey: comp.componentKey, layout: coi === 0 ? "left" : "right" });
+              const layout = cg.components.length === 1 ? "full" : (coi === 0 ? "left" : "right");
+              out.push({ level: "component", id: comp.id, title: comp.title, parentId: cg.id, order: coi + 1, componentKey: comp.componentKey, layout });
             });
           });
         });
@@ -295,8 +296,8 @@ export function useCourseStructure(courseId: string, courseTitle = "Course") {
       if (!inModule && draft.topics.length <= 1) { setError(new Error("At least one topic is required at the course level.")); return; }
     }
     // Any component may be removed (a block may be left empty; the Tree warns
-    // first). A surviving single component becomes "left" automatically — save()
-    // recomputes _layout from position.
+    // first). A surviving single component becomes "full" automatically — save()
+    // recomputes _layout from sibling count and position.
     edit((d) => { detachNode(d, level, id, courseId); });
   }, [edit, draft, courseId]);
 

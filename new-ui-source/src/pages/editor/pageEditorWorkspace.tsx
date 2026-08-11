@@ -6,6 +6,7 @@ import {
   ArticleCanvas,
 } from "../../components/editor/index";
 import AddComponentDrawer from "../../components/course/AddComponentDrawer";
+import AddTemplateDrawer from "../../components/course/AddTemplateDrawer";
 import CourseStructureMap from "../../components/course/CourseStructureMap";
 import { StructureIcon, STRUCTURE_ICON_COLOR_CLASS } from "../../components/course/StructureIcons";
 import PageEditorTopBar from "./pageEditorTopBar";
@@ -17,7 +18,10 @@ import {
   createTopic,
   deleteStructureNode,
   getCourseStructure,
+  pasteTemplateIntoCourse,
   type ComponentTypeOption,
+  type DashboardTemplate,
+  updateComponentLayout,
   updateStructureNode,
 } from "../../api/adaptAuthoring";
 import type { MenuPageData } from "../../components/editor/MenuPageCanvas";
@@ -99,7 +103,7 @@ function mapStructureToPages(
         title: string;
         description?: string;
         instruction?: string;
-        components: Array<{ id: string; title: string; componentKey: string; description?: string; url?: string }>;
+        components: Array<{ id: string; title: string; componentKey: string; layout?: "full" | "left" | "right"; description?: string; url?: string }>;
       }>;
     }>;
   }) => {
@@ -121,6 +125,7 @@ function mapStructureToPages(
           components: group.components.map((component) => ({
             id: component.id,
             type: toComponentType(component.componentKey),
+            layout: component.layout,
             settings: {
               title: component.title || "",
               description: component.description || "",
@@ -152,6 +157,7 @@ export type ComponentType = "Image" | "Video" | "Accordion" | "Text" | "Quiz";
 export interface ComponentData {
   id: string;
   type: ComponentType;
+  layout?: "full" | "left" | "right";
   settings: {
     title?: string;
     description?: string;
@@ -231,6 +237,12 @@ export default function CourseEditor({
     pageId: string;
     articleId: string;
     blockId: string;
+  } | null>(null);
+  const [addTemplateTarget, setAddTemplateTarget] = useState<{
+    level: "topic" | "section" | "group" | "component";
+    pageId: string;
+    articleId?: string;
+    blockId?: string;
   } | null>(null);
 
   const loadStructureFromDatabase = useCallback(async (selection?: {
@@ -550,12 +562,18 @@ export default function CourseEditor({
     if (!targetBlock || targetBlock.components.length >= 2) return;
 
     try {
-      const layout = targetBlock.components.length === 0 ? "left" : "right";
+      const componentCount = targetBlock.components.length;
+      const layout = componentCount === 0 ? "full" : "right";
+
+      if (componentCount === 1) {
+        await updateComponentLayout(targetBlock.components[0].id, "left");
+      }
+
       const newComponentId = await createComponent(
         courseId,
         blockId,
         componentType,
-        targetBlock.components.length + 1,
+        componentCount + 1,
         layout
       );
       await loadStructureFromDatabase({ pageId, articleId, blockId, componentId: newComponentId });
@@ -598,7 +616,17 @@ export default function CourseEditor({
 
   async function deleteComponent(pageId: string, articleId: string, blockId: string, componentId: string) {
     try {
+      const targetPage = contentPages.find((p) => p.id === pageId);
+      const targetArticle = targetPage?.articles.find((a) => a.id === articleId);
+      const targetBlock = targetArticle?.blocks.find((b) => b.id === blockId);
+      const remainingComponent = targetBlock?.components.find((c) => c.id !== componentId);
+
       await deleteStructureNode("component", componentId);
+
+      if (remainingComponent && (targetBlock?.components.length ?? 0) === 2) {
+        await updateComponentLayout(remainingComponent.id, "full");
+      }
+
       await loadStructureFromDatabase({ pageId, articleId, blockId });
     } catch (error) {
       console.error("Failed to delete component", error);
@@ -629,6 +657,89 @@ export default function CourseEditor({
     setRightPanelOpen(true);
     setRightPanelType("block");
     setAddComponentTarget({ pageId, articleId, blockId });
+  }
+
+  function handleOpenTemplateDrawer(target: {
+    level: "topic" | "section" | "group" | "component";
+    pageId: string;
+    articleId?: string;
+    blockId?: string;
+  }) {
+    setAddTemplateTarget(target);
+  }
+
+  async function handleApplyTemplate(target: {
+    level: "topic" | "section" | "group" | "component";
+    pageId: string;
+    articleId?: string;
+    blockId?: string;
+  }, template: DashboardTemplate) {
+    try {
+      const expectedType =
+        target.level === "topic"
+          ? "Page"
+          : target.level === "section"
+            ? "Article"
+            : target.level === "group"
+              ? "Block"
+              : "Component";
+
+      if (template.type !== expectedType) {
+        return;
+      }
+
+      let parentId = courseId;
+      let sortOrder = contentPages.length + 1;
+      let layout: "full" | "left" | "right" | undefined;
+
+      if (target.level === "section") {
+        const page = contentPages.find((item) => item.id === target.pageId);
+        if (!page) return;
+        parentId = target.pageId;
+        sortOrder = page.articles.length + 1;
+      }
+
+      if (target.level === "group") {
+        const page = contentPages.find((item) => item.id === target.pageId);
+        const article = page?.articles.find((item) => item.id === target.articleId);
+        if (!article) return;
+        parentId = article.id;
+        sortOrder = article.blocks.length + 1;
+      }
+
+      if (target.level === "component") {
+        const page = contentPages.find((item) => item.id === target.pageId);
+        const article = page?.articles.find((item) => item.id === target.articleId);
+        const block = article?.blocks.find((item) => item.id === target.blockId);
+        if (!block || block.components.length >= 2) return;
+
+        parentId = block.id;
+        sortOrder = block.components.length + 1;
+        layout = block.components.length === 0 ? "full" : "right";
+
+        if (block.components.length === 1) {
+          await updateComponentLayout(block.components[0].id, "left");
+        }
+      }
+
+      await pasteTemplateIntoCourse({
+        objectId: template.backendId,
+        parentId,
+        courseId,
+        sortOrder,
+        layout,
+      });
+
+      await loadStructureFromDatabase({
+        pageId: selectedPageId,
+        articleId: selectedArticleId,
+        blockId: selectedBlockId,
+        componentId: selectedComponentId,
+      });
+      setAddTemplateTarget(null);
+    } catch (error) {
+      console.error("Failed to add template", error);
+    }
   }
 
   function copyPage(pageId: string) {
@@ -830,6 +941,7 @@ export default function CourseEditor({
           onDeleteBlock={deleteBlock}
           onAddComponent={handleAddComponentPanel}
           onDeleteComponent={deleteComponent}
+          onUseTemplate={handleOpenTemplateDrawer}
         />
 
         {/* Canvas */}
@@ -1100,6 +1212,8 @@ export default function CourseEditor({
                       type="button"
                       onClick={() => setRightPanelOpen(false)}
                       className="w-full h-[56px] border-b border-[#d8dee6] px-3.5 flex items-center gap-2 text-[#3b4753]"
+                      aria-label="Collapse properties"
+                      title="Collapse properties"
                     >
                       <span className="w-8 h-8 rounded-[6px] flex items-center justify-center hover:bg-[#f2f5f8] transition-colors">
                         <MaskIcon file="chevron-right.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
@@ -1288,6 +1402,16 @@ export default function CourseEditor({
                 componentType
               );
               setAddComponentTarget(null);
+            }}
+          />
+        )}
+
+        {addTemplateTarget && (
+          <AddTemplateDrawer
+            level={addTemplateTarget.level}
+            onClose={() => setAddTemplateTarget(null)}
+            onSelect={async (template) => {
+              await handleApplyTemplate(addTemplateTarget, template);
             }}
           />
         )}

@@ -54,13 +54,28 @@ interface CourseOutlinePanelProps {
   onDeleteBlock: (pageId: string, articleId: string, blockId: string) => void;
   onAddComponent: (pageId: string, articleId: string, blockId: string) => void;
   onDeleteComponent: (pageId: string, articleId: string, blockId: string, componentId: string) => void;
+  onUseTemplate?: (target: {
+    level: "topic" | "section" | "group" | "component";
+    pageId: string;
+    articleId?: string;
+    blockId?: string;
+  }) => void;
 }
 
 type AddMenuTarget = {
-  level: "topic" | "section" | "group";
+  level: "topic" | "section" | "group" | "component";
   pageId: string;
   articleId?: string;
   blockId?: string;
+};
+
+type DeleteTarget = {
+  level: "topic" | "section" | "group" | "component";
+  name: string;
+  pageId: string;
+  articleId?: string;
+  blockId?: string;
+  componentId?: string;
 };
 
 function getTargetKey(target: AddMenuTarget) {
@@ -84,6 +99,8 @@ function TreeRow({
   onAddStartFresh,
   onAddTemplate,
   addLabel = "section",
+  toggleLabel = "section",
+  labelClassName,
 }: {
   label: string;
   paddingLeft: number;
@@ -101,15 +118,17 @@ function TreeRow({
   onAddStartFresh?: () => void;
   onAddTemplate?: () => void;
   addLabel?: string;
+  toggleLabel?: string;
+  labelClassName?: string;
 }) {
   return (
     <div
-      className={`w-full h-9 flex items-center gap-[6px] text-left border-l-[3px] transition-colors group relative ${
+      className={`w-full min-h-9 flex items-center gap-[6px] text-left border-l-[3px] transition-colors group relative ${
         selected
           ? "bg-[var(--life-primary-100)] border-[var(--life-primary-500)]"
           : "border-transparent hover:bg-[var(--life-neutral-100)]"
       }`}
-      style={{ paddingLeft, paddingRight: 6 }}
+      style={{ paddingLeft, paddingRight: 6, paddingTop: 6, paddingBottom: 6 }}
     >
       <div
         role="button"
@@ -123,7 +142,7 @@ function TreeRow({
         }}
         className="flex items-center gap-[6px] min-w-0 flex-1 cursor-pointer"
       >
-        <span className="w-[14px] h-[14px] shrink-0 flex items-center justify-center text-[#b8c4cf] group-hover:text-[#6b7280] cursor-grab hover:text-[#4b5563]">
+        <span className="w-[14px] h-[14px] shrink-0 self-center flex items-center justify-center text-[#b8c4cf] group-hover:text-[#6b7280] cursor-grab hover:text-[#4b5563]">
           <MaskIcon file="drag-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
         </span>
 
@@ -134,8 +153,9 @@ function TreeRow({
               event.stopPropagation();
               onToggleExpand?.();
             }}
-            className="w-[14px] h-[14px] shrink-0 flex items-center justify-center text-[#9aa7b2] hover:text-[#1f2937]"
-            aria-label={expanded ? "Collapse" : "Expand"}
+            className="w-[14px] h-[14px] shrink-0 self-center flex items-center justify-center text-[#9aa7b2] hover:text-[#1f2937]"
+            aria-label={`${expanded ? "Collapse" : "Expand"} ${toggleLabel}`}
+            title={`${expanded ? "Collapse" : "Expand"} ${toggleLabel}`}
           >
             <svg
               width="12"
@@ -153,19 +173,22 @@ function TreeRow({
           </button>
         ) : null}
 
-        <span className="w-[18px] shrink-0 flex items-center justify-center">{icon}</span>
+        <span className="w-[18px] shrink-0 self-center flex items-center justify-center">{icon}</span>
         <span
-          className={`text-[13px] truncate ${
+          title={label || "Untitled"}
+          className={`min-w-0 flex-1 self-center leading-[1.35] break-words line-clamp-2 ${
+            labelClassName ?? "text-[13px] font-medium"
+          } ${
             selected
-              ? "font-medium text-[var(--life-primary-500)]"
-              : "font-medium text-[#5b6674] group-hover:text-[#374151]"
+              ? "text-[var(--life-primary-500)]"
+              : "text-[#5b6674] group-hover:text-[#374151]"
           }`}
         >
           {label || "Untitled"}
         </span>
       </div>
 
-      <div className="ml-auto flex items-center gap-1">
+      <div className="ml-auto shrink-0 self-center flex items-center gap-1">
         {showAdd && (
           <button
             type="button"
@@ -175,6 +198,7 @@ function TreeRow({
             }}
             className="w-6 h-6 rounded-[4px] flex items-center justify-center text-[#2E7FA1] hover:bg-[#e8f3f8] active:bg-[#d4e9f2]"
             aria-label={`Add ${addLabel}`}
+            title={`Add ${addLabel}`}
           >
             <MaskIcon file="add-icon.svg" className="block w-[12px] h-[12px] shrink-0 bg-current" />
           </button>
@@ -196,23 +220,21 @@ function TreeRow({
       </div>
 
       {menuOpen && (
-        <div className="absolute left-8 top-[36px] z-30 w-[230px] rounded-xl border border-[#d8dee6] bg-white shadow-[0_8px_24px_rgba(0,0,0,0.14)] p-1.5">
+        <div className="absolute left-8 top-[36px] z-30 min-w-[210px] rounded-[var(--radius-md)] border border-[var(--life-neutral-100)] bg-[var(--life-base-white)] p-[6px] shadow-[0_4px_20px_rgba(0,0,0,0.12)] flex flex-col gap-[2px]">
           <button
             type="button"
             onClick={(event) => {
               event.stopPropagation();
               onAddStartFresh?.();
             }}
-            className="w-full flex items-center gap-2.5 rounded-lg px-2.5 py-2.5 hover:bg-[#f7fafc]"
+            className="w-full flex items-center gap-[10px] rounded-[var(--radius-sm)] px-[10px] py-[8px] text-left hover:bg-[var(--life-primary-020)] transition-colors"
           >
-            <span className="w-9 h-9 rounded-lg bg-[#e8f3f8] flex items-center justify-center text-[#2E7FA1] shrink-0">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
+            <span className="w-[30px] h-[30px] rounded-[var(--radius-sm)] bg-[var(--life-primary-050)] flex items-center justify-center text-[var(--life-primary-600)] shrink-0">
+              <MaskIcon file="add-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
             </span>
             <span className="text-left">
-              <span className="block text-[17px] leading-[1.1] font-semibold text-[#1f2937]">Start fresh</span>
-              <span className="block text-[12px] text-[#586473]">Blank {addLabel}</span>
+              <span className="block text-[12px] leading-[1.2] font-semibold text-[var(--life-base-black)]">Start fresh</span>
+              <span className="block text-[11px] leading-[1.2] text-[var(--life-neutral-500)]">Blank {addLabel}</span>
             </span>
           </button>
 
@@ -222,14 +244,14 @@ function TreeRow({
               event.stopPropagation();
               onAddTemplate?.();
             }}
-            className="w-full flex items-center gap-2.5 rounded-lg px-2.5 py-2.5 hover:bg-[#f7fafc]"
+            className="w-full flex items-center gap-[10px] rounded-[var(--radius-sm)] px-[10px] py-[8px] text-left hover:bg-[var(--life-primary-020)] transition-colors"
           >
-            <span className="w-9 h-9 rounded-lg bg-[#eaf9f7] flex items-center justify-center text-[#0f7f7b] shrink-0">
-              <MaskIcon file="add-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current" />
+            <span className="w-[30px] h-[30px] rounded-[var(--radius-sm)] bg-[var(--life-accent1-050)] flex items-center justify-center text-[var(--life-accent1-600)] shrink-0">
+              <MaskIcon file="use-template-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
             </span>
             <span className="text-left">
-              <span className="block text-[17px] leading-[1.1] font-semibold text-[#1f2937]">Use template</span>
-              <span className="block text-[12px] text-[#586473]">Pick a pre-built structure</span>
+              <span className="block text-[12px] leading-[1.2] font-semibold text-[var(--life-base-black)]">Use template</span>
+              <span className="block text-[11px] leading-[1.2] text-[var(--life-neutral-500)]">Pick a pre-built structure</span>
             </span>
           </button>
         </div>
@@ -242,27 +264,75 @@ function InlineAddRow({
   label,
   paddingLeft,
   onClick,
+  menuOpen = false,
+  onAddStartFresh,
+  onAddTemplate,
+  addLabel = "item",
 }: {
   label: string;
   paddingLeft: number;
   onClick: () => void;
+  menuOpen?: boolean;
+  onAddStartFresh?: () => void;
+  onAddTemplate?: () => void;
+  addLabel?: string;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="w-full h-9 flex items-center text-[#2E7FA1] hover:bg-[#f0f8ff] transition-colors"
-      style={{ paddingLeft, paddingRight: 6 }}
-    >
-      <span className="w-[14px] h-[14px] mr-[6px]" aria-hidden="true" />
-      <span className="w-[18px] mr-[6px] shrink-0 flex items-center justify-center">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="12" y1="5" x2="12" y2="19" />
-          <line x1="5" y1="12" x2="19" y2="12" />
-        </svg>
-      </span>
-      <span className="text-[13px] font-medium">{label}</span>
-    </button>
+    <div className="relative">
+      <button
+        type="button"
+        onClick={onClick}
+        className="w-full h-9 flex items-center text-[#2E7FA1] hover:bg-[#f0f8ff] transition-colors"
+        style={{ paddingLeft, paddingRight: 6 }}
+      >
+        <span className="w-[14px] h-[14px] mr-[6px]" aria-hidden="true" />
+        <span className="w-[18px] mr-[6px] shrink-0 flex items-center justify-center">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+          </svg>
+        </span>
+        <span className="text-[13px] font-medium">{label}</span>
+      </button>
+
+      {menuOpen && (
+        <div className="absolute left-8 top-[36px] z-30 min-w-[210px] rounded-[var(--radius-md)] border border-[var(--life-neutral-100)] bg-[var(--life-base-white)] p-[6px] shadow-[0_4px_20px_rgba(0,0,0,0.12)] flex flex-col gap-[2px]">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onAddStartFresh?.();
+            }}
+            className="w-full flex items-center gap-[10px] rounded-[var(--radius-sm)] px-[10px] py-[8px] text-left hover:bg-[var(--life-primary-020)] transition-colors"
+          >
+            <span className="w-[30px] h-[30px] rounded-[var(--radius-sm)] bg-[var(--life-primary-050)] flex items-center justify-center text-[var(--life-primary-600)] shrink-0">
+              <MaskIcon file="add-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+            </span>
+            <span className="text-left">
+              <span className="block text-[12px] leading-[1.2] font-semibold text-[var(--life-base-black)]">Start fresh</span>
+              <span className="block text-[11px] leading-[1.2] text-[var(--life-neutral-500)]">Blank {addLabel}</span>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onAddTemplate?.();
+            }}
+            className="w-full flex items-center gap-[10px] rounded-[var(--radius-sm)] px-[10px] py-[8px] text-left hover:bg-[var(--life-primary-020)] transition-colors"
+          >
+            <span className="w-[30px] h-[30px] rounded-[var(--radius-sm)] bg-[var(--life-accent1-050)] flex items-center justify-center text-[var(--life-accent1-600)] shrink-0">
+              <MaskIcon file="use-template-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+            </span>
+            <span className="text-left">
+              <span className="block text-[12px] leading-[1.2] font-semibold text-[var(--life-base-black)]">Use template</span>
+              <span className="block text-[11px] leading-[1.2] text-[var(--life-neutral-500)]">Pick a pre-built structure</span>
+            </span>
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -288,6 +358,7 @@ export default function CourseOutlinePanel({
   onDeleteBlock,
   onAddComponent,
   onDeleteComponent,
+  onUseTemplate,
 }: CourseOutlinePanelProps) {
   const navigate = useNavigate();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -295,6 +366,7 @@ export default function CourseOutlinePanel({
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [activeAddMenu, setActiveAddMenu] = useState<AddMenuTarget | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
 
   useEffect(() => {
     function handleOutsideClick(event: MouseEvent) {
@@ -321,10 +393,40 @@ export default function CourseOutlinePanel({
       onAddPage();
     } else if (target.level === "section" && target.articleId) {
       onAddArticle(target.pageId);
-    } else if (target.level === "group" && target.articleId && target.blockId) {
+    } else if (target.level === "group" && target.articleId) {
+      onAddBlock(target.pageId, target.articleId);
+    } else if (target.level === "component" && target.articleId && target.blockId) {
       onAddComponent(target.pageId, target.articleId, target.blockId);
     }
     setActiveAddMenu(null);
+  }
+
+  function confirmDelete() {
+    if (!deleteTarget) return;
+
+    if (deleteTarget.level === "topic") {
+      onDeletePage(deleteTarget.pageId);
+    } else if (deleteTarget.level === "section" && deleteTarget.articleId) {
+      onDeleteArticle(deleteTarget.pageId, deleteTarget.articleId);
+    } else if (deleteTarget.level === "group" && deleteTarget.articleId && deleteTarget.blockId) {
+      onDeleteBlock(deleteTarget.pageId, deleteTarget.articleId, deleteTarget.blockId);
+    } else if (deleteTarget.level === "component" && deleteTarget.articleId && deleteTarget.blockId && deleteTarget.componentId) {
+      onDeleteComponent(
+        deleteTarget.pageId,
+        deleteTarget.articleId,
+        deleteTarget.blockId,
+        deleteTarget.componentId
+      );
+    }
+
+    setDeleteTarget(null);
+  }
+
+  function deleteLabel(level: DeleteTarget["level"]) {
+    if (level === "topic") return "Topic";
+    if (level === "section") return "Section";
+    if (level === "group") return "Group";
+    return "Component";
   }
 
 function handleCourseConfigClick() {
@@ -335,7 +437,7 @@ function handleCourseConfigClick() {
     <div ref={panelRef} className="w-[280px] h-full bg-white border-r border-[#d8dee6] flex flex-col shrink-0 overflow-x-hidden">
       <div className="px-[14px] py-3 border-b border-[#d8dee6] flex items-center justify-between shrink-0">
         <span className="text-sm tracking-[0.08em] font-semibold text-[#3b4753] uppercase">Structure</span>
-        <button type="button" onClick={onClose} className="w-8 h-8 rounded flex items-center justify-center text-[#6b7280] hover:bg-[#f5f7fa]" aria-label="Collapse structure">
+        <button type="button" onClick={onClose} className="w-8 h-8 rounded flex items-center justify-center text-[#6b7280] hover:bg-[#f5f7fa]" aria-label="Collapse structure" title="Collapse structure">
           <MaskIcon file="back-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
         </button>
       </div>
@@ -349,6 +451,7 @@ function handleCourseConfigClick() {
                 label={page.title}
                 paddingLeft={12}
                 selected={pageSelected}
+                labelClassName="text-[13px] font-bold"
                 onClick={() => {
                   setActiveAddMenu(null);
                   onPageSelect(page.id);
@@ -364,14 +467,26 @@ function handleCourseConfigClick() {
                 }}
                 showDelete={true}
                 onDelete={() => {
-                  if (window.confirm("Delete this topic?")) {
-                    onDeletePage(page.id);
-                  }
+                  setActiveAddMenu(null);
+                  setDeleteTarget({
+                    level: "topic",
+                    name: page.title || "Untitled",
+                    pageId: page.id,
+                  });
                 }}
                 menuOpen={activeAddKey === getTargetKey({ level: "topic", pageId: page.id })}
                 onAddStartFresh={() => runAddAction({ level: "topic", pageId: page.id })}
-                onAddTemplate={() => runAddAction({ level: "topic", pageId: page.id })}
+                onAddTemplate={() => {
+                  const target: AddMenuTarget = { level: "topic", pageId: page.id };
+                  if (onUseTemplate) {
+                    onUseTemplate(target);
+                    setActiveAddMenu(null);
+                    return;
+                  }
+                  runAddAction(target);
+                }}
                 addLabel="topic"
+                toggleLabel="topic"
               />
 
               {isExpanded(expandedTopics, page.id) && page.articles.map((article) => {
@@ -382,6 +497,7 @@ function handleCourseConfigClick() {
                       label={article.title}
                       paddingLeft={28}
                       selected={articleSelected}
+                      labelClassName="text-[13px] font-medium"
                       onClick={() => {
                         setActiveAddMenu(null);
                         onArticleSelect(page.id, article.id);
@@ -397,21 +513,49 @@ function handleCourseConfigClick() {
                       }}
                       showDelete={true}
                       onDelete={() => {
-                        if (window.confirm("Delete this section?")) {
-                          onDeleteArticle(page.id, article.id);
-                        }
+                        setActiveAddMenu(null);
+                        setDeleteTarget({
+                          level: "section",
+                          name: article.title || "Untitled",
+                          pageId: page.id,
+                          articleId: article.id,
+                        });
                       }}
                       menuOpen={activeAddKey === getTargetKey({ level: "section", pageId: page.id, articleId: article.id })}
                       onAddStartFresh={() => runAddAction({ level: "section", pageId: page.id, articleId: article.id })}
-                      onAddTemplate={() => runAddAction({ level: "section", pageId: page.id, articleId: article.id })}
+                      onAddTemplate={() => {
+                        const target: AddMenuTarget = { level: "section", pageId: page.id, articleId: article.id };
+                        if (onUseTemplate) {
+                          onUseTemplate(target);
+                          setActiveAddMenu(null);
+                          return;
+                        }
+                        runAddAction(target);
+                      }}
                       addLabel="section"
+                      toggleLabel="section"
                     />
 
                     {isExpanded(expandedSections, article.id) && article.blocks.length === 0 && (
                       <InlineAddRow
                         label="Add Group"
                         paddingLeft={44}
-                        onClick={() => onAddBlock(page.id, article.id)}
+                        onClick={() => {
+                          const target: AddMenuTarget = { level: "group", pageId: page.id, articleId: article.id };
+                          setActiveAddMenu((previous) => (previous && getTargetKey(previous) === getTargetKey(target) ? null : target));
+                        }}
+                        menuOpen={activeAddKey === getTargetKey({ level: "group", pageId: page.id, articleId: article.id })}
+                        onAddStartFresh={() => runAddAction({ level: "group", pageId: page.id, articleId: article.id })}
+                        onAddTemplate={() => {
+                          const target: AddMenuTarget = { level: "group", pageId: page.id, articleId: article.id };
+                          if (onUseTemplate) {
+                            onUseTemplate(target);
+                            setActiveAddMenu(null);
+                            return;
+                          }
+                          runAddAction(target);
+                        }}
+                        addLabel="group"
                       />
                     )}
 
@@ -424,6 +568,7 @@ function handleCourseConfigClick() {
                             label={block.title}
                             paddingLeft={44}
                             selected={blockSelected}
+                            labelClassName="text-[13px] font-normal"
                             onClick={() => {
                               setActiveAddMenu(null);
                               onBlockSelect(page.id, article.id, block.id);
@@ -432,21 +577,35 @@ function handleCourseConfigClick() {
                             canExpand={true}
                             expanded={isExpanded(expandedGroups, block.id)}
                             onToggleExpand={() => setExpandedGroups((previous) => ({ ...previous, [block.id]: !isExpanded(previous, block.id) }))}
-                            showAdd={canAddComponent}
+                            showAdd={true}
                             onAdd={() => {
                               const target: AddMenuTarget = { level: "group", pageId: page.id, articleId: article.id, blockId: block.id };
                               setActiveAddMenu((previous) => (previous && getTargetKey(previous) === getTargetKey(target) ? null : target));
                             }}
                             showDelete={true}
                             onDelete={() => {
-                              if (window.confirm("Delete this group?")) {
-                                onDeleteBlock(page.id, article.id, block.id);
-                              }
+                              setActiveAddMenu(null);
+                              setDeleteTarget({
+                                level: "group",
+                                name: block.title || "Untitled",
+                                pageId: page.id,
+                                articleId: article.id,
+                                blockId: block.id,
+                              });
                             }}
-                            menuOpen={canAddComponent && activeAddKey === getTargetKey({ level: "group", pageId: page.id, articleId: article.id, blockId: block.id })}
+                            menuOpen={activeAddKey === getTargetKey({ level: "group", pageId: page.id, articleId: article.id, blockId: block.id })}
                             onAddStartFresh={() => runAddAction({ level: "group", pageId: page.id, articleId: article.id, blockId: block.id })}
-                            onAddTemplate={() => runAddAction({ level: "group", pageId: page.id, articleId: article.id, blockId: block.id })}
-                            addLabel="group"
+                            onAddTemplate={() => {
+                              const target: AddMenuTarget = { level: "group", pageId: page.id, articleId: article.id, blockId: block.id };
+                              if (onUseTemplate) {
+                                onUseTemplate(target);
+                                setActiveAddMenu(null);
+                                return;
+                              }
+                              runAddAction(target);
+                            }}
+                            addLabel="content group"
+                            toggleLabel="content group"
                           />
 
                           {isExpanded(expandedGroups, block.id) && block.components.map((component) => (
@@ -462,9 +621,15 @@ function handleCourseConfigClick() {
                               icon={<StructureIcon level="component" size={14} className={STRUCTURE_ICON_COLOR_CLASS.component} />}
                               showDelete={true}
                               onDelete={() => {
-                                if (window.confirm("Delete this component?")) {
-                                  onDeleteComponent(page.id, article.id, block.id, component.id);
-                                }
+                                setActiveAddMenu(null);
+                                setDeleteTarget({
+                                  level: "component",
+                                  name: component.settings.title || component.type || "Untitled",
+                                  pageId: page.id,
+                                  articleId: article.id,
+                                  blockId: block.id,
+                                  componentId: component.id,
+                                });
                               }}
                             />
                           ))}
@@ -474,9 +639,21 @@ function handleCourseConfigClick() {
                               label="Add Component"
                               paddingLeft={60}
                               onClick={() => {
-                                const target: AddMenuTarget = { level: "group", pageId: page.id, articleId: article.id, blockId: block.id };
+                                const target: AddMenuTarget = { level: "component", pageId: page.id, articleId: article.id, blockId: block.id };
                                 setActiveAddMenu((previous) => (previous && getTargetKey(previous) === getTargetKey(target) ? null : target));
                               }}
+                              menuOpen={activeAddKey === getTargetKey({ level: "component", pageId: page.id, articleId: article.id, blockId: block.id })}
+                              onAddStartFresh={() => runAddAction({ level: "component", pageId: page.id, articleId: article.id, blockId: block.id })}
+                              onAddTemplate={() => {
+                                const target: AddMenuTarget = { level: "component", pageId: page.id, articleId: article.id, blockId: block.id };
+                                if (onUseTemplate) {
+                                  onUseTemplate(target);
+                                  setActiveAddMenu(null);
+                                  return;
+                                }
+                                runAddAction(target);
+                              }}
+                              addLabel="component"
                             />
                           )}
                         </div>
@@ -525,6 +702,49 @@ function handleCourseConfigClick() {
           <span>Course Config</span>
         </button>
       </div>
+
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setDeleteTarget(null);
+          }}
+        >
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm flex flex-col overflow-hidden">
+            <div className="px-6 pt-6 pb-4 flex flex-col items-center text-center">
+              <div className="w-12 h-12 rounded-full bg-[#fee2e2] flex items-center justify-center mb-4">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
+                  <path d="M10 11v6M14 11v6" />
+                  <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
+                </svg>
+              </div>
+              <h2 className="font-semibold text-[#111827] text-base mb-1">Delete {deleteLabel(deleteTarget.level)}</h2>
+              <p className="text-sm text-[#6b7280]">
+                Are you sure you want to delete <span className="font-medium text-[#111827]">"{deleteTarget.name}"</span>? This action cannot be undone.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#e5e7eb]">
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDelete}
+                className="px-5 py-2 text-sm font-semibold text-white bg-[#dc2626] hover:bg-[#b91c1c] rounded-lg transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

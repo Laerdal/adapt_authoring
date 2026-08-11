@@ -21,6 +21,7 @@ export interface SComponent {
   id: string;
   title: string;
   componentKey: string; // engine `_component` key, e.g. 'text' | 'mcq'
+  layout?: "full" | "left" | "right";
   description?: string;
   url?: string;
 }
