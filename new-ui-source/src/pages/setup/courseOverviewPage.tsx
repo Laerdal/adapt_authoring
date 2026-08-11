@@ -330,7 +330,16 @@ export function CourseOverviewPage({
       setSavedHeroAssetId(heroAssetId);
       setSavedLanguage(language);
       setSavedIsShared(isSharedAll);
-      setSavedCollaborators(collaborators);
+      const nextSavedCollaborators = isSharedAll ? [] : collaborators;
+      setSavedCollaborators(nextSavedCollaborators);
+      if (isSharedAll) {
+        setCollaborators([]);
+        setEmailInput("");
+        setEmailSuggestions([]);
+        setShowEmailSuggestions(false);
+        setActiveEmailSuggestionIndex(-1);
+        setEmailError(null);
+      }
       setSaveSuccess(true);
       return true;
     } catch {
@@ -788,7 +797,7 @@ export function CourseOverviewPage({
         )}
 
         {/* Collaborator list */}
-        {collaborators.length > 0 && (
+        {shareMode === "specific" && collaborators.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {collaborators.map(({ userId, email, role }) => {
               const initials = email.slice(0, 2).toUpperCase();
