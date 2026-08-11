@@ -4,7 +4,6 @@ import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationG
 /* ─────────────────────────────────────────────────────────────
    Types
 ───────────────────────────────────────────────────────────── */
-type PageCompletionRule   = "all-content" | "required-interaction";
 type CourseCompletionRule = "all-content" | "assessment";
 type BookmarkLocation     = "page" | "block" | "component";
 type BookmarkReturn       = "previous" | "furthest";
@@ -17,7 +16,6 @@ type ProgressIndicator    =
   | "all-content-objects"
   | "course-level-nav-btn";
 interface CompletionProgressSettings {
-  pageCompletionRule:   PageCompletionRule;
   courseCompletionRule: CourseCompletionRule;
   notifierLine1:        string;
   notifierLine2:        string;
@@ -36,7 +34,6 @@ interface CompletionProgressSettings {
   timeTextCompleted:    string;
 }
 const DEFAULT_SETTINGS: CompletionProgressSettings = {
-  pageCompletionRule:   "all-content",
   courseCompletionRule: "all-content",
   notifierLine1:        "",
   notifierLine2:        "",
@@ -334,16 +331,6 @@ function CompletionRulesContent({
 }) {
   return (
     <>
-      <CpInnerCard title="Page Completion" subtitle="Complete page when:">
-        <CpRadioGroup<PageCompletionRule>
-          value={cfg.pageCompletionRule}
-          onChange={(v) => set("pageCompletionRule", v)}
-          options={[
-            { value: "all-content",          label: "All content viewed" },
-            { value: "required-interaction", label: "Required interaction completed" },
-          ]}
-        />
-      </CpInnerCard>
       <CpInnerCard title="Course Completion" subtitle="Complete course when:">
         <CpRadioGroup<CourseCompletionRule>
           value={cfg.courseCompletionRule}
