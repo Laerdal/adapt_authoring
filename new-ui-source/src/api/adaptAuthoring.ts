@@ -900,6 +900,12 @@ export async function saveNavigationSettings(courseId: string, s: NavigationSett
 export interface CourseTechnicalSettings {
   _id?: string;
   _courseId?: string;
+  _completionCriteria?: {
+    _requireContentCompleted?: boolean;
+    _requireAssessmentCompleted?: boolean;
+    _submitOnEveryAssessmentAttempt?: boolean;
+    _shouldSubmitScore?: boolean;
+  };
   screenSize?: {
     small?: number;
     medium?: number;

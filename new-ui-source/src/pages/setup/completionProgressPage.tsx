@@ -1,4 +1,9 @@
 ﻿import { useState, useEffect, useCallback } from "react";
+import {
+  getCourseTechnicalSettings,
+  updateCourseTechnicalSettings,
+  type CourseTechnicalSettings,
+} from "../../api/adaptAuthoring";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 /* ─────────────────────────────────────────────────────────────
@@ -37,8 +42,48 @@ interface CompletionProgressSettings {
   timeTextAfter:        string;
   timeTextCompleted:    string;
 }
+
+type CompletionCriteriaConfig = NonNullable<CourseTechnicalSettings["_completionCriteria"]>;
+
+const COURSE_COMPLETION_RULE_ORDER: CourseCompletionRule[] = [
+  "all-content",
+  "assessment",
+  "submit-every-attempt",
+  "submit-score",
+];
+
+function normalizeCourseCompletionRules(rules: CourseCompletionRule[]): CourseCompletionRule[] {
+  const uniqueRules = new Set(rules);
+  return COURSE_COMPLETION_RULE_ORDER.filter((rule) => uniqueRules.has(rule));
+}
+
+function rulesFromCompletionCriteria(
+  criteria?: CompletionCriteriaConfig | null,
+): CourseCompletionRule[] {
+  const rules: CourseCompletionRule[] = [];
+  if (criteria?._requireContentCompleted !== false) rules.push("all-content");
+  if (criteria?._requireAssessmentCompleted) rules.push("assessment");
+  if (criteria?._submitOnEveryAssessmentAttempt) rules.push("submit-every-attempt");
+  if (criteria?._shouldSubmitScore) rules.push("submit-score");
+  return normalizeCourseCompletionRules(rules);
+}
+
+function completionCriteriaFromRules(
+  rules: CourseCompletionRule[],
+  base?: CompletionCriteriaConfig | null,
+): CompletionCriteriaConfig {
+  const normalizedRules = new Set(normalizeCourseCompletionRules(rules));
+  return {
+    ...(base ?? {}),
+    _requireContentCompleted: normalizedRules.has("all-content"),
+    _requireAssessmentCompleted: normalizedRules.has("assessment"),
+    _submitOnEveryAssessmentAttempt: normalizedRules.has("submit-every-attempt"),
+    _shouldSubmitScore: normalizedRules.has("submit-score"),
+  };
+}
+
 const DEFAULT_SETTINGS: CompletionProgressSettings = {
-  courseCompletionRules:          [],
+  courseCompletionRules:          ["all-content"],
   notifierLine1:        "",
   notifierLine2:        "",
   bookmarkingEnabled:   false,
@@ -367,7 +412,7 @@ function CompletionRulesContent({
       <CpInnerCard title="Course Completion" subtitle="Complete course when:">
         <CpCheckboxMulti<CourseCompletionRule>
           selected={cfg.courseCompletionRules}
-          onChange={(v) => set("courseCompletionRules", v)}
+          onChange={(v) => set("courseCompletionRules", normalizeCourseCompletionRules(v))}
           options={[
             { value: "all-content",           label: "All content in the course must be completed" },
             { value: "assessment",             label: "The assessment must be completed" },
@@ -633,12 +678,21 @@ export interface CompletionProgressPageProps {
   onPendingNavigationHandled?: () => void;
 }
 export function CompletionProgressPage({
+  courseId,
   onNavigationRequest,
   pendingNavigation,
   onPendingNavigationHandled,
 }: CompletionProgressPageProps) {
   const [cfg, setCfg] = useState<CompletionProgressSettings>(DEFAULT_SETTINGS);
   const [saved, setSaved] = useState<CompletionProgressSettings>(DEFAULT_SETTINGS);
+  const [configId, setConfigId] = useState<string | null>(null);
+  const [completionCriteria, setCompletionCriteria] = useState<CompletionCriteriaConfig>({
+    _requireContentCompleted: true,
+    _requireAssessmentCompleted: false,
+    _submitOnEveryAssessmentAttempt: false,
+    _shouldSubmitScore: false,
+  });
+  const [loadError, setLoadError] = useState(false);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   type Section = "completionRules" | "completionFeedback" | "resumeBookmarking" | "progressIndicators" | "timeEstimate";
@@ -653,6 +707,54 @@ export function CompletionProgressPage({
       setCfg((prev) => ({ ...prev, [k]: v })),
     [],
   );
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCompletionCriteria() {
+      if (!courseId) {
+        if (!cancelled) {
+          setConfigId(null);
+          setLoadError(false);
+          setCompletionCriteria(completionCriteriaFromRules(DEFAULT_SETTINGS.courseCompletionRules));
+          setCfg(DEFAULT_SETTINGS);
+          setSaved(DEFAULT_SETTINGS);
+        }
+        return;
+      }
+
+      try {
+        setLoadError(false);
+        const config = await getCourseTechnicalSettings(courseId);
+        if (cancelled) return;
+
+        const nextCriteria = completionCriteriaFromRules(
+          rulesFromCompletionCriteria(config._completionCriteria),
+          config._completionCriteria,
+        );
+        const nextRules = rulesFromCompletionCriteria(nextCriteria);
+        const nextSettings = {
+          ...DEFAULT_SETTINGS,
+          courseCompletionRules: nextRules,
+        };
+
+        setConfigId(config._id ?? null);
+        setCompletionCriteria(nextCriteria);
+        setCfg(nextSettings);
+        setSaved(nextSettings);
+      } catch (error) {
+        if (cancelled) return;
+        console.error("Failed to load completion criteria settings", error);
+        setConfigId(null);
+        setLoadError(true);
+      }
+    }
+
+    void loadCompletionCriteria();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 3500);
@@ -671,13 +773,38 @@ export function CompletionProgressPage({
   }
   async function handleSave() {
     if (saving) return;
+    if (!courseId) {
+      setToast({ type: "error", message: "Course id is missing. Reload the page before saving." });
+      return;
+    }
+    if (loadError) {
+      setToast({ type: "error", message: "Completion criteria didn't load. Reload the page before saving." });
+      return;
+    }
+    if (!configId) {
+      setToast({ type: "error", message: "Completion criteria config didn't load. Reload the page before saving." });
+      return;
+    }
+
     setSaving(true);
     setToast(null);
     try {
-      await new Promise((r) => setTimeout(r, 300));
-      setSaved(cfg);
+      const nextCompletionCriteria = completionCriteriaFromRules(cfg.courseCompletionRules, completionCriteria);
+      const changedFields: Partial<CourseTechnicalSettings> = {
+        _id: configId,
+        _courseId: courseId,
+        _completionCriteria: nextCompletionCriteria,
+      };
+
+      await updateCourseTechnicalSettings(configId, changedFields);
+      setCompletionCriteria(nextCompletionCriteria);
+      setSaved((prev) => ({
+        ...prev,
+        courseCompletionRules: normalizeCourseCompletionRules(cfg.courseCompletionRules),
+      }));
       setToast({ type: "success", message: "Changes saved successfully" });
-    } catch {
+    } catch (error) {
+      console.error("Failed to save completion criteria settings", error);
       setToast({ type: "error", message: "Couldn't save. Please try again." });
     } finally {
       setSaving(false);
