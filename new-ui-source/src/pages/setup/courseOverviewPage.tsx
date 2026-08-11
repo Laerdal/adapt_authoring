@@ -213,6 +213,7 @@ export function CourseOverviewPage({
     }, 220);
 
     return () => {
+      emailSearchRequestIdRef.current++;
       window.clearTimeout(timeoutId);
     };
   }, [emailInput, shareMode, collaborators, emailInputFocused]);
