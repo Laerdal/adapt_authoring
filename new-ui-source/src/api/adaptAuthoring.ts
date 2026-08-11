@@ -1037,6 +1037,56 @@ export async function updateCourseMenuSettings(courseId: string, menuSettings: C
   return apiClient.put(`/api/content/course/${courseId}`, { menuSettings });
 }
 
+export interface CourseCompletionNotifier {
+  _isEnabled?: boolean;
+  _message?: {
+    line1?: string;
+    line2?: string;
+  };
+  ariaLabel?: string;
+  _ariaLabel?: string;
+  [key: string]: unknown;
+}
+
+export async function getCourseCompletionNotifier(courseId: string): Promise<CourseCompletionNotifier> {
+  const course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+  const rootNotifier = obj(course._completionNotifier);
+  const extensionNotifier = obj(obj(course._extensions)._completionNotifier);
+  const notifier = Object.keys(extensionNotifier).length ? extensionNotifier : rootNotifier;
+  return notifier as CourseCompletionNotifier;
+}
+
+export async function saveCourseCompletionNotifier(
+  courseId: string,
+  completionNotifier: CourseCompletionNotifier,
+): Promise<unknown> {
+  const course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+  const courseExtensions = {
+    ...obj(course._extensions),
+    _completionNotifier: completionNotifier,
+  };
+
+  return apiClient.put(`/api/content/course/${courseId}`, {
+    _extensions: courseExtensions,
+    _completionNotifier: completionNotifier,
+  });
+}
+
+export async function enableCompletionNotifierInConfig(
+  configId: string,
+  courseId: string,
+): Promise<unknown> {
+  return apiClient.patch(`/api/content/config/${configId}`, {
+    _id: configId,
+    _courseId: courseId,
+    _extensions: {
+      _completionNotifier: {
+        _isEnabled: true,
+      },
+    },
+  });
+}
+
 // ── Accessibility (_globals) ─────────────────────────────────────────────────
 // Every accessibility text override lives in the course document's `_globals`
 // object: core ARIA labels + instructions under `_accessibility`, plus per-plugin

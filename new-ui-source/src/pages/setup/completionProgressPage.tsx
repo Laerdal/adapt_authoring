@@ -1,7 +1,11 @@
 ﻿import { useState, useEffect, useCallback } from "react";
 import {
+  enableCompletionNotifierInConfig,
+  getCourseCompletionNotifier,
   getCourseTechnicalSettings,
+  saveCourseCompletionNotifier,
   updateCourseTechnicalSettings,
+  type CourseCompletionNotifier,
   type CourseTechnicalSettings,
 } from "../../api/adaptAuthoring";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
@@ -28,6 +32,7 @@ interface CompletionProgressSettings {
   courseCompletionRules:           CourseCompletionRule[];
   notifierLine1:        string;
   notifierLine2:        string;
+  notifierAriaLabel:    string;
   bookmarkingEnabled:   boolean;
   bookmarkingLevel:     BookmarkLocation;
   bookmarkingReturn:    BookmarkReturn;
@@ -44,6 +49,7 @@ interface CompletionProgressSettings {
 }
 
 type CompletionCriteriaConfig = NonNullable<CourseTechnicalSettings["_completionCriteria"]>;
+type CompletionNotifierConfig = CourseCompletionNotifier;
 
 const COURSE_COMPLETION_RULE_ORDER: CourseCompletionRule[] = [
   "all-content",
@@ -82,10 +88,44 @@ function completionCriteriaFromRules(
   };
 }
 
+function completionNotifierFromCourse(
+  notifier?: CompletionNotifierConfig | null,
+): Pick<CompletionProgressSettings, "notifierLine1" | "notifierLine2" | "notifierAriaLabel"> {
+  const message = notifier?._message;
+  const ariaLabel = typeof notifier?.ariaLabel === "string"
+    ? notifier.ariaLabel
+    : typeof notifier?._ariaLabel === "string"
+      ? notifier._ariaLabel
+      : "Close completion message";
+
+  return {
+    notifierLine1: typeof message?.line1 === "string" ? message.line1 : "",
+    notifierLine2: typeof message?.line2 === "string" ? message.line2 : "",
+    notifierAriaLabel: ariaLabel,
+  };
+}
+
+function completionNotifierToCourse(
+  settings: Pick<CompletionProgressSettings, "notifierLine1" | "notifierLine2" | "notifierAriaLabel">,
+  base?: CompletionNotifierConfig | null,
+): CompletionNotifierConfig {
+  return {
+    ...(base ?? {}),
+    _message: {
+      ...(base?._message ?? {}),
+      line1: settings.notifierLine1,
+      line2: settings.notifierLine2,
+    },
+    ariaLabel: settings.notifierAriaLabel,
+    _ariaLabel: settings.notifierAriaLabel,
+  };
+}
+
 const DEFAULT_SETTINGS: CompletionProgressSettings = {
   courseCompletionRules:          ["all-content"],
   notifierLine1:        "",
   notifierLine2:        "",
+  notifierAriaLabel:    "Close completion message",
   bookmarkingEnabled:   false,
   bookmarkingLevel:     "component",
   bookmarkingReturn:    "furthest",
@@ -431,7 +471,6 @@ function CompletionFeedbackContent({
   cfg: CompletionProgressSettings;
   set: <K extends keyof CompletionProgressSettings>(k: K, v: CompletionProgressSettings[K]) => void;
 }) {
-  const hasPreview = cfg.notifierLine1.trim() || cfg.notifierLine2.trim();
   return (
     <>
       <CpInnerCard title="Completion Notifier" subtitle="Message for the course completion notifier">
@@ -448,22 +487,15 @@ function CompletionFeedbackContent({
             onChange={(v) => set("notifierLine2", v)}
             placeholder="e.g. You have completed this course."
           />
+          <CpTextInput
+            label="Close button aria label"
+            hint="Accessible label announced by screen readers for the close button"
+            value={cfg.notifierAriaLabel}
+            onChange={(v) => set("notifierAriaLabel", v)}
+            placeholder="e.g. Close completion message"
+          />
         </div>
       </CpInnerCard>
-      {hasPreview && (
-        <div className="rounded-xl border border-[#e5e7eb] bg-[#f9fafb] p-4">
-          <p className="text-[11px] font-semibold text-[#9ca3af] uppercase tracking-wide mb-3">Preview</p>
-          <div className="bg-white rounded-xl border border-[#e5e7eb] shadow-sm p-5 flex flex-col items-center gap-2 text-center max-w-xs mx-auto">
-            <div className="w-10 h-10 rounded-full bg-[#d1fae5] flex items-center justify-center mb-1">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-            </div>
-            {cfg.notifierLine1 && <p className="text-sm font-bold text-[#111827]">{cfg.notifierLine1}</p>}
-            {cfg.notifierLine2 && <p className="text-sm text-[#6b7280]">{cfg.notifierLine2}</p>}
-          </div>
-        </div>
-      )}
     </>
   );
 }
@@ -692,7 +724,15 @@ export function CompletionProgressPage({
     _submitOnEveryAssessmentAttempt: false,
     _shouldSubmitScore: false,
   });
-  const [loadError, setLoadError] = useState(false);
+  const [completionNotifier, setCompletionNotifier] = useState<CompletionNotifierConfig>({
+    _message: {
+      line1: DEFAULT_SETTINGS.notifierLine1,
+      line2: DEFAULT_SETTINGS.notifierLine2,
+    },
+    ariaLabel: DEFAULT_SETTINGS.notifierAriaLabel,
+    _ariaLabel: DEFAULT_SETTINGS.notifierAriaLabel,
+  });
+  const [loadErrorMessage, setLoadErrorMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   type Section = "completionRules" | "completionFeedback" | "resumeBookmarking" | "progressIndicators" | "timeEstimate";
@@ -714,8 +754,9 @@ export function CompletionProgressPage({
       if (!courseId) {
         if (!cancelled) {
           setConfigId(null);
-          setLoadError(false);
+          setLoadErrorMessage(null);
           setCompletionCriteria(completionCriteriaFromRules(DEFAULT_SETTINGS.courseCompletionRules));
+          setCompletionNotifier(completionNotifierToCourse(DEFAULT_SETTINGS));
           setCfg(DEFAULT_SETTINGS);
           setSaved(DEFAULT_SETTINGS);
         }
@@ -723,8 +764,11 @@ export function CompletionProgressPage({
       }
 
       try {
-        setLoadError(false);
-        const config = await getCourseTechnicalSettings(courseId);
+        setLoadErrorMessage(null);
+        const [config, notifier] = await Promise.all([
+          getCourseTechnicalSettings(courseId),
+          getCourseCompletionNotifier(courseId),
+        ]);
         if (cancelled) return;
 
         const nextCriteria = completionCriteriaFromRules(
@@ -732,20 +776,23 @@ export function CompletionProgressPage({
           config._completionCriteria,
         );
         const nextRules = rulesFromCompletionCriteria(nextCriteria);
+        const nextNotifier = completionNotifierFromCourse(notifier);
         const nextSettings = {
           ...DEFAULT_SETTINGS,
           courseCompletionRules: nextRules,
+          ...nextNotifier,
         };
 
         setConfigId(config._id ?? null);
         setCompletionCriteria(nextCriteria);
+        setCompletionNotifier(completionNotifierToCourse(nextSettings, notifier));
         setCfg(nextSettings);
         setSaved(nextSettings);
       } catch (error) {
         if (cancelled) return;
-        console.error("Failed to load completion criteria settings", error);
+        console.error("Failed to load completion settings", error);
         setConfigId(null);
-        setLoadError(true);
+        setLoadErrorMessage("Completion settings didn't load. Reload the page before saving.");
       }
     }
 
@@ -777,8 +824,8 @@ export function CompletionProgressPage({
       setToast({ type: "error", message: "Course id is missing. Reload the page before saving." });
       return;
     }
-    if (loadError) {
-      setToast({ type: "error", message: "Completion criteria didn't load. Reload the page before saving." });
+    if (loadErrorMessage) {
+      setToast({ type: "error", message: loadErrorMessage });
       return;
     }
     if (!configId) {
@@ -790,21 +837,30 @@ export function CompletionProgressPage({
     setToast(null);
     try {
       const nextCompletionCriteria = completionCriteriaFromRules(cfg.courseCompletionRules, completionCriteria);
+      const nextCompletionNotifier = {
+        ...completionNotifierToCourse(cfg, completionNotifier),
+        _isEnabled: true,
+      };
       const changedFields: Partial<CourseTechnicalSettings> = {
         _id: configId,
         _courseId: courseId,
         _completionCriteria: nextCompletionCriteria,
       };
 
-      await updateCourseTechnicalSettings(configId, changedFields);
+      await Promise.all([
+        updateCourseTechnicalSettings(configId, changedFields),
+        saveCourseCompletionNotifier(courseId, nextCompletionNotifier),
+        enableCompletionNotifierInConfig(configId, courseId),
+      ]);
       setCompletionCriteria(nextCompletionCriteria);
-      setSaved((prev) => ({
-        ...prev,
+      setCompletionNotifier(nextCompletionNotifier);
+      setSaved({
+        ...cfg,
         courseCompletionRules: normalizeCourseCompletionRules(cfg.courseCompletionRules),
-      }));
+      });
       setToast({ type: "success", message: "Changes saved successfully" });
     } catch (error) {
-      console.error("Failed to save completion criteria settings", error);
+      console.error("Failed to save completion settings", error);
       setToast({ type: "error", message: "Couldn't save. Please try again." });
     } finally {
       setSaving(false);
