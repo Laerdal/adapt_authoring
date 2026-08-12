@@ -1050,6 +1050,8 @@ export function CompletionProgressPage({
           progressIndicators: cfg.progressIndicators,
           progressIndicatorText: cfg.progressIndicatorText,
           progressIndicatorAriaLabel: cfg.progressIndicatorAriaLabel,
+          progressType: cfg.progressType,
+          progressFormat: cfg.progressFormat,
         }),
       ]);
       setCompletionCriteria(nextCompletionCriteria);

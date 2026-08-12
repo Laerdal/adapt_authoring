@@ -1089,6 +1089,7 @@ export async function enableCompletionNotifierInConfig(
 
 const PAGE_LEVEL_PROGRESS_EXTENSION_NAME = "adapt-contrib-pageLevelProgress";
 const LAERDAL_PAGE_LEVEL_PROGRESS_EXTENSION_NAME = "adapt-laerdal-pageLevelProgress";
+const PROGRESSION_INDICATOR_EXTENSION_TARGET = "_progressionIndicator";
 
 export type CourseProgressBarStyle = "continuous" | "compact";
 export type CourseProgressIndicatorKey =
@@ -1097,12 +1098,16 @@ export type CourseProgressIndicatorKey =
   | "nav-bar"
   | "all-content-objects"
   | "course-level-nav-btn";
+export type CourseProgressType = "pages" | "questions";
+export type CourseProgressFormat = "bar" | "stepper" | "percentage";
 
 export interface CoursePageLevelProgressSettings {
   progressBarStyle: CourseProgressBarStyle;
   progressIndicators: CourseProgressIndicatorKey[];
   progressIndicatorText: string;
   progressIndicatorAriaLabel: string;
+  progressType: CourseProgressType;
+  progressFormat: CourseProgressFormat;
 }
 
 interface CoursePageLevelProgressConfig {
@@ -1114,6 +1119,13 @@ interface CoursePageLevelProgressConfig {
   _useCourseProgressInNavigationButton: boolean;
 }
 
+interface CourseProgressionIndicatorConfig {
+  _progressionLabel: string;
+  _progressionAriaLabel: string;
+  _progressionType: CourseProgressType;
+  _progressionFormat: CourseProgressFormat;
+}
+
 const DEFAULT_PAGE_LEVEL_PROGRESS_CONFIG: CoursePageLevelProgressConfig = {
   _isEnabled: true,
   _showPageCompletion: true,
@@ -1121,6 +1133,13 @@ const DEFAULT_PAGE_LEVEL_PROGRESS_CONFIG: CoursePageLevelProgressConfig = {
   _isShownInNavigationBar: true,
   _showAtCourseLevel: false,
   _useCourseProgressInNavigationButton: false,
+};
+
+const DEFAULT_PROGRESSION_INDICATOR_CONFIG: CourseProgressionIndicatorConfig = {
+  _progressionLabel: "",
+  _progressionAriaLabel: "",
+  _progressionType: "pages",
+  _progressionFormat: "bar",
 };
 
 function toPageLevelProgressConfig(raw: AnyRecord): CoursePageLevelProgressConfig {
@@ -1134,6 +1153,18 @@ function toPageLevelProgressConfig(raw: AnyRecord): CoursePageLevelProgressConfi
       raw._useCourseProgressInNavigationButton,
       DEFAULT_PAGE_LEVEL_PROGRESS_CONFIG._useCourseProgressInNavigationButton,
     ),
+  };
+}
+
+function toProgressionIndicatorConfig(raw: AnyRecord): CourseProgressionIndicatorConfig {
+  const progressionType = str(raw._progressionType, DEFAULT_PROGRESSION_INDICATOR_CONFIG._progressionType);
+  const progressionFormat = str(raw._progressionFormat, DEFAULT_PROGRESSION_INDICATOR_CONFIG._progressionFormat);
+
+  return {
+    _progressionLabel: str(raw._progressionLabel, DEFAULT_PROGRESSION_INDICATOR_CONFIG._progressionLabel),
+    _progressionAriaLabel: str(raw._progressionAriaLabel, DEFAULT_PROGRESSION_INDICATOR_CONFIG._progressionAriaLabel),
+    _progressionType: progressionType === "questions" ? "questions" : "pages",
+    _progressionFormat: progressionFormat === "stepper" || progressionFormat === "percentage" ? progressionFormat : "bar",
   };
 }
 
@@ -1180,6 +1211,10 @@ export async function getCoursePageLevelProgressSettings(
     ...obj(courseExtensions._laerdalPageLevelProgress),
     ...obj(course._laerdalPageLevelProgress),
   };
+  const progressionRaw = {
+    ...obj(courseExtensions[PROGRESSION_INDICATOR_EXTENSION_TARGET]),
+    ...obj(course[PROGRESSION_INDICATOR_EXTENSION_TARGET]),
+  };
 
   const globals = obj(course._globals);
   const globalExtensions = obj(globals._extensions);
@@ -1188,6 +1223,7 @@ export async function getCoursePageLevelProgressSettings(
 
   const contribCfg = toPageLevelProgressConfig(contribRaw);
   const laerdalCfg = toPageLevelProgressConfig(laerdalRaw);
+  const progressionCfg = toProgressionIndicatorConfig(progressionRaw);
 
   const contribInstalled = isExtensionInstalledByName(config, PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
   const laerdalInstalled = isExtensionInstalledByName(config, LAERDAL_PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
@@ -1208,17 +1244,19 @@ export async function getCoursePageLevelProgressSettings(
   const activeConfig = progressBarStyle === "continuous" ? laerdalCfg : contribCfg;
   const activeGlobals = progressBarStyle === "continuous" ? laerdalGlobals : contribGlobals;
 
-  const progressIndicatorText = str(
+  const progressIndicatorText = progressionCfg._progressionLabel || str(
     activeGlobals.pageLevelProgress,
     str(activeGlobals._laerdalPageLevelProgress),
   );
-  const progressIndicatorAriaLabel = str(activeGlobals.pageLevelProgressIndicatorBar);
+  const progressIndicatorAriaLabel = progressionCfg._progressionAriaLabel || str(activeGlobals.pageLevelProgressIndicatorBar);
 
   return {
     progressBarStyle,
     progressIndicators: indicatorsFromPageLevelProgressConfig(activeConfig),
     progressIndicatorText,
     progressIndicatorAriaLabel,
+    progressType: progressionCfg._progressionType,
+    progressFormat: progressionCfg._progressionFormat,
   };
 }
 
@@ -1276,6 +1314,10 @@ export async function saveCoursePageLevelProgressSettings(
     ...obj(courseExtensions._laerdalPageLevelProgress),
     ...obj(course._laerdalPageLevelProgress),
   };
+  const existingProgression = {
+    ...obj(courseExtensions[PROGRESSION_INDICATOR_EXTENSION_TARGET]),
+    ...obj(course[PROGRESSION_INDICATOR_EXTENSION_TARGET]),
+  };
 
   const nextContrib = {
     ...existingContrib,
@@ -1286,6 +1328,13 @@ export async function saveCoursePageLevelProgressSettings(
     ...existingLaerdal,
     ...sharedConfig,
     _isEnabled: laerdalInstalledNow && shouldEnableLaerdal,
+  };
+  const nextProgression = {
+    ...existingProgression,
+    _progressionLabel: settings.progressIndicatorText,
+    _progressionAriaLabel: settings.progressIndicatorAriaLabel,
+    _progressionType: settings.progressType,
+    _progressionFormat: settings.progressFormat,
   };
 
   const nextContribGlobals = {
@@ -1303,10 +1352,12 @@ export async function saveCoursePageLevelProgressSettings(
   await apiClient.put(`/api/content/course/${courseId}`, {
     _pageLevelProgress: nextContrib,
     _laerdalPageLevelProgress: nextLaerdal,
+    [PROGRESSION_INDICATOR_EXTENSION_TARGET]: nextProgression,
     _extensions: {
       ...courseExtensions,
       _pageLevelProgress: nextContrib,
       _laerdalPageLevelProgress: nextLaerdal,
+      [PROGRESSION_INDICATOR_EXTENSION_TARGET]: nextProgression,
     },
     _globals: {
       ...courseGlobals,
