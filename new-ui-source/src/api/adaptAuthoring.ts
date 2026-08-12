@@ -1087,6 +1087,125 @@ export async function enableCompletionNotifierInConfig(
   });
 }
 
+const BOOKMARKING_EXTENSION_NAME = "adapt-contrib-bookmarking";
+
+export interface CourseBookmarkingSettings {
+  _isEnabled?: boolean;
+  _level?: "page" | "block" | "component";
+  _location?: "previous" | "furthest";
+  _showPrompt?: boolean;
+  _autoRestore?: boolean;
+  title?: string;
+  body?: string;
+  _buttons?: {
+    yes?: string;
+    no?: string;
+  };
+  [key: string]: unknown;
+}
+
+function normalizePluginName(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function isExtensionInstalledByName(config: EngineConfigDetails, extensionName: string): boolean {
+  const target = normalizePluginName(extensionName);
+  const map = config._enabledExtensions ?? {};
+  return Object.values(map).some((entry) => {
+    const name = typeof entry?.name === "string" ? normalizePluginName(entry.name) : "";
+    return !!name && name === target;
+  });
+}
+
+async function resolveExtensionTypeIdsByNames(extensionNames: string[]): Promise<string[]> {
+  if (!extensionNames.length) return [];
+
+  const rows = await apiClient.get<{ _id: string; name?: string }[]>("/api/extensiontype");
+  const byName = new Map<string, string>();
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    if (!row?._id || typeof row?.name !== "string") return;
+    byName.set(normalizePluginName(row.name), row._id);
+  });
+
+  return extensionNames
+    .map((name) => byName.get(normalizePluginName(name)))
+    .filter((id): id is string => !!id);
+}
+
+export async function getCourseBookmarkingSettings(courseId: string): Promise<CourseBookmarkingSettings> {
+  const course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+  const rootBookmarking = obj(course._bookmarking);
+  const extensionBookmarking = obj(obj(course._extensions)._bookmarking);
+  const source = Object.keys(rootBookmarking).length ? rootBookmarking : extensionBookmarking;
+  const buttons = obj(source._buttons);
+
+  return {
+    ...source,
+    _isEnabled: bool(source._isEnabled, false),
+    _level: str(source._level, "component") as CourseBookmarkingSettings["_level"],
+    _location: str(source._location, "furthest") as CourseBookmarkingSettings["_location"],
+    _showPrompt: bool(source._showPrompt, true),
+    _autoRestore: bool(source._autoRestore, true),
+    title: str(source.title, "Bookmarking"),
+    body: str(source.body, "Would you like to continue where you left off?"),
+    _buttons: {
+      ...buttons,
+      yes: str(buttons.yes, "Yes"),
+      no: str(buttons.no, "No"),
+    },
+  };
+}
+
+export async function saveCourseBookmarkingSettings(
+  courseId: string,
+  settings: CourseBookmarkingSettings,
+): Promise<void> {
+  let course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+  const config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+
+  const shouldEnable = bool(settings._isEnabled, false);
+  const isInstalled = isExtensionInstalledByName(config, BOOKMARKING_EXTENSION_NAME);
+
+  if (shouldEnable && !isInstalled) {
+    const ids = await resolveExtensionTypeIdsByNames([BOOKMARKING_EXTENSION_NAME]);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/enable/${courseId}`, { extensions: ids });
+      course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+    }
+  } else if (!shouldEnable && isInstalled) {
+    const ids = await resolveExtensionTypeIdsByNames([BOOKMARKING_EXTENSION_NAME]);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/disable/${courseId}`, { extensions: ids });
+      course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+    }
+  }
+
+  const rootBookmarking = obj(course._bookmarking);
+  const buttons = obj(rootBookmarking._buttons);
+
+  const nextBookmarking: CourseBookmarkingSettings = {
+    ...rootBookmarking,
+    ...settings,
+    _isEnabled: shouldEnable,
+    _level: str(settings._level, str(rootBookmarking._level, "component")) as CourseBookmarkingSettings["_level"],
+    _location: str(settings._location, str(rootBookmarking._location, "furthest")) as CourseBookmarkingSettings["_location"],
+    _showPrompt: bool(settings._showPrompt, bool(rootBookmarking._showPrompt, true)),
+    _autoRestore: bool(settings._autoRestore, bool(rootBookmarking._autoRestore, true)),
+    title: str(settings.title, str(rootBookmarking.title, "Bookmarking")),
+    body: str(settings.body, str(rootBookmarking.body, "Would you like to continue where you left off?")),
+    _buttons: {
+      ...buttons,
+      ...obj(settings._buttons),
+      yes: str(obj(settings._buttons).yes, str(buttons.yes, "Yes")),
+      no: str(obj(settings._buttons).no, str(buttons.no, "No")),
+    },
+  };
+
+  await apiClient.put(`/api/content/course/${courseId}`, {
+    _bookmarking: nextBookmarking,
+  });
+}
+
 // ── Accessibility (_globals) ─────────────────────────────────────────────────
 // Every accessibility text override lives in the course document's `_globals`
 // object: core ARIA labels + instructions under `_accessibility`, plus per-plugin

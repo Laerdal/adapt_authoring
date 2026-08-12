@@ -1,10 +1,13 @@
 ﻿import { useState, useEffect, useCallback } from "react";
 import {
   enableCompletionNotifierInConfig,
+  getCourseBookmarkingSettings,
   getCourseCompletionNotifier,
   getCourseTechnicalSettings,
   saveCourseCompletionNotifier,
+  saveCourseBookmarkingSettings,
   updateCourseTechnicalSettings,
+  type CourseBookmarkingSettings,
   type CourseCompletionNotifier,
   type CourseTechnicalSettings,
 } from "../../api/adaptAuthoring";
@@ -36,6 +39,12 @@ interface CompletionProgressSettings {
   bookmarkingEnabled:   boolean;
   bookmarkingLevel:     BookmarkLocation;
   bookmarkingReturn:    BookmarkReturn;
+  bookmarkingShowPrompt: boolean;
+  bookmarkingAutoRestore: boolean;
+  bookmarkingPromptTitle: string;
+  bookmarkingPromptMessage: string;
+  bookmarkingPromptYes: string;
+  bookmarkingPromptNo: string;
   resumeEnabled:        boolean;
   resumeTitle:          string;
   resumeMessage:        string;
@@ -50,6 +59,7 @@ interface CompletionProgressSettings {
 
 type CompletionCriteriaConfig = NonNullable<CourseTechnicalSettings["_completionCriteria"]>;
 type CompletionNotifierConfig = CourseCompletionNotifier;
+type BookmarkingConfig = CourseBookmarkingSettings;
 
 const COURSE_COMPLETION_RULE_ORDER: CourseCompletionRule[] = [
   "all-content",
@@ -129,6 +139,12 @@ const DEFAULT_SETTINGS: CompletionProgressSettings = {
   bookmarkingEnabled:   false,
   bookmarkingLevel:     "component",
   bookmarkingReturn:    "furthest",
+  bookmarkingShowPrompt: true,
+  bookmarkingAutoRestore: true,
+  bookmarkingPromptTitle: "Bookmarking",
+  bookmarkingPromptMessage: "Would you like to continue where you left off?",
+  bookmarkingPromptYes: "Yes",
+  bookmarkingPromptNo: "No",
   resumeEnabled:        false,
   resumeTitle:          "Continue where you left off?",
   resumeMessage:        "Would you like to resume?",
@@ -540,6 +556,45 @@ function ResumeBookmarkingContent({
                 The Furthest option pairs well with sequential navigation, ensuring learners always progress forward.
               </CpInfoNote>
             )}
+
+            <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] p-3 flex flex-col gap-3">
+              <CpCheckbox
+                label="Show prompt"
+                checked={cfg.bookmarkingShowPrompt}
+                onChange={(v) => set("bookmarkingShowPrompt", v)}
+              />
+              <CpCheckbox
+                label="Auto restore"
+                checked={cfg.bookmarkingAutoRestore}
+                onChange={(v) => set("bookmarkingAutoRestore", v)}
+              />
+              <CpTextInput
+                label="Prompt title"
+                value={cfg.bookmarkingPromptTitle}
+                onChange={(v) => set("bookmarkingPromptTitle", v)}
+                placeholder="Bookmarking"
+              />
+              <CpTextInput
+                label="Prompt message"
+                value={cfg.bookmarkingPromptMessage}
+                onChange={(v) => set("bookmarkingPromptMessage", v)}
+                placeholder="Would you like to continue where you left off?"
+              />
+              <div className="grid grid-cols-2 gap-3">
+                <CpTextInput
+                  label="Yes"
+                  value={cfg.bookmarkingPromptYes}
+                  onChange={(v) => set("bookmarkingPromptYes", v)}
+                  placeholder="Yes"
+                />
+                <CpTextInput
+                  label="No"
+                  value={cfg.bookmarkingPromptNo}
+                  onChange={(v) => set("bookmarkingPromptNo", v)}
+                  placeholder="No"
+                />
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -765,9 +820,10 @@ export function CompletionProgressPage({
 
       try {
         setLoadErrorMessage(null);
-        const [config, notifier] = await Promise.all([
+        const [config, notifier, bookmarking] = await Promise.all([
           getCourseTechnicalSettings(courseId),
           getCourseCompletionNotifier(courseId),
+          getCourseBookmarkingSettings(courseId),
         ]);
         if (cancelled) return;
 
@@ -781,6 +837,27 @@ export function CompletionProgressPage({
           ...DEFAULT_SETTINGS,
           courseCompletionRules: nextRules,
           ...nextNotifier,
+          bookmarkingEnabled: !!bookmarking._isEnabled,
+          bookmarkingLevel: (bookmarking._level ?? DEFAULT_SETTINGS.bookmarkingLevel) as BookmarkLocation,
+          bookmarkingReturn: (bookmarking._location ?? DEFAULT_SETTINGS.bookmarkingReturn) as BookmarkReturn,
+          bookmarkingShowPrompt: typeof bookmarking._showPrompt === "boolean"
+            ? bookmarking._showPrompt
+            : DEFAULT_SETTINGS.bookmarkingShowPrompt,
+          bookmarkingAutoRestore: typeof bookmarking._autoRestore === "boolean"
+            ? bookmarking._autoRestore
+            : DEFAULT_SETTINGS.bookmarkingAutoRestore,
+          bookmarkingPromptTitle: typeof bookmarking.title === "string"
+            ? bookmarking.title
+            : DEFAULT_SETTINGS.bookmarkingPromptTitle,
+          bookmarkingPromptMessage: typeof bookmarking.body === "string"
+            ? bookmarking.body
+            : DEFAULT_SETTINGS.bookmarkingPromptMessage,
+          bookmarkingPromptYes: typeof bookmarking._buttons?.yes === "string"
+            ? bookmarking._buttons.yes
+            : DEFAULT_SETTINGS.bookmarkingPromptYes,
+          bookmarkingPromptNo: typeof bookmarking._buttons?.no === "string"
+            ? bookmarking._buttons.no
+            : DEFAULT_SETTINGS.bookmarkingPromptNo,
         };
 
         setConfigId(config._id ?? null);
@@ -841,6 +918,19 @@ export function CompletionProgressPage({
         ...completionNotifierToCourse(cfg, completionNotifier),
         _isEnabled: true,
       };
+      const nextBookmarking: BookmarkingConfig = {
+        _isEnabled: cfg.bookmarkingEnabled,
+        _level: cfg.bookmarkingLevel,
+        _location: cfg.bookmarkingReturn,
+        _showPrompt: cfg.bookmarkingShowPrompt,
+        _autoRestore: cfg.bookmarkingAutoRestore,
+        title: cfg.bookmarkingPromptTitle,
+        body: cfg.bookmarkingPromptMessage,
+        _buttons: {
+          yes: cfg.bookmarkingPromptYes,
+          no: cfg.bookmarkingPromptNo,
+        },
+      };
       const changedFields: Partial<CourseTechnicalSettings> = {
         _id: configId,
         _courseId: courseId,
@@ -851,6 +941,7 @@ export function CompletionProgressPage({
         updateCourseTechnicalSettings(configId, changedFields),
         saveCourseCompletionNotifier(courseId, nextCompletionNotifier),
         enableCompletionNotifierInConfig(configId, courseId),
+        saveCourseBookmarkingSettings(courseId, nextBookmarking),
       ]);
       setCompletionCriteria(nextCompletionCriteria);
       setCompletionNotifier(nextCompletionNotifier);
