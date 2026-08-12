@@ -1226,6 +1226,124 @@ export async function saveCourseBookmarkingSettings(
   });
 }
 
+// ── Estimated Time ───────────────────────────────────────────────────────────
+// The `adapt-estimated-time` extension stores its settings in two places:
+//   • course document `_extensions._estimatedTime` (or root `_estimatedTime`):
+//       iconClass, textBefore, textAfter, moduleCompleted
+//   • config document `_extensions._estimatedTime`:
+//       _isEnabled, _debugEnabled, _attachTo
+const ESTIMATED_TIME_EXTENSION_NAME = "adapt-estimated-time";
+
+export interface CourseEstimatedTimeSettings {
+  /** Whether the extension is enabled */
+  _isEnabled: boolean;
+  /** Debug mode */
+  _debugEnabled: boolean;
+  /** Where to place the view on the page */
+  _attachTo: "" | "navigation-footer";
+  /** CSS class for the clock icon */
+  iconClass: string;
+  /** Text displayed before the duration number */
+  textBefore: string;
+  /** Text displayed after the duration number (e.g. "minutes") */
+  textAfter: string;
+  /** Text shown when the module is completed */
+  moduleCompleted: string;
+}
+
+export async function getCourseEstimatedTimeSettings(
+  courseId: string,
+): Promise<CourseEstimatedTimeSettings> {
+  const [course, config] = await Promise.all([
+    apiClient.get<AnyRecord>(`/api/content/course/${courseId}`),
+    apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`),
+  ]);
+
+  // Course-level fields (icon + text strings)
+  const courseExt = obj(obj(course._extensions)._estimatedTime);
+  const courseRoot = obj(course._estimatedTime);
+  const courseData = Object.keys(courseExt).length ? courseExt : courseRoot;
+
+  // Config-level fields (enable toggles + attachTo)
+  const configExt = obj(obj(config._extensions)._estimatedTime);
+
+  const isInstalled = isExtensionInstalledByName(config, ESTIMATED_TIME_EXTENSION_NAME);
+
+  return {
+    _isEnabled: bool(configExt._isEnabled, isInstalled),
+    _debugEnabled: bool(configExt._debugEnabled, false),
+    _attachTo: (str(configExt._attachTo, "") as "" | "navigation-footer"),
+    iconClass: str(courseData.iconClass, "icon-time"),
+    textBefore: str(courseData.textBefore, "Remaining time to complete module:"),
+    textAfter: str(courseData.textAfter, "minutes"),
+    moduleCompleted: str(courseData.moduleCompleted, "Module completed."),
+  };
+}
+
+export async function saveCourseEstimatedTimeSettings(
+  courseId: string,
+  settings: CourseEstimatedTimeSettings,
+): Promise<void> {
+  let course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+  let config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+
+  const shouldEnable = settings._isEnabled;
+  const isInstalled = isExtensionInstalledByName(config, ESTIMATED_TIME_EXTENSION_NAME);
+
+  // Enable or disable the extension as needed
+  if (shouldEnable && !isInstalled) {
+    const ids = await resolveExtensionTypeIdsByNames([ESTIMATED_TIME_EXTENSION_NAME]);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/enable/${courseId}`, { extensions: ids });
+      course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+      config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+    }
+  } else if (!shouldEnable && isInstalled) {
+    const ids = await resolveExtensionTypeIdsByNames([ESTIMATED_TIME_EXTENSION_NAME]);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/disable/${courseId}`, { extensions: ids });
+    }
+  }
+
+  // Save course-level data (text strings)
+  const existingCourseExt = obj(obj(course._extensions)._estimatedTime);
+  const nextCourseData = {
+    ...existingCourseExt,
+    iconClass: settings.iconClass,
+    textBefore: settings.textBefore,
+    textAfter: settings.textAfter,
+    moduleCompleted: settings.moduleCompleted,
+  };
+  const courseExtensions = {
+    ...obj(course._extensions),
+    _estimatedTime: nextCourseData,
+  };
+  await apiClient.put(`/api/content/course/${courseId}`, {
+    _extensions: courseExtensions,
+    _estimatedTime: nextCourseData,
+  });
+
+  // Save config-level data (enable toggles + attachTo)
+  const configId = config._id;
+  if (configId) {
+    const existingConfigExt = obj(obj(config._extensions)._estimatedTime);
+    const nextConfigData = {
+      ...existingConfigExt,
+      _isEnabled: shouldEnable,
+      _debugEnabled: settings._debugEnabled,
+      _attachTo: settings._attachTo,
+    };
+    await apiClient.patch(`/api/content/config/${configId}`, {
+      _id: configId,
+      _courseId: courseId,
+      _extensions: {
+        ...obj(config._extensions),
+        _estimatedTime: nextConfigData,
+      },
+    });
+  }
+}
+
 // ── Accessibility (_globals) ─────────────────────────────────────────────────
 // Every accessibility text override lives in the course document's `_globals`
 // object: core ARIA labels + instructions under `_accessibility`, plus per-plugin
