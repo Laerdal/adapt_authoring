@@ -1101,6 +1101,8 @@ export type CourseProgressIndicatorKey =
 export interface CoursePageLevelProgressSettings {
   progressBarStyle: CourseProgressBarStyle;
   progressIndicators: CourseProgressIndicatorKey[];
+  progressIndicatorText: string;
+  progressIndicatorAriaLabel: string;
 }
 
 interface CoursePageLevelProgressConfig {
@@ -1120,6 +1122,9 @@ const DEFAULT_PAGE_LEVEL_PROGRESS_CONFIG: CoursePageLevelProgressConfig = {
   _showAtCourseLevel: false,
   _useCourseProgressInNavigationButton: false,
 };
+
+const DEFAULT_PROGRESS_INDICATOR_TEXT = "Page Progress";
+const DEFAULT_PROGRESS_INDICATOR_ARIA_LABEL = "Page progress. {{percentageComplete}}%. Open page sections.";
 
 function toPageLevelProgressConfig(raw: AnyRecord): CoursePageLevelProgressConfig {
   return {
@@ -1179,6 +1184,11 @@ export async function getCoursePageLevelProgressSettings(
     ...obj(course._laerdalPageLevelProgress),
   };
 
+  const globals = obj(course._globals);
+  const globalExtensions = obj(globals._extensions);
+  const contribGlobals = obj(globalExtensions._pageLevelProgress);
+  const laerdalGlobals = obj(globalExtensions._laerdalPageLevelProgress);
+
   const contribCfg = toPageLevelProgressConfig(contribRaw);
   const laerdalCfg = toPageLevelProgressConfig(laerdalRaw);
 
@@ -1199,10 +1209,22 @@ export async function getCoursePageLevelProgressSettings(
           : "continuous";
 
   const activeConfig = progressBarStyle === "continuous" ? laerdalCfg : contribCfg;
+  const activeGlobals = progressBarStyle === "continuous" ? laerdalGlobals : contribGlobals;
+
+  const progressIndicatorText = str(
+    activeGlobals.pageLevelProgress,
+    str(activeGlobals._laerdalPageLevelProgress, DEFAULT_PROGRESS_INDICATOR_TEXT),
+  );
+  const progressIndicatorAriaLabel = str(
+    activeGlobals.pageLevelProgressIndicatorBar,
+    DEFAULT_PROGRESS_INDICATOR_ARIA_LABEL,
+  );
 
   return {
     progressBarStyle,
     progressIndicators: indicatorsFromPageLevelProgressConfig(activeConfig),
+    progressIndicatorText,
+    progressIndicatorAriaLabel,
   };
 }
 
@@ -1249,6 +1271,8 @@ export async function saveCoursePageLevelProgressSettings(
 
   const sharedConfig = pageLevelProgressConfigFromIndicators(settings.progressIndicators);
   const courseExtensions = obj(course._extensions);
+  const courseGlobals = obj(course._globals);
+  const globalExtensions = obj(courseGlobals._extensions);
 
   const existingContrib = {
     ...obj(courseExtensions._pageLevelProgress),
@@ -1270,6 +1294,18 @@ export async function saveCoursePageLevelProgressSettings(
     _isEnabled: laerdalInstalledNow && shouldEnableLaerdal,
   };
 
+  const nextContribGlobals = {
+    ...obj(globalExtensions._pageLevelProgress),
+    pageLevelProgress: settings.progressIndicatorText,
+    pageLevelProgressIndicatorBar: settings.progressIndicatorAriaLabel,
+  };
+  const nextLaerdalGlobals = {
+    ...obj(globalExtensions._laerdalPageLevelProgress),
+    pageLevelProgress: settings.progressIndicatorText,
+    _laerdalPageLevelProgress: settings.progressIndicatorText,
+    pageLevelProgressIndicatorBar: settings.progressIndicatorAriaLabel,
+  };
+
   await apiClient.put(`/api/content/course/${courseId}`, {
     _pageLevelProgress: nextContrib,
     _laerdalPageLevelProgress: nextLaerdal,
@@ -1277,6 +1313,14 @@ export async function saveCoursePageLevelProgressSettings(
       ...courseExtensions,
       _pageLevelProgress: nextContrib,
       _laerdalPageLevelProgress: nextLaerdal,
+    },
+    _globals: {
+      ...courseGlobals,
+      _extensions: {
+        ...globalExtensions,
+        _pageLevelProgress: nextContribGlobals,
+        _laerdalPageLevelProgress: nextLaerdalGlobals,
+      },
     },
   });
 }

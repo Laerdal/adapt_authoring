@@ -54,6 +54,8 @@ interface CompletionProgressSettings {
   resumeTitle:          string;
   resumeMessage:        string;
   progressIndicators:   ProgressIndicator[];
+  progressIndicatorText: string;
+  progressIndicatorAriaLabel: string;
   progressType:         ProgressType;
   progressFormat:       ProgressFormat;
   progressBarStyle:     "continuous" | "compact";
@@ -158,6 +160,8 @@ const DEFAULT_SETTINGS: CompletionProgressSettings = {
   resumeTitle:          "Continue where you left off?",
   resumeMessage:        "Would you like to resume?",
   progressIndicators:   [],
+  progressIndicatorText: "Page Progress",
+  progressIndicatorAriaLabel: "Page progress. {{percentageComplete}}%. Open page sections.",
   progressType:         "pages",
   progressFormat:       "bar",
   progressBarStyle:     "continuous",
@@ -644,44 +648,6 @@ const PROGRESS_INDICATOR_OPTIONS: { value: ProgressIndicator; label: string }[] 
   { value: "all-content-objects",  label: "Display all content objects and the current page components" },
   { value: "course-level-nav-btn", label: "Use course-level progress on navigation button" },
 ];
-function ProgressFormatPreview({ format }: { format: ProgressFormat }) {
-  if (format === "bar") {
-    return (
-      <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-[#e5e7eb] bg-white">
-        <span className="text-xs text-[#6b7280] shrink-0">Progress</span>
-        <div className="flex-1 h-2 bg-[#e5e7eb] rounded-full overflow-hidden">
-          <div className="h-full w-2/3 bg-[var(--life-primary-500)] rounded-full" />
-        </div>
-        <span className="text-xs font-semibold text-[var(--life-primary-500)] shrink-0">66%</span>
-      </div>
-    );
-  }
-  if (format === "stepper") {
-    return (
-      <div className="flex items-center gap-1.5 px-4 py-3 rounded-lg border border-[#e5e7eb] bg-white">
-        {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="flex items-center gap-1.5">
-            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 ${i <= 3 ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)] text-white" : "border-[#d1d5db] text-[#9ca3af] bg-white"}`}>
-              {i <= 2 ? (
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              ) : i}
-            </div>
-            {i < 5 && <div className={`h-0.5 w-3 ${i < 3 ? "bg-[var(--life-primary-500)]" : "bg-[#e5e7eb]"}`} />}
-          </div>
-        ))}
-      </div>
-    );
-  }
-  return (
-    <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-[#e5e7eb] bg-white">
-      <span className="text-xs text-[#6b7280]">Progress</span>
-      <span className="text-2xl font-bold text-[var(--life-primary-500)]">66<span className="text-base">%</span></span>
-      <span className="text-xs text-[#9ca3af]">complete</span>
-    </div>
-  );
-}
 function ProgressBarStylePicker({
   value,
   onChange,
@@ -797,6 +763,20 @@ function ProgressIndicatorsContent({
         />
       </CpInnerCard>
       <div className="grid grid-cols-2 gap-4">
+        <CpTextInput
+          label="Progress indicator text"
+          value={cfg.progressIndicatorText}
+          onChange={(v) => set("progressIndicatorText", v)}
+          placeholder="Page Progress"
+        />
+        <CpTextInput
+          label="Aria label"
+          value={cfg.progressIndicatorAriaLabel}
+          onChange={(v) => set("progressIndicatorAriaLabel", v)}
+          placeholder="Page progress. {{percentageComplete}}%. Open page sections."
+        />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
         <CpSelect<ProgressType>
           label="Progress Type"
           value={cfg.progressType}
@@ -816,10 +796,6 @@ function ProgressIndicatorsContent({
             { value: "percentage", label: "Percentage" },
           ]}
         />
-      </div>
-      <div className="flex flex-col gap-2">
-        <span className="text-xs font-semibold text-[#374151]">Format Preview</span>
-        <ProgressFormatPreview format={cfg.progressFormat} />
       </div>
     </>
   );
@@ -972,6 +948,8 @@ export function CompletionProgressPage({
           timeTextCompleted: estimatedTime.moduleCompleted,
           progressBarStyle: pageLevelProgress.progressBarStyle,
           progressIndicators: pageLevelProgress.progressIndicators,
+          progressIndicatorText: pageLevelProgress.progressIndicatorText,
+          progressIndicatorAriaLabel: pageLevelProgress.progressIndicatorAriaLabel,
         };
 
         setConfigId(config._id ?? null);
@@ -1070,6 +1048,8 @@ export function CompletionProgressPage({
         saveCoursePageLevelProgressSettings(courseId, {
           progressBarStyle: cfg.progressBarStyle,
           progressIndicators: cfg.progressIndicators,
+          progressIndicatorText: cfg.progressIndicatorText,
+          progressIndicatorAriaLabel: cfg.progressIndicatorAriaLabel,
         }),
       ]);
       setCompletionCriteria(nextCompletionCriteria);
