@@ -783,6 +783,10 @@ function ProgressIndicatorsContent({
 }) {
   return (
     <>
+      <ProgressBarStylePicker
+        value={cfg.progressBarStyle}
+        onChange={(v) => set("progressBarStyle", v)}
+      />
       <CpInnerCard title="Show progress indicators" subtitle="Select all that apply">
         <CpCheckboxMulti<ProgressIndicator>
           selected={cfg.progressIndicators}
@@ -815,10 +819,6 @@ function ProgressIndicatorsContent({
         <span className="text-xs font-semibold text-[#374151]">Format Preview</span>
         <ProgressFormatPreview format={cfg.progressFormat} />
       </div>
-      <ProgressBarStylePicker
-        value={cfg.progressBarStyle}
-        onChange={(v) => set("progressBarStyle", v)}
-      />
     </>
   );
 }
