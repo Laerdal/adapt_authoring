@@ -4,10 +4,12 @@ import {
   getCourseBookmarkingSettings,
   getCourseCompletionNotifier,
   getCourseEstimatedTimeSettings,
+  getCoursePageLevelProgressSettings,
   getCourseTechnicalSettings,
   saveCourseBookmarkingSettings,
   saveCourseCompletionNotifier,
   saveCourseEstimatedTimeSettings,
+  saveCoursePageLevelProgressSettings,
   updateCourseTechnicalSettings,
   type CourseBookmarkingSettings,
   type CourseCompletionNotifier,
@@ -922,11 +924,12 @@ export function CompletionProgressPage({
 
       try {
         setLoadErrorMessage(null);
-        const [config, notifier, bookmarking, estimatedTime] = await Promise.all([
+        const [config, notifier, bookmarking, estimatedTime, pageLevelProgress] = await Promise.all([
           getCourseTechnicalSettings(courseId),
           getCourseCompletionNotifier(courseId),
           getCourseBookmarkingSettings(courseId),
           getCourseEstimatedTimeSettings(courseId),
+          getCoursePageLevelProgressSettings(courseId),
         ]);
         if (cancelled) return;
 
@@ -967,6 +970,8 @@ export function CompletionProgressPage({
           timeTextBefore:   estimatedTime.textBefore,
           timeTextAfter:    estimatedTime.textAfter,
           timeTextCompleted: estimatedTime.moduleCompleted,
+          progressBarStyle: pageLevelProgress.progressBarStyle,
+          progressIndicators: pageLevelProgress.progressIndicators,
         };
 
         setConfigId(config._id ?? null);
@@ -1062,6 +1067,10 @@ export function CompletionProgressPage({
         enableCompletionNotifierInConfig(configId, courseId),
         saveCourseBookmarkingSettings(courseId, nextBookmarking),
         saveCourseEstimatedTimeSettings(courseId, nextEstimatedTime),
+        saveCoursePageLevelProgressSettings(courseId, {
+          progressBarStyle: cfg.progressBarStyle,
+          progressIndicators: cfg.progressIndicators,
+        }),
       ]);
       setCompletionCriteria(nextCompletionCriteria);
       setCompletionNotifier(nextCompletionNotifier);

@@ -1087,6 +1087,200 @@ export async function enableCompletionNotifierInConfig(
   });
 }
 
+const PAGE_LEVEL_PROGRESS_EXTENSION_NAME = "adapt-contrib-pageLevelProgress";
+const LAERDAL_PAGE_LEVEL_PROGRESS_EXTENSION_NAME = "adapt-laerdal-pageLevelProgress";
+
+export type CourseProgressBarStyle = "continuous" | "compact";
+export type CourseProgressIndicatorKey =
+  | "page-completion"
+  | "course-completion"
+  | "nav-bar"
+  | "all-content-objects"
+  | "course-level-nav-btn";
+
+export interface CoursePageLevelProgressSettings {
+  progressBarStyle: CourseProgressBarStyle;
+  progressIndicators: CourseProgressIndicatorKey[];
+}
+
+interface CoursePageLevelProgressConfig {
+  _isEnabled: boolean;
+  _showPageCompletion: boolean;
+  _isCompletionIndicatorEnabled: boolean;
+  _isShownInNavigationBar: boolean;
+  _showAtCourseLevel: boolean;
+  _useCourseProgressInNavigationButton: boolean;
+}
+
+const DEFAULT_PAGE_LEVEL_PROGRESS_CONFIG: CoursePageLevelProgressConfig = {
+  _isEnabled: true,
+  _showPageCompletion: true,
+  _isCompletionIndicatorEnabled: false,
+  _isShownInNavigationBar: true,
+  _showAtCourseLevel: false,
+  _useCourseProgressInNavigationButton: false,
+};
+
+function toPageLevelProgressConfig(raw: AnyRecord): CoursePageLevelProgressConfig {
+  return {
+    _isEnabled: bool(raw._isEnabled, DEFAULT_PAGE_LEVEL_PROGRESS_CONFIG._isEnabled),
+    _showPageCompletion: bool(raw._showPageCompletion, DEFAULT_PAGE_LEVEL_PROGRESS_CONFIG._showPageCompletion),
+    _isCompletionIndicatorEnabled: bool(raw._isCompletionIndicatorEnabled, DEFAULT_PAGE_LEVEL_PROGRESS_CONFIG._isCompletionIndicatorEnabled),
+    _isShownInNavigationBar: bool(raw._isShownInNavigationBar, DEFAULT_PAGE_LEVEL_PROGRESS_CONFIG._isShownInNavigationBar),
+    _showAtCourseLevel: bool(raw._showAtCourseLevel, DEFAULT_PAGE_LEVEL_PROGRESS_CONFIG._showAtCourseLevel),
+    _useCourseProgressInNavigationButton: bool(
+      raw._useCourseProgressInNavigationButton,
+      DEFAULT_PAGE_LEVEL_PROGRESS_CONFIG._useCourseProgressInNavigationButton,
+    ),
+  };
+}
+
+function indicatorsFromPageLevelProgressConfig(
+  cfg: CoursePageLevelProgressConfig,
+): CourseProgressIndicatorKey[] {
+  const selected: CourseProgressIndicatorKey[] = [];
+  if (cfg._showPageCompletion) selected.push("page-completion");
+  if (cfg._isCompletionIndicatorEnabled) selected.push("course-completion");
+  if (cfg._isShownInNavigationBar) selected.push("nav-bar");
+  if (cfg._showAtCourseLevel) selected.push("all-content-objects");
+  if (cfg._useCourseProgressInNavigationButton) selected.push("course-level-nav-btn");
+  return selected;
+}
+
+function pageLevelProgressConfigFromIndicators(
+  indicators: CourseProgressIndicatorKey[],
+): CoursePageLevelProgressConfig {
+  const selected = new Set(indicators);
+  return {
+    _isEnabled: true,
+    _showPageCompletion: selected.has("page-completion"),
+    _isCompletionIndicatorEnabled: selected.has("course-completion"),
+    _isShownInNavigationBar: selected.has("nav-bar"),
+    _showAtCourseLevel: selected.has("all-content-objects"),
+    _useCourseProgressInNavigationButton: selected.has("course-level-nav-btn"),
+  };
+}
+
+export async function getCoursePageLevelProgressSettings(
+  courseId: string,
+): Promise<CoursePageLevelProgressSettings> {
+  const [course, config] = await Promise.all([
+    apiClient.get<AnyRecord>(`/api/content/course/${courseId}`),
+    apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`),
+  ]);
+
+  const courseExtensions = obj(course._extensions);
+  const contribRaw = {
+    ...obj(courseExtensions._pageLevelProgress),
+    ...obj(course._pageLevelProgress),
+  };
+  const laerdalRaw = {
+    ...obj(courseExtensions._laerdalPageLevelProgress),
+    ...obj(course._laerdalPageLevelProgress),
+  };
+
+  const contribCfg = toPageLevelProgressConfig(contribRaw);
+  const laerdalCfg = toPageLevelProgressConfig(laerdalRaw);
+
+  const contribInstalled = isExtensionInstalledByName(config, PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+  const laerdalInstalled = isExtensionInstalledByName(config, LAERDAL_PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+
+  const contribActive = contribInstalled && contribCfg._isEnabled;
+  const laerdalActive = laerdalInstalled && laerdalCfg._isEnabled;
+
+  const progressBarStyle: CourseProgressBarStyle = laerdalActive
+    ? "continuous"
+    : contribActive
+      ? "compact"
+      : laerdalInstalled
+        ? "continuous"
+        : contribInstalled
+          ? "compact"
+          : "continuous";
+
+  const activeConfig = progressBarStyle === "continuous" ? laerdalCfg : contribCfg;
+
+  return {
+    progressBarStyle,
+    progressIndicators: indicatorsFromPageLevelProgressConfig(activeConfig),
+  };
+}
+
+export async function saveCoursePageLevelProgressSettings(
+  courseId: string,
+  settings: CoursePageLevelProgressSettings,
+): Promise<void> {
+  let course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+  let config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+
+  const shouldEnableLaerdal = settings.progressBarStyle === "continuous";
+  const shouldEnableContrib = settings.progressBarStyle === "compact";
+
+  const installedContrib = isExtensionInstalledByName(config, PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+  const installedLaerdal = isExtensionInstalledByName(config, LAERDAL_PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+
+  const toEnable: string[] = [];
+  const toDisable: string[] = [];
+  if (shouldEnableContrib && !installedContrib) toEnable.push(PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+  if (shouldEnableLaerdal && !installedLaerdal) toEnable.push(LAERDAL_PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+  if (!shouldEnableContrib && installedContrib) toDisable.push(PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+  if (!shouldEnableLaerdal && installedLaerdal) toDisable.push(LAERDAL_PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+
+  if (toEnable.length) {
+    const ids = await resolveExtensionTypeIdsByNames(toEnable);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/enable/${courseId}`, { extensions: ids });
+    }
+  }
+  if (toDisable.length) {
+    const ids = await resolveExtensionTypeIdsByNames(toDisable);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/disable/${courseId}`, { extensions: ids });
+    }
+  }
+
+  if (toEnable.length || toDisable.length) {
+    course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+    config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+  }
+
+  const contribInstalledNow = isExtensionInstalledByName(config, PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+  const laerdalInstalledNow = isExtensionInstalledByName(config, LAERDAL_PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+
+  const sharedConfig = pageLevelProgressConfigFromIndicators(settings.progressIndicators);
+  const courseExtensions = obj(course._extensions);
+
+  const existingContrib = {
+    ...obj(courseExtensions._pageLevelProgress),
+    ...obj(course._pageLevelProgress),
+  };
+  const existingLaerdal = {
+    ...obj(courseExtensions._laerdalPageLevelProgress),
+    ...obj(course._laerdalPageLevelProgress),
+  };
+
+  const nextContrib = {
+    ...existingContrib,
+    ...sharedConfig,
+    _isEnabled: contribInstalledNow && shouldEnableContrib,
+  };
+  const nextLaerdal = {
+    ...existingLaerdal,
+    ...sharedConfig,
+    _isEnabled: laerdalInstalledNow && shouldEnableLaerdal,
+  };
+
+  await apiClient.put(`/api/content/course/${courseId}`, {
+    _pageLevelProgress: nextContrib,
+    _laerdalPageLevelProgress: nextLaerdal,
+    _extensions: {
+      ...courseExtensions,
+      _pageLevelProgress: nextContrib,
+      _laerdalPageLevelProgress: nextLaerdal,
+    },
+  });
+}
+
 const BOOKMARKING_EXTENSION_NAME = "adapt-contrib-bookmarking";
 
 export interface CourseBookmarkingSettings {
