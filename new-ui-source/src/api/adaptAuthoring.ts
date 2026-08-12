@@ -4,6 +4,15 @@
 // keep engine-specific endpoint knowledge here, not in the pages.
 
 import { apiClient } from "./client";
+import {
+  buildGraphicField,
+  buildMediaField,
+  filenameFromLink,
+  imageFromGraphic,
+  mediaFromComponent,
+  type ImageData,
+  type MediaData,
+} from "@/components/storyboard/mediaMapping";
 export {
   TRACKING_ANALYTICS_EXTENSION_NAME_BY_KEY,
   defaultTrackingAnalyticsSettings,
@@ -138,10 +147,12 @@ export interface Asset {
   path?: string;
 }
 
-// Query image assets from the engine asset manager.
-// GET /api/asset/query?search[mimeType]=image
-export async function queryImages(search?: string): Promise<Asset[]> {
-  const params = new URLSearchParams({ "search[mimeType]": "image" });
+export type AssetKind = "image" | "audio" | "video";
+
+// Query assets of a given kind from the engine asset manager.
+// GET /api/asset/query?search[mimeType]=<kind>
+export async function queryAssets(kind: AssetKind, search?: string): Promise<Asset[]> {
+  const params = new URLSearchParams({ "search[mimeType]": kind });
   if (search) params.append("search[title]", search);
   try {
     const result = await apiClient.get<Asset[]>(`/api/asset/query?${params}`);
@@ -149,6 +160,11 @@ export async function queryImages(search?: string): Promise<Asset[]> {
   } catch {
     return [];
   }
+}
+
+// Query image assets (back-compat wrapper used by the cover-image picker).
+export async function queryImages(search?: string): Promise<Asset[]> {
+  return queryAssets("image", search);
 }
 
 // Upload a file as a new asset. Returns the new asset's _id.
@@ -1180,6 +1196,57 @@ export async function createCourseAssetMapping(courseId: string, fieldName: stri
   });
 }
 
+// All courseasset links for a course, keyed by filename (`_fieldName`) → asset
+// `_id`. Used to resolve a stored `course/assets/<filename>` reference back to a
+// servable `/api/asset/serve/<id>` URL when projecting course media into the
+// storyboard.
+export async function getCourseAssetIdMap(courseId: string): Promise<Record<string, string>> {
+  try {
+    const records = await apiClient.get<CourseAssetRecord[]>(
+      `/api/content/courseasset?_courseId=${encodeURIComponent(courseId)}`
+    );
+    if (!Array.isArray(records)) return {};
+    const map: Record<string, string> = {};
+    for (const r of records) {
+      if (r?._fieldName && r?._assetId) map[r._fieldName] = r._assetId;
+    }
+    return map;
+  } catch {
+    return {};
+  }
+}
+
+// Link a DAM asset to a specific content node's field (component-scoped
+// courseasset), mirroring the legacy scaffoldAssetView contract so publish
+// asset-copy resolves. `filename` is the `course/assets/<filename>` basename.
+export async function linkContentAsset(
+  courseId: string,
+  contentType: string,
+  contentId: string,
+  parentId: string,
+  filename: string,
+  assetId: string
+): Promise<void> {
+  if (!filename || !assetId) return;
+  try {
+    // Avoid duplicate link records for the same node+field.
+    const existing = await apiClient.get<CourseAssetRecord[]>(
+      `/api/content/courseasset?_courseId=${encodeURIComponent(courseId)}&_contentTypeId=${encodeURIComponent(contentId)}&_fieldName=${encodeURIComponent(filename)}`
+    );
+    if (Array.isArray(existing) && existing.length) return;
+  } catch {
+    /* fall through and attempt to create */
+  }
+  await apiClient.post("/api/content/courseasset", {
+    _courseId: courseId,
+    _contentType: contentType,
+    _contentTypeId: contentId,
+    _fieldName: filename,
+    _assetId: assetId,
+    _contentTypeParentId: parentId,
+  });
+}
+
 export async function removeCourseAssetMappings(courseId: string, fieldName: string): Promise<void> {
   const records = await apiClient.get<CourseAssetRecord[]>(
     `/api/content/courseasset?_contentTypeId=${encodeURIComponent(courseId)}&_contentType=course&_fieldName=${encodeURIComponent(fieldName)}`
@@ -1230,6 +1297,9 @@ interface EngineContentNode {
   _componentType?: string;
   _layout?: string;
   url?: string;
+  body?: string;
+  _graphic?: Record<string, unknown>;
+  _media?: Record<string, unknown>;
 }
 
 // A component type installed on the instance (GET /api/componenttype).
@@ -1246,7 +1316,7 @@ export interface ComponentTypeOption {
 const bySortOrder = (a: EngineContentNode, b: EngineContentNode): number =>
   (a._sortOrder ?? 0) - (b._sortOrder ?? 0);
 
-async function getContentByCourse(
+export async function getContentByCourse(
   type: string,
   courseId: string
 ): Promise<EngineContentNode[]> {
@@ -1329,6 +1399,250 @@ export async function getCourseStructure(
     modules: childMenus(courseId).map(buildModule),
     topics: childPages(courseId).map(buildTopic),
   };
+}
+
+// ── Storyboard ⇄ course content bridge (ADAPT-3760, AC4/AC11) ───────────────
+// Read: project the live course hierarchy into a BlockNote document so the
+// storyboard reflects the real course. Each block's `id` is set to the source
+// content `_id` (a component's body paragraph uses `<id>::body`) so edits can
+// be written back to the exact node. Write: update titles/bodies of existing
+// nodes matched by those ids. Structural create/delete/move is deferred to the
+// Phase 4 generation engine and reported (never silently dropped).
+
+const BODY_SUFFIX = "::body";
+
+function stripHtml(html: string): string {
+  return (html || "")
+    .replace(/<\s*br\s*\/?>/gi, "\n")
+    .replace(/<\/(p|div|li|h[1-6])>/gi, "\n")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function escapeHtml(s: string): string {
+  return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// A BlockNote block's inline content → plain text.
+function inlineToText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((n) => (n && typeof (n as { text?: unknown }).text === "string" ? (n as { text: string }).text : ""))
+    .join("");
+}
+
+interface StoryboardBlock {
+  id?: string;
+  type?: string;
+  props?: { level?: number; kind?: string; title?: string; adaptComponent?: string; data?: string };
+  content?: unknown;
+}
+
+export interface CourseWriteBackResult {
+  updatedTitles: number;
+  updatedBodies: number;
+  /** Blocks in the doc with no matching course node (new structure — Phase 4). */
+  unmapped: number;
+}
+
+// READ: course hierarchy → ordered BlockNote blocks (H1 Topic / H2 Section /
+// H3 Content Group / H4 Component + body paragraph). Modules (menus) are
+// flattened (implicit-single-Module mapping) — their pages emit as topics.
+export async function getCourseStoryboardBlocks(courseId: string): Promise<unknown[]> {
+  const [contentObjects, articles, blocks, components, assetIdMap] = await Promise.all([
+    getContentByCourse("contentobject", courseId),
+    getContentByCourse("article", courseId),
+    getContentByCourse("block", courseId),
+    getContentByCourse("component", courseId),
+    getCourseAssetIdMap(courseId),
+  ]);
+
+  const label = (n: EngineContentNode) => n.displayTitle || n.title || "Untitled";
+  const childrenOf = (rows: EngineContentNode[], parentId: string) =>
+    rows.filter((r) => r._parentId === parentId).sort(bySortOrder);
+  const pages = contentObjects.filter((c) => c._type === "page");
+  const menus = contentObjects.filter((c) => c._type === "menu");
+
+  const out: StoryboardBlock[] = [];
+
+  // Graphic/media components project as rich sbComponent cards (so the chosen
+  // asset renders + round-trips); every other component stays as an H4 heading
+  // + body paragraph (keeps the text write-back contract intact).
+  const emitComponent = (comp: EngineContentNode) => {
+    const kindOf = comp._component;
+    if (kindOf === "graphic") {
+      const image = imageFromGraphic(comp._graphic, assetIdMap);
+      out.push({
+        id: comp._id,
+        type: "sbComponent",
+        props: {
+          kind: "image",
+          title: label(comp),
+          adaptComponent: "graphic",
+          data: JSON.stringify({ showTitle: true, description: "", instruction: "", image }),
+        },
+      });
+      return;
+    }
+    if (kindOf === "media") {
+      const { kind, data } = mediaFromComponent(comp._media, assetIdMap);
+      out.push({
+        id: comp._id,
+        type: "sbComponent",
+        props: {
+          kind,
+          title: label(comp),
+          adaptComponent: "media",
+          data: JSON.stringify({ showTitle: true, description: "", instruction: "", media: data }),
+        },
+      });
+      return;
+    }
+    out.push({ id: comp._id, type: "heading", props: { level: 4 }, content: label(comp) });
+    const bodyText = stripHtml(comp.body || "");
+    if (bodyText) out.push({ id: `${comp._id}${BODY_SUFFIX}`, type: "paragraph", content: bodyText });
+  };
+  const emitTopic = (page: EngineContentNode) => {
+    out.push({ id: page._id, type: "heading", props: { level: 1 }, content: label(page) });
+    for (const article of childrenOf(articles, page._id)) {
+      out.push({ id: article._id, type: "heading", props: { level: 2 }, content: label(article) });
+      for (const blk of childrenOf(blocks, article._id)) {
+        out.push({ id: blk._id, type: "heading", props: { level: 3 }, content: label(blk) });
+        for (const comp of childrenOf(components, blk._id)) emitComponent(comp);
+      }
+    }
+  };
+  const emitMenu = (menu: EngineContentNode) => {
+    for (const page of childrenOf(pages, menu._id)) emitTopic(page);
+    for (const sub of childrenOf(menus, menu._id)) emitMenu(sub);
+  };
+
+  for (const page of childrenOf(pages, courseId)) emitTopic(page);
+  for (const menu of childrenOf(menus, courseId)) emitMenu(menu);
+
+  return out;
+}
+
+// WRITE: persist edits of EXISTING nodes (titles + text bodies) back to course
+// content. New/removed/moved structure is NOT reconciled here (Phase 4) — such
+// blocks are counted as `unmapped` and left for the generation engine.
+export async function saveStoryboardToCourse(
+  courseId: string,
+  doc: unknown[]
+): Promise<CourseWriteBackResult> {
+  const [contentObjects, articles, blocks, components] = await Promise.all([
+    getContentByCourse("contentobject", courseId),
+    getContentByCourse("article", courseId),
+    getContentByCourse("block", courseId),
+    getContentByCourse("component", courseId),
+  ]);
+
+  const label = (n: EngineContentNode) => n.displayTitle || n.title || "Untitled";
+  const index = new Map<
+    string,
+    { level: StructureLevel; title: string; body?: string; component?: string; parentId?: string }
+  >();
+  contentObjects.forEach((c) =>
+    index.set(c._id, { level: c._type === "menu" ? "module" : "topic", title: label(c) })
+  );
+  articles.forEach((a) => index.set(a._id, { level: "section", title: label(a) }));
+  blocks.forEach((b) => index.set(b._id, { level: "contentGroup", title: label(b) }));
+  components.forEach((c) =>
+    index.set(c._id, {
+      level: "component",
+      title: label(c),
+      body: c.body || "",
+      component: c._component,
+      parentId: c._parentId,
+    })
+  );
+
+  let updatedTitles = 0;
+  let updatedBodies = 0;
+  let unmapped = 0;
+  const tasks: Promise<unknown>[] = [];
+
+  for (const raw of doc as StoryboardBlock[]) {
+    const id = raw && typeof raw.id === "string" ? raw.id : undefined;
+    if (!id) continue;
+
+    if (id.endsWith(BODY_SUFFIX)) {
+      const compId = id.slice(0, -BODY_SUFFIX.length);
+      const info = index.get(compId);
+      if (!info || info.level !== "component") {
+        unmapped += 1;
+        continue;
+      }
+      const nextText = inlineToText(raw.content);
+      if (nextText !== stripHtml(info.body || "")) {
+        tasks.push(apiClient.put(`/api/content/component/${compId}`, { body: `<p>${escapeHtml(nextText)}</p>` }));
+        updatedBodies += 1;
+      }
+      continue;
+    }
+
+    const info = index.get(id);
+    if (!info) {
+      unmapped += 1; // new block — structural create is Phase 4
+      continue;
+    }
+    if (raw.type === "heading") {
+      const nextTitle = inlineToText(raw.content).trim();
+      if (nextTitle && nextTitle !== info.title) {
+        tasks.push(renameStructureNode(info.level, id, nextTitle));
+        updatedTitles += 1;
+      }
+      continue;
+    }
+    // Media card mapped to an existing graphic/media component → write its
+    // asset fields (+ title) and (re)link the courseasset for publish.
+    if (raw.type === "sbComponent" && info.level === "component") {
+      const kind = raw.props?.kind;
+      let parsed: { image?: ImageData; media?: MediaData } = {};
+      try {
+        parsed = raw.props?.data ? JSON.parse(raw.props.data) : {};
+      } catch {
+        parsed = {};
+      }
+      const patch: Record<string, unknown> = {};
+      const nextTitle = (raw.props?.title || "").trim();
+      if (nextTitle && nextTitle !== info.title) {
+        patch.title = nextTitle;
+        patch.displayTitle = nextTitle;
+        updatedTitles += 1;
+      }
+      let assetLink: string | undefined;
+      let assetId: string | undefined;
+      if (kind === "image" && info.component === "graphic") {
+        Object.assign(patch, buildGraphicField(parsed.image));
+        assetLink = parsed.image?.link;
+        assetId = parsed.image?.assetId;
+      } else if ((kind === "video" || kind === "audio") && info.component === "media") {
+        Object.assign(patch, buildMediaField(kind, parsed.media));
+        assetLink = parsed.media?.asset?.link;
+        assetId = parsed.media?.asset?.assetId;
+      }
+      if (Object.keys(patch).length) {
+        tasks.push(apiClient.put(`/api/content/component/${id}`, patch));
+        updatedBodies += 1;
+        if (assetId && assetLink) {
+          const fn = filenameFromLink(assetLink);
+          if (fn) tasks.push(linkContentAsset(courseId, "component", id, info.parentId || "", fn, assetId));
+        }
+      }
+    }
+  }
+
+  await Promise.all(tasks);
+  return { updatedTitles, updatedBodies, unmapped };
 }
 
 // ── Component types (Add Component drawer) ──────────────────────────────────
@@ -1955,4 +2269,149 @@ export async function getPlugins(): Promise<DashboardPlugin[]> {
     status: p._isAvailableInEditor === false ? "Disabled" : "Enabled",
     installedDate: fmtDate(p.createdAt),
   }));
+}
+
+// ── Storyboard Authoring (ADAPT-3760 / ADAPT-3779) ──────────────────────────
+// CRUD over /api/storyboard/{documents,comments,audit}. documentJson and
+// _generatedContentMap are exchanged as parsed JSON (the backend stores them as
+// strings and (de)serialises at the route boundary).
+
+export type StoryboardStatus = "draft" | "in_review" | "approved";
+
+export interface StoryboardRecord {
+  _id: string;
+  _courseId: string;
+  title: string;
+  status: StoryboardStatus;
+  version: number;
+  documentJson: unknown[];
+  _generatedContentMap: Record<string, string>;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface StoryboardComment {
+  _id: string;
+  _storyboardId: string;
+  _courseId?: string;
+  blockId: string;
+  _parentCommentId?: string;
+  body: string;
+  resolved: boolean;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface StoryboardAuditEvent {
+  _id: string;
+  _storyboardId: string;
+  _courseId?: string;
+  event: "status_change" | "generated" | "imported";
+  fromStatus?: string;
+  toStatus?: string;
+  meta?: Record<string, unknown>;
+  createdBy?: string;
+  createdAt?: string;
+}
+
+const SB_DOCS = "/api/storyboard/documents";
+const SB_COMMENTS = "/api/storyboard/comments";
+
+// Storyboard documents ------------------------------------------------------
+
+// Returns null when the course has no storyboard yet.
+export function getStoryboardByCourse(courseId: string): Promise<StoryboardRecord | null> {
+  return apiClient.get<StoryboardRecord | null>(`${SB_DOCS}/course/${courseId}`);
+}
+
+export function getStoryboard(id: string): Promise<StoryboardRecord> {
+  return apiClient.get<StoryboardRecord>(`${SB_DOCS}/${id}`);
+}
+
+export function createStoryboard(input: {
+  _courseId: string;
+  title?: string;
+  documentJson?: unknown[];
+  status?: StoryboardStatus;
+}): Promise<StoryboardRecord> {
+  return apiClient.post<StoryboardRecord>(SB_DOCS, input);
+}
+
+export function updateStoryboard(
+  id: string,
+  patch: Partial<Pick<StoryboardRecord, "title" | "status" | "version" | "documentJson" | "_generatedContentMap">>
+): Promise<StoryboardRecord> {
+  return apiClient.put<StoryboardRecord>(`${SB_DOCS}/${id}`, patch);
+}
+
+// Changes status and appends a status_change audit event server-side.
+export function setStoryboardStatus(id: string, status: StoryboardStatus): Promise<StoryboardRecord> {
+  return apiClient.put<StoryboardRecord>(`${SB_DOCS}/${id}/status`, { status });
+}
+
+export function deleteStoryboard(id: string): Promise<{ success: boolean }> {
+  return apiClient.delete<{ success: boolean }>(`${SB_DOCS}/${id}`);
+}
+
+// Comments ------------------------------------------------------------------
+
+export function listStoryboardComments(id: string): Promise<StoryboardComment[]> {
+  return apiClient.get<StoryboardComment[]>(`${SB_DOCS}/${id}/comments`);
+}
+
+export function addStoryboardComment(
+  id: string,
+  input: { blockId: string; body: string; _parentCommentId?: string; _courseId?: string }
+): Promise<StoryboardComment> {
+  return apiClient.post<StoryboardComment>(`${SB_DOCS}/${id}/comments`, input);
+}
+
+export function updateStoryboardComment(
+  commentId: string,
+  patch: { body?: string; resolved?: boolean }
+): Promise<StoryboardComment> {
+  return apiClient.put<StoryboardComment>(`${SB_COMMENTS}/${commentId}`, patch);
+}
+
+export function deleteStoryboardComment(commentId: string): Promise<{ success: boolean }> {
+  return apiClient.delete<{ success: boolean }>(`${SB_COMMENTS}/${commentId}`);
+}
+
+// Audit ---------------------------------------------------------------------
+
+export function listStoryboardAudit(id: string): Promise<StoryboardAuditEvent[]> {
+  return apiClient.get<StoryboardAuditEvent[]>(`${SB_DOCS}/${id}/audit`);
+}
+
+export function addStoryboardAudit(
+  id: string,
+  input: {
+    event: StoryboardAuditEvent["event"];
+    fromStatus?: string;
+    toStatus?: string;
+    meta?: Record<string, unknown>;
+    _courseId?: string;
+  }
+): Promise<StoryboardAuditEvent> {
+  return apiClient.post<StoryboardAuditEvent>(`${SB_DOCS}/${id}/audit`, input);
+}
+
+// Import / Export (AC10) — binary exchanged as base64 through the JSON client.
+export type ImportFormat = "word" | "pdf" | "pptx";
+
+export function exportStoryboardWord(id: string): Promise<{ filename: string; mime: string; dataBase64: string }> {
+  return apiClient.get<{ filename: string; mime: string; dataBase64: string }>(`${SB_DOCS}/${id}/export/word`);
+}
+
+export function exportStoryboardPdf(id: string): Promise<{ filename: string; mime: string; dataBase64: string }> {
+  return apiClient.get<{ filename: string; mime: string; dataBase64: string }>(`${SB_DOCS}/${id}/export/pdf`);
+}
+
+export function importStoryboardDocument(
+  format: ImportFormat,
+  dataBase64: string
+): Promise<{ blocks: unknown[] }> {
+  return apiClient.post<{ blocks: unknown[] }>(`/api/storyboard/import/${format}`, { dataBase64 });
 }
