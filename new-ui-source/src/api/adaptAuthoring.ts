@@ -1136,8 +1136,14 @@ export async function getCourseBookmarkingSettings(courseId: string): Promise<Co
   const course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
   const rootBookmarking = obj(course._bookmarking);
   const extensionBookmarking = obj(obj(course._extensions)._bookmarking);
-  const source = Object.keys(rootBookmarking).length ? rootBookmarking : extensionBookmarking;
-  const buttons = obj(source._buttons);
+  const source = {
+    ...rootBookmarking,
+    ...extensionBookmarking,
+  };
+  const buttons = {
+    ...obj(rootBookmarking._buttons),
+    ...obj(extensionBookmarking._buttons),
+  };
 
   return {
     ...source,
@@ -1181,18 +1187,26 @@ export async function saveCourseBookmarkingSettings(
   }
 
   const rootBookmarking = obj(course._bookmarking);
-  const buttons = obj(rootBookmarking._buttons);
+  const extensionBookmarking = obj(obj(course._extensions)._bookmarking);
+  const existingBookmarking = {
+    ...rootBookmarking,
+    ...extensionBookmarking,
+  };
+  const buttons = {
+    ...obj(rootBookmarking._buttons),
+    ...obj(extensionBookmarking._buttons),
+  };
 
   const nextBookmarking: CourseBookmarkingSettings = {
-    ...rootBookmarking,
+    ...existingBookmarking,
     ...settings,
     _isEnabled: shouldEnable,
-    _level: str(settings._level, str(rootBookmarking._level, "component")) as CourseBookmarkingSettings["_level"],
-    _location: str(settings._location, str(rootBookmarking._location, "furthest")) as CourseBookmarkingSettings["_location"],
-    _showPrompt: bool(settings._showPrompt, bool(rootBookmarking._showPrompt, true)),
-    _autoRestore: bool(settings._autoRestore, bool(rootBookmarking._autoRestore, true)),
-    title: str(settings.title, str(rootBookmarking.title, "Bookmarking")),
-    body: str(settings.body, str(rootBookmarking.body, "Would you like to continue where you left off?")),
+    _level: str(settings._level, str(existingBookmarking._level, "component")) as CourseBookmarkingSettings["_level"],
+    _location: str(settings._location, str(existingBookmarking._location, "furthest")) as CourseBookmarkingSettings["_location"],
+    _showPrompt: bool(settings._showPrompt, bool(existingBookmarking._showPrompt, true)),
+    _autoRestore: bool(settings._autoRestore, bool(existingBookmarking._autoRestore, true)),
+    title: str(settings.title, str(existingBookmarking.title, "Bookmarking")),
+    body: str(settings.body, str(existingBookmarking.body, "Would you like to continue where you left off?")),
     _buttons: {
       ...buttons,
       ...obj(settings._buttons),
@@ -1201,7 +1215,13 @@ export async function saveCourseBookmarkingSettings(
     },
   };
 
+  const courseExtensions = {
+    ...obj(course._extensions),
+    _bookmarking: nextBookmarking,
+  };
+
   await apiClient.put(`/api/content/course/${courseId}`, {
+    _extensions: courseExtensions,
     _bookmarking: nextBookmarking,
   });
 }
