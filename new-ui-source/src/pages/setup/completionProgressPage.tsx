@@ -55,7 +55,6 @@ interface CompletionProgressSettings {
   progressType:         ProgressType;
   progressFormat:       ProgressFormat;
   timeEnabled:          boolean;
-  timeDebugEnabled:     boolean;
   timeAttachTo:         "" | "navigation-footer";
   timeIconClass:        string;
   timeTextBefore:       string;
@@ -159,7 +158,6 @@ const DEFAULT_SETTINGS: CompletionProgressSettings = {
   progressType:         "pages",
   progressFormat:       "bar",
   timeEnabled:          false,
-  timeDebugEnabled:     false,
   timeAttachTo:         "",
   timeIconClass:        "icon-time",
   timeTextBefore:       "Remaining time to complete module:",
@@ -753,39 +751,9 @@ function TimeEstimateContent({
             <CpTextInput label="Text before duration" value={cfg.timeTextBefore} onChange={(v) => set("timeTextBefore", v)} placeholder="Remaining time to complete module:" />
             <CpTextInput label="Text after duration" value={cfg.timeTextAfter} onChange={(v) => set("timeTextAfter", v)} placeholder="minutes" />
             <CpTextInput label="Text shown when module is completed" value={cfg.timeTextCompleted} onChange={(v) => set("timeTextCompleted", v)} placeholder="Module completed." />
-            <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] p-3">
-              <CpCheckbox
-                label="Enable debug mode"
-                checked={cfg.timeDebugEnabled}
-                onChange={(v) => set("timeDebugEnabled", v)}
-              />
-            </div>
           </div>
         )}
       </div>
-      {cfg.timeEnabled && (
-        <div className="flex flex-col gap-2.5">
-          <span className="text-xs font-semibold text-[#374151]">Live Preview</span>
-          <div className="flex items-center gap-2.5 px-4 py-3 rounded-lg bg-[#f9fafb] border border-[#e5e7eb]">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-            </svg>
-            <span className="text-xs text-[#374151]">
-              <span className="font-medium">{cfg.timeTextBefore || "Remaining time to complete module:"}</span>
-              {" "}
-              <span className="font-bold text-[var(--life-primary-500)]">15</span>
-              {" "}
-              <span>{cfg.timeTextAfter || "minutes"}</span>
-            </span>
-          </div>
-          <div className="flex items-center gap-2.5 px-4 py-3 rounded-lg bg-[#f0fdf4] border border-[#bbf7d0]">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" /><polyline points="9 12 11 14 15 10" />
-            </svg>
-            <span className="text-xs font-medium text-[#15803d]">{cfg.timeTextCompleted || "Module completed."}</span>
-          </div>
-        </div>
-      )}
     </>
   );
 }
@@ -894,7 +862,6 @@ export function CompletionProgressPage({
             ? bookmarking._buttons.no
             : DEFAULT_SETTINGS.bookmarkingPromptNo,
           timeEnabled:      estimatedTime._isEnabled,
-          timeDebugEnabled: estimatedTime._debugEnabled,
           timeAttachTo:     estimatedTime._attachTo,
           timeIconClass:    estimatedTime.iconClass,
           timeTextBefore:   estimatedTime.textBefore,
@@ -981,7 +948,7 @@ export function CompletionProgressPage({
 
       const nextEstimatedTime: CourseEstimatedTimeSettings = {
         _isEnabled:      cfg.timeEnabled,
-        _debugEnabled:   cfg.timeDebugEnabled,
+        _debugEnabled:   false,
         _attachTo:       cfg.timeAttachTo,
         iconClass:       cfg.timeIconClass,
         textBefore:      cfg.timeTextBefore,
