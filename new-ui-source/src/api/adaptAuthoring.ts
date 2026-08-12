@@ -11,6 +11,11 @@ export {
   saveTrackingAnalyticsSettings,
 } from "../helpers/trackingAnalyticsHelper";
 export type { TrackingAnalyticsSettings } from "../helpers/trackingAnalyticsHelper";
+import {
+  NEW_CONTENT_GROUP_TITLE,
+  NEW_SECTION_TITLE,
+  NEW_TOPIC_TITLE,
+} from "../constants/structureDefaults";
 
 // ── Current user ────────────────────────────────────────────────────────────
 // GET /api/user/me → the session user, enriched with rolesAsName by the engine.
@@ -1218,10 +1223,13 @@ interface EngineContentNode {
   _type?: string;
   title?: string;
   displayTitle?: string;
+  description?: string;
+  instruction?: string;
   _sortOrder?: number;
   _component?: string;
   _componentType?: string;
   _layout?: string;
+  url?: string;
 }
 
 // A component type installed on the instance (GET /api/componenttype).
@@ -1276,19 +1284,29 @@ export async function getCourseStructure(
     id: page._id,
     title: label(page),
     sortOrder: page._sortOrder ?? 0,
+    description: page.description || "",
     sections: childrenOf(articles, page._id).map(
       (article): SSection => ({
         id: article._id,
         title: label(article),
+        description: article.description || "",
+        instruction: article.instruction || "",
         contentGroups: childrenOf(blocks, article._id).map(
           (block): SContentGroup => ({
             id: block._id,
             title: label(block),
+            description: block.description || "",
+            instruction: block.instruction || "",
             components: childrenOf(components, block._id).map(
               (comp): SComponent => ({
                 id: comp._id,
                 title: label(comp),
                 componentKey: comp._component || "",
+                layout: comp._layout === "left" || comp._layout === "right" || comp._layout === "full"
+                  ? comp._layout
+                  : undefined,
+                description: comp.description || "",
+                url: comp.url || "",
               })
             ),
           })
@@ -1586,15 +1604,15 @@ function getTextComponentType(): Promise<ComponentTypeOption | null> {
 export async function seedDefaultTopic(
   courseId: string,
   parentId: string,
-  topicTitle = "Untitled Topic",
+  topicTitle = NEW_TOPIC_TITLE,
   sortOrder = 1
 ): Promise<string> {
   const topicId = await createTopic(courseId, parentId, topicTitle, sortOrder);
-  const articleId = await createArticle(courseId, topicId, "Untitled Section", 1);
-  const blockId = await createBlock(courseId, articleId, "Untitled Content Group", 1);
+  const articleId = await createArticle(courseId, topicId, NEW_SECTION_TITLE, 1);
+  const blockId = await createBlock(courseId, articleId, NEW_CONTENT_GROUP_TITLE, 1);
   const text = await getTextComponentType();
-  // A single component is placed on the left (see design).
-  if (text) await createComponent(courseId, blockId, text, 1, "left");
+  // A single component should start as full-width.
+  if (text) await createComponent(courseId, blockId, text, 1, "full");
   return topicId;
 }
 
@@ -1608,7 +1626,7 @@ export function updateComponentLayout(
 
 // Fresh-course default: one top-level topic with a starter text component.
 export function seedDefaultStructure(courseId: string): Promise<string> {
-  return seedDefaultTopic(courseId, courseId, "Untitled Topic", 1);
+  return seedDefaultTopic(courseId, courseId, NEW_TOPIC_TITLE, 1);
 }
 
 // title == displayTitle (the two are kept in sync — see developer notes).
@@ -1621,6 +1639,18 @@ export function renameStructureNode(
     title,
     displayTitle: title,
   });
+}
+
+export function updateStructureNode(
+  level: StructureLevel,
+  id: string,
+  patch: Record<string, unknown>
+): Promise<unknown> {
+  const body =
+    typeof patch.title === "string" && patch.displayTitle === undefined
+      ? { ...patch, displayTitle: patch.title }
+      : patch;
+  return apiClient.put(`/api/content/${LEVEL_TO_CONTENT_TYPE[level]}/${id}`, body);
 }
 
 export function deleteStructureNode(level: StructureLevel, id: string): Promise<unknown> {
@@ -1805,6 +1835,20 @@ export function updateTemplate(
 
 export function deleteTemplate(backendId: string): Promise<unknown> {
   return apiClient.delete(`/api/content/templating/${backendId}`);
+}
+
+export interface TemplatePasteRequest {
+  objectId: string;
+  parentId: string;
+  courseId: string;
+  sortOrder?: number;
+  layout?: "full" | "left" | "right";
+}
+
+export function pasteTemplateIntoCourse(
+  payload: TemplatePasteRequest
+): Promise<{ success?: boolean }> {
+  return apiClient.post<{ success?: boolean }>("/api/templating/paste", payload);
 }
 
 // ── Assets ────────────────────────────────────────────────────────────────────

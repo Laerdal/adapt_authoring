@@ -13,7 +13,7 @@ import {
   mergedChildren,
   acceptsChild,
 } from '../../types/structure';
-import { StructureIcon } from './StructureIcons';
+import { StructureIcon, STRUCTURE_ICON_COLOR_CLASS } from './StructureIcons';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -61,10 +61,10 @@ function computeDrop(dragged: Dragged, row: RowRef): DropPlan | null {
 
 const LEVEL_ICON_COLOR: Record<StructureLevel, string> = {
   module: 'text-[#3d8f7c]',
-  topic: 'text-[#2d6fa8]',
-  section: 'text-[#d1a808]',
-  contentGroup: 'text-[#3d8f7c]',
-  component: 'text-[#6b7280]',
+  topic: STRUCTURE_ICON_COLOR_CLASS.topic,
+  section: STRUCTURE_ICON_COLOR_CLASS.section,
+  contentGroup: STRUCTURE_ICON_COLOR_CLASS.contentGroup,
+  component: STRUCTURE_ICON_COLOR_CLASS.component,
 };
 
 // ─── Icons ────────────────────────────────────────────────────────────────────

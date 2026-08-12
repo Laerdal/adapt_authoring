@@ -52,6 +52,12 @@ interface PageEditorNavigationProps {
   onDeleteBlock: (pageId: string, articleId: string, blockId: string) => void;
   onAddComponent: (pageId: string, articleId: string, blockId: string) => void;
   onDeleteComponent: (pageId: string, articleId: string, blockId: string, componentId: string) => void;
+  onUseTemplate?: (target: {
+    level: "topic" | "section" | "group" | "component";
+    pageId: string;
+    articleId?: string;
+    blockId?: string;
+  }) => void;
 }
 
 export default function PageEditorNavigation({
@@ -82,6 +88,7 @@ export default function PageEditorNavigation({
   onDeleteBlock,
   onAddComponent,
   onDeleteComponent,
+  onUseTemplate,
 }: PageEditorNavigationProps) {
   const navigate = useNavigate();
 
@@ -123,6 +130,7 @@ export default function PageEditorNavigation({
             onDeleteBlock={onDeleteBlock}
             onAddComponent={onAddComponent}
             onDeleteComponent={onDeleteComponent}
+            onUseTemplate={onUseTemplate}
           />
         </div>
       )}
