@@ -54,6 +54,7 @@ interface CompletionProgressSettings {
   progressIndicators:   ProgressIndicator[];
   progressType:         ProgressType;
   progressFormat:       ProgressFormat;
+  progressBarStyle:     "continuous" | "compact";
   timeEnabled:          boolean;
   timeAttachTo:         "" | "navigation-footer";
   timeIconClass:        string;
@@ -157,6 +158,7 @@ const DEFAULT_SETTINGS: CompletionProgressSettings = {
   progressIndicators:   [],
   progressType:         "pages",
   progressFormat:       "bar",
+  progressBarStyle:     "continuous",
   timeEnabled:          false,
   timeAttachTo:         "",
   timeIconClass:        "icon-time",
@@ -678,6 +680,100 @@ function ProgressFormatPreview({ format }: { format: ProgressFormat }) {
     </div>
   );
 }
+function ProgressBarStylePicker({
+  value,
+  onChange,
+}: {
+  value: "continuous" | "compact";
+  onChange: (v: "continuous" | "compact") => void;
+}) {
+  const options: { value: "continuous" | "compact"; label: string; description: string }[] = [
+    {
+      value: "continuous",
+      label: "Continuous bar",
+      description: "A single bar spanning the full width beneath the navigation bar.",
+    },
+    {
+      value: "compact",
+      label: "Compact indicator",
+      description: "A small pill-shaped progress indicator inside the navigation bar.",
+    },
+  ];
+  return (
+    <div className="flex flex-col gap-2.5">
+      <div className="flex items-center gap-1.5">
+        <span className="text-xs font-semibold text-[#374151]">Progress Bar Style</span>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+          <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        {options.map((opt) => {
+          const selected = value === opt.value;
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => onChange(opt.value)}
+              className={`flex flex-col gap-3 rounded-xl border-2 p-3 text-left transition-all ${
+                selected
+                  ? "border-[var(--life-base-black)] bg-white shadow-sm"
+                  : "border-[#e5e7eb] bg-white hover:border-[#d1d5db]"
+              }`}
+            >
+              {/* Nav bar mockup */}
+              <div className="w-full rounded-lg border border-[#e5e7eb] bg-[#f9fafb] overflow-hidden">
+                {/* Nav row */}
+                <div className="flex items-center justify-between px-2.5 py-1.5">
+                  <div className="flex items-center gap-1 text-[10px] text-[#6b7280]">
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="15 18 9 12 15 6" />
+                    </svg>
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
+                    </svg>
+                    <span className="font-medium text-[#374151]">Home / Case 1</span>
+                  </div>
+                  {opt.value === "compact" ? (
+                    /* Compact: pill indicator top-right */
+                    <div className="flex items-center gap-1.5">
+                      <div className="h-2 w-8 rounded-full bg-[#e5e7eb] overflow-hidden">
+                        <div className="h-full w-3/5 rounded-full bg-[var(--life-primary-500)]" />
+                      </div>
+                      <span className="text-[9px] font-semibold text-[#6b7280]">v0.0.2</span>
+                    </div>
+                  ) : (
+                    <span className="text-[9px] font-semibold text-[#6b7280]">v0.0.2</span>
+                  )}
+                </div>
+                {opt.value === "continuous" && (
+                  /* Continuous: full-width bar below nav */
+                  <div className="h-1.5 w-full bg-[#e5e7eb]">
+                    <div className="h-full w-3/5 bg-[var(--life-primary-500)]" />
+                  </div>
+                )}
+              </div>
+              {/* Label row */}
+              <div className="flex items-start gap-2">
+                <div className={`mt-0.5 w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                  selected
+                    ? "border-[var(--life-primary-500)]"
+                    : "border-[#d1d5db]"
+                }`}>
+                  {selected && <div className="w-2 h-2 rounded-full bg-[var(--life-primary-500)]" />}
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-[#111827]">{opt.label}</p>
+                  <p className="text-[11px] text-[#6b7280] mt-0.5 leading-snug">{opt.description}</p>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 function ProgressIndicatorsContent({
   cfg,
   set,
@@ -719,6 +815,10 @@ function ProgressIndicatorsContent({
         <span className="text-xs font-semibold text-[#374151]">Format Preview</span>
         <ProgressFormatPreview format={cfg.progressFormat} />
       </div>
+      <ProgressBarStylePicker
+        value={cfg.progressBarStyle}
+        onChange={(v) => set("progressBarStyle", v)}
+      />
     </>
   );
 }
