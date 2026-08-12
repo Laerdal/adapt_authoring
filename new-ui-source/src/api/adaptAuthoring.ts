@@ -1123,9 +1123,6 @@ const DEFAULT_PAGE_LEVEL_PROGRESS_CONFIG: CoursePageLevelProgressConfig = {
   _useCourseProgressInNavigationButton: false,
 };
 
-const DEFAULT_PROGRESS_INDICATOR_TEXT = "Page Progress";
-const DEFAULT_PROGRESS_INDICATOR_ARIA_LABEL = "Page progress. {{percentageComplete}}%. Open page sections.";
-
 function toPageLevelProgressConfig(raw: AnyRecord): CoursePageLevelProgressConfig {
   return {
     _isEnabled: bool(raw._isEnabled, DEFAULT_PAGE_LEVEL_PROGRESS_CONFIG._isEnabled),
@@ -1213,12 +1210,9 @@ export async function getCoursePageLevelProgressSettings(
 
   const progressIndicatorText = str(
     activeGlobals.pageLevelProgress,
-    str(activeGlobals._laerdalPageLevelProgress, DEFAULT_PROGRESS_INDICATOR_TEXT),
+    str(activeGlobals._laerdalPageLevelProgress),
   );
-  const progressIndicatorAriaLabel = str(
-    activeGlobals.pageLevelProgressIndicatorBar,
-    DEFAULT_PROGRESS_INDICATOR_ARIA_LABEL,
-  );
+  const progressIndicatorAriaLabel = str(activeGlobals.pageLevelProgressIndicatorBar);
 
   return {
     progressBarStyle,
