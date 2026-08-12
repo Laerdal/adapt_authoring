@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   MenuPageCanvas,
   ContentPageCanvas,
@@ -233,6 +233,8 @@ export default function CourseEditor({
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
   const [hasCanvasSelection, setHasCanvasSelection] = useState(false);
+  const structureLoadRequestIdRef = useRef(0);
+  const isMountedRef = useRef(true);
   const [addComponentTarget, setAddComponentTarget] = useState<{
     pageId: string;
     articleId: string;
@@ -251,16 +253,25 @@ export default function CourseEditor({
     blockId?: string | null;
     componentId?: string | null;
   }) => {
+    const requestId = ++structureLoadRequestIdRef.current;
+    const isCurrentRequest = () => isMountedRef.current && requestId === structureLoadRequestIdRef.current;
+
     if (!courseId || courseId === "new-course") {
-      setIsLoadingStructure(false);
+      if (isCurrentRequest()) {
+        setIsLoadingStructure(false);
+      }
       return;
     }
 
-    setIsLoadingStructure(true);
-    setStructureLoadError(null);
+    if (isCurrentRequest()) {
+      setIsLoadingStructure(true);
+      setStructureLoadError(null);
+    }
 
     try {
       const structure = await getCourseStructure(courseId, courseTitle);
+      if (!isCurrentRequest()) return;
+
       const pages = mapStructureToPages(structure);
       const fallbackPage = pages[0] ?? null;
       const page = pages.find((item) => item.id === selection?.pageId) ?? fallbackPage;
@@ -298,6 +309,8 @@ export default function CourseEditor({
                 : "menu"
       );
     } catch (error) {
+      if (!isCurrentRequest()) return;
+
       setContentPages([]);
       setMenuPageCreated(false);
       setMenuSelected(false);
@@ -312,9 +325,19 @@ export default function CourseEditor({
         error instanceof Error ? error.message : "Failed to load course structure"
       );
     } finally {
-      setIsLoadingStructure(false);
+      if (isCurrentRequest()) {
+        setIsLoadingStructure(false);
+      }
     }
   }, [courseId, courseTitle]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      structureLoadRequestIdRef.current += 1;
+    };
+  }, []);
 
   useEffect(() => {
     void loadStructureFromDatabase();

@@ -67,17 +67,17 @@ export default function ComponentSelector({
         ) : (
           <div className="space-y-2">
             {components.map((comp) => (
-            <button
-              key={comp._id}
-              onClick={() => {
-                onSelectComponent(comp);
-                onClose();
-              }}
-              className="w-full text-left px-4 py-3 rounded-lg border-2 transition-all border-[#d1d5db] hover:border-[#2d6fa8] hover:bg-[#f0f8ff] cursor-pointer"
-            >
-              <p className="font-medium text-sm">{comp.displayName}</p>
-              <p className="text-xs text-[#6b7280] mt-1">{comp.description || comp.component}</p>
-            </button>
+              <button
+                key={comp._id}
+                onClick={() => {
+                  onSelectComponent(comp);
+                  onClose();
+                }}
+                className="w-full text-left px-4 py-3 rounded-lg border-2 transition-all border-[#d1d5db] hover:border-[#2d6fa8] hover:bg-[#f0f8ff] cursor-pointer"
+              >
+                <p className="font-medium text-sm">{comp.displayName}</p>
+                <p className="text-xs text-[#6b7280] mt-1">{comp.description || comp.component}</p>
+              </button>
             ))}
           </div>
         )}
