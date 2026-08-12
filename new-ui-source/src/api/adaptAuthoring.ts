@@ -42,6 +42,42 @@ export interface UserSummary {
 }
 
 /**
+ * Search users by partial email address within the current instance.
+ * Uses GET /api/user?search[email]=... and returns up to `limit` users.
+ */
+export async function searchUsersByEmailQuery(query: string, limit = 8): Promise<UserSummary[]> {
+  const trimmedQuery = query.trim();
+  try {
+    const users = trimmedQuery
+      ? await apiClient.get<UserSummary[]>(
+          `/api/user?search[email]=${encodeURIComponent(trimmedQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))}`
+        )
+      : await apiClient.get<UserSummary[]>("/api/user");
+    if (!Array.isArray(users)) return [];
+
+    const normalizedQuery = trimmedQuery.toLowerCase();
+    const deduped = users.filter((user, index, array) => {
+      const email = user.email?.toLowerCase();
+      if (!email) return false;
+      return array.findIndex((u) => u.email?.toLowerCase() === email) === index;
+    });
+
+    return deduped
+      .sort((a, b) => {
+        const aEmail = a.email.toLowerCase();
+        const bEmail = b.email.toLowerCase();
+        const aStartsWith = aEmail.startsWith(normalizedQuery);
+        const bStartsWith = bEmail.startsWith(normalizedQuery);
+        if (aStartsWith !== bStartsWith) return aStartsWith ? -1 : 1;
+        return aEmail.localeCompare(bEmail);
+      })
+      .slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Find a user by exact email address.
  * Uses GET /api/user?search[email]=... which does a case-insensitive regex search;
  * we then filter client-side for an exact match.
@@ -208,8 +244,10 @@ export async function updateCourse(
   patch: {
     title?: string;
     displayTitle?: string;
+    subtitle?: string;
     description?: string;
     body?: string;
+    instruction?: string;
     heroAssetId?: string | null;
     tags?: string[];
     isShared?: boolean;
@@ -220,10 +258,17 @@ export async function updateCourse(
   const updateData: Record<string, unknown> = {};
   if (patch.title !== undefined) updateData.title = patch.title;
   if (patch.displayTitle !== undefined) updateData.displayTitle = patch.displayTitle;
+  if (patch.subtitle !== undefined) {
+    updateData.subtitle = patch.subtitle;
+    updateData._subtitle = patch.subtitle;
+  }
   // Keep title and displayTitle in sync when only one is provided
-  if (patch.title !== undefined && patch.displayTitle === undefined) updateData.displayTitle = patch.title;
+  if (patch.title !== undefined && patch.displayTitle === undefined && patch.subtitle === undefined) {
+    updateData.displayTitle = patch.title;
+  }
   if (patch.description !== undefined) updateData.description = patch.description;
   if (patch.body !== undefined) updateData.body = patch.body;
+  if (patch.instruction !== undefined) updateData.instruction = patch.instruction;
   if (patch.heroAssetId !== undefined) updateData.heroImage = patch.heroAssetId;
   if (patch.tags !== undefined) {
     updateData.tags = await resolveOrCreateTagIds(patch.tags);
@@ -286,8 +331,11 @@ interface EngineCourseDetails {
   _id: string;
   title?: string;
   displayTitle?: string;
+  subtitle?: string;
+  _subtitle?: string;
   description?: string;
   body?: string;
+  instruction?: string;
   heroImage?: string | null;
   tags?: Array<string | { _id: string; title?: string }>;
   _isShared?: boolean;
@@ -315,8 +363,9 @@ export interface CourseBootstrapData {
   courseId: string;
   title: string;
   displayTitle: string;
+  subtitle: string;
   description: string;
-  body: string;
+  instruction: string;
   heroAssetId: string | null;
   tags: string[];
   isShared: boolean;
@@ -548,9 +597,10 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
   return {
     courseId,
     title: course.title || "Untitled Course",
-    displayTitle: course.displayTitle || course.title || "",
+    displayTitle: course.displayTitle ?? "",
+    subtitle: course.subtitle ?? course._subtitle ?? "",
     description: course.description || "",
-    body: course.body || "",
+    instruction: course.instruction ?? "",
     heroAssetId,
     tags,
     isShared: course._isShared ?? false,
