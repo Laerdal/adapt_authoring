@@ -60,7 +60,6 @@ interface CompletionProgressSettings {
   progressFormat:       ProgressFormat;
   progressBarStyle:     "continuous" | "compact";
   timeEnabled:          boolean;
-  timeAttachTo:         "" | "navigation-footer";
   timeIconClass:        string;
   timeTextBefore:       string;
   timeTextAfter:        string;
@@ -166,7 +165,6 @@ const DEFAULT_SETTINGS: CompletionProgressSettings = {
   progressFormat:       "bar",
   progressBarStyle:     "continuous",
   timeEnabled:          false,
-  timeAttachTo:         "",
   timeIconClass:        "icon-time",
   timeTextBefore:       "Remaining time to complete module:",
   timeTextAfter:        "minutes",
@@ -815,16 +813,6 @@ function TimeEstimateContent({
         </div>
         {cfg.timeEnabled && (
           <div className="px-4 py-4 flex flex-col gap-4">
-            <CpSelect<"" | "navigation-footer">
-              label="Where to place on page"
-              hint="Leave blank to place at the end of the page; choose navigation-footer only if the Navigation Footer extension is included."
-              value={cfg.timeAttachTo}
-              onChange={(v) => set("timeAttachTo", v)}
-              options={[
-                { value: "",                  label: "End of page (default)" },
-                { value: "navigation-footer", label: "Navigation footer" },
-              ]}
-            />
             <CpTextInput label="Icon class" value={cfg.timeIconClass} onChange={(v) => set("timeIconClass", v)} placeholder="icon-time" />
             <CpTextInput label="Text before duration" value={cfg.timeTextBefore} onChange={(v) => set("timeTextBefore", v)} placeholder="Remaining time to complete module:" />
             <CpTextInput label="Text after duration" value={cfg.timeTextAfter} onChange={(v) => set("timeTextAfter", v)} placeholder="minutes" />
@@ -941,7 +929,6 @@ export function CompletionProgressPage({
             ? bookmarking._buttons.no
             : DEFAULT_SETTINGS.bookmarkingPromptNo,
           timeEnabled:      estimatedTime._isEnabled,
-          timeAttachTo:     estimatedTime._attachTo,
           timeIconClass:    estimatedTime.iconClass,
           timeTextBefore:   estimatedTime.textBefore,
           timeTextAfter:    estimatedTime.textAfter,
@@ -1032,7 +1019,7 @@ export function CompletionProgressPage({
       const nextEstimatedTime: CourseEstimatedTimeSettings = {
         _isEnabled:      cfg.timeEnabled,
         _debugEnabled:   false,
-        _attachTo:       cfg.timeAttachTo,
+        _attachTo:       "",
         iconClass:       cfg.timeIconClass,
         textBefore:      cfg.timeTextBefore,
         textAfter:       cfg.timeTextAfter,
