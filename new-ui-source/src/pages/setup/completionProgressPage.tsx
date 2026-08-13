@@ -50,9 +50,6 @@ interface CompletionProgressSettings {
   bookmarkingPromptMessage: string;
   bookmarkingPromptYes: string;
   bookmarkingPromptNo: string;
-  resumeEnabled:        boolean;
-  resumeTitle:          string;
-  resumeMessage:        string;
   progressIndicators:   ProgressIndicator[];
   progressIndicatorText: string;
   progressIndicatorAriaLabel: string;
@@ -155,9 +152,6 @@ const DEFAULT_SETTINGS: CompletionProgressSettings = {
   bookmarkingPromptMessage: "Would you like to continue where you left off?",
   bookmarkingPromptYes: "Yes",
   bookmarkingPromptNo: "No",
-  resumeEnabled:        false,
-  resumeTitle:          "Continue where you left off?",
-  resumeMessage:        "Would you like to resume?",
   progressIndicators:   [],
   progressIndicatorText: "",
   progressIndicatorAriaLabel: "",
@@ -609,30 +603,6 @@ function ResumeBookmarkingContent({
                 />
               </div>
             </div>
-          </div>
-        )}
-      </div>
-      <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
-        <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
-          <CpToggle label="Enable Resume" checked={cfg.resumeEnabled} onChange={(v) => set("resumeEnabled", v)} />
-        </div>
-        {cfg.resumeEnabled && (
-          <div className="px-4 py-4 flex flex-col gap-4">
-            <CpTextInput label="Title" value={cfg.resumeTitle} onChange={(v) => set("resumeTitle", v)} placeholder="Continue where you left off?" />
-            <CpTextInput label="Message" value={cfg.resumeMessage} onChange={(v) => set("resumeMessage", v)} placeholder="Would you like to resume?" />
-            {(cfg.resumeTitle || cfg.resumeMessage) && (
-              <div className="rounded-xl border border-[#e5e7eb] bg-[#f9fafb] p-4">
-                <p className="text-[11px] font-semibold text-[#9ca3af] uppercase tracking-wide mb-3">Dialog Preview</p>
-                <div className="bg-white rounded-xl border border-[#e5e7eb] shadow-sm p-4 max-w-xs mx-auto">
-                  {cfg.resumeTitle && <p className="text-sm font-bold text-[#111827] mb-1">{cfg.resumeTitle}</p>}
-                  {cfg.resumeMessage && <p className="text-sm text-[#6b7280] mb-4">{cfg.resumeMessage}</p>}
-                  <div className="flex gap-2">
-                    <button type="button" className="flex-1 py-1.5 text-xs font-medium border border-[#e5e7eb] rounded-lg text-[#374151] bg-white">No</button>
-                    <button type="button" className="flex-1 py-1.5 text-xs font-semibold rounded-lg text-white bg-[var(--life-primary-500)]">Yes, resume</button>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         )}
       </div>
