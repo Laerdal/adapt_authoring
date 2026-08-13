@@ -1,5 +1,4 @@
 import { CourseOutlinePanel } from "../../components/editor/index";
-import { useNavigate } from "react-router-dom";
 import type { ContentPageData } from "./pageEditorWorkspace";
 
 const ICON_BASE = "/new/assets/icons";
@@ -52,6 +51,7 @@ interface PageEditorNavigationProps {
   onDeleteBlock: (pageId: string, articleId: string, blockId: string) => void;
   onAddComponent: (pageId: string, articleId: string, blockId: string) => void;
   onDeleteComponent: (pageId: string, articleId: string, blockId: string, componentId: string) => void;
+  onCourseConfig: () => void;
   onUseTemplate?: (target: {
     level: "topic" | "section" | "group" | "component";
     pageId: string;
@@ -88,10 +88,9 @@ export default function PageEditorNavigation({
   onDeleteBlock,
   onAddComponent,
   onDeleteComponent,
+  onCourseConfig,
   onUseTemplate,
 }: PageEditorNavigationProps) {
-  const navigate = useNavigate();
-
   return (
     <>
       {leftPanelOpen && (
@@ -152,9 +151,7 @@ export default function PageEditorNavigation({
           <div className="mt-auto">
             <button
               type="button"
-onClick={() => {
-  navigate(`/course/${courseId}/setup`);
-}}
+              onClick={onCourseConfig}
               className="w-8 h-8 rounded-[6px] flex items-center justify-center bg-[var(--life-primary-500)] text-[var(--life-base-white)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] transition-colors"
               aria-label="Course Config"
               title="Course Config"

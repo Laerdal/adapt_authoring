@@ -1223,6 +1223,9 @@ interface EngineContentNode {
   _type?: string;
   title?: string;
   displayTitle?: string;
+  subtitle?: string;
+  _subtitle?: string;
+  body?: string;
   description?: string;
   instruction?: string;
   _sortOrder?: number;
@@ -1230,6 +1233,7 @@ interface EngineContentNode {
   _componentType?: string;
   _layout?: string;
   url?: string;
+  properties?: Record<string, unknown>;
 }
 
 // A component type installed on the instance (GET /api/componenttype).
@@ -1284,18 +1288,21 @@ export async function getCourseStructure(
     id: page._id,
     title: label(page),
     sortOrder: page._sortOrder ?? 0,
+    subtitle: page.subtitle || page._subtitle || "",
+    body: page.body || "",
+    instruction: page.instruction || "",
     description: page.description || "",
     sections: childrenOf(articles, page._id).map(
       (article): SSection => ({
         id: article._id,
         title: label(article),
-        description: article.description || "",
+        description: article.body || article.description || "",
         instruction: article.instruction || "",
         contentGroups: childrenOf(blocks, article._id).map(
           (block): SContentGroup => ({
             id: block._id,
             title: label(block),
-            description: block.description || "",
+            description: block.body || block.description || "",
             instruction: block.instruction || "",
             components: childrenOf(components, block._id).map(
               (comp): SComponent => ({
@@ -1305,7 +1312,20 @@ export async function getCourseStructure(
                 layout: comp._layout === "left" || comp._layout === "right" || comp._layout === "full"
                   ? comp._layout
                   : undefined,
-                description: comp.description || "",
+                subtitle:
+                  typeof comp.properties?.subtitle === "string"
+                    ? (comp.properties.subtitle as string)
+                    : "",
+                description: comp.body || comp.description || "",
+                instruction:
+                  comp.instruction ||
+                  (typeof comp.properties?.instruction === "string"
+                    ? (comp.properties.instruction as string)
+                    : ""),
+                properties:
+                  comp.properties && typeof comp.properties === "object"
+                    ? comp.properties
+                    : {},
                 url: comp.url || "",
               })
             ),
@@ -1367,6 +1387,39 @@ async function fetchMergedComponentSchema(
   } catch {
     return null;
   }
+}
+
+function hasOwnRecordKey(value: unknown, key: string): boolean {
+  return !!value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, key);
+}
+
+export async function componentSchemaSupportsPropertiesField(
+  componentKey: string,
+  fieldName: string
+): Promise<boolean> {
+  const key = (componentKey || "").trim();
+  const field = (fieldName || "").trim();
+  if (!key || !field) return false;
+
+  const schema = await fetchMergedComponentSchema(key);
+  if (!schema?.properties || typeof schema.properties !== "object") {
+    return false;
+  }
+
+  const root = schema.properties as Record<string, unknown>;
+  const candidates: unknown[] = [
+    root,
+    (root as { properties?: unknown }).properties,
+    ((root as { properties?: { properties?: unknown } }).properties as { properties?: unknown } | undefined)?.properties,
+  ];
+
+  for (const candidate of candidates) {
+    if (hasOwnRecordKey(candidate, field)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 // Walk a schema `properties` object, producing each property's default value.
@@ -1614,6 +1667,31 @@ export async function seedDefaultTopic(
   // A single component should start as full-width.
   if (text) await createComponent(courseId, blockId, text, 1, "full");
   return topicId;
+}
+
+export async function seedDefaultSection(
+  courseId: string,
+  parentId: string,
+  sectionTitle = NEW_SECTION_TITLE,
+  sortOrder = 1
+): Promise<string> {
+  const articleId = await createArticle(courseId, parentId, sectionTitle, sortOrder);
+  const blockId = await createBlock(courseId, articleId, NEW_CONTENT_GROUP_TITLE, 1);
+  const text = await getTextComponentType();
+  if (text) await createComponent(courseId, blockId, text, 1, "full");
+  return articleId;
+}
+
+export async function seedDefaultContentGroup(
+  courseId: string,
+  parentId: string,
+  groupTitle = NEW_CONTENT_GROUP_TITLE,
+  sortOrder = 1
+): Promise<string> {
+  const blockId = await createBlock(courseId, parentId, groupTitle, sortOrder);
+  const text = await getTextComponentType();
+  if (text) await createComponent(courseId, blockId, text, 1, "full");
+  return blockId;
 }
 
 // Change a component's column layout (left | right | full).

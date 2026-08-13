@@ -1,9 +1,11 @@
-import { Link } from "react-router-dom";
-
 interface PageEditorTopBarProps {
   courseTitle: string;
   onCourseTitleChange: (title: string) => void;
   onToggleLeftPanel: () => void;
+  onBack: () => void;
+  onSave: () => void;
+  isSaving?: boolean;
+  isSaveDisabled?: boolean;
 }
 
 const ICON_BASE = "/new/assets/icons";
@@ -32,6 +34,10 @@ export default function PageEditorTopBar({
   courseTitle,
   onCourseTitleChange,
   onToggleLeftPanel,
+  onBack,
+  onSave,
+  isSaving = false,
+  isSaveDisabled = false,
 }: PageEditorTopBarProps) {
   return (
     <header className="h-[56px] bg-white border-b border-[#d8dde6] flex items-center shrink-0 px-4 md:px-6 gap-3 relative z-10">
@@ -69,13 +75,14 @@ export default function PageEditorTopBar({
       </div>
 
       <div className="ml-auto flex items-center gap-2 shrink-0">
-        <Link
-          to="/"
+        <button
+          type="button"
+          onClick={onBack}
           className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold text-[#4b5563] border border-transparent rounded-[8px] hover:bg-[#f3f4f6] hover:text-[#111827] transition-colors cursor-pointer"
         >
           <HeaderMaskIcon file="back-icon.svg" />
           <span className="hidden md:inline">Back</span>
-        </Link>
+        </button>
 
         <button
           type="button"
@@ -87,10 +94,12 @@ export default function PageEditorTopBar({
 
         <button
           type="button"
+          onClick={onSave}
+          disabled={isSaveDisabled || isSaving}
           className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold border-2 border-[var(--life-neutral-200)] bg-white text-[var(--life-base-black)] rounded-[8px] hover:border-[var(--life-primary-700)] hover:text-[var(--life-primary-700)] active:border-[var(--life-primary-800)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer"
         >
           <HeaderMaskIcon file="save-icon.svg" />
-          <span className="hidden lg:inline">Save</span>
+          <span className="hidden lg:inline">{isSaving ? "Saving..." : "Save"}</span>
         </button>
 
         <button

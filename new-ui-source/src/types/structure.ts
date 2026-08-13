@@ -22,7 +22,10 @@ export interface SComponent {
   title: string;
   componentKey: string; // engine `_component` key, e.g. 'text' | 'mcq'
   layout?: "full" | "left" | "right";
+  subtitle?: string;
   description?: string;
+  instruction?: string;
+  properties?: Record<string, unknown>;
   url?: string;
 }
 
@@ -46,6 +49,9 @@ export interface STopic {
   id: string;
   title: string;
   sortOrder: number;
+  subtitle?: string;
+  body?: string;
+  instruction?: string;
   description?: string;
   sections: SSection[];
 }
