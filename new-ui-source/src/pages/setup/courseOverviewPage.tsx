@@ -43,12 +43,9 @@ const LANGUAGES: { label: string; iso: string }[] = [
   { label: "Hindi", iso: "hi" },
 ];
 
-const ROLE_OPTIONS = ["Viewer", "Editor", "Admin"];
-
 interface Collaborator {
   userId: string;   // ObjectId on the server
   email: string;
-  role: string;     // UI-only — not persisted to engine (no per-user role in engine)
 }
 
 export function CourseOverviewPage({
@@ -103,7 +100,7 @@ export function CourseOverviewPage({
   function serializeCollaborators(list: Collaborator[]) {
     return [...list]
       .sort((a, b) => a.userId.localeCompare(b.userId))
-      .map(({ userId, role }) => `${userId}:${role}`);
+      .map(({ userId }) => userId);
   }
 
   // Detect unsaved changes (core fields + sharing)
@@ -154,7 +151,7 @@ export function CourseOverviewPage({
           const resolved = await Promise.all(
             data.shareWithUserIds.map(async (uid) => {
               const user = await getUserById(uid);
-              return user ? { userId: uid, email: user.email, role: "Editor" } : null;
+              return user ? { userId: uid, email: user.email } : null;
             })
           );
           const validCollabs = resolved.filter((c): c is Collaborator => c !== null);
@@ -223,7 +220,7 @@ export function CourseOverviewPage({
       setEmailError("This user is already in the list.");
       return;
     }
-    setCollaborators((prev) => [...prev, { userId: user._id, email: user.email, role: "Editor" }]);
+    setCollaborators((prev) => [...prev, { userId: user._id, email: user.email }]);
     setEmailInput("");
     setEmailSuggestions([]);
     setShowEmailSuggestions(false);
@@ -277,10 +274,6 @@ export function CourseOverviewPage({
   }
   function handleRemoveCollaborator(userId: string) {
     setCollaborators((prev) => prev.filter((c) => c.userId !== userId));
-    markDirty();
-  }
-  function handleRoleChange(userId: string, role: string) {
-    setCollaborators((prev) => prev.map((c) => (c.userId === userId ? { ...c, role } : c)));
     markDirty();
   }
 
@@ -830,7 +823,7 @@ export function CourseOverviewPage({
         {/* Collaborator list */}
         {shareMode === "specific" && collaborators.length > 0 && (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {collaborators.map(({ userId, email, role }) => {
+            {collaborators.map(({ userId, email }) => {
               const initials = email.slice(0, 2).toUpperCase();
               return (
                 <div key={userId} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 8, border: "1px solid var(--life-neutral-200)", background: "var(--life-neutral-020)" }}>
@@ -838,15 +831,6 @@ export function CourseOverviewPage({
                     {initials}
                   </div>
                   <span style={{ flex: 1, fontFamily: '"Lato", sans-serif', fontSize: 14, color: "var(--life-base-black)" }}>{email}</span>
-                  <select
-                    value={role}
-                    onChange={(e) => handleRoleChange(userId, e.target.value)}
-                    disabled
-                    title="Roles are not configurable yet"
-                    style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-base-black)", background: "#ffffff", border: "1px solid var(--life-neutral-200)", borderRadius: 6, padding: "4px 10px", cursor: "not-allowed", outline: "none", opacity: 0.7 }}
-                  >
-                    {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
-                  </select>
                   <button
                     type="button"
                     onClick={() => handleRemoveCollaborator(userId)}
