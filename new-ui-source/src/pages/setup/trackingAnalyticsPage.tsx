@@ -1160,7 +1160,7 @@ export function TrackingAnalyticsPage({
       <div className="max-w-2xl w-full pb-24">
         <div className="mb-6">
           <h2 className="text-xl font-bold text-[#111827]">Tracking &amp; Analytics</h2>
-          <p className="text-sm text-[#6b7280] mt-0.5">Group and configure your existing tracking and analytics plugins for this course.</p>
+          <p className="text-sm text-[#6b7280] mt-0.5">Configure LMS tracking standards and analytics integrations for this course.</p>
         </div>
 
         <div className="flex flex-col gap-4">
