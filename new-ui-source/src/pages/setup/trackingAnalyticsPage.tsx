@@ -1408,11 +1408,9 @@ export function TrackingAnalyticsPage({
         </AccordionCard>
       </div>
 
-      <div className="flex items-start gap-3 px-4 py-3 rounded-lg border border-[#fde68a] bg-[#fffbeb] mt-2">
-        <svg className="shrink-0 mt-0.5 text-[#d97706]" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-        </svg>
-        <p className="text-sm text-[#374151]">
+      <div className="flex items-start gap-2.5 rounded-lg bg-[#fff7ed] border border-[#fed7aa] px-4 py-3 mt-2">
+        <span className="text-base leading-none mt-0.5" aria-hidden="true">💡</span>
+        <p className="text-sm text-[#9a3412] leading-snug">
           <span className="font-semibold">Tip:</span> Tracking standards report learner progress back to the LMS, while analytics providers give you aggregate usage insights. You can enable both.
         </p>
       </div>
