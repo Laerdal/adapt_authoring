@@ -405,17 +405,8 @@ function CpCheckboxMulti<T extends string>({
 }
 function CpInfoNote({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-2 rounded-lg bg-[#eff6ff] border border-[#bfdbfe] px-3 py-2.5 text-xs text-[#1d4ed8]">
-      <svg
-        width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-        strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-        className="mt-0.5 shrink-0"
-      >
-        <circle cx="12" cy="12" r="10" />
-        <line x1="12" y1="8" x2="12" y2="12" />
-        <line x1="12" y1="16" x2="12.01" y2="16" />
-      </svg>
-      <span className="leading-relaxed">{children}</span>
+    <div className="rounded-xl bg-[#c3deee] border border-[#2986b5] px-5 py-3 text-sm text-[#206a92] leading-relaxed">
+      <span>{children}</span>
     </div>
   );
 }
@@ -596,9 +587,7 @@ function ResumeBookmarkingContent({
               ]}
             />
             {cfg.bookmarkingReturn === "furthest" && (
-              <CpInfoNote>
-                The Furthest option pairs well with sequential navigation, ensuring learners always progress forward.
-              </CpInfoNote>
+              <CpInfoNote>The furthest option pairs well with sequential navigation, ensuring learners always progress forward.</CpInfoNote>
             )}
 
             <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] p-3 flex flex-col gap-3">
