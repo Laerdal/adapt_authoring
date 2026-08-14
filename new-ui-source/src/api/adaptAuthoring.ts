@@ -1131,7 +1131,9 @@ export async function setCompletionNotifierEnabledInConfig(
     _id: configId,
     _courseId: courseId,
     _extensions: {
+      ...obj(config._extensions),
       _completionNotifier: {
+        ...obj(obj(config._extensions)._completionNotifier),
         _isEnabled: isEnabled,
       },
     },
