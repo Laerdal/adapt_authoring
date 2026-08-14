@@ -39,6 +39,7 @@ type ProgressIndicator    =
 interface CompletionProgressSettings {
   courseCompletionRules:           CourseCompletionRule[];
   completionNotifierEnabled: boolean;
+  progressIndicatorEnabled: boolean;
   notifierLine1:        string;
   notifierLine2:        string;
   notifierAriaLabel:    string;
@@ -165,6 +166,7 @@ function completionNotifierToCourse(
 const DEFAULT_SETTINGS: CompletionProgressSettings = {
   courseCompletionRules:          ["all-content"],
   completionNotifierEnabled: false,
+  progressIndicatorEnabled: true,
   notifierLine1:        "",
   notifierLine2:        "",
   notifierAriaLabel:    "Close completion message",
@@ -764,40 +766,53 @@ function ProgressIndicatorsContent({
           options={PROGRESS_INDICATOR_OPTIONS}
         />
       </CpInnerCard>
-      <div className="grid grid-cols-2 gap-4">
-        <CpTextInput
-          label="Progress indicator text"
-          value={cfg.progressIndicatorText}
-          onChange={(v) => set("progressIndicatorText", v)}
-          placeholder="Page Progress"
-        />
-        <CpTextInput
-          label="Aria label"
-          value={cfg.progressIndicatorAriaLabel}
-          onChange={(v) => set("progressIndicatorAriaLabel", v)}
-          placeholder="Page progress. {{percentageComplete}}%. Open page sections."
-        />
-      </div>
-      <div className="grid grid-cols-2 gap-4">
-        <CpSelect<ProgressType>
-          label="Progress Type"
-          value={cfg.progressType}
-          onChange={(v) => set("progressType", v)}
-          options={[
-            { value: "pages",     label: "Pages" },
-            { value: "questions", label: "Questions" },
-          ]}
-        />
-        <CpSelect<ProgressFormat>
-          label="Progression Format"
-          value={cfg.progressFormat}
-          onChange={(v) => set("progressFormat", v)}
-          options={[
-            { value: "bar",        label: "Bar" },
-            { value: "stepper",    label: "Stepper" },
-            { value: "percentage", label: "Percentage" },
-          ]}
-        />
+      <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
+        <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
+          <CpToggle
+            label="Enable Progression Indicator"
+            checked={cfg.progressIndicatorEnabled}
+            onChange={(v) => set("progressIndicatorEnabled", v)}
+          />
+        </div>
+        {cfg.progressIndicatorEnabled && (
+          <div className="px-4 py-4 flex flex-col gap-4">
+            <div className="grid grid-cols-2 gap-4">
+              <CpTextInput
+                label="Progress indicator text"
+                value={cfg.progressIndicatorText}
+                onChange={(v) => set("progressIndicatorText", v)}
+                placeholder="Page Progress"
+              />
+              <CpTextInput
+                label="Aria label"
+                value={cfg.progressIndicatorAriaLabel}
+                onChange={(v) => set("progressIndicatorAriaLabel", v)}
+                placeholder="Page progress. {{percentageComplete}}%. Open page sections."
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <CpSelect<ProgressType>
+                label="Progress Type"
+                value={cfg.progressType}
+                onChange={(v) => set("progressType", v)}
+                options={[
+                  { value: "pages",     label: "Pages" },
+                  { value: "questions", label: "Questions" },
+                ]}
+              />
+              <CpSelect<ProgressFormat>
+                label="Progression Format"
+                value={cfg.progressFormat}
+                onChange={(v) => set("progressFormat", v)}
+                options={[
+                  { value: "bar",        label: "Bar" },
+                  { value: "stepper",    label: "Stepper" },
+                  { value: "percentage", label: "Percentage" },
+                ]}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </>
   );
@@ -940,8 +955,11 @@ export function CompletionProgressPage({
           timeTextCompleted: estimatedTime.moduleCompleted,
           progressBarStyle: pageLevelProgress.progressBarStyle,
           progressIndicators: pageLevelProgress.progressIndicators,
+          progressIndicatorEnabled: pageLevelProgress.progressIndicatorEnabled,
           progressIndicatorText: pageLevelProgress.progressIndicatorText,
           progressIndicatorAriaLabel: pageLevelProgress.progressIndicatorAriaLabel,
+          progressType: pageLevelProgress.progressType,
+          progressFormat: pageLevelProgress.progressFormat,
         };
 
         setConfigId(config._id ?? null);
@@ -1034,6 +1052,7 @@ export function CompletionProgressPage({
       await saveCoursePageLevelProgressSettings(courseId, {
         progressBarStyle: cfg.progressBarStyle,
         progressIndicators: cfg.progressIndicators,
+        progressIndicatorEnabled: cfg.progressIndicatorEnabled,
         progressIndicatorText: cfg.progressIndicatorText,
         progressIndicatorAriaLabel: cfg.progressIndicatorAriaLabel,
         progressType: cfg.progressType,

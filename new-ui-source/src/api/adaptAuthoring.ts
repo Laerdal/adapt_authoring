@@ -1140,6 +1140,7 @@ export async function setCompletionNotifierEnabledInConfig(
 
 const PAGE_LEVEL_PROGRESS_EXTENSION_NAME = "adapt-contrib-pageLevelProgress";
 const LAERDAL_PAGE_LEVEL_PROGRESS_EXTENSION_NAME = "adapt-laerdal-pageLevelProgress";
+const PROGRESSION_INDICATOR_EXTENSION_NAME = "adapt-progression-indicator";
 const PROGRESSION_INDICATOR_EXTENSION_TARGET = "_progressionIndicator";
 
 export type CourseProgressBarStyle = "continuous" | "compact";
@@ -1155,6 +1156,7 @@ export type CourseProgressFormat = "bar" | "stepper" | "percentage";
 export interface CoursePageLevelProgressSettings {
   progressBarStyle: CourseProgressBarStyle;
   progressIndicators: CourseProgressIndicatorKey[];
+  progressIndicatorEnabled: boolean;
   progressIndicatorText: string;
   progressIndicatorAriaLabel: string;
   progressType: CourseProgressType;
@@ -1278,6 +1280,13 @@ export async function getCoursePageLevelProgressSettings(
 
   const contribInstalled = isExtensionInstalledByName(config, PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
   const laerdalInstalled = isExtensionInstalledByName(config, LAERDAL_PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+  const progressionInstalled = isExtensionInstalledByName(config, PROGRESSION_INDICATOR_EXTENSION_NAME);
+  const configRootProgression = obj((config as AnyRecord)._progressionIndicator);
+  const configExtProgression = obj(obj((config as AnyRecord)._extensions)._progressionIndicator);
+  const progressionEnabled = bool(
+    configExtProgression._isEnabled,
+    bool(configRootProgression._isEnabled, progressionInstalled),
+  );
 
   const contribActive = contribInstalled && contribCfg._isEnabled;
   const laerdalActive = laerdalInstalled && laerdalCfg._isEnabled;
@@ -1304,6 +1313,7 @@ export async function getCoursePageLevelProgressSettings(
   return {
     progressBarStyle,
     progressIndicators: indicatorsFromPageLevelProgressConfig(activeConfig),
+    progressIndicatorEnabled: progressionInstalled && progressionEnabled,
     progressIndicatorText,
     progressIndicatorAriaLabel,
     progressType: progressionCfg._progressionType,
@@ -1320,16 +1330,20 @@ export async function saveCoursePageLevelProgressSettings(
 
   const shouldEnableLaerdal = settings.progressBarStyle === "continuous";
   const shouldEnableContrib = settings.progressBarStyle === "compact";
+  const shouldEnableProgression = settings.progressIndicatorEnabled;
 
   const installedContrib = isExtensionInstalledByName(config, PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
   const installedLaerdal = isExtensionInstalledByName(config, LAERDAL_PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+  const installedProgression = isExtensionInstalledByName(config, PROGRESSION_INDICATOR_EXTENSION_NAME);
 
   const toEnable: string[] = [];
   const toDisable: string[] = [];
   if (shouldEnableContrib && !installedContrib) toEnable.push(PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
   if (shouldEnableLaerdal && !installedLaerdal) toEnable.push(LAERDAL_PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+  if (shouldEnableProgression && !installedProgression) toEnable.push(PROGRESSION_INDICATOR_EXTENSION_NAME);
   if (!shouldEnableContrib && installedContrib) toDisable.push(PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
   if (!shouldEnableLaerdal && installedLaerdal) toDisable.push(LAERDAL_PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+  if (!shouldEnableProgression && installedProgression) toDisable.push(PROGRESSION_INDICATOR_EXTENSION_NAME);
 
   if (toEnable.length) {
     const ids = await resolveExtensionTypeIdsByNames(toEnable);
@@ -1351,6 +1365,7 @@ export async function saveCoursePageLevelProgressSettings(
 
   const contribInstalledNow = isExtensionInstalledByName(config, PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
   const laerdalInstalledNow = isExtensionInstalledByName(config, LAERDAL_PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+  const progressionInstalledNow = isExtensionInstalledByName(config, PROGRESSION_INDICATOR_EXTENSION_NAME);
 
   const sharedConfig = pageLevelProgressConfigFromIndicators(settings.progressIndicators);
   const courseExtensions = obj(course._extensions);
@@ -1382,6 +1397,7 @@ export async function saveCoursePageLevelProgressSettings(
   };
   const nextProgression = {
     ...existingProgression,
+    _isEnabled: progressionInstalledNow && shouldEnableProgression,
     _progressionLabel: settings.progressIndicatorText,
     _progressionAriaLabel: settings.progressIndicatorAriaLabel,
     _progressionType: settings.progressType,
@@ -1417,6 +1433,30 @@ export async function saveCoursePageLevelProgressSettings(
         _pageLevelProgress: nextContribGlobals,
         _laerdalPageLevelProgress: nextLaerdalGlobals,
       },
+    },
+  });
+
+  const configRootProgression = obj((config as AnyRecord)._progressionIndicator);
+  const configExtensions = obj((config as AnyRecord)._extensions);
+  const configExtProgression = obj(configExtensions._progressionIndicator);
+  const configProgression = {
+    ...configRootProgression,
+    _isEnabled: progressionInstalledNow && shouldEnableProgression,
+  };
+  const configProgressionExt = {
+    ...configExtProgression,
+    _isEnabled: progressionInstalledNow && shouldEnableProgression,
+  };
+
+  const configId = str((config as AnyRecord)._id, courseId);
+
+  await apiClient.patch(`/api/content/config/${configId}`, {
+    _id: configId,
+    _courseId: courseId,
+    _progressionIndicator: configProgression,
+    _extensions: {
+      ...configExtensions,
+      _progressionIndicator: configProgressionExt,
     },
   });
 }
