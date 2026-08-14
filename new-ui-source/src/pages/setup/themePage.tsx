@@ -928,6 +928,15 @@ type LifeCourseConfig = {
   _svgSpriteSheets: LifeSpriteSheet[];
   _singleIcons: LifeSingleIcon[];
 };
+type LifeListItemErrors = {
+  _spriteSheetId?: string;
+  iconId?: string;
+  src?: string;
+};
+type LifeCourseConfigErrors = {
+  _svgSpriteSheets: LifeListItemErrors[];
+  _singleIcons: LifeListItemErrors[];
+};
 type LifeBlocksConfig = {
   _paddingTop: string;
   _paddingBottom: string;
@@ -948,6 +957,11 @@ type OnScreenConfig = {
 };
 
 const DEFAULT_LIFE_COURSE_CONFIG: LifeCourseConfig = {
+  _svgSpriteSheets: [],
+  _singleIcons: [],
+};
+
+const DEFAULT_LIFE_COURSE_CONFIG_ERRORS: LifeCourseConfigErrors = {
   _svgSpriteSheets: [],
   _singleIcons: [],
 };
@@ -990,6 +1004,7 @@ function LifeListField({
   title,
   description,
   items,
+  errors,
   onAdd,
   onRemove,
   onChange,
@@ -999,6 +1014,7 @@ function LifeListField({
   title: string;
   description: string;
   items: Array<LifeSpriteSheet | LifeSingleIcon>;
+  errors: LifeListItemErrors[];
   onAdd: () => void;
   onRemove: (index: number) => void;
   onChange: (index: number, key: string, value: string) => void;
@@ -1012,7 +1028,11 @@ function LifeListField({
         <p className="text-xs text-[#6b7280] leading-relaxed">{description}</p>
       </div>
       <div className="space-y-3">
-        {items.map((item, index) => (
+        {items.map((item, index) => {
+          const itemErrors = errors[index] ?? {};
+          const idError = idKey === '_spriteSheetId' ? itemErrors._spriteSheetId : itemErrors.iconId;
+
+          return (
           <div key={`${idKey}-${index}`} className="border border-[#e5e7eb] rounded-lg p-3 space-y-3 bg-[#fafafa]">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
@@ -1021,8 +1041,10 @@ function LifeListField({
                   type="text"
                   value={idKey === '_spriteSheetId' ? (item as LifeSpriteSheet)._spriteSheetId : (item as LifeSingleIcon).iconId}
                   onChange={(e) => onChange(index, idKey, e.target.value)}
-                  className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1.5 text-[#111827] focus:border-[var(--life-primary-500)] outline-none"
+                  aria-invalid={!!idError}
+                  className={`text-xs w-full border rounded px-2 py-1.5 text-[#111827] outline-none ${idError ? 'border-[#ef4444] focus:border-[#ef4444]' : 'border-[#d1d5db] focus:border-[var(--life-primary-500)]'}`}
                 />
+                {idError && <p className="mt-1 text-xs text-[#ef4444]">{idError}</p>}
               </div>
               <div>
                 <p className="text-xs font-semibold text-[#111827] mb-2">External Source</p>
@@ -1030,8 +1052,10 @@ function LifeListField({
                   type="text"
                   value={item.src}
                   onChange={(e) => onChange(index, 'src', e.target.value)}
-                  className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1.5 text-[#111827] focus:border-[var(--life-primary-500)] outline-none"
+                  aria-invalid={!!itemErrors.src}
+                  className={`text-xs w-full border rounded px-2 py-1.5 text-[#111827] outline-none ${itemErrors.src ? 'border-[#ef4444] focus:border-[#ef4444]' : 'border-[#d1d5db] focus:border-[var(--life-primary-500)]'}`}
                 />
+                {itemErrors.src && <p className="mt-1 text-xs text-[#ef4444]">{itemErrors.src}</p>}
               </div>
             </div>
             <button
@@ -1042,7 +1066,7 @@ function LifeListField({
               Remove
             </button>
           </div>
-        ))}
+        )})}
       </div>
       <button
         type="button"
@@ -1168,6 +1192,10 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     const labelMap: Record<string, string> = { life: 'LIFE Theme', vanilla: 'Vanilla Theme', custom: 'Custom Theme' };
     const themeLabel = labelMap[selected];
     if (!themeLabel) return;
+    if ((selected === 'life' || selected === 'custom') && !validateLifeCourseConfig()) {
+      setSaveError('Fix the custom icon fields before saving.');
+      return;
+    }
     setSaving(true);
     setSaveError(null);
     setSaveSuccess(false);
@@ -1285,12 +1313,56 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   const [checkHidePartial, setCheckHidePartial] = useState(false);
   const [activeAccordion, setActiveAccordion] = useState<string | null>(null);
   const [lifeCourseConfig, setLifeCourseConfig] = useState<LifeCourseConfig>(DEFAULT_LIFE_COURSE_CONFIG);
+  const [lifeCourseConfigErrors, setLifeCourseConfigErrors] = useState<LifeCourseConfigErrors>(DEFAULT_LIFE_COURSE_CONFIG_ERRORS);
   const [lifeBlocksConfig, setLifeBlocksConfig] = useState<LifeBlocksConfig>(DEFAULT_LIFE_BLOCKS_CONFIG);
   const [onScreenConfig, setOnScreenConfig] = useState<OnScreenConfig>(DEFAULT_ON_SCREEN_CONFIG);
   const [activeVanillaAccordion, setActiveVanillaAccordion] = useState<string | null>('_global');
   const [vanillaColors, setVanillaColors] = useState<Record<string, string>>({});
   const [activeCustomAccordion, setActiveCustomAccordion] = useState<string | null>('_global');
   const [customSettings, setCustomSettings] = useState<Record<string, string>>(CUSTOM_FIELD_DEFAULTS);
+
+  const clearLifeCourseValidation = useCallback(() => {
+    setLifeCourseConfigErrors(DEFAULT_LIFE_COURSE_CONFIG_ERRORS);
+    setSaveError(null);
+  }, []);
+
+  const isValidExternalUrl = useCallback((value: string) => {
+    try {
+      const parsed = new URL(value);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const validateLifeCourseConfig = useCallback(() => {
+    const hasAnyCustomIcons = lifeCourseConfig._svgSpriteSheets.length > 0 || lifeCourseConfig._singleIcons.length > 0;
+    if (!hasAnyCustomIcons) {
+      setLifeCourseConfigErrors(DEFAULT_LIFE_COURSE_CONFIG_ERRORS);
+      return true;
+    }
+
+    const nextErrors: LifeCourseConfigErrors = {
+      _svgSpriteSheets: lifeCourseConfig._svgSpriteSheets.map((item) => {
+        const itemErrors: LifeListItemErrors = {};
+        if (!item._spriteSheetId.trim()) itemErrors._spriteSheetId = 'Icon set name is required.';
+        if (!item.src.trim()) itemErrors.src = 'External source URL is required.';
+        else if (!isValidExternalUrl(item.src.trim())) itemErrors.src = 'Enter a valid URL.';
+        return itemErrors;
+      }),
+      _singleIcons: lifeCourseConfig._singleIcons.map((item) => {
+        const itemErrors: LifeListItemErrors = {};
+        if (!item.iconId.trim()) itemErrors.iconId = 'Icon id is required.';
+        if (!item.src.trim()) itemErrors.src = 'External source URL is required.';
+        else if (!isValidExternalUrl(item.src.trim())) itemErrors.src = 'Enter a valid URL.';
+        return itemErrors;
+      }),
+    };
+
+    const hasErrors = [...nextErrors._svgSpriteSheets, ...nextErrors._singleIcons].some((item) => Object.keys(item).length > 0);
+    setLifeCourseConfigErrors(nextErrors);
+    return !hasErrors;
+  }, [isValidExternalUrl, lifeCourseConfig]);
 
   const updateOnScreenRow = useCallback((rowKey: OnScreenLevelKey, patch: Partial<OnScreenLevelConfig>) => {
     setOnScreenConfig((prev) => {
@@ -1671,6 +1743,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     setCheckUnanswered(!!(comp && typeof comp._hidePartiallyDisplayMarking === 'boolean' && comp._hidePartiallyDisplayMarking));
     setCheckHideFeedback(!!(comp && typeof comp._hideFeedbackFirstAttempt === 'boolean' && comp._hideFeedbackFirstAttempt));
     setCheckHidePartial(!!(comp && typeof comp._hidePartiallyFeedback === 'boolean' && comp._hidePartiallyFeedback));
+    setLifeCourseConfigErrors(DEFAULT_LIFE_COURSE_CONFIG_ERRORS);
   }, []);
 
   // Load saved themeVariables into customSettings / vanillaColors / checkboxes.
@@ -2187,43 +2260,63 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     title="Custom Icons: Sprite Sheets"
                     description="Add a reference to an external sprite sheet with icons that can be used in the course."
                     items={lifeCourseConfig._svgSpriteSheets}
+                    errors={lifeCourseConfigErrors._svgSpriteSheets}
                     idLabel="Icon Set Name"
                     idKey="_spriteSheetId"
-                    onAdd={() => setLifeCourseConfig((prev) => ({
-                      ...prev,
-                      _svgSpriteSheets: [...prev._svgSpriteSheets, { _spriteSheetId: '', src: '' }],
-                    }))}
-                    onRemove={(index) => setLifeCourseConfig((prev) => ({
-                      ...prev,
-                      _svgSpriteSheets: prev._svgSpriteSheets.filter((_, itemIndex) => itemIndex !== index),
-                    }))}
-                    onChange={(index, key, value) => setLifeCourseConfig((prev) => ({
-                      ...prev,
-                      _svgSpriteSheets: prev._svgSpriteSheets.map((item, itemIndex) => (
-                        itemIndex === index ? { ...item, [key]: value } : item
-                      )),
-                    }))}
+                    onAdd={() => {
+                      clearLifeCourseValidation();
+                      setLifeCourseConfig((prev) => ({
+                        ...prev,
+                        _svgSpriteSheets: [...prev._svgSpriteSheets, { _spriteSheetId: '', src: '' }],
+                      }));
+                    }}
+                    onRemove={(index) => {
+                      clearLifeCourseValidation();
+                      setLifeCourseConfig((prev) => ({
+                        ...prev,
+                        _svgSpriteSheets: prev._svgSpriteSheets.filter((_, itemIndex) => itemIndex !== index),
+                      }));
+                    }}
+                    onChange={(index, key, value) => {
+                      clearLifeCourseValidation();
+                      setLifeCourseConfig((prev) => ({
+                        ...prev,
+                        _svgSpriteSheets: prev._svgSpriteSheets.map((item, itemIndex) => (
+                          itemIndex === index ? { ...item, [key]: value } : item
+                        )),
+                      }));
+                    }}
                   />
                   <LifeListField
                     title="Custom Icons: Single Icons"
                     description="Add a reference to an external individual icon that can be used in the course."
                     items={lifeCourseConfig._singleIcons}
+                    errors={lifeCourseConfigErrors._singleIcons}
                     idLabel="Icon Id"
                     idKey="iconId"
-                    onAdd={() => setLifeCourseConfig((prev) => ({
-                      ...prev,
-                      _singleIcons: [...prev._singleIcons, { iconId: '', src: '' }],
-                    }))}
-                    onRemove={(index) => setLifeCourseConfig((prev) => ({
-                      ...prev,
-                      _singleIcons: prev._singleIcons.filter((_, itemIndex) => itemIndex !== index),
-                    }))}
-                    onChange={(index, key, value) => setLifeCourseConfig((prev) => ({
-                      ...prev,
-                      _singleIcons: prev._singleIcons.map((item, itemIndex) => (
-                        itemIndex === index ? { ...item, [key]: value } : item
-                      )),
-                    }))}
+                    onAdd={() => {
+                      clearLifeCourseValidation();
+                      setLifeCourseConfig((prev) => ({
+                        ...prev,
+                        _singleIcons: [...prev._singleIcons, { iconId: '', src: '' }],
+                      }));
+                    }}
+                    onRemove={(index) => {
+                      clearLifeCourseValidation();
+                      setLifeCourseConfig((prev) => ({
+                        ...prev,
+                        _singleIcons: prev._singleIcons.filter((_, itemIndex) => itemIndex !== index),
+                      }));
+                    }}
+                    onChange={(index, key, value) => {
+                      clearLifeCourseValidation();
+                      setLifeCourseConfig((prev) => ({
+                        ...prev,
+                        _singleIcons: prev._singleIcons.map((item, itemIndex) => (
+                          itemIndex === index ? { ...item, [key]: value } : item
+                        )),
+                      }));
+                    }}
                   />
                 </>
               ) : null}

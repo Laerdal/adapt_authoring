@@ -124,6 +124,7 @@ const NAV_ITEMS = [
   {
     id: "tracking",
     label: "Tracking & Analytics",
+    guarded: true,
     icon: (
       <SidebarMaskIcon file="tracking-icon.svg" />
     ),
