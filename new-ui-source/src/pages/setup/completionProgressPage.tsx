@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect, useCallback } from "react";
 import {
-  enableCompletionNotifierInConfig,
+  setCompletionNotifierEnabledInConfig,
   getCourseBookmarkingSettings,
   getCourseCompletionNotifier,
   getCourseEstimatedTimeSettings,
@@ -38,6 +38,7 @@ type ProgressIndicator    =
   | "course-level-nav-btn";
 interface CompletionProgressSettings {
   courseCompletionRules:           CourseCompletionRule[];
+  completionNotifierEnabled: boolean;
   notifierLine1:        string;
   notifierLine2:        string;
   notifierAriaLabel:    string;
@@ -67,6 +68,29 @@ type CompletionCriteriaConfig = NonNullable<CourseTechnicalSettings["_completion
 type CompletionNotifierConfig = CourseCompletionNotifier;
 type BookmarkingConfig = CourseBookmarkingSettings;
 type EstimatedTimeConfig = CourseEstimatedTimeSettings;
+
+function completionNotifierEnabledFromConfig(
+  config?: CourseTechnicalSettings | null,
+): boolean {
+  const cfg = (config ?? {}) as CourseTechnicalSettings & {
+    _extensions?: Record<string, unknown>;
+    _completionNotifier?: { _isEnabled?: unknown };
+    _enabledExtensions?: Record<string, { name?: unknown; targetAttribute?: unknown }>;
+  };
+  const extensionNotifier = (cfg._extensions?._completionNotifier ?? {}) as { _isEnabled?: unknown };
+  const rootNotifier = cfg._completionNotifier ?? {};
+  const rawEnabled = extensionNotifier._isEnabled ?? rootNotifier._isEnabled;
+  const enabledExtensions = cfg._enabledExtensions ?? {};
+  const installedInOldUi = Object.values(enabledExtensions).some((entry) => {
+    if (!entry) return false;
+    const byName = typeof entry.name === "string" && entry.name === "adapt-completion-notifier";
+    const byTarget = typeof entry.targetAttribute === "string" && entry.targetAttribute === "_completionNotifier";
+    return byName || byTarget;
+  });
+  const enabled = extensionNotifier._isEnabled ?? rootNotifier._isEnabled;
+  if (typeof enabled === "boolean") return enabled;
+  return installedInOldUi;
+}
 
 const COURSE_COMPLETION_RULE_ORDER: CourseCompletionRule[] = [
   "all-content",
@@ -140,6 +164,7 @@ function completionNotifierToCourse(
 
 const DEFAULT_SETTINGS: CompletionProgressSettings = {
   courseCompletionRules:          ["all-content"],
+  completionNotifierEnabled: false,
   notifierLine1:        "",
   notifierLine2:        "",
   notifierAriaLabel:    "Close completion message",
@@ -497,29 +522,38 @@ function CompletionFeedbackContent({
 }) {
   return (
     <>
-      <CpInnerCard title="Completion Notifier" subtitle="Message for the course completion notifier">
-        <div className="flex flex-col gap-4 pt-1">
-          <CpTextInput
-            label="Text for message first line"
-            value={cfg.notifierLine1}
-            onChange={(v) => set("notifierLine1", v)}
-            placeholder="e.g. Congratulations!"
-          />
-          <CpTextInput
-            label="Text for message second line"
-            value={cfg.notifierLine2}
-            onChange={(v) => set("notifierLine2", v)}
-            placeholder="e.g. You have completed this course."
-          />
-          <CpTextInput
-            label="Close button aria label"
-            hint="Accessible label announced by screen readers for the close button"
-            value={cfg.notifierAriaLabel}
-            onChange={(v) => set("notifierAriaLabel", v)}
-            placeholder="e.g. Close completion message"
+      <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
+        <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
+          <CpToggle
+            label="Enable Completion Notifier"
+            checked={cfg.completionNotifierEnabled}
+            onChange={(v) => set("completionNotifierEnabled", v)}
           />
         </div>
-      </CpInnerCard>
+        {cfg.completionNotifierEnabled && (
+          <div className="px-4 py-4 flex flex-col gap-4">
+            <CpTextInput
+              label="Text for message first line"
+              value={cfg.notifierLine1}
+              onChange={(v) => set("notifierLine1", v)}
+              placeholder="e.g. Congratulations!"
+            />
+            <CpTextInput
+              label="Text for message second line"
+              value={cfg.notifierLine2}
+              onChange={(v) => set("notifierLine2", v)}
+              placeholder="e.g. You have completed this course."
+            />
+            <CpTextInput
+              label="Close button aria label"
+              hint="Accessible label announced by screen readers for the close button"
+              value={cfg.notifierAriaLabel}
+              onChange={(v) => set("notifierAriaLabel", v)}
+              placeholder="e.g. Close completion message"
+            />
+          </div>
+        )}
+      </div>
     </>
   );
 }
@@ -876,6 +910,7 @@ export function CompletionProgressPage({
         const nextSettings = {
           ...DEFAULT_SETTINGS,
           courseCompletionRules: nextRules,
+          completionNotifierEnabled: completionNotifierEnabledFromConfig(config),
           ...nextNotifier,
           bookmarkingEnabled: !!bookmarking._isEnabled,
           bookmarkingLevel: (bookmarking._level ?? DEFAULT_SETTINGS.bookmarkingLevel) as BookmarkLocation,
@@ -963,10 +998,7 @@ export function CompletionProgressPage({
     setToast(null);
     try {
       const nextCompletionCriteria = completionCriteriaFromRules(cfg.courseCompletionRules, completionCriteria);
-      const nextCompletionNotifier = {
-        ...completionNotifierToCourse(cfg, completionNotifier),
-        _isEnabled: true,
-      };
+      const nextCompletionNotifier = completionNotifierToCourse(cfg, completionNotifier);
       const nextBookmarking: BookmarkingConfig = {
         _isEnabled: cfg.bookmarkingEnabled,
         _level: cfg.bookmarkingLevel,
@@ -996,21 +1028,20 @@ export function CompletionProgressPage({
         moduleCompleted: cfg.timeTextCompleted,
       };
 
-      await Promise.all([
-        updateCourseTechnicalSettings(configId, changedFields),
-        saveCourseCompletionNotifier(courseId, nextCompletionNotifier),
-        enableCompletionNotifierInConfig(configId, courseId),
-        saveCourseBookmarkingSettings(courseId, nextBookmarking),
-        saveCourseEstimatedTimeSettings(courseId, nextEstimatedTime),
-        saveCoursePageLevelProgressSettings(courseId, {
-          progressBarStyle: cfg.progressBarStyle,
-          progressIndicators: cfg.progressIndicators,
-          progressIndicatorText: cfg.progressIndicatorText,
-          progressIndicatorAriaLabel: cfg.progressIndicatorAriaLabel,
-          progressType: cfg.progressType,
-          progressFormat: cfg.progressFormat,
-        }),
-      ]);
+      await updateCourseTechnicalSettings(configId, changedFields);
+      await saveCourseBookmarkingSettings(courseId, nextBookmarking);
+      await saveCourseEstimatedTimeSettings(courseId, nextEstimatedTime);
+      await saveCoursePageLevelProgressSettings(courseId, {
+        progressBarStyle: cfg.progressBarStyle,
+        progressIndicators: cfg.progressIndicators,
+        progressIndicatorText: cfg.progressIndicatorText,
+        progressIndicatorAriaLabel: cfg.progressIndicatorAriaLabel,
+        progressType: cfg.progressType,
+        progressFormat: cfg.progressFormat,
+      });
+      await setCompletionNotifierEnabledInConfig(configId, courseId, cfg.completionNotifierEnabled);
+      // Write notifier settings last to avoid later extension updates clobbering message fields.
+      await saveCourseCompletionNotifier(courseId, nextCompletionNotifier);
       setCompletionCriteria(nextCompletionCriteria);
       setCompletionNotifier(nextCompletionNotifier);
       setSaved({

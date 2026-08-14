@@ -1048,6 +1048,8 @@ export interface CourseCompletionNotifier {
   [key: string]: unknown;
 }
 
+const COMPLETION_NOTIFIER_EXTENSION_NAME = "adapt-completion-notifier";
+
 export async function getCourseCompletionNotifier(courseId: string): Promise<CourseCompletionNotifier> {
   const course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
   const rootNotifier = obj(course._completionNotifier);
@@ -1061,27 +1063,76 @@ export async function saveCourseCompletionNotifier(
   completionNotifier: CourseCompletionNotifier,
 ): Promise<unknown> {
   const course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+  const config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
   const courseExtensions = {
     ...obj(course._extensions),
     _completionNotifier: completionNotifier,
   };
 
-  return apiClient.put(`/api/content/course/${courseId}`, {
+  // Old UI extension editor binds to config model values; keep notifier message
+  // mirrored on config._completionNotifier for cross-UI parity.
+  const configNotifier = {
+    ...obj(config._completionNotifier),
+    ...completionNotifier,
+    _message: {
+      ...obj(obj(config._completionNotifier)._message),
+      ...obj(completionNotifier._message),
+    },
+  };
+
+  const configExtensions = obj(config._extensions);
+  const configExtensionNotifier = {
+    ...obj(configExtensions._completionNotifier),
+    ...completionNotifier,
+    _isEnabled: bool(obj(configExtensions._completionNotifier)._isEnabled, bool(completionNotifier._isEnabled, false)),
+    _message: {
+      ...obj(obj(configExtensions._completionNotifier)._message),
+      ...obj(completionNotifier._message),
+    },
+  };
+
+  await apiClient.put(`/api/content/course/${courseId}`, {
     _extensions: courseExtensions,
     _completionNotifier: completionNotifier,
   });
+
+  return apiClient.patch(`/api/content/config/${config._id}`, {
+    _id: config._id,
+    _courseId: courseId,
+    _completionNotifier: configNotifier,
+    _extensions: {
+      ...configExtensions,
+      _completionNotifier: configExtensionNotifier,
+    },
+  });
 }
 
-export async function enableCompletionNotifierInConfig(
+export async function setCompletionNotifierEnabledInConfig(
   configId: string,
   courseId: string,
+  isEnabled: boolean,
 ): Promise<unknown> {
+  const config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+  const installed = isExtensionInstalledByName(config, COMPLETION_NOTIFIER_EXTENSION_NAME);
+
+  if (isEnabled && !installed) {
+    const ids = await resolveExtensionTypeIdsByNames([COMPLETION_NOTIFIER_EXTENSION_NAME]);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/enable/${courseId}`, { extensions: ids });
+    }
+  } else if (!isEnabled && installed) {
+    const ids = await resolveExtensionTypeIdsByNames([COMPLETION_NOTIFIER_EXTENSION_NAME]);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/disable/${courseId}`, { extensions: ids });
+    }
+  }
+
   return apiClient.patch(`/api/content/config/${configId}`, {
     _id: configId,
     _courseId: courseId,
     _extensions: {
       _completionNotifier: {
-        _isEnabled: true,
+        _isEnabled: isEnabled,
       },
     },
   });
