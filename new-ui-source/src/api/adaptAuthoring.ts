@@ -587,8 +587,8 @@ export async function createCourse(input: CreateCourseInput): Promise<CreatedCou
 
 export async function getCourseBootstrapData(courseId: string): Promise<CourseBootstrapData> {
   const [course, config] = await Promise.all([
-    apiClient.get<EngineCourseDetails>(`/api/content/course/${courseId}`),
-    apiClient.get<EngineConfigDetails>(`/api/content/config/${courseId}`),
+      apiClient.get<EngineCourseDetails>(`/api/content/course/${courseId}`),
+      apiClient.get<EngineConfigDetails>(`/api/content/config/${courseId}`),
   ]);
 
   const rawHero = course.heroImage ?? null;
@@ -1233,6 +1233,22 @@ interface EngineContentNode {
   _componentType?: string;
   _layout?: string;
   url?: string;
+  _graphic?: Record<string, unknown>;
+  linkText?: string;
+  duration?: string;
+  _lockType?: string;
+  _lockedBy?: string[];
+  _classes?: string;
+  _isOptional?: boolean;
+  _isAvailable?: boolean;
+  _isHidden?: boolean;
+  _isVisible?: boolean;
+  _onScreen?: Record<string, unknown>;
+  _ariaLevel?: string;
+  _ariaLabel?: string;
+  _extensions?: Record<string, unknown>;
+  themeSettings?: Record<string, unknown>;
+  menuSettings?: Record<string, unknown>;
   properties?: Record<string, unknown>;
 }
 
@@ -1284,56 +1300,103 @@ export async function getCourseStructure(
   const childPages = (parentId: string) =>
     pages.filter((p) => p._parentId === parentId).sort(bySortOrder);
 
-  const buildTopic = (page: EngineContentNode): STopic => ({
-    id: page._id,
-    title: label(page),
-    sortOrder: page._sortOrder ?? 0,
-    subtitle: page.subtitle || page._subtitle || "",
-    body: page.body || "",
-    instruction: page.instruction || "",
-    description: page.description || "",
-    sections: childrenOf(articles, page._id).map(
-      (article): SSection => ({
-        id: article._id,
-        title: label(article),
-        description: article.body || article.description || "",
-        instruction: article.instruction || "",
-        contentGroups: childrenOf(blocks, article._id).map(
-          (block): SContentGroup => ({
-            id: block._id,
-            title: label(block),
-            description: block.body || block.description || "",
-            instruction: block.instruction || "",
-            components: childrenOf(components, block._id).map(
-              (comp): SComponent => ({
-                id: comp._id,
-                title: label(comp),
-                componentKey: comp._component || "",
-                layout: comp._layout === "left" || comp._layout === "right" || comp._layout === "full"
-                  ? comp._layout
-                  : undefined,
-                subtitle:
-                  typeof comp.properties?.subtitle === "string"
-                    ? (comp.properties.subtitle as string)
-                    : "",
-                description: comp.body || comp.description || "",
-                instruction:
-                  comp.instruction ||
-                  (typeof comp.properties?.instruction === "string"
-                    ? (comp.properties.instruction as string)
-                    : ""),
-                properties:
-                  comp.properties && typeof comp.properties === "object"
-                    ? comp.properties
-                    : {},
-                url: comp.url || "",
-              })
-            ),
-          })
-        ),
-      })
-    ),
-  });
+  const buildTopic = (page: EngineContentNode): STopic => {
+    const pageGraphic = page._graphic && typeof page._graphic === "object"
+      ? (page._graphic as Record<string, unknown>)
+      : null;
+    const onScreen = page._onScreen && typeof page._onScreen === "object"
+      ? (page._onScreen as Record<string, unknown>)
+      : {};
+
+    return {
+      id: page._id,
+      title: label(page),
+      displayTitle: page.displayTitle || "",
+      sortOrder: page._sortOrder ?? 0,
+      subtitle: page.subtitle || page._subtitle || "",
+      body: page.body || "",
+      instruction: page.instruction || "",
+      description: page.description || "",
+      graphic: {
+        src: typeof pageGraphic?.src === "string" ? pageGraphic.src : "",
+        alt: typeof pageGraphic?.alt === "string" ? pageGraphic.alt : "",
+      },
+      linkText: page.linkText || "",
+      duration: page.duration || "",
+      lockType: page._lockType || "",
+      lockedBy: Array.isArray(page._lockedBy)
+        ? page._lockedBy.filter((item): item is string => typeof item === "string")
+        : [],
+      classes: page._classes || "",
+      isOptional: !!page._isOptional,
+      isAvailable: page._isAvailable !== false,
+      isHidden: !!page._isHidden,
+      isVisible: page._isVisible !== false,
+      onScreen: {
+        _isEnabled: !!onScreen._isEnabled,
+        _classes: typeof onScreen._classes === "string" ? onScreen._classes : "",
+        _percentInviewVertical:
+          typeof onScreen._percentInviewVertical === "number"
+            ? onScreen._percentInviewVertical
+            : 50,
+      },
+      ariaLevel: page._ariaLevel || "",
+      ariaLabel: page._ariaLabel || "",
+      extensions:
+        page._extensions && typeof page._extensions === "object"
+          ? page._extensions
+          : {},
+      themeSettings:
+        page.themeSettings && typeof page.themeSettings === "object"
+          ? page.themeSettings
+          : {},
+      menuSettings:
+        page.menuSettings && typeof page.menuSettings === "object"
+          ? page.menuSettings
+          : {},
+      sections: childrenOf(articles, page._id).map(
+        (article): SSection => ({
+          id: article._id,
+          title: label(article),
+          description: article.body || article.description || "",
+          instruction: article.instruction || "",
+          contentGroups: childrenOf(blocks, article._id).map(
+            (block): SContentGroup => ({
+              id: block._id,
+              title: label(block),
+              description: block.body || block.description || "",
+              instruction: block.instruction || "",
+              components: childrenOf(components, block._id).map(
+                (comp): SComponent => ({
+                  id: comp._id,
+                  title: label(comp),
+                  componentKey: comp._component || "",
+                  layout: comp._layout === "left" || comp._layout === "right" || comp._layout === "full"
+                    ? comp._layout
+                    : undefined,
+                  subtitle:
+                    typeof comp.properties?.subtitle === "string"
+                      ? (comp.properties.subtitle as string)
+                      : "",
+                  description: comp.body || comp.description || "",
+                  instruction:
+                    comp.instruction ||
+                    (typeof comp.properties?.instruction === "string"
+                      ? (comp.properties.instruction as string)
+                      : ""),
+                  properties:
+                    comp.properties && typeof comp.properties === "object"
+                      ? comp.properties
+                      : {},
+                  url: comp.url || "",
+                })
+              ),
+            })
+          ),
+        })
+      ),
+    };
+  };
 
   // Menus nest recursively; each carries its child menus (sub-modules) + pages.
   const buildModule = (menu: EngineContentNode): SModule => ({
@@ -1722,10 +1785,12 @@ export function renameStructureNode(
 export function updateStructureNode(
   level: StructureLevel,
   id: string,
-  patch: Record<string, unknown>
+  patch: Record<string, unknown>,
+  options?: { syncTitleDisplayTitle?: boolean }
 ): Promise<unknown> {
+  const shouldSync = options?.syncTitleDisplayTitle !== false;
   const body =
-    typeof patch.title === "string" && patch.displayTitle === undefined
+    shouldSync && typeof patch.title === "string" && patch.displayTitle === undefined
       ? { ...patch, displayTitle: patch.title }
       : patch;
   return apiClient.put(`/api/content/${LEVEL_TO_CONTENT_TYPE[level]}/${id}`, body);

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import AddComponentDrawer from "../../components/course/AddComponentDrawer";
 import AddTemplateDrawer from "../../components/course/AddTemplateDrawer";
+import AssetPickerModal from "../../components/common/AssetPickerModal";
 import CourseStructureMap from "../../components/course/CourseStructureMap";
 import { StructureIcon, STRUCTURE_ICON_COLOR_CLASS } from "../../components/course/StructureIcons";
 import { UnsavedChangesModal } from "../setup/unsavedChangesModal";
@@ -75,6 +76,307 @@ const defaultMenuPage: MenuPageData = {
   bgImageUrl: null,
 };
 
+type BreakpointKey = "_xlarge" | "_large" | "_medium" | "_small";
+
+type TopicGraphicSettings = {
+  src: string;
+  alt: string;
+};
+
+type TopicResponsiveAssetMap = Partial<Record<BreakpointKey, string>>;
+
+type TopicResponsiveClasses = Partial<Record<BreakpointKey, string>>;
+
+type TopicBackgroundStyles = {
+  _backgroundRepeat?: string;
+  _backgroundSize?: string;
+  _backgroundPosition?: string;
+};
+
+type TopicMinimumHeights = Partial<Record<BreakpointKey, number | "">>;
+
+type TopicTextAlignment = {
+  _title?: string;
+  _subtitle?: string;
+  _body?: string;
+  _instruction?: string;
+};
+
+type TopicOnScreenSettings = {
+  _isEnabled?: boolean;
+  _classes?: string;
+  _percentInviewVertical?: number | "";
+};
+
+type TopicThemeSettings = {
+  _backgroundImage?: TopicResponsiveAssetMap;
+  _backgroundStyles?: TopicBackgroundStyles;
+  _responsiveClasses?: TopicResponsiveClasses;
+  _pageHeader?: {
+    _graphic?: {
+      _src?: string;
+      alt?: string;
+    };
+    _textAlignment?: TopicTextAlignment;
+    _backgroundImage?: TopicResponsiveAssetMap;
+    _backgroundStyles?: TopicBackgroundStyles;
+    _minimumHeights?: TopicMinimumHeights;
+  };
+};
+
+type TopicMenuSettings = {
+  _graphic?: {
+    _src?: string;
+    alt?: string;
+  };
+  _skipSubmenuView?: boolean;
+  lockedNotification?: string;
+  _backgroundImage?: TopicResponsiveAssetMap;
+  _backgroundStyles?: TopicBackgroundStyles;
+  _menuHeader?: {
+    _displayAboveHeader?: boolean;
+    _textAlignment?: TopicTextAlignment;
+    _backgroundImage?: TopicResponsiveAssetMap;
+    _backgroundStyles?: TopicBackgroundStyles;
+    _minimumHeights?: TopicMinimumHeights;
+  };
+};
+
+type TopicAssetTarget =
+  | { scope: "pageGraphic" }
+  | { scope: "themePageBackground"; bp: BreakpointKey }
+  | { scope: "themeHeaderGraphic" }
+  | { scope: "themeHeaderBackground"; bp: BreakpointKey }
+  | { scope: "menuGraphic" }
+  | { scope: "menuBackground"; bp: BreakpointKey }
+  | { scope: "menuHeaderBackground"; bp: BreakpointKey };
+
+const BG_REPEAT_OPTIONS = ["", "repeat", "repeat-x", "repeat-y", "no-repeat"] as const;
+const BG_SIZE_OPTIONS = ["", "auto", "cover", "contain", "100% 100%"] as const;
+const BG_POSITION_OPTIONS = [
+  "",
+  "left top",
+  "left center",
+  "left bottom",
+  "center top",
+  "center center",
+  "center bottom",
+  "right top",
+  "right center",
+  "right bottom",
+] as const;
+const TEXT_ALIGN_OPTIONS = ["", "left", "center", "right"] as const;
+const LOCK_TYPE_OPTIONS = ["", "custom", "lockLast", "sequential", "unlockFirst"] as const;
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function asBoolean(value: unknown, fallback = false): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function asNumberOrEmpty(value: unknown): number | "" {
+  return typeof value === "number" && Number.isFinite(value) ? value : "";
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function parseNumberishInput(value: string): number | "" {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : "";
+}
+
+function toRenderableAssetUrl(source: string | undefined): string | null {
+  const src = (source || "").trim();
+  if (!src) return null;
+  if (/^(https?:)?\/\//i.test(src) || src.startsWith("/")) return src;
+  if (src.startsWith("course/assets/")) return `/${src}`;
+  if (/^[a-f0-9]{24}$/i.test(src)) return `/api/asset/serve/${src}`;
+  return src;
+}
+
+function TopicAccordion({
+  title,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={`w-full rounded-[8px] border bg-white overflow-hidden transition-colors ${
+        open
+          ? "border-[var(--life-primary-200)]"
+          : "border-[#d8dee6] hover:border-[var(--life-primary-100)]"
+      }`}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className={`w-full flex items-center justify-between gap-3 px-4 py-3 text-left transition-colors ${
+          open
+            ? "bg-[var(--life-primary-020)]"
+            : "bg-white hover:bg-[var(--life-neutral-020)]"
+        }`}
+      >
+        <h3 className="text-sm font-semibold text-[var(--life-base-black)]">{title}</h3>
+        <svg
+          className={`shrink-0 ml-auto transition-transform duration-200 text-[var(--life-primary-700)] ${open ? "rotate-90" : ""}`}
+          width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+        >
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+      </button>
+      {open ? <div className="px-4 pb-4 pt-3 border-t border-[#eef2f6] flex flex-col gap-3">{children}</div> : null}
+    </div>
+  );
+}
+
+function TopicFieldLabel({ children }: { children: React.ReactNode }) {
+  return <span className="text-xs font-semibold text-[#374151]">{children}</span>;
+}
+
+function TopicTextInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+  readOnly = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  type?: "text" | "number";
+  readOnly?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <TopicFieldLabel>{label}</TopicFieldLabel>
+      <input
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        readOnly={readOnly}
+        className={`w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] text-[#111827] transition-colors ${readOnly ? "bg-[#f8fafc]" : "bg-white focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"}`}
+      />
+    </div>
+  );
+}
+
+function TopicSelect({
+  label,
+  value,
+  onChange,
+  options,
+  emptyOptionLabel = "Default",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: readonly string[];
+  emptyOptionLabel?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <TopicFieldLabel>{label}</TopicFieldLabel>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="w-full border border-[#e5e7eb] rounded-lg px-3 py-2.5 text-sm text-[var(--life-base-black)] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:border-transparent pr-8"
+        >
+          {options.map((option) => (
+            <option key={option} value={option}>{option || emptyOptionLabel}</option>
+          ))}
+        </select>
+        <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function TopicCheckbox({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-sm text-[#111827] cursor-pointer">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        className="h-4 w-4 rounded-[8px] border-[#cbd5e1] text-[#2d6fa8] focus:ring-[#2d6fa8]"
+      />
+      <span>{label}</span>
+    </label>
+  );
+}
+
+function TopicAssetField({
+  label,
+  value,
+  onPickAsset,
+  onClear,
+}: {
+  label: string;
+  value: string;
+  onPickAsset: () => void;
+  onClear: () => void;
+}) {
+  const previewUrl = toRenderableAssetUrl(value);
+
+  return (
+    <div className="border border-[var(--life-neutral-200)] rounded-lg p-3 flex flex-col gap-2.5">
+      <div className="text-[13px] text-[var(--life-base-black)]">{label}</div>
+      {previewUrl ? (
+        <div className="border border-[var(--life-neutral-200)] rounded-[8px] overflow-hidden bg-[var(--life-neutral-020)]">
+          <div className="h-24 w-full flex items-center justify-center overflow-hidden bg-[var(--life-neutral-020)]">
+            <img src={previewUrl} alt={label} className="w-full h-full object-contain" />
+          </div>
+          <div className="px-2.5 py-2 border-t border-[var(--life-neutral-200)] text-[11px] text-[var(--life-neutral-500)] truncate">{value}</div>
+        </div>
+      ) : null}
+      <div className="flex gap-2.5 flex-wrap">
+        <button type="button" onClick={onPickAsset} className={`px-3 py-2 text-sm font-semibold rounded-[8px] transition-colors cursor-pointer flex items-center gap-1.5 ${value ? "border border-[var(--life-primary-500)] text-[var(--life-primary-500)] bg-white hover:bg-[var(--life-primary-020)]" : "bg-[var(--life-primary-500)] text-white hover:bg-[var(--life-primary-700)]"}`}>
+          Select an Asset
+        </button>
+        {value ? (
+          <button type="button" onClick={onClear} className="px-3 py-2 text-sm font-semibold rounded-[8px] border border-[var(--life-critical-500)] text-[var(--life-critical-500)] bg-white hover:bg-[var(--life-critical-050)] transition-colors cursor-pointer">
+            Remove
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function cloneContentPages(pages: ContentPageData[]): ContentPageData[] {
   return JSON.parse(JSON.stringify(pages)) as ContentPageData[];
 }
@@ -108,6 +410,26 @@ function mapStructureToPages(
     subtitle?: string;
     body?: string;
     instruction?: string;
+    graphic?: {
+      src?: string;
+      alt?: string;
+    };
+    themeSettings?: Record<string, unknown>;
+    menuSettings?: Record<string, unknown>;
+    linkText?: string;
+    duration?: string;
+    lockType?: string;
+    lockedBy?: string[];
+    classes?: string;
+    isOptional?: boolean;
+    isAvailable?: boolean;
+    isHidden?: boolean;
+    isVisible?: boolean;
+    onScreen?: TopicOnScreenSettings;
+    ariaLevel?: string;
+    ariaLabel?: string;
+    extensions?: Record<string, unknown>;
+    displayTitle?: string;
     sections: Array<{
       id: string;
       title: string;
@@ -133,6 +455,43 @@ function mapStructureToPages(
       subtitle: topicSubtitle,
       body: topicBody,
       instruction: topicInstruction,
+      graphic: {
+        src: topic.graphic?.src || "",
+        alt: topic.graphic?.alt || "",
+      },
+      themeSettings: topic.themeSettings && typeof topic.themeSettings === "object"
+        ? topic.themeSettings as TopicThemeSettings
+        : {},
+      menuSettings: topic.menuSettings && typeof topic.menuSettings === "object"
+        ? topic.menuSettings as TopicMenuSettings
+        : {},
+      linkText: topic.linkText || "",
+      duration: topic.duration || "",
+      lockType: topic.lockType || "",
+      lockedBy: Array.isArray(topic.lockedBy) ? topic.lockedBy : [],
+      classes: topic.classes || "",
+      isOptional: !!topic.isOptional,
+      isAvailable: topic.isAvailable !== false,
+      isHidden: !!topic.isHidden,
+      isVisible: topic.isVisible !== false,
+      onScreen: {
+        _isEnabled: !!topic.onScreen?._isEnabled,
+        _classes: topic.onScreen?._classes || "",
+        _percentInviewVertical:
+          typeof topic.onScreen?._percentInviewVertical === "number"
+            ? topic.onScreen._percentInviewVertical
+            : 50,
+      },
+      ariaLevel: topic.ariaLevel || "",
+      ariaLabel: topic.ariaLabel || "",
+      extensions:
+        topic.extensions && typeof topic.extensions === "object"
+          ? topic.extensions
+          : {},
+      showDisplayTitleInPreview:
+        typeof topic.displayTitle === "string"
+          ? topic.displayTitle.trim().length > 0
+          : true,
       subPages: [],
       articles: topic.sections.map((section) => ({
         id: section.id,
@@ -233,6 +592,23 @@ export interface ContentPageData {
   subtitle: string;
   body: string;
   instruction: string;
+  graphic: TopicGraphicSettings;
+  themeSettings: TopicThemeSettings;
+  menuSettings: TopicMenuSettings;
+  linkText: string;
+  duration: string;
+  lockType: string;
+  lockedBy: string[];
+  classes: string;
+  isOptional: boolean;
+  isAvailable: boolean;
+  isHidden: boolean;
+  isVisible: boolean;
+  onScreen: TopicOnScreenSettings;
+  ariaLevel: string;
+  ariaLabel: string;
+  extensions: Record<string, unknown>;
+  showDisplayTitleInPreview: boolean;
   articles: ArticleData[];
   subPages: SubPageData[];
 }
@@ -307,6 +683,18 @@ export default function CourseEditor({
   const [isSavingSelection, setIsSavingSelection] = useState(false);
   const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
   const [componentSubtitleSchemaSupport, setComponentSubtitleSchemaSupport] = useState<Record<string, boolean>>({});
+  const [topicAssetPickerTarget, setTopicAssetPickerTarget] = useState<TopicAssetTarget | null>(null);
+  const [copiedTopicId, setCopiedTopicId] = useState<string | null>(null);
+  const [openTopicAccordions, setOpenTopicAccordions] = useState<Record<string, boolean>>({
+    general: true,
+    availability: false,
+    accessibility: false,
+    extensions: false,
+    theme: false,
+    menu: false,
+    media: false,
+    advanced: false,
+  });
   const structureLoadRequestIdRef = useRef(0);
   const isMountedRef = useRef(true);
   const pendingGuardedActionRef = useRef<(() => void) | null>(null);
@@ -323,6 +711,7 @@ export default function CourseEditor({
     blockId?: string;
   } | null>(null);
   const previewBuildRequestIdRef = useRef(0);
+  const copiedTopicIdResetTimerRef = useRef<number | null>(null);
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const cleanupPreviewListenersRef = useRef<(() => void) | null>(null);
   const pendingLeftPanelScrollTargetRef = useRef<PendingPreviewScrollTarget | null>(null);
@@ -1141,7 +1530,10 @@ export default function CourseEditor({
       const pageHeader = pageNode?.querySelector(".page__header-inner") as HTMLElement | null;
       if (!pageHeader) return;
 
-      const titleEl = ensureElement(pageHeader, ".page__title-inner", "page__title-inner", "div", selectedPage.title || "");
+      const previewTopicTitle = selectedPage.showDisplayTitleInPreview
+        ? (selectedPage.title || "")
+        : "";
+      const titleEl = ensureElement(pageHeader, ".page__title-inner", "page__title-inner", "div", previewTopicTitle);
       const subtitleEl = ensureContainerInner(
         pageHeader,
         ".page__subtitle",
@@ -1167,13 +1559,21 @@ export default function CourseEditor({
         selectedPage.instruction || ""
       );
 
-      makeEditable(titleEl, {
-        level: "topic",
-        field: "title",
-        placeholder: "Topic title",
-        value: selectedPage.title || "",
-        pageId: selectedPage.id,
-      });
+      const titleContainer = titleEl.closest(".page__title") as HTMLElement | null;
+      if (titleContainer) {
+        titleContainer.style.display = selectedPage.showDisplayTitleInPreview ? "" : "none";
+      } else {
+        titleEl.style.display = selectedPage.showDisplayTitleInPreview ? "" : "none";
+      }
+      if (selectedPage.showDisplayTitleInPreview) {
+        makeEditable(titleEl, {
+          level: "topic",
+          field: "title",
+          placeholder: "TOPIC TITLE",
+          value: selectedPage.title || "",
+          pageId: selectedPage.id,
+        });
+      }
       makeEditable(subtitleEl, {
         level: "topic",
         field: "subtitle",
@@ -1379,6 +1779,25 @@ export default function CourseEditor({
       return page.articles.find((candidate) => candidate.id === articleId) ?? null;
     };
 
+    const resolveTopicField = (
+      editableNode: HTMLElement,
+      currentField: "title" | "subtitle" | "body" | "instruction" | null
+    ) => {
+      if (!currentField || (currentField !== "title" && currentField !== "subtitle")) {
+        return currentField;
+      }
+
+      if (editableNode.matches(".page__title-inner") || editableNode.closest(".page__title")) {
+        return "title" as const;
+      }
+
+      if (editableNode.matches(".page__subtitle-inner") || editableNode.closest(".page__subtitle")) {
+        return "subtitle" as const;
+      }
+
+      return currentField;
+    };
+
     const onMouseOver = (event: Event) => {
       const state = resolvePreviewIds(event.target as Element | null);
       setPreviewHoverState(state);
@@ -1481,11 +1900,13 @@ export default function CourseEditor({
 
       if (!field || !level || !pageId) return;
 
+      const resolvedField = level === "topic" ? resolveTopicField(target, field) : field;
+
       if (level === "topic") {
-        if (field === "title") updatePageData(pageId, { title: value });
-        if (field === "subtitle") updatePageData(pageId, { subtitle: value });
-        if (field === "body") updatePageData(pageId, { body: value, description: value });
-        if (field === "instruction") updatePageData(pageId, { instruction: value });
+        if (resolvedField === "title") updatePageData(pageId, { title: value });
+        if (resolvedField === "subtitle") updatePageData(pageId, { subtitle: value });
+        if (resolvedField === "body") updatePageData(pageId, { body: value, description: value });
+        if (resolvedField === "instruction") updatePageData(pageId, { instruction: value });
         return;
       }
 
@@ -1570,20 +1991,22 @@ export default function CourseEditor({
 
       if (!field || !level || !pageId) return;
 
+      const resolvedField = level === "topic" ? resolveTopicField(target, field) : field;
+
       if (level === "topic") {
-        if (field === "title") {
+        if (resolvedField === "title") {
           updatePageData(pageId, { title: normalizedValue });
           return;
         }
-        if (field === "subtitle") {
+        if (resolvedField === "subtitle") {
           updatePageData(pageId, { subtitle: normalizedValue });
           return;
         }
-        if (field === "body") {
+        if (resolvedField === "body") {
           updatePageData(pageId, { body: normalizedValue, description: normalizedValue });
           return;
         }
-        if (field === "instruction") {
+        if (resolvedField === "instruction") {
           updatePageData(pageId, { instruction: normalizedValue });
         }
         return;
@@ -1710,7 +2133,48 @@ export default function CourseEditor({
 
   useEffect(() => () => {
     cleanupPreviewListenersRef.current?.();
+    if (copiedTopicIdResetTimerRef.current !== null) {
+      window.clearTimeout(copiedTopicIdResetTimerRef.current);
+      copiedTopicIdResetTimerRef.current = null;
+    }
   }, []);
+
+  function handleCopyTopicId(topicId: string) {
+    if (!topicId) return;
+
+    const afterCopy = () => {
+      setCopiedTopicId(topicId);
+      if (copiedTopicIdResetTimerRef.current !== null) {
+        window.clearTimeout(copiedTopicIdResetTimerRef.current);
+      }
+      copiedTopicIdResetTimerRef.current = window.setTimeout(() => {
+        setCopiedTopicId((current) => (current === topicId ? null : current));
+        copiedTopicIdResetTimerRef.current = null;
+      }, 2000);
+    };
+
+    const fallbackCopy = () => {
+      const helperTextArea = document.createElement("textarea");
+      helperTextArea.value = topicId;
+      helperTextArea.style.position = "fixed";
+      helperTextArea.style.left = "-9999px";
+      document.body.appendChild(helperTextArea);
+      helperTextArea.focus();
+      helperTextArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(helperTextArea);
+      afterCopy();
+    };
+
+    if (navigator.clipboard?.writeText) {
+      void navigator.clipboard.writeText(topicId)
+        .then(afterCopy)
+        .catch(fallbackCopy);
+      return;
+    }
+
+    fallbackCopy();
+  }
 
   function handleMenuPageCreate() {
     setMenuPageCreated(true);
@@ -1720,6 +2184,10 @@ export default function CourseEditor({
 
   function updateMenuData(patch: Partial<MenuPageData>) {
     setMenuData((prev) => ({ ...prev, ...patch }));
+  }
+
+  function toggleTopicAccordion(id: "general" | "availability" | "accessibility" | "extensions" | "theme" | "menu" | "media" | "advanced") {
+    setOpenTopicAccordions((prev) => ({ ...prev, [id]: !prev[id] }));
   }
 
   function handleCanvasClick() {
@@ -1895,6 +2363,122 @@ export default function CourseEditor({
       previousPages.map((p) => (p.id === pageId ? { ...p, ...patch } : p))
     );
     setDirtyNodeKeys((prev) => ({ ...prev, [`topic:${pageId}`]: true }));
+  }
+
+  function updatePageGraphic(pageId: string, updater: (current: TopicGraphicSettings) => TopicGraphicSettings) {
+    setContentPages((previousPages) =>
+      previousPages.map((p) =>
+        p.id === pageId
+          ? { ...p, graphic: updater(p.graphic ?? { src: "", alt: "" }) }
+          : p
+      )
+    );
+    setDirtyNodeKeys((prev) => ({ ...prev, [`topic:${pageId}`]: true }));
+  }
+
+  function updatePageThemeSettings(pageId: string, updater: (current: TopicThemeSettings) => TopicThemeSettings) {
+    setContentPages((previousPages) =>
+      previousPages.map((p) =>
+        p.id === pageId
+          ? { ...p, themeSettings: updater((p.themeSettings ?? {}) as TopicThemeSettings) }
+          : p
+      )
+    );
+    setDirtyNodeKeys((prev) => ({ ...prev, [`topic:${pageId}`]: true }));
+  }
+
+  function updatePageMenuSettings(pageId: string, updater: (current: TopicMenuSettings) => TopicMenuSettings) {
+    setContentPages((previousPages) =>
+      previousPages.map((p) =>
+        p.id === pageId
+          ? { ...p, menuSettings: updater((p.menuSettings ?? {}) as TopicMenuSettings) }
+          : p
+      )
+    );
+    setDirtyNodeKeys((prev) => ({ ...prev, [`topic:${pageId}`]: true }));
+  }
+
+  function applyTopicAssetSelection(pageId: string, target: TopicAssetTarget, assetLink: string) {
+    if (target.scope === "pageGraphic") {
+      updatePageGraphic(pageId, (current) => ({ ...current, src: assetLink }));
+      return;
+    }
+
+    if (target.scope === "themeHeaderGraphic") {
+      updatePageThemeSettings(pageId, (current) => ({
+        ...current,
+        _pageHeader: {
+          ...asRecord(current._pageHeader),
+          _graphic: {
+            ...asRecord(asRecord(current._pageHeader)._graphic),
+            _src: assetLink,
+          },
+        },
+      }));
+      return;
+    }
+
+    if (target.scope === "themePageBackground") {
+      updatePageThemeSettings(pageId, (current) => ({
+        ...current,
+        _backgroundImage: {
+          ...asRecord(current._backgroundImage),
+          [target.bp]: assetLink,
+        },
+      }));
+      return;
+    }
+
+    if (target.scope === "themeHeaderBackground") {
+      updatePageThemeSettings(pageId, (current) => ({
+        ...current,
+        _pageHeader: {
+          ...asRecord(current._pageHeader),
+          _backgroundImage: {
+            ...asRecord(asRecord(current._pageHeader)._backgroundImage),
+            [target.bp]: assetLink,
+          },
+        },
+      }));
+      return;
+    }
+
+    if (target.scope === "menuGraphic") {
+      updatePageMenuSettings(pageId, (current) => ({
+        ...current,
+        _graphic: {
+          ...asRecord(current._graphic),
+          _src: assetLink,
+        },
+      }));
+      return;
+    }
+
+    if (target.scope === "menuBackground") {
+      updatePageMenuSettings(pageId, (current) => ({
+        ...current,
+        _backgroundImage: {
+          ...asRecord(current._backgroundImage),
+          [target.bp]: assetLink,
+        },
+      }));
+      return;
+    }
+
+    updatePageMenuSettings(pageId, (current) => ({
+      ...current,
+      _menuHeader: {
+        ...asRecord(current._menuHeader),
+        _backgroundImage: {
+          ...asRecord(asRecord(current._menuHeader)._backgroundImage),
+          [target.bp]: assetLink,
+        },
+      },
+    }));
+  }
+
+  function clearTopicAssetSelection(pageId: string, target: TopicAssetTarget) {
+    applyTopicAssetSelection(pageId, target, "");
   }
 
   async function deletePage(pageId: string) {
@@ -2082,15 +2666,48 @@ export default function CourseEditor({
         if (level === "topic") {
           const page = findPage(id);
           if (!page) continue;
-          await updateStructureNode("topic", id, {
+          const topicPatch: Record<string, unknown> = {
             title: page.title,
-            displayTitle: page.title,
             description: page.body,
             subtitle: page.subtitle,
             _subtitle: page.subtitle,
             body: page.body,
             instruction: page.instruction,
-          });
+            linkText: page.linkText,
+            duration: page.duration,
+            _lockType: page.lockType,
+            _lockedBy: page.lockedBy,
+            _classes: page.classes,
+            _isOptional: page.isOptional,
+            _isAvailable: page.isAvailable,
+            _isHidden: page.isHidden,
+            _isVisible: page.isVisible,
+            _onScreen: {
+              _isEnabled: !!page.onScreen?._isEnabled,
+              _classes: page.onScreen?._classes || "",
+              _percentInviewVertical:
+                typeof page.onScreen?._percentInviewVertical === "number"
+                  ? page.onScreen._percentInviewVertical
+                  : 50,
+            },
+            _ariaLevel: page.ariaLevel,
+            _ariaLabel: page.ariaLabel,
+            _extensions: page.extensions ?? {},
+            _graphic: {
+              src: page.graphic?.src || "",
+              alt: page.graphic?.alt || "",
+            },
+            themeSettings: page.themeSettings ?? {},
+            menuSettings: page.menuSettings ?? {},
+          };
+
+          if (page.showDisplayTitleInPreview) {
+            topicPatch.displayTitle = page.title;
+          } else {
+            topicPatch._unsetFields = ["displayTitle"];
+          }
+
+          await updateStructureNode("topic", id, topicPatch, { syncTitleDisplayTitle: false });
           continue;
         }
 
@@ -2177,22 +2794,28 @@ export default function CourseEditor({
     setShowUnsavedChangesModal(true);
   }
 
-  function runWithPageLeaveGuard(nextPageId: string | null, action: () => void) {
-    const currentPageId = menuSelected ? null : selectedPageId;
-    const isLeavingCurrentPage = currentPageId !== nextPageId;
-    if (hasUnsavedChanges && isLeavingCurrentPage) {
-      requestUnsavedChangesGuard(action);
-      return;
-    }
-    action();
-  }
-
   function runWithEditorExitGuard(action: () => void) {
     if (hasUnsavedChanges) {
       requestUnsavedChangesGuard(action);
       return;
     }
     action();
+  }
+
+  function openSetupPanel(panel?: "storyboarding") {
+    if (!courseId || courseId === "new-course") return;
+    const suffix = panel ? `?panel=${panel}` : "";
+    runWithEditorExitGuard(() => navigate(`/course/${courseId}/setup${suffix}`));
+  }
+
+  function openEditorPreview(startFromCurrentPage: boolean) {
+    if (!courseId || courseId === "new-course") return;
+
+    const pageId = (selectedPageId || "").trim();
+    const previewUrl = startFromCurrentPage && pageId
+      ? `/course/${courseId}/preview?pageId=${encodeURIComponent(pageId)}`
+      : `/course/${courseId}/preview`;
+    runWithEditorExitGuard(() => navigate(previewUrl));
   }
 
   async function deleteComponent(pageId: string, articleId: string, blockId: string, componentId: string) {
@@ -2489,6 +3112,8 @@ export default function CourseEditor({
     })),
   }), [courseTitle, menuPageCreated, menuData, contentPages]);
 
+  const loginName = user?.username || user?.email || "Not signed in";
+
   return (
     <div className="flex flex-col h-screen bg-white overflow-hidden">
       <PageEditorTopBar
@@ -2496,8 +3121,16 @@ export default function CourseEditor({
         onCourseTitleChange={setCourseTitle}
         onToggleLeftPanel={() => setLeftPanelOpen((o) => !o)}
         onBack={() => runWithEditorExitGuard(() => navigate("/"))}
+        onOpenCourseSettings={() => openSetupPanel()}
+        onOpenStoryboard={() => openSetupPanel("storyboarding")}
+        onOpenPreview={(startFromCurrentPage) => openEditorPreview(startFromCurrentPage)}
+        loginName={loginName}
+        previewDisabled={!courseId || courseId === "new-course"}
         onSave={() => {
           void saveDraftChanges();
+        }}
+        onPublish={() => {
+          void 0;
         }}
         isSaving={isSavingSelection}
         isSaveDisabled={!hasUnsavedChanges}
@@ -2522,15 +3155,15 @@ export default function CourseEditor({
           selectedArticleId={selectedArticleId}
           selectedBlockId={selectedBlockId}
           selectedComponentId={selectedComponentId}
-          onMenuSelect={() => runWithPageLeaveGuard(null, () => handleMenuSelect("leftPanel"))}
-          onPageSelect={(pageId) => runWithPageLeaveGuard(pageId, () => handlePageSelect(pageId, "leftPanel"))}
-          onSubPageSelect={(pageId, subPageId) => runWithPageLeaveGuard(pageId, () => handleSubPageSelect(pageId, subPageId, "leftPanel"))}
-          onArticleSelect={(pageId, articleId) => runWithPageLeaveGuard(pageId, () => handleArticleSelect(pageId, articleId, "leftPanel"))}
-          onBlockSelect={(pageId, articleId, blockId) => runWithPageLeaveGuard(pageId, () => handleBlockSelect(pageId, articleId, blockId, "leftPanel"))}
-          onComponentSelect={(pageId, articleId, blockId, componentId) => runWithPageLeaveGuard(pageId, () => handleSelectComponent(pageId, articleId, blockId, componentId, "leftPanel"))}
-          onAddPage={() => runWithPageLeaveGuard(null, () => {
+          onMenuSelect={() => handleMenuSelect("leftPanel")}
+          onPageSelect={(pageId) => handlePageSelect(pageId, "leftPanel")}
+          onSubPageSelect={(pageId, subPageId) => handleSubPageSelect(pageId, subPageId, "leftPanel")}
+          onArticleSelect={(pageId, articleId) => handleArticleSelect(pageId, articleId, "leftPanel")}
+          onBlockSelect={(pageId, articleId, blockId) => handleBlockSelect(pageId, articleId, blockId, "leftPanel")}
+          onComponentSelect={(pageId, articleId, blockId, componentId) => handleSelectComponent(pageId, articleId, blockId, componentId, "leftPanel")}
+          onAddPage={() => {
             void handleAddPage();
-          })}
+          }}
           onDeletePage={deletePage}
           onAddArticle={handleAddArticle}
           onDeleteArticle={deleteArticle}
@@ -2539,7 +3172,6 @@ export default function CourseEditor({
           onDeleteBlock={deleteBlock}
           onAddComponent={handleAddComponentPanel}
           onDeleteComponent={deleteComponent}
-          onCourseConfig={() => runWithEditorExitGuard(() => navigate(`/course/${courseId}/setup`))}
           onUseTemplate={handleOpenTemplateDrawer}
         />
 
@@ -2638,13 +3270,11 @@ export default function CourseEditor({
                   course={courseData}
                   onNodeClick={(pageId: string) => {
                     if (pageId !== 'menu') {
-                      runWithPageLeaveGuard(pageId, () => {
-                        handlePageSelect(pageId);
-                        setShowStructureMap(false);
-                      });
+                      handlePageSelect(pageId);
+                      setShowStructureMap(false);
                       return;
                     }
-                    runWithPageLeaveGuard(null, () => setShowStructureMap(false));
+                    setShowStructureMap(false);
                   }}
                 />
               </div>
@@ -2733,36 +3363,283 @@ export default function CourseEditor({
                         className={`block w-[13px] h-[13px] shrink-0 bg-current transition-transform ${activeLevel === "page" ? "rotate-90" : ""}`}
                       />
                     </button>
-                    {activeLevel === "page" && page && (
-                      <div className="px-4 py-4 border-b border-[#e6ebf0] space-y-3">
-                        <input
-                          value={page.title}
-                          onChange={(e) => updatePageData(page.id, { title: e.target.value })}
-                          className="w-full border border-[#d1d5db] rounded-md px-3 py-2 text-sm"
-                          placeholder="Topic title"
-                        />
-                        <input
-                          value={page.subtitle}
-                          onChange={(e) => updatePageData(page.id, { subtitle: e.target.value })}
-                          className="w-full border border-[#d1d5db] rounded-md px-3 py-2 text-sm"
-                          placeholder="Topic subtitle"
-                        />
-                        <textarea
-                          value={page.body}
-                          onChange={(e) => updatePageData(page.id, { body: e.target.value, description: e.target.value })}
-                          className="w-full border border-[#d1d5db] rounded-md px-3 py-2 text-sm resize-none"
-                          rows={3}
-                          placeholder="Page body"
-                        />
-                        <textarea
-                          value={page.instruction}
-                          onChange={(e) => updatePageData(page.id, { instruction: e.target.value })}
-                          className="w-full border border-[#d1d5db] rounded-md px-3 py-2 text-sm resize-none"
-                          rows={2}
-                          placeholder="Page instruction"
-                        />
-                      </div>
-                    )}
+                    {activeLevel === "page" && page && (() => {
+                      const themeSettings = (page.themeSettings ?? {}) as TopicThemeSettings;
+                      const pageBackgroundImage = asRecord(themeSettings._backgroundImage);
+                      const pageBackgroundStyles = asRecord(themeSettings._backgroundStyles);
+                      const responsiveClasses = asRecord(themeSettings._responsiveClasses);
+                      const pageHeader = asRecord(themeSettings._pageHeader);
+                      const pageHeaderGraphic = asRecord(pageHeader._graphic);
+                      const pageHeaderTextAlignment = asRecord(pageHeader._textAlignment);
+                      const pageHeaderBackgroundImage = asRecord(pageHeader._backgroundImage);
+                      const pageHeaderBackgroundStyles = asRecord(pageHeader._backgroundStyles);
+                      const pageHeaderMinimumHeights = asRecord(pageHeader._minimumHeights);
+
+                      const menuSettings = (page.menuSettings ?? {}) as TopicMenuSettings;
+                      const menuGraphic = asRecord(menuSettings._graphic);
+                      const menuBackgroundImage = asRecord(menuSettings._backgroundImage);
+                      const menuBackgroundStyles = asRecord(menuSettings._backgroundStyles);
+                      const menuHeader = asRecord(menuSettings._menuHeader);
+                      const menuHeaderTextAlignment = asRecord(menuHeader._textAlignment);
+                      const menuHeaderBackgroundImage = asRecord(menuHeader._backgroundImage);
+                      const menuHeaderBackgroundStyles = asRecord(menuHeader._backgroundStyles);
+                      const menuHeaderMinimumHeights = asRecord(menuHeader._minimumHeights);
+                      const showMenuSubtitleAlignment = courseMenu === "Box Menu";
+
+                      return (
+                        <div className="px-4 py-4 border-b border-[#e6ebf0] space-y-2.5">
+                          <TopicAccordion title="General" open={!!openTopicAccordions.general} onToggle={() => toggleTopicAccordion("general")}>
+                            <div className="flex flex-col gap-1.5">
+                              <TopicFieldLabel>TOPIC ID</TopicFieldLabel>
+                              {(() => {
+                                const isCopied = copiedTopicId === page.id;
+                                return (
+                                  <div className="relative">
+                                    <button
+                                      type="button"
+                                      aria-label="Copy topic id"
+                                      title="Copy topic id"
+                                      onClick={() => handleCopyTopicId(page.id)}
+                                      className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors flex items-center justify-between gap-2 cursor-pointer ${isCopied ? "bg-[var(--life-positive-050)] border-[var(--life-positive-500)] text-[var(--life-positive-500)]" : "bg-white border-[var(--life-neutral-300)] text-[var(--life-base-black)] hover:bg-[#f8fafc] hover:border-[var(--life-primary-500)] hover:text-[var(--life-primary-500)]"}`}
+                                    >
+                                      <span className="truncate text-left">{page.id}</span>
+                                      {isCopied ? (
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                          <polyline points="20 6 9 17 4 12" />
+                                        </svg>
+                                      ) : (
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                        </svg>
+                                      )}
+                                    </button>
+                                    {isCopied ? (
+                                      <div className="absolute -top-8 right-0 px-2.5 py-1 rounded-[8px] border border-[var(--life-positive-500)] bg-[var(--life-positive-050)] text-[11px] font-semibold text-[var(--life-positive-500)] shadow-sm whitespace-nowrap">
+                                        Id copied to clipboard.
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                );
+                              })()}
+                              <p className="text-xs text-[#6b7280]">Unique identifier for this topic. Click to copy.</p>
+                            </div>
+                            <TopicTextInput label="Topic title" value={page.title} onChange={(value) => updatePageData(page.id, { title: value })} />
+                            <TopicCheckbox
+                              label="Display title in preview"
+                              checked={!!page.showDisplayTitleInPreview}
+                              onChange={(checked) => updatePageData(page.id, { showDisplayTitleInPreview: checked })}
+                            />
+                          </TopicAccordion>
+
+                          <TopicAccordion title="Availability & Progression" open={!!openTopicAccordions.availability} onToggle={() => toggleTopicAccordion("availability")}>
+                            <TopicCheckbox label="Is optional" checked={!!page.isOptional} onChange={(checked) => updatePageData(page.id, { isOptional: checked })} />
+                            <TopicCheckbox label="Is available" checked={!!page.isAvailable} onChange={(checked) => updatePageData(page.id, { isAvailable: checked })} />
+                            <TopicCheckbox label="Is hidden" checked={!!page.isHidden} onChange={(checked) => updatePageData(page.id, { isHidden: checked })} />
+                            <TopicCheckbox label="Is visible" checked={!!page.isVisible} onChange={(checked) => updatePageData(page.id, { isVisible: checked })} />
+                            <TopicTextInput label="Duration" value={page.duration} onChange={(value) => updatePageData(page.id, { duration: value })} />
+                            <TopicTextInput label="Link text" value={page.linkText} onChange={(value) => updatePageData(page.id, { linkText: value })} />
+                            <TopicSelect label="Menu lock type" value={page.lockType} onChange={(value) => updatePageData(page.id, { lockType: value })} options={LOCK_TYPE_OPTIONS} emptyOptionLabel="" />
+                            <TopicTextInput
+                              label="Locked by (comma separated IDs)"
+                              value={page.lockedBy.join(", ")}
+                              onChange={(value) => updatePageData(page.id, {
+                                lockedBy: value.split(",").map((item) => item.trim()).filter(Boolean),
+                              })}
+                            />
+                          </TopicAccordion>
+
+                          <TopicAccordion title="Accessibility" open={!!openTopicAccordions.accessibility} onToggle={() => toggleTopicAccordion("accessibility")}>
+                            <TopicTextInput label="ARIA level" value={page.ariaLevel} onChange={(value) => updatePageData(page.id, { ariaLevel: value })} />
+                            <TopicTextInput label="ARIA label" value={page.ariaLabel} onChange={(value) => updatePageData(page.id, { ariaLabel: value })} />
+                          </TopicAccordion>
+
+                          <TopicAccordion title="Extensions" open={!!openTopicAccordions.extensions} onToggle={() => toggleTopicAccordion("extensions")}>
+                            <div className="flex flex-col gap-1.5">
+                              <TopicFieldLabel>Extensions JSON</TopicFieldLabel>
+                              <textarea
+                                key={`${page.id}-extensions`}
+                                defaultValue={JSON.stringify(page.extensions ?? {}, null, 2)}
+                                onBlur={(event) => {
+                                  try {
+                                    const parsed = JSON.parse(event.target.value || "{}");
+                                    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                                      updatePageData(page.id, { extensions: parsed as Record<string, unknown> });
+                                    }
+                                  } catch {
+                                    // Keep current value when invalid JSON is entered.
+                                  }
+                                }}
+                                className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors resize-y min-h-[120px] font-mono"
+                              />
+                            </div>
+                          </TopicAccordion>
+
+                          <TopicAccordion title="Theme settings" open={!!openTopicAccordions.theme} onToggle={() => toggleTopicAccordion("theme")}>
+                            <TopicAssetField
+                              label="Page background image (_xlarge)"
+                              value={asString(pageBackgroundImage._xlarge)}
+                              onPickAsset={() => setTopicAssetPickerTarget({ scope: "themePageBackground", bp: "_xlarge" })}
+                              onClear={() => clearTopicAssetSelection(page.id, { scope: "themePageBackground", bp: "_xlarge" })}
+                            />
+                            <TopicAssetField
+                              label="Page background image (_large)"
+                              value={asString(pageBackgroundImage._large)}
+                              onPickAsset={() => setTopicAssetPickerTarget({ scope: "themePageBackground", bp: "_large" })}
+                              onClear={() => clearTopicAssetSelection(page.id, { scope: "themePageBackground", bp: "_large" })}
+                            />
+                            <TopicAssetField
+                              label="Page background image (_medium)"
+                              value={asString(pageBackgroundImage._medium)}
+                              onPickAsset={() => setTopicAssetPickerTarget({ scope: "themePageBackground", bp: "_medium" })}
+                              onClear={() => clearTopicAssetSelection(page.id, { scope: "themePageBackground", bp: "_medium" })}
+                            />
+                            <TopicAssetField
+                              label="Page background image (_small)"
+                              value={asString(pageBackgroundImage._small)}
+                              onPickAsset={() => setTopicAssetPickerTarget({ scope: "themePageBackground", bp: "_small" })}
+                              onClear={() => clearTopicAssetSelection(page.id, { scope: "themePageBackground", bp: "_small" })}
+                            />
+                            <TopicSelect label="Page background repeat" value={asString(pageBackgroundStyles._backgroundRepeat)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundRepeat: value } }))} options={BG_REPEAT_OPTIONS} />
+                            <TopicSelect label="Page background size" value={asString(pageBackgroundStyles._backgroundSize)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundSize: value } }))} options={BG_SIZE_OPTIONS} />
+                            <TopicSelect label="Page background position" value={asString(pageBackgroundStyles._backgroundPosition)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundPosition: value } }))} options={BG_POSITION_OPTIONS} />
+
+                            <TopicAssetField
+                              label="Header image"
+                              value={asString(pageHeaderGraphic._src)}
+                              onPickAsset={() => setTopicAssetPickerTarget({ scope: "themeHeaderGraphic" })}
+                              onClear={() => clearTopicAssetSelection(page.id, { scope: "themeHeaderGraphic" })}
+                            />
+                            <TopicTextInput label="Header image alt text" value={asString(pageHeaderGraphic.alt)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _graphic: { ...asRecord(asRecord(current._pageHeader)._graphic), alt: value } } }))} />
+
+                            <TopicSelect label="Header title alignment" value={asString(pageHeaderTextAlignment._title)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _textAlignment: { ...asRecord(asRecord(current._pageHeader)._textAlignment), _title: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                            <TopicSelect label="Header body alignment" value={asString(pageHeaderTextAlignment._body)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _textAlignment: { ...asRecord(asRecord(current._pageHeader)._textAlignment), _body: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                            <TopicSelect label="Header instruction alignment" value={asString(pageHeaderTextAlignment._instruction)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _textAlignment: { ...asRecord(asRecord(current._pageHeader)._textAlignment), _instruction: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+
+                            <TopicAssetField
+                              label="Header background image (_xlarge)"
+                              value={asString(pageHeaderBackgroundImage._xlarge)}
+                              onPickAsset={() => setTopicAssetPickerTarget({ scope: "themeHeaderBackground", bp: "_xlarge" })}
+                              onClear={() => clearTopicAssetSelection(page.id, { scope: "themeHeaderBackground", bp: "_xlarge" })}
+                            />
+                            <TopicAssetField
+                              label="Header background image (_large)"
+                              value={asString(pageHeaderBackgroundImage._large)}
+                              onPickAsset={() => setTopicAssetPickerTarget({ scope: "themeHeaderBackground", bp: "_large" })}
+                              onClear={() => clearTopicAssetSelection(page.id, { scope: "themeHeaderBackground", bp: "_large" })}
+                            />
+                            <TopicAssetField
+                              label="Header background image (_medium)"
+                              value={asString(pageHeaderBackgroundImage._medium)}
+                              onPickAsset={() => setTopicAssetPickerTarget({ scope: "themeHeaderBackground", bp: "_medium" })}
+                              onClear={() => clearTopicAssetSelection(page.id, { scope: "themeHeaderBackground", bp: "_medium" })}
+                            />
+                            <TopicAssetField
+                              label="Header background image (_small)"
+                              value={asString(pageHeaderBackgroundImage._small)}
+                              onPickAsset={() => setTopicAssetPickerTarget({ scope: "themeHeaderBackground", bp: "_small" })}
+                              onClear={() => clearTopicAssetSelection(page.id, { scope: "themeHeaderBackground", bp: "_small" })}
+                            />
+                            <TopicSelect label="Header background repeat" value={asString(pageHeaderBackgroundStyles._backgroundRepeat)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _backgroundStyles: { ...asRecord(asRecord(current._pageHeader)._backgroundStyles), _backgroundRepeat: value } } }))} options={BG_REPEAT_OPTIONS} />
+                            <TopicSelect label="Header background size" value={asString(pageHeaderBackgroundStyles._backgroundSize)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _backgroundStyles: { ...asRecord(asRecord(current._pageHeader)._backgroundStyles), _backgroundSize: value } } }))} options={BG_SIZE_OPTIONS} />
+                            <TopicSelect label="Header background position" value={asString(pageHeaderBackgroundStyles._backgroundPosition)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _backgroundStyles: { ...asRecord(asRecord(current._pageHeader)._backgroundStyles), _backgroundPosition: value } } }))} options={BG_POSITION_OPTIONS} />
+
+                            <TopicTextInput label="Header minimum height (_xlarge)" type="number" value={String(asNumberOrEmpty(pageHeaderMinimumHeights._xlarge))} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _minimumHeights: { ...asRecord(asRecord(current._pageHeader)._minimumHeights), _xlarge: parseNumberishInput(value) } } }))} />
+                            <TopicTextInput label="Header minimum height (_large)" type="number" value={String(asNumberOrEmpty(pageHeaderMinimumHeights._large))} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _minimumHeights: { ...asRecord(asRecord(current._pageHeader)._minimumHeights), _large: parseNumberishInput(value) } } }))} />
+                            <TopicTextInput label="Header minimum height (_medium)" type="number" value={String(asNumberOrEmpty(pageHeaderMinimumHeights._medium))} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _minimumHeights: { ...asRecord(asRecord(current._pageHeader)._minimumHeights), _medium: parseNumberishInput(value) } } }))} />
+                            <TopicTextInput label="Header minimum height (_small)" type="number" value={String(asNumberOrEmpty(pageHeaderMinimumHeights._small))} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _minimumHeights: { ...asRecord(asRecord(current._pageHeader)._minimumHeights), _small: parseNumberishInput(value) } } }))} />
+                          </TopicAccordion>
+
+                          <TopicAccordion title="Menu Appearance" open={!!openTopicAccordions.menu} onToggle={() => toggleTopicAccordion("menu")}>
+                            <TopicAssetField
+                              label="Menu graphic"
+                              value={asString(menuGraphic._src)}
+                              onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuGraphic" })}
+                              onClear={() => clearTopicAssetSelection(page.id, { scope: "menuGraphic" })}
+                            />
+                            <TopicTextInput label="Menu graphic alt text" value={asString(menuGraphic.alt)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _graphic: { ...asRecord(current._graphic), alt: value } }))} />
+                            <TopicCheckbox label="Skip submenu view" checked={asBoolean(menuSettings._skipSubmenuView)} onChange={(checked) => updatePageMenuSettings(page.id, (current) => ({ ...current, _skipSubmenuView: checked }))} />
+                            <TopicTextInput label="Locked notification" value={asString(menuSettings.lockedNotification)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, lockedNotification: value }))} />
+
+                            <TopicAssetField label="Menu background image (_xlarge)" value={asString(menuBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuBackground", bp: "_xlarge" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuBackground", bp: "_xlarge" })} />
+                            <TopicAssetField label="Menu background image (_large)" value={asString(menuBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuBackground", bp: "_large" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuBackground", bp: "_large" })} />
+                            <TopicAssetField label="Menu background image (_medium)" value={asString(menuBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuBackground", bp: "_medium" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuBackground", bp: "_medium" })} />
+                            <TopicAssetField label="Menu background image (_small)" value={asString(menuBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuBackground", bp: "_small" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuBackground", bp: "_small" })} />
+                            <TopicSelect label="Menu background repeat" value={asString(menuBackgroundStyles._backgroundRepeat)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundRepeat: value } }))} options={BG_REPEAT_OPTIONS} />
+                            <TopicSelect label="Menu background size" value={asString(menuBackgroundStyles._backgroundSize)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundSize: value } }))} options={BG_SIZE_OPTIONS} />
+                            <TopicSelect label="Menu background position" value={asString(menuBackgroundStyles._backgroundPosition)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundPosition: value } }))} options={BG_POSITION_OPTIONS} />
+
+                            <TopicCheckbox label="Display image above menu header" checked={asBoolean(menuHeader._displayAboveHeader)} onChange={(checked) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _displayAboveHeader: checked } }))} />
+                            <TopicSelect label="Menu header title alignment" value={asString(menuHeaderTextAlignment._title)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _textAlignment: { ...asRecord(asRecord(current._menuHeader)._textAlignment), _title: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                            {showMenuSubtitleAlignment ? <TopicSelect label="Menu header subtitle alignment" value={asString(menuHeaderTextAlignment._subtitle)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _textAlignment: { ...asRecord(asRecord(current._menuHeader)._textAlignment), _subtitle: value } } }))} options={TEXT_ALIGN_OPTIONS} /> : null}
+                            <TopicSelect label="Menu header body alignment" value={asString(menuHeaderTextAlignment._body)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _textAlignment: { ...asRecord(asRecord(current._menuHeader)._textAlignment), _body: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                            <TopicSelect label="Menu header instruction alignment" value={asString(menuHeaderTextAlignment._instruction)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _textAlignment: { ...asRecord(asRecord(current._menuHeader)._textAlignment), _instruction: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+
+                            <TopicAssetField label="Menu header background image (_xlarge)" value={asString(menuHeaderBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuHeaderBackground", bp: "_xlarge" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuHeaderBackground", bp: "_xlarge" })} />
+                            <TopicAssetField label="Menu header background image (_large)" value={asString(menuHeaderBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuHeaderBackground", bp: "_large" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuHeaderBackground", bp: "_large" })} />
+                            <TopicAssetField label="Menu header background image (_medium)" value={asString(menuHeaderBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuHeaderBackground", bp: "_medium" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuHeaderBackground", bp: "_medium" })} />
+                            <TopicAssetField label="Menu header background image (_small)" value={asString(menuHeaderBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuHeaderBackground", bp: "_small" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuHeaderBackground", bp: "_small" })} />
+                            <TopicSelect label="Menu header background repeat" value={asString(menuHeaderBackgroundStyles._backgroundRepeat)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _backgroundStyles: { ...asRecord(asRecord(current._menuHeader)._backgroundStyles), _backgroundRepeat: value } } }))} options={BG_REPEAT_OPTIONS} />
+                            <TopicSelect label="Menu header background size" value={asString(menuHeaderBackgroundStyles._backgroundSize)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _backgroundStyles: { ...asRecord(asRecord(current._menuHeader)._backgroundStyles), _backgroundSize: value } } }))} options={BG_SIZE_OPTIONS} />
+                            <TopicSelect label="Menu header background position" value={asString(menuHeaderBackgroundStyles._backgroundPosition)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _backgroundStyles: { ...asRecord(asRecord(current._menuHeader)._backgroundStyles), _backgroundPosition: value } } }))} options={BG_POSITION_OPTIONS} />
+
+                            <TopicTextInput label="Menu header minimum height (_xlarge)" type="number" value={String(asNumberOrEmpty(menuHeaderMinimumHeights._xlarge))} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _minimumHeights: { ...asRecord(asRecord(current._menuHeader)._minimumHeights), _xlarge: parseNumberishInput(value) } } }))} />
+                            <TopicTextInput label="Menu header minimum height (_large)" type="number" value={String(asNumberOrEmpty(menuHeaderMinimumHeights._large))} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _minimumHeights: { ...asRecord(asRecord(current._menuHeader)._minimumHeights), _large: parseNumberishInput(value) } } }))} />
+                            <TopicTextInput label="Menu header minimum height (_medium)" type="number" value={String(asNumberOrEmpty(menuHeaderMinimumHeights._medium))} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _minimumHeights: { ...asRecord(asRecord(current._menuHeader)._minimumHeights), _medium: parseNumberishInput(value) } } }))} />
+                            <TopicTextInput label="Menu header minimum height (_small)" type="number" value={String(asNumberOrEmpty(menuHeaderMinimumHeights._small))} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _minimumHeights: { ...asRecord(asRecord(current._menuHeader)._minimumHeights), _small: parseNumberishInput(value) } } }))} />
+                          </TopicAccordion>
+
+                          <TopicAccordion title="Media" open={!!openTopicAccordions.media} onToggle={() => toggleTopicAccordion("media")}>
+                            <TopicAssetField
+                              label="Graphic"
+                              value={page.graphic?.src || ""}
+                              onPickAsset={() => setTopicAssetPickerTarget({ scope: "pageGraphic" })}
+                              onClear={() => clearTopicAssetSelection(page.id, { scope: "pageGraphic" })}
+                            />
+                            <TopicTextInput label="Graphic alt text" value={page.graphic?.alt || ""} onChange={(value) => updatePageGraphic(page.id, (current) => ({ ...current, alt: value }))} />
+                          </TopicAccordion>
+
+                          <TopicAccordion title="Advanced Settings" open={!!openTopicAccordions.advanced} onToggle={() => toggleTopicAccordion("advanced")}>
+                            <TopicTextInput label="Classes" value={page.classes} onChange={(value) => updatePageData(page.id, { classes: value })} />
+                            <TopicCheckbox
+                              label="On-screen classes enabled"
+                              checked={asBoolean(page.onScreen?._isEnabled)}
+                              onChange={(checked) => updatePageData(page.id, {
+                                onScreen: {
+                                  ...(page.onScreen ?? {}),
+                                  _isEnabled: checked,
+                                },
+                              })}
+                            />
+                            <TopicTextInput
+                              label="On-screen classes"
+                              value={asString(page.onScreen?._classes)}
+                              onChange={(value) => updatePageData(page.id, {
+                                onScreen: {
+                                  ...(page.onScreen ?? {}),
+                                  _classes: value,
+                                },
+                              })}
+                            />
+                            <TopicTextInput
+                              label="On-screen percent in view"
+                              type="number"
+                              value={String(asNumberOrEmpty(page.onScreen?._percentInviewVertical))}
+                              onChange={(value) => updatePageData(page.id, {
+                                onScreen: {
+                                  ...(page.onScreen ?? {}),
+                                  _percentInviewVertical: parseNumberishInput(value),
+                                },
+                              })}
+                            />
+                            <TopicTextInput label="Responsive classes _xlarge" value={asString(responsiveClasses._xlarge)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _xlarge: value } }))} />
+                            <TopicTextInput label="Responsive classes _large" value={asString(responsiveClasses._large)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _large: value } }))} />
+                            <TopicTextInput label="Responsive classes _medium" value={asString(responsiveClasses._medium)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _medium: value } }))} />
+                            <TopicTextInput label="Responsive classes _small" value={asString(responsiveClasses._small)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _small: value } }))} />
+                          </TopicAccordion>
+                        </div>
+                      );
+                    })()}
 
                     <button type="button" className={rowClass(activeLevel === "article")}>
                       <span className="flex items-center gap-2 text-[13px] font-semibold flex-1">
@@ -2785,20 +3662,20 @@ export default function CourseEditor({
                         <input
                           value={article.title}
                           onChange={(e) => updateArticle(page!.id, article.id, { title: e.target.value })}
-                          className="w-full border border-[#d1d5db] rounded-md px-3 py-2 text-sm"
+                          className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm"
                           placeholder="Section title"
                         />
                         <textarea
                           value={article.description}
                           onChange={(e) => updateArticle(page!.id, article.id, { description: e.target.value })}
-                          className="w-full border border-[#d1d5db] rounded-md px-3 py-2 text-sm resize-none"
+                          className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm resize-none"
                           rows={3}
                           placeholder="Section body"
                         />
                         <textarea
                           value={article.instruction}
                           onChange={(e) => updateArticle(page!.id, article.id, { instruction: e.target.value })}
-                          className="w-full border border-[#d1d5db] rounded-md px-3 py-2 text-sm resize-none"
+                          className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm resize-none"
                           rows={2}
                           placeholder="Section instruction"
                         />
@@ -2827,27 +3704,27 @@ export default function CourseEditor({
                           <input
                             value={block.title}
                             onChange={(e) => updateBlock(page!.id, article!.id, block.id, { title: e.target.value })}
-                            className="w-full border border-[#d1d5db] rounded-md px-3 py-2 text-sm"
+                            className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm"
                             placeholder="Content Group title"
                           />
                           <textarea
                             value={block.description}
                             onChange={(e) => updateBlock(page!.id, article!.id, block.id, { description: e.target.value })}
-                            className="w-full border border-[#d1d5db] rounded-md px-3 py-2 text-sm resize-none"
+                            className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm resize-none"
                             rows={3}
                             placeholder="Content Group body"
                           />
                           <textarea
                             value={block.instruction}
                             onChange={(e) => updateBlock(page!.id, article!.id, block.id, { instruction: e.target.value })}
-                            className="w-full border border-[#d1d5db] rounded-md px-3 py-2 text-sm resize-none"
+                            className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm resize-none"
                             rows={2}
                             placeholder="Content Group instruction"
                           />
                           <input
                             value={block.id}
                             readOnly
-                            className="w-full border border-[#d1d5db] rounded-md px-3 py-2 text-sm text-[#6b7280] bg-[#f8fafc]"
+                            className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm text-[#6b7280] bg-[#f8fafc]"
                           />
                           <p className="text-xs text-[#6b7280]">Unique identifier for this content group. Click to copy.</p>
                         </div>
@@ -2906,7 +3783,7 @@ export default function CourseEditor({
                                     },
                                   },
                                 })}
-                                className="w-full border border-[#d1d5db] rounded-md px-3 py-2 text-sm"
+                                className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm"
                                 placeholder="Component subtitle"
                               />
                             )}
@@ -2915,7 +3792,7 @@ export default function CourseEditor({
                               onChange={(e) => updateComponent(page.id, article.id, block.id, component.id, {
                                 settings: { ...component.settings, title: e.target.value },
                               })}
-                              className="w-full border border-[#d1d5db] rounded-md px-3 py-2 text-sm"
+                              className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm"
                               placeholder="Component title"
                             />
                             <textarea
@@ -2923,7 +3800,7 @@ export default function CourseEditor({
                               onChange={(e) => updateComponent(page.id, article.id, block.id, component.id, {
                                 settings: { ...component.settings, description: e.target.value },
                               })}
-                              className="w-full border border-[#d1d5db] rounded-md px-3 py-2 text-sm resize-none"
+                              className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm resize-none"
                               rows={3}
                               placeholder="Component body"
                             />
@@ -2932,7 +3809,7 @@ export default function CourseEditor({
                               onChange={(e) => updateComponent(page.id, article.id, block.id, component.id, {
                                 settings: { ...component.settings, instruction: e.target.value },
                               })}
-                              className="w-full border border-[#d1d5db] rounded-md px-3 py-2 text-sm resize-none"
+                              className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm resize-none"
                               rows={2}
                               placeholder="Component instruction"
                             />
@@ -2961,6 +3838,16 @@ export default function CourseEditor({
             )}
           </>
         )}
+
+        {topicAssetPickerTarget && selectedPageId ? (
+          <AssetPickerModal
+            onClose={() => setTopicAssetPickerTarget(null)}
+            onSelect={(asset) => {
+              applyTopicAssetSelection(selectedPageId, topicAssetPickerTarget, asset.assetLink || asset.url || asset.id);
+              setTopicAssetPickerTarget(null);
+            }}
+          />
+        ) : null}
 
         {addComponentTarget && (
           <AddComponentDrawer

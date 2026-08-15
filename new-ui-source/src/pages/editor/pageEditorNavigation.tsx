@@ -51,7 +51,6 @@ interface PageEditorNavigationProps {
   onDeleteBlock: (pageId: string, articleId: string, blockId: string) => void;
   onAddComponent: (pageId: string, articleId: string, blockId: string) => void;
   onDeleteComponent: (pageId: string, articleId: string, blockId: string, componentId: string) => void;
-  onCourseConfig: () => void;
   onUseTemplate?: (target: {
     level: "topic" | "section" | "group" | "component";
     pageId: string;
@@ -88,7 +87,6 @@ export default function PageEditorNavigation({
   onDeleteBlock,
   onAddComponent,
   onDeleteComponent,
-  onCourseConfig,
   onUseTemplate,
 }: PageEditorNavigationProps) {
   return (
@@ -104,7 +102,6 @@ export default function PageEditorNavigation({
       {leftPanelOpen && (
         <div className="flex md:relative fixed inset-y-0 left-0 z-40 md:z-auto h-full md:h-auto shrink-0">
           <CourseOutlinePanel
-            courseId={courseId}
             onClose={onClosePanels}
             menuPageCreated={menuPageCreated}
             menuSelected={menuSelected}
@@ -145,18 +142,6 @@ export default function PageEditorNavigation({
               title="Expand structure"
             >
               <MaskIcon file="chevron-right.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-            </button>
-          </div>
-
-          <div className="mt-auto">
-            <button
-              type="button"
-              onClick={onCourseConfig}
-              className="w-8 h-8 rounded-[6px] flex items-center justify-center bg-[var(--life-primary-500)] text-[var(--life-base-white)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] transition-colors"
-              aria-label="Course Config"
-              title="Course Config"
-            >
-              <MaskIcon file="back-icon.svg" className="block w-[13px] h-[13px] shrink-0 bg-current" />
             </button>
           </div>
         </aside>

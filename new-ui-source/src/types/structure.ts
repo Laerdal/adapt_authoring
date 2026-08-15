@@ -48,11 +48,35 @@ export interface SSection {
 export interface STopic {
   id: string;
   title: string;
+  displayTitle?: string;
   sortOrder: number;
   subtitle?: string;
   body?: string;
   instruction?: string;
   description?: string;
+  graphic?: {
+    src?: string;
+    alt?: string;
+  };
+  linkText?: string;
+  duration?: string;
+  lockType?: string;
+  lockedBy?: string[];
+  classes?: string;
+  isOptional?: boolean;
+  isAvailable?: boolean;
+  isHidden?: boolean;
+  isVisible?: boolean;
+  onScreen?: {
+    _isEnabled?: boolean;
+    _classes?: string;
+    _percentInviewVertical?: number;
+  };
+  ariaLevel?: string;
+  ariaLabel?: string;
+  extensions?: Record<string, unknown>;
+  themeSettings?: Record<string, unknown>;
+  menuSettings?: Record<string, unknown>;
   sections: SSection[];
 }
 
