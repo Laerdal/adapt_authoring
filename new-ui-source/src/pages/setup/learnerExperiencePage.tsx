@@ -361,29 +361,27 @@ interface LearnerNotesState {
 }
 
 /* -- Learner Search types -- */
-type SearchAvailability = "all" | "selected";
-type SearchFeature = "create" | "upload" | "download" | "search";
-
 interface LearnerSearchState {
   enabled: boolean;
-  sectionTitle: string;
-  helperText: string;
-  availability: SearchAvailability;
-  features: SearchFeature[];
-  editorPlaceholder: string;
+  title: string;
+  placeholder: string;
+  searchBoxPlaceholder: string;
+  noResultsMessage: string;
+  processingResultsMessage: string;
+  showFoundWords: boolean;
+  showHighlights: boolean;
+  previewWords: number;
+  previewCharacters: number;
+  minimumWordLength: number;
+  frequencyImportance: number;
+  ignoredWords: string[];
+  matchOn: {
+    contentWordBeginsPhraseWord: boolean;
+    contentWordContainsPhraseWord: boolean;
+    contentWordEqualsPhraseWord: boolean;
+    phraseWordBeginsContentWord: boolean;
+  };
 }
-
-const SEARCH_AVAILABILITY_OPTIONS: { value: SearchAvailability; label: string }[] = [
-  { value: "all",      label: "Available on all pages" },
-  { value: "selected", label: "Only on selected pages" },
-];
-
-const SEARCH_FEATURES: { value: SearchFeature; label: string }[] = [
-  { value: "create",   label: "Allow note creation" },
-  { value: "upload",   label: "Allow file upload" },
-  { value: "download", label: "Allow download / export" },
-  { value: "search",   label: "Enable search" },
-];
 
 /* shared multi-select checkbox list */
 function LrCheckList<T extends string>({
@@ -462,6 +460,50 @@ function LrRadioList<T extends string>({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/* -- Ignored words tag input -- */
+function IgnoredWordsInput({ words, onChange }: { words: string[]; onChange: (w: string[]) => void }) {
+  const [draft, setDraft] = useState("");
+
+  function addWord(raw: string) {
+    const word = raw.trim().toLowerCase();
+    if (word && !words.includes(word)) onChange([...words, word]);
+    setDraft("");
+  }
+
+  function handleKey(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      addWord(draft);
+    } else if (e.key === "Backspace" && draft === "" && words.length > 0) {
+      onChange(words.slice(0, -1));
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5 min-h-[44px] w-full px-3 py-2 rounded-lg border border-[#e5e7eb] bg-white focus-within:ring-2 focus-within:ring-[#2d6fa8] focus-within:border-transparent transition-all">
+      {words.map((w) => (
+        <span key={w} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#dbeeff] text-[#1e4f7a] text-xs font-medium">
+          {w}
+          <button type="button" onClick={() => onChange(words.filter((x) => x !== w))} className="text-[#2d6fa8] hover:text-[#1e4f7a] leading-none">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </span>
+      ))}
+      <input
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={handleKey}
+        onBlur={() => { if (draft.trim()) addWord(draft); }}
+        placeholder={words.length === 0 ? "Type a word and press Enter" : ""}
+        className="flex-1 min-w-[120px] text-sm text-[#111827] outline-none bg-transparent placeholder-[#9ca3af]"
+      />
     </div>
   );
 }
@@ -558,15 +600,32 @@ export function LearnerExperiencePanel() {
   const [lsOpen, setLsOpen] = useState(false);
   const [lsState, setLsState] = useState<LearnerSearchState>({
     enabled: false,
-    sectionTitle: "",
-    helperText: "",
-    availability: "all",
-    features: [],
-    editorPlaceholder: "",
+    title: "",
+    placeholder: "",
+    searchBoxPlaceholder: "",
+    noResultsMessage: "",
+    processingResultsMessage: "",
+    showFoundWords: true,
+    showHighlights: true,
+    previewWords: 15,
+    previewCharacters: 30,
+    minimumWordLength: 2,
+    frequencyImportance: 5,
+    ignoredWords: [],
+    matchOn: {
+      contentWordBeginsPhraseWord: false,
+      contentWordContainsPhraseWord: false,
+      contentWordEqualsPhraseWord: true,
+      phraseWordBeginsContentWord: true,
+    },
   });
 
   const setLs = <K extends keyof LearnerSearchState>(k: K, v: LearnerSearchState[K]) =>
     setLsState((prev) => ({ ...prev, [k]: v }));
+
+  function setMatchOn(key: keyof LearnerSearchState["matchOn"], value: boolean) {
+    setLsState((prev) => ({ ...prev, matchOn: { ...prev.matchOn, [key]: value } }));
+  }
 
   /* -- Ask AI Tutor state -- */
   const [atOpen, setAtOpen] = useState(false);
@@ -799,64 +858,77 @@ export function LearnerExperiencePanel() {
         >
           <DemoVideoPlaceholder label="See how Learner Search works" />
           <div className={`pt-3${lsState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
-            <LrToggle
-              checked={lsState.enabled}
-              onChange={(v) => setLs("enabled", v)}
-              label="Enable Search"
-            />
+            <LrToggle checked={lsState.enabled} onChange={(v) => setLs("enabled", v)} label="Enable Search" />
           </div>
 
           {lsState.enabled && (
             <>
-              <LrField label="Section Title">
-                <input type="text" value={lsState.sectionTitle} onChange={(e) => setLs("sectionTitle", e.target.value)} placeholder="e.g. Search" className={LR_INPUT} />
-              </LrField>
-
-              <LrField label="Helper Text">
-                <textarea value={lsState.helperText} onChange={(e) => setLs("helperText", e.target.value)} placeholder="Add helper text shown to learners above the search input" rows={3} className={LR_TEXTAREA} />
-              </LrField>
-
+              {/* Match On Rules */}
               <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
                 <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Availability</p>
-                  <p className="text-xs text-[#6b7280] mt-1">Choose which pages the search panel is available on.</p>
+                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Match On Rules</p>
+                  <p className="text-xs text-[#6b7280] mt-1">Select which word-matching strategies are active.</p>
                 </div>
-                <div className="px-4 py-3 space-y-1">
-                  {SEARCH_AVAILABILITY_OPTIONS.map(({ value, label }) => {
-                    const active = lsState.availability === value;
-                    return (
-                      <label key={value} className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-[#f9fafb] cursor-pointer group">
-                        <div
-                          onClick={() => setLs("availability", value)}
-                          className={`w-4 h-4 rounded-full shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
-                            active ? "border-[#2d6fa8] bg-[#2d6fa8]" : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
-                          }`}
-                        >
-                          {active && <span className="w-1.5 h-1.5 rounded-full bg-white block" />}
-                        </div>
-                        <span className="text-sm text-[#374151]">{label}</span>
-                      </label>
-                    );
-                  })}
+                <div className="px-4 py-4 space-y-3">
+                  <LrToggle checked={lsState.matchOn.contentWordBeginsPhraseWord} onChange={(v) => setMatchOn("contentWordBeginsPhraseWord", v)} label="A word in the content begins the search phrase word" />
+                  <LrToggle checked={lsState.matchOn.contentWordContainsPhraseWord} onChange={(v) => setMatchOn("contentWordContainsPhraseWord", v)} label="A word in the content contains the search phrase word" />
+                  <LrToggle checked={lsState.matchOn.contentWordEqualsPhraseWord} onChange={(v) => setMatchOn("contentWordEqualsPhraseWord", v)} label="A word in the content equals the search phrase word" />
+                  <LrToggle checked={lsState.matchOn.phraseWordBeginsContentWord} onChange={(v) => setMatchOn("phraseWordBeginsContentWord", v)} label="A word in the content starts with the search phrase word" />
                 </div>
               </div>
 
+              {/* Preview */}
+              <div className="grid grid-cols-2 gap-4">
+                <LrField label="Preview Words">
+                  <input type="number" min={0} value={lsState.previewWords} onChange={(e) => setLs("previewWords", Number(e.target.value))} className={LR_INPUT} />
+                </LrField>
+                <LrField label="Preview Characters">
+                  <input type="number" min={0} value={lsState.previewCharacters} onChange={(e) => setLs("previewCharacters", Number(e.target.value))} className={LR_INPUT} />
+                </LrField>
+              </div>
+
+              {/* Display options */}
               <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
                 <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Features</p>
-                  <p className="text-xs text-[#6b7280] mt-1">Enable optional search capabilities.</p>
+                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Display Options</p>
                 </div>
-                <div className="px-4 py-2">
-                  <LrCheckList<SearchFeature>
-                    options={SEARCH_FEATURES}
-                    selected={lsState.features}
-                    onChange={(v) => setLs("features", v)}
-                  />
+                <div className="px-4 py-4 space-y-3">
+                  <LrToggle checked={lsState.showFoundWords} onChange={(v) => setLs("showFoundWords", v)} label="Show found words" />
+                  <LrToggle checked={lsState.showHighlights} onChange={(v) => setLs("showHighlights", v)} label="Show highlights" />
                 </div>
               </div>
 
-              <LrField label="Editor Placeholder Text">
-                <input type="text" value={lsState.editorPlaceholder} onChange={(e) => setLs("editorPlaceholder", e.target.value)} placeholder="e.g. Start typing your notes here..." className={LR_INPUT} />
+              {/* Ignored Words */}
+              <LrField label="Ignored Words">
+                <IgnoredWordsInput words={lsState.ignoredWords} onChange={(w) => setLs("ignoredWords", w)} />
+                <p className="text-xs text-[#9ca3af] mt-1">Type a word and press Enter to add. These words are excluded from search indexing.</p>
+              </LrField>
+
+              {/* Numeric settings */}
+              <div className="grid grid-cols-2 gap-4">
+                <LrField label="Minimum Word Length">
+                  <input type="number" min={1} value={lsState.minimumWordLength} onChange={(e) => setLs("minimumWordLength", Number(e.target.value))} className={LR_INPUT} />
+                </LrField>
+                <LrField label="Frequency Importance">
+                  <input type="number" min={0} value={lsState.frequencyImportance} onChange={(e) => setLs("frequencyImportance", Number(e.target.value))} className={LR_INPUT} />
+                </LrField>
+              </div>
+
+              {/* Text fields */}
+              <LrField label="Title">
+                <input type="text" value={lsState.title} onChange={(e) => setLs("title", e.target.value)} placeholder="e.g. How can we help?" className={LR_INPUT} />
+              </LrField>
+              <LrField label="Placeholder">
+                <input type="text" value={lsState.placeholder} onChange={(e) => setLs("placeholder", e.target.value)} placeholder="e.g. Type in search words" className={LR_INPUT} />
+              </LrField>
+              <LrField label="Placeholder Text for the Search Box">
+                <input type="text" value={lsState.searchBoxPlaceholder} onChange={(e) => setLs("searchBoxPlaceholder", e.target.value)} placeholder="e.g. Enter search criteria" className={LR_INPUT} />
+              </LrField>
+              <LrField label="No Results Message">
+                <input type="text" value={lsState.noResultsMessage} onChange={(e) => setLs("noResultsMessage", e.target.value)} placeholder="e.g. Sorry, no results were found" className={LR_INPUT} />
+              </LrField>
+              <LrField label="Processing Results Message">
+                <input type="text" value={lsState.processingResultsMessage} onChange={(e) => setLs("processingResultsMessage", e.target.value)} placeholder="e.g. Formulating results..." className={LR_INPUT} />
               </LrField>
             </>
           )}
