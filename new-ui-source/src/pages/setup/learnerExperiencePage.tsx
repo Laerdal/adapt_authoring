@@ -341,32 +341,7 @@ const AI_TUTOR_CONTROL_OPTIONS: { value: AiTutorControl; label: string }[] = [
 ];
 
 /* -- Learner Notes types -- */
-type NotesAvailability = "all" | "selected";
-type NotesFeature = "create" | "upload" | "download" | "search";
-
 interface LearnerNotesState {
-  enabled: boolean;
-  sectionTitle: string;
-  helperText: string;
-  availability: NotesAvailability;
-  features: NotesFeature[];
-  editorPlaceholder: string;
-}
-
-const NOTES_AVAILABILITY_OPTIONS: { value: NotesAvailability; label: string }[] = [
-  { value: "all",      label: "Available on all pages" },
-  { value: "selected", label: "Only on selected pages" },
-];
-
-const NOTES_FEATURES: { value: NotesFeature; label: string }[] = [
-  { value: "create",   label: "Allow note creation" },
-  { value: "upload",   label: "Allow file upload" },
-  { value: "download", label: "Allow download / export" },
-  { value: "search",   label: "Enable search" },
-];
-
-/* -- Learner Search types -- */
-interface LearnerSearchState {
   enabled: boolean;
   title: string;
   instruction: string;
@@ -384,6 +359,31 @@ interface LearnerSearchState {
   cancel: string;
   editNote: string;
 }
+
+/* -- Learner Search types -- */
+type SearchAvailability = "all" | "selected";
+type SearchFeature = "create" | "upload" | "download" | "search";
+
+interface LearnerSearchState {
+  enabled: boolean;
+  sectionTitle: string;
+  helperText: string;
+  availability: SearchAvailability;
+  features: SearchFeature[];
+  editorPlaceholder: string;
+}
+
+const SEARCH_AVAILABILITY_OPTIONS: { value: SearchAvailability; label: string }[] = [
+  { value: "all",      label: "Available on all pages" },
+  { value: "selected", label: "Only on selected pages" },
+];
+
+const SEARCH_FEATURES: { value: SearchFeature; label: string }[] = [
+  { value: "create",   label: "Allow note creation" },
+  { value: "upload",   label: "Allow file upload" },
+  { value: "download", label: "Allow download / export" },
+  { value: "search",   label: "Enable search" },
+];
 
 /* shared multi-select checkbox list */
 function LrCheckList<T extends string>({
@@ -530,9 +530,9 @@ export function LearnerExperiencePanel() {
     setLrState((prev) => ({ ...prev, resources: prev.resources.filter((r) => r.id !== id) }));
   }
 
-  /* -- Learner Search state -- */
-  const [lsOpen, setLsOpen] = useState(false);
-  const [lsState, setLsState] = useState<LearnerSearchState>({
+  /* -- Learner Notes state -- */
+  const [lnOpen, setLnOpen] = useState(false);
+  const [lnState, setLnState] = useState<LearnerNotesState>({
     enabled: false,
     title: "",
     instruction: "",
@@ -551,12 +551,12 @@ export function LearnerExperiencePanel() {
     editNote: "",
   });
 
-  const setLs = <K extends keyof LearnerSearchState>(k: K, v: LearnerSearchState[K]) =>
-    setLsState((prev) => ({ ...prev, [k]: v }));
+  const setLn = <K extends keyof LearnerNotesState>(k: K, v: LearnerNotesState[K]) =>
+    setLnState((prev) => ({ ...prev, [k]: v }));
 
-  /* -- Learner Notes state -- */
-  const [lnOpen, setLnOpen] = useState(false);
-  const [lnState, setLnState] = useState<LearnerNotesState>({
+  /* -- Learner Search state -- */
+  const [lsOpen, setLsOpen] = useState(false);
+  const [lsState, setLsState] = useState<LearnerSearchState>({
     enabled: false,
     sectionTitle: "",
     helperText: "",
@@ -565,8 +565,8 @@ export function LearnerExperiencePanel() {
     editorPlaceholder: "",
   });
 
-  const setLn = <K extends keyof LearnerNotesState>(k: K, v: LearnerNotesState[K]) =>
-    setLnState((prev) => ({ ...prev, [k]: v }));
+  const setLs = <K extends keyof LearnerSearchState>(k: K, v: LearnerSearchState[K]) =>
+    setLsState((prev) => ({ ...prev, [k]: v }));
 
   /* -- Ask AI Tutor state -- */
   const [atOpen, setAtOpen] = useState(false);
@@ -715,78 +715,6 @@ export function LearnerExperiencePanel() {
           )}
         </LeAccordion>
 
-        {/* -- Learner Search accordion -- */}
-        <LeAccordion
-          open={lsOpen}
-          onToggle={() => setLsOpen((o) => !o)}
-          title="Learner Search"
-          icon={
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-          }
-        >
-          {/* Enable toggle */}
-          <DemoVideoPlaceholder label="See how Learner Search works" />
-          <div className={`pt-3${lsState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
-            <LrToggle
-              checked={lsState.enabled}
-              onChange={(v) => setLs("enabled", v)}
-              label="Enable Search"
-            />
-          </div>
-
-          {lsState.enabled && (
-            <>
-              <LrField label="Title">
-                <input type="text" value={lsState.title} onChange={(e) => setLs("title", e.target.value)} placeholder="e.g. Search" className={LR_INPUT} />
-              </LrField>
-              <LrField label="Instruction">
-                <input type="text" value={lsState.instruction} onChange={(e) => setLs("instruction", e.target.value)} placeholder="e.g. Type in search words and enter" className={LR_INPUT} />
-              </LrField>
-              <LrField label="Placeholder">
-                <input type="text" value={lsState.placeholder} onChange={(e) => setLs("placeholder", e.target.value)} placeholder="e.g. Enter search criteria" className={LR_INPUT} />
-              </LrField>
-              <LrField label="Search Error Message">
-                <input type="text" value={lsState.searchErrorMessage} onChange={(e) => setLs("searchErrorMessage", e.target.value)} placeholder="e.g. Sorry, no results were found" className={LR_INPUT} />
-              </LrField>
-              <LrField label="Success Message">
-                <input type="text" value={lsState.successMessage} onChange={(e) => setLs("successMessage", e.target.value)} placeholder="e.g. Note saved successfully" className={LR_INPUT} />
-              </LrField>
-              <LrField label="Error Message">
-                <input type="text" value={lsState.errorMessage} onChange={(e) => setLs("errorMessage", e.target.value)} placeholder="e.g. An error occurred. Please try again." className={LR_INPUT} />
-              </LrField>
-              <LrField label="Create a New Note">
-                <input type="text" value={lsState.createANewNote} onChange={(e) => setLs("createANewNote", e.target.value)} placeholder="e.g. Create a new note" className={LR_INPUT} />
-              </LrField>
-              <LrField label="Export a Note">
-                <input type="text" value={lsState.exportANote} onChange={(e) => setLs("exportANote", e.target.value)} placeholder="e.g. Export note" className={LR_INPUT} />
-              </LrField>
-              <LrField label="Save Note">
-                <input type="text" value={lsState.saveNote} onChange={(e) => setLs("saveNote", e.target.value)} placeholder="e.g. Save note" className={LR_INPUT} />
-              </LrField>
-              <LrField label="Download a Note">
-                <input type="text" value={lsState.downloadANote} onChange={(e) => setLs("downloadANote", e.target.value)} placeholder="e.g. Download note" className={LR_INPUT} />
-              </LrField>
-              <LrField label="Upload a Note">
-                <input type="text" value={lsState.uploadANote} onChange={(e) => setLs("uploadANote", e.target.value)} placeholder="e.g. Upload note" className={LR_INPUT} />
-              </LrField>
-              <LrField label="Search Note">
-                <input type="text" value={lsState.searchNote} onChange={(e) => setLs("searchNote", e.target.value)} placeholder="e.g. Search notes" className={LR_INPUT} />
-              </LrField>
-              <LrField label="Delete Note">
-                <input type="text" value={lsState.deleteNote} onChange={(e) => setLs("deleteNote", e.target.value)} placeholder="e.g. Delete note" className={LR_INPUT} />
-              </LrField>
-              <LrField label="Cancel">
-                <input type="text" value={lsState.cancel} onChange={(e) => setLs("cancel", e.target.value)} placeholder="e.g. Cancel" className={LR_INPUT} />
-              </LrField>
-              <LrField label="Edit Note">
-                <input type="text" value={lsState.editNote} onChange={(e) => setLs("editNote", e.target.value)} placeholder="e.g. Edit note" className={LR_INPUT} />
-              </LrField>
-            </>
-          )}
-        </LeAccordion>
-
         {/* -- Learner Notes accordion -- */}
         <LeAccordion
           open={lnOpen}
@@ -798,7 +726,6 @@ export function LearnerExperiencePanel() {
             </svg>
           }
         >
-          {/* Enable toggle */}
           <DemoVideoPlaceholder label="See how Learner Notes works" />
           <div className={`pt-3${lnState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
             <LrToggle
@@ -810,48 +737,99 @@ export function LearnerExperiencePanel() {
 
           {lnState.enabled && (
             <>
-              {/* Section Title */}
+              <LrField label="Title">
+                <input type="text" value={lnState.title} onChange={(e) => setLn("title", e.target.value)} placeholder="e.g. My Notes" className={LR_INPUT} />
+              </LrField>
+              <LrField label="Instruction">
+                <input type="text" value={lnState.instruction} onChange={(e) => setLn("instruction", e.target.value)} placeholder="e.g. Write your notes here" className={LR_INPUT} />
+              </LrField>
+              <LrField label="Placeholder">
+                <input type="text" value={lnState.placeholder} onChange={(e) => setLn("placeholder", e.target.value)} placeholder="e.g. Start typing your notes..." className={LR_INPUT} />
+              </LrField>
+              <LrField label="Search Error Message">
+                <input type="text" value={lnState.searchErrorMessage} onChange={(e) => setLn("searchErrorMessage", e.target.value)} placeholder="e.g. Sorry, no results were found" className={LR_INPUT} />
+              </LrField>
+              <LrField label="Success Message">
+                <input type="text" value={lnState.successMessage} onChange={(e) => setLn("successMessage", e.target.value)} placeholder="e.g. Note saved successfully" className={LR_INPUT} />
+              </LrField>
+              <LrField label="Error Message">
+                <input type="text" value={lnState.errorMessage} onChange={(e) => setLn("errorMessage", e.target.value)} placeholder="e.g. An error occurred. Please try again." className={LR_INPUT} />
+              </LrField>
+              <LrField label="Create a New Note">
+                <input type="text" value={lnState.createANewNote} onChange={(e) => setLn("createANewNote", e.target.value)} placeholder="e.g. Create a new note" className={LR_INPUT} />
+              </LrField>
+              <LrField label="Export a Note">
+                <input type="text" value={lnState.exportANote} onChange={(e) => setLn("exportANote", e.target.value)} placeholder="e.g. Export note" className={LR_INPUT} />
+              </LrField>
+              <LrField label="Save Note">
+                <input type="text" value={lnState.saveNote} onChange={(e) => setLn("saveNote", e.target.value)} placeholder="e.g. Save note" className={LR_INPUT} />
+              </LrField>
+              <LrField label="Download a Note">
+                <input type="text" value={lnState.downloadANote} onChange={(e) => setLn("downloadANote", e.target.value)} placeholder="e.g. Download note" className={LR_INPUT} />
+              </LrField>
+              <LrField label="Upload a Note">
+                <input type="text" value={lnState.uploadANote} onChange={(e) => setLn("uploadANote", e.target.value)} placeholder="e.g. Upload note" className={LR_INPUT} />
+              </LrField>
+              <LrField label="Search Note">
+                <input type="text" value={lnState.searchNote} onChange={(e) => setLn("searchNote", e.target.value)} placeholder="e.g. Search notes" className={LR_INPUT} />
+              </LrField>
+              <LrField label="Delete Note">
+                <input type="text" value={lnState.deleteNote} onChange={(e) => setLn("deleteNote", e.target.value)} placeholder="e.g. Delete note" className={LR_INPUT} />
+              </LrField>
+              <LrField label="Cancel">
+                <input type="text" value={lnState.cancel} onChange={(e) => setLn("cancel", e.target.value)} placeholder="e.g. Cancel" className={LR_INPUT} />
+              </LrField>
+              <LrField label="Edit Note">
+                <input type="text" value={lnState.editNote} onChange={(e) => setLn("editNote", e.target.value)} placeholder="e.g. Edit note" className={LR_INPUT} />
+              </LrField>
+            </>
+          )}
+        </LeAccordion>
+
+        {/* -- Learner Search accordion -- */}
+        <LeAccordion
+          open={lsOpen}
+          onToggle={() => setLsOpen((o) => !o)}
+          title="Learner Search"
+          icon={
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+          }
+        >
+          <DemoVideoPlaceholder label="See how Learner Search works" />
+          <div className={`pt-3${lsState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
+            <LrToggle
+              checked={lsState.enabled}
+              onChange={(v) => setLs("enabled", v)}
+              label="Enable Search"
+            />
+          </div>
+
+          {lsState.enabled && (
+            <>
               <LrField label="Section Title">
-                <input
-                  type="text"
-                  value={lnState.sectionTitle}
-                  onChange={(e) => setLn("sectionTitle", e.target.value)}
-                  placeholder="e.g. My Notes"
-                  className={LR_INPUT}
-                />
+                <input type="text" value={lsState.sectionTitle} onChange={(e) => setLs("sectionTitle", e.target.value)} placeholder="e.g. Search" className={LR_INPUT} />
               </LrField>
 
-              {/* Helper Text */}
               <LrField label="Helper Text">
-                <textarea
-                  value={lnState.helperText}
-                  onChange={(e) => setLn("helperText", e.target.value)}
-                  placeholder="Add helper text shown to learners above the notes editor"
-                  rows={3}
-                  className={LR_TEXTAREA}
-                />
+                <textarea value={lsState.helperText} onChange={(e) => setLs("helperText", e.target.value)} placeholder="Add helper text shown to learners above the search input" rows={3} className={LR_TEXTAREA} />
               </LrField>
 
-              {/* Notes Availability */}
               <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
                 <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Notes Availability</p>
-                  <p className="text-xs text-[#6b7280] mt-1">Choose which pages the notes panel is available on.</p>
+                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Availability</p>
+                  <p className="text-xs text-[#6b7280] mt-1">Choose which pages the search panel is available on.</p>
                 </div>
                 <div className="px-4 py-3 space-y-1">
-                  {NOTES_AVAILABILITY_OPTIONS.map(({ value, label }) => {
-                    const active = lnState.availability === value;
+                  {SEARCH_AVAILABILITY_OPTIONS.map(({ value, label }) => {
+                    const active = lsState.availability === value;
                     return (
-                      <label
-                        key={value}
-                        className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-[#f9fafb] cursor-pointer group"
-                      >
+                      <label key={value} className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-[#f9fafb] cursor-pointer group">
                         <div
-                          onClick={() => setLn("availability", value)}
+                          onClick={() => setLs("availability", value)}
                           className={`w-4 h-4 rounded-full shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
-                            active
-                              ? "border-[#2d6fa8] bg-[#2d6fa8]"
-                              : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
+                            active ? "border-[#2d6fa8] bg-[#2d6fa8]" : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
                           }`}
                         >
                           {active && <span className="w-1.5 h-1.5 rounded-full bg-white block" />}
@@ -863,30 +841,22 @@ export function LearnerExperiencePanel() {
                 </div>
               </div>
 
-              {/* Features */}
               <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
                 <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
                   <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Features</p>
-                  <p className="text-xs text-[#6b7280] mt-1">Enable optional note-taking capabilities.</p>
+                  <p className="text-xs text-[#6b7280] mt-1">Enable optional search capabilities.</p>
                 </div>
                 <div className="px-4 py-2">
-                  <LrCheckList<NotesFeature>
-                    options={NOTES_FEATURES}
-                    selected={lnState.features}
-                    onChange={(v) => setLn("features", v)}
+                  <LrCheckList<SearchFeature>
+                    options={SEARCH_FEATURES}
+                    selected={lsState.features}
+                    onChange={(v) => setLs("features", v)}
                   />
                 </div>
               </div>
 
-              {/* Editor Placeholder Text */}
               <LrField label="Editor Placeholder Text">
-                <input
-                  type="text"
-                  value={lnState.editorPlaceholder}
-                  onChange={(e) => setLn("editorPlaceholder", e.target.value)}
-                  placeholder="e.g. Start typing your notes here..."
-                  className={LR_INPUT}
-                />
+                <input type="text" value={lsState.editorPlaceholder} onChange={(e) => setLs("editorPlaceholder", e.target.value)} placeholder="e.g. Start typing your notes here..." className={LR_INPUT} />
               </LrField>
             </>
           )}
