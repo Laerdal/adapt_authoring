@@ -366,44 +366,24 @@ const NOTES_FEATURES: { value: NotesFeature; label: string }[] = [
 ];
 
 /* -- Learner Search types -- */
-type SearchMatchRule =
-  | "begins"
-  | "contains"
-  | "equals"
-  | "startsWith";
-
-type SearchFeature = "highlight" | "showKeywords";
-type SearchResultPreview = "short" | "medium" | "long";
-
 interface LearnerSearchState {
   enabled: boolean;
-  sectionTitle: string;
-  helperText: string;
-  matchRules: SearchMatchRule[];
-  features: SearchFeature[];
-  resultPreview: SearchResultPreview;
-  searchPlaceholder: string;
-  noResultMessage: string;
-  loadingMessage: string;
+  title: string;
+  instruction: string;
+  placeholder: string;
+  searchErrorMessage: string;
+  successMessage: string;
+  errorMessage: string;
+  createANewNote: string;
+  exportANote: string;
+  saveNote: string;
+  downloadANote: string;
+  uploadANote: string;
+  searchNote: string;
+  deleteNote: string;
+  cancel: string;
+  editNote: string;
 }
-
-const SEARCH_MATCH_RULES: { value: SearchMatchRule; label: string }[] = [
-  { value: "begins",     label: "A word in the content begins the search phrase word" },
-  { value: "contains",   label: "A word in the content contains the search phrase word" },
-  { value: "equals",     label: "A word in the content equals the search phrase word" },
-  { value: "startsWith", label: "A word in the content starts with the search phrase word" },
-];
-
-const SEARCH_FEATURES: { value: SearchFeature; label: string }[] = [
-  { value: "highlight",    label: "Highlight search terms in result" },
-  { value: "showKeywords", label: "Show matching keywords" },
-];
-
-const SEARCH_RESULT_PREVIEW_OPTIONS: { value: SearchResultPreview; label: string }[] = [
-  { value: "short",  label: "Short" },
-  { value: "medium", label: "Medium" },
-  { value: "long",   label: "Long" },
-];
 
 /* shared multi-select checkbox list */
 function LrCheckList<T extends string>({
@@ -554,14 +534,21 @@ export function LearnerExperiencePanel() {
   const [lsOpen, setLsOpen] = useState(false);
   const [lsState, setLsState] = useState<LearnerSearchState>({
     enabled: false,
-    sectionTitle: "Search",
-    helperText: "",
-    matchRules: [],
-    features: [],
-    resultPreview: "medium",
-    searchPlaceholder: "",
-    noResultMessage: "",
-    loadingMessage: "",
+    title: "",
+    instruction: "",
+    placeholder: "",
+    searchErrorMessage: "",
+    successMessage: "",
+    errorMessage: "",
+    createANewNote: "",
+    exportANote: "",
+    saveNote: "",
+    downloadANote: "",
+    uploadANote: "",
+    searchNote: "",
+    deleteNote: "",
+    cancel: "",
+    editNote: "",
   });
 
   const setLs = <K extends keyof LearnerSearchState>(k: K, v: LearnerSearchState[K]) =>
@@ -751,99 +738,50 @@ export function LearnerExperiencePanel() {
 
           {lsState.enabled && (
             <>
-              {/* Section Title */}
-              <LrField label="Section Title">
-                <input
-                  type="text"
-                  value={lsState.sectionTitle}
-                  onChange={(e) => setLs("sectionTitle", e.target.value)}
-                  placeholder="Search"
-                  className={LR_INPUT}
-                />
+              <LrField label="Title">
+                <input type="text" value={lsState.title} onChange={(e) => setLs("title", e.target.value)} placeholder="e.g. Search" className={LR_INPUT} />
               </LrField>
-
-              {/* Helper Text */}
-              <LrField label="Helper Text">
-                <textarea
-                  value={lsState.helperText}
-                  onChange={(e) => setLs("helperText", e.target.value)}
-                  placeholder="Add helper text shown to learners above the search input"
-                  rows={3}
-                  className={LR_TEXTAREA}
-                />
+              <LrField label="Instruction">
+                <input type="text" value={lsState.instruction} onChange={(e) => setLs("instruction", e.target.value)} placeholder="e.g. Type in search words and enter" className={LR_INPUT} />
               </LrField>
-
-              {/* Search Scope -- Match On Rules */}
-              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Search Scope</p>
-                  <p className="text-xs font-semibold text-[#111827] mt-2 mb-0.5">Match On Rules</p>
-                  <p className="text-xs text-[#6b7280]">Select which word-matching strategies are active.</p>
-                </div>
-                <div className="px-4 py-2">
-                  <LrCheckList<SearchMatchRule>
-                    options={SEARCH_MATCH_RULES}
-                    selected={lsState.matchRules}
-                    onChange={(v) => setLs("matchRules", v)}
-                  />
-                </div>
-              </div>
-
-              {/* Features */}
-              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Features</p>
-                  <p className="text-xs text-[#6b7280] mt-1">Enable optional search result display features.</p>
-                </div>
-                <div className="px-4 py-2">
-                  <LrCheckList<SearchFeature>
-                    options={SEARCH_FEATURES}
-                    selected={lsState.features}
-                    onChange={(v) => setLs("features", v)}
-                  />
-                </div>
-              </div>
-
-              {/* Result Preview */}
-              <LrField label="Result Preview">
-                <LrRadioList<SearchResultPreview>
-                  options={SEARCH_RESULT_PREVIEW_OPTIONS}
-                  selected={lsState.resultPreview}
-                  onChange={(v) => setLs("resultPreview", v)}
-                />
+              <LrField label="Placeholder">
+                <input type="text" value={lsState.placeholder} onChange={(e) => setLs("placeholder", e.target.value)} placeholder="e.g. Enter search criteria" className={LR_INPUT} />
               </LrField>
-
-              {/* Search Placeholder */}
-              <LrField label="Search Placeholder">
-                <input
-                  type="text"
-                  value={lsState.searchPlaceholder}
-                  onChange={(e) => setLs("searchPlaceholder", e.target.value)}
-                  placeholder="e.g. Type to search..."
-                  className={LR_INPUT}
-                />
+              <LrField label="Search Error Message">
+                <input type="text" value={lsState.searchErrorMessage} onChange={(e) => setLs("searchErrorMessage", e.target.value)} placeholder="e.g. Sorry, no results were found" className={LR_INPUT} />
               </LrField>
-
-              {/* No Result Message */}
-              <LrField label="No Result Message">
-                <input
-                  type="text"
-                  value={lsState.noResultMessage}
-                  onChange={(e) => setLs("noResultMessage", e.target.value)}
-                  placeholder="e.g. No results found for your search."
-                  className={LR_INPUT}
-                />
+              <LrField label="Success Message">
+                <input type="text" value={lsState.successMessage} onChange={(e) => setLs("successMessage", e.target.value)} placeholder="e.g. Note saved successfully" className={LR_INPUT} />
               </LrField>
-
-              {/* Loading Message */}
-              <LrField label="Loading Message">
-                <input
-                  type="text"
-                  value={lsState.loadingMessage}
-                  onChange={(e) => setLs("loadingMessage", e.target.value)}
-                  placeholder="e.g. Searching..."
-                  className={LR_INPUT}
-                />
+              <LrField label="Error Message">
+                <input type="text" value={lsState.errorMessage} onChange={(e) => setLs("errorMessage", e.target.value)} placeholder="e.g. An error occurred. Please try again." className={LR_INPUT} />
+              </LrField>
+              <LrField label="Create a New Note">
+                <input type="text" value={lsState.createANewNote} onChange={(e) => setLs("createANewNote", e.target.value)} placeholder="e.g. Create a new note" className={LR_INPUT} />
+              </LrField>
+              <LrField label="Export a Note">
+                <input type="text" value={lsState.exportANote} onChange={(e) => setLs("exportANote", e.target.value)} placeholder="e.g. Export note" className={LR_INPUT} />
+              </LrField>
+              <LrField label="Save Note">
+                <input type="text" value={lsState.saveNote} onChange={(e) => setLs("saveNote", e.target.value)} placeholder="e.g. Save note" className={LR_INPUT} />
+              </LrField>
+              <LrField label="Download a Note">
+                <input type="text" value={lsState.downloadANote} onChange={(e) => setLs("downloadANote", e.target.value)} placeholder="e.g. Download note" className={LR_INPUT} />
+              </LrField>
+              <LrField label="Upload a Note">
+                <input type="text" value={lsState.uploadANote} onChange={(e) => setLs("uploadANote", e.target.value)} placeholder="e.g. Upload note" className={LR_INPUT} />
+              </LrField>
+              <LrField label="Search Note">
+                <input type="text" value={lsState.searchNote} onChange={(e) => setLs("searchNote", e.target.value)} placeholder="e.g. Search notes" className={LR_INPUT} />
+              </LrField>
+              <LrField label="Delete Note">
+                <input type="text" value={lsState.deleteNote} onChange={(e) => setLs("deleteNote", e.target.value)} placeholder="e.g. Delete note" className={LR_INPUT} />
+              </LrField>
+              <LrField label="Cancel">
+                <input type="text" value={lsState.cancel} onChange={(e) => setLs("cancel", e.target.value)} placeholder="e.g. Cancel" className={LR_INPUT} />
+              </LrField>
+              <LrField label="Edit Note">
+                <input type="text" value={lsState.editNote} onChange={(e) => setLs("editNote", e.target.value)} placeholder="e.g. Edit note" className={LR_INPUT} />
               </LrField>
             </>
           )}
