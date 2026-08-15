@@ -78,6 +78,20 @@ function LrField({ label, children }: { label: string; children: React.ReactNode
 const LR_INPUT = "w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent";
 const LR_TEXTAREA = `${LR_INPUT} resize-none`;
 
+/* Demo video placeholder shown at top of each accordion section */
+function DemoVideoPlaceholder({ label }: { label?: string }) {
+  return (
+    <div className="rounded-lg overflow-hidden border border-[#e5e7eb]">
+      <div className="relative bg-[#1b3a4b] flex flex-col items-center justify-center gap-2.5" style={{ aspectRatio: '16/9' }}>
+        <div className="w-12 h-12 rounded-full bg-white/15 border-2 border-white/35 flex items-center justify-center backdrop-blur-sm">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="rgba(255,255,255,0.8)"><polygon points="5,3 19,12 5,21"/></svg>
+        </div>
+        <span className="text-xs text-white/50 font-medium">{label ?? 'Demo video coming soon'}</span>
+      </div>
+    </div>
+  );
+}
+
 /* Add Resource modal/drawer */
 function AddResourceDialog({
   initial,
@@ -234,27 +248,37 @@ function AddResourceDialog({
   );
 }
 
-/* Resource format icon */
+/* Resource format icon badge with colored background (matches Figma design) */
+const FORMAT_STYLES: Record<ResourceFormat, { bg: string; color: string }> = {
+  document: { bg: "#fee2e2", color: "#dc2626" },
+  media:    { bg: "#ede9f6", color: "#7c5cbf" },
+  link:     { bg: "#dbeeff", color: "#2d6fa8" },
+  custom:   { bg: "#d1fae5", color: "#059669" },
+};
+
 function ResourceFormatIcon({ format }: { format: ResourceFormat }) {
-  if (format === "document") return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+  const { bg, color } = FORMAT_STYLES[format];
+  const icon = format === "document" ? (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
     </svg>
-  );
-  if (format === "media") return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+  ) : format === "media" ? (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
     </svg>
-  );
-  if (format === "link") return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+  ) : format === "link" ? (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+    </svg>
+  ) : (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
     </svg>
   );
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-    </svg>
+    <span className="w-7 h-7 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: bg, color }}>
+      {icon}
+    </span>
   );
 }
 
@@ -484,7 +508,7 @@ function LeAccordion({
         className="w-full flex items-center justify-between px-4 py-3.5 bg-white hover:bg-[#f9fafb] transition-colors"
       >
         <div className="flex items-center gap-2.5">
-          <span className="text-[#6b7280]">{icon}</span>
+          <span className="text-[#2d6fa8]">{icon}</span>
           <span className="text-sm font-semibold text-[#111827]">{title}</span>
         </div>
         <svg
@@ -631,7 +655,8 @@ export function LearnerExperiencePanel() {
           }
         >
           {/* Enable toggle */}
-          <div className="pt-3">
+          <DemoVideoPlaceholder label="See how Learning Resources works" />
+          <div className={`pt-3${lrState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
             <LrToggle
               checked={lrState.enabled}
               onChange={(v) => setLr("enabled", v)}
@@ -668,9 +693,7 @@ export function LearnerExperiencePanel() {
                 <div className="space-y-2">
                   {lrState.resources.map((r) => (
                     <div key={r.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-[#e5e7eb] bg-[#f9fafb]">
-                      <span className="text-[#6b7280] shrink-0">
-                        <ResourceFormatIcon format={r.format} />
-                      </span>
+                      <ResourceFormatIcon format={r.format} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-[#111827] truncate">{r.title || <span className="text-[#9ca3af] font-normal">Untitled resource</span>}</p>
                         <p className="text-xs text-[#6b7280] capitalize">{r.format}{r.displayOnEveryPage ? " · Every page" : ""}</p>
@@ -717,7 +740,8 @@ export function LearnerExperiencePanel() {
           }
         >
           {/* Enable toggle */}
-          <div className="pt-3">
+          <DemoVideoPlaceholder label="See how Learner Search works" />
+          <div className={`pt-3${lsState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
             <LrToggle
               checked={lsState.enabled}
               onChange={(v) => setLs("enabled", v)}
@@ -837,7 +861,8 @@ export function LearnerExperiencePanel() {
           }
         >
           {/* Enable toggle */}
-          <div className="pt-3">
+          <DemoVideoPlaceholder label="See how Learner Notes works" />
+          <div className={`pt-3${lnState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
             <LrToggle
               checked={lnState.enabled}
               onChange={(v) => setLn("enabled", v)}
@@ -941,7 +966,8 @@ export function LearnerExperiencePanel() {
           }
         >
           {/* Enable toggle */}
-          <div className="pt-3">
+          <DemoVideoPlaceholder label="See how Ask AI Tutor works" />
+          <div className={`pt-3${atState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
             <LrToggle
               checked={atState.enabled}
               onChange={(v) => setAt("enabled", v)}
@@ -1086,7 +1112,8 @@ export function LearnerExperiencePanel() {
           }
         >
           {/* Enable toggle */}
-          <div className="pt-3">
+          <DemoVideoPlaceholder label="See how Course Feedback works" />
+          <div className={`pt-3${cfState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
             <LrToggle
               checked={cfState.enabled}
               onChange={(v) => setCf("enabled", v)}
