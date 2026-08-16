@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import AssetPickerModal from "../../components/common/AssetPickerModal";
 
 /* -------------------------------------------------------------
    LEARNER EXPERIENCE PANEL - Learning Resources accordion
@@ -633,19 +634,10 @@ export function LearnerExperiencePanel() {
   const setCf = <K extends keyof CourseFeedbackState>(k: K, v: CourseFeedbackState[K]) =>
     setCfState((prev) => ({ ...prev, [k]: v }));
 
+  const [assetPickerOpen, setAssetPickerOpen] = useState(false);
+
   function handleAddDocument() {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.onchange = () => {
-      const file = input.files?.[0];
-      if (file) {
-        setAtState((prev) => ({
-          ...prev,
-          documents: [...prev.documents, { id: Math.random().toString(36).slice(2), name: file.name }],
-        }));
-      }
-    };
-    input.click();
+    setAssetPickerOpen(true);
   }
 
   function handleRemoveDocument(id: string) {
@@ -1135,6 +1127,20 @@ export function LearnerExperiencePanel() {
       )}
 
       <div className="h-8" />
+
+      {assetPickerOpen && (
+        <AssetPickerModal
+          onSelect={(asset) => {
+            const name = asset.assetLink.split("/").pop() ?? asset.assetLink;
+            setAtState((prev) => ({
+              ...prev,
+              documents: [...prev.documents, { id: asset.id, name }],
+            }));
+            setAssetPickerOpen(false);
+          }}
+          onClose={() => setAssetPickerOpen(false)}
+        />
+      )}
     </div>
   );
 }
