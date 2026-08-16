@@ -290,12 +290,18 @@ interface CourseFeedbackState {
   enabled: boolean;
   options: CourseFeedbackOption[];
   buttonText: string;
-  widgetTitle: string;
+  buttonAriaLabel: string;
+  ratingTitle: string;
+  ratingAriaLabel: string;
   highestRatingLabel: string;
   lowestRatingLabel: string;
-  commentTitle: string;
-  commentPlaceholder: string;
-  thankYouMessage: string;
+  commonTitle: string;
+  commonPlaceholder: string;
+  commonAriaLabel: string;
+  maximumCharacterLength: number;
+  nextButtonText: string;
+  closeButtonText: string;
+  thankYouBody: string;
 }
 
 const COURSE_FEEDBACK_OPTIONS: { value: CourseFeedbackOption; label: string }[] = [
@@ -623,12 +629,18 @@ export function LearnerExperiencePanel() {
     enabled: false,
     options: [],
     buttonText: "",
-    widgetTitle: "",
+    buttonAriaLabel: "",
+    ratingTitle: "",
+    ratingAriaLabel: "",
     highestRatingLabel: "",
     lowestRatingLabel: "",
-    commentTitle: "",
-    commentPlaceholder: "",
-    thankYouMessage: "",
+    commonTitle: "",
+    commonPlaceholder: "",
+    commonAriaLabel: "",
+    maximumCharacterLength: 250,
+    nextButtonText: "",
+    closeButtonText: "",
+    thankYouBody: "",
   });
 
   const setCf = <K extends keyof CourseFeedbackState>(k: K, v: CourseFeedbackState[K]) =>
@@ -1037,82 +1049,174 @@ export function LearnerExperiencePanel() {
                 </div>
               </div>
 
-              {/* Button text */}
-              <LrField label="Text displayed on the feedback button">
-                <input
-                  type="text"
-                  value={cfState.buttonText}
-                  onChange={(e) => setCf("buttonText", e.target.value)}
-                  placeholder="e.g. Give Feedback"
-                  className={LR_INPUT}
-                />
-              </LrField>
-
-              {/* Widget title */}
-              <LrField label="Title for the feedback widget">
-                <input
-                  type="text"
-                  value={cfState.widgetTitle}
-                  onChange={(e) => setCf("widgetTitle", e.target.value)}
-                  placeholder="e.g. How did we do?"
-                  className={LR_INPUT}
-                />
-              </LrField>
-
-              {/* Rating labels */}
-              <div className="grid grid-cols-2 gap-3">
-                <LrField label="Highest rating label">
-                  <input
-                    type="text"
-                    value={cfState.highestRatingLabel}
-                    onChange={(e) => setCf("highestRatingLabel", e.target.value)}
-                    placeholder="e.g. Excellent"
-                    className={LR_INPUT}
-                  />
-                </LrField>
-                <LrField label="Lowest rating label">
-                  <input
-                    type="text"
-                    value={cfState.lowestRatingLabel}
-                    onChange={(e) => setCf("lowestRatingLabel", e.target.value)}
-                    placeholder="e.g. Poor"
-                    className={LR_INPUT}
-                  />
-                </LrField>
+              {/* Trigger button */}
+              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
+                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
+                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Trigger Button</p>
+                </div>
+                <div className="px-4 py-4 space-y-3">
+                  <LrField label="Button text">
+                    <input
+                      type="text"
+                      value={cfState.buttonText}
+                      onChange={(e) => setCf("buttonText", e.target.value)}
+                      placeholder="e.g. Give Feedback"
+                      className={LR_INPUT}
+                    />
+                  </LrField>
+                  <LrField label="Aria label">
+                    <input
+                      type="text"
+                      value={cfState.buttonAriaLabel}
+                      onChange={(e) => setCf("buttonAriaLabel", e.target.value)}
+                      placeholder="e.g. Open course feedback"
+                      className={LR_INPUT}
+                    />
+                  </LrField>
+                </div>
               </div>
 
-              {/* Comment title */}
-              <LrField label="Comment title">
-                <textarea
-                  value={cfState.commentTitle}
-                  onChange={(e) => setCf("commentTitle", e.target.value)}
-                  placeholder="e.g. Tell us more about your experience"
-                  rows={2}
-                  className={LR_TEXTAREA}
-                />
-              </LrField>
+              {/* Feedback widget */}
+              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
+                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
+                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Feedback Widget</p>
+                </div>
+                <div className="px-4 py-4 space-y-4">
+                  <div className="rounded-lg border border-[#e5e7eb] overflow-hidden">
+                    <div className="px-3.5 py-2.5 bg-[#fafafa] border-b border-[#f3f4f6]">
+                      <p className="text-xs font-semibold text-[#374151] uppercase tracking-wide">Rating Step</p>
+                    </div>
+                    <div className="px-3.5 py-3 space-y-3">
+                      <LrField label="Title">
+                        <input
+                          type="text"
+                          value={cfState.ratingTitle}
+                          onChange={(e) => setCf("ratingTitle", e.target.value)}
+                          placeholder="e.g. How was your learning experience?"
+                          className={LR_INPUT}
+                        />
+                      </LrField>
+                      <LrField label="Aria label">
+                        <input
+                          type="text"
+                          value={cfState.ratingAriaLabel}
+                          onChange={(e) => setCf("ratingAriaLabel", e.target.value)}
+                          placeholder="e.g. Rate your experience"
+                          className={LR_INPUT}
+                        />
+                      </LrField>
+                      <div className="grid grid-cols-2 gap-3">
+                        <LrField label="Lowest rating label">
+                          <input
+                            type="text"
+                            value={cfState.lowestRatingLabel}
+                            onChange={(e) => setCf("lowestRatingLabel", e.target.value)}
+                            placeholder="e.g. Poor"
+                            className={LR_INPUT}
+                          />
+                        </LrField>
+                        <LrField label="Highest rating label">
+                          <input
+                            type="text"
+                            value={cfState.highestRatingLabel}
+                            onChange={(e) => setCf("highestRatingLabel", e.target.value)}
+                            placeholder="e.g. Excellent"
+                            className={LR_INPUT}
+                          />
+                        </LrField>
+                      </div>
+                    </div>
+                  </div>
 
-              {/* Comment placeholder */}
-              <LrField label="Placeholder text for the comment section">
-                <textarea
-                  value={cfState.commentPlaceholder}
-                  onChange={(e) => setCf("commentPlaceholder", e.target.value)}
-                  placeholder="e.g. Share your thoughts..."
-                  rows={2}
-                  className={LR_TEXTAREA}
-                />
-              </LrField>
+                  <div className="rounded-lg border border-[#e5e7eb] overflow-hidden">
+                    <div className="px-3.5 py-2.5 bg-[#fafafa] border-b border-[#f3f4f6]">
+                      <p className="text-xs font-semibold text-[#374151] uppercase tracking-wide">Common Step</p>
+                    </div>
+                    <div className="px-3.5 py-3 space-y-3">
+                      <LrField label="Title">
+                        <input
+                          type="text"
+                          value={cfState.commonTitle}
+                          onChange={(e) => setCf("commonTitle", e.target.value)}
+                          placeholder="e.g. Tell us more"
+                          className={LR_INPUT}
+                        />
+                      </LrField>
+                      <LrField label="Placeholder">
+                        <input
+                          type="text"
+                          value={cfState.commonPlaceholder}
+                          onChange={(e) => setCf("commonPlaceholder", e.target.value)}
+                          placeholder="e.g. Share your feedback..."
+                          className={LR_INPUT}
+                        />
+                      </LrField>
+                      <LrField label="Aria label">
+                        <input
+                          type="text"
+                          value={cfState.commonAriaLabel}
+                          onChange={(e) => setCf("commonAriaLabel", e.target.value)}
+                          placeholder="e.g. Feedback comment"
+                          className={LR_INPUT}
+                        />
+                      </LrField>
+                      <LrField label="Maximum character length">
+                        <input
+                          type="number"
+                          min={0}
+                          value={cfState.maximumCharacterLength}
+                          onChange={(e) => setCf("maximumCharacterLength", Number(e.target.value))}
+                          className={LR_INPUT}
+                        />
+                      </LrField>
+                    </div>
+                  </div>
 
-              {/* Thank you message */}
-              <LrField label="Message shown on the Thank you screen">
-                <textarea
-                  value={cfState.thankYouMessage}
-                  onChange={(e) => setCf("thankYouMessage", e.target.value)}
-                  placeholder="e.g. Thank you for your feedback! We really appreciate it."
-                  rows={3}
-                  className={LR_TEXTAREA}
-                />
-              </LrField>
+                  <div className="rounded-lg border border-[#e5e7eb] overflow-hidden">
+                    <div className="px-3.5 py-2.5 bg-[#fafafa] border-b border-[#f3f4f6]">
+                      <p className="text-xs font-semibold text-[#374151] uppercase tracking-wide">Buttons</p>
+                    </div>
+                    <div className="px-3.5 py-3 space-y-3">
+                      <LrField label="Next button text">
+                        <input
+                          type="text"
+                          value={cfState.nextButtonText}
+                          onChange={(e) => setCf("nextButtonText", e.target.value)}
+                          placeholder="e.g. Next"
+                          className={LR_INPUT}
+                        />
+                      </LrField>
+                      <LrField label="Close button text">
+                        <input
+                          type="text"
+                          value={cfState.closeButtonText}
+                          onChange={(e) => setCf("closeButtonText", e.target.value)}
+                          placeholder="e.g. Close"
+                          className={LR_INPUT}
+                        />
+                      </LrField>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Thankyou message */}
+              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
+                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
+                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Thankyou Message</p>
+                </div>
+                <div className="px-4 py-4">
+                  <LrField label="Body">
+                    <textarea
+                      value={cfState.thankYouBody}
+                      onChange={(e) => setCf("thankYouBody", e.target.value)}
+                      placeholder="e.g. Thank you for your feedback!"
+                      rows={3}
+                      className={LR_TEXTAREA}
+                    />
+                  </LrField>
+                </div>
+              </div>
             </>
           )}
         </LeAccordion>
