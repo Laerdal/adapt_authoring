@@ -303,10 +303,6 @@ const COURSE_FEEDBACK_OPTIONS: { value: CourseFeedbackOption; label: string }[] 
 ];
 
 /* -- Ask AI Tutor types -- */
-type AiTutorCapability = "allPages" | "answerFromContent" | "useLearnerNotes" | "stepByStep";
-type AiTutorKnowledge  = "concise" | "detailed";
-type AiTutorControl    = "drawer" | "floating";
-
 interface AiTutorDocument {
   id: string;
   name: string;
@@ -315,30 +311,10 @@ interface AiTutorDocument {
 interface AiTutorState {
   enabled: boolean;
   title: string;
-  availability: string;
-  capabilities: AiTutorCapability[];
-  knowledge: AiTutorKnowledge;
+  placeholderText: string;
+  languageCode: string;
   documents: AiTutorDocument[];
-  control: AiTutorControl;
-  promptPlaceholder: string;
 }
-
-const AI_TUTOR_CAPABILITIES: { value: AiTutorCapability; label: string }[] = [
-  { value: "allPages",          label: "Available on all pages" },
-  { value: "answerFromContent", label: "Answer question from course content" },
-  { value: "useLearnerNotes",   label: "Use learner notes" },
-  { value: "stepByStep",        label: "Provide step-by-step guidance" },
-];
-
-const AI_TUTOR_KNOWLEDGE_OPTIONS: { value: AiTutorKnowledge; label: string }[] = [
-  { value: "concise",  label: "Concise" },
-  { value: "detailed", label: "Detailed" },
-];
-
-const AI_TUTOR_CONTROL_OPTIONS: { value: AiTutorControl; label: string }[] = [
-  { value: "drawer",   label: "Drawer" },
-  { value: "floating", label: "Floating button" },
-];
 
 /* -- Learner Notes types -- */
 interface LearnerNotesState {
@@ -632,12 +608,9 @@ export function LearnerExperiencePanel() {
   const [atState, setAtState] = useState<AiTutorState>({
     enabled: false,
     title: "",
-    availability: "",
-    capabilities: [],
-    knowledge: "concise",
+    placeholderText: "",
+    languageCode: "",
     documents: [],
-    control: "drawer",
-    promptPlaceholder: "",
   });
 
   const setAt = <K extends keyof AiTutorState>(k: K, v: AiTutorState[K]) =>
@@ -968,46 +941,27 @@ export function LearnerExperiencePanel() {
                 />
               </LrField>
 
-              {/* Availability */}
-              <LrField label="Availability">
-                <textarea
-                  value={atState.availability}
-                  onChange={(e) => setAt("availability", e.target.value)}
-                  placeholder="Describe when and where the AI Tutor is available to learners"
-                  rows={3}
-                  className={LR_TEXTAREA}
+              {/* Placeholder Text */}
+              <LrField label="Placeholder Text">
+                <input
+                  type="text"
+                  value={atState.placeholderText}
+                  onChange={(e) => setAt("placeholderText", e.target.value)}
+                  placeholder="e.g. Ask me anything about this course..."
+                  className={LR_INPUT}
                 />
               </LrField>
 
-              {/* Capabilities */}
-              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Capabilities</p>
-                  <p className="text-xs text-[#6b7280] mt-1">Select what the AI Tutor is allowed to do.</p>
-                </div>
-                <div className="px-4 py-2">
-                  <LrCheckList<AiTutorCapability>
-                    options={AI_TUTOR_CAPABILITIES}
-                    selected={atState.capabilities}
-                    onChange={(v) => setAt("capabilities", v)}
-                  />
-                </div>
-              </div>
-
-              {/* Knowledge Sources */}
-              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Knowledge Sources</p>
-                  <p className="text-xs text-[#6b7280] mt-1">Choose the response style for the AI Tutor.</p>
-                </div>
-                <div className="px-4 py-3">
-                  <LrRadioList<AiTutorKnowledge>
-                    options={AI_TUTOR_KNOWLEDGE_OPTIONS}
-                    selected={atState.knowledge}
-                    onChange={(v) => setAt("knowledge", v)}
-                  />
-                </div>
-              </div>
+              {/* Language Code */}
+              <LrField label="Language Code">
+                <input
+                  type="text"
+                  value={atState.languageCode}
+                  onChange={(e) => setAt("languageCode", e.target.value)}
+                  placeholder="e.g. en-US"
+                  className={LR_INPUT}
+                />
+              </LrField>
 
               {/* Documents */}
               <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
@@ -1050,32 +1004,6 @@ export function LearnerExperiencePanel() {
                   </button>
                 </div>
               </div>
-
-              {/* Controls */}
-              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Controls</p>
-                  <p className="text-xs text-[#6b7280] mt-1">Choose how learners open the AI Tutor.</p>
-                </div>
-                <div className="px-4 py-3">
-                  <LrRadioList<AiTutorControl>
-                    options={AI_TUTOR_CONTROL_OPTIONS}
-                    selected={atState.control}
-                    onChange={(v) => setAt("control", v)}
-                  />
-                </div>
-              </div>
-
-              {/* Prompt Placeholder */}
-              <LrField label="Prompt Placeholder">
-                <textarea
-                  value={atState.promptPlaceholder}
-                  onChange={(e) => setAt("promptPlaceholder", e.target.value)}
-                  placeholder="e.g. Ask me anything about this course..."
-                  rows={3}
-                  className={LR_TEXTAREA}
-                />
-              </LrField>
             </>
           )}
         </LeAccordion>
