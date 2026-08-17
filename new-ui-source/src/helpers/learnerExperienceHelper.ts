@@ -73,6 +73,7 @@ const LEARNER_NOTES_EXTENSION_NAME = "adapt-courseNotes";
 const LEARNER_SEARCH_EXTENSION_NAME = "adapt-search";
 const COURSE_FEEDBACK_EXTENSION_NAME = "laerdal-course-feedback";
 const COURSE_FEEDBACK_EXTENSION_DISPLAY_NAME = "Laerdal Course Feedback";
+const LEARNING_RESOURCES_EXTENSION_NAME = "adapt-contrib-resources";
 
 function obj(v: unknown): AnyRecord {
   return v && typeof v === "object" ? (v as AnyRecord) : {};
@@ -283,7 +284,239 @@ export async function saveLearnerNotesSettings(courseId: string, settings: Learn
     },
   });
 }
+/* =============================================================
+   LEARNING RESOURCES (adapt-contrib-resources)
+   ============================================================= */
 
+export type LearningResourceType =
+  | "document" | "media" | "link"
+  | "custom1" | "custom2" | "custom3" | "custom4" | "custom5"
+  | "custom6" | "custom7" | "custom8" | "custom9" | "custom10";
+
+export interface LearningResourceItem {
+  /** UI-only stable id (not persisted) */
+  id: string;
+  format: LearningResourceType;
+  forceDownload: boolean;
+  title: string;
+  fileName: string;
+  description: string;
+  /** "asset" = path relative to course, "url" = external http(s) link */
+  sourceType: "asset" | "url";
+  assetValue: string;
+  urlValue: string;
+  displayOnEveryPage: boolean;
+}
+
+export interface LearningResourceFilterText {
+  all: string;
+  document: string;
+  media: string;
+  link: string;
+  customType1: string;
+  customType2: string;
+  customType3: string;
+  customType4: string;
+  customType5: string;
+  customType6: string;
+  customType7: string;
+  customType8: string;
+  customType9: string;
+  customType10: string;
+}
+
+export interface LearningResourcesSettings {
+  enabled: boolean;
+  drawerOrder: number;
+  sectionTitle: string;
+  description: string;
+  displayTitle: string;
+  body: string;
+  instruction: string;
+  enableFilterButton: boolean;
+  filterButtons: LearningResourceFilterText;
+  ariaLabels: LearningResourceFilterText;
+  resources: LearningResourceItem[];
+}
+
+function defaultLearningResourceFilterText(): LearningResourceFilterText {
+  return {
+    all: "", document: "", media: "", link: "",
+    customType1: "", customType2: "", customType3: "", customType4: "", customType5: "",
+    customType6: "", customType7: "", customType8: "", customType9: "", customType10: "",
+  };
+}
+
+export function defaultLearningResourcesSettings(): LearningResourcesSettings {
+  return {
+    enabled: false,
+    drawerOrder: 0,
+    sectionTitle: "",
+    description: "",
+    displayTitle: "",
+    body: "",
+    instruction: "",
+    enableFilterButton: false,
+    filterButtons: defaultLearningResourceFilterText(),
+    ariaLabels: defaultLearningResourceFilterText(),
+    resources: [],
+  };
+}
+
+/** Convert a `_link` string from the schema to sourceType + values. */
+function parseLinkField(link: string): Pick<LearningResourceItem, "sourceType" | "assetValue" | "urlValue"> {
+  if (/^https?:\/\//i.test(link)) {
+    return { sourceType: "url", assetValue: "", urlValue: link };
+  }
+  return { sourceType: "asset", assetValue: link, urlValue: "" };
+}
+
+function filterTextFromSchema(buttons: AnyRecord, suffix: string): LearningResourceFilterText {
+  return {
+    all: str(buttons[`all${suffix}`]),
+    document: str(buttons[`document${suffix}`]),
+    media: str(buttons[`media${suffix}`]),
+    link: str(buttons[`link${suffix}`]),
+    customType1: str(buttons[`custom1${suffix}`]),
+    customType2: str(buttons[`custom2${suffix}`]),
+    customType3: str(buttons[`custom3${suffix}`]),
+    customType4: str(buttons[`custom4${suffix}`]),
+    customType5: str(buttons[`custom5${suffix}`]),
+    customType6: str(buttons[`custom6${suffix}`]),
+    customType7: str(buttons[`custom7${suffix}`]),
+    customType8: str(buttons[`custom8${suffix}`]),
+    customType9: str(buttons[`custom9${suffix}`]),
+    customType10: str(buttons[`custom10${suffix}`]),
+  };
+}
+
+function filterTextToSchemaButtons(text: LearningResourceFilterText): AnyRecord {
+  return {
+    all: text.all, document: text.document, media: text.media, link: text.link,
+    custom1: text.customType1, custom2: text.customType2, custom3: text.customType3,
+    custom4: text.customType4, custom5: text.customType5, custom6: text.customType6,
+    custom7: text.customType7, custom8: text.customType8, custom9: text.customType9,
+    custom10: text.customType10,
+  };
+}
+
+function filterTextToSchemaAria(text: LearningResourceFilterText): AnyRecord {
+  return {
+    allAria: text.all, documentAria: text.document, mediaAria: text.media, linkAria: text.link,
+    custom1Aria: text.customType1, custom2Aria: text.customType2, custom3Aria: text.customType3,
+    custom4Aria: text.customType4, custom5Aria: text.customType5, custom6Aria: text.customType6,
+    custom7Aria: text.customType7, custom8Aria: text.customType8, custom9Aria: text.customType9,
+    custom10Aria: text.customType10,
+  };
+}
+
+export async function getLearningResourcesSettings(courseId: string): Promise<LearningResourcesSettings> {
+  const [course, config] = await Promise.all([
+    apiClient.get<AnyRecord>(`/api/content/course/${courseId}`),
+    apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`),
+  ]);
+
+  const courseExtensions = obj(course._extensions);
+  const resources = obj(courseExtensions._resources || course._resources);
+  const filterButtons = obj(resources._filterButtons);
+  const filterAria = obj(resources._filterAria);
+  const defaults = defaultLearningResourcesSettings();
+
+  const rawItems = Array.isArray(resources._resourcesItems) ? resources._resourcesItems : [];
+  const items: LearningResourceItem[] = rawItems.map((item: unknown) => {
+    const i = obj(item);
+    const { sourceType, assetValue, urlValue } = parseLinkField(str(i._link));
+    return {
+      id: Math.random().toString(36).slice(2),
+      format: str(i._type, "document") as LearningResourceType,
+      forceDownload: bool(i._forceDownload, false),
+      title: str(i.title),
+      fileName: str(i.filename),
+      description: str(i.description),
+      sourceType,
+      assetValue,
+      urlValue,
+      displayOnEveryPage: bool(i._isGlobal, true),
+    };
+  });
+
+  return {
+    ...defaults,
+    enabled: isExtensionInstalledByName(config, LEARNING_RESOURCES_EXTENSION_NAME) && bool(resources._isEnabled, true),
+    drawerOrder: num(resources._drawerOrder, 0),
+    sectionTitle: str(resources.title),
+    description: str(resources.description),
+    displayTitle: str(resources.displayTitle),
+    body: str(resources.body),
+    instruction: str(resources.instruction),
+    enableFilterButton: bool(resources._enableFilters, false),
+    filterButtons: filterTextFromSchema(filterButtons, ""),
+    ariaLabels: filterTextFromSchema(filterAria, "Aria"),
+    resources: items,
+  };
+}
+
+export async function saveLearningResourcesSettings(courseId: string, settings: LearningResourcesSettings): Promise<void> {
+  let [course, config] = await Promise.all([
+    apiClient.get<AnyRecord>(`/api/content/course/${courseId}`),
+    apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`),
+  ]);
+
+  const installed = isExtensionInstalledByName(config, LEARNING_RESOURCES_EXTENSION_NAME);
+  if (settings.enabled && !installed) {
+    const ids = await resolveExtensionTypeIdsByNames([LEARNING_RESOURCES_EXTENSION_NAME]);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/enable/${courseId}`, { extensions: ids });
+      [course, config] = await Promise.all([
+        apiClient.get<AnyRecord>(`/api/content/course/${courseId}`),
+        apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`),
+      ]);
+    }
+  } else if (!settings.enabled && installed) {
+    const ids = await resolveExtensionTypeIdsByNames([LEARNING_RESOURCES_EXTENSION_NAME]);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/disable/${courseId}`, { extensions: ids });
+    }
+    return;
+  }
+
+  if (!isExtensionInstalledByName(config, LEARNING_RESOURCES_EXTENSION_NAME)) return;
+
+  const courseExtensions = obj(course._extensions);
+  const existing = obj(courseExtensions._resources || course._resources);
+
+  const resourcesItems = settings.resources.map((r) => ({
+    _type: r.format,
+    _forceDownload: r.forceDownload,
+    title: r.title,
+    filename: r.fileName,
+    description: r.description,
+    _link: r.sourceType === "url" ? r.urlValue : r.assetValue,
+    _isGlobal: r.displayOnEveryPage,
+  }));
+
+  const payload = {
+    ...existing,
+    _isEnabled: settings.enabled,
+    _drawerOrder: settings.drawerOrder,
+    title: settings.sectionTitle,
+    description: settings.description,
+    displayTitle: settings.displayTitle,
+    body: settings.body,
+    instruction: settings.instruction,
+    _enableFilters: settings.enableFilterButton,
+    _filterButtons: filterTextToSchemaButtons(settings.filterButtons),
+    _filterAria: filterTextToSchemaAria(settings.ariaLabels),
+    _resourcesItems: resourcesItems,
+  };
+
+  await apiClient.put(`/api/content/course/${courseId}`, {
+    _extensions: {
+      ...courseExtensions,
+      _resources: payload,
+    },
+  });
+}
 export async function getLearnerSearchSettings(courseId: string): Promise<LearnerSearchSettings> {
   const [course, config] = await Promise.all([
     apiClient.get<AnyRecord>(`/api/content/course/${courseId}`),

@@ -4,16 +4,22 @@ import {
   defaultCourseFeedbackSettings,
   defaultLearnerNotesSettings,
   defaultLearnerSearchSettings,
+  defaultLearningResourcesSettings,
   getCourseFeedbackSettings,
   getLearnerNotesSettings,
   getLearnerSearchSettings,
+  getLearningResourcesSettings,
   saveCourseFeedbackSettings,
   saveLearnerNotesSettings,
+  saveLearnerSearchSettings,
+  saveLearningResourcesSettings,
   type CourseFeedbackOption,
   type CourseFeedbackSettings,
   type LearnerNotesSettings,
-  saveLearnerSearchSettings,
   type LearnerSearchSettings,
+  type LearningResourceItem,
+  type LearningResourcesSettings,
+  type LearningResourceFilterText as LrFilterTextHelper,
 } from "../../helpers/learnerExperienceHelper";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
@@ -22,51 +28,13 @@ import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationG
    LEARNER EXPERIENCE PANEL - Learning Resources accordion
    ------------------------------------------------------------- */
 
-type ResourceFormat = "document" | "media" | "link" | "custom" | "custom1" | "custom2" | "custom3" | "custom4" | "custom5" | "custom6" | "custom7" | "custom8" | "custom9" | "custom10";
+type ResourceFormat = LearningResourceItem["format"];
 
-interface LearningResource {
-  id: string;
-  format: ResourceFormat;
-  forceDownload: boolean;
-  title: string;
-  fileName: string;
-  description: string;
-  sourceType: "asset" | "url";
-  assetValue: string;
-  urlValue: string;
-  displayOnEveryPage: boolean;
-}
+// Re-use imported types under local names for backwards compat with existing JSX
+type LearningResource = LearningResourceItem;
+type LearningResourcesState = LearningResourcesSettings;
 
-interface LearningResourcesState {
-  enabled: boolean;
-  drawerOrder: number;
-  sectionTitle: string;
-  description: string;
-  displayTitle: string;
-  body: string;
-  instruction: string;
-  enableFilterButton: boolean;
-  filterButtons: LearningResourceFilterText;
-  ariaLabels: LearningResourceFilterText;
-  resources: LearningResource[];
-}
-
-interface LearningResourceFilterText {
-  all: string;
-  document: string;
-  media: string;
-  link: string;
-  customType1: string;
-  customType2: string;
-  customType3: string;
-  customType4: string;
-  customType5: string;
-  customType6: string;
-  customType7: string;
-  customType8: string;
-  customType9: string;
-  customType10: string;
-}
+type LearningResourceFilterText = LrFilterTextHelper;
 
 const LEARNING_RESOURCE_FILTER_FIELDS: { key: keyof LearningResourceFilterText; label: string }[] = [
   { key: "all", label: "All" },
@@ -84,25 +52,6 @@ const LEARNING_RESOURCE_FILTER_FIELDS: { key: keyof LearningResourceFilterText; 
   { key: "customType9", label: "Custom type 9" },
   { key: "customType10", label: "Custom type 10" },
 ];
-
-function newLearningResourceFilterText(): LearningResourceFilterText {
-  return {
-    all: "",
-    document: "",
-    media: "",
-    link: "",
-    customType1: "",
-    customType2: "",
-    customType3: "",
-    customType4: "",
-    customType5: "",
-    customType6: "",
-    customType7: "",
-    customType8: "",
-    customType9: "",
-    customType10: "",
-  };
-}
 
 const RESOURCE_FORMAT_OPTIONS: { value: ResourceFormat; label: string }[] = [
   { value: "document", label: "Document" },
@@ -124,7 +73,6 @@ function getResourceFormatLabel(format: ResourceFormat): string {
   if (format === "document") return "Document";
   if (format === "media") return "Media";
   if (format === "link") return "Link";
-  if (format === "custom") return "Custom";
   return `Custom ${format.slice(6)}`;
 }
 
@@ -198,10 +146,12 @@ function AddResourceDialog({
   onCancel: () => void;
 }) {
   const [res, setRes] = useState<LearningResource>(initial ?? newResource());
+  const [assetPickerOpen, setAssetPickerOpen] = useState(false);
   const set = <K extends keyof LearningResource>(k: K, v: LearningResource[K]) =>
     setRes((prev) => ({ ...prev, [k]: v }));
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col max-h-[90vh] overflow-hidden">
         {/* header */}
@@ -295,6 +245,7 @@ function AddResourceDialog({
             {res.sourceType === "asset" ? (
               <button
                 type="button"
+                onClick={() => setAssetPickerOpen(true)}
                 className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-[#d1d5db] rounded-xl py-4 text-sm text-[#6b7280] hover:border-[#2d6fa8] hover:text-[#2d6fa8] hover:bg-[#f0f7ff] transition-colors"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -340,6 +291,17 @@ function AddResourceDialog({
         </div>
       </div>
     </div>
+
+    {assetPickerOpen && (
+      <AssetPickerModal
+        onSelect={(asset) => {
+          set("assetValue", asset.assetLink);
+          setAssetPickerOpen(false);
+        }}
+        onClose={() => setAssetPickerOpen(false)}
+      />
+    )}
+    </>
   );
 }
 
@@ -348,7 +310,6 @@ const FORMAT_STYLES: Record<ResourceFormat, { bg: string; color: string }> = {
   document: { bg: "#fee2e2", color: "#dc2626" },
   media:    { bg: "#ede9f6", color: "#7c5cbf" },
   link:     { bg: "#dbeeff", color: "#2d6fa8" },
-  custom:   { bg: "#d1fae5", color: "#059669" },
   custom1:  { bg: "#d1fae5", color: "#059669" },
   custom2:  { bg: "#d1fae5", color: "#059669" },
   custom3:  { bg: "#d1fae5", color: "#059669" },
@@ -593,19 +554,10 @@ export function LearnerExperiencePanel({
   onPendingNavigationHandled?: () => void;
 }) {
   /* -- Learning Resources state -- */
-  const [lrState, setLrState] = useState<LearningResourcesState>({
-    enabled: false,
-    drawerOrder: 0,
-    sectionTitle: "",
-    description: "",
-    displayTitle: "",
-    body: "",
-    instruction: "",
-    enableFilterButton: false,
-    filterButtons: newLearningResourceFilterText(),
-    ariaLabels: newLearningResourceFilterText(),
-    resources: [],
-  });
+  const [lrState, setLrState] = useState<LearningResourcesState>(defaultLearningResourcesSettings);
+  const [savedLrState, setSavedLrState] = useState<LearningResourcesState>(defaultLearningResourcesSettings);
+  const [lrLoading, setLrLoading] = useState(false);
+  const [lrSaving, setLrSaving] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [lrOpen, setLrOpen] = useState(false);
 
@@ -655,6 +607,35 @@ export function LearnerExperiencePanel({
   function setMatchOn(key: keyof LearnerSearchState["matchOn"], value: boolean) {
     setLsState((prev) => ({ ...prev, matchOn: { ...prev.matchOn, [key]: value } }));
   }
+
+  useEffect(() => {
+    if (!courseId) {
+      const defaults = defaultLearningResourcesSettings();
+      setLrState(defaults);
+      setSavedLrState(defaults);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setLrLoading(true);
+      try {
+        const loaded = await getLearningResourcesSettings(courseId);
+        if (cancelled) return;
+        setLrState(loaded);
+        setSavedLrState(loaded);
+      } catch {
+        if (cancelled) return;
+        const defaults = defaultLearningResourcesSettings();
+        setLrState(defaults);
+        setSavedLrState(defaults);
+      } finally {
+        if (!cancelled) setLrLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [courseId]);
 
   useEffect(() => {
     if (!courseId) {
@@ -758,7 +739,8 @@ export function LearnerExperiencePanel({
   const lnDirty = JSON.stringify(lnState) !== JSON.stringify(savedLnState);
   const lsDirty = JSON.stringify(lsState) !== JSON.stringify(savedLsState);
   const cfDirty = JSON.stringify(cfState) !== JSON.stringify(savedCfState);
-  const hasChanges = lnDirty || lsDirty || cfDirty;
+  const lrDirty = JSON.stringify(lrState) !== JSON.stringify(savedLrState);
+  const hasChanges = lnDirty || lsDirty || cfDirty || lrDirty;
 
   const { showConfirmModal, consumePendingNavigation, clearPendingNavigation } =
     useUnsavedChangesNavigationGuard({
@@ -772,6 +754,7 @@ export function LearnerExperiencePanel({
     setLnState(savedLnState);
     setLsState(savedLsState);
     setCfState(savedCfState);
+    setLrState(savedLrState);
   }
 
   async function handleLnSave() {
@@ -782,9 +765,11 @@ export function LearnerExperiencePanel({
       await saveLearnerNotesSettings(courseId, lnState as LearnerNotesSettings);
       await saveLearnerSearchSettings(courseId, lsState);
       await saveCourseFeedbackSettings(courseId, cfState);
+      await saveLearningResourcesSettings(courseId, lrState);
       setSavedLnState(lnState);
       setSavedLsState(lsState);
       setSavedCfState(cfState);
+      setSavedLrState(lrState);
       setLnToast({ type: "success", message: "Changes saved successfully" });
     } catch {
       setLnToast({ type: "error", message: "Couldn't save. Please try again." });
@@ -801,9 +786,11 @@ export function LearnerExperiencePanel({
       await saveLearnerNotesSettings(courseId, lnState);
       await saveLearnerSearchSettings(courseId, lsState);
       await saveCourseFeedbackSettings(courseId, cfState);
+      await saveLearningResourcesSettings(courseId, lrState);
       setSavedLnState(lnState);
       setSavedLsState(lsState);
       setSavedCfState(cfState);
+      setSavedLrState(lrState);
       const navTarget = consumePendingNavigation();
       setLnToast({ type: "success", message: "Changes saved successfully" });
       if (navTarget) onNavigationRequest?.(navTarget);
@@ -818,6 +805,7 @@ export function LearnerExperiencePanel({
     setLnState(savedLnState);
     setLsState(savedLsState);
     setCfState(savedCfState);
+    setLrState(savedLrState);
     const navTarget = consumePendingNavigation();
     if (navTarget) onNavigationRequest?.(navTarget);
   }
@@ -868,6 +856,11 @@ export function LearnerExperiencePanel({
         >
           {/* Enable toggle */}
           <DemoVideoPlaceholder label="See how Learning Resources works" />
+          {lrLoading && (
+            <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-sm text-[#6b7280]">
+              Loading Learning Resources settings...
+            </div>
+          )}
           <div className={`pt-3${lrState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
             <LrToggle
               checked={lrState.enabled}
