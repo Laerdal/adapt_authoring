@@ -697,6 +697,7 @@ export interface NavigationSettings {
   };
 }
 
+
 // Schema defaults for the six footer buttons (adapt-navigation-footer/properties.schema).
 function defaultFooterButtons(): Record<NavFooterButtonKey, NavFooterButton> {
   return {

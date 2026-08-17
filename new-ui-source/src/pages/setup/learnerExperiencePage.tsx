@@ -1,5 +1,13 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
+import {
+  defaultLearnerNotesSettings,
+  getLearnerNotesSettings,
+  saveLearnerNotesSettings,
+  type LearnerNotesSettings,
+} from "../../helpers/learnerExperienceHelper";
+import { UnsavedChangesModal } from "./unsavedChangesModal";
+import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
 /* -------------------------------------------------------------
    LEARNER EXPERIENCE PANEL - Learning Resources accordion
@@ -411,24 +419,7 @@ interface AiTutorState {
 }
 
 /* -- Learner Notes types -- */
-interface LearnerNotesState {
-  enabled: boolean;
-  title: string;
-  instruction: string;
-  placeholder: string;
-  searchErrorMessage: string;
-  successMessage: string;
-  errorMessage: string;
-  createANewNote: string;
-  exportANote: string;
-  saveNote: string;
-  downloadANote: string;
-  uploadANote: string;
-  searchNote: string;
-  deleteNote: string;
-  cancel: string;
-  editNote: string;
-}
+type LearnerNotesState = LearnerNotesSettings;
 
 /* -- Learner Search types -- */
 interface LearnerSearchState {
@@ -619,7 +610,17 @@ function LeAccordion({
   );
 }
 
-export function LearnerExperiencePanel() {
+export function LearnerExperiencePanel({
+  courseId,
+  onNavigationRequest,
+  pendingNavigation,
+  onPendingNavigationHandled,
+}: {
+  courseId: string;
+  onNavigationRequest?: (nav: string) => void;
+  pendingNavigation?: string | null;
+  onPendingNavigationHandled?: () => void;
+}) {
   /* -- Learning Resources state -- */
   const [lrState, setLrState] = useState<LearningResourcesState>({
     enabled: false,
@@ -659,27 +660,103 @@ export function LearnerExperiencePanel() {
 
   /* -- Learner Notes state -- */
   const [lnOpen, setLnOpen] = useState(false);
-  const [lnState, setLnState] = useState<LearnerNotesState>({
-    enabled: false,
-    title: "",
-    instruction: "",
-    placeholder: "",
-    searchErrorMessage: "",
-    successMessage: "",
-    errorMessage: "",
-    createANewNote: "",
-    exportANote: "",
-    saveNote: "",
-    downloadANote: "",
-    uploadANote: "",
-    searchNote: "",
-    deleteNote: "",
-    cancel: "",
-    editNote: "",
-  });
+  const [lnState, setLnState] = useState<LearnerNotesState>(defaultLearnerNotesSettings());
+  const [savedLnState, setSavedLnState] = useState<LearnerNotesState>(defaultLearnerNotesSettings());
+  const [lnLoading, setLnLoading] = useState(false);
+  const [lnSaving, setLnSaving] = useState(false);
+  const [lnToast, setLnToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const setLn = <K extends keyof LearnerNotesState>(k: K, v: LearnerNotesState[K]) =>
     setLnState((prev) => ({ ...prev, [k]: v }));
+
+  useEffect(() => {
+    if (!courseId) {
+      const defaults = defaultLearnerNotesSettings();
+      setLnState(defaults);
+      setSavedLnState(defaults);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setLnLoading(true);
+      try {
+        const loaded = await getLearnerNotesSettings(courseId);
+        if (cancelled) return;
+        setLnState(loaded);
+        setSavedLnState(loaded);
+      } catch {
+        if (cancelled) return;
+        const defaults = defaultLearnerNotesSettings();
+        setLnState(defaults);
+        setSavedLnState(defaults);
+      } finally {
+        if (!cancelled) setLnLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
+
+  useEffect(() => {
+    if (!lnToast) return;
+    const t = setTimeout(() => setLnToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [lnToast]);
+
+  const lnDirty = JSON.stringify(lnState) !== JSON.stringify(savedLnState);
+
+  const { showConfirmModal, consumePendingNavigation, clearPendingNavigation } =
+    useUnsavedChangesNavigationGuard({
+      hasChanges: lnDirty,
+      pendingNavigation,
+      onPendingNavigationHandled,
+      onNavigate: onNavigationRequest,
+    });
+
+  function handleLnCancel() {
+    setLnState(savedLnState);
+  }
+
+  async function handleLnSave() {
+    if (!courseId || lnSaving) return;
+    setLnSaving(true);
+    setLnToast(null);
+    try {
+      await saveLearnerNotesSettings(courseId, lnState as LearnerNotesSettings);
+      setSavedLnState(lnState);
+      setLnToast({ type: "success", message: "Learner Notes saved successfully" });
+    } catch {
+      setLnToast({ type: "error", message: "Couldn't save Learner Notes. Please try again." });
+    } finally {
+      setLnSaving(false);
+    }
+  }
+
+  async function handleConfirmSave() {
+    if (!courseId || lnSaving) return;
+    setLnSaving(true);
+    setLnToast(null);
+    try {
+      await saveLearnerNotesSettings(courseId, lnState);
+      setSavedLnState(lnState);
+      const navTarget = consumePendingNavigation();
+      setLnToast({ type: "success", message: "Learner Notes saved successfully" });
+      if (navTarget) onNavigationRequest?.(navTarget);
+    } catch {
+      setLnToast({ type: "error", message: "Couldn't save Learner Notes. Please try again." });
+    } finally {
+      setLnSaving(false);
+    }
+  }
+
+  function handleConfirmDiscard() {
+    setLnState(savedLnState);
+    const navTarget = consumePendingNavigation();
+    if (navTarget) onNavigationRequest?.(navTarget);
+  }
 
   /* -- Learner Search state -- */
   const [lsOpen, setLsOpen] = useState(false);
@@ -950,6 +1027,11 @@ export function LearnerExperiencePanel() {
           }
         >
           <DemoVideoPlaceholder label="See how Learner Notes works" />
+          {lnLoading && (
+            <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-sm text-[#6b7280]">
+              Loading Learner Notes settings...
+            </div>
+          )}
           <div className={`pt-3${lnState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
             <LrToggle
               checked={lnState.enabled}
@@ -1419,6 +1501,73 @@ export function LearnerExperiencePanel() {
 
       <div className="h-8" />
 
+      {!lnLoading && lnDirty && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-3 rounded-xl bg-white border border-[var(--life-warning-100)] shadow-lg animate-fade-in-down">
+          <span className="flex items-center gap-2 text-sm text-[#374151]">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-warning-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            Unsaved changes
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleLnCancel}
+              disabled={lnSaving}
+              className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] disabled:opacity-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleLnSave}
+              disabled={lnSaving || !courseId}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:opacity-50 rounded-lg transition-colors"
+            >
+              {lnSaving && (
+                <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                </svg>
+              )}
+              {lnSaving ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {lnToast && (
+        <div className="fixed top-4 right-4 z-[60] pointer-events-none">
+          <div
+            className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium border pointer-events-auto animate-fade-in-down min-w-[260px] max-w-sm ${
+              lnToast.type === "success"
+                ? "bg-[var(--life-positive-050)] border-[var(--life-positive-100)] text-[var(--life-positive-500)]"
+                : "bg-[var(--life-critical-050)] border-[var(--life-critical-100)] text-[var(--life-critical-500)]"
+            }`}
+          >
+            {lnToast.type === "success" ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-positive-500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-critical-500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+            )}
+            <span className="flex-1">{lnToast.message}</span>
+            <button
+              type="button"
+              onClick={() => setLnToast(null)}
+              className="opacity-60 hover:opacity-100 transition-opacity ml-1"
+              aria-label="Dismiss"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+
       {assetPickerOpen && (
         <AssetPickerModal
           onSelect={(asset) => {
@@ -1432,6 +1581,14 @@ export function LearnerExperiencePanel() {
           onClose={() => setAssetPickerOpen(false)}
         />
       )}
+
+      <UnsavedChangesModal
+        isOpen={showConfirmModal}
+        isSaving={lnSaving}
+        onDiscard={handleConfirmDiscard}
+        onSave={handleConfirmSave}
+        onClose={clearPendingNavigation}
+      />
     </div>
   );
 }

@@ -112,6 +112,7 @@ const NAV_ITEMS = [
   {
     id: "learner-experience",
     label: "Learner Experience",
+    guarded: true,
     icon: (
       <SidebarMaskIcon file="learner-icon.svg" />
     ),
@@ -3340,7 +3341,7 @@ function CourseCreationCenterContent() {
     if (activeNav === "accessibility") return <AccessibilityPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "tracking") return <TrackingAnalyticsPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "completion") return <CompletionProgressPanel />;
-    if (activeNav === "learner-experience") return <LearnerExperiencePanel />;
+    if (activeNav === "learner-experience") return <LearnerExperiencePanel courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "technical-settings") return <TechnicalSettingPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "publish") return <PublishPanel />;
     return <ComingSoonPanel label={activeItem?.label ?? (activeNav === "storyboarding" ? "Storyboarding" : "")} />;
