@@ -1,11 +1,16 @@
 import React, { useEffect, useState } from "react";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
 import {
+  defaultCourseFeedbackSettings,
   defaultLearnerNotesSettings,
   defaultLearnerSearchSettings,
+  getCourseFeedbackSettings,
   getLearnerNotesSettings,
   getLearnerSearchSettings,
+  saveCourseFeedbackSettings,
   saveLearnerNotesSettings,
+  type CourseFeedbackOption,
+  type CourseFeedbackSettings,
   type LearnerNotesSettings,
   saveLearnerSearchSettings,
   type LearnerSearchSettings,
@@ -383,25 +388,7 @@ function ResourceFormatIcon({ format }: { format: ResourceFormat }) {
 }
 
 /* -- Course Feedback types -- */
-type CourseFeedbackOption = "autoOpen" | "hideAfterSubmit";
-
-interface CourseFeedbackState {
-  enabled: boolean;
-  options: CourseFeedbackOption[];
-  buttonText: string;
-  buttonAriaLabel: string;
-  ratingTitle: string;
-  ratingAriaLabel: string;
-  highestRatingLabel: string;
-  lowestRatingLabel: string;
-  commonTitle: string;
-  commonPlaceholder: string;
-  commonAriaLabel: string;
-  maximumCharacterLength: number;
-  nextButtonText: string;
-  closeButtonText: string;
-  thankYouBody: string;
-}
+type CourseFeedbackState = CourseFeedbackSettings;
 
 const COURSE_FEEDBACK_OPTIONS: { value: CourseFeedbackOption; label: string }[] = [
   { value: "autoOpen",        label: "Auto-open on course complete" },
@@ -648,16 +635,22 @@ export function LearnerExperiencePanel({
   const [savedLnState, setSavedLnState] = useState<LearnerNotesState>(defaultLearnerNotesSettings());
   const [lnLoading, setLnLoading] = useState(false);
   const [lsLoading, setLsLoading] = useState(false);
+  const [cfLoading, setCfLoading] = useState(false);
   const [lnSaving, setLnSaving] = useState(false);
   const [lnToast, setLnToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [lsOpen, setLsOpen] = useState(false);
   const [lsState, setLsState] = useState<LearnerSearchState>(defaultLearnerSearchSettings());
   const [savedLsState, setSavedLsState] = useState<LearnerSearchState>(defaultLearnerSearchSettings());
+  const [cfOpen, setCfOpen] = useState(false);
+  const [cfState, setCfState] = useState<CourseFeedbackState>(defaultCourseFeedbackSettings());
+  const [savedCfState, setSavedCfState] = useState<CourseFeedbackState>(defaultCourseFeedbackSettings());
 
   const setLn = <K extends keyof LearnerNotesState>(k: K, v: LearnerNotesState[K]) =>
     setLnState((prev) => ({ ...prev, [k]: v }));
   const setLs = <K extends keyof LearnerSearchState>(k: K, v: LearnerSearchState[K]) =>
     setLsState((prev) => ({ ...prev, [k]: v }));
+  const setCf = <K extends keyof CourseFeedbackState>(k: K, v: CourseFeedbackState[K]) =>
+    setCfState((prev) => ({ ...prev, [k]: v }));
 
   function setMatchOn(key: keyof LearnerSearchState["matchOn"], value: boolean) {
     setLsState((prev) => ({ ...prev, matchOn: { ...prev.matchOn, [key]: value } }));
@@ -686,6 +679,37 @@ export function LearnerExperiencePanel({
         setSavedLnState(defaults);
       } finally {
         if (!cancelled) setLnLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
+
+  useEffect(() => {
+    if (!courseId) {
+      const defaults = defaultCourseFeedbackSettings();
+      setCfState(defaults);
+      setSavedCfState(defaults);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setCfLoading(true);
+      try {
+        const loaded = await getCourseFeedbackSettings(courseId);
+        if (cancelled) return;
+        setCfState(loaded);
+        setSavedCfState(loaded);
+      } catch {
+        if (cancelled) return;
+        const defaults = defaultCourseFeedbackSettings();
+        setCfState(defaults);
+        setSavedCfState(defaults);
+      } finally {
+        if (!cancelled) setCfLoading(false);
       }
     })();
 
@@ -733,7 +757,8 @@ export function LearnerExperiencePanel({
 
   const lnDirty = JSON.stringify(lnState) !== JSON.stringify(savedLnState);
   const lsDirty = JSON.stringify(lsState) !== JSON.stringify(savedLsState);
-  const hasChanges = lnDirty || lsDirty;
+  const cfDirty = JSON.stringify(cfState) !== JSON.stringify(savedCfState);
+  const hasChanges = lnDirty || lsDirty || cfDirty;
 
   const { showConfirmModal, consumePendingNavigation, clearPendingNavigation } =
     useUnsavedChangesNavigationGuard({
@@ -746,6 +771,7 @@ export function LearnerExperiencePanel({
   function handleLnCancel() {
     setLnState(savedLnState);
     setLsState(savedLsState);
+    setCfState(savedCfState);
   }
 
   async function handleLnSave() {
@@ -755,8 +781,10 @@ export function LearnerExperiencePanel({
     try {
       await saveLearnerNotesSettings(courseId, lnState as LearnerNotesSettings);
       await saveLearnerSearchSettings(courseId, lsState);
+      await saveCourseFeedbackSettings(courseId, cfState);
       setSavedLnState(lnState);
       setSavedLsState(lsState);
+      setSavedCfState(cfState);
       setLnToast({ type: "success", message: "Changes saved successfully" });
     } catch {
       setLnToast({ type: "error", message: "Couldn't save. Please try again." });
@@ -772,8 +800,10 @@ export function LearnerExperiencePanel({
     try {
       await saveLearnerNotesSettings(courseId, lnState);
       await saveLearnerSearchSettings(courseId, lsState);
+      await saveCourseFeedbackSettings(courseId, cfState);
       setSavedLnState(lnState);
       setSavedLsState(lsState);
+      setSavedCfState(cfState);
       const navTarget = consumePendingNavigation();
       setLnToast({ type: "success", message: "Changes saved successfully" });
       if (navTarget) onNavigationRequest?.(navTarget);
@@ -787,6 +817,7 @@ export function LearnerExperiencePanel({
   function handleConfirmDiscard() {
     setLnState(savedLnState);
     setLsState(savedLsState);
+    setCfState(savedCfState);
     const navTarget = consumePendingNavigation();
     if (navTarget) onNavigationRequest?.(navTarget);
   }
@@ -803,29 +834,6 @@ export function LearnerExperiencePanel({
 
   const setAt = <K extends keyof AiTutorState>(k: K, v: AiTutorState[K]) =>
     setAtState((prev) => ({ ...prev, [k]: v }));
-
-  /* -- Course Feedback state -- */
-  const [cfOpen, setCfOpen] = useState(false);
-  const [cfState, setCfState] = useState<CourseFeedbackState>({
-    enabled: false,
-    options: [],
-    buttonText: "",
-    buttonAriaLabel: "",
-    ratingTitle: "",
-    ratingAriaLabel: "",
-    highestRatingLabel: "",
-    lowestRatingLabel: "",
-    commonTitle: "",
-    commonPlaceholder: "",
-    commonAriaLabel: "",
-    maximumCharacterLength: 250,
-    nextButtonText: "",
-    closeButtonText: "",
-    thankYouBody: "",
-  });
-
-  const setCf = <K extends keyof CourseFeedbackState>(k: K, v: CourseFeedbackState[K]) =>
-    setCfState((prev) => ({ ...prev, [k]: v }));
 
   const [assetPickerOpen, setAssetPickerOpen] = useState(false);
 
@@ -1288,11 +1296,11 @@ export function LearnerExperiencePanel({
           )}
         </LeAccordion>
 
-        {/* -- Course Feedback accordion -- */}
+        {/* -- Laerdal Course Feedback accordion -- */}
         <LeAccordion
           open={cfOpen}
           onToggle={() => setCfOpen((o) => !o)}
-          title="Course Feedback"
+          title="Laerdal Course Feedback"
           icon={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
@@ -1300,12 +1308,12 @@ export function LearnerExperiencePanel({
           }
         >
           {/* Enable toggle */}
-          <DemoVideoPlaceholder label="See how Course Feedback works" />
+          <DemoVideoPlaceholder label="See how Laerdal Course Feedback works" />
           <div className={`pt-3${cfState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
             <LrToggle
               checked={cfState.enabled}
               onChange={(v) => setCf("enabled", v)}
-              label="Enable Course Feedback"
+              label="Enable Laerdal Course Feedback"
             />
           </div>
 
@@ -1508,7 +1516,7 @@ export function LearnerExperiencePanel({
 
       <div className="h-8" />
 
-      {!lnLoading && !lsLoading && hasChanges && (
+      {!lnLoading && !lsLoading && !cfLoading && hasChanges && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-3 rounded-xl bg-white border border-[var(--life-warning-100)] shadow-lg animate-fade-in-down">
           <span className="flex items-center gap-2 text-sm text-[#374151]">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-warning-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
