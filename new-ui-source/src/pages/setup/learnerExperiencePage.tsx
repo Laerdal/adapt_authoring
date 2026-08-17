@@ -5,7 +5,7 @@ import AssetPickerModal from "../../components/common/AssetPickerModal";
    LEARNER EXPERIENCE PANEL - Learning Resources accordion
    ------------------------------------------------------------- */
 
-type ResourceFormat = "document" | "media" | "link" | "custom";
+type ResourceFormat = "document" | "media" | "link" | "custom" | "custom1" | "custom2" | "custom3" | "custom4" | "custom5" | "custom6" | "custom7" | "custom8" | "custom9" | "custom10";
 
 interface LearningResource {
   id: string;
@@ -91,8 +91,25 @@ const RESOURCE_FORMAT_OPTIONS: { value: ResourceFormat; label: string }[] = [
   { value: "document", label: "Document" },
   { value: "media",    label: "Media" },
   { value: "link",     label: "Link" },
-  { value: "custom",   label: "Custom" },
+  { value: "custom1",   label: "Custom 1" },
+  { value: "custom2",   label: "Custom 2" },
+  { value: "custom3",   label: "Custom 3" },
+  { value: "custom4",   label: "Custom 4" },
+  { value: "custom5",   label: "Custom 5" },
+  { value: "custom6",   label: "Custom 6" },
+  { value: "custom7",   label: "Custom 7" },
+  { value: "custom8",   label: "Custom 8" },
+  { value: "custom9",   label: "Custom 9" },
+  { value: "custom10",  label: "Custom 10" },
 ];
+
+function getResourceFormatLabel(format: ResourceFormat): string {
+  if (format === "document") return "Document";
+  if (format === "media") return "Media";
+  if (format === "link") return "Link";
+  if (format === "custom") return "Custom";
+  return `Custom ${format.slice(6)}`;
+}
 
 function newResource(): LearningResource {
   return {
@@ -315,6 +332,16 @@ const FORMAT_STYLES: Record<ResourceFormat, { bg: string; color: string }> = {
   media:    { bg: "#ede9f6", color: "#7c5cbf" },
   link:     { bg: "#dbeeff", color: "#2d6fa8" },
   custom:   { bg: "#d1fae5", color: "#059669" },
+  custom1:  { bg: "#d1fae5", color: "#059669" },
+  custom2:  { bg: "#d1fae5", color: "#059669" },
+  custom3:  { bg: "#d1fae5", color: "#059669" },
+  custom4:  { bg: "#d1fae5", color: "#059669" },
+  custom5:  { bg: "#d1fae5", color: "#059669" },
+  custom6:  { bg: "#d1fae5", color: "#059669" },
+  custom7:  { bg: "#d1fae5", color: "#059669" },
+  custom8:  { bg: "#d1fae5", color: "#059669" },
+  custom9:  { bg: "#d1fae5", color: "#059669" },
+  custom10: { bg: "#d1fae5", color: "#059669" },
 };
 
 function ResourceFormatIcon({ format }: { format: ResourceFormat }) {
@@ -879,7 +906,7 @@ export function LearnerExperiencePanel() {
                       <ResourceFormatIcon format={r.format} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-[#111827] truncate">{r.title || <span className="text-[#9ca3af] font-normal">Untitled resource</span>}</p>
-                        <p className="text-xs text-[#6b7280] capitalize">{r.format}{r.displayOnEveryPage ? " · Every page" : ""}</p>
+                        <p className="text-xs text-[#6b7280]">{getResourceFormatLabel(r.format)}{r.displayOnEveryPage ? " · Every page" : ""}</p>
                       </div>
                       <button
                         type="button"
