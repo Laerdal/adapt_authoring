@@ -22,9 +22,69 @@ interface LearningResource {
 
 interface LearningResourcesState {
   enabled: boolean;
+  drawerOrder: number;
   sectionTitle: string;
   description: string;
+  displayTitle: string;
+  body: string;
+  instruction: string;
+  enableFilterButton: boolean;
+  filterButtons: LearningResourceFilterText;
+  ariaLabels: LearningResourceFilterText;
   resources: LearningResource[];
+}
+
+interface LearningResourceFilterText {
+  all: string;
+  document: string;
+  media: string;
+  link: string;
+  customType1: string;
+  customType2: string;
+  customType3: string;
+  customType4: string;
+  customType5: string;
+  customType6: string;
+  customType7: string;
+  customType8: string;
+  customType9: string;
+  customType10: string;
+}
+
+const LEARNING_RESOURCE_FILTER_FIELDS: { key: keyof LearningResourceFilterText; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "document", label: "Document" },
+  { key: "media", label: "Media" },
+  { key: "link", label: "Link" },
+  { key: "customType1", label: "Custom type 1" },
+  { key: "customType2", label: "Custom type 2" },
+  { key: "customType3", label: "Custom type 3" },
+  { key: "customType4", label: "Custom type 4" },
+  { key: "customType5", label: "Custom type 5" },
+  { key: "customType6", label: "Custom type 6" },
+  { key: "customType7", label: "Custom type 7" },
+  { key: "customType8", label: "Custom type 8" },
+  { key: "customType9", label: "Custom type 9" },
+  { key: "customType10", label: "Custom type 10" },
+];
+
+function newLearningResourceFilterText(): LearningResourceFilterText {
+  return {
+    all: "",
+    document: "",
+    media: "",
+    link: "",
+    customType1: "",
+    customType2: "",
+    customType3: "",
+    customType4: "",
+    customType5: "",
+    customType6: "",
+    customType7: "",
+    customType8: "",
+    customType9: "",
+    customType10: "",
+  };
 }
 
 const RESOURCE_FORMAT_OPTIONS: { value: ResourceFormat; label: string }[] = [
@@ -536,8 +596,15 @@ export function LearnerExperiencePanel() {
   /* -- Learning Resources state -- */
   const [lrState, setLrState] = useState<LearningResourcesState>({
     enabled: false,
+    drawerOrder: 0,
     sectionTitle: "",
     description: "",
+    displayTitle: "",
+    body: "",
+    instruction: "",
+    enableFilterButton: false,
+    filterButtons: newLearningResourceFilterText(),
+    ariaLabels: newLearningResourceFilterText(),
     resources: [],
   });
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -545,6 +612,14 @@ export function LearnerExperiencePanel() {
 
   const setLr = <K extends keyof LearningResourcesState>(k: K, v: LearningResourcesState[K]) =>
     setLrState((prev) => ({ ...prev, [k]: v }));
+
+  function setLrFilterButton<K extends keyof LearningResourceFilterText>(k: K, v: LearningResourceFilterText[K]) {
+    setLrState((prev) => ({ ...prev, filterButtons: { ...prev.filterButtons, [k]: v } }));
+  }
+
+  function setLrAriaLabel<K extends keyof LearningResourceFilterText>(k: K, v: LearningResourceFilterText[K]) {
+    setLrState((prev) => ({ ...prev, ariaLabels: { ...prev.ariaLabels, [k]: v } }));
+  }
 
   function handleAddResource(r: LearningResource) {
     setLrState((prev) => ({ ...prev, resources: [...prev.resources, r] }));
@@ -689,8 +764,19 @@ export function LearnerExperiencePanel() {
 
           {lrState.enabled && (
             <>
+              {/* Drawer order */}
+              <LrField label="Drawer order">
+                <input
+                  type="number"
+                  min={0}
+                  value={lrState.drawerOrder}
+                  onChange={(e) => setLr("drawerOrder", Number(e.target.value))}
+                  className={LR_INPUT}
+                />
+              </LrField>
+
               {/* Section Title */}
-              <LrField label="Section Title">
+              <LrField label="Title">
                 <input
                   type="text"
                   value={lrState.sectionTitle}
@@ -710,6 +796,80 @@ export function LearnerExperiencePanel() {
                   className={LR_TEXTAREA}
                 />
               </LrField>
+
+              <LrField label="Display Title">
+                <input
+                  type="text"
+                  value={lrState.displayTitle}
+                  onChange={(e) => setLr("displayTitle", e.target.value)}
+                  placeholder="e.g. Resources"
+                  className={LR_INPUT}
+                />
+              </LrField>
+
+              <LrField label="Body">
+                <input
+                  type="text"
+                  value={lrState.body}
+                  onChange={(e) => setLr("body", e.target.value)}
+                  placeholder="e.g. Explore additional learner resources"
+                  className={LR_INPUT}
+                />
+              </LrField>
+
+              <LrField label="Instruction">
+                <input
+                  type="text"
+                  value={lrState.instruction}
+                  onChange={(e) => setLr("instruction", e.target.value)}
+                  placeholder="e.g. Select a filter to narrow resources"
+                  className={LR_INPUT}
+                />
+              </LrField>
+
+              <LrToggle
+                checked={lrState.enableFilterButton}
+                onChange={(v) => setLr("enableFilterButton", v)}
+                label="Enable filter button"
+              />
+
+              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
+                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
+                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Filter Buttons</p>
+                </div>
+                <div className="px-4 py-4 space-y-3">
+                  {LEARNING_RESOURCE_FILTER_FIELDS.map(({ key, label }) => (
+                    <LrField key={key} label={label}>
+                      <input
+                        type="text"
+                        value={lrState.filterButtons[key]}
+                        onChange={(e) => setLrFilterButton(key, e.target.value)}
+                        placeholder={`e.g. ${label}`}
+                        className={LR_INPUT}
+                      />
+                    </LrField>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
+                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
+                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Aria Labels</p>
+                </div>
+                <div className="px-4 py-4 space-y-3">
+                  {LEARNING_RESOURCE_FILTER_FIELDS.map(({ key, label }) => (
+                    <LrField key={`aria-${key}`} label={key === "link" ? "Links" : label}>
+                      <input
+                        type="text"
+                        value={lrState.ariaLabels[key]}
+                        onChange={(e) => setLrAriaLabel(key, e.target.value)}
+                        placeholder={key === "link" ? "e.g. Links" : `e.g. ${label}`}
+                        className={LR_INPUT}
+                      />
+                    </LrField>
+                  ))}
+                </div>
+              </div>
 
               {/* Resources list */}
               {lrState.resources.length > 0 && (
