@@ -18,6 +18,7 @@ import { TechnicalSettingPage } from "./setup/technicalSettingPage";
 import { TrackingAnalyticsPage } from "./setup/trackingAnalyticsPage";
 import { UnsavedChangesModal } from "./setup/unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./setup/useUnsavedChangesNavigationGuard";
+import { CompletionProgressPage } from "./setup/completionProgressPage";
 
 const ICON_BASE = "/new/assets/icons";
 
@@ -104,6 +105,7 @@ const NAV_ITEMS = [
   {
     id: "completion",
     label: "Completion & Progress",
+    guarded: true,
     icon: (
       <SidebarMaskIcon file="completion-icon.svg" />
     ),
@@ -124,6 +126,7 @@ const NAV_ITEMS = [
   {
     id: "tracking",
     label: "Tracking & Analytics",
+    guarded: true,
     icon: (
       <SidebarMaskIcon file="tracking-icon.svg" />
     ),
@@ -4531,7 +4534,7 @@ function CourseCreationCenterContent() {
     if (activeNav === "navigation") return <NavigationPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "accessibility") return <AccessibilityPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "tracking") return <TrackingAnalyticsPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "completion") return <CompletionProgressPanel />;
+    if (activeNav === "completion") return <CompletionProgressPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "learner-experience") return <LearnerExperiencePanel />;
     if (activeNav === "technical-settings") return <TechnicalSettingPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "publish") return <PublishPanel />;
