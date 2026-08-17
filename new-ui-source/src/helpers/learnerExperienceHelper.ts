@@ -66,6 +66,13 @@ function num(v: unknown, fallback: number): number {
   return typeof v === "number" && Number.isFinite(v) ? v : fallback;
 }
 
+function normalizeIgnoredWords(value: string): string[] {
+  return value
+    .split(",")
+    .map((word) => word.trim())
+    .filter((word) => word.length > 0);
+}
+
 function normalizePluginName(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
@@ -124,11 +131,7 @@ export function defaultLearnerSearchSettings(): LearnerSearchSettings {
     previewCharacters: 30,
     minimumWordLength: 2,
     frequencyImportance: 5,
-    ignoredWords: [
-      "a", "an", "and", "are", "as", "at", "be", "by", "for",
-      "from", "has", "he", "in", "is", "it", "its", "of", "on",
-      "that", "the", "to", "was", "were", "will", "wish",
-    ],
+    ignoredWords: [],
     matchOn: {
       contentWordBeginsPhraseWord: false,
       contentWordContainsPhraseWord: false,
@@ -235,8 +238,10 @@ export async function getLearnerSearchSettings(courseId: string): Promise<Learne
   const matchOn = obj(search._matchOn);
   const defaults = defaultLearnerSearchSettings();
   const ignoreWords = Array.isArray(search._ignoreWords)
-    ? search._ignoreWords.filter((value): value is string => typeof value === "string" && value.length > 0)
-    : defaults.ignoredWords;
+    ? search._ignoreWords.filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    : typeof search._ignoreWords === "string"
+      ? normalizeIgnoredWords(search._ignoreWords)
+      : defaults.ignoredWords;
 
   return {
     ...defaults,
@@ -303,7 +308,7 @@ export async function saveLearnerSearchSettings(courseId: string, settings: Lear
     _previewCharacters: settings.previewCharacters,
     _minimumWordLength: settings.minimumWordLength,
     _frequencyImportance: settings.frequencyImportance,
-    _ignoreWords: settings.ignoredWords,
+    _ignoreWords: settings.ignoredWords.join(","),
     _matchOn: {
       _contentWordBeginsPhraseWord: settings.matchOn.contentWordBeginsPhraseWord,
       _contentWordContainsPhraseWord: settings.matchOn.contentWordContainsPhraseWord,
