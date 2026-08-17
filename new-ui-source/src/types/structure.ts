@@ -25,6 +25,7 @@ export interface SComponent {
   subtitle?: string;
   description?: string;
   instruction?: string;
+  themeSettings?: Record<string, unknown>;
   properties?: Record<string, unknown>;
   url?: string;
 }
@@ -34,6 +35,7 @@ export interface SContentGroup {
   title: string;
   description?: string;
   instruction?: string;
+  themeSettings?: Record<string, unknown>;
   components: SComponent[];
 }
 
@@ -42,6 +44,7 @@ export interface SSection {
   title: string;
   description?: string;
   instruction?: string;
+  themeSettings?: Record<string, unknown>;
   contentGroups: SContentGroup[];
 }
 
@@ -63,6 +66,8 @@ export interface STopic {
   lockType?: string;
   lockedBy?: string[];
   classes?: string;
+  htmlClasses?: string;
+  requireCompletionOf?: string;
   isOptional?: boolean;
   isAvailable?: boolean;
   isHidden?: boolean;
@@ -73,7 +78,6 @@ export interface STopic {
     _percentInviewVertical?: number;
   };
   ariaLevel?: string;
-  ariaLabel?: string;
   extensions?: Record<string, unknown>;
   themeSettings?: Record<string, unknown>;
   menuSettings?: Record<string, unknown>;

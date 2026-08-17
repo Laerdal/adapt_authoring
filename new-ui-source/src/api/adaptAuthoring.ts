@@ -1239,13 +1239,16 @@ interface EngineContentNode {
   _lockType?: string;
   _lockedBy?: string[];
   _classes?: string;
+  _htmlClasses?: string;
+  requirecompletionof?: string | number;
+  requireCompletionOf?: string | number;
+  _requireCompletionOf?: string | number;
   _isOptional?: boolean;
   _isAvailable?: boolean;
   _isHidden?: boolean;
   _isVisible?: boolean;
   _onScreen?: Record<string, unknown>;
   _ariaLevel?: string;
-  _ariaLabel?: string;
   _extensions?: Record<string, unknown>;
   themeSettings?: Record<string, unknown>;
   menuSettings?: Record<string, unknown>;
@@ -1289,7 +1292,36 @@ export async function getCourseStructure(
   ]);
 
   const label = (n: EngineContentNode): string =>
-    n.displayTitle || n.title || "Untitled";
+    n.title || n.displayTitle || "Untitled";
+  const scalarString = (value: unknown): string => {
+    if (typeof value === "string") return value;
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+    return "";
+  };
+  const scalarNumber = (value: unknown, fallback: number): number => {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string") {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return fallback;
+  };
+  const objectValue = (value: unknown): Record<string, unknown> => {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+    if (typeof value === "string") {
+      try {
+        const parsed = JSON.parse(value);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          return parsed as Record<string, unknown>;
+        }
+      } catch {
+        // Return an empty object when string values are not valid JSON.
+      }
+    }
+    return {};
+  };
   const childrenOf = (rows: EngineContentNode[], parentId: string) =>
     rows.filter((r) => r._parentId === parentId).sort(bySortOrder);
 
@@ -1301,12 +1333,8 @@ export async function getCourseStructure(
     pages.filter((p) => p._parentId === parentId).sort(bySortOrder);
 
   const buildTopic = (page: EngineContentNode): STopic => {
-    const pageGraphic = page._graphic && typeof page._graphic === "object"
-      ? (page._graphic as Record<string, unknown>)
-      : null;
-    const onScreen = page._onScreen && typeof page._onScreen === "object"
-      ? (page._onScreen as Record<string, unknown>)
-      : {};
+    const pageGraphic = objectValue(page._graphic);
+    const onScreen = objectValue(page._onScreen);
 
     return {
       id: page._id,
@@ -1328,68 +1356,62 @@ export async function getCourseStructure(
         ? page._lockedBy.filter((item): item is string => typeof item === "string")
         : [],
       classes: page._classes || "",
+      htmlClasses: scalarString(page._htmlClasses),
+      requireCompletionOf: scalarString(
+        page.requirecompletionof ?? page.requireCompletionOf ?? page._requireCompletionOf ?? "-1"
+      ),
       isOptional: !!page._isOptional,
       isAvailable: page._isAvailable !== false,
       isHidden: !!page._isHidden,
       isVisible: page._isVisible !== false,
       onScreen: {
         _isEnabled: !!onScreen._isEnabled,
-        _classes: typeof onScreen._classes === "string" ? onScreen._classes : "",
-        _percentInviewVertical:
-          typeof onScreen._percentInviewVertical === "number"
-            ? onScreen._percentInviewVertical
-            : 50,
+        _classes: scalarString(onScreen._classes),
+        _percentInviewVertical: scalarNumber(onScreen._percentInviewVertical, 50),
       },
-      ariaLevel: page._ariaLevel || "",
-      ariaLabel: page._ariaLabel || "",
-      extensions:
-        page._extensions && typeof page._extensions === "object"
-          ? page._extensions
-          : {},
-      themeSettings:
-        page.themeSettings && typeof page.themeSettings === "object"
-          ? page.themeSettings
-          : {},
-      menuSettings:
-        page.menuSettings && typeof page.menuSettings === "object"
-          ? page.menuSettings
-          : {},
+      ariaLevel: scalarString(page._ariaLevel),
+      extensions: objectValue(page._extensions),
+      themeSettings: objectValue(page.themeSettings),
+      menuSettings: objectValue(page.menuSettings),
       sections: childrenOf(articles, page._id).map(
         (article): SSection => ({
           id: article._id,
           title: label(article),
           description: article.body || article.description || "",
           instruction: article.instruction || "",
+          themeSettings: objectValue(article.themeSettings),
           contentGroups: childrenOf(blocks, article._id).map(
             (block): SContentGroup => ({
               id: block._id,
               title: label(block),
               description: block.body || block.description || "",
               instruction: block.instruction || "",
+              themeSettings: objectValue(block.themeSettings),
               components: childrenOf(components, block._id).map(
-                (comp): SComponent => ({
-                  id: comp._id,
-                  title: label(comp),
-                  componentKey: comp._component || "",
-                  layout: comp._layout === "left" || comp._layout === "right" || comp._layout === "full"
-                    ? comp._layout
-                    : undefined,
-                  subtitle:
-                    typeof comp.properties?.subtitle === "string"
-                      ? (comp.properties.subtitle as string)
-                      : "",
-                  description: comp.body || comp.description || "",
-                  instruction:
-                    comp.instruction ||
-                    (typeof comp.properties?.instruction === "string"
-                      ? (comp.properties.instruction as string)
-                      : ""),
-                  properties:
-                    comp.properties && typeof comp.properties === "object"
-                      ? comp.properties
-                      : {},
-                  url: comp.url || "",
-                })
+                (comp): SComponent => {
+                  const componentProperties = objectValue(comp.properties);
+                  return {
+                    id: comp._id,
+                    title: label(comp),
+                    componentKey: comp._component || "",
+                    layout: comp._layout === "left" || comp._layout === "right" || comp._layout === "full"
+                      ? comp._layout
+                      : undefined,
+                    themeSettings: objectValue(comp.themeSettings),
+                    subtitle:
+                      typeof componentProperties.subtitle === "string"
+                        ? (componentProperties.subtitle as string)
+                        : "",
+                    description: comp.body || comp.description || "",
+                    instruction:
+                      comp.instruction ||
+                      (typeof componentProperties.instruction === "string"
+                        ? (componentProperties.instruction as string)
+                        : ""),
+                    properties: componentProperties,
+                    url: comp.url || "",
+                  };
+                }
               ),
             })
           ),
@@ -1621,6 +1643,35 @@ export function createTopic(
     _type: "page",
     title,
     displayTitle: title,
+    subtitle: "",
+    _subtitle: "",
+    body: "",
+    description: "",
+    instruction: "",
+    linkText: "",
+    duration: "",
+    _lockType: "",
+    _lockedBy: [],
+    _classes: "",
+    _htmlClasses: "",
+    requirecompletionof: "-1",
+    _isOptional: false,
+    _isAvailable: true,
+    _isHidden: false,
+    _isVisible: true,
+    _onScreen: {
+      _isEnabled: false,
+      _classes: "",
+      _percentInviewVertical: 50,
+    },
+    _ariaLevel: "",
+    _extensions: {},
+    _graphic: {
+      src: "",
+      alt: "",
+    },
+    themeSettings: {},
+    menuSettings: {},
     _sortOrder: sortOrder,
   });
 }
@@ -1636,6 +1687,9 @@ export function createArticle(
     _parentId: parentId,
     title,
     displayTitle: title,
+    body: "",
+    description: "",
+    instruction: "",
     _sortOrder: sortOrder,
   });
 }
@@ -1651,6 +1705,9 @@ export function createBlock(
     _parentId: parentId,
     title,
     displayTitle: title,
+    body: "",
+    description: "",
+    instruction: "",
     _sortOrder: sortOrder,
   });
 }
@@ -1670,6 +1727,24 @@ export async function createComponent(
   const schemaDefaults = buildSchemaDefaults(
     schemaSource as Record<string, unknown>
   );
+  const defaultProperties =
+    schemaDefaults.properties &&
+    typeof schemaDefaults.properties === "object" &&
+    !Array.isArray(schemaDefaults.properties)
+      ? (schemaDefaults.properties as Record<string, unknown>)
+      : {};
+
+  const mergedProperties: Record<string, unknown> = {
+    ...defaultProperties,
+  };
+
+  if (!Object.prototype.hasOwnProperty.call(mergedProperties, "subtitle")) {
+    mergedProperties.subtitle = "";
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(mergedProperties, "instruction")) {
+    mergedProperties.instruction = "";
+  }
 
   const body: Record<string, unknown> = {
     ...schemaDefaults,
@@ -1682,6 +1757,7 @@ export async function createComponent(
     _layout: layout,
     title: componentType.displayName,
     displayTitle: componentType.displayName,
+    properties: mergedProperties,
     _sortOrder: sortOrder,
   };
   // Only send version when known; otherwise let the server's default apply.
