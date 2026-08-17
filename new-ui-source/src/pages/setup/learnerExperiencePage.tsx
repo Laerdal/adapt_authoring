@@ -2,9 +2,13 @@ import React, { useEffect, useState } from "react";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
 import {
   defaultLearnerNotesSettings,
+  defaultLearnerSearchSettings,
   getLearnerNotesSettings,
+  getLearnerSearchSettings,
   saveLearnerNotesSettings,
   type LearnerNotesSettings,
+  saveLearnerSearchSettings,
+  type LearnerSearchSettings,
 } from "../../helpers/learnerExperienceHelper";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
@@ -422,27 +426,7 @@ interface AiTutorState {
 type LearnerNotesState = LearnerNotesSettings;
 
 /* -- Learner Search types -- */
-interface LearnerSearchState {
-  enabled: boolean;
-  title: string;
-  placeholder: string;
-  searchBoxPlaceholder: string;
-  noResultsMessage: string;
-  processingResultsMessage: string;
-  showFoundWords: boolean;
-  showHighlights: boolean;
-  previewWords: number;
-  previewCharacters: number;
-  minimumWordLength: number;
-  frequencyImportance: number;
-  ignoredWords: string[];
-  matchOn: {
-    contentWordBeginsPhraseWord: boolean;
-    contentWordContainsPhraseWord: boolean;
-    contentWordEqualsPhraseWord: boolean;
-    phraseWordBeginsContentWord: boolean;
-  };
-}
+type LearnerSearchState = LearnerSearchSettings;
 
 /* shared multi-select checkbox list */
 function LrCheckList<T extends string>({
@@ -663,11 +647,21 @@ export function LearnerExperiencePanel({
   const [lnState, setLnState] = useState<LearnerNotesState>(defaultLearnerNotesSettings());
   const [savedLnState, setSavedLnState] = useState<LearnerNotesState>(defaultLearnerNotesSettings());
   const [lnLoading, setLnLoading] = useState(false);
+  const [lsLoading, setLsLoading] = useState(false);
   const [lnSaving, setLnSaving] = useState(false);
   const [lnToast, setLnToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [lsOpen, setLsOpen] = useState(false);
+  const [lsState, setLsState] = useState<LearnerSearchState>(defaultLearnerSearchSettings());
+  const [savedLsState, setSavedLsState] = useState<LearnerSearchState>(defaultLearnerSearchSettings());
 
   const setLn = <K extends keyof LearnerNotesState>(k: K, v: LearnerNotesState[K]) =>
     setLnState((prev) => ({ ...prev, [k]: v }));
+  const setLs = <K extends keyof LearnerSearchState>(k: K, v: LearnerSearchState[K]) =>
+    setLsState((prev) => ({ ...prev, [k]: v }));
+
+  function setMatchOn(key: keyof LearnerSearchState["matchOn"], value: boolean) {
+    setLsState((prev) => ({ ...prev, matchOn: { ...prev.matchOn, [key]: value } }));
+  }
 
   useEffect(() => {
     if (!courseId) {
@@ -701,16 +695,49 @@ export function LearnerExperiencePanel({
   }, [courseId]);
 
   useEffect(() => {
+    if (!courseId) {
+      const defaults = defaultLearnerSearchSettings();
+      setLsState(defaults);
+      setSavedLsState(defaults);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setLsLoading(true);
+      try {
+        const loaded = await getLearnerSearchSettings(courseId);
+        if (cancelled) return;
+        setLsState(loaded);
+        setSavedLsState(loaded);
+      } catch {
+        if (cancelled) return;
+        const defaults = defaultLearnerSearchSettings();
+        setLsState(defaults);
+        setSavedLsState(defaults);
+      } finally {
+        if (!cancelled) setLsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
+
+  useEffect(() => {
     if (!lnToast) return;
     const t = setTimeout(() => setLnToast(null), 3500);
     return () => clearTimeout(t);
   }, [lnToast]);
 
   const lnDirty = JSON.stringify(lnState) !== JSON.stringify(savedLnState);
+  const lsDirty = JSON.stringify(lsState) !== JSON.stringify(savedLsState);
+  const hasChanges = lnDirty || lsDirty;
 
   const { showConfirmModal, consumePendingNavigation, clearPendingNavigation } =
     useUnsavedChangesNavigationGuard({
-      hasChanges: lnDirty,
+      hasChanges,
       pendingNavigation,
       onPendingNavigationHandled,
       onNavigate: onNavigationRequest,
@@ -718,6 +745,7 @@ export function LearnerExperiencePanel({
 
   function handleLnCancel() {
     setLnState(savedLnState);
+    setLsState(savedLsState);
   }
 
   async function handleLnSave() {
@@ -726,10 +754,12 @@ export function LearnerExperiencePanel({
     setLnToast(null);
     try {
       await saveLearnerNotesSettings(courseId, lnState as LearnerNotesSettings);
+      await saveLearnerSearchSettings(courseId, lsState);
       setSavedLnState(lnState);
-      setLnToast({ type: "success", message: "Learner Notes saved successfully" });
+      setSavedLsState(lsState);
+      setLnToast({ type: "success", message: "Changes saved successfully" });
     } catch {
-      setLnToast({ type: "error", message: "Couldn't save Learner Notes. Please try again." });
+      setLnToast({ type: "error", message: "Couldn't save. Please try again." });
     } finally {
       setLnSaving(false);
     }
@@ -741,12 +771,14 @@ export function LearnerExperiencePanel({
     setLnToast(null);
     try {
       await saveLearnerNotesSettings(courseId, lnState);
+      await saveLearnerSearchSettings(courseId, lsState);
       setSavedLnState(lnState);
+      setSavedLsState(lsState);
       const navTarget = consumePendingNavigation();
-      setLnToast({ type: "success", message: "Learner Notes saved successfully" });
+      setLnToast({ type: "success", message: "Changes saved successfully" });
       if (navTarget) onNavigationRequest?.(navTarget);
     } catch {
-      setLnToast({ type: "error", message: "Couldn't save Learner Notes. Please try again." });
+      setLnToast({ type: "error", message: "Couldn't save. Please try again." });
     } finally {
       setLnSaving(false);
     }
@@ -754,39 +786,9 @@ export function LearnerExperiencePanel({
 
   function handleConfirmDiscard() {
     setLnState(savedLnState);
+    setLsState(savedLsState);
     const navTarget = consumePendingNavigation();
     if (navTarget) onNavigationRequest?.(navTarget);
-  }
-
-  /* -- Learner Search state -- */
-  const [lsOpen, setLsOpen] = useState(false);
-  const [lsState, setLsState] = useState<LearnerSearchState>({
-    enabled: false,
-    title: "",
-    placeholder: "",
-    searchBoxPlaceholder: "",
-    noResultsMessage: "",
-    processingResultsMessage: "",
-    showFoundWords: true,
-    showHighlights: true,
-    previewWords: 15,
-    previewCharacters: 30,
-    minimumWordLength: 2,
-    frequencyImportance: 5,
-    ignoredWords: [],
-    matchOn: {
-      contentWordBeginsPhraseWord: false,
-      contentWordContainsPhraseWord: false,
-      contentWordEqualsPhraseWord: true,
-      phraseWordBeginsContentWord: true,
-    },
-  });
-
-  const setLs = <K extends keyof LearnerSearchState>(k: K, v: LearnerSearchState[K]) =>
-    setLsState((prev) => ({ ...prev, [k]: v }));
-
-  function setMatchOn(key: keyof LearnerSearchState["matchOn"], value: boolean) {
-    setLsState((prev) => ({ ...prev, matchOn: { ...prev.matchOn, [key]: value } }));
   }
 
   /* -- Ask AI Tutor state -- */
@@ -1103,6 +1105,11 @@ export function LearnerExperiencePanel({
           }
         >
           <DemoVideoPlaceholder label="See how Learner Search works" />
+          {lsLoading && (
+            <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-sm text-[#6b7280]">
+              Loading Learner Search settings...
+            </div>
+          )}
           <div className={`pt-3${lsState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
             <LrToggle checked={lsState.enabled} onChange={(v) => setLs("enabled", v)} label="Enable Search" />
           </div>
@@ -1501,7 +1508,7 @@ export function LearnerExperiencePanel({
 
       <div className="h-8" />
 
-      {!lnLoading && lnDirty && (
+      {!lnLoading && !lsLoading && hasChanges && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-3 rounded-xl bg-white border border-[var(--life-warning-100)] shadow-lg animate-fade-in-down">
           <span className="flex items-center gap-2 text-sm text-[#374151]">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-warning-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
