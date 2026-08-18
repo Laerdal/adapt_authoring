@@ -189,10 +189,15 @@ server.get('/studio', (req, res, next) => {
  *   shell cached for fingerprint → restore by file copy (no grunt)
  *   otherwise                    → build once via the shared compiler, cache it
  *
- * Must be registered before the greedy '/studio/:tenant/:course/*' route so
- * '/studio/ensure/...' matches here first. Returns { built, cached, fingerprint }.
+ * Registered before the greedy '/studio/:tenant/:course/*' route. Returns
+ * { built, cached, fingerprint }.
+ *
+ * POST (not GET): this endpoint has side effects — a cache MISS triggers a grunt
+ * shell build (plugin.publish with force). POST prevents accidental triggering by
+ * prefetchers/crawlers and matches the verb used for other mutating/expensive
+ * operations. Auth is unchanged (session + per-course permission gate below).
  * ------------------------------------------------------------------ */
-server.get('/studio/ensure/:tenant/:course', (req, res, next) => {
+server.post('/studio/ensure/:tenant/:course', (req, res, next) => {
   const tenantId = req.params.tenant;
   const courseId = req.params.course;
   const user = usermanager.getCurrentUser();
@@ -327,7 +332,14 @@ server.get('/studio/:tenant/:course/*', (req, res, next) => {
         logger.log('warn', `Studio: no build shell for course '${courseId}'. Preview the course once to generate it.`);
         return res.status(404).send(renderNoShell(tenantId, courseId));
       }
-      const injected = html.replace('</body>', STUDIO_BRIDGE + '\n</body>');
+      // The embedded page editor drives the iframe via direct same-origin DOM, so it
+      // neither needs nor wants the postMessage bridge (its click/hover outlines would
+      // double up with the editor's own selection visuals). Skip injection when the
+      // caller marks itself embedded; the standalone Studio app omits the flag and
+      // still receives the bridge.
+      const injected = req.query.embedded
+        ? html
+        : html.replace('</body>', STUDIO_BRIDGE + '\n</body>');
       res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.type('html').send(injected);
     });
