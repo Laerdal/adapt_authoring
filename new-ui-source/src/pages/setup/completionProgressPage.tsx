@@ -786,7 +786,7 @@ function ProgressIndicatorsContent({
                 value={cfg.progressType}
                 onChange={(v) => set("progressType", v)}
                 options={[
-                  { value: "pages",     label: "Pages" },
+                  { value: "pages",     label: "Topics" },
                   { value: "questions", label: "Questions" },
                 ]}
               />
