@@ -34,8 +34,36 @@ module.exports = {
       await ensureCollection(name);
     }
 
-    // storyboards — looked up by course; filtered by status.
-    await db.collection('storyboards').createIndex({ _courseId: 1 }, { name: 'storyboard_courseId' });
+    // storyboards — exactly ONE document per course (getStoryboardByCourse
+    // relies on this), so the course index is UNIQUE. Clean up any pre-existing
+    // duplicates first (keep the most recently updated) so the unique index can
+    // build, and drop a prior non-unique index of the same name if present.
+    const dupeGroups = await db
+      .collection('storyboards')
+      .aggregate([
+        { $group: { _id: '$_courseId', ids: { $push: '$_id' }, count: { $sum: 1 } } },
+        { $match: { count: { $gt: 1 } } },
+      ])
+      .toArray();
+    for (const g of dupeGroups) {
+      const docs = await db
+        .collection('storyboards')
+        .find({ _courseId: g._id })
+        .sort({ updatedAt: -1, version: -1, _id: -1 })
+        .toArray();
+      const remove = docs.slice(1).map((d) => d._id); // keep docs[0] (newest)
+      if (remove.length) {
+        await db.collection('storyboards').deleteMany({ _id: { $in: remove } });
+        console.log(`• removed ${remove.length} duplicate storyboard(s) for course ${g._id}`);
+      }
+    }
+    await db
+      .collection('storyboards')
+      .dropIndex('storyboard_courseId')
+      .catch(() => {}); // no-op if it doesn't exist yet
+    await db
+      .collection('storyboards')
+      .createIndex({ _courseId: 1 }, { name: 'storyboard_courseId', unique: true });
     await db.collection('storyboards').createIndex({ status: 1 }, { name: 'storyboard_status' });
 
     // storyboardcomments — listed per storyboard; filtered by resolved; threaded.

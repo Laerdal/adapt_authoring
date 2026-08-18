@@ -24,12 +24,13 @@ function update(type, search, delta) {
   });
 }
 
-// force=true skips the (course) permission pre-check; access is already gated
-// by the route's own auth. The dispatch layer forwards (search, force, cb) to
-// the plugin's destroy(search, force, next).
+// force=false so the content plugin's hasPermission gates the delete (see
+// ContentPlugin.destroy in lib/contentmanager.js). We do NOT hard-bypass
+// permissions here — the storyboard plugins currently allow the action, and
+// when real ownership/course-scoped checks land they'll be enforced.
 function destroy(type, search) {
   return new Promise((resolve, reject) => {
-    app.contentmanager.destroy(type, search, true, (err) => (err ? reject(err) : resolve()));
+    app.contentmanager.destroy(type, search, false, (err) => (err ? reject(err) : resolve()));
   });
 }
 
