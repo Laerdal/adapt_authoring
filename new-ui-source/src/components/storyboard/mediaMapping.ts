@@ -75,10 +75,54 @@ export function detectMediaType(link?: string): string {
   return "";
 }
 
+// A YouTube/Vimeo watch/link URL → an embeddable iframe URL (a <video> tag
+// cannot play watch-page URLs). Returns null for direct file URLs. Mirrors the
+// Lovable VideoPlayer behaviour.
+export function toEmbedUrl(raw?: string): string | null {
+  const url = (raw || "").trim();
+  if (!url) return null;
+  const yt = url.match(
+    /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([\w-]{6,})/i
+  );
+  if (yt) return `https://www.youtube.com/embed/${yt[1]}`;
+  const vm = url.match(/vimeo\.com\/(?:video\/)?(\d+)/i);
+  if (vm) return `https://player.vimeo.com/video/${vm[1]}`;
+  return null;
+}
+
+// ── properties nesting ───────────────────────────────────────────────────────
+// Plugin-specific component attributes (`_graphic`, `_media`, `_items`,
+// `_feedback`, …) are NOT top-level fields on an Adapt authoring `component`
+// document — they live under a single `properties` object (see
+// plugins/content/component/model.schema). Writing them at the top level makes
+// the content model silently drop them. This helper merges a raw field patch
+// (e.g. `{_graphic: {...}}`) into `target.properties`, preserving any fields
+// already staged there (so title/_layout stay top-level and multiple plugin
+// fields accumulate under properties).
+export function mergeProperties(target: Record<string, unknown>, fields: Record<string, unknown>): void {
+  if (!fields || !Object.keys(fields).length) return;
+  const existing = (target.properties as Record<string, unknown> | undefined) || {};
+  target.properties = { ...existing, ...fields };
+}
+
 // ── Card data → Adapt component fields ───────────────────────────────────────
 
-// Image card → `_graphic` patch. Adapt's graphic component holds a single image
-// in `large` (desktop) + `small` (mobile); we set both to the same source.
+// The Laerdal Media Component (`laerdal-media`) backs BOTH image and video/audio
+// (spec: no generic components). Its `_media` object is the single asset store.
+export const LAERDAL_MEDIA_COMPONENT = "laerdal-media";
+
+function emptyMediaObject(): Record<string, unknown> {
+  return { mp4: "", ogv: "", webm: "", mp3: "", source: "", type: "", poster: "" };
+}
+
+// Image card → `laerdal-media` `_media` patch: the image is the poster (the only
+// image asset field on the media component).
+export function buildImageAsMedia(image?: ImageData): { _media: Record<string, unknown>; title?: string } {
+  const link = image?.link || "";
+  return { _media: { ...emptyMediaObject(), poster: link } };
+}
+
+// Image card → `_graphic` patch (legacy adapt-contrib-graphic fallback).
 export function buildGraphicField(image?: ImageData): { _graphic: Record<string, unknown> } {
   const link = image?.link || "";
   return { _graphic: { large: link, small: link, alt: image?.alt || "" } };
@@ -135,6 +179,29 @@ export function imageFromGraphic(graphic: GraphicShape | undefined, idByFilename
     link,
     url: resolveAssetUrl(link, idByFilename),
     alt: (graphic && graphic.alt) || "",
+    external: !!link && !isCourseAssetLink(link),
+  };
+}
+
+// A laerdal-media component with only a poster (no video/audio/source) is an
+// image; anything with a playable source is video/audio.
+export function classifyLaerdalMedia(media: MediaShape | undefined): "image" | "video" | "audio" {
+  const m = media || {};
+  const hasVideo = !!(m.mp4 || m.webm || m.ogv);
+  const hasAudio = !!m.mp3;
+  const hasSource = !!m.source;
+  if (!hasVideo && !hasAudio && !hasSource && m.poster) return "image";
+  if (hasAudio && !hasVideo && !hasSource) return "audio";
+  return "video";
+}
+
+// laerdal-media poster → image card data.
+export function imageFromMediaPoster(media: MediaShape | undefined, idByFilename: Record<string, string>): ImageData {
+  const link = (media && media.poster) || "";
+  return {
+    link,
+    url: resolveAssetUrl(link, idByFilename),
+    alt: "",
     external: !!link && !isCourseAssetLink(link),
   };
 }

@@ -150,8 +150,8 @@ export default function ReviewCenter({
   };
 
   return (
-    <aside className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b px-4 py-2.5">
+    <aside className="flex h-full flex-col bg-muted/20">
+      <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-2.5 backdrop-blur">
         <h2 className="text-sm font-semibold text-foreground">Review Center</h2>
         {onCollapse && (
           <button

@@ -10,6 +10,10 @@ import { apiClient } from "./client";
 
 export type StoryboardAiAction = "improve" | "rewrite" | "summarize" | "suggest";
 
+// Samaritan Assistance actions (parity with the legacy CKEditor tool). `custom`
+// carries a free-text instruction. All share the same server proxy.
+export type SamaritanAction = "improve" | "shorten" | "lengthen" | "spelling" | "custom";
+
 // Run an AI action on a piece of text via the server proxy. Returns the result.
 export async function storyboardAi(
   action: StoryboardAiAction,
@@ -17,6 +21,24 @@ export async function storyboardAi(
   context?: string
 ): Promise<string> {
   const res = await apiClient.post<{ text: string }>("/api/storyboard/ai", { action, text, context });
+  return res.text ?? "";
+}
+
+// Samaritan Assistance call: a fixed action (improve/shorten/lengthen/spelling)
+// or a free-text `custom` instruction. `text` is the content to operate on (may
+// be empty for generate-from-scratch). `context` is the course title. Keys stay
+// server-side — same /api/storyboard/ai proxy.
+export async function samaritanAssist(
+  action: SamaritanAction,
+  text: string,
+  opts?: { instruction?: string; context?: string }
+): Promise<string> {
+  const res = await apiClient.post<{ text: string }>("/api/storyboard/ai", {
+    action,
+    text,
+    instruction: opts?.instruction,
+    context: opts?.context,
+  });
   return res.text ?? "";
 }
 

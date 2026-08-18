@@ -6,13 +6,21 @@
 import { apiClient } from "./client";
 import {
   buildGraphicField,
+  buildImageAsMedia,
   buildMediaField,
+  classifyLaerdalMedia,
   filenameFromLink,
   imageFromGraphic,
+  imageFromMediaPoster,
+  LAERDAL_MEDIA_COMPONENT,
   mediaFromComponent,
+  mergeProperties,
+  resolveAssetUrl,
   type ImageData,
   type MediaData,
 } from "@/components/storyboard/mediaMapping";
+import { reverseKind, isAssessmentComponentKind } from "./componentMapping";
+import { parseAssessmentData, type AssessmentKind } from "@/types/storyboard";
 export {
   TRACKING_ANALYTICS_EXTENSION_NAME_BY_KEY,
   defaultTrackingAnalyticsSettings,
@@ -1300,6 +1308,7 @@ interface EngineContentNode {
   body?: string;
   _graphic?: Record<string, unknown>;
   _media?: Record<string, unknown>;
+  properties?: Record<string, unknown>;
 }
 
 // A component type installed on the instance (GET /api/componenttype).
@@ -1466,6 +1475,10 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
   ]);
 
   const label = (n: EngineContentNode) => n.displayTitle || n.title || "Untitled";
+  // Plugin fields live under `properties`; fall back to the top level for any
+  // legacy data written before that was fixed.
+  const propOf = (n: EngineContentNode, key: "_graphic" | "_media") =>
+    ((n.properties as Record<string, unknown> | undefined)?.[key] ?? n[key]) as Record<string, unknown> | undefined;
   const childrenOf = (rows: EngineContentNode[], parentId: string) =>
     rows.filter((r) => r._parentId === parentId).sort(bySortOrder);
   const pages = contentObjects.filter((c) => c._type === "page");
@@ -1476,36 +1489,106 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
   // Graphic/media components project as rich sbComponent cards (so the chosen
   // asset renders + round-trips); every other component stays as an H4 heading
   // + body paragraph (keeps the text write-back contract intact).
-  const emitComponent = (comp: EngineContentNode) => {
-    const kindOf = comp._component;
-    if (kindOf === "graphic") {
-      const image = imageFromGraphic(comp._graphic, assetIdMap);
+  const emitMediaCard = (comp: EngineContentNode, mediaKind: "image" | "video" | "audio") => {
+    if (mediaKind === "image") {
+      const image = imageFromMediaPoster(propOf(comp, "_media"), assetIdMap);
       out.push({
         id: comp._id,
         type: "sbComponent",
         props: {
           kind: "image",
           title: label(comp),
-          adaptComponent: "graphic",
+          adaptComponent: LAERDAL_MEDIA_COMPONENT,
           data: JSON.stringify({ showTitle: true, description: "", instruction: "", image }),
         },
       });
       return;
     }
+    const { data } = mediaFromComponent(propOf(comp, "_media"), assetIdMap);
+    out.push({
+      id: comp._id,
+      type: "sbComponent",
+      props: {
+        kind: mediaKind,
+        title: label(comp),
+        adaptComponent: LAERDAL_MEDIA_COMPONENT,
+        data: JSON.stringify({ showTitle: true, description: "", instruction: "", media: data }),
+      },
+    });
+  };
+
+  const emitCard = (comp: EngineContentNode, kind: string, data: Record<string, unknown>) => {
+    out.push({
+      id: comp._id,
+      type: "sbComponent",
+      props: { kind, title: label(comp), adaptComponent: comp._component || kind, data: JSON.stringify(data) },
+    });
+  };
+
+  const emitComponent = (comp: EngineContentNode) => {
+    const kindOf = comp._component;
+    const props = (comp.properties as Record<string, unknown>) || {};
+    const sbKind = reverseKind(kindOf);
+
+    // Media (laerdal-media / contrib media) → image/video/audio, classified by
+    // which `_media` fields are set.
+    if (kindOf === LAERDAL_MEDIA_COMPONENT) {
+      emitMediaCard(comp, classifyLaerdalMedia(propOf(comp, "_media")));
+      return;
+    }
     if (kindOf === "media") {
-      const { kind, data } = mediaFromComponent(comp._media, assetIdMap);
-      out.push({
-        id: comp._id,
-        type: "sbComponent",
-        props: {
-          kind,
-          title: label(comp),
-          adaptComponent: "media",
-          data: JSON.stringify({ showTitle: true, description: "", instruction: "", media: data }),
-        },
+      const { kind } = mediaFromComponent(propOf(comp, "_media"), assetIdMap);
+      emitMediaCard(comp, kind);
+      return;
+    }
+    // Graphic → Image card.
+    if (kindOf === "graphic") {
+      const image = imageFromGraphic(propOf(comp, "_graphic"), assetIdMap);
+      emitCard(comp, "image", { showTitle: true, description: "", instruction: "", image });
+      return;
+    }
+    // Accordion / Narrative → Grouped Content card. Items round-trip via
+    // `_items[].{title, body, _graphic.src}` (accept legacy `.small`).
+    if (sbKind === "groupedContent") {
+      const rawItems = Array.isArray(props._items) ? (props._items as Array<Record<string, unknown>>) : [];
+      const items = rawItems.map((it) => {
+        const g = (it._graphic as { src?: string; small?: string } | undefined) || {};
+        const link = g.src || g.small || "";
+        return {
+          title: String(it.title || ""),
+          body: stripHtml(String(it.body || "")),
+          image: link, // persisted link (course/assets/<file> or external URL)
+          imageUrl: resolveAssetUrl(link, assetIdMap), // servable preview
+        };
+      });
+      emitCard(comp, "groupedContent", {
+        showTitle: true,
+        description: stripHtml(comp.body || ""),
+        instruction: comp.instruction || "",
+        items,
       });
       return;
     }
+    // Assessment question components → assessment card (options + feedback).
+    if (sbKind && isAssessmentComponentKind(sbKind)) {
+      const data = parseAssessmentData(sbKind as AssessmentKind, props, stripHtml(comp.body || ""));
+      out.push({
+        id: comp._id,
+        type: "sbAssessment",
+        props: { kind: sbKind, title: label(comp), adaptComponent: kindOf, data: JSON.stringify(data) },
+      });
+      return;
+    }
+    // H5P and Laerdal Form → their own cards (config round-trips minimally).
+    if (sbKind === "h5p") {
+      emitCard(comp, "h5p", { showTitle: true, description: stripHtml(comp.body || ""), instruction: "" });
+      return;
+    }
+    if (sbKind === "laerdalForm") {
+      emitCard(comp, "laerdalForm", { showTitle: true, description: stripHtml(comp.body || ""), instruction: "" });
+      return;
+    }
+    // Unknown / text → H4 heading + body paragraph (text write-back contract).
     out.push({ id: comp._id, type: "heading", props: { level: 4 }, content: label(comp) });
     const bodyText = stripHtml(comp.body || "");
     if (bodyText) out.push({ id: `${comp._id}${BODY_SUFFIX}`, type: "paragraph", content: bodyText });
@@ -1606,7 +1689,12 @@ export async function saveStoryboardToCourse(
     // asset fields (+ title) and (re)link the courseasset for publish.
     if (raw.type === "sbComponent" && info.level === "component") {
       const kind = raw.props?.kind;
-      let parsed: { image?: ImageData; media?: MediaData } = {};
+      let parsed: {
+        image?: ImageData;
+        media?: MediaData;
+        description?: string;
+        items?: Array<{ title?: string; body?: string; image?: string; imageAssetId?: string }>;
+      } = {};
       try {
         parsed = raw.props?.data ? JSON.parse(raw.props.data) : {};
       } catch {
@@ -1621,14 +1709,47 @@ export async function saveStoryboardToCourse(
       }
       let assetLink: string | undefined;
       let assetId: string | undefined;
-      if (kind === "image" && info.component === "graphic") {
-        Object.assign(patch, buildGraphicField(parsed.image));
+      const isLaerdalMedia = info.component === LAERDAL_MEDIA_COMPONENT;
+      const isGrouped =
+        info.component === "accordion" ||
+        info.component === "laerdal-narrative" ||
+        info.component === "narrative";
+      if (kind === "image" && (info.component === "graphic" || isLaerdalMedia)) {
+        // Image → _graphic (or legacy laerdal-media poster if the existing comp
+        // is a laerdal-media from a course generated before this change).
+        // Plugin fields nest under `properties` (top-level is dropped by the
+        // content model).
+        mergeProperties(patch, isLaerdalMedia ? buildImageAsMedia(parsed.image) : buildGraphicField(parsed.image));
         assetLink = parsed.image?.link;
         assetId = parsed.image?.assetId;
-      } else if ((kind === "video" || kind === "audio") && info.component === "media") {
-        Object.assign(patch, buildMediaField(kind, parsed.media));
+      } else if ((kind === "video" || kind === "audio") && (isLaerdalMedia || info.component === "media")) {
+        mergeProperties(patch, buildMediaField(kind, parsed.media));
         assetLink = parsed.media?.asset?.link;
         assetId = parsed.media?.asset?.assetId;
+      } else if (kind === "groupedContent" && isGrouped) {
+        // Grouped Content → accordion / narrative `properties._items` with
+        // `_graphic.src` (matches the installed schemas). Persist any link
+        // (course/assets/<file> or external URL).
+        const items = Array.isArray(parsed.items) ? parsed.items : [];
+        mergeProperties(patch, {
+          _items: items.map((it) => {
+            const rawBody = (it?.body || "").trim();
+            const body = rawBody
+              ? rawBody.startsWith("<")
+                ? rawBody
+                : `<p>${escapeHtml(rawBody)}</p>`
+              : "";
+            const imgLink = (it?.image || "").trim();
+            return { title: it?.title || "", body, _graphic: { alt: "", src: imgLink, attribution: "" } };
+          }),
+        });
+        // Each item image needs its own courseasset link for publish.
+        for (const it of items) {
+          const fn = filenameFromLink((it?.image || "").trim());
+          if (fn && it?.imageAssetId) {
+            tasks.push(linkContentAsset(courseId, "component", id, info.parentId || "", fn, it.imageAssetId));
+          }
+        }
       }
       if (Object.keys(patch).length) {
         tasks.push(apiClient.put(`/api/content/component/${id}`, patch));
@@ -2401,12 +2522,22 @@ export function addStoryboardAudit(
 // Import / Export (AC10) — binary exchanged as base64 through the JSON client.
 export type ImportFormat = "word" | "pdf" | "pptx";
 
-export function exportStoryboardWord(id: string): Promise<{ filename: string; mime: string; dataBase64: string }> {
-  return apiClient.get<{ filename: string; mime: string; dataBase64: string }>(`${SB_DOCS}/${id}/export/word`);
+// `title` (the course title) drives both the in-document heading and the
+// download filename server-side; falls back to the storyboard record title.
+export function exportStoryboardWord(
+  id: string,
+  title?: string
+): Promise<{ filename: string; mime: string; dataBase64: string }> {
+  const q = title ? `?title=${encodeURIComponent(title)}` : "";
+  return apiClient.get<{ filename: string; mime: string; dataBase64: string }>(`${SB_DOCS}/${id}/export/word${q}`);
 }
 
-export function exportStoryboardPdf(id: string): Promise<{ filename: string; mime: string; dataBase64: string }> {
-  return apiClient.get<{ filename: string; mime: string; dataBase64: string }>(`${SB_DOCS}/${id}/export/pdf`);
+export function exportStoryboardPdf(
+  id: string,
+  title?: string
+): Promise<{ filename: string; mime: string; dataBase64: string }> {
+  const q = title ? `?title=${encodeURIComponent(title)}` : "";
+  return apiClient.get<{ filename: string; mime: string; dataBase64: string }>(`${SB_DOCS}/${id}/export/pdf${q}`);
 }
 
 export function importStoryboardDocument(

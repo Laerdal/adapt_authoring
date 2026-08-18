@@ -23,7 +23,6 @@ import type {
 } from '@/types/storyboard';
 import { useStoryboard } from '@/hooks/useStoryboard';
 import { useStoryboardReview } from '@/hooks/useStoryboardReview';
-import { storyboardAi, type StoryboardAiAction } from '@/api/ai';
 import {
   getCourseStoryboardBlocks,
   saveStoryboardToCourse,
@@ -47,6 +46,9 @@ import DocumentToolbar from './DocumentToolbar';
 import StoryboardTopBar from './StoryboardTopBar';
 import ReviewCenter from './ReviewCenter';
 import GenerateDialog from './GenerateDialog';
+import AiAssistPopover from './AiAssistPopover';
+import CommentPopover from './CommentPopover';
+import { storyboardActions, type AiAssistRequest, type CommentRequest } from './storyboardActions';
 
 const EMPTY_SUMMARY: StoryboardSummary = {
   topics: 0,
@@ -118,6 +120,20 @@ export default function StoryboardWorkspace({
   const [showContents, setShowContents] = useState(true);
   const [showReview, setShowReview] = useState(true);
   const [toast, setToast] = useState<string>();
+  // Component-action popovers (AI Assistance / Comment). Opened by the card
+  // header actions via the storyboardActions channel — NOT from Add Content.
+  const [aiConfig, setAiConfig] = useState<AiAssistRequest | null>(null);
+  const [commentConfig, setCommentConfig] = useState<CommentRequest | null>(null);
+
+  // Register the card→workspace action channel (cards render inside BlockNote).
+  useEffect(
+    () =>
+      storyboardActions.register({
+        openAi: (req) => setAiConfig(req),
+        openComment: (req) => setCommentConfig(req),
+      }),
+    []
+  );
 
   // Course generation (AC11) dialog state.
   const [genOpen, setGenOpen] = useState(false);
@@ -146,37 +162,35 @@ export default function StoryboardWorkspace({
     window.setTimeout(() => setToast(undefined), 2600);
   };
 
-  // Once the storyboard has loaded, decide the editor's initial content.
-  // Priority: the last-saved storyboard document (so nothing the author did —
-  // including chosen media assets held in card data — is ever lost on reload),
-  // then a projection of the live course (first open of an existing course, so
-  // the storyboard mirrors it), then any passed-in doc, then starter content.
+  // Once the storyboard has loaded, decide the editor's initial content. The
+  // live course is the source of truth (spec: the storyboard is always generated
+  // from the latest backend course structure), so we project it first — this
+  // reflects edits made anywhere in the AT. Fallbacks: the last-saved storyboard
+  // snapshot, any passed-in doc, then starter content. Save keeps them in sync.
   useEffect(() => {
     if (sb.loading || bootstrapped.current) return;
     bootstrapped.current = true;
     (async () => {
-      let doc: unknown[] | null =
-        Array.isArray(sb.document) && sb.document.length ? (sb.document as unknown[]) : null;
-      const fromSaved = !!doc;
-      if (!doc && courseId) {
+      let doc: unknown[] | null = null;
+      if (courseId) {
         try {
           const courseBlocks = await getCourseStoryboardBlocks(courseId);
           if (courseBlocks.length) doc = courseBlocks;
         } catch {
-          /* fall back to the passed-in doc / starter below */
+          /* fall back to the saved snapshot / starter below */
         }
       }
       if (!doc) {
         doc =
-          Array.isArray(initialDocument) && (initialDocument as unknown[]).length
-            ? (initialDocument as unknown[])
-            : STARTER_DOCUMENT;
+          Array.isArray(sb.document) && sb.document.length
+            ? (sb.document as unknown[])
+            : Array.isArray(initialDocument) && (initialDocument as unknown[]).length
+              ? (initialDocument as unknown[])
+              : STARTER_DOCUMENT;
       }
       initialContent.current = doc;
       sb.setDocument(doc);
-      // Only the already-saved document is clean; a fresh course projection is
-      // staged so the first Save writes it through.
-      if (fromSaved) sb.markSaved(doc);
+      sb.markSaved(doc); // seeding from the backend is not an unsaved edit
       setBooted(true);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -204,43 +218,84 @@ export default function StoryboardWorkspace({
   const insert = (kind: StoryboardInsertKind) => editorRef.current?.insert(kind);
   const insertHeading = (level: number) => editorRef.current?.insert('heading', { level });
 
-  const stub = (action: string, phase: string) => flash(`${action} — arrives in ${phase}.`);
-
-  // AI actions (AC7) operate on the cursor block's text via the server proxy.
-  // Improve/Rewrite replace the block; Summarize/Suggest append a paragraph.
-  const runAi = async (action: StoryboardAiAction) => {
-    const text = editorRef.current?.getActiveText() ?? '';
-    if (!text.trim()) {
-      flash('Place the cursor in a block with text first.');
+  // Pull the latest backend course structure into the storyboard on demand
+  // (spec §1 — keep the storyboard synchronized with the AT). Guarded so it
+  // never discards unsaved edits.
+  const refreshFromCourse = async () => {
+    if (!courseId) return;
+    if (sb.dirty) {
+      flash('Save your changes first — then refresh from the course.');
       return;
     }
-    flash('Asking Samaritan…');
+    flash('Refreshing from course…');
     try {
-      const result = (await storyboardAi(action, text, courseTitle)).trim();
-      if (!result) {
-        flash('AI returned no content.');
-        return;
+      const fresh = await getCourseStoryboardBlocks(courseId);
+      if (fresh.length) {
+        editorRef.current?.setDocument(fresh);
+        sb.setDocument(fresh);
+        sb.markSaved(fresh);
+        setHeadings(editorRef.current?.getHeadings() ?? []);
+        setSummary(editorRef.current?.getSummary() ?? EMPTY_SUMMARY);
+        flash('Storyboard updated from the latest course content.');
+      } else {
+        flash('No course content to load yet.');
       }
-      if (action === 'improve' || action === 'rewrite') editorRef.current?.replaceActive(result);
-      else editorRef.current?.insertAfterActive(result);
-      flash('AI suggestion applied.');
     } catch (e) {
-      flash(`AI failed — ${e instanceof Error ? e.message : 'unknown error'}`);
+      flash(`Refresh failed — ${e instanceof Error ? e.message : 'unknown error'}`);
     }
+  };
+
+  const stub = (action: string, phase: string) => flash(`${action} — arrives in ${phase}.`);
+
+  // Document-level "Enrich with AI" (toolbar): open the SAME Samaritan popup,
+  // seeded from the cursor block. Insert → new Text component at the cursor;
+  // Replace → rewrite the cursor block. (Card-level AI supplies its own
+  // handlers via the storyboardActions channel.)
+  const openEnrichAi = () => {
+    setAiConfig({
+      initialText: activeBlock?.text || editorRef.current?.getActiveText() || '',
+      onInsert: (text) => {
+        editorRef.current?.insertComponent('text', { data: { description: text, showTitle: false } });
+        setHeadings(editorRef.current?.getHeadings() ?? []);
+        setSummary(editorRef.current?.getSummary() ?? EMPTY_SUMMARY);
+      },
+      onReplace: (text) => editorRef.current?.replaceActive(text),
+    });
   };
 
   const handleSave = async () => {
     const doc = editorRef.current?.getDocument() as unknown[] | undefined;
     try {
       let msg = 'Storyboard saved.';
-      // Write content edits back to the live course (source of truth, AC11).
       if (courseId && doc) {
+        // 1. Write edits to EXISTING course content (titles, text, media/_media).
         const r = await saveStoryboardToCourse(courseId, doc);
-        msg =
-          `Saved to course — ${r.updatedTitles} title(s), ${r.updatedBodies} text edit(s).` +
-          (r.unmapped ? ` ${r.unmapped} new block(s) need course generation (Phase 4).` : '');
+        msg = `Saved to course — ${r.updatedTitles} title(s), ${r.updatedBodies} content edit(s).`;
+        // 2. New blocks/components (incl. new media) → additively create them in
+        //    the backend so nothing is left only in the draft. Never deletes.
+        if (r.unmapped > 0) {
+          const result = await generateStoryboardCourse(courseId, doc, generatedMap.current, { skipDeletes: true });
+          generatedMap.current = { ...generatedMap.current, ...result.blockToContent };
+          if (sb.storyboardId) await updateStoryboard(sb.storyboardId, { _generatedContentMap: generatedMap.current });
+          if (result.created) msg += ` ${result.created} new item(s) added to the course.`;
+          // Media/assessment can't persist if their component type isn't
+          // installed — surface it instead of silently degrading to text.
+          if (result.missingTypes.length) {
+            msg += ` ⚠ Not generated (no installed plugin): ${result.missingTypes.join(', ')} — install the component plugin, then Save again. Your storyboard content is kept.`;
+          }
+          // 3. Re-seed from the backend so the storyboard mirrors the saved
+          //    course (new content ids + canonical media) — no manual refresh.
+          const fresh = await getCourseStoryboardBlocks(courseId);
+          if (fresh.length) {
+            editorRef.current?.setDocument(fresh);
+            sb.setDocument(fresh);
+            sb.markSaved(fresh);
+            setHeadings(editorRef.current?.getHeadings() ?? []);
+            setSummary(editorRef.current?.getSummary() ?? EMPTY_SUMMARY);
+          }
+        }
       }
-      // Also persist the storyboard snapshot (documentJson) if we have a record.
+      // 4. Persist the storyboard snapshot (documentJson).
       if (sb.storyboardId) await sb.save();
       flash(msg);
     } catch (e) {
@@ -300,9 +355,13 @@ export default function StoryboardWorkspace({
     try {
       if (sb.dirty) await sb.save(); // export reads the persisted document
       const { filename, mime, dataBase64 } = isPdf
-        ? await exportStoryboardPdf(sb.storyboardId)
-        : await exportStoryboardWord(sb.storyboardId);
-      triggerDownload(base64ToBlob(dataBase64, mime), filename);
+        ? await exportStoryboardPdf(sb.storyboardId, courseTitle)
+        : await exportStoryboardWord(sb.storyboardId, courseTitle);
+      // Name the download after the course title (fall back to the server name).
+      const ext = isPdf ? 'pdf' : 'docx';
+      const safeCourse = courseTitle.trim().replace(/[\\/:*?"<>|]+/g, '_');
+      const downloadName = safeCourse ? `${safeCourse}.${ext}` : filename;
+      triggerDownload(base64ToBlob(dataBase64, mime), downloadName);
     } catch (e) {
       flash(`Export failed — ${e instanceof Error ? e.message : 'unknown error'}`);
     }
@@ -375,7 +434,6 @@ export default function StoryboardWorkspace({
         onCycleStatus={cycleStatus}
         onBack={() => onBack?.()}
         onStub={stub}
-        onAiAction={runAi}
         onImport={handleImport}
         onExport={handleExport}
         onGenerate={generate}
@@ -415,14 +473,24 @@ export default function StoryboardWorkspace({
 
         {/* Center — document */}
         <main className="flex min-w-0 flex-1 flex-col bg-background">
-          <DocumentToolbar onInsert={insert} onInsertHeading={insertHeading} onEnrichAI={() => runAi('improve')} />
+          <DocumentToolbar
+            onInsert={insert}
+            onInsertHeading={insertHeading}
+            onEnrichAI={openEnrichAi}
+            onRefresh={courseId ? refreshFromCourse : undefined}
+          />
           <div className="flex-1 overflow-y-auto">
-            <article className="mx-auto max-w-3xl px-8 py-10">
-              <div className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--samaritan)' }}>
-                Course
+            {/* Authoring canvas ~60% of the viewport (Lovable proportions),
+                capped to the center column when the side panels squeeze it. */}
+            <article className="mx-auto w-[60vw] max-w-full px-8 py-10">
+              <div className="mb-8 border-b pb-5">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.2em]" style={{ color: 'var(--samaritan)' }}>
+                  Course
+                </div>
+                <h1 className="mt-1 text-[2.6rem] font-bold leading-tight tracking-tight text-foreground">
+                  {courseTitle}
+                </h1>
               </div>
-              <h1 className="mt-1 text-4xl font-bold tracking-tight text-foreground">{courseTitle}</h1>
-              <hr className="my-6 border-border" />
               {booted ? (
                 <BlockNoteStoryboardEditor
                   key={sb.storyboardId ?? 'sb'}
@@ -472,6 +540,36 @@ export default function StoryboardWorkspace({
           result={genResult}
           onConfirm={confirmGenerate}
           onClose={() => setGenOpen(false)}
+        />
+      )}
+
+      {aiConfig && (
+        <AiAssistPopover
+          initialText={aiConfig.initialText || ''}
+          courseContext={courseTitle}
+          onInsert={(t) => {
+            aiConfig.onInsert(t);
+            flash('AI content inserted as a component. Save to persist it.');
+          }}
+          onReplace={(t) => {
+            aiConfig.onReplace(t);
+            flash('AI content applied.');
+          }}
+          onClose={() => setAiConfig(null)}
+        />
+      )}
+
+      {commentConfig && (
+        <CommentPopover
+          blockId={commentConfig.blockId}
+          blockLabel={commentConfig.label}
+          courseId={courseId}
+          comments={review.comments}
+          loading={review.loading}
+          onAdd={review.addComment}
+          onResolve={review.setResolved}
+          onDelete={review.removeComment}
+          onClose={() => setCommentConfig(null)}
         />
       )}
 

@@ -48,10 +48,23 @@ const SYSTEM_PROMPTS = {
     'You summarise instructional e-learning content. Produce a concise summary of the text. Return ONLY the summary.',
   suggest:
     'You are an instructional designer. Given the content, suggest concrete improvements and additional content ideas. Return a short markdown bullet list.',
+  // Samaritan-parity actions (match the CKEditor "Samaritan Assistance" tool).
+  shorten:
+    'Make this text shorter while preserving its complete meaning. Return ONLY the shortened text, with no preamble or quotes.',
+  lengthen:
+    'Make this text longer with relevant details while preserving its core meaning. Return ONLY the expanded text, with no preamble or quotes.',
+  spelling:
+    'Check and correct spelling and grammar without changing the meaning. Return ONLY the corrected text, with no preamble or quotes.',
+  // Free-text: the user's own instruction drives the model (edit selection or
+  // generate from scratch). The instruction is injected into the user message.
+  custom:
+    'You are Samaritan, an assistant for authoring instructional e-learning content. Follow the user instruction precisely. Return ONLY the resulting content, with no preamble, explanation or quotes.',
 };
 
-// Run an AI action on `text`. Returns the assistant message content.
-async function run(action, text, context) {
+// Run an AI action on `text`. For action === 'custom', `instruction` carries the
+// user's free-text request (and `text` is the optional content to operate on).
+// Returns the assistant message content.
+async function run(action, text, context, instruction) {
   const s = getSettings();
   if (PLACEHOLDERS.has(s.key) || PLACEHOLDERS.has(s.endpoint)) {
     const err = new Error('Storyboard AI is not configured on the server.');
@@ -59,7 +72,13 @@ async function run(action, text, context) {
     throw err;
   }
   const system = SYSTEM_PROMPTS[action] || SYSTEM_PROMPTS.improve;
-  const user = (context ? `Course: ${context}\n\n` : '') + String(text || '');
+  const instr = String(instruction || '').trim();
+  const srcText = String(text || '');
+  const coursePrefix = context ? `Course: ${context}\n\n` : '';
+  const user =
+    action === 'custom'
+      ? coursePrefix + (srcText ? `${srcText}\n\nInstruction: ${instr}` : instr)
+      : coursePrefix + srcText;
   const url = `${s.endpoint}/openai/deployments/${s.deployment}/chat/completions?api-version=${s.apiVersion}`;
 
   let resp;

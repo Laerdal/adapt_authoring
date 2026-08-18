@@ -3,7 +3,7 @@
 //   Row 2: Enrich with AI
 // (References and JSON state are hidden for Phase 1.)
 
-import { FileText, Info, Sparkles } from 'lucide-react';
+import { FileText, Info, RefreshCw, Sparkles } from 'lucide-react';
 import type { StoryboardInsertKind } from '@/types/storyboard';
 import AddContentMenu from './AddContentMenu';
 import HeadingMenu from './HeadingMenu';
@@ -12,13 +12,15 @@ export default function DocumentToolbar({
   onInsert,
   onInsertHeading,
   onEnrichAI,
+  onRefresh,
 }: {
   onInsert: (kind: StoryboardInsertKind) => void;
   onInsertHeading: (level: number) => void;
   onEnrichAI: () => void;
+  onRefresh?: () => void;
 }) {
   return (
-    <div className="border-b bg-background/95 px-6 py-2 backdrop-blur">
+    <div className="border-b bg-background/95 px-8 py-2 backdrop-blur">
       <div className="flex flex-wrap items-center gap-2">
         <div className="mr-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
           <FileText className="h-4 w-4" /> Storyboard Document
@@ -32,6 +34,16 @@ export default function DocumentToolbar({
         >
           <Info className="h-3.5 w-3.5" /> Add Instruction
         </button>
+        {onRefresh && (
+          <button
+            type="button"
+            onClick={onRefresh}
+            title="Reload the storyboard from the latest course content"
+            className="ml-auto inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-secondary"
+          >
+            <RefreshCw className="h-3.5 w-3.5" /> Refresh from course
+          </button>
+        )}
       </div>
 
       <div className="mt-1.5 flex flex-wrap items-center gap-2">

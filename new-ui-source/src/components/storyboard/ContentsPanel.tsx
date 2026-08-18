@@ -19,8 +19,8 @@ export default function ContentsPanel({
   onCollapse?: () => void;
 }) {
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b px-3 py-2.5">
+    <div className="flex h-full flex-col bg-muted/20">
+      <div className="flex items-center justify-between border-b bg-muted/40 px-3 py-2.5 backdrop-blur">
         <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           <ListTree className="h-4 w-4" />
           Contents

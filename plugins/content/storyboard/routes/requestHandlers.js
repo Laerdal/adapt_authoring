@@ -11,7 +11,7 @@ const convert = require('../utils/documentConvert');
 
 const STATUSES = ['draft', 'in_review', 'approved'];
 const AUDIT_EVENTS = ['status_change', 'generated', 'imported'];
-const AI_ACTIONS = ['improve', 'rewrite', 'summarize', 'suggest'];
+const AI_ACTIONS = ['improve', 'rewrite', 'summarize', 'suggest', 'shorten', 'lengthen', 'spelling', 'custom'];
 
 // Resolve the current user + tenant. Prefer passport's req.user, fall back to
 // the usermanager (same convention as the templating plugin).
@@ -280,8 +280,17 @@ async function handleAi(req, res) {
     const body = req.body || {};
     const action = AI_ACTIONS.includes(body.action) ? body.action : 'improve';
     const text = String(body.text || '');
-    if (!text.trim()) return res.status(400).json({ error: 'text is required' });
-    const result = await ai.run(action, text, body.context);
+    const instruction = String(body.instruction || '');
+    // 'custom' (free-text) may generate from scratch with only an instruction;
+    // every other action operates on `text`.
+    if (action === 'custom') {
+      if (!text.trim() && !instruction.trim()) {
+        return res.status(400).json({ error: 'text or instruction is required' });
+      }
+    } else if (!text.trim()) {
+      return res.status(400).json({ error: 'text is required' });
+    }
+    const result = await ai.run(action, text, body.context, instruction);
     return res.status(200).json({ text: result });
   } catch (error) {
     const code = error && error.statusCode ? error.statusCode : 500;
@@ -301,9 +310,12 @@ async function exportWord(req, res) {
       return res.status(404).json({ error: 'Storyboard not found' });
     }
     const rec = toPlain(results[0]);
+    // Prefer the course title (passed by the client) so the document heading
+    // and filename match the course, not the internal storyboard record title.
+    const docTitle = (req.query && req.query.title) || rec.title || 'Storyboard';
     const blocks = safeParse(rec.documentJson, []);
-    const buffer = await convert.blocksToDocx(blocks, rec.title || 'Storyboard');
-    const safeName = String(rec.title || 'storyboard').replace(/[^\w.-]+/g, '_');
+    const buffer = await convert.blocksToDocx(blocks, docTitle);
+    const safeName = String(docTitle).replace(/[^\w.-]+/g, '_') || 'storyboard';
     return res.status(200).json({
       filename: `${safeName}.docx`,
       mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -321,9 +333,10 @@ async function exportPdf(req, res) {
       return res.status(404).json({ error: 'Storyboard not found' });
     }
     const rec = toPlain(results[0]);
+    const docTitle = (req.query && req.query.title) || rec.title || 'Storyboard';
     const blocks = safeParse(rec.documentJson, []);
-    const buffer = await convert.blocksToPdf(blocks, rec.title || 'Storyboard');
-    const safeName = String(rec.title || 'storyboard').replace(/[^\w.-]+/g, '_');
+    const buffer = await convert.blocksToPdf(blocks, docTitle);
+    const safeName = String(docTitle).replace(/[^\w.-]+/g, '_') || 'storyboard';
     return res.status(200).json({
       filename: `${safeName}.pdf`,
       mime: 'application/pdf',

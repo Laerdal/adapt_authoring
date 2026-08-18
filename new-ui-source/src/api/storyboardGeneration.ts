@@ -19,14 +19,30 @@ import {
   createComponent,
   linkContentAsset,
 } from "./adaptAuthoring";
-import { isAssessmentKind, validateAssessment, type AssessmentData } from "@/types/storyboard";
+import {
+  buildAssessmentFields,
+  isAssessmentKind,
+  validateAssessment,
+  INSERT_META,
+  type AssessmentData,
+  type AssessmentKind,
+} from "@/types/storyboard";
 import {
   buildGraphicField,
+  buildImageAsMedia,
   buildMediaField,
   filenameFromLink,
+  mergeProperties,
   type ImageData,
   type MediaData,
 } from "@/components/storyboard/mediaMapping";
+import { resolveAdaptComponent } from "./componentMapping";
+
+// sbPlaceholder blocks store the human label; map it back to the storyboard
+// kind so it can be resolved to a component (or reported unsupported).
+const PLACEHOLDER_LABEL_TO_KIND: Record<string, string> = Object.fromEntries(
+  (Object.keys(INSERT_META) as (keyof typeof INSERT_META)[]).map((k) => [INSERT_META[k].label, k])
+);
 
 export interface GenerationPlan {
   topics: number;
@@ -43,36 +59,16 @@ export interface GenerationResult {
   updated: number;
   deleted: number;
   blockToContent: Record<string, string>;
+  /** Storyboard kinds that map to NO installed Adapt plugin — reported so the
+   *  author can install the plugin. These are SKIPPED during generation (never
+   *  silently persisted as Text); their content remains in the storyboard. */
+  missingTypes: string[];
 }
 
-// Neutral kind → Adapt component key (`_component`) for creation.
-const ASSESS_KEY: Record<string, string> = {
-  mcq: "mcq",
-  gmcq: "gmcq",
-  matching: "matching",
-  reorder: "textInput",
-  textInput: "textInput",
-  slider: "slider",
-};
-const PLACEHOLDER_KEY: Record<string, string> = {
-  hotgraphic: "hotgraphic",
-  hotgrid: "hotgrid",
-  h5p: "h5p",
-  actionplan: "actionplan",
-  groupedContent: "text",
-  laerdalForm: "text",
-  instruction: "text",
-};
-// Rich component-card kind → Adapt component key.
-const COMPONENT_KEY: Record<string, string> = {
-  text: "text",
-  groupedContent: "text",
-  image: "graphic",
-  video: "media",
-  audio: "media",
-  h5p: "h5p",
-  laerdalForm: "text",
-};
+// Storyboard kind → Adapt `_component` is resolved at generation time against
+// the tenant's installed component types via resolveAdaptComponent (see
+// api/componentMapping.ts) — the single source of truth. No hard-coded key maps
+// live here anymore, and there is NO silent "text" fallback for unmapped kinds.
 
 interface ContentNode {
   _id: string;
@@ -98,6 +94,15 @@ interface GenComponent {
   mediaPatch?: Record<string, unknown>;
   assetLink?: string;
   assetId?: string;
+  // Assessment components: `_items` + `_feedback` + per-kind extras.
+  assessmentPatch?: Record<string, unknown>;
+  // Original storyboard kind + parsed data, retained so we can rebuild the
+  // persistence patch once we know which Adapt component-type the generator
+  // resolves to (e.g. image can persist to graphic OR laerdal-media OR media).
+  pendingKind?: "image" | "video" | "audio" | "groupedContent";
+  pendingImage?: ImageData;
+  pendingMedia?: MediaData;
+  pendingItems?: Array<{ title?: string; body?: string; image?: string; imageAssetId?: string }>;
 }
 interface GenGroup {
   sourceBlockId?: string;
@@ -137,6 +142,36 @@ function safeParseJson<T>(value: unknown, fallback: T): T {
   } catch {
     return fallback;
   }
+}
+
+// Grouped Content items → laerdal-narrative `properties._items`. The item's
+// Grouped Content items → `_items[]` for the Accordion / Narrative components.
+// Both accordion and (laerdal-)narrative use `_items[].{title, body, _graphic:
+// {src, alt, attribution}}` (verbatim from the installed schemas). A course
+// asset persists as `_graphic.src`; otherwise `_graphic` is left empty.
+// Returns a RAW plugin-field patch (`{_items: [...]}`) — the caller nests it
+// under `properties` via mergeProperties.
+function buildGroupedItemsPatch(
+  items?: Array<{ title?: string; body?: string; image?: string }>
+): { _items: Array<Record<string, unknown>> } {
+  const list = Array.isArray(items) ? items : [];
+  return {
+    _items: list.map((it) => {
+      const rawBody = (it?.body || "").trim();
+      const body = rawBody
+        ? rawBody.startsWith("<")
+          ? rawBody
+          : `<p>${escapeHtml(rawBody)}</p>`
+        : "";
+      // `image` is the persisted link (course/assets/<file> or an external URL).
+      const imgLink = (it?.image || "").trim();
+      return {
+        title: it?.title || "",
+        body,
+        _graphic: { alt: "", src: imgLink, attribution: "" },
+      };
+    }),
+  };
 }
 
 // Parse the ordered document into the intended course tree.
@@ -209,6 +244,12 @@ function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => string 
 
     if (type === "paragraph") {
       const text = inlineToText(raw.content);
+      // Blank spacer paragraphs (BlockNote inserts them around cards, and the
+      // starter/seed docs contain a trailing one) must NOT become Text
+      // components — that was the phantom "extra Text component". A Text
+      // component is created ONLY from a paragraph the author actually typed
+      // into, or the H4-heading body below.
+      if (!text.trim()) continue;
       if (pending && pending.componentKey === "text") {
         pending.body = (pending.body ? `${pending.body}\n` : "") + text;
         if (id && !id.endsWith("::body") && !pending.sourceBlockId) pending.sourceBlockId = id;
@@ -232,47 +273,59 @@ function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => string 
     let comp: GenComponent | null = null;
     if (type === "sbComponent") {
       const kind = (raw.props && raw.props.kind) || "text";
-      const data = safeParseJson<{ description?: string; image?: ImageData; media?: MediaData }>(
-        raw.props && raw.props.data,
-        {}
-      );
+      const data = safeParseJson<{
+        description?: string;
+        image?: ImageData;
+        media?: MediaData;
+        items?: Array<{ title?: string; body?: string; image?: string }>;
+      }>(raw.props && raw.props.data, {});
+      // `componentKey` now holds the STORYBOARD KIND; the Adapt _component is
+      // resolved later via resolveAdaptComponent against installed types.
       comp = {
         sourceBlockId: id,
         existingId,
-        componentKey: COMPONENT_KEY[kind] || "text",
+        componentKey: kind,
         title: ((raw.props && raw.props.title) || "").trim() || "Component",
         body: data.description || "",
       };
       if (kind === "image") {
-        comp.mediaPatch = buildGraphicField(data.image);
+        comp.pendingKind = "image";
+        comp.pendingImage = data.image;
         comp.assetLink = data.image?.link;
         comp.assetId = data.image?.assetId;
       } else if (kind === "video" || kind === "audio") {
-        comp.mediaPatch = buildMediaField(kind, data.media);
+        comp.pendingKind = kind;
+        comp.pendingMedia = data.media;
         comp.assetLink = data.media?.asset?.link;
         comp.assetId = data.media?.asset?.assetId;
+      } else if (kind === "groupedContent") {
+        comp.pendingKind = "groupedContent";
+        comp.pendingItems = data.items;
       }
     } else if (type === "sbAssessment") {
-      const kind = (raw.props && raw.props.kind) || "mcq";
-      const data = safeParseJson<{ question?: string }>(raw.props && raw.props.data, {});
+      const kind = ((raw.props && raw.props.kind) || "mcq") as AssessmentKind;
+      const data = safeParseJson<AssessmentData>(raw.props && raw.props.data, { question: "" });
       comp = {
         sourceBlockId: id,
         existingId,
-        componentKey: ASSESS_KEY[kind] || "mcq",
-        title: (data.question || "").trim() || "Question",
+        componentKey: kind,
+        title: ((raw.props && raw.props.title) || data.question || "").trim() || "Question",
+        body: data.question || "",
+        assessmentPatch: buildAssessmentFields(kind, data),
       };
     } else if (type === "sbPlaceholder") {
       const label = (raw.props && (raw.props.title || raw.props.label)) || "Placeholder";
+      const rawLabel = (raw.props && raw.props.label) || "";
       comp = {
         sourceBlockId: id,
         existingId,
-        componentKey: PLACEHOLDER_KEY[(raw.props && raw.props.label) || ""] || "text",
+        componentKey: PLACEHOLDER_LABEL_TO_KIND[rawLabel] || "instruction",
         title: label,
       };
     } else if (type === "image") {
-      comp = { sourceBlockId: id, existingId, componentKey: "graphic", title: "Image" };
+      comp = { sourceBlockId: id, existingId, componentKey: "image", title: "Image" };
     } else if (type === "video" || type === "audio") {
-      comp = { sourceBlockId: id, existingId, componentKey: "media", title: type };
+      comp = { sourceBlockId: id, existingId, componentKey: type, title: type };
     }
     if (comp) {
       group!.components.push(comp);
@@ -402,11 +455,14 @@ export async function planStoryboardGeneration(
   return { topics: tree.length, sections, groups, components, willDelete, issues, warnings };
 }
 
-/** Apply the storyboard to the course: create/update/reparent/reorder/delete. */
+/** Apply the storyboard to the course: create/update/reparent/reorder/delete.
+ *  `options.skipDeletes` (used by Save) reconciles additively — it never removes
+ *  course content, only creates/updates/reorders. */
 export async function generateStoryboardCourse(
   courseId: string,
   doc: unknown[],
-  generatedContentMap: Record<string, string> = {}
+  generatedContentMap: Record<string, string> = {},
+  options: { skipDeletes?: boolean } = {}
 ): Promise<GenerationResult> {
   const [index, availableTypes] = await Promise.all([fetchCourseIndex(courseId), getAvailableComponents()]);
   const { resolve } = makeResolver(index as never, generatedContentMap);
@@ -414,7 +470,55 @@ export async function generateStoryboardCourse(
   enforceMaxComponentsPerBlock(tree);
 
   const typeByKey = new Map(availableTypes.map((t) => [t.component, t]));
-  const getType = (key: string) => typeByKey.get(key) || typeByKey.get("text") || null;
+  const installed = new Set(availableTypes.map((t) => t.component));
+  // Storyboard kinds that map to NO installed Adapt plugin. These are reported
+  // (never silently persisted as Text) so the author can install the plugin.
+  const unsupported = new Set<string>();
+
+  // Resolve a storyboard KIND to an installed Adapt component-type (the single
+  // source of truth is /api/componenttype via componentMapping). Returns null
+  // (and records the kind as unsupported) when no candidate is installed — there
+  // is NO "text" fallback.
+  const getType = (kind: string): { type: ReturnType<typeof typeByKey.get>; component: string } | null => {
+    const component = resolveAdaptComponent(kind, installed);
+    if (!component) {
+      unsupported.add(kind);
+      return null;
+    }
+    const type = typeByKey.get(component);
+    if (!type) {
+      unsupported.add(kind);
+      return null;
+    }
+    return { type, component };
+  };
+
+  // Build the plugin-property patch for a media/grouped component, shaped to the
+  // ACTUAL resolved Adapt `_component`. Called for both new and existing nodes.
+  const buildPatchFor = (c: GenComponent, component: string): void => {
+    if (!c.pendingKind) return;
+    if (c.pendingKind === "image") {
+      c.mediaPatch = component === "graphic" ? buildGraphicField(c.pendingImage) : buildImageAsMedia(c.pendingImage);
+      return;
+    }
+    if (c.pendingKind === "video" || c.pendingKind === "audio") {
+      if (component === "graphic") {
+        c.mediaPatch = buildGraphicField({
+          link: c.pendingMedia?.poster?.link || "",
+          url: c.pendingMedia?.poster?.url || "",
+          alt: "",
+        });
+      } else {
+        c.mediaPatch = buildMediaField(c.pendingKind, c.pendingMedia);
+      }
+      return;
+    }
+    if (c.pendingKind === "groupedContent") {
+      // accordion / narrative / laerdal-narrative all take `_items[]` with a
+      // `_graphic.src` image (verbatim from the installed schemas).
+      c.mediaPatch = buildGroupedItemsPatch(c.pendingItems);
+    }
+  };
 
   const resolved = new Set<string>();
   const blockToContent: Record<string, string> = {};
@@ -474,23 +578,35 @@ export async function generateStoryboardCourse(
           // Default component alignment is Right (spec: newly generated blocks
           // hold up to 2 right-aligned components).
           const layout: "right" = "right";
+          // Resolve the storyboard kind → installed Adapt component (source of
+          // truth). null = unsupported (NO text fallback).
+          const resolvedType = getType(c.componentKey);
+          // Shape the media/grouped patch to the resolved `_component`.
+          if (resolvedType) buildPatchFor(c, resolvedType.component);
           let compId = c.existingId;
           if (compId) {
+            // Existing node: always keep title/body; only write plugin fields
+            // when the kind resolves to an installed component.
             const upd: Record<string, unknown> = { title: c.title, displayTitle: c.title, _parentId: grpId, _sortOrder: cSort, _layout: layout };
             if (bodyHtml !== undefined) upd.body = bodyHtml;
-            if (c.mediaPatch) Object.assign(upd, c.mediaPatch);
+            // Plugin fields (_graphic/_media/_items/_feedback) nest under
+            // `properties` — top-level would be dropped by the content model.
+            if (resolvedType && c.mediaPatch) mergeProperties(upd, c.mediaPatch);
+            if (resolvedType && c.assessmentPatch) mergeProperties(upd, c.assessmentPatch);
             await put("component", compId, upd);
             updated += 1;
           } else {
-            const ctype = getType(c.componentKey);
-            if (!ctype) {
+            if (!resolvedType || !resolvedType.type) {
+              // Unsupported: report it (see `unsupported`), never create a Text
+              // stand-in. The content stays in the storyboard (source of truth).
               cSort += 1;
-              continue; // no installed component type and no text fallback
+              continue;
             }
-            compId = await createComponent(courseId, grpId, ctype, cSort, layout);
+            compId = await createComponent(courseId, grpId, resolvedType.type, cSort, layout);
             const upd: Record<string, unknown> = { title: c.title, displayTitle: c.title, _layout: layout };
             if (bodyHtml !== undefined) upd.body = bodyHtml;
-            if (c.mediaPatch) Object.assign(upd, c.mediaPatch);
+            if (c.mediaPatch) mergeProperties(upd, c.mediaPatch);
+            if (c.assessmentPatch) mergeProperties(upd, c.assessmentPatch);
             await put("component", compId, upd);
             created += 1;
           }
@@ -507,6 +623,20 @@ export async function generateStoryboardCourse(
               }
             }
           }
+          // Grouped Content / Accordion item images each need their own
+          // courseasset link (multiple images per component).
+          if (c.pendingKind === "groupedContent" && Array.isArray(c.pendingItems)) {
+            for (const it of c.pendingItems) {
+              const fn = filenameFromLink(it?.image);
+              if (fn && it?.imageAssetId) {
+                try {
+                  await linkContentAsset(courseId, "component", compId, grpId, fn, it.imageAssetId);
+                } catch {
+                  /* best-effort */
+                }
+              }
+            }
+          }
           cSort += 1;
         }
       }
@@ -515,21 +645,24 @@ export async function generateStoryboardCourse(
 
   // Delete pages/articles/blocks/components removed from the storyboard
   // (leaves first; page deletes cascade — 404s on already-removed are ignored).
-  const pages = index.contentObjects.filter((c) => c._type === "page");
-  const removals: Array<[string, string]> = [
-    ...index.components.filter((c) => !resolved.has(c._id)).map((c) => ["component", c._id] as [string, string]),
-    ...index.blocks.filter((b) => !resolved.has(b._id)).map((b) => ["block", b._id] as [string, string]),
-    ...index.articles.filter((a) => !resolved.has(a._id)).map((a) => ["article", a._id] as [string, string]),
-    ...pages.filter((p) => !resolved.has(p._id)).map((p) => ["contentobject", p._id] as [string, string]),
-  ];
-  for (const [type, id] of removals) {
-    try {
-      await apiClient.delete(`/api/content/${type}/${id}`);
-      deleted += 1;
-    } catch {
-      /* already removed by a cascade */
+  // Skipped for additive Save reconciliation.
+  if (!options.skipDeletes) {
+    const pages = index.contentObjects.filter((c) => c._type === "page");
+    const removals: Array<[string, string]> = [
+      ...index.components.filter((c) => !resolved.has(c._id)).map((c) => ["component", c._id] as [string, string]),
+      ...index.blocks.filter((b) => !resolved.has(b._id)).map((b) => ["block", b._id] as [string, string]),
+      ...index.articles.filter((a) => !resolved.has(a._id)).map((a) => ["article", a._id] as [string, string]),
+      ...pages.filter((p) => !resolved.has(p._id)).map((p) => ["contentobject", p._id] as [string, string]),
+    ];
+    for (const [type, id] of removals) {
+      try {
+        await apiClient.delete(`/api/content/${type}/${id}`);
+        deleted += 1;
+      } catch {
+        /* already removed by a cascade */
+      }
     }
   }
 
-  return { created, updated, deleted, blockToContent };
+  return { created, updated, deleted, blockToContent, missingTypes: [...unsupported] };
 }

@@ -27,12 +27,32 @@ import {
   X,
   FolderOpen,
   Link2,
+  MessageSquare,
 } from 'lucide-react';
 import { createReactBlockSpec } from '@blocknote/react';
-import { storyboardAi } from '@/api/ai';
+import { storyboardActions } from '../storyboardActions';
 import type { AssetKind } from '@/api/adaptAuthoring';
 import AssetPickerModal from '@/components/common/AssetPickerModal';
-import { emptyMediaData, type AssetRef, type ImageData, type MediaData } from '../mediaMapping';
+import { emptyMediaData, toEmbedUrl, type AssetRef, type ImageData, type MediaData } from '../mediaMapping';
+
+// YouTube/Vimeo → iframe embed; direct file URLs → <video>. Matches Lovable.
+function VideoView({ src, poster, className }: { src: string; poster?: string; className?: string }) {
+  const embed = toEmbedUrl(src);
+  if (embed) {
+    return (
+      <div className={`aspect-video w-full overflow-hidden rounded ${className ?? ''}`}>
+        <iframe
+          src={embed}
+          title="Video"
+          className="h-full w-full"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+          allowFullScreen
+        />
+      </div>
+    );
+  }
+  return <video src={src} poster={poster || undefined} controls className={className ?? 'w-full rounded'} />;
+}
 
 // ── Kinds + metadata ─────────────────────────────────────────────────────────
 
@@ -74,7 +94,9 @@ const LABEL_TO_KIND: Record<string, ComponentKind> = Object.fromEntries(
 interface GroupedItem {
   title: string;
   body: string;
-  image: string; // preview URL (grouped content persists as a text component)
+  image: string; // PERSISTED value → `_graphic.src` (course/assets/<file> or external URL)
+  imageUrl?: string; // servable preview URL (/api/asset/serve/<id>); not persisted verbatim
+  imageAssetId?: string; // DAM asset id, for the courseasset publish link
 }
 interface FormField {
   control: string;
@@ -112,12 +134,18 @@ export function defaultComponentData(kind: ComponentKind): ComponentData {
   }
 }
 
-export function makeComponentBlock(kind: ComponentKind) {
+export function makeComponentBlock(
+  kind: ComponentKind,
+  opts?: { title?: string; data?: Partial<ComponentData> }
+) {
+  const data = { ...defaultComponentData(kind), ...(opts?.data as Partial<ComponentData>) };
   return {
     type: 'sbComponent',
-    props: { kind, title: '', adaptComponent: META[kind].comp, data: JSON.stringify(defaultComponentData(kind)) },
+    props: { kind, title: opts?.title ?? '', adaptComponent: META[kind].comp, data: JSON.stringify(data) },
   };
 }
+
+export const isComponentKind = (k: string): k is ComponentKind => (COMPONENT_KINDS as string[]).includes(k);
 
 function parseData(kind: ComponentKind, raw: string): ComponentData {
   try {
@@ -156,7 +184,7 @@ function AssetPreview({ assetType, value }: { assetType: AssetKind; value: Asset
   if (!src) return null;
   if (assetType === 'image') return <img src={src} alt="" className="max-h-48 w-full rounded object-contain" />;
   if (assetType === 'audio') return <audio src={src} controls className="w-full" />;
-  return <video src={src} controls className="max-h-64 w-full rounded" />;
+  return <VideoView src={src} className="max-h-64 w-full rounded" />;
 }
 
 // The Lovable asset field: "Select an Asset" (DAM picker) / "Select an External
@@ -317,8 +345,20 @@ function ComponentBody({ kind, data, set }: { kind: ComponentKind; data: Compone
             <textarea value={it.body} placeholder="Item body — what should the learner read here?" onKeyDown={stop} rows={2} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, body: e.target.value } : x)))} className={`${inputCls} mb-1 resize-y`} />
             <AssetField
               assetType="image"
-              value={it.image ? { link: it.image, url: it.image } : undefined}
-              onChange={(a) => setItems(items.map((x, j) => (j === i ? { ...x, image: a?.url || a?.link || '' } : x)))}
+              value={
+                it.image || it.imageUrl
+                  ? { link: it.image, url: it.imageUrl || it.image, assetId: it.imageAssetId }
+                  : undefined
+              }
+              onChange={(a) =>
+                setItems(
+                  items.map((x, j) =>
+                    j === i
+                      ? { ...x, image: a?.link || '', imageUrl: a?.url || '', imageAssetId: a?.assetId }
+                      : x
+                  )
+                )
+              }
             />
           </div>
         ))}
@@ -460,7 +500,7 @@ function ComponentPreview({ kind, title, data }: { kind: ComponentKind; title: s
                 <div className="font-semibold text-foreground">{it.title || `Item ${i + 1}`}</div>
                 {it.body && <div className="mt-0.5 whitespace-pre-wrap text-sm text-foreground">{it.body}</div>}
               </div>
-              {it.image && <img src={it.image} alt="" className="h-20 w-32 shrink-0 rounded-md object-cover" />}
+              {(it.imageUrl || it.image) && <img src={it.imageUrl || it.image} alt="" className="h-20 w-32 shrink-0 rounded-md object-cover" />}
             </div>
           ))}
         </div>
@@ -488,7 +528,7 @@ function ComponentPreview({ kind, title, data }: { kind: ComponentKind; title: s
       <div>
         {heading}
         {src ? (
-          <video src={src} poster={poster} controls className="w-full rounded-lg" />
+          <VideoView src={src} poster={poster} className="w-full rounded-lg" />
         ) : (
           <MediaPlaceholder Icon={Video} label="No video source" />
         )}
@@ -583,15 +623,22 @@ export const componentBlock = createReactBlockSpec(
       };
       const setTitle = (t: string) => editor.updateBlock(block, { props: { title: t } });
 
-      const aiImprove = async () => {
-        const text = model.description || (model.items || []).map((i) => i.body).join('\n');
-        if (!text.trim()) return;
-        try {
-          const result = (await storyboardAi('improve', text)).trim();
-          if (result) setData({ ...model, description: result });
-        } catch {
-          /* surfaced elsewhere */
-        }
+      // AI is an ACTION: open the Samaritan popup seeded with this card's text.
+      // Both Apply modes stay INSIDE this component (no new component is
+      // created): Replace overwrites the content, Insert appends to it.
+      const openAi = () => {
+        storyboardActions.openAi({
+          initialText: model.description || (model.items || []).map((i) => i.body).join('\n'),
+          onReplace: (text) => setData({ ...model, description: text }),
+          onInsert: (text) =>
+            setData({ ...model, description: model.description ? `${model.description}\n\n${text}` : text }),
+        });
+      };
+
+      // Comment is an ACTION attached to this component's block id (uses the
+      // storyboardcomment backend; does NOT touch the course structure).
+      const openComment = () => {
+        storyboardActions.openComment({ blockId: block.id, label: `CONTENT · ${meta.badge.toUpperCase()}` });
       };
 
       const insertSuggestion = (k: ComponentKind) => {
@@ -627,11 +674,14 @@ export const componentBlock = createReactBlockSpec(
             <HeaderBtn onClick={() => {}} title="Change type in the Page Editor">
               <RefreshCw className="h-3 w-3" /> Replace
             </HeaderBtn>
-            <HeaderBtn onClick={aiImprove} title="Improve with AI">
+            <HeaderBtn onClick={openAi} title="AI Assistance">
               <Sparkles className="h-3 w-3" /> AI
             </HeaderBtn>
             <HeaderBtn onClick={() => setSource((s) => !s)} active={source} title="Toggle source view">
               <Code className="h-3 w-3" /> Source
+            </HeaderBtn>
+            <HeaderBtn onClick={openComment} title="Comment on this component">
+              <MessageSquare className="h-3 w-3" /> Comment
             </HeaderBtn>
             <HeaderBtn onClick={() => editor.removeBlocks([block])} title="Delete component">
               <Trash2 className="h-3 w-3" /> Delete

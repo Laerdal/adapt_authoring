@@ -25,6 +25,7 @@ import {
   Target,
   Grid3x3,
   ListTodo,
+  Rows3,
   ChevronDown,
 } from 'lucide-react';
 import type { StoryboardInsertKind } from '@/types/storyboard';
@@ -71,6 +72,9 @@ const GROUPS: MenuGroup[] = [
   {
     label: 'Interactive',
     items: [
+      // Accordion has no distinct storyboard block yet — map it to Grouped
+      // Content (heading + body rows), per product decision.
+      { kind: 'groupedContent', label: 'Accordion', Icon: Rows3 },
       { kind: 'hotgraphic', label: 'Hot Graphic', Icon: Target },
       { kind: 'hotgrid', label: 'Hot Grid', Icon: Grid3x3 },
       { kind: 'actionplan', label: 'Laerdal Action Plan', Icon: ListTodo },
@@ -80,6 +84,9 @@ const GROUPS: MenuGroup[] = [
 
 const MENU_WIDTH = 260;
 
+// Add Content lists ONLY course-content components. AI and Comment are authoring
+// ACTIONS on a component card (see componentBlock/assessmentBlock headers), not
+// content components — they are intentionally NOT in this menu.
 export default function AddContentMenu({ onInsert }: { onInsert: (kind: StoryboardInsertKind) => void }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ left: number; top: number; maxHeight: number }>({ left: 0, top: 0, maxHeight: 360 });
@@ -104,14 +111,20 @@ export default function AddContentMenu({ onInsert }: { onInsert: (kind: Storyboa
       setOpen(false);
     };
     const close = () => setOpen(false);
+    // Close on scroll of an ANCESTOR (fixed menu would otherwise detach), but
+    // NOT when scrolling inside the menu's own scroll area — that capture-phase
+    // event was closing the menu on the first wheel tick ("scroll not working").
+    const onScroll = (e: Event) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
     document.addEventListener('mousedown', onDown);
     window.addEventListener('resize', close);
-    // Close on scroll of any ancestor (fixed menu would otherwise detach).
-    window.addEventListener('scroll', close, true);
+    window.addEventListener('scroll', onScroll, true);
     return () => {
       document.removeEventListener('mousedown', onDown);
       window.removeEventListener('resize', close);
-      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('scroll', onScroll, true);
     };
   }, [open]);
 
@@ -146,7 +159,7 @@ export default function AddContentMenu({ onInsert }: { onInsert: (kind: Storyboa
                 </div>
                 {group.items.map(({ kind, label, Icon }) => (
                   <button
-                    key={kind}
+                    key={label}
                     type="button"
                     onClick={() => choose(kind)}
                     className="flex w-full items-center gap-2.5 px-3 py-1.5 text-sm hover:bg-muted"

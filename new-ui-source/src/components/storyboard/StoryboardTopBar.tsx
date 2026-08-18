@@ -8,7 +8,6 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
   Upload,
-  Sparkles,
   Download,
   Users,
   ArrowRight,
@@ -16,14 +15,10 @@ import {
   Save,
 } from 'lucide-react';
 import type { ReviewStatus } from '@/types/storyboard';
-import type { StoryboardAiAction } from '@/api/ai';
 
-const AI_ACTION_LABELS: { label: string; action: StoryboardAiAction }[] = [
-  { label: 'Improve', action: 'improve' },
-  { label: 'Rewrite', action: 'rewrite' },
-  { label: 'Summarize', action: 'summarize' },
-  { label: 'Generate Suggestions', action: 'suggest' },
-];
+// AI is no longer a top-bar action — it lives under Add Content → AI Assistance
+// (Samaritan Assistance popover). The underlying /api/storyboard/ai proxy and
+// the card-level AI buttons are unchanged.
 
 const STATUS_META: Record<ReviewStatus, { label: string; className: string; next: ReviewStatus }> = {
   draft: { label: 'Draft', className: 'bg-muted text-foreground', next: 'in_review' },
@@ -88,7 +83,6 @@ export default function StoryboardTopBar({
   onCycleStatus,
   onBack,
   onStub,
-  onAiAction,
   onImport,
   onExport,
   onGenerate,
@@ -100,7 +94,6 @@ export default function StoryboardTopBar({
   onCycleStatus: () => void;
   onBack: () => void;
   onStub: (action: string, phase: string) => void;
-  onAiAction: (action: StoryboardAiAction) => void;
   onImport: () => void;
   onExport: (format: string) => void;
   onGenerate: () => void;
@@ -146,15 +139,6 @@ export default function StoryboardTopBar({
         >
           <Upload className="h-3.5 w-3.5" /> Import
         </button>
-        <Dropdown
-          label="AI Actions"
-          Icon={Sparkles}
-          items={AI_ACTION_LABELS.map((a) => a.label)}
-          onSelect={(label) => {
-            const match = AI_ACTION_LABELS.find((a) => a.label === label);
-            if (match) onAiAction(match.action);
-          }}
-        />
         <Dropdown label="Export" Icon={Download} items={['Word (.docx)', 'PDF (.pdf)']} onSelect={onExport} />
         <button
           type="button"

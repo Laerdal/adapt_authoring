@@ -1,20 +1,24 @@
-// Custom BlockNote block: simplified assessment authoring (spec AC5).
-//
-// One block covers MCQ / Graphic MCQ / Matching / Sentence Reordering / Text
-// Input / Slider. It shows only the essential authoring fields — advanced
-// settings (feedback, scoring, attempts) are deferred to the Page Editor. The
-// structured model is stored as JSON in the `data` prop (BlockNote props are
-// primitives only) and validated inline so it's generation-ready for Phase 4.
+// Assessment authoring card (spec AC5) — matches the Lovable question block:
+// a common header (badge, title, Show title, Replace, AI, Source, Delete, Done),
+// a "Regenerate with AI" bar, a Body field, per-kind options (with per-option
+// answer-specific feedback), a whole-question Feedback group, and a footer hint.
+// The structured model is stored as JSON in the `data` prop and is generation-
+// ready — options + feedback are written into the Adapt component on Save.
 
 import { useState } from 'react';
-import { Plus, X, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Sparkles, Code, Trash2, Check, Plus, AlertTriangle, MessageSquare } from 'lucide-react';
+import { storyboardActions } from '../storyboardActions';
 import { createReactBlockSpec } from '@blocknote/react';
+import { storyboardAi } from '@/api/ai';
 import {
   defaultAssessmentData,
+  emptyFeedback,
   isAssessmentKind,
   validateAssessment,
   type AssessmentData,
+  type AssessmentFeedback,
   type AssessmentKind,
+  type MatchPair,
   type McqOption,
 } from '@/types/storyboard';
 
@@ -27,157 +31,159 @@ const LABELS: Record<AssessmentKind, string> = {
   slider: 'Slider',
 };
 
+const FOOTER: Record<AssessmentKind, string> = {
+  mcq: 'Select one option and then select Submit.',
+  gmcq: 'Select one option and then select Submit.',
+  matching: 'Match each item to its correct pair and then select Submit.',
+  reorder: 'Place the items in the correct order and then select Submit.',
+  textInput: 'Type your answer and then select Submit.',
+  slider: 'Move the slider to your answer and then select Submit.',
+};
+
+const inputCls =
+  'w-full rounded border border-border bg-background px-2 py-1 text-sm text-foreground outline-none focus:border-primary';
+const labelCls = 'mb-0.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground';
+const stop = (e: React.KeyboardEvent) => e.stopPropagation();
+
 function parseData(kind: AssessmentKind, raw: string): AssessmentData {
   try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object') return parsed as AssessmentData;
+    const p = JSON.parse(raw);
+    if (p && typeof p === 'object') return { ...defaultAssessmentData(kind), ...p };
   } catch {
-    /* fall through to default */
+    /* fall through */
   }
   return defaultAssessmentData(kind);
 }
 
-// Small presentational helpers ------------------------------------------------
-
-const inputCls =
-  'w-full rounded border border-border bg-background px-2 py-1 text-sm text-foreground outline-none focus:border-primary';
-const stop = (e: React.KeyboardEvent) => e.stopPropagation(); // keep keys out of BlockNote
-
-function RowButton({ onClick, label }: { onClick: () => void; label: string }) {
+function HeaderBtn({ onClick, active, children, title }: { onClick: () => void; active?: boolean; children: React.ReactNode; title?: string }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+      title={title}
+      className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs hover:bg-muted ${active ? 'border-primary text-primary' : 'text-muted-foreground'}`}
     >
-      <Plus className="h-3 w-3" /> {label}
+      {children}
     </button>
   );
 }
 
-function RemoveButton({ onClick }: { onClick: () => void }) {
+// ── Feedback group (whole-question) ──────────────────────────────────────────
+
+function FeedbackGroup({ fb, set }: { fb: AssessmentFeedback; set: (f: AssessmentFeedback) => void }) {
+  const field = (key: keyof AssessmentFeedback, label: string) => (
+    <label className="mt-1 block">
+      <span className={labelCls}>{label}</span>
+      <input value={fb[key]} onKeyDown={stop} onChange={(e) => set({ ...fb, [key]: e.target.value })} className={inputCls} />
+    </label>
+  );
+  const empty = !Object.values(fb).some((v) => v.trim());
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label="Remove"
-      className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-muted"
-    >
-      <X className="h-3.5 w-3.5" />
-    </button>
+    <div className="mt-2 rounded border border-border p-2">
+      <div className={labelCls}>Feedback</div>
+      {field('correct', 'Correct')}
+      {field('incorrect', 'Incorrect')}
+      {field('incorrectNotFinal', 'Incorrect — not final')}
+      {field('partlyCorrectFinal', 'Partly correct — final')}
+      {field('partlyCorrectNotFinal', 'Partly correct — not final')}
+      {empty && (
+        <div className="mt-1.5 inline-flex items-center gap-1 text-xs text-[#92400e]">
+          <AlertTriangle className="h-3.5 w-3.5" /> Feedback not configured
+        </div>
+      )}
+    </div>
   );
 }
 
-// Per-kind forms --------------------------------------------------------------
+// ── Per-kind bodies ──────────────────────────────────────────────────────────
 
-function OptionsForm({
-  data,
-  graphic,
-  update,
-}: {
-  data: AssessmentData;
-  graphic: boolean;
-  update: (next: AssessmentData) => void;
-}) {
+function OptionsForm({ data, graphic, update }: { data: AssessmentData; graphic: boolean; update: (n: AssessmentData) => void }) {
   const options = data.options ?? [];
   const setOptions = (next: McqOption[]) => update({ ...data, options: next });
+  const patch = (i: number, p: Partial<McqOption>) => setOptions(options.map((o, j) => (j === i ? { ...o, ...p } : o)));
   return (
-    <div className="space-y-1.5">
+    <div className="mt-2 rounded border border-border p-2">
+      <div className={labelCls}>Options</div>
       {options.map((opt, i) => (
-        <div key={i} className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={opt.correct}
-            onChange={(e) => setOptions(options.map((o, j) => (j === i ? { ...o, correct: e.target.checked } : o)))}
-            title="Correct answer"
-            className="h-4 w-4 shrink-0 accent-[color:var(--primary)]"
-          />
-          <input
-            value={opt.text}
-            placeholder={`Option ${i + 1}`}
-            onKeyDown={stop}
-            onChange={(e) => setOptions(options.map((o, j) => (j === i ? { ...o, text: e.target.value } : o)))}
-            className={inputCls}
-          />
+        <div key={i} className="mb-2 rounded border border-border p-2">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <label className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+              <input type="checkbox" checked={opt.correct} onChange={(e) => patch(i, { correct: e.target.checked })} className="h-4 w-4 accent-[color:var(--primary)]" />
+              Correct
+              <span className="ml-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Option {i + 1}/{options.length}
+              </span>
+            </label>
+            <button type="button" aria-label="Remove option" onClick={() => setOptions(options.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-foreground">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
           {graphic && (
-            <input
-              value={opt.image ?? ''}
-              placeholder="Image URL"
-              onKeyDown={stop}
-              onChange={(e) => setOptions(options.map((o, j) => (j === i ? { ...o, image: e.target.value } : o)))}
-              className={`${inputCls} max-w-[9rem]`}
-            />
+            <input value={opt.image ?? ''} placeholder="Image source URL" onKeyDown={stop} onChange={(e) => patch(i, { image: e.target.value })} className={`${inputCls} mb-1`} />
           )}
-          <RemoveButton onClick={() => setOptions(options.filter((_, j) => j !== i))} />
+          <label className="block">
+            <span className={labelCls}>Option text</span>
+            <input value={opt.text} onKeyDown={stop} onChange={(e) => patch(i, { text: e.target.value })} className={inputCls} />
+          </label>
+          <label className="mt-1 block">
+            <span className={labelCls}>Answer-specific feedback</span>
+            <input value={opt.feedback ?? ''} placeholder="Shown when this option is selected" onKeyDown={stop} onChange={(e) => patch(i, { feedback: e.target.value })} className={inputCls} />
+          </label>
         </div>
       ))}
-      <RowButton onClick={() => setOptions([...options, { text: '', correct: false }])} label="Add option" />
+      <button type="button" onClick={() => setOptions([...options, { text: '', correct: false, feedback: '' }])} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+        <Plus className="h-3 w-3" /> Add option
+      </button>
     </div>
   );
 }
 
 function MatchingForm({ data, update }: { data: AssessmentData; update: (n: AssessmentData) => void }) {
   const pairs = data.pairs ?? [];
-  const setPairs = (next: typeof pairs) => update({ ...data, pairs: next });
+  const setPairs = (next: MatchPair[]) => update({ ...data, pairs: next });
   return (
-    <div className="space-y-1.5">
+    <div className="mt-2 rounded border border-border p-2">
+      <div className={labelCls}>Options &amp; matching options</div>
       {pairs.map((p, i) => (
-        <div key={i} className="flex items-center gap-2">
-          <input
-            value={p.prompt}
-            placeholder="Prompt"
-            onKeyDown={stop}
-            onChange={(e) => setPairs(pairs.map((x, j) => (j === i ? { ...x, prompt: e.target.value } : x)))}
-            className={inputCls}
-          />
-          <span className="text-muted-foreground">↔</span>
-          <input
-            value={p.answer}
-            placeholder="Correct match"
-            onKeyDown={stop}
-            onChange={(e) => setPairs(pairs.map((x, j) => (j === i ? { ...x, answer: e.target.value } : x)))}
-            className={inputCls}
-          />
-          <RemoveButton onClick={() => setPairs(pairs.filter((_, j) => j !== i))} />
+        <div key={i} className="mb-2 rounded border border-border p-2">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Option {i + 1}/{pairs.length}</span>
+            <button type="button" aria-label="Remove pair" onClick={() => setPairs(pairs.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-foreground">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <label className="block">
+            <span className={labelCls}>Text</span>
+            <input value={p.prompt} onKeyDown={stop} onChange={(e) => setPairs(pairs.map((x, j) => (j === i ? { ...x, prompt: e.target.value } : x)))} className={inputCls} />
+          </label>
+          <label className="mt-1 block">
+            <span className={labelCls}>Matching option</span>
+            <input value={p.answer} placeholder="Correct match for this option" onKeyDown={stop} onChange={(e) => setPairs(pairs.map((x, j) => (j === i ? { ...x, answer: e.target.value } : x)))} className={inputCls} />
+          </label>
         </div>
       ))}
-      <RowButton onClick={() => setPairs([...pairs, { prompt: '', answer: '' }])} label="Add pair" />
+      <button type="button" onClick={() => setPairs([...pairs, { prompt: '', answer: '' }])} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+        <Plus className="h-3 w-3" /> Add option
+      </button>
     </div>
   );
 }
 
-function ListForm({
-  values,
-  placeholder,
-  addLabel,
-  hint,
-  onChange,
-}: {
-  values: string[];
-  placeholder: (i: number) => string;
-  addLabel: string;
-  hint?: string;
-  onChange: (next: string[]) => void;
-}) {
+function ListForm({ values, itemLabel, addLabel, onChange }: { values: string[]; itemLabel: string; addLabel: string; onChange: (n: string[]) => void }) {
   return (
-    <div className="space-y-1.5">
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    <div className="mt-2 rounded border border-border p-2">
       {values.map((v, i) => (
-        <div key={i} className="flex items-center gap-2">
-          {placeholder(i).startsWith('#') && (
-            <span className="w-5 shrink-0 text-xs text-muted-foreground">{i + 1}.</span>
-          )}
-          <input
-            value={v}
-            placeholder={placeholder(i).replace(/^#/, '')}
-            onKeyDown={stop}
-            onChange={(e) => onChange(values.map((x, j) => (j === i ? e.target.value : x)))}
-            className={inputCls}
-          />
-          <RemoveButton onClick={() => onChange(values.filter((_, j) => j !== i))} />
+        <div key={i} className="mb-1 flex items-center gap-2">
+          <span className="w-16 shrink-0 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{itemLabel} {i + 1}</span>
+          <input value={v} onKeyDown={stop} onChange={(e) => onChange(values.map((x, j) => (j === i ? e.target.value : x)))} className={inputCls} />
+          <button type="button" aria-label="Remove" onClick={() => onChange(values.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-foreground">
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
         </div>
       ))}
-      <RowButton onClick={() => onChange([...values, ''])} label={addLabel} />
+      <button type="button" onClick={() => onChange([...values, ''])} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+        <Plus className="h-3 w-3" /> {addLabel}
+      </button>
     </div>
   );
 }
@@ -187,24 +193,36 @@ function SliderForm({ data, update }: { data: AssessmentData; update: (n: Assess
   const set = (patch: Partial<typeof s>) => update({ ...data, slider: { ...s, ...patch } });
   const num = (v: string) => (v === '' ? 0 : Number(v));
   return (
-    <div className="grid grid-cols-4 gap-2">
+    <div className="mt-2 grid grid-cols-4 gap-2 rounded border border-border p-2">
       {(['min', 'max', 'step', 'correct'] as const).map((k) => (
-        <label key={k} className="text-xs text-muted-foreground">
-          <span className="mb-0.5 block capitalize">{k}</span>
-          <input
-            type="number"
-            value={s[k]}
-            onKeyDown={stop}
-            onChange={(e) => set({ [k]: num(e.target.value) })}
-            className={inputCls}
-          />
+        <label key={k} className="block">
+          <span className={labelCls}>{k}</span>
+          <input type="number" value={s[k]} onKeyDown={stop} onChange={(e) => set({ [k]: num(e.target.value) })} className={inputCls} />
         </label>
       ))}
     </div>
   );
 }
 
-// The block ------------------------------------------------------------------
+function Body({ kind, data, update }: { kind: AssessmentKind; data: AssessmentData; update: (n: AssessmentData) => void }) {
+  switch (kind) {
+    case 'mcq':
+    case 'gmcq':
+      return <OptionsForm data={data} graphic={kind === 'gmcq'} update={update} />;
+    case 'matching':
+      return <MatchingForm data={data} update={update} />;
+    case 'reorder':
+      return <ListForm values={data.items ?? []} itemLabel="Position" addLabel="Add item" onChange={(n) => update({ ...data, items: n })} />;
+    case 'textInput':
+      return <ListForm values={data.answers ?? []} itemLabel="Answer" addLabel="Add acceptable answer" onChange={(n) => update({ ...data, answers: n })} />;
+    case 'slider':
+      return <SliderForm data={data} update={update} />;
+    default:
+      return null;
+  }
+}
+
+// ── The block ────────────────────────────────────────────────────────────────
 
 export const assessmentBlock = createReactBlockSpec(
   {
@@ -212,7 +230,7 @@ export const assessmentBlock = createReactBlockSpec(
     propSchema: {
       kind: { default: 'mcq', values: ['mcq', 'gmcq', 'matching', 'reorder', 'textInput', 'slider'] },
       title: { default: '' },
-      adaptComponent: { default: 'adapt-contrib-mcq' },
+      adaptComponent: { default: 'mcq' },
       data: { default: '{}' },
     },
     content: 'none',
@@ -221,65 +239,122 @@ export const assessmentBlock = createReactBlockSpec(
     render: ({ block, editor }) => {
       const kind = (isAssessmentKind(block.props.kind as string) ? block.props.kind : 'mcq') as AssessmentKind;
       const [model, setModel] = useState<AssessmentData>(() => parseData(kind, block.props.data as string));
+      const [collapsed, setCollapsed] = useState(false);
+      const [source, setSource] = useState(false);
+      const title = block.props.title as string;
+      const fb = model.feedback ?? emptyFeedback();
 
       const update = (next: AssessmentData) => {
         setModel(next);
-        editor.updateBlock(block, { props: { data: JSON.stringify(next), title: next.question || '' } });
+        editor.updateBlock(block, { props: { data: JSON.stringify(next) } });
+      };
+      const setTitle = (t: string) => editor.updateBlock(block, { props: { title: t } });
+
+      const regenerate = async () => {
+        try {
+          const seed = model.question || title || LABELS[kind];
+          const r = (await storyboardAi('suggest', seed)).trim();
+          if (r) update({ ...model, question: r });
+        } catch {
+          /* surfaced elsewhere */
+        }
       };
 
       const issues = validateAssessment(kind, model);
-      const ready = issues.length === 0;
+
+      if (collapsed) {
+        return (
+          <div className="group relative my-2 rounded-lg border bg-muted/20 p-3" contentEditable={false}>
+            <div className="mb-1 flex items-center gap-2">
+              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{LABELS[kind]}</span>
+              <span className="truncate text-sm font-medium text-foreground">{title || model.question || 'Untitled question'}</span>
+            </div>
+            {model.question && <p className="text-sm text-foreground">{model.question}</p>}
+            <ul className="mt-1 space-y-0.5">
+              {(model.options ?? []).filter((o) => o.text.trim()).map((o, i) => (
+                <li key={i} className={`text-sm ${o.correct ? 'font-medium text-[#166534]' : 'text-muted-foreground'}`}>
+                  {o.correct ? '✓ ' : '• '}{o.text}
+                </li>
+              ))}
+            </ul>
+            <button type="button" onClick={() => setCollapsed(false)} className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-xs text-muted-foreground opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100">
+              <RefreshCw className="h-3 w-3" /> Edit
+            </button>
+          </div>
+        );
+      }
 
       return (
-        <div className="my-2 rounded-md border border-dashed border-primary/50 bg-primary/5 p-3" contentEditable={false}>
-          <div className="mb-2 flex items-center gap-2">
-            <span className="rounded bg-foreground/80 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-background">
-              Assessment
+        <div className="my-2 rounded-lg border p-3" contentEditable={false}>
+          {/* Header */}
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              {LABELS[kind]}
             </span>
-            <span className="text-sm font-medium text-foreground">{LABELS[kind]}</span>
-            <span
-              className={`ml-auto inline-flex items-center gap-1 text-xs ${ready ? 'text-[#166534]' : 'text-[#92400e]'}`}
-              title={ready ? 'Generation-ready' : issues.join('\n')}
+            <input value={title} placeholder={`${LABELS[kind]} title`} onKeyDown={stop} onChange={(e) => setTitle(e.target.value)} className="min-w-0 flex-1 border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground" />
+            <HeaderBtn onClick={() => update({ ...model, showTitle: !model.showTitle })} active={model.showTitle} title="Show the title to learners">
+              <Check className="h-3 w-3" /> Show title
+            </HeaderBtn>
+            <HeaderBtn onClick={() => {}} title="Change type in the Page Editor">
+              <RefreshCw className="h-3 w-3" /> Replace
+            </HeaderBtn>
+            <HeaderBtn onClick={regenerate} title="Draft with AI">
+              <Sparkles className="h-3 w-3" /> AI
+            </HeaderBtn>
+            <HeaderBtn onClick={() => setSource((s) => !s)} active={source} title="Toggle source view">
+              <Code className="h-3 w-3" /> Source
+            </HeaderBtn>
+            <HeaderBtn
+              onClick={() => storyboardActions.openComment({ blockId: block.id, label: `ASSESSMENT · ${LABELS[kind].toUpperCase()}` })}
+              title="Comment on this question"
             >
-              {ready ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
-              {ready ? 'Ready' : `${issues.length} to fix`}
-            </span>
+              <MessageSquare className="h-3 w-3" /> Comment
+            </HeaderBtn>
+            <HeaderBtn onClick={() => editor.removeBlocks([block])} title="Delete question">
+              <Trash2 className="h-3 w-3" /> Delete
+            </HeaderBtn>
+            <HeaderBtn onClick={() => setCollapsed(true)} title="Collapse">
+              <Check className="h-3 w-3" /> Done
+            </HeaderBtn>
           </div>
 
-          <input
-            value={model.question}
-            placeholder="Question / instruction…"
-            onKeyDown={stop}
-            onChange={(e) => update({ ...model, question: e.target.value })}
-            className={`${inputCls} mb-2 font-medium`}
-          />
+          {/* Regenerate with AI bar */}
+          <button
+            type="button"
+            onClick={regenerate}
+            className="mb-2 flex w-full items-center gap-2 rounded-md border border-dashed px-2 py-1.5 text-left text-xs hover:opacity-90"
+            style={{ borderColor: 'color-mix(in oklab, var(--samaritan) 40%, transparent)', background: 'color-mix(in oklab, var(--samaritan) 6%, transparent)' }}
+          >
+            <span className="inline-flex items-center gap-1 font-medium" style={{ color: 'var(--samaritan)' }}>
+              <Sparkles className="h-3.5 w-3.5" /> Regenerate with AI
+            </span>
+            <span className="text-muted-foreground">Drafts the question, items and feedback from the course content and learning objectives.</span>
+          </button>
 
-          {(kind === 'mcq' || kind === 'gmcq') && (
-            <OptionsForm data={model} graphic={kind === 'gmcq'} update={update} />
-          )}
-          {kind === 'matching' && <MatchingForm data={model} update={update} />}
-          {kind === 'reorder' && (
-            <ListForm
-              values={model.items ?? []}
-              placeholder={() => '#Item'}
-              addLabel="Add item"
-              hint="List items in their correct order."
-              onChange={(next) => update({ ...model, items: next })}
-            />
-          )}
-          {kind === 'textInput' && (
-            <ListForm
-              values={model.answers ?? []}
-              placeholder={() => 'Acceptable answer'}
-              addLabel="Add acceptable answer"
-              onChange={(next) => update({ ...model, answers: next })}
-            />
-          )}
-          {kind === 'slider' && <SliderForm data={model} update={update} />}
+          {source ? (
+            <textarea value={JSON.stringify(model, null, 2)} readOnly rows={8} className={`${inputCls} font-mono text-xs`} />
+          ) : (
+            <>
+              {/* Body */}
+              <label className="block">
+                <span className={labelCls}>Body</span>
+                <textarea value={model.question} placeholder="Type the question here" onKeyDown={stop} rows={2} onChange={(e) => update({ ...model, question: e.target.value })} className={`${inputCls} resize-y`} />
+              </label>
 
-          <p className="mt-2 text-xs text-muted-foreground">
-            Advanced settings (feedback, scoring, attempts) are configured in the Page Editor.
-          </p>
+              <Body kind={kind} data={model} update={update} />
+              <FeedbackGroup fb={fb} set={(f) => update({ ...model, feedback: f })} />
+            </>
+          )}
+
+          {/* Footer + readiness */}
+          <div className="mt-2 flex items-center justify-between">
+            <p className="text-sm italic text-muted-foreground">{FOOTER[kind]}</p>
+            {issues.length > 0 && (
+              <span className="inline-flex items-center gap-1 text-xs text-[#92400e]" title={issues.join('\n')}>
+                <AlertTriangle className="h-3.5 w-3.5" /> {issues.length} to fix
+              </span>
+            )}
+          </div>
         </div>
       );
     },

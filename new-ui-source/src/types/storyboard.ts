@@ -84,13 +84,13 @@ export const INSERT_META: Record<
   Exclude<StoryboardInsertKind, 'text' | 'image' | 'video' | 'audio' | 'heading'>,
   { label: string; category: PlaceholderCategory; adaptComponent: string }
 > = {
-  groupedContent: { label: 'Grouped Content', category: 'group', adaptComponent: 'block' },
+  groupedContent: { label: 'Grouped Content', category: 'group', adaptComponent: 'laerdal-narrative' },
   h5p: { label: 'H5P', category: 'media', adaptComponent: 'adapt-laerdal-h5p' },
   laerdalForm: { label: 'Laerdal Form', category: 'survey', adaptComponent: 'adapt-laerdal-form' },
   mcq: { label: 'MCQ', category: 'assessment', adaptComponent: 'adapt-contrib-mcq' },
   gmcq: { label: 'Graphic MCQ', category: 'assessment', adaptComponent: 'adapt-contrib-gmcq' },
   matching: { label: 'Matching', category: 'assessment', adaptComponent: 'adapt-contrib-matching' },
-  reorder: { label: 'Sentence Reordering', category: 'assessment', adaptComponent: 'adapt-contrib-textInput' },
+  reorder: { label: 'Sentence Reordering', category: 'assessment', adaptComponent: 'adapt-contrib-resequence' },
   textInput: { label: 'Text Input', category: 'assessment', adaptComponent: 'adapt-contrib-textInput' },
   slider: { label: 'Slider', category: 'assessment', adaptComponent: 'adapt-contrib-slider' },
   hotgraphic: { label: 'Hot Graphic', category: 'interactive', adaptComponent: 'adapt-contrib-hotgraphic' },
@@ -117,6 +117,8 @@ export interface McqOption {
   correct: boolean;
   /** Optional image reference for Graphic MCQ (gmcq). */
   image?: string;
+  /** Answer-specific feedback shown when this option is selected. */
+  feedback?: string;
 }
 export interface MatchPair {
   prompt: string;
@@ -128,37 +130,54 @@ export interface SliderConfig {
   step: number;
   correct: number;
 }
+/** Whole-question feedback (maps to Adapt `_feedback`). */
+export interface AssessmentFeedback {
+  correct: string;
+  incorrect: string;
+  incorrectNotFinal: string;
+  partlyCorrectFinal: string;
+  partlyCorrectNotFinal: string;
+}
 
 export interface AssessmentData {
   question: string;
+  showTitle?: boolean;
   options?: McqOption[]; // mcq, gmcq
   pairs?: MatchPair[]; // matching
   items?: string[]; // reorder — array order is the correct order
   answers?: string[]; // textInput — acceptable answers
   slider?: SliderConfig; // slider
+  feedback?: AssessmentFeedback; // whole-question feedback (all kinds)
+}
+
+export function emptyFeedback(): AssessmentFeedback {
+  return { correct: '', incorrect: '', incorrectNotFinal: '', partlyCorrectFinal: '', partlyCorrectNotFinal: '' };
 }
 
 export function defaultAssessmentData(kind: AssessmentKind): AssessmentData {
+  const base = { showTitle: true, feedback: emptyFeedback() };
   switch (kind) {
     case 'mcq':
     case 'gmcq':
       return {
+        ...base,
         question: '',
         options: [
-          { text: '', correct: true },
-          { text: '', correct: false },
+          { text: 'Correct answer', correct: true, feedback: '' },
+          { text: 'Incorrect option', correct: false, feedback: '' },
+          { text: 'Incorrect option', correct: false, feedback: '' },
         ],
       };
     case 'matching':
-      return { question: '', pairs: [{ prompt: '', answer: '' }] };
+      return { ...base, question: '', pairs: [{ prompt: '', answer: '' }] };
     case 'reorder':
-      return { question: '', items: ['', ''] };
+      return { ...base, question: '', items: ['', ''] };
     case 'textInput':
-      return { question: '', answers: [''] };
+      return { ...base, question: '', answers: [''] };
     case 'slider':
-      return { question: '', slider: { min: 0, max: 10, step: 1, correct: 5 } };
+      return { ...base, question: '', slider: { min: 0, max: 10, step: 1, correct: 5 } };
     default:
-      return { question: '' };
+      return { ...base, question: '' };
   }
 }
 
@@ -205,6 +224,106 @@ export function validateAssessment(kind: AssessmentKind, data: AssessmentData): 
   return issues;
 }
 
+// Assessment card → Adapt question-component fields (`_items` + `_feedback` +
+// per-kind extras). Shapes follow adapt-contrib question components; approximate
+// where the exact Laerdal schema differs (verify against the installed plugin).
+export function buildAssessmentFields(kind: AssessmentKind, data: AssessmentData): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  const fb = data.feedback;
+  if (fb) {
+    patch._feedback = {
+      correct: fb.correct,
+      _incorrect: { final: fb.incorrect, notFinal: fb.incorrectNotFinal },
+      _partlyCorrect: { final: fb.partlyCorrectFinal, notFinal: fb.partlyCorrectNotFinal },
+    };
+  }
+  if (kind === 'mcq' || kind === 'gmcq') {
+    patch._items = (data.options ?? []).map((o) => ({
+      text: o.text,
+      _shouldBeSelected: !!o.correct,
+      feedback: o.feedback ?? '',
+      ...(o.image ? { _graphic: { src: o.image, large: o.image } } : {}),
+    }));
+  } else if (kind === 'matching') {
+    patch._items = (data.pairs ?? []).map((p) => ({
+      text: p.prompt,
+      _options: [{ text: p.answer, _isCorrect: true }],
+    }));
+  } else if (kind === 'reorder') {
+    // adapt-laerdal-sentenceOrdering: `_items[].{ sentence, position }`.
+    patch._items = (data.items ?? []).map((t, i) => ({ sentence: t, position: i + 1 }));
+  } else if (kind === 'textInput') {
+    patch._items = (data.answers ?? []).map((a) => ({ _answers: [a] }));
+  } else if (kind === 'slider') {
+    const s = data.slider;
+    if (s) {
+      patch._scaleStart = s.min;
+      patch._scaleEnd = s.max;
+      patch._scaleStep = s.step;
+      patch._correctAnswer = s.correct;
+    }
+  }
+  return patch;
+}
+
+// Inverse of buildAssessmentFields: reconstruct an AssessmentData card from a
+// saved Adapt question component's `properties` (+ its `body` = question). Used
+// by the reload/read-back path so questions round-trip as cards, not H4+text.
+export function parseAssessmentData(
+  kind: AssessmentKind,
+  props: Record<string, unknown>,
+  question: string
+): AssessmentData {
+  const p = props || {};
+  const fb = (p._feedback as Record<string, unknown>) || {};
+  const inc = (fb._incorrect as Record<string, unknown>) || {};
+  const part = (fb._partlyCorrect as Record<string, unknown>) || {};
+  const feedback: AssessmentFeedback = {
+    correct: String(fb.correct ?? ''),
+    incorrect: String(inc.final ?? ''),
+    incorrectNotFinal: String(inc.notFinal ?? ''),
+    partlyCorrectFinal: String(part.final ?? ''),
+    partlyCorrectNotFinal: String(part.notFinal ?? ''),
+  };
+  const items = Array.isArray(p._items) ? (p._items as Array<Record<string, unknown>>) : [];
+  const data: AssessmentData = { question, showTitle: true, feedback };
+
+  if (kind === 'mcq' || kind === 'gmcq') {
+    data.options = items.map((it) => {
+      const g = (it._graphic as { large?: string; small?: string; src?: string }) || {};
+      return {
+        text: String(it.text ?? ''),
+        correct: !!it._shouldBeSelected,
+        feedback: it.feedback ? String(it.feedback) : undefined,
+        image: g.large || g.small || g.src || undefined,
+      } as McqOption;
+    });
+  } else if (kind === 'matching') {
+    data.pairs = items.map((it) => {
+      const opts = Array.isArray(it._options) ? (it._options as Array<Record<string, unknown>>) : [];
+      return { prompt: String(it.text ?? ''), answer: String(opts[0]?.text ?? '') };
+    });
+  } else if (kind === 'reorder') {
+    data.items = items
+      .slice()
+      .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0))
+      .map((it) => String(it.sentence ?? it.text ?? ''));
+  } else if (kind === 'textInput') {
+    data.answers = items.map((it) => {
+      const ans = Array.isArray(it._answers) ? (it._answers as unknown[]) : [];
+      return String(ans[0] ?? '');
+    });
+  } else if (kind === 'slider') {
+    data.slider = {
+      min: Number(p._scaleStart ?? 0),
+      max: Number(p._scaleEnd ?? 10),
+      step: Number(p._scaleStep ?? 1),
+      correct: Number(p._correctAnswer ?? 0),
+    };
+  }
+  return data;
+}
+
 /** Rollup counts for the Review Center summary + AI guidance (AC7/AC8). */
 export interface StoryboardSummary {
   topics: number;
@@ -228,6 +347,14 @@ export interface StoryboardEditorHandle {
   /** Insert content at the cursor (Add Heading / Add Content / Add Instruction).
    *  `opts.level` sets the heading level (H1–H3) when `kind === 'heading'`. */
   insert(kind: StoryboardInsertKind, opts?: { level?: number }): void;
+  /** Insert a pre-populated component card at the cursor (AI Assistance →
+   *  Insert). `title` seeds the card title; `data` is merged into the card's
+   *  default data (e.g. `{ description }` for a Text component). Returns the new
+   *  block id so the caller can anchor follow-up actions (comments). */
+  insertComponent(
+    kind: StoryboardInsertKind,
+    opts?: { title?: string; data?: Record<string, unknown> }
+  ): string | null;
   /** Plain text of the block at the cursor (for AI actions, AC7). */
   getActiveText(): string;
   /** Replace the cursor block's content with `text` (Improve / Rewrite). */
