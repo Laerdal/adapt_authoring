@@ -668,7 +668,7 @@ export default function HomePage() {
                 <CourseCard
                   key={course.id}
                   {...course}
-                  view={view}
+                  viewHref={course.backendId ? `/course/${course.backendId}/preview` : ""}
                   onUpdate={(patch) => handleUpdate(course.id, patch)}
                   onCopy={() => handleCopy(course.id)}
                   onCopyId={() => handleCopyId(course.id)}

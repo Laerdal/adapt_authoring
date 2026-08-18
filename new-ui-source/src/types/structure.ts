@@ -22,31 +22,88 @@ export interface SComponent {
   title: string;
   componentKey: string; // engine `_component` key, e.g. 'text' | 'mcq'
   layout?: "full" | "left" | "right";
+  subtitle?: string;
   description?: string;
+  instruction?: string;
+  themeSettings?: Record<string, unknown>;
+  properties?: Record<string, unknown>;
   url?: string;
 }
 
 export interface SContentGroup {
   id: string;
   title: string;
+  displayTitle?: string;
   description?: string;
   instruction?: string;
+  themeSettings?: Record<string, unknown>;
+  classes?: string;
+  requireCompletionOf?: string;
+  isOptional?: boolean;
+  isAvailable?: boolean;
+  isHidden?: boolean;
+  isVisible?: boolean;
+  ariaLevel?: string;
+  extensions?: Record<string, unknown>;
   components: SComponent[];
 }
 
 export interface SSection {
   id: string;
   title: string;
+  displayTitle?: string;
   description?: string;
   instruction?: string;
+  themeSettings?: Record<string, unknown>;
+  classes?: string;
+  requireCompletionOf?: string;
+  isOptional?: boolean;
+  isAvailable?: boolean;
+  isHidden?: boolean;
+  isVisible?: boolean;
+  onScreen?: {
+    _isEnabled?: boolean;
+    _classes?: string;
+    _percentInviewVertical?: number;
+  };
+  ariaLevel?: string;
+  extensions?: Record<string, unknown>;
   contentGroups: SContentGroup[];
 }
 
 export interface STopic {
   id: string;
   title: string;
+  displayTitle?: string;
   sortOrder: number;
+  subtitle?: string;
+  body?: string;
+  instruction?: string;
   description?: string;
+  graphic?: {
+    src?: string;
+    alt?: string;
+  };
+  linkText?: string;
+  duration?: string;
+  lockType?: string;
+  lockedBy?: string[];
+  classes?: string;
+  htmlClasses?: string;
+  requireCompletionOf?: string;
+  isOptional?: boolean;
+  isAvailable?: boolean;
+  isHidden?: boolean;
+  isVisible?: boolean;
+  onScreen?: {
+    _isEnabled?: boolean;
+    _classes?: string;
+    _percentInviewVertical?: number;
+  };
+  ariaLevel?: string;
+  extensions?: Record<string, unknown>;
+  themeSettings?: Record<string, unknown>;
+  menuSettings?: Record<string, unknown>;
   sections: SSection[];
 }
 

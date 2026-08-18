@@ -11,15 +11,17 @@ import {
   updateCourseMenuSettings,
 } from "../../api/adaptAuthoring";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
+import AssetSelectionField, { toRenderableAssetUrl } from "../../components/common/AssetSelectionField";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
 type MenuStyle = "life" | "overview" | "box";
 type Align = "left" | "center" | "right";
 type HeaderPosition = "above" | "below";
-type BgRepeat = "no-repeat" | "repeat" | "repeat-x" | "repeat-y";
-type BgSize = "cover" | "contain" | "auto" | "100% 100%";
+type BgRepeat = "" | "no-repeat" | "repeat" | "repeat-x" | "repeat-y";
+type BgSize = "" | "cover" | "contain" | "auto";
 type BgPosition =
+  | ""
   | "left top"
   | "left center"
   | "left bottom"
@@ -81,23 +83,24 @@ const DEFAULT_CONFIG: MenuPageConfig = {
     medium: "",
     small: "",
   },
-  headerRepeat: "no-repeat",
-  headerSize: "cover",
-  headerBgPosition: "center center",
+  headerRepeat: "",
+  headerSize: "",
+  headerBgPosition: "",
   bgImageSrc: {
     xlarge: "",
     large: "",
     medium: "",
     small: "",
   },
-  bgRepeat: "no-repeat",
-  bgSize: "cover",
-  bgPosition: "center center",
+  bgRepeat: "",
+  bgSize: "",
+  bgPosition: "",
 };
 
-const BG_REPEAT_OPTIONS: BgRepeat[] = ["no-repeat", "repeat", "repeat-x", "repeat-y"];
-const BG_SIZE_OPTIONS: BgSize[] = ["cover", "contain", "auto", "100% 100%"];
+const BG_REPEAT_OPTIONS: BgRepeat[] = ["", "no-repeat", "repeat", "repeat-x", "repeat-y"];
+const BG_SIZE_OPTIONS: BgSize[] = ["", "auto", "cover", "contain"];
 const BG_POSITION_OPTIONS: BgPosition[] = [
+  "",
   "left top",
   "left center",
   "left bottom",
@@ -124,7 +127,7 @@ function coerceOption<T extends string>(
   allowed: readonly T[],
   fallback: T
 ): T {
-  if (!value) return fallback;
+  if (value == null) return fallback;
   return (allowed as readonly string[]).includes(value) ? (value as T) : fallback;
 }
 
@@ -154,15 +157,6 @@ function getMenuSettingsEntryForStyle(settings: CourseMenuSettings, style: MenuS
   return byStyleKey || settings._boxMenu;
 }
 
-function toRenderableAssetUrl(source: string | undefined): string | null {
-  const src = (source || "").trim();
-  if (!src) return null;
-  if (/^(https?:)?\/\//i.test(src) || src.startsWith("/")) return src;
-  if (src.startsWith("course/assets/")) return `/${src}`;
-  if (/^[a-f0-9]{24}$/i.test(src)) return `/api/asset/serve/${src}`;
-  return src;
-}
-
 function isExternalAsset(value: string): boolean {
   return /^(https?:)?\/\//i.test((value || "").trim());
 }
@@ -174,6 +168,59 @@ function toCourseAssetFieldName(value: string): string | null {
   if (!normalized.startsWith("course/assets/")) return null;
   const fieldName = normalized.replace(/^course\/assets\//, "");
   return fieldName || null;
+}
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function buildCourseAssetLinkCandidates(value: string): string[] {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return [];
+
+  const normalized = trimmed.replace(/^\/+/, "").split(/[?#]/)[0];
+  const candidates = new Set<string>([trimmed, normalized, `/${normalized}`]);
+
+  if (normalized.startsWith("course/assets/")) {
+    const fieldName = normalized.replace(/^course\/assets\//, "");
+    const decodedFieldName = safeDecodeURIComponent(fieldName);
+    const encodedFieldName = encodeURIComponent(decodedFieldName).replace(/%2F/gi, "/");
+    candidates.add(`course/assets/${decodedFieldName}`);
+    candidates.add(`course/assets/${encodedFieldName}`);
+    candidates.add(`/course/assets/${decodedFieldName}`);
+    candidates.add(`/course/assets/${encodedFieldName}`);
+  }
+
+  return [...candidates];
+}
+
+function addAssetLinkMapping(target: Record<string, string>, fieldName: string, assetId: string) {
+  const decodedFieldName = safeDecodeURIComponent(fieldName);
+  const encodedFieldName = encodeURIComponent(decodedFieldName).replace(/%2F/gi, "/");
+  const variants = [
+    `course/assets/${fieldName}`,
+    `course/assets/${decodedFieldName}`,
+    `course/assets/${encodedFieldName}`,
+  ];
+
+  variants.forEach((link) => {
+    target[link] = assetId;
+    target[`/${link}`] = assetId;
+  });
+}
+
+function extractAssetIdFromCourseAssetPath(value: string): string | null {
+  const normalized = (value || "").trim().replace(/^\/+/, "");
+  if (!normalized.startsWith("course/assets/")) return null;
+
+  const tail = normalized.replace(/^course\/assets\//, "").split(/[?#]/)[0];
+  const basename = tail.split("/").pop() || "";
+  const match = basename.match(/^([a-f0-9]{24})(?:\.[^.]+)?$/i);
+  return match?.[1] || null;
 }
 
 type AssetTarget =
@@ -439,7 +486,7 @@ function MenuDropdown({
                   value === opt ? "bg-[#dbeeff] text-[#2d6fa8] font-medium" : "text-[#374151] hover:bg-[#f9fafb]"
                 }`}
               >
-                {opt}
+                {opt || "Default"}
                 {value === opt ? (
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12" />
@@ -604,60 +651,7 @@ function AlignButtons({ value, onChange }: { value: Align; onChange: (v: Align) 
   );
 }
 
-function AssetPickerCard({
-  label,
-  value,
-  resolveUrl,
-  onPickAsset,
-  onPickExternal,
-  onClear,
-  showLabel = true,
-}: {
-  label: string;
-  value: string;
-  resolveUrl?: (value: string) => string | null;
-  onPickAsset: () => void;
-  onPickExternal: () => void;
-  onClear: () => void;
-  showLabel?: boolean;
-}) {
-  const previewUrl = resolveUrl ? resolveUrl(value) : toRenderableAssetUrl(value);
-
-  return (
-    <div className="border border-[var(--life-neutral-200)] rounded-lg p-3 flex flex-col gap-2.5">
-      {showLabel ? <div className="text-[13px] text-[var(--life-base-black)]">{label}</div> : null}
-      {previewUrl ? (
-        <div className="border border-[var(--life-neutral-200)] rounded-md overflow-hidden bg-[var(--life-neutral-020)]">
-          <div className="h-24 w-full flex items-center justify-center overflow-hidden bg-[var(--life-neutral-020)]">
-            <img src={previewUrl} alt={label} className="w-full h-full object-contain" />
-          </div>
-          <div className="px-2.5 py-2 border-t border-[var(--life-neutral-200)] text-[11px] text-[var(--life-neutral-500)] truncate">{value}</div>
-        </div>
-      ) : null}
-      {value ? (
-        <div className="flex items-center justify-end gap-2.5">
-          <button type="button" onClick={onPickAsset} className="px-3 py-2 text-sm font-semibold rounded-md border border-[var(--life-primary-500)] text-[var(--life-primary-500)] bg-white hover:bg-[var(--life-primary-020)] transition-colors cursor-pointer">
-            Change
-          </button>
-          <button type="button" onClick={onClear} className="px-3 py-2 text-sm font-semibold rounded-md border border-[var(--life-critical-500)] text-[var(--life-critical-500)] bg-white hover:bg-[var(--life-critical-050)] transition-colors cursor-pointer">
-            Remove
-          </button>
-        </div>
-      ) : (
-        <div className="flex gap-2.5 flex-wrap">
-          <button type="button" onClick={onPickAsset} className="px-3 py-2 text-sm font-semibold rounded-md bg-[var(--life-primary-500)] text-white hover:bg-[var(--life-primary-700)] transition-colors cursor-pointer flex items-center gap-1.5">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8l2 3h6a2 2 0 0 1 2 2z" /></svg>
-            Select an Asset
-          </button>
-          <button type="button" onClick={onPickExternal} className="px-3 py-2 text-sm font-semibold rounded-md border border-[var(--life-primary-500)] text-[var(--life-primary-500)] hover:bg-[var(--life-primary-020)] transition-colors cursor-pointer flex items-center gap-1.5">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07L11.65 5" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07L12.35 19" /></svg>
-            Select an External Asset
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
+const AssetPickerCard = AssetSelectionField;
 
 function StyleThumb({ style }: { style: MenuStyle }) {
   if (style === "life") {
@@ -1090,7 +1084,7 @@ export function MenuPage({
         setCourseAssetMappings(courseAssets || {});
         const nextAssetLinkMap: Record<string, string> = {};
         Object.entries(courseAssets || {}).forEach(([fieldName, assetId]) => {
-          nextAssetLinkMap[`course/assets/${fieldName}`] = assetId;
+          addAssetLinkMapping(nextAssetLinkMap, fieldName, assetId);
         });
         setAssetLinkIdMap(nextAssetLinkMap);
         setConfig(merged);
@@ -1135,10 +1129,19 @@ export function MenuPage({
     if (!normalized.startsWith("course/assets/")) return src;
 
     const fieldName = normalized.replace(/^course\/assets\//, "");
-    const assetId = courseAssetMappings[fieldName] || assetLinkIdMap[normalized] || assetLinkIdMap[src];
+    const decodedFieldName = safeDecodeURIComponent(fieldName);
+    const encodedFieldName = encodeURIComponent(decodedFieldName).replace(/%2F/gi, "/");
+    const assetId =
+      courseAssetMappings[fieldName] ||
+      courseAssetMappings[decodedFieldName] ||
+      courseAssetMappings[encodedFieldName] ||
+      buildCourseAssetLinkCandidates(src).map((candidate) => assetLinkIdMap[candidate]).find(Boolean);
     if (assetId) return `/api/asset/serve/${assetId}`;
 
-    return null;
+    const embeddedAssetId = extractAssetIdFromCourseAssetPath(src);
+    if (embeddedAssetId) return `/api/asset/serve/${embeddedAssetId}`;
+
+    return `/${encodeURI(normalized)}`;
   }, [assetLinkIdMap, courseAssetMappings]);
 
   const applyAssetValue = useCallback((target: AssetTarget, value: string) => {
@@ -1193,7 +1196,7 @@ export function MenuPage({
       for (const link of currentLinks) {
         const fieldName = toCourseAssetFieldName(link);
         if (!fieldName) continue;
-        const assetId = assetLinkIdMap[link];
+        const assetId = buildCourseAssetLinkCandidates(link).map((candidate) => assetLinkIdMap[candidate]).find(Boolean);
         if (!assetId) continue;
         upserts.push(
           removeCourseAssetMappings(courseId, fieldName).then(() => createCourseAssetMapping(courseId, fieldName, assetId))
@@ -1212,7 +1215,12 @@ export function MenuPage({
       await updateCourseMenuSettings(courseId, payload);
 
       const refreshedMappings = await getCourseAssetMappings(courseId);
+      const refreshedAssetLinkMap: Record<string, string> = {};
+      Object.entries(refreshedMappings || {}).forEach(([fieldName, assetId]) => {
+        addAssetLinkMapping(refreshedAssetLinkMap, fieldName, assetId);
+      });
       setCourseAssetMappings(refreshedMappings);
+      setAssetLinkIdMap((prev) => ({ ...prev, ...refreshedAssetLinkMap }));
 
       setActiveCourseMenuSettings(payload);
       setSavedConfig(config);
@@ -1399,10 +1407,14 @@ export function MenuPage({
       {assetPickerTarget ? (
         <AssetPickerModal
           onSelect={(asset) => {
-            applyAssetValue(assetPickerTarget, asset.assetLink || asset.url || asset.id);
+            const resolvedAssetLink = asset.assetLink || asset.url || asset.id;
+            applyAssetValue(assetPickerTarget, resolvedAssetLink);
             setAssetLinkIdMap((prev) => ({
               ...prev,
-              [asset.assetLink || asset.url || asset.id]: asset.id,
+              ...buildCourseAssetLinkCandidates(resolvedAssetLink).reduce<Record<string, string>>((next, key) => {
+                next[key] = asset.id;
+                return next;
+              }, {}),
             }));
             setAssetPickerTarget(null);
           }}

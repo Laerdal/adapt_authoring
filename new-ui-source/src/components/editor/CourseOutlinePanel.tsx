@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { useNavigate } from "react-router-dom";
 import { StructureIcon, STRUCTURE_ICON_COLOR_CLASS } from "@/components/course/StructureIcons";
 import type { ContentPageData } from "@/pages/editor/pageEditorWorkspace";
 
@@ -29,7 +28,6 @@ function MaskIcon({ file, className }: { file: string; className?: string }) {
 }
 
 interface CourseOutlinePanelProps {
-  courseId: string;
   onClose: () => void;
   menuPageCreated: boolean;
   menuSelected: boolean;
@@ -337,7 +335,6 @@ function InlineAddRow({
 }
 
 export default function CourseOutlinePanel({
-  courseId,
   onClose,
   contentPages,
   selectedPageId,
@@ -360,7 +357,6 @@ export default function CourseOutlinePanel({
   onDeleteComponent,
   onUseTemplate,
 }: CourseOutlinePanelProps) {
-  const navigate = useNavigate();
   const panelRef = useRef<HTMLDivElement>(null);
   const [expandedTopics, setExpandedTopics] = useState<Record<string, boolean>>({});
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
@@ -428,10 +424,6 @@ export default function CourseOutlinePanel({
     if (level === "group") return "Group";
     return "Component";
   }
-
-function handleCourseConfigClick() {
-  navigate(`/course/${courseId}/setup`);
-}
 
   return (
     <div ref={panelRef} className="w-[280px] h-full bg-white border-r border-[#d8dee6] flex flex-col shrink-0 overflow-x-hidden">
@@ -687,20 +679,6 @@ function handleCourseConfigClick() {
             </div>
           );
         })}
-      </div>
-
-      <div className="px-3 pb-4 pt-3 border-t border-[#d8dee6] shrink-0">
-        <button
-          type="button"
-          onClick={handleCourseConfigClick}
-          className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          aria-label="Course Config"
-          title="Course Config"
-          disabled={!courseId}
-        >
-          <MaskIcon file="back-icon.svg" className="block w-[13px] h-[13px] shrink-0 bg-current" />
-          <span>Course Config</span>
-        </button>
       </div>
 
       {deleteTarget && (
