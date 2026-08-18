@@ -20,6 +20,7 @@ import { LearnerExperiencePanel } from "./setup/learnerExperiencePage";
 import { UnsavedChangesModal } from "./setup/unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./setup/useUnsavedChangesNavigationGuard";
 import { CompletionProgressPage } from "./setup/completionProgressPage";
+import { CdnDeploymentPage } from "./setup/cdnDeploymentPage";
 
 const ICON_BASE = "/new/assets/icons";
 
@@ -164,6 +165,7 @@ const NAV_ITEMS = [
   {
     id: "cdn-deployment",
     label: "CDN Deployment",
+    guarded: true,
     icon: (
       <SidebarMaskIcon file="cdn-icon.svg" />
     ),
@@ -3335,6 +3337,7 @@ function CourseCreationCenterContent() {
     if (activeNav === "learner-experience") return <LearnerExperiencePanel courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "completion") return <CompletionProgressPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "technical-settings") return <TechnicalSettingPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+    if (activeNav === "cdn-deployment") return <CdnDeploymentPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "publish") return <PublishPanel />;
     return <ComingSoonPanel label={activeItem?.label ?? (activeNav === "storyboarding" ? "Storyboarding" : "")} />;
   }
