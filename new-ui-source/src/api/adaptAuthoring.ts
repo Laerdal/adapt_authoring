@@ -697,6 +697,7 @@ export interface NavigationSettings {
   };
 }
 
+
 // Schema defaults for the six footer buttons (adapt-navigation-footer/properties.schema).
 function defaultFooterButtons(): Record<NavFooterButtonKey, NavFooterButton> {
   return {
@@ -1200,7 +1201,7 @@ const LAERDAL_PAGE_LEVEL_PROGRESS_EXTENSION_NAME = "adapt-laerdal-pageLevelProgr
 const PROGRESSION_INDICATOR_EXTENSION_NAME = "adapt-progression-indicator";
 const PROGRESSION_INDICATOR_EXTENSION_TARGET = "_progressionIndicator";
 
-export type CourseProgressBarStyle = "continuous" | "compact";
+export type CourseProgressBarStyle = "continuous" | "compact" | "";
 export type CourseProgressIndicatorKey =
   | "page-completion"
   | "course-completion"
@@ -1356,10 +1357,10 @@ export async function getCoursePageLevelProgressSettings(
         ? "continuous"
         : contribInstalled
           ? "compact"
-          : "continuous";
+          : "";
 
-  const activeConfig = progressBarStyle === "continuous" ? laerdalCfg : contribCfg;
-  const activeGlobals = progressBarStyle === "continuous" ? laerdalGlobals : contribGlobals;
+  const activeConfig = progressBarStyle === "continuous" ? laerdalCfg : progressBarStyle === "compact" ? contribCfg : null;
+  const activeGlobals = progressBarStyle === "continuous" ? laerdalGlobals : progressBarStyle === "compact" ? contribGlobals : {};
 
   const progressIndicatorText = progressionCfg._progressionLabel || str(
     activeGlobals.pageLevelProgress,
@@ -1369,7 +1370,7 @@ export async function getCoursePageLevelProgressSettings(
 
   return {
     progressBarStyle,
-    progressIndicators: indicatorsFromPageLevelProgressConfig(activeConfig),
+    progressIndicators: activeConfig ? indicatorsFromPageLevelProgressConfig(activeConfig) : [],
     progressIndicatorEnabled: progressionInstalled && progressionEnabled,
     progressIndicatorText,
     progressIndicatorAriaLabel,
