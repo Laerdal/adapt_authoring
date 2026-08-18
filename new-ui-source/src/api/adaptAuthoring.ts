@@ -587,8 +587,8 @@ export async function createCourse(input: CreateCourseInput): Promise<CreatedCou
 
 export async function getCourseBootstrapData(courseId: string): Promise<CourseBootstrapData> {
   const [course, config] = await Promise.all([
-    apiClient.get<EngineCourseDetails>(`/api/content/course/${courseId}`),
-    apiClient.get<EngineConfigDetails>(`/api/content/config/${courseId}`),
+      apiClient.get<EngineCourseDetails>(`/api/content/course/${courseId}`),
+      apiClient.get<EngineConfigDetails>(`/api/content/config/${courseId}`),
   ]);
 
   const rawHero = course.heroImage ?? null;
@@ -1912,6 +1912,9 @@ interface EngineContentNode {
   _type?: string;
   title?: string;
   displayTitle?: string;
+  subtitle?: string;
+  _subtitle?: string;
+  body?: string;
   description?: string;
   instruction?: string;
   _sortOrder?: number;
@@ -1919,6 +1922,26 @@ interface EngineContentNode {
   _componentType?: string;
   _layout?: string;
   url?: string;
+  _graphic?: Record<string, unknown>;
+  linkText?: string;
+  duration?: string;
+  _lockType?: string;
+  _lockedBy?: string[];
+  _classes?: string;
+  _htmlClasses?: string;
+  requirecompletionof?: string | number;
+  requireCompletionOf?: string | number;
+  _requireCompletionOf?: string | number;
+  _isOptional?: boolean;
+  _isAvailable?: boolean;
+  _isHidden?: boolean;
+  _isVisible?: boolean;
+  _onScreen?: Record<string, unknown>;
+  _ariaLevel?: string;
+  _extensions?: Record<string, unknown>;
+  themeSettings?: Record<string, unknown>;
+  menuSettings?: Record<string, unknown>;
+  properties?: Record<string, unknown>;
 }
 
 // A component type installed on the instance (GET /api/componenttype).
@@ -1958,7 +1981,36 @@ export async function getCourseStructure(
   ]);
 
   const label = (n: EngineContentNode): string =>
-    n.displayTitle || n.title || "Untitled";
+    n.title || n.displayTitle || "Untitled";
+  const scalarString = (value: unknown): string => {
+    if (typeof value === "string") return value;
+    if (typeof value === "number" && Number.isFinite(value)) return String(value);
+    return "";
+  };
+  const scalarNumber = (value: unknown, fallback: number): number => {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string") {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return fallback;
+  };
+  const objectValue = (value: unknown): Record<string, unknown> => {
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return value as Record<string, unknown>;
+    }
+    if (typeof value === "string") {
+      try {
+        const parsed = JSON.parse(value);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          return parsed as Record<string, unknown>;
+        }
+      } catch {
+        // Return an empty object when string values are not valid JSON.
+      }
+    }
+    return {};
+  };
   const childrenOf = (rows: EngineContentNode[], parentId: string) =>
     rows.filter((r) => r._parentId === parentId).sort(bySortOrder);
 
@@ -1969,40 +2021,123 @@ export async function getCourseStructure(
   const childPages = (parentId: string) =>
     pages.filter((p) => p._parentId === parentId).sort(bySortOrder);
 
-  const buildTopic = (page: EngineContentNode): STopic => ({
-    id: page._id,
-    title: label(page),
-    sortOrder: page._sortOrder ?? 0,
-    description: page.description || "",
-    sections: childrenOf(articles, page._id).map(
-      (article): SSection => ({
-        id: article._id,
-        title: label(article),
-        description: article.description || "",
-        instruction: article.instruction || "",
-        contentGroups: childrenOf(blocks, article._id).map(
-          (block): SContentGroup => ({
-            id: block._id,
-            title: label(block),
-            description: block.description || "",
-            instruction: block.instruction || "",
-            components: childrenOf(components, block._id).map(
-              (comp): SComponent => ({
-                id: comp._id,
-                title: label(comp),
-                componentKey: comp._component || "",
-                layout: comp._layout === "left" || comp._layout === "right" || comp._layout === "full"
-                  ? comp._layout
-                  : undefined,
-                description: comp.description || "",
-                url: comp.url || "",
-              })
-            ),
-          })
-        ),
-      })
-    ),
-  });
+  const buildTopic = (page: EngineContentNode): STopic => {
+    const pageGraphic = objectValue(page._graphic);
+    const onScreen = objectValue(page._onScreen);
+
+    return {
+      id: page._id,
+      title: label(page),
+      displayTitle: page.displayTitle || "",
+      sortOrder: page._sortOrder ?? 0,
+      subtitle: page.subtitle || page._subtitle || "",
+      body: page.body || "",
+      instruction: page.instruction || "",
+      description: page.description || "",
+      graphic: {
+        src: typeof pageGraphic?.src === "string" ? pageGraphic.src : "",
+        alt: typeof pageGraphic?.alt === "string" ? pageGraphic.alt : "",
+      },
+      linkText: page.linkText || "",
+      duration: page.duration || "",
+      lockType: page._lockType || "",
+      lockedBy: Array.isArray(page._lockedBy)
+        ? page._lockedBy.filter((item): item is string => typeof item === "string")
+        : [],
+      classes: page._classes || "",
+      htmlClasses: scalarString(page._htmlClasses),
+      requireCompletionOf: scalarString(
+        page.requirecompletionof ?? page.requireCompletionOf ?? page._requireCompletionOf ?? "-1"
+      ),
+      isOptional: !!page._isOptional,
+      isAvailable: page._isAvailable !== false,
+      isHidden: !!page._isHidden,
+      isVisible: page._isVisible !== false,
+      onScreen: {
+        _isEnabled: !!onScreen._isEnabled,
+        _classes: scalarString(onScreen._classes),
+        _percentInviewVertical: scalarNumber(onScreen._percentInviewVertical, 50),
+      },
+      ariaLevel: scalarString(page._ariaLevel),
+      extensions: objectValue(page._extensions),
+      themeSettings: objectValue(page.themeSettings),
+      menuSettings: objectValue(page.menuSettings),
+      sections: childrenOf(articles, page._id).map(
+        (article): SSection => ({
+          id: article._id,
+          title: label(article),
+          displayTitle: article.displayTitle || "",
+          description: article.body || article.description || "",
+          instruction: article.instruction || "",
+          themeSettings: objectValue(article.themeSettings),
+          classes: article._classes || "",
+          requireCompletionOf: scalarString(
+            article.requirecompletionof ?? article.requireCompletionOf ?? article._requireCompletionOf ?? "-1"
+          ),
+          isOptional: !!article._isOptional,
+          isAvailable: article._isAvailable !== false,
+          isHidden: !!article._isHidden,
+          isVisible: article._isVisible !== false,
+          onScreen: (() => {
+            const os = objectValue(article._onScreen);
+            return {
+              _isEnabled: !!os._isEnabled,
+              _classes: scalarString(os._classes),
+              _percentInviewVertical: scalarNumber(os._percentInviewVertical, 50),
+            };
+          })(),
+          ariaLevel: scalarString(article._ariaLevel),
+          extensions: objectValue(article._extensions),
+          contentGroups: childrenOf(blocks, article._id).map(
+            (block): SContentGroup => ({
+              id: block._id,
+              title: label(block),
+              displayTitle: block.displayTitle || "",
+              description: block.body || block.description || "",
+              instruction: block.instruction || "",
+              themeSettings: objectValue(block.themeSettings),
+              classes: block._classes || "",
+              requireCompletionOf: scalarString(
+                block.requirecompletionof ?? block.requireCompletionOf ?? block._requireCompletionOf ?? "-1"
+              ),
+              isOptional: !!block._isOptional,
+              isAvailable: block._isAvailable !== false,
+              isHidden: !!block._isHidden,
+              isVisible: block._isVisible !== false,
+              ariaLevel: scalarString(block._ariaLevel),
+              extensions: objectValue(block._extensions),
+              components: childrenOf(components, block._id).map(
+                (comp): SComponent => {
+                  const componentProperties = objectValue(comp.properties);
+                  return {
+                    id: comp._id,
+                    title: label(comp),
+                    componentKey: comp._component || "",
+                    layout: comp._layout === "left" || comp._layout === "right" || comp._layout === "full"
+                      ? comp._layout
+                      : undefined,
+                    themeSettings: objectValue(comp.themeSettings),
+                    subtitle:
+                      typeof componentProperties.subtitle === "string"
+                        ? (componentProperties.subtitle as string)
+                        : "",
+                    description: comp.body || comp.description || "",
+                    instruction:
+                      comp.instruction ||
+                      (typeof componentProperties.instruction === "string"
+                        ? (componentProperties.instruction as string)
+                        : ""),
+                    properties: componentProperties,
+                    url: comp.url || "",
+                  };
+                }
+              ),
+            })
+          ),
+        })
+      ),
+    };
+  };
 
   // Menus nest recursively; each carries its child menus (sub-modules) + pages.
   const buildModule = (menu: EngineContentNode): SModule => ({
@@ -2056,6 +2191,39 @@ async function fetchMergedComponentSchema(
   } catch {
     return null;
   }
+}
+
+function hasOwnRecordKey(value: unknown, key: string): boolean {
+  return !!value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, key);
+}
+
+export async function componentSchemaSupportsPropertiesField(
+  componentKey: string,
+  fieldName: string
+): Promise<boolean> {
+  const key = (componentKey || "").trim();
+  const field = (fieldName || "").trim();
+  if (!key || !field) return false;
+
+  const schema = await fetchMergedComponentSchema(key);
+  if (!schema?.properties || typeof schema.properties !== "object") {
+    return false;
+  }
+
+  const root = schema.properties as Record<string, unknown>;
+  const candidates: unknown[] = [
+    root,
+    (root as { properties?: unknown }).properties,
+    ((root as { properties?: { properties?: unknown } }).properties as { properties?: unknown } | undefined)?.properties,
+  ];
+
+  for (const candidate of candidates) {
+    if (hasOwnRecordKey(candidate, field)) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 // Walk a schema `properties` object, producing each property's default value.
@@ -2194,6 +2362,35 @@ export function createTopic(
     _type: "page",
     title,
     displayTitle: title,
+    subtitle: "",
+    _subtitle: "",
+    body: "",
+    description: "",
+    instruction: "",
+    linkText: "",
+    duration: "",
+    _lockType: "",
+    _lockedBy: [],
+    _classes: "",
+    _htmlClasses: "",
+    requirecompletionof: "-1",
+    _isOptional: false,
+    _isAvailable: true,
+    _isHidden: false,
+    _isVisible: true,
+    _onScreen: {
+      _isEnabled: false,
+      _classes: "",
+      _percentInviewVertical: 50,
+    },
+    _ariaLevel: "",
+    _extensions: {},
+    _graphic: {
+      src: "",
+      alt: "",
+    },
+    themeSettings: {},
+    menuSettings: {},
     _sortOrder: sortOrder,
   });
 }
@@ -2209,6 +2406,9 @@ export function createArticle(
     _parentId: parentId,
     title,
     displayTitle: title,
+    body: "",
+    description: "",
+    instruction: "",
     _sortOrder: sortOrder,
   });
 }
@@ -2224,6 +2424,9 @@ export function createBlock(
     _parentId: parentId,
     title,
     displayTitle: title,
+    body: "",
+    description: "",
+    instruction: "",
     _sortOrder: sortOrder,
   });
 }
@@ -2243,6 +2446,24 @@ export async function createComponent(
   const schemaDefaults = buildSchemaDefaults(
     schemaSource as Record<string, unknown>
   );
+  const defaultProperties =
+    schemaDefaults.properties &&
+    typeof schemaDefaults.properties === "object" &&
+    !Array.isArray(schemaDefaults.properties)
+      ? (schemaDefaults.properties as Record<string, unknown>)
+      : {};
+
+  const mergedProperties: Record<string, unknown> = {
+    ...defaultProperties,
+  };
+
+  if (!Object.prototype.hasOwnProperty.call(mergedProperties, "subtitle")) {
+    mergedProperties.subtitle = "";
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(mergedProperties, "instruction")) {
+    mergedProperties.instruction = "";
+  }
 
   const body: Record<string, unknown> = {
     ...schemaDefaults,
@@ -2255,6 +2476,7 @@ export async function createComponent(
     _layout: layout,
     title: componentType.displayName,
     displayTitle: componentType.displayName,
+    properties: mergedProperties,
     _sortOrder: sortOrder,
   };
   // Only send version when known; otherwise let the server's default apply.
@@ -2305,6 +2527,31 @@ export async function seedDefaultTopic(
   return topicId;
 }
 
+export async function seedDefaultSection(
+  courseId: string,
+  parentId: string,
+  sectionTitle = NEW_SECTION_TITLE,
+  sortOrder = 1
+): Promise<string> {
+  const articleId = await createArticle(courseId, parentId, sectionTitle, sortOrder);
+  const blockId = await createBlock(courseId, articleId, NEW_CONTENT_GROUP_TITLE, 1);
+  const text = await getTextComponentType();
+  if (text) await createComponent(courseId, blockId, text, 1, "full");
+  return articleId;
+}
+
+export async function seedDefaultContentGroup(
+  courseId: string,
+  parentId: string,
+  groupTitle = NEW_CONTENT_GROUP_TITLE,
+  sortOrder = 1
+): Promise<string> {
+  const blockId = await createBlock(courseId, parentId, groupTitle, sortOrder);
+  const text = await getTextComponentType();
+  if (text) await createComponent(courseId, blockId, text, 1, "full");
+  return blockId;
+}
+
 // Change a component's column layout (left | right | full).
 export function updateComponentLayout(
   id: string,
@@ -2333,10 +2580,12 @@ export function renameStructureNode(
 export function updateStructureNode(
   level: StructureLevel,
   id: string,
-  patch: Record<string, unknown>
+  patch: Record<string, unknown>,
+  options?: { syncTitleDisplayTitle?: boolean }
 ): Promise<unknown> {
+  const shouldSync = options?.syncTitleDisplayTitle !== false;
   const body =
-    typeof patch.title === "string" && patch.displayTitle === undefined
+    shouldSync && typeof patch.title === "string" && patch.displayTitle === undefined
       ? { ...patch, displayTitle: patch.title }
       : patch;
   return apiClient.put(`/api/content/${LEVEL_TO_CONTENT_TYPE[level]}/${id}`, body);

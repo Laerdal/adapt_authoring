@@ -4,6 +4,7 @@ import DashboardLayout from './components/layout/DashboardLayout'
 import HomePage from './pages/HomePage'
 import NewCoursePage from './pages/NewCoursePage'
 import SetupPage from './pages/SetupPage'
+import CoursePreviewPage from './pages/CoursePreviewPage'
 import PageEditorPage from './pages/editor/pageEditorPage'
 import CourseStructureDemoPage from './pages/CourseStructureDemoPage'
 import UserManagementPage from './pages/UserManagementPage'
@@ -33,6 +34,7 @@ export const router = createBrowserRouter([
       { path: '/course/new/setup', element: <SetupPage /> },
       { path: '/course/:id/setup', element: <SetupPage /> },
       { path: '/course/:id', element: <PageEditorPage /> },
+      { path: '/course/:id/preview', element: <CoursePreviewPage /> },
       { path: '/course-structure-demo', element: <CourseStructureDemoPage /> },
     ],
   },

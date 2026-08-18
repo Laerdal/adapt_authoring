@@ -1,11 +1,11 @@
 import { useSearchParams, useNavigate, useParams } from "react-router-dom";
-import { Link } from "react-router-dom";
 import { Suspense, useEffect, useState, useRef, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import AiAssistant from "../components/common/AiAssistant";
 import CourseStructureMapView from "../components/course/CourseStructureMapView";
 import CourseStructureTree from "../components/course/CourseStructureTree";
 import AddComponentDrawer from "../components/course/AddComponentDrawer";
+import CommonCourseTopBarRow from "../components/course/CommonCourseTopBarRow";
 import { getCourseBootstrapData } from "../api/adaptAuthoring";
 import { useCourseStructure } from "../hooks/useCourseStructure";
 import { STRUCTURE_LABELS } from "../types/structure";
@@ -4430,6 +4430,7 @@ function CourseCreationCenterContent() {
   const { user } = useAuth();
   const initialTitle = params.get("title") ?? "Untitled Course";
   const initialDescription = params.get("description") ?? "";
+  const initialPanel = params.get("panel") ?? "";
   const courseId = routeParams.id ?? params.get("courseId") ?? "";
 
   const [title, setTitle] = useState(initialTitle);
@@ -4439,7 +4440,7 @@ function CourseCreationCenterContent() {
   const [savedThemeVariables, setSavedThemeVariables] = useState<Record<string, unknown>>({});
   const [savedPresetId, setSavedPresetId] = useState("");
 
-  const [activeNav, setActiveNav] = useState("overview");
+  const [activeNav, setActiveNav] = useState(() => (initialPanel === "storyboarding" ? "storyboarding" : "overview"));
   const [collapsed, setCollapsed] = useState(false);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
@@ -4521,18 +4522,7 @@ function CourseCreationCenterContent() {
         <CourseStructurePanel
           courseId={courseId}
           courseTitle={title}
-          onOpenEditor={(pageId) =>
-            navigate(`/course/${courseId}`, {
-              state: {
-                courseId,
-                title,
-                description,
-                theme: savedThemeName,
-                menu: savedMenuName,
-                pageId,
-              },
-            })
-          }
+          onOpenEditor={(pageId) => openEditor(pageId)}
           onOpenStoryboard={() => setActiveNav("storyboarding")}
           onNavigationRequest={setActiveNav}
           pendingNavigation={pendingNavigation}
@@ -4555,6 +4545,42 @@ function CourseCreationCenterContent() {
     setShowExportDialog(true);
   }
 
+  function buildPageEditorState(pageId?: string) {
+    return {
+      courseId,
+      title,
+      description,
+      theme: savedThemeName,
+      menu: savedMenuName,
+      ...(pageId ? { pageId } : {}),
+    };
+  }
+
+  function openEditor(pageId?: string) {
+    if (!courseId) return;
+
+    const chosenPageId = (pageId || "").trim();
+    if (chosenPageId) {
+      window.sessionStorage.setItem(`setup:${courseId}:lastPageId`, chosenPageId);
+    }
+
+    navigate(`/course/${courseId}`, {
+      state: buildPageEditorState(chosenPageId || undefined),
+    });
+  }
+
+  function openPreview(startFromCurrentPage: boolean) {
+    if (!courseId) return;
+
+    const savedPageId = (window.sessionStorage.getItem(`setup:${courseId}:lastPageId`) || "").trim();
+    const previewUrl = startFromCurrentPage && savedPageId
+      ? `/course/${courseId}/preview?pageId=${encodeURIComponent(savedPageId)}`
+      : `/course/${courseId}/preview`;
+    navigate(previewUrl);
+  }
+
+  const primaryTopNav: "settings" | "storyboard" | "editor" = activeNav === "storyboarding" ? "storyboard" : "settings";
+
   return (
     <div className="flex flex-col h-screen bg-[#f8fafc] overflow-hidden">
       {!courseId && (
@@ -4562,44 +4588,34 @@ function CourseCreationCenterContent() {
           No backend course was initialized for this setup flow. Start from Create New Course on the dashboard.
         </div>
       )}
-      {/* -- Header -- */}
-      <header className="h-[56px] bg-white border-b border-[#d8dde6] flex items-center shrink-0 px-4 md:px-6 gap-3 relative z-10">
-        <div className="flex items-center gap-3 md:gap-4 min-w-0">
-          <img src="/adapt-logo.jpeg" alt="Adapt logo" width={34} height={34} className="rounded-lg shrink-0" />
-          <div className="min-w-0 flex items-center gap-3">
-            <p className="text-[15px] leading-none font-semibold text-[#1f2937] tracking-tight hidden lg:block">Adapt Studio</p>
-            <div className="hidden lg:block w-px h-5 bg-[#d8dde6]" />
-            <p className="text-[15px] font-[700] text-[#1a1a1a] truncate max-w-[260px]">{title}</p>
-          </div>
+      <CommonCourseTopBarRow
+        courseTitle={title}
+        loginName={loginName}
+        activeNav={primaryTopNav}
+        onBack={() => navigate("/")}
+        onOpenCourseSettings={() => {
+          navigate(`/course/${courseId}/setup`);
+          setActiveNav("overview");
+        }}
+        onOpenStoryboard={() => handleNavigation("storyboarding")}
+        onOpenEditor={() => openEditor()}
+        onOpenPreview={(startFromCurrentPage) => openPreview(startFromCurrentPage)}
+        previewDisabled={!courseId}
+        editorDisabled={!courseId}
+      />
+
+      {/* -- Second Row Header -- */}
+      <div className="h-[56px] bg-white border-b border-[#d8dde6] flex items-center px-4 md:px-6 gap-3 shrink-0 relative z-10">
+        <div className="flex items-center gap-2 text-[#111827] min-w-0">
+          <SidebarMaskIcon file="overview-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current opacity-80" />
+          <span className="text-base font-semibold truncate">{activeItem?.label ?? "Course Overview"}</span>
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold text-[#4b5563] border border-transparent rounded-[8px] hover:bg-[#f3f4f6] hover:text-[#111827] transition-colors cursor-pointer"
-          >
-            <SidebarMaskIcon file="back-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-            <span className="hidden md:inline">Back</span>
-          </Link>
-
-          <button
-            type="button"
-            onClick={() => handleNavigation("storyboarding")}
-            className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold border-2 rounded-[8px] transition-colors cursor-pointer bg-white ${activeNav === "storyboarding" ? "border-[var(--life-primary-800)] text-[var(--life-primary-800)]" : "border-[var(--life-neutral-200)] text-[var(--life-base-black)] hover:border-[var(--life-primary-700)] hover:text-[var(--life-primary-700)] active:border-[var(--life-primary-800)] active:text-[var(--life-primary-800)]"}`}
-          >
-            <SidebarMaskIcon file="storyboard-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-            <span className="hidden lg:inline">Storyboard</span>
-          </button>
-
-          <button type="button" className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold border-2 border-[var(--life-neutral-200)] text-[var(--life-base-black)] rounded-[8px] bg-white hover:border-[var(--life-primary-700)] hover:text-[var(--life-primary-700)] active:border-[var(--life-primary-800)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer">
-            <SidebarMaskIcon file="preview-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-            <span className="hidden lg:inline">Preview</span>
-          </button>
-
+        <div className="ml-auto flex items-center gap-4">
           <button
             type="button"
             onClick={openExportDialog}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold border-2 border-[var(--life-neutral-200)] bg-white text-[var(--life-base-black)] rounded-[8px] hover:border-[var(--life-primary-700)] hover:text-[var(--life-primary-700)] active:border-[var(--life-primary-800)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer"
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold bg-transparent text-[var(--life-base-black)] rounded-[8px] hover:bg-[var(--life-primary-050)] hover:text-[var(--life-primary-700)] active:bg-[var(--life-primary-100)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer"
           >
             <SidebarMaskIcon file="export-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
             <span className="hidden lg:inline">Export</span>
@@ -4616,14 +4632,8 @@ function CourseCreationCenterContent() {
             <SidebarMaskIcon file="publish-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
             <span className="hidden lg:inline">Publish</span>
           </button>
-
-          <div className="hidden xl:flex items-center pl-3 border-l border-[#d8dde6]">
-            <span className="max-w-[260px] truncate text-[13px] font-medium text-[#9ca3af] select-none">
-              {loginName}
-            </span>
-          </div>
         </div>
-      </header>
+      </div>
 
       {/* -- Body -- */}
       <div className="flex flex-1 overflow-hidden">
@@ -4743,54 +4753,6 @@ function CourseCreationCenterContent() {
             )}
           </nav>
 
-          {/* Skip to editor - bottom */}
-          {!collapsed && (
-            <div className="px-4 pb-4 border-t border-[#e5e7eb] pt-3 shrink-0">
-              <button
-                type="button"
-                disabled={!courseId}
-                onClick={() =>
-                  navigate(`/course/${courseId}`, {
-                    state: {
-                      courseId,
-                      title,
-                      description,
-                      theme: savedThemeName,
-                      menu: savedMenuName,
-                    },
-                  })
-                }
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Skip to Editor
-                <SidebarMaskIcon file="chevron-right.svg" className="block w-[13px] h-[13px] shrink-0 bg-current" />
-              </button>
-            </div>
-          )}
-          {collapsed && (
-            <div className="px-2 pb-3 border-t border-[#e5e7eb] pt-3 shrink-0">
-              <button
-                type="button"
-                disabled={!courseId}
-                onClick={() =>
-                  navigate(`/course/${courseId}`, {
-                    state: {
-                      courseId,
-                      title,
-                      description,
-                      theme: savedThemeName,
-                      menu: savedMenuName,
-                    },
-                  })
-                }
-                aria-label="Skip to Editor"
-                title="Skip to Editor"
-                className="w-full h-10 flex items-center justify-center rounded-lg text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <SidebarMaskIcon file="chevron-right.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-              </button>
-            </div>
-          )}
         </aside>
 
         {/* -- Right content panel -- */}

@@ -16,11 +16,12 @@ interface CourseCardProps {
   onCopy: () => void;
   onCopyId: () => void;
   onDelete: () => void;
+  viewHref: string;
 }
 
 export default function CourseCard({
   id, title, description, savedDate, imageUrl, heroAssetId = null, tags = [],
-  view = "grid", onUpdate, onCopy, onCopyId, onDelete,
+  view = "grid", onUpdate, onCopy, onCopyId, onDelete, viewHref,
 }: CourseCardProps) {
   const [modalOpen, setModalOpen]           = useState(false);
   const [menuOpen, setMenuOpen]             = useState(false);
@@ -225,10 +226,10 @@ export default function CourseCard({
               Saved {savedDate}
             </div>
             <Link
-              to={`/course/${id}`}
+              to={viewHref}
               className="mt-1 w-full py-2.5 rounded-lg bg-[#2d6fa8] hover:bg-[#245c8f] text-white text-sm font-medium transition-colors text-center"
             >
-              Continue Editing
+              View Course
             </Link>
           </div>
         </div>
@@ -282,10 +283,10 @@ export default function CourseCard({
             <MoreButton className="p-2 rounded-lg border border-[#e5e7eb] bg-white hover:bg-[#f3f4f6] text-[#6b7280] hover:text-[#374151] transition-colors" />
 
             <Link
-              to={`/course/${id}`}
+              to={viewHref}
               className="px-4 py-2 rounded-lg bg-[#2d6fa8] hover:bg-[#245c8f] text-white text-xs font-semibold transition-colors whitespace-nowrap"
             >
-              Continue Editing
+              View Course
             </Link>
           </div>
         </div>
