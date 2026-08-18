@@ -1,18 +1,22 @@
 import React, { useEffect, useState } from "react";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
 import {
+  defaultAiTutorSettings,
   defaultCourseFeedbackSettings,
   defaultLearnerNotesSettings,
   defaultLearnerSearchSettings,
   defaultLearningResourcesSettings,
+  getAiTutorSettings,
   getCourseFeedbackSettings,
   getLearnerNotesSettings,
   getLearnerSearchSettings,
   getLearningResourcesSettings,
+  saveAiTutorSettings,
   saveCourseFeedbackSettings,
   saveLearnerNotesSettings,
   saveLearnerSearchSettings,
   saveLearningResourcesSettings,
+  type AiTutorSettings,
   type CourseFeedbackOption,
   type CourseFeedbackSettings,
   type LearnerNotesSettings,
@@ -360,15 +364,10 @@ const COURSE_FEEDBACK_OPTIONS: { value: CourseFeedbackOption; label: string }[] 
 interface AiTutorDocument {
   id: string;
   name: string;
+  document: string;
 }
 
-interface AiTutorState {
-  enabled: boolean;
-  title: string;
-  placeholderText: string;
-  languageCode: string;
-  documents: AiTutorDocument[];
-}
+type AiTutorState = AiTutorSettings;
 
 /* -- Learner Notes types -- */
 type LearnerNotesState = LearnerNotesSettings;
@@ -587,6 +586,7 @@ export function LearnerExperiencePanel({
   const [savedLnState, setSavedLnState] = useState<LearnerNotesState>(defaultLearnerNotesSettings());
   const [lnLoading, setLnLoading] = useState(false);
   const [lsLoading, setLsLoading] = useState(false);
+  const [atLoading, setAtLoading] = useState(false);
   const [cfLoading, setCfLoading] = useState(false);
   const [lnSaving, setLnSaving] = useState(false);
   const [lnToast, setLnToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -596,6 +596,10 @@ export function LearnerExperiencePanel({
   const [cfOpen, setCfOpen] = useState(false);
   const [cfState, setCfState] = useState<CourseFeedbackState>(defaultCourseFeedbackSettings());
   const [savedCfState, setSavedCfState] = useState<CourseFeedbackState>(defaultCourseFeedbackSettings());
+  const [atOpen, setAtOpen] = useState(false);
+  const [atState, setAtState] = useState<AiTutorState>(defaultAiTutorSettings());
+  const [savedAtState, setSavedAtState] = useState<AiTutorState>(defaultAiTutorSettings());
+  const [assetPickerOpen, setAssetPickerOpen] = useState(false);
 
   const setLn = <K extends keyof LearnerNotesState>(k: K, v: LearnerNotesState[K]) =>
     setLnState((prev) => ({ ...prev, [k]: v }));
@@ -603,6 +607,8 @@ export function LearnerExperiencePanel({
     setLsState((prev) => ({ ...prev, [k]: v }));
   const setCf = <K extends keyof CourseFeedbackState>(k: K, v: CourseFeedbackState[K]) =>
     setCfState((prev) => ({ ...prev, [k]: v }));
+  const setAt = <K extends keyof AiTutorState>(k: K, v: AiTutorState[K]) =>
+    setAtState((prev) => ({ ...prev, [k]: v }));
 
   function setMatchOn(key: keyof LearnerSearchState["matchOn"], value: boolean) {
     setLsState((prev) => ({ ...prev, matchOn: { ...prev.matchOn, [key]: value } }));
@@ -731,6 +737,37 @@ export function LearnerExperiencePanel({
   }, [courseId]);
 
   useEffect(() => {
+    if (!courseId) {
+      const defaults = defaultAiTutorSettings();
+      setAtState(defaults);
+      setSavedAtState(defaults);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setAtLoading(true);
+      try {
+        const loaded = await getAiTutorSettings(courseId);
+        if (cancelled) return;
+        setAtState(loaded);
+        setSavedAtState(loaded);
+      } catch {
+        if (cancelled) return;
+        const defaults = defaultAiTutorSettings();
+        setAtState(defaults);
+        setSavedAtState(defaults);
+      } finally {
+        if (!cancelled) setAtLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
+
+  useEffect(() => {
     if (!lnToast) return;
     const t = setTimeout(() => setLnToast(null), 3500);
     return () => clearTimeout(t);
@@ -740,7 +777,8 @@ export function LearnerExperiencePanel({
   const lsDirty = JSON.stringify(lsState) !== JSON.stringify(savedLsState);
   const cfDirty = JSON.stringify(cfState) !== JSON.stringify(savedCfState);
   const lrDirty = JSON.stringify(lrState) !== JSON.stringify(savedLrState);
-  const hasChanges = lnDirty || lsDirty || cfDirty || lrDirty;
+  const atDirty = JSON.stringify(atState) !== JSON.stringify(savedAtState);
+  const hasChanges = lnDirty || lsDirty || cfDirty || lrDirty || atDirty;
 
   const { showConfirmModal, consumePendingNavigation, clearPendingNavigation } =
     useUnsavedChangesNavigationGuard({
@@ -755,6 +793,7 @@ export function LearnerExperiencePanel({
     setLsState(savedLsState);
     setCfState(savedCfState);
     setLrState(savedLrState);
+    setAtState(savedAtState);
   }
 
   async function handleLnSave() {
@@ -766,10 +805,12 @@ export function LearnerExperiencePanel({
       await saveLearnerSearchSettings(courseId, lsState);
       await saveCourseFeedbackSettings(courseId, cfState);
       await saveLearningResourcesSettings(courseId, lrState);
+      await saveAiTutorSettings(courseId, atState);
       setSavedLnState(lnState);
       setSavedLsState(lsState);
       setSavedCfState(cfState);
       setSavedLrState(lrState);
+      setSavedAtState(atState);
       setLnToast({ type: "success", message: "Changes saved successfully" });
     } catch {
       setLnToast({ type: "error", message: "Couldn't save. Please try again." });
@@ -787,10 +828,12 @@ export function LearnerExperiencePanel({
       await saveLearnerSearchSettings(courseId, lsState);
       await saveCourseFeedbackSettings(courseId, cfState);
       await saveLearningResourcesSettings(courseId, lrState);
+      await saveAiTutorSettings(courseId, atState);
       setSavedLnState(lnState);
       setSavedLsState(lsState);
       setSavedCfState(cfState);
       setSavedLrState(lrState);
+      setSavedAtState(atState);
       const navTarget = consumePendingNavigation();
       setLnToast({ type: "success", message: "Changes saved successfully" });
       if (navTarget) onNavigationRequest?.(navTarget);
@@ -806,24 +849,10 @@ export function LearnerExperiencePanel({
     setLsState(savedLsState);
     setCfState(savedCfState);
     setLrState(savedLrState);
+    setAtState(savedAtState);
     const navTarget = consumePendingNavigation();
     if (navTarget) onNavigationRequest?.(navTarget);
   }
-
-  /* -- Ask AI Tutor state -- */
-  const [atOpen, setAtOpen] = useState(false);
-  const [atState, setAtState] = useState<AiTutorState>({
-    enabled: false,
-    title: "",
-    placeholderText: "",
-    languageCode: "",
-    documents: [],
-  });
-
-  const setAt = <K extends keyof AiTutorState>(k: K, v: AiTutorState[K]) =>
-    setAtState((prev) => ({ ...prev, [k]: v }));
-
-  const [assetPickerOpen, setAssetPickerOpen] = useState(false);
 
   function handleAddDocument() {
     setAssetPickerOpen(true);
@@ -1201,6 +1230,11 @@ export function LearnerExperiencePanel({
         >
           {/* Enable toggle */}
           <DemoVideoPlaceholder label="See how Ask AI Tutor works" />
+          {atLoading && (
+            <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-sm text-[#6b7280]">
+              Loading Ask AI Tutor settings...
+            </div>
+          )}
           <div className={`pt-3${atState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
             <LrToggle
               checked={atState.enabled}
@@ -1509,7 +1543,7 @@ export function LearnerExperiencePanel({
 
       <div className="h-8" />
 
-      {!lnLoading && !lsLoading && !cfLoading && hasChanges && (
+      {!lnLoading && !lsLoading && !cfLoading && !atLoading && hasChanges && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-3 rounded-xl bg-white border border-[var(--life-warning-100)] shadow-lg animate-fade-in-down">
           <span className="flex items-center gap-2 text-sm text-[#374151]">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-warning-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
@@ -1582,7 +1616,7 @@ export function LearnerExperiencePanel({
             const name = asset.assetLink.split("/").pop() ?? asset.assetLink;
             setAtState((prev) => ({
               ...prev,
-              documents: [...prev.documents, { id: asset.id, name }],
+              documents: [...prev.documents, { id: asset.id, name, document: asset.assetLink }],
             }));
             setAssetPickerOpen(false);
           }}

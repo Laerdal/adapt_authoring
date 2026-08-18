@@ -74,6 +74,21 @@ const LEARNER_SEARCH_EXTENSION_NAME = "adapt-search";
 const COURSE_FEEDBACK_EXTENSION_NAME = "laerdal-course-feedback";
 const COURSE_FEEDBACK_EXTENSION_DISPLAY_NAME = "Laerdal Course Feedback";
 const LEARNING_RESOURCES_EXTENSION_NAME = "adapt-contrib-resources";
+const AI_TUTOR_EXTENSION_NAME = "adapt-laerdal-ai-tutor";
+
+export interface AiTutorDocument {
+  id: string;
+  name: string;
+  document: string;
+}
+
+export interface AiTutorSettings {
+  enabled: boolean;
+  title: string;
+  placeholderText: string;
+  languageCode: string;
+  documents: AiTutorDocument[];
+}
 
 function obj(v: unknown): AnyRecord {
   return v && typeof v === "object" ? (v as AnyRecord) : {};
@@ -768,4 +783,98 @@ async function resolveLaerdalCourseFeedbackExtensionTypeId(): Promise<string> {
 function isExtensionInstalledById(config: EngineConfigDetails, extensionTypeId: string): boolean {
   const map = config._enabledExtensions ?? {};
   return Object.values(map).some((entry) => entry?._id === extensionTypeId);
+}
+
+export function defaultAiTutorSettings(): AiTutorSettings {
+  return {
+    enabled: false,
+    title: "AI Tutor",
+    placeholderText: "Ask AI tutor anything...",
+    languageCode: "en",
+    documents: [],
+  };
+}
+
+export async function getAiTutorSettings(courseId: string): Promise<AiTutorSettings> {
+  const config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+  const defaults = defaultAiTutorSettings();
+  const configExtensions = obj(config._extensions);
+  const aiTutor = obj(config._aiTutor || configExtensions._aiTutor);
+  const sourceDocuments = Array.isArray(aiTutor._sourceDocuments) ? aiTutor._sourceDocuments : [];
+
+  const documents = sourceDocuments
+    .map((item: unknown) => {
+      const raw = typeof item === "string" ? item : str(obj(item)._document);
+      const document = raw.trim();
+      if (!document) return null;
+      const name = document.split("/").pop() || document;
+      return {
+        id: Math.random().toString(36).slice(2),
+        name,
+        document,
+      } satisfies AiTutorDocument;
+    })
+    .filter((item): item is AiTutorDocument => !!item);
+
+  return {
+    ...defaults,
+    enabled: isExtensionInstalledByName(config, AI_TUTOR_EXTENSION_NAME) && bool(aiTutor._isEnabled, true),
+    title: str(aiTutor._aiTutorTitle, defaults.title),
+    placeholderText: str(aiTutor._placeHolderText, defaults.placeholderText),
+    languageCode: str(aiTutor._languageCode, defaults.languageCode),
+    documents,
+  };
+}
+
+export async function saveAiTutorSettings(courseId: string, settings: AiTutorSettings): Promise<void> {
+  let config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+  if (!config?._id) {
+    throw new Error("Could not resolve config id for AI Tutor settings");
+  }
+
+  const installed = isExtensionInstalledByName(config, AI_TUTOR_EXTENSION_NAME);
+  if (settings.enabled && !installed) {
+    const ids = await resolveExtensionTypeIdsByNames([AI_TUTOR_EXTENSION_NAME]);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/enable/${courseId}`, { extensions: ids });
+      config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+      if (!config?._id) {
+        throw new Error("Could not resolve config id for AI Tutor settings after enabling extension");
+      }
+    }
+  } else if (!settings.enabled && installed) {
+    const ids = await resolveExtensionTypeIdsByNames([AI_TUTOR_EXTENSION_NAME]);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/disable/${courseId}`, { extensions: ids });
+    }
+    return;
+  }
+
+  if (!isExtensionInstalledByName(config, AI_TUTOR_EXTENSION_NAME)) return;
+
+  const configExtensions = obj(config._extensions);
+  const existingAiTutor = obj(config._aiTutor || configExtensions._aiTutor);
+  const sourceDocuments = settings.documents
+    .map((doc) => str(doc.document).trim())
+    .filter((doc) => doc.length > 0)
+    .map((doc) => ({ _document: doc }));
+
+  const aiTutor = {
+    ...existingAiTutor,
+    _isEnabled: settings.enabled,
+    _aiTutorTitle: settings.title,
+    _placeHolderText: settings.placeholderText,
+    _languageCode: settings.languageCode,
+    _sourceDocuments: sourceDocuments,
+  };
+
+  await apiClient.patch(`/api/content/config/${config._id}`, {
+    _id: config._id,
+    _courseId: courseId,
+    _aiTutor: aiTutor,
+    _extensions: {
+      ...configExtensions,
+      _aiTutor: aiTutor,
+    },
+  });
 }
