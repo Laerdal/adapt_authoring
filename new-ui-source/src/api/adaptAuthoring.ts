@@ -956,6 +956,12 @@ export async function saveNavigationSettings(courseId: string, s: NavigationSett
 export interface CourseTechnicalSettings {
   _id?: string;
   _courseId?: string;
+  _completionCriteria?: {
+    _requireContentCompleted?: boolean;
+    _requireAssessmentCompleted?: boolean;
+    _submitOnEveryAssessmentAttempt?: boolean;
+    _shouldSubmitScore?: boolean;
+  };
   screenSize?: {
     small?: number;
     medium?: number;
@@ -1085,6 +1091,689 @@ export async function getCourseMenuSettings(courseId: string): Promise<CourseMen
 
 export async function updateCourseMenuSettings(courseId: string, menuSettings: CourseMenuSettings): Promise<unknown> {
   return apiClient.put(`/api/content/course/${courseId}`, { menuSettings });
+}
+
+export interface CourseCompletionNotifier {
+  _isEnabled?: boolean;
+  _message?: {
+    line1?: string;
+    line2?: string;
+  };
+  ariaLabel?: string;
+  _ariaLabel?: string;
+  [key: string]: unknown;
+}
+
+const COMPLETION_NOTIFIER_EXTENSION_NAME = "adapt-completion-notifier";
+
+export async function getCourseCompletionNotifier(courseId: string): Promise<CourseCompletionNotifier> {
+  const course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+  const rootNotifier = obj(course._completionNotifier);
+  const extensionNotifier = obj(obj(course._extensions)._completionNotifier);
+  const notifier = Object.keys(extensionNotifier).length ? extensionNotifier : rootNotifier;
+  return notifier as CourseCompletionNotifier;
+}
+
+export async function saveCourseCompletionNotifier(
+  courseId: string,
+  completionNotifier: CourseCompletionNotifier,
+): Promise<unknown> {
+  const course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+  const config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+  const courseExtensions = {
+    ...obj(course._extensions),
+    _completionNotifier: completionNotifier,
+  };
+
+  // Old UI extension editor binds to config model values; keep notifier message
+  // mirrored on config._completionNotifier for cross-UI parity.
+  const configNotifier = {
+    ...obj(config._completionNotifier),
+    ...completionNotifier,
+    _message: {
+      ...obj(obj(config._completionNotifier)._message),
+      ...obj(completionNotifier._message),
+    },
+  };
+
+  const configExtensions = obj(config._extensions);
+  const configExtensionNotifier = {
+    ...obj(configExtensions._completionNotifier),
+    ...completionNotifier,
+    _isEnabled: bool(obj(configExtensions._completionNotifier)._isEnabled, bool(completionNotifier._isEnabled, false)),
+    _message: {
+      ...obj(obj(configExtensions._completionNotifier)._message),
+      ...obj(completionNotifier._message),
+    },
+  };
+
+  await apiClient.put(`/api/content/course/${courseId}`, {
+    _extensions: courseExtensions,
+    _completionNotifier: completionNotifier,
+  });
+
+  return apiClient.patch(`/api/content/config/${config._id}`, {
+    _id: config._id,
+    _courseId: courseId,
+    _completionNotifier: configNotifier,
+    _extensions: {
+      ...configExtensions,
+      _completionNotifier: configExtensionNotifier,
+    },
+  });
+}
+
+export async function setCompletionNotifierEnabledInConfig(
+  configId: string,
+  courseId: string,
+  isEnabled: boolean,
+): Promise<unknown> {
+  const config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+  const installed = isExtensionInstalledByName(config, COMPLETION_NOTIFIER_EXTENSION_NAME);
+
+  if (isEnabled && !installed) {
+    const ids = await resolveExtensionTypeIdsByNames([COMPLETION_NOTIFIER_EXTENSION_NAME]);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/enable/${courseId}`, { extensions: ids });
+    }
+  } else if (!isEnabled && installed) {
+    const ids = await resolveExtensionTypeIdsByNames([COMPLETION_NOTIFIER_EXTENSION_NAME]);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/disable/${courseId}`, { extensions: ids });
+    }
+  }
+
+  return apiClient.patch(`/api/content/config/${configId}`, {
+    _id: configId,
+    _courseId: courseId,
+    _extensions: {
+      ...obj(config._extensions),
+      _completionNotifier: {
+        ...obj(obj(config._extensions)._completionNotifier),
+        _isEnabled: isEnabled,
+      },
+    },
+  });
+}
+
+const PAGE_LEVEL_PROGRESS_EXTENSION_NAME = "adapt-contrib-pageLevelProgress";
+const LAERDAL_PAGE_LEVEL_PROGRESS_EXTENSION_NAME = "adapt-laerdal-pageLevelProgress";
+const PROGRESSION_INDICATOR_EXTENSION_NAME = "adapt-progression-indicator";
+const PROGRESSION_INDICATOR_EXTENSION_TARGET = "_progressionIndicator";
+
+export type CourseProgressBarStyle = "continuous" | "compact";
+export type CourseProgressIndicatorKey =
+  | "page-completion"
+  | "course-completion"
+  | "nav-bar"
+  | "all-content-objects"
+  | "course-level-nav-btn";
+export type CourseProgressType = "pages" | "questions";
+export type CourseProgressFormat = "bar" | "stepper" | "percentage";
+
+export interface CoursePageLevelProgressSettings {
+  progressBarStyle: CourseProgressBarStyle;
+  progressIndicators: CourseProgressIndicatorKey[];
+  progressIndicatorEnabled: boolean;
+  progressIndicatorText: string;
+  progressIndicatorAriaLabel: string;
+  progressType: CourseProgressType;
+  progressFormat: CourseProgressFormat;
+}
+
+interface CoursePageLevelProgressConfig {
+  _isEnabled: boolean;
+  _showPageCompletion: boolean;
+  _isCompletionIndicatorEnabled: boolean;
+  _isShownInNavigationBar: boolean;
+  _showAtCourseLevel: boolean;
+  _useCourseProgressInNavigationButton: boolean;
+}
+
+interface CourseProgressionIndicatorConfig {
+  _progressionLabel: string;
+  _progressionAriaLabel: string;
+  _progressionType: CourseProgressType;
+  _progressionFormat: CourseProgressFormat;
+}
+
+const DEFAULT_PAGE_LEVEL_PROGRESS_CONFIG: CoursePageLevelProgressConfig = {
+  _isEnabled: true,
+  _showPageCompletion: true,
+  _isCompletionIndicatorEnabled: false,
+  _isShownInNavigationBar: true,
+  _showAtCourseLevel: false,
+  _useCourseProgressInNavigationButton: false,
+};
+
+const DEFAULT_PROGRESSION_INDICATOR_CONFIG: CourseProgressionIndicatorConfig = {
+  _progressionLabel: "",
+  _progressionAriaLabel: "",
+  _progressionType: "pages",
+  _progressionFormat: "bar",
+};
+
+function toPageLevelProgressConfig(raw: AnyRecord): CoursePageLevelProgressConfig {
+  return {
+    _isEnabled: bool(raw._isEnabled, DEFAULT_PAGE_LEVEL_PROGRESS_CONFIG._isEnabled),
+    _showPageCompletion: bool(raw._showPageCompletion, DEFAULT_PAGE_LEVEL_PROGRESS_CONFIG._showPageCompletion),
+    _isCompletionIndicatorEnabled: bool(raw._isCompletionIndicatorEnabled, DEFAULT_PAGE_LEVEL_PROGRESS_CONFIG._isCompletionIndicatorEnabled),
+    _isShownInNavigationBar: bool(raw._isShownInNavigationBar, DEFAULT_PAGE_LEVEL_PROGRESS_CONFIG._isShownInNavigationBar),
+    _showAtCourseLevel: bool(raw._showAtCourseLevel, DEFAULT_PAGE_LEVEL_PROGRESS_CONFIG._showAtCourseLevel),
+    _useCourseProgressInNavigationButton: bool(
+      raw._useCourseProgressInNavigationButton,
+      DEFAULT_PAGE_LEVEL_PROGRESS_CONFIG._useCourseProgressInNavigationButton,
+    ),
+  };
+}
+
+function toProgressionIndicatorConfig(raw: AnyRecord): CourseProgressionIndicatorConfig {
+  const progressionType = str(raw._progressionType, DEFAULT_PROGRESSION_INDICATOR_CONFIG._progressionType);
+  const progressionFormat = str(raw._progressionFormat, DEFAULT_PROGRESSION_INDICATOR_CONFIG._progressionFormat);
+
+  return {
+    _progressionLabel: str(raw._progressionLabel, DEFAULT_PROGRESSION_INDICATOR_CONFIG._progressionLabel),
+    _progressionAriaLabel: str(raw._progressionAriaLabel, DEFAULT_PROGRESSION_INDICATOR_CONFIG._progressionAriaLabel),
+    _progressionType: progressionType === "questions" ? "questions" : "pages",
+    _progressionFormat: progressionFormat === "stepper" || progressionFormat === "percentage" ? progressionFormat : "bar",
+  };
+}
+
+function indicatorsFromPageLevelProgressConfig(
+  cfg: CoursePageLevelProgressConfig,
+): CourseProgressIndicatorKey[] {
+  const selected: CourseProgressIndicatorKey[] = [];
+  if (cfg._showPageCompletion) selected.push("page-completion");
+  if (cfg._isCompletionIndicatorEnabled) selected.push("course-completion");
+  if (cfg._isShownInNavigationBar) selected.push("nav-bar");
+  if (cfg._showAtCourseLevel) selected.push("all-content-objects");
+  if (cfg._useCourseProgressInNavigationButton) selected.push("course-level-nav-btn");
+  return selected;
+}
+
+function pageLevelProgressConfigFromIndicators(
+  indicators: CourseProgressIndicatorKey[],
+): CoursePageLevelProgressConfig {
+  const selected = new Set(indicators);
+  return {
+    _isEnabled: true,
+    _showPageCompletion: selected.has("page-completion"),
+    _isCompletionIndicatorEnabled: selected.has("course-completion"),
+    _isShownInNavigationBar: selected.has("nav-bar"),
+    _showAtCourseLevel: selected.has("all-content-objects"),
+    _useCourseProgressInNavigationButton: selected.has("course-level-nav-btn"),
+  };
+}
+
+export async function getCoursePageLevelProgressSettings(
+  courseId: string,
+): Promise<CoursePageLevelProgressSettings> {
+  const [course, config] = await Promise.all([
+    apiClient.get<AnyRecord>(`/api/content/course/${courseId}`),
+    apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`),
+  ]);
+
+  const courseExtensions = obj(course._extensions);
+  const contribRaw = {
+    ...obj(courseExtensions._pageLevelProgress),
+    ...obj(course._pageLevelProgress),
+  };
+  const laerdalRaw = {
+    ...obj(courseExtensions._laerdalPageLevelProgress),
+    ...obj(course._laerdalPageLevelProgress),
+  };
+  const progressionRaw = {
+    ...obj(courseExtensions[PROGRESSION_INDICATOR_EXTENSION_TARGET]),
+    ...obj(course[PROGRESSION_INDICATOR_EXTENSION_TARGET]),
+  };
+
+  const globals = obj(course._globals);
+  const globalExtensions = obj(globals._extensions);
+  const contribGlobals = obj(globalExtensions._pageLevelProgress);
+  const laerdalGlobals = obj(globalExtensions._laerdalPageLevelProgress);
+
+  const contribCfg = toPageLevelProgressConfig(contribRaw);
+  const laerdalCfg = toPageLevelProgressConfig(laerdalRaw);
+  const progressionCfg = toProgressionIndicatorConfig(progressionRaw);
+
+  const contribInstalled = isExtensionInstalledByName(config, PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+  const laerdalInstalled = isExtensionInstalledByName(config, LAERDAL_PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+  const progressionInstalled = isExtensionInstalledByName(config, PROGRESSION_INDICATOR_EXTENSION_NAME);
+  const configRootProgression = obj((config as AnyRecord)._progressionIndicator);
+  const configExtProgression = obj(obj((config as AnyRecord)._extensions)._progressionIndicator);
+  const progressionEnabled = bool(
+    configExtProgression._isEnabled,
+    bool(configRootProgression._isEnabled, progressionInstalled),
+  );
+
+  const contribActive = contribInstalled && contribCfg._isEnabled;
+  const laerdalActive = laerdalInstalled && laerdalCfg._isEnabled;
+
+  const progressBarStyle: CourseProgressBarStyle = laerdalActive
+    ? "continuous"
+    : contribActive
+      ? "compact"
+      : laerdalInstalled
+        ? "continuous"
+        : contribInstalled
+          ? "compact"
+          : "continuous";
+
+  const activeConfig = progressBarStyle === "continuous" ? laerdalCfg : contribCfg;
+  const activeGlobals = progressBarStyle === "continuous" ? laerdalGlobals : contribGlobals;
+
+  const progressIndicatorText = progressionCfg._progressionLabel || str(
+    activeGlobals.pageLevelProgress,
+    str(activeGlobals._laerdalPageLevelProgress),
+  );
+  const progressIndicatorAriaLabel = progressionCfg._progressionAriaLabel || str(activeGlobals.pageLevelProgressIndicatorBar);
+
+  return {
+    progressBarStyle,
+    progressIndicators: indicatorsFromPageLevelProgressConfig(activeConfig),
+    progressIndicatorEnabled: progressionInstalled && progressionEnabled,
+    progressIndicatorText,
+    progressIndicatorAriaLabel,
+    progressType: progressionCfg._progressionType,
+    progressFormat: progressionCfg._progressionFormat,
+  };
+}
+
+export async function saveCoursePageLevelProgressSettings(
+  courseId: string,
+  settings: CoursePageLevelProgressSettings,
+): Promise<void> {
+  let course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+  let config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+
+  const shouldEnableLaerdal = settings.progressBarStyle === "continuous";
+  const shouldEnableContrib = settings.progressBarStyle === "compact";
+  const shouldEnableProgression = settings.progressIndicatorEnabled;
+
+  const installedContrib = isExtensionInstalledByName(config, PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+  const installedLaerdal = isExtensionInstalledByName(config, LAERDAL_PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+  const installedProgression = isExtensionInstalledByName(config, PROGRESSION_INDICATOR_EXTENSION_NAME);
+
+  const toEnable: string[] = [];
+  const toDisable: string[] = [];
+  if (shouldEnableContrib && !installedContrib) toEnable.push(PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+  if (shouldEnableLaerdal && !installedLaerdal) toEnable.push(LAERDAL_PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+  if (shouldEnableProgression && !installedProgression) toEnable.push(PROGRESSION_INDICATOR_EXTENSION_NAME);
+  if (!shouldEnableContrib && installedContrib) toDisable.push(PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+  if (!shouldEnableLaerdal && installedLaerdal) toDisable.push(LAERDAL_PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+  if (!shouldEnableProgression && installedProgression) toDisable.push(PROGRESSION_INDICATOR_EXTENSION_NAME);
+
+  if (toEnable.length) {
+    const ids = await resolveExtensionTypeIdsByNames(toEnable);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/enable/${courseId}`, { extensions: ids });
+    }
+  }
+  if (toDisable.length) {
+    const ids = await resolveExtensionTypeIdsByNames(toDisable);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/disable/${courseId}`, { extensions: ids });
+    }
+  }
+
+  if (toEnable.length || toDisable.length) {
+    course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+    config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+  }
+
+  const contribInstalledNow = isExtensionInstalledByName(config, PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+  const laerdalInstalledNow = isExtensionInstalledByName(config, LAERDAL_PAGE_LEVEL_PROGRESS_EXTENSION_NAME);
+  const progressionInstalledNow = isExtensionInstalledByName(config, PROGRESSION_INDICATOR_EXTENSION_NAME);
+
+  const sharedConfig = pageLevelProgressConfigFromIndicators(settings.progressIndicators);
+  const courseExtensions = obj(course._extensions);
+  const courseGlobals = obj(course._globals);
+  const globalExtensions = obj(courseGlobals._extensions);
+
+  const existingContrib = {
+    ...obj(courseExtensions._pageLevelProgress),
+    ...obj(course._pageLevelProgress),
+  };
+  const existingLaerdal = {
+    ...obj(courseExtensions._laerdalPageLevelProgress),
+    ...obj(course._laerdalPageLevelProgress),
+  };
+  const existingProgression = {
+    ...obj(courseExtensions[PROGRESSION_INDICATOR_EXTENSION_TARGET]),
+    ...obj(course[PROGRESSION_INDICATOR_EXTENSION_TARGET]),
+  };
+
+  const nextContrib = {
+    ...existingContrib,
+    ...sharedConfig,
+    _isEnabled: contribInstalledNow && shouldEnableContrib,
+  };
+  const nextLaerdal = {
+    ...existingLaerdal,
+    ...sharedConfig,
+    _isEnabled: laerdalInstalledNow && shouldEnableLaerdal,
+  };
+  const nextProgression = {
+    ...existingProgression,
+    _isEnabled: progressionInstalledNow && shouldEnableProgression,
+    _progressionLabel: settings.progressIndicatorText,
+    _progressionAriaLabel: settings.progressIndicatorAriaLabel,
+    _progressionType: settings.progressType,
+    _progressionFormat: settings.progressFormat,
+  };
+
+  const nextContribGlobals = {
+    ...obj(globalExtensions._pageLevelProgress),
+    pageLevelProgress: settings.progressIndicatorText,
+    pageLevelProgressIndicatorBar: settings.progressIndicatorAriaLabel,
+  };
+  const nextLaerdalGlobals = {
+    ...obj(globalExtensions._laerdalPageLevelProgress),
+    pageLevelProgress: settings.progressIndicatorText,
+    _laerdalPageLevelProgress: settings.progressIndicatorText,
+    pageLevelProgressIndicatorBar: settings.progressIndicatorAriaLabel,
+  };
+
+  await apiClient.put(`/api/content/course/${courseId}`, {
+    _pageLevelProgress: nextContrib,
+    _laerdalPageLevelProgress: nextLaerdal,
+    [PROGRESSION_INDICATOR_EXTENSION_TARGET]: nextProgression,
+    _extensions: {
+      ...courseExtensions,
+      _pageLevelProgress: nextContrib,
+      _laerdalPageLevelProgress: nextLaerdal,
+      [PROGRESSION_INDICATOR_EXTENSION_TARGET]: nextProgression,
+    },
+    _globals: {
+      ...courseGlobals,
+      _extensions: {
+        ...globalExtensions,
+        _pageLevelProgress: nextContribGlobals,
+        _laerdalPageLevelProgress: nextLaerdalGlobals,
+      },
+    },
+  });
+
+  const configRootProgression = obj((config as AnyRecord)._progressionIndicator);
+  const configExtensions = obj((config as AnyRecord)._extensions);
+  const configExtProgression = obj(configExtensions._progressionIndicator);
+  const configProgression = {
+    ...configRootProgression,
+    _isEnabled: progressionInstalledNow && shouldEnableProgression,
+  };
+  const configProgressionExt = {
+    ...configExtProgression,
+    _isEnabled: progressionInstalledNow && shouldEnableProgression,
+  };
+
+  const configId = str((config as AnyRecord)._id, courseId);
+
+  await apiClient.patch(`/api/content/config/${configId}`, {
+    _id: configId,
+    _courseId: courseId,
+    _progressionIndicator: configProgression,
+    _extensions: {
+      ...configExtensions,
+      _progressionIndicator: configProgressionExt,
+    },
+  });
+}
+
+const BOOKMARKING_EXTENSION_NAME = "adapt-contrib-bookmarking";
+
+export interface CourseBookmarkingSettings {
+  _isEnabled?: boolean;
+  _level?: "page" | "block" | "component";
+  _location?: "previous" | "furthest";
+  _showPrompt?: boolean;
+  _autoRestore?: boolean;
+  title?: string;
+  body?: string;
+  _buttons?: {
+    yes?: string;
+    no?: string;
+  };
+  [key: string]: unknown;
+}
+
+function normalizePluginName(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function isExtensionInstalledByName(config: EngineConfigDetails, extensionName: string): boolean {
+  const target = normalizePluginName(extensionName);
+  const map = config._enabledExtensions ?? {};
+  return Object.values(map).some((entry) => {
+    const name = typeof entry?.name === "string" ? normalizePluginName(entry.name) : "";
+    return !!name && name === target;
+  });
+}
+
+async function resolveExtensionTypeIdsByNames(extensionNames: string[]): Promise<string[]> {
+  if (!extensionNames.length) return [];
+
+  const rows = await apiClient.get<{ _id: string; name?: string }[]>("/api/extensiontype");
+  const byName = new Map<string, string>();
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    if (!row?._id || typeof row?.name !== "string") return;
+    byName.set(normalizePluginName(row.name), row._id);
+  });
+
+  return extensionNames
+    .map((name) => byName.get(normalizePluginName(name)))
+    .filter((id): id is string => !!id);
+}
+
+export async function getCourseBookmarkingSettings(courseId: string): Promise<CourseBookmarkingSettings> {
+  const course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+  const rootBookmarking = obj(course._bookmarking);
+  const extensionBookmarking = obj(obj(course._extensions)._bookmarking);
+  const source = {
+    ...rootBookmarking,
+    ...extensionBookmarking,
+  };
+  const buttons = {
+    ...obj(rootBookmarking._buttons),
+    ...obj(extensionBookmarking._buttons),
+  };
+
+  return {
+    ...source,
+    _isEnabled: bool(source._isEnabled, false),
+    _level: str(source._level, "component") as CourseBookmarkingSettings["_level"],
+    _location: str(source._location, "furthest") as CourseBookmarkingSettings["_location"],
+    _showPrompt: bool(source._showPrompt, true),
+    _autoRestore: bool(source._autoRestore, true),
+    title: str(source.title, "Bookmarking"),
+    body: str(source.body, "Would you like to continue where you left off?"),
+    _buttons: {
+      ...buttons,
+      yes: str(buttons.yes, "Yes"),
+      no: str(buttons.no, "No"),
+    },
+  };
+}
+
+export async function saveCourseBookmarkingSettings(
+  courseId: string,
+  settings: CourseBookmarkingSettings,
+): Promise<void> {
+  let course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+  const config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+
+  const shouldEnable = bool(settings._isEnabled, false);
+  const isInstalled = isExtensionInstalledByName(config, BOOKMARKING_EXTENSION_NAME);
+
+  if (shouldEnable && !isInstalled) {
+    const ids = await resolveExtensionTypeIdsByNames([BOOKMARKING_EXTENSION_NAME]);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/enable/${courseId}`, { extensions: ids });
+      course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+    }
+  } else if (!shouldEnable && isInstalled) {
+    const ids = await resolveExtensionTypeIdsByNames([BOOKMARKING_EXTENSION_NAME]);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/disable/${courseId}`, { extensions: ids });
+      course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+    }
+  }
+
+  const rootBookmarking = obj(course._bookmarking);
+  const extensionBookmarking = obj(obj(course._extensions)._bookmarking);
+  const existingBookmarking = {
+    ...rootBookmarking,
+    ...extensionBookmarking,
+  };
+  const buttons = {
+    ...obj(rootBookmarking._buttons),
+    ...obj(extensionBookmarking._buttons),
+  };
+
+  const nextBookmarking: CourseBookmarkingSettings = {
+    ...existingBookmarking,
+    ...settings,
+    _isEnabled: shouldEnable,
+    _level: str(settings._level, str(existingBookmarking._level, "component")) as CourseBookmarkingSettings["_level"],
+    _location: str(settings._location, str(existingBookmarking._location, "furthest")) as CourseBookmarkingSettings["_location"],
+    _showPrompt: bool(settings._showPrompt, bool(existingBookmarking._showPrompt, true)),
+    _autoRestore: bool(settings._autoRestore, bool(existingBookmarking._autoRestore, true)),
+    title: str(settings.title, str(existingBookmarking.title, "Bookmarking")),
+    body: str(settings.body, str(existingBookmarking.body, "Would you like to continue where you left off?")),
+    _buttons: {
+      ...buttons,
+      ...obj(settings._buttons),
+      yes: str(obj(settings._buttons).yes, str(buttons.yes, "Yes")),
+      no: str(obj(settings._buttons).no, str(buttons.no, "No")),
+    },
+  };
+
+  const courseExtensions = {
+    ...obj(course._extensions),
+    _bookmarking: nextBookmarking,
+  };
+
+  await apiClient.put(`/api/content/course/${courseId}`, {
+    _extensions: courseExtensions,
+    _bookmarking: nextBookmarking,
+  });
+}
+
+// ── Estimated Time ───────────────────────────────────────────────────────────
+// The `adapt-estimated-time` extension stores its settings in two places:
+//   • course document `_extensions._estimatedTime` (or root `_estimatedTime`):
+//       iconClass, textBefore, textAfter, moduleCompleted
+//   • config document `_extensions._estimatedTime`:
+//       _isEnabled, _debugEnabled, _attachTo
+const ESTIMATED_TIME_EXTENSION_NAME = "adapt-estimated-time";
+
+export interface CourseEstimatedTimeSettings {
+  /** Whether the extension is enabled */
+  _isEnabled: boolean;
+  /** Debug mode */
+  _debugEnabled: boolean;
+  /** Where to place the view on the page */
+  _attachTo: "" | "navigation-footer";
+  /** CSS class for the clock icon */
+  iconClass: string;
+  /** Text displayed before the duration number */
+  textBefore: string;
+  /** Text displayed after the duration number (e.g. "minutes") */
+  textAfter: string;
+  /** Text shown when the module is completed */
+  moduleCompleted: string;
+}
+
+export async function getCourseEstimatedTimeSettings(
+  courseId: string,
+): Promise<CourseEstimatedTimeSettings> {
+  const [course, config] = await Promise.all([
+    apiClient.get<AnyRecord>(`/api/content/course/${courseId}`),
+    apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`),
+  ]);
+
+  // Course-level fields (icon + text strings)
+  const courseExt = obj(obj(course._extensions)._estimatedTime);
+  const courseRoot = obj(course._estimatedTime);
+  const courseData = Object.keys(courseExt).length ? courseExt : courseRoot;
+
+  // Config-level fields (enable toggles + attachTo)
+  const configExt = obj(obj(config._extensions)._estimatedTime);
+
+  const isInstalled = isExtensionInstalledByName(config, ESTIMATED_TIME_EXTENSION_NAME);
+
+  return {
+    _isEnabled: bool(configExt._isEnabled, isInstalled),
+    _debugEnabled: bool(configExt._debugEnabled, false),
+    _attachTo: (str(configExt._attachTo, "") as "" | "navigation-footer"),
+    iconClass: str(courseData.iconClass, "icon-time"),
+    textBefore: str(courseData.textBefore, "Remaining time to complete module:"),
+    textAfter: str(courseData.textAfter, "minutes"),
+    moduleCompleted: str(courseData.moduleCompleted, "Module completed."),
+  };
+}
+
+export async function saveCourseEstimatedTimeSettings(
+  courseId: string,
+  settings: CourseEstimatedTimeSettings,
+): Promise<void> {
+  let course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+  let config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+
+  const shouldEnable = settings._isEnabled;
+  const isInstalled = isExtensionInstalledByName(config, ESTIMATED_TIME_EXTENSION_NAME);
+
+  // Enable or disable the extension as needed
+  if (shouldEnable && !isInstalled) {
+    const ids = await resolveExtensionTypeIdsByNames([ESTIMATED_TIME_EXTENSION_NAME]);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/enable/${courseId}`, { extensions: ids });
+      course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+      config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+    }
+  } else if (!shouldEnable && isInstalled) {
+    const ids = await resolveExtensionTypeIdsByNames([ESTIMATED_TIME_EXTENSION_NAME]);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/disable/${courseId}`, { extensions: ids });
+    }
+  }
+
+  // Save course-level data (text strings)
+  const existingCourseExt = obj(obj(course._extensions)._estimatedTime);
+  const nextCourseData = {
+    ...existingCourseExt,
+    iconClass: settings.iconClass,
+    textBefore: settings.textBefore,
+    textAfter: settings.textAfter,
+    moduleCompleted: settings.moduleCompleted,
+  };
+  const courseExtensions = {
+    ...obj(course._extensions),
+    _estimatedTime: nextCourseData,
+  };
+  await apiClient.put(`/api/content/course/${courseId}`, {
+    _extensions: courseExtensions,
+    _estimatedTime: nextCourseData,
+  });
+
+  // Save config-level data (enable toggles + attachTo)
+  const configId = config._id;
+  if (configId) {
+    const existingConfigExt = obj(obj(config._extensions)._estimatedTime);
+    const nextConfigData = {
+      ...existingConfigExt,
+      _isEnabled: shouldEnable,
+      _debugEnabled: settings._debugEnabled,
+      _attachTo: settings._attachTo,
+    };
+    await apiClient.patch(`/api/content/config/${configId}`, {
+      _id: configId,
+      _courseId: courseId,
+      _extensions: {
+        ...obj(config._extensions),
+        _estimatedTime: nextConfigData,
+      },
+    });
+  }
 }
 
 // ── Accessibility (_globals) ─────────────────────────────────────────────────
