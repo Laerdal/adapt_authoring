@@ -636,10 +636,10 @@ function ResumeBookmarkingContent({
   );
 }
 const PROGRESS_INDICATOR_OPTIONS: { value: ProgressIndicator; label: string }[] = [
-  { value: "page-completion",      label: "Show page completion" },
+  { value: "page-completion",      label: "Show topic completion" },
   { value: "course-completion",    label: "Show course completion indicator" },
   { value: "nav-bar",              label: "Show progress in the navigation bar" },
-  { value: "all-content-objects",  label: "Display all content objects and the current page components" },
+  { value: "all-content-objects",  label: "Display all content objects and the current topic components" },
   { value: "course-level-nav-btn", label: "Use course-level progress on navigation button" },
 ];
 function ProgressBarStylePicker({
@@ -771,13 +771,13 @@ function ProgressIndicatorsContent({
                 label="Progress indicator text"
                 value={cfg.progressIndicatorText}
                 onChange={(v) => set("progressIndicatorText", v)}
-                placeholder="Page Progress"
+                placeholder="Topic Progress"
               />
               <CpTextInput
                 label="Aria label"
                 value={cfg.progressIndicatorAriaLabel}
                 onChange={(v) => set("progressIndicatorAriaLabel", v)}
-                placeholder="Page progress. {{percentageComplete}}%. Open page sections."
+                placeholder="Topic progress. {{percentageComplete}}%. Open topic sections."
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -1080,7 +1080,7 @@ export function CompletionProgressPage({
       <div className="mb-6">
         <h2 className="text-xl font-bold text-[var(--life-base-black)]">Completion &amp; Progress</h2>
         <p className="text-sm text-[var(--life-neutral-300)] mt-1">
-          Configure how course and page completion is tracked and displayed to learners.
+          Configure how course and topic completion is tracked and displayed to learners.
         </p>
       </div>
       <div className="flex flex-col gap-2">
