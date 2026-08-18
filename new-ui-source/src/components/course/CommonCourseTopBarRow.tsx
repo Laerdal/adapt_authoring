@@ -53,11 +53,7 @@ function navButtonClass(active: boolean) {
 }
 
 function previewButtonClass(active: boolean) {
-  if (active) {
-    return "inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold rounded-[8px] transition-colors cursor-pointer bg-[var(--life-primary-100)] text-[var(--life-primary-700)] hover:bg-[var(--life-primary-100)]";
-  }
-
-  return "inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold text-[var(--life-base-black)] rounded-[8px] bg-transparent hover:bg-[var(--life-primary-050)] hover:text-[var(--life-primary-700)] active:bg-[var(--life-primary-100)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer";
+  return navButtonClass(active);
 }
 
 export default function CommonCourseTopBarRow({
