@@ -358,7 +358,8 @@ const STUDIO_BRIDGE = `
 </style>
 <script>
 (function(){
-  function post(m){ try { window.parent.postMessage(Object.assign({ source:'adapt-studio' }, m), '*'); } catch(e){} }
+  var allowedOrigin = window.location.origin;
+  function post(m){ try { window.parent.postMessage(Object.assign({ source:'adapt-studio' }, m), allowedOrigin); } catch(e){} }
   function rectOf(el){ var r = el.getBoundingClientRect(); return { top:r.top, left:r.left, width:r.width, height:r.height }; }
 
   function announceReady(){ post({ type:'studio:ready' }); }
@@ -366,6 +367,8 @@ const STUDIO_BRIDGE = `
   else window.addEventListener('load', function(){ setTimeout(announceReady, 400); });
 
   window.addEventListener('message', function(e){
+    if (e.source !== window.parent) return;
+    if (e.origin !== allowedOrigin) return;
     var d = e.data || {};
     if (d.target !== 'adapt-studio') return;
     if (d.type === 'studio:highlight') highlight(d.id);
