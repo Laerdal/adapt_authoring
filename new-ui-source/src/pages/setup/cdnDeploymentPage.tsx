@@ -97,11 +97,15 @@ function Section({
 function CheckboxRow({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: React.ReactNode }) {
   return (
     <label className="flex items-start gap-3 py-1 cursor-pointer group">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="sr-only peer"
+      />
       <div
-        onClick={() => onChange(!checked)}
-        className={`mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors ${
-          checked ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]" : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
-        }`}
+        aria-hidden="true"
+        className="mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd] peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--life-primary-500)] peer-focus-visible:ring-offset-1"
       >
         {checked && (
           <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
@@ -181,22 +185,30 @@ function appendIsCDNModeParam(url: string): string {
   }
 }
 
-function appendCDNParamsToHtml(html: string): string {
-  return html.replace(/href="([^"]+)"/g, (match, url) => {
-    const updated = appendIsCDNModeParam(url);
-    return updated !== url ? `href="${updated}"` : match;
-  });
+// The `cdndeploy` CLI always emits this exact shape for each deployed link
+// (util/azcopy.js: `<div class="${kind}"><a href="${link}" target=_blank><h3>${label}</h3></a></div>`).
+// Parse out just the href + label rather than trusting/injecting the raw HTML.
+function parseCdnLinkHtml(html: string): { href: string; label: string } | null {
+  const hrefMatch = html.match(/href="([^"]+)"/);
+  if (!hrefMatch) return null;
+  const labelMatch = html.match(/<h3>([\s\S]*?)<\/h3>/);
+  return { href: appendIsCDNModeParam(hrefMatch[1]), label: labelMatch ? labelMatch[1] : hrefMatch[1] };
 }
 
 type LogEventType = "open" | "message" | "link" | "close" | "server-error";
+
+interface CdnLink {
+  href: string;
+  label: string;
+}
 
 interface LogEntry {
   id: number;
   eventType: LogEventType;
   timestamp: string;
   message?: string;
-  specificHtml?: string;
-  latestHtml?: string;
+  specificLink?: CdnLink;
+  latestLink?: CdnLink;
   comment?: string;
   triggeredBy?: string;
 }
@@ -400,8 +412,8 @@ export function CdnDeploymentPage({
         const latestMatch = data.match(/<div class="latest">([\s\S]*?)<\/div>/);
         appendLog({
           eventType: "link",
-          specificHtml: specificMatch ? appendCDNParamsToHtml(specificMatch[1]) : undefined,
-          latestHtml: latestMatch ? appendCDNParamsToHtml(latestMatch[1]) : undefined,
+          specificLink: specificMatch ? parseCdnLinkHtml(specificMatch[1]) ?? undefined : undefined,
+          latestLink: latestMatch ? parseCdnLinkHtml(latestMatch[1]) ?? undefined : undefined,
           comment: cfg.buildTriggerComment,
           triggeredBy: user?.email,
         });
@@ -410,7 +422,12 @@ export function CdnDeploymentPage({
       }
     };
 
+    // es.onerror and the "server-error" listener can both fire for the same
+    // failure — guard so the closing log/state update/links refresh only run once.
+    let stopped = false;
     const stop = () => {
+      if (stopped) return;
+      stopped = true;
       appendLog({ eventType: "close", message: "⚫ Connection closed" });
       setBuilding(false);
       es.close();
@@ -589,8 +606,16 @@ export function CdnDeploymentPage({
                           <div className="mt-1 flex flex-col gap-1">
                             {entry.triggeredBy && <p className="text-[#6b7280]">Triggered by: {entry.triggeredBy}</p>}
                             {entry.comment && <p className="italic text-[#6b7280]">Comment: {entry.comment}</p>}
-                            {entry.specificHtml && <div dangerouslySetInnerHTML={{ __html: entry.specificHtml }} />}
-                            {entry.latestHtml && <div dangerouslySetInnerHTML={{ __html: entry.latestHtml }} />}
+                            {entry.specificLink && (
+                              <a href={entry.specificLink.href} target="_blank" rel="noreferrer" className="font-semibold text-[var(--life-primary-500)] underline">
+                                {entry.specificLink.label}
+                              </a>
+                            )}
+                            {entry.latestLink && (
+                              <a href={entry.latestLink.href} target="_blank" rel="noreferrer" className="font-semibold text-[var(--life-primary-500)] underline">
+                                {entry.latestLink.label}
+                              </a>
+                            )}
                           </div>
                         ) : (
                           <span>{entry.message}</span>
@@ -627,7 +652,10 @@ export function CdnDeploymentPage({
                               <tr key={entry.entry} className="border-t border-[#f3f4f6]">
                                 <td className="px-3 py-2">
                                   <a href={entry.href} target="_blank" rel="noreferrer" className="underline text-[var(--life-primary-500)]">
-                                    {entry.version ?? entry.entry}
+                                    {/* Full version-folder name (e.g. "0.0.1.1755500064000"), not the
+                                        CLI's truncated 3-part semver (entry.version) — matches what
+                                        was actually deployed and keeps each row's link unambiguous. */}
+                                    {entry.entry}
                                   </a>
                                 </td>
                                 <td className="px-3 py-2 text-[#6b7280]">{entry.timestampPretty ?? "—"}</td>

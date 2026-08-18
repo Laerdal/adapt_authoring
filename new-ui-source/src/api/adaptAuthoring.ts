@@ -2489,7 +2489,9 @@ export interface CdnLinkEntry {
 }
 
 export async function getCdnPreviousLinks(groupid: string, courseid: string, cdnid: string): Promise<CdnLinkEntry[]> {
-  const result = await apiClient.get<{ data?: CdnLinkEntry[] }>(`/api/cdn/getlinks/${groupid}/${courseid}/${cdnid}`);
+  const result = await apiClient.get<{ data?: CdnLinkEntry[] }>(
+    `/api/cdn/getlinks/${encodeURIComponent(groupid)}/${encodeURIComponent(courseid)}/${encodeURIComponent(cdnid)}`,
+  );
   return Array.isArray(result?.data) ? result.data : [];
 }
 
@@ -2513,7 +2515,7 @@ export async function restoreCdnLink(
   versionfolder: string,
 ): Promise<CdnLinkEntry[]> {
   const result = await apiClient.get<{ data?: CdnLinkEntry[] }>(
-    `/api/cdn/restoreLink/${groupid}/${courseid}/${cdnid}/${versionfolder}`,
+    `/api/cdn/restoreLink/${encodeURIComponent(groupid)}/${encodeURIComponent(courseid)}/${encodeURIComponent(cdnid)}/${encodeURIComponent(versionfolder)}`,
   );
   return Array.isArray(result?.data) ? result.data : [];
 }
@@ -2526,7 +2528,7 @@ export async function setCdnLinkExpiry(
   expiredate: string,
 ): Promise<CdnLinkEntry[]> {
   const result = await apiClient.get<{ data?: CdnLinkEntry[] }>(
-    `/api/cdn/setExpiry/${groupid}/${courseid}/${cdnid}/${versionfolder}/${expiredate}`,
+    `/api/cdn/setExpiry/${encodeURIComponent(groupid)}/${encodeURIComponent(courseid)}/${encodeURIComponent(cdnid)}/${encodeURIComponent(versionfolder)}/${encodeURIComponent(expiredate)}`,
   );
   return Array.isArray(result?.data) ? result.data : [];
 }
