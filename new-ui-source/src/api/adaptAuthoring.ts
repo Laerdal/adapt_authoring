@@ -2092,9 +2092,20 @@ export async function getCourseStructure(
             (block): SContentGroup => ({
               id: block._id,
               title: label(block),
+              displayTitle: block.displayTitle || "",
               description: block.body || block.description || "",
               instruction: block.instruction || "",
               themeSettings: objectValue(block.themeSettings),
+              classes: block._classes || "",
+              requireCompletionOf: scalarString(
+                block.requirecompletionof ?? block.requireCompletionOf ?? block._requireCompletionOf ?? "-1"
+              ),
+              isOptional: !!block._isOptional,
+              isAvailable: block._isAvailable !== false,
+              isHidden: !!block._isHidden,
+              isVisible: block._isVisible !== false,
+              ariaLevel: scalarString(block._ariaLevel),
+              extensions: objectValue(block._extensions),
               components: childrenOf(components, block._id).map(
                 (comp): SComponent => {
                   const componentProperties = objectValue(comp.properties);

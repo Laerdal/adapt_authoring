@@ -33,9 +33,18 @@ export interface SComponent {
 export interface SContentGroup {
   id: string;
   title: string;
+  displayTitle?: string;
   description?: string;
   instruction?: string;
   themeSettings?: Record<string, unknown>;
+  classes?: string;
+  requireCompletionOf?: string;
+  isOptional?: boolean;
+  isAvailable?: boolean;
+  isHidden?: boolean;
+  isVisible?: boolean;
+  ariaLevel?: string;
+  extensions?: Record<string, unknown>;
   components: SComponent[];
 }
 

@@ -118,6 +118,18 @@ type TopicThemeSettings = {
   _backgroundImage?: TopicResponsiveAssetMap;
   _backgroundStyles?: TopicBackgroundStyles;
   _responsiveClasses?: TopicResponsiveClasses;
+  _textAlignment?: TopicTextAlignment;
+  _minimumHeights?: TopicMinimumHeights;
+  _isDivider?: boolean;
+  _blockColours?: {
+    _background?: string;
+    _font?: string;
+    _header?: string;
+  };
+  _spacingTop?: string;
+  _spacingBottom?: string;
+  _verticalAlignment?: string;
+  _horizontalAlignment?: string;
   _pageHeader?: {
     _graphic?: {
       _src?: string;
@@ -207,6 +219,25 @@ const ONSCREEN_CLASS_OPTIONS = [
 ] as const;
 const TEXT_ALIGN_OPTIONS = ["", "left", "center", "right"] as const;
 const LOCK_TYPE_OPTIONS = ["", "custom", "lockLast", "sequential", "unlockFirst"] as const;
+
+// Palette rows match the adapt-laerdal-life / custom-theme properties.schema exactly.
+const LIFE_PALETTE_ROWS: readonly (readonly string[])[] = [
+  ["#FFFFFF", "#FAFAFA", "#E5E5E5", "#CCCCCC"],
+  ["#F1FBFE", "#D4E9F2", "#A9D3E5", "#215369"],
+  ["#EDFCFB", "#C8EEEC", "#98D8D5", "#145653"],
+  ["#FFFAEE", "#F8E2BF", "#EAC785", "#604920"],
+];
+const VANILLA_PALETTE_ROWS: readonly (readonly string[])[] = [
+  ["#FFFFFF", "#FAFAFA", "#F0EDEA", "#D6D0C8"],
+  ["#F5F5F0", "#E8E4D4", "#D4CCBC", "#C8C0A0"],
+  ["#EDE8DC", "#D8CCBC", "#C0B094", "#A09070"],
+  ["#D4C8B0", "#B0966C", "#786050", "#504030"],
+];
+const THEME_COLOUR_PALETTE_ROWS: Record<string, readonly (readonly string[])[]> = {
+  "LIFE Theme":    LIFE_PALETTE_ROWS,
+  "Custom Theme":  LIFE_PALETTE_ROWS,
+  "Vanilla Theme": VANILLA_PALETTE_ROWS,
+};
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -498,6 +529,164 @@ function TopicCheckbox({
   );
 }
 
+function TopicColorField({
+  label,
+  value,
+  onChange,
+  paletteRows = [],
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  paletteRows?: readonly (readonly string[])[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [showMore, setShowMore] = useState(false);
+  const [draft, setDraft] = useState(value || "#000000");
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => { setDraft(value || "#000000"); }, [value]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      if (popoverRef.current?.contains(e.target as Node) || triggerRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  function openPicker() {
+    setDraft(value || "#000000");
+    setShowMore(false);
+    setOpen((o) => !o);
+  }
+  function apply() { onChange(draft); setOpen(false); }
+  function clear() { onChange(""); setOpen(false); }
+
+  const isEmpty = !value;
+  const checkerStyle: React.CSSProperties = {
+    backgroundImage: "linear-gradient(45deg,#ccc 25%,transparent 25%),linear-gradient(-45deg,#ccc 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#ccc 75%),linear-gradient(-45deg,transparent 75%,#ccc 75%)",
+    backgroundSize: "8px 8px",
+    backgroundPosition: "0 0,0 4px,4px -4px,-4px 0",
+  };
+
+  const popoverStyle = (() => {
+    const rect = triggerRef.current?.getBoundingClientRect();
+    if (!rect) return { top: 0, left: 0 };
+    const top = rect.bottom + 4;
+    const left = Math.min(rect.left, window.innerWidth - 168);
+    return { top, left };
+  })();
+
+  return (
+    <div className="flex flex-col gap-1">
+      <TopicFieldLabel>{label}</TopicFieldLabel>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={openPicker}
+        aria-label={`Pick ${label}`}
+        className="w-10 h-10 rounded-md border-2 border-[#e5e7eb] hover:border-[var(--life-primary-500)] transition-colors relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#2d6fa8]"
+        style={isEmpty ? checkerStyle : { backgroundColor: value }}
+      >
+        {isEmpty && (
+          <svg className="absolute inset-0 m-auto text-[#9ca3af]" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        )}
+      </button>
+
+      {open && createPortal(
+        <div
+          ref={popoverRef}
+          className="fixed z-[100] bg-white border border-[#d1d5db] rounded-lg shadow-xl overflow-hidden"
+          style={{ ...popoverStyle, width: 160 }}
+        >
+          {/* Palette grid */}
+          {paletteRows.length > 0 && (
+            <div className="p-1.5">
+              {paletteRows.map((row, ri) => (
+                <div key={ri} className="flex">
+                  {row.map((colour) => (
+                    <button
+                      key={colour}
+                      type="button"
+                      title={colour}
+                      onClick={() => { onChange(colour); setOpen(false); }}
+                      className="w-9 h-9 hover:scale-110 transition-transform focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#2d6fa8] rounded-sm"
+                      style={{ backgroundColor: colour }}
+                      aria-label={colour}
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* "more" toggle — expands to full picker */}
+          <div className="border-t border-[#e5e7eb]">
+            {!showMore ? (
+              <button
+                type="button"
+                onClick={() => setShowMore(true)}
+                className="w-full text-right px-2 py-1 text-xs text-[#374151] hover:bg-[#f9fafb] transition-colors"
+              >
+                more
+              </button>
+            ) : (
+              <div className="p-2 flex flex-col gap-2">
+                <div className="flex items-center gap-1.5">
+                  <label
+                    className="w-8 h-8 rounded border border-[#e5e7eb] overflow-hidden cursor-pointer relative shrink-0"
+                    style={{ backgroundColor: draft }}
+                  >
+                    <input
+                      type="color"
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      aria-label="Custom colour"
+                    />
+                  </label>
+                  <input
+                    type="text"
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onBlur={(e) => {
+                      const v = e.target.value.trim();
+                      if (!/^#[0-9a-fA-F]{3,6}$/.test(v)) setDraft(value || "#000000");
+                    }}
+                    maxLength={7}
+                    placeholder="#000000"
+                    className="flex-1 border border-[#e5e7eb] rounded px-1.5 py-1 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-[#2d6fa8]"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <button type="button" onClick={clear} className="text-[11px] text-[#9ca3af] hover:text-[#ef4444] transition-colors">
+                    Clear
+                  </button>
+                  <div className="flex gap-1">
+                    <button type="button" onClick={() => setShowMore(false)} className="px-2 py-0.5 text-[11px] border border-[#e5e7eb] rounded text-[#374151] hover:bg-[#f9fafb] transition-colors">
+                      Cancel
+                    </button>
+                    <button type="button" onClick={apply} className="px-2 py-0.5 text-[11px] rounded bg-[#2d6fa8] text-white hover:bg-[#245c8f] transition-colors">
+                      Choose
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
 function ExternalAssetModal({
   open,
   title,
@@ -636,9 +825,18 @@ function mapStructureToPages(
       contentGroups: Array<{
         id: string;
         title: string;
+        displayTitle?: string;
         description?: string;
         instruction?: string;
         themeSettings?: Record<string, unknown>;
+        classes?: string;
+        requireCompletionOf?: string;
+        isOptional?: boolean;
+        isAvailable?: boolean;
+        isHidden?: boolean;
+        isVisible?: boolean;
+        ariaLevel?: string;
+        extensions?: Record<string, unknown>;
           components: Array<{ id: string; title: string; componentKey: string; layout?: "full" | "left" | "right"; description?: string; instruction?: string; subtitle?: string; themeSettings?: Record<string, unknown>; properties?: Record<string, unknown>; url?: string }>;
       }>;
     }>;
@@ -731,6 +929,18 @@ function mapStructureToPages(
             group.themeSettings && typeof group.themeSettings === "object"
               ? group.themeSettings as TopicThemeSettings
               : {},
+          isOptional: !!group.isOptional,
+          isAvailable: group.isAvailable !== false,
+          isHidden: !!group.isHidden,
+          isVisible: group.isVisible !== false,
+          requireCompletionOf: group.requireCompletionOf ?? "-1",
+          classes: group.classes || "",
+          ariaLevel: group.ariaLevel || "",
+          extensions: group.extensions ?? {},
+          showDisplayTitleInPreview:
+            typeof group.displayTitle === "string"
+              ? group.displayTitle.trim().length > 0
+              : false,
           components: group.components.map((component) => ({
             id: component.id,
             type: toComponentType(component.componentKey),
@@ -803,6 +1013,15 @@ export interface BlockData {
   instruction: string;
   themeSettings: TopicThemeSettings;
   components: ComponentData[];
+  isOptional: boolean;
+  isAvailable: boolean;
+  isHidden: boolean;
+  isVisible: boolean;
+  requireCompletionOf: string;
+  classes: string;
+  ariaLevel: string;
+  extensions: Record<string, unknown>;
+  showDisplayTitleInPreview: boolean;
 }
 
 export interface ArticleData {
@@ -894,6 +1113,18 @@ const DEFAULT_SECTION_ACCORDIONS: Record<string, boolean> = {
   advanced: false,
 };
 
+const DEFAULT_BLOCK_ACCORDIONS: Record<string, boolean> = {
+  general: true,
+  availability: false,
+  extensions: false,
+  theme: false,
+  advanced: false,
+};
+
+const SPACING_OPTIONS = ["", "default", "small", "medium", "large"] as const;
+const VERTICAL_ALIGN_OPTIONS = ["", "top", "middle", "bottom"] as const;
+const HORIZONTAL_ALIGN_OPTIONS = ["", "left", "center", "right"] as const;
+
 interface CourseEditorProps {
   courseId?: string;
   initialTitle?: string;
@@ -953,8 +1184,10 @@ export default function CourseEditor({
   const [topicExternalAssetTarget, setTopicExternalAssetTarget] = useState<TopicExternalAssetTarget | null>(null);
   const [copiedTopicId, setCopiedTopicId] = useState<string | null>(null);
   const [copiedSectionId, setCopiedSectionId] = useState<string | null>(null);
+  const [copiedBlockId, setCopiedBlockId] = useState<string | null>(null);
   const [openTopicAccordions, setOpenTopicAccordions] = useState<Record<string, boolean>>(DEFAULT_TOPIC_ACCORDIONS);
   const [openSectionAccordions, setOpenSectionAccordions] = useState<Record<string, boolean>>(DEFAULT_SECTION_ACCORDIONS);
+  const [openBlockAccordions, setOpenBlockAccordions] = useState<Record<string, boolean>>(DEFAULT_BLOCK_ACCORDIONS);
   const [courseAssetMappings, setCourseAssetMappings] = useState<Record<string, string>>({});
   const [assetLinkIdMap, setAssetLinkIdMap] = useState<Record<string, string>>({});
   const structureLoadRequestIdRef = useRef(0);
@@ -975,6 +1208,7 @@ export default function CourseEditor({
   const previewBuildRequestIdRef = useRef(0);
   const copiedTopicIdResetTimerRef = useRef<number | null>(null);
   const copiedSectionIdResetTimerRef = useRef<number | null>(null);
+  const copiedBlockIdResetTimerRef = useRef<number | null>(null);
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const rightPanelScrollRef = useRef<HTMLElement | null>(null);
   const cleanupPreviewListenersRef = useRef<(() => void) | null>(null);
@@ -3066,6 +3300,10 @@ export default function CourseEditor({
       window.clearTimeout(copiedSectionIdResetTimerRef.current);
       copiedSectionIdResetTimerRef.current = null;
     }
+    if (copiedBlockIdResetTimerRef.current !== null) {
+      window.clearTimeout(copiedBlockIdResetTimerRef.current);
+      copiedBlockIdResetTimerRef.current = null;
+    }
   }, []);
 
   function handleCopyTopicId(topicId: string) {
@@ -3131,6 +3369,37 @@ export default function CourseEditor({
     };
     if (navigator.clipboard?.writeText) {
       void navigator.clipboard.writeText(sectionId).then(afterCopy).catch(fallbackCopy);
+      return;
+    }
+    fallbackCopy();
+  }
+
+  function handleCopyBlockId(blockId: string) {
+    if (!blockId) return;
+    const afterCopy = () => {
+      setCopiedBlockId(blockId);
+      if (copiedBlockIdResetTimerRef.current !== null) {
+        window.clearTimeout(copiedBlockIdResetTimerRef.current);
+      }
+      copiedBlockIdResetTimerRef.current = window.setTimeout(() => {
+        setCopiedBlockId((current) => (current === blockId ? null : current));
+        copiedBlockIdResetTimerRef.current = null;
+      }, 2000);
+    };
+    const fallbackCopy = () => {
+      const helperTextArea = document.createElement("textarea");
+      helperTextArea.value = blockId;
+      helperTextArea.style.position = "fixed";
+      helperTextArea.style.left = "-9999px";
+      document.body.appendChild(helperTextArea);
+      helperTextArea.focus();
+      helperTextArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(helperTextArea);
+      afterCopy();
+    };
+    if (navigator.clipboard?.writeText) {
+      void navigator.clipboard.writeText(blockId).then(afterCopy).catch(fallbackCopy);
       return;
     }
     fallbackCopy();
@@ -3202,6 +3471,41 @@ export default function CourseEditor({
       general: false,
       availability: false,
       accessibility: false,
+      extensions: false,
+      theme: false,
+      advanced: false,
+      [id]: !prev[id],
+    }));
+
+    if (container && triggerEl) {
+      requestAnimationFrame(() => {
+        if (!triggerEl.isConnected) return;
+        const topAfter = triggerEl.getBoundingClientRect().top;
+        if (topBefore !== null) {
+          container.scrollTop += topAfter - topBefore;
+        }
+        const padding = 10;
+        const containerRect = container.getBoundingClientRect();
+        const triggerRect = triggerEl.getBoundingClientRect();
+        if (triggerRect.top < containerRect.top + padding) {
+          container.scrollTop -= (containerRect.top + padding) - triggerRect.top;
+        } else if (triggerRect.bottom > containerRect.bottom - padding) {
+          container.scrollTop += triggerRect.bottom - (containerRect.bottom - padding);
+        }
+      });
+    }
+  }
+
+  function toggleBlockAccordion(
+    id: "general" | "availability" | "extensions" | "theme" | "advanced",
+    triggerEl?: HTMLButtonElement
+  ) {
+    const container = rightPanelScrollRef.current;
+    const topBefore = container && triggerEl ? triggerEl.getBoundingClientRect().top : null;
+
+    setOpenBlockAccordions((prev) => ({
+      general: false,
+      availability: false,
       extensions: false,
       theme: false,
       advanced: false,
@@ -3343,6 +3647,7 @@ export default function CourseEditor({
     setHasCanvasSelection(true);
     setRightPanelOpen(true);
     setRightPanelType("block");
+    setOpenBlockAccordions(DEFAULT_BLOCK_ACCORDIONS);
     if (source === "leftPanel") {
       queuePreviewScrollFromLeftPanel({ level: "group", id: blockId });
     }
@@ -4119,11 +4424,19 @@ export default function CourseEditor({
           if (!block) continue;
           await updateStructureNode("contentGroup", id, {
             title: block.title,
-            displayTitle: block.title,
+            displayTitle: block.showDisplayTitleInPreview ? block.title : "",
             body: block.description,
             description: block.description,
             instruction: block.instruction,
             themeSettings: block.themeSettings ?? {},
+            _isOptional: block.isOptional,
+            _isAvailable: block.isAvailable,
+            _isHidden: block.isHidden,
+            _isVisible: block.isVisible,
+            _requireCompletionOf: isNaN(Number(block.requireCompletionOf)) ? -1 : Number(block.requireCompletionOf),
+            _classes: block.classes,
+            _ariaLevel: isNaN(Number(block.ariaLevel)) ? 0 : Number(block.ariaLevel),
+            _extensions: block.extensions ?? {},
           });
           continue;
         }
@@ -5336,93 +5649,163 @@ export default function CourseEditor({
                       />
                     </button>
                     {activeLevel === "block" && block && (
-                      <div className="border-b border-[#e6ebf0]">
-                        <div className="px-4 py-4 space-y-3">
-                          {(() => {
-                            const blockThemeSettings = getActiveThemeSettings(block.themeSettings);
-                            const blockBackgroundImage = asRecord(blockThemeSettings._backgroundImage);
-                            const blockBackgroundStyles = asRecord(blockThemeSettings._backgroundStyles);
-                            return (
-                              <>
+                      <div className="px-4 py-4 border-b border-[#e6ebf0] space-y-2">
+                        {(() => {
+                          const blockThemeSettings = getActiveThemeSettings(block.themeSettings);
+                          const blockBackgroundImage = asRecord(blockThemeSettings._backgroundImage);
+                          const blockBackgroundStyles = asRecord(blockThemeSettings._backgroundStyles);
+                          const blockMinimumHeights = asRecord(blockThemeSettings._minimumHeights);
+                          const blockColours = asRecord(blockThemeSettings._blockColours);
+                          const blockResponsiveClasses = asRecord(blockThemeSettings._responsiveClasses);
+                          const isCopied = copiedBlockId === block.id;
+
+                          return (
+                            <>
+                              <TopicAccordion title="General" open={!!openBlockAccordions.general} onToggle={(triggerEl) => toggleBlockAccordion("general", triggerEl)}>
                                 <div className="flex flex-col gap-1.5">
-                                  <div className="text-[13px] font-semibold text-[var(--life-base-black)]">Content Group background image</div>
-                                  <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(blockBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" }, initialValue: asString(blockBackgroundImage._xlarge), title: "Content Group background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" })} />
-                                  <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(blockBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_large" }, initialValue: asString(blockBackgroundImage._large), title: "Content Group background image (_large)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_large" })} />
-                                  <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(blockBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_medium" }, initialValue: asString(blockBackgroundImage._medium), title: "Content Group background image (_medium)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_medium" })} />
-                                  <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(blockBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_small" }, initialValue: asString(blockBackgroundImage._small), title: "Content Group background image (_small)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_small" })} />
+                                  <TopicFieldLabel>CONTENT GROUP ID</TopicFieldLabel>
+                                  <div className="relative">
+                                    <button
+                                      type="button"
+                                      aria-label="Copy content group id"
+                                      title="Copy content group id"
+                                      onClick={() => handleCopyBlockId(block.id)}
+                                      className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors flex items-center justify-between gap-2 cursor-pointer ${isCopied ? "bg-[var(--life-positive-050)] border-[var(--life-positive-500)] text-[var(--life-positive-500)]" : "bg-white border-[var(--life-neutral-300)] text-[var(--life-base-black)] hover:bg-[#f8fafc] hover:border-[var(--life-primary-500)] hover:text-[var(--life-primary-500)]"}`}
+                                    >
+                                      <span className="truncate text-left">{block.id}</span>
+                                      {isCopied ? (
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
+                                      ) : (
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+                                      )}
+                                    </button>
+                                    {isCopied && (
+                                      <div className="absolute -top-8 right-0 px-2.5 py-1 rounded-[8px] border border-[var(--life-positive-500)] bg-[var(--life-positive-050)] text-[11px] font-semibold text-[var(--life-positive-500)] shadow-sm whitespace-nowrap">
+                                        Id copied to clipboard.
+                                      </div>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-[#6b7280]">Unique identifier for this content group. Click to copy.</p>
                                 </div>
-                                <TopicNestedAccordion title="Content Group background image styles">
-                                  <TopicSelect
-                                    label={BG_REPEAT_LABEL}
-                                    value={asString(blockBackgroundStyles._backgroundRepeat)}
-                                    onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({
-                                      ...current,
-                                      _backgroundStyles: {
-                                        ...asRecord(current._backgroundStyles),
-                                        _backgroundRepeat: value,
-                                      },
-                                    }))}
-                                    options={BG_REPEAT_OPTIONS}
-                                  />
-                                  <TopicSelect
-                                    label={BG_SIZE_LABEL}
-                                    value={asString(blockBackgroundStyles._backgroundSize)}
-                                    onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({
-                                      ...current,
-                                      _backgroundStyles: {
-                                        ...asRecord(current._backgroundStyles),
-                                        _backgroundSize: value,
-                                      },
-                                    }))}
-                                    options={BG_SIZE_OPTIONS}
-                                  />
-                                  <TopicSelect
-                                    label={BG_POSITION_LABEL}
-                                    value={asString(blockBackgroundStyles._backgroundPosition)}
-                                    onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({
-                                      ...current,
-                                      _backgroundStyles: {
-                                        ...asRecord(current._backgroundStyles),
-                                        _backgroundPosition: value,
-                                      },
-                                    }))}
-                                    options={BG_POSITION_OPTIONS}
-                                  />
+                                <TopicTextInput label="Title" value={block.title} onChange={(value) => updateBlock(page!.id, article!.id, block.id, { title: value })} />
+                                <TopicCheckbox
+                                  label="Display title in preview"
+                                  checked={!!block.showDisplayTitleInPreview}
+                                  onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { showDisplayTitleInPreview: checked })}
+                                />
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Availability & Progression" open={!!openBlockAccordions.availability} onToggle={(triggerEl) => toggleBlockAccordion("availability", triggerEl)}>
+                                <TopicCheckbox label="Is this optional?" checked={!!block.isOptional} onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { isOptional: checked })} />
+                                <TopicCheckbox label="Is this available?" checked={!!block.isAvailable} onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { isAvailable: checked })} />
+                                <TopicCheckbox label="Is this hidden?" checked={!!block.isHidden} onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { isHidden: checked })} />
+                                <TopicCheckbox label="Is this visible?" checked={!!block.isVisible} onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { isVisible: checked })} />
+                                <TopicTextInput label="Require completion of" value={block.requireCompletionOf} onChange={(value) => updateBlock(page!.id, article!.id, block.id, { requireCompletionOf: value })} />
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Extensions" open={!!openBlockAccordions.extensions} onToggle={(triggerEl) => toggleBlockAccordion("extensions", triggerEl)}>
+                                {(() => {
+                                  const extensionKeySet = new Set<string>();
+                                  contentPages.forEach((contentPage) => {
+                                    contentPage.articles.forEach((art) => {
+                                      art.blocks.forEach((blk) => {
+                                        Object.keys(asRecord(blk.extensions)).forEach((key) => {
+                                          if (key.trim()) extensionKeySet.add(key);
+                                        });
+                                      });
+                                    });
+                                  });
+                                  const extensionKeys = Array.from(extensionKeySet).sort((a, b) => a.localeCompare(b));
+                                  if (!extensionKeys.length) {
+                                    return <p className="text-[13px] text-[var(--life-neutral-300)]">No extensions are currently configured in this course.</p>;
+                                  }
+                                  return (
+                                    <div className="flex flex-col gap-2.5">
+                                      {extensionKeys.map((extensionKey) => {
+                                        const extensionConfig = asRecord(block.extensions)[extensionKey];
+                                        const extensionJson = JSON.stringify(extensionConfig ?? {}, null, 2);
+                                        return (
+                                          <TopicNestedAccordion key={`${block.id}-extension-${extensionKey}`} title={extensionKey}>
+                                            <div className="flex flex-col gap-1.5">
+                                              <TopicFieldLabel>Content group-level settings</TopicFieldLabel>
+                                              <textarea
+                                                key={`${block.id}-extension-json-${extensionKey}`}
+                                                defaultValue={extensionJson}
+                                                onBlur={(event) => {
+                                                  try {
+                                                    const rawInput = event.target.value.trim();
+                                                    const parsed = JSON.parse(rawInput || "{}");
+                                                    updateBlock(page!.id, article!.id, block.id, {
+                                                      extensions: { ...asRecord(block.extensions), [extensionKey]: parsed },
+                                                    });
+                                                  } catch {
+                                                    // Keep current value on invalid JSON.
+                                                  }
+                                                }}
+                                                className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors resize-y min-h-[120px] font-mono"
+                                              />
+                                            </div>
+                                          </TopicNestedAccordion>
+                                        );
+                                      })}
+                                    </div>
+                                  );
+                                })()}
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Theme settings" open={!!openBlockAccordions.theme} onToggle={(triggerEl) => toggleBlockAccordion("theme", triggerEl)}>
+                                <TopicNestedAccordion title="Text alignment">
+                                  <TopicSelect label="Title alignment" value={asString(asRecord(blockThemeSettings._textAlignment)._title)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _title: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                  <TopicSelect label="Body alignment" value={asString(asRecord(blockThemeSettings._textAlignment)._body)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _body: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                  <TopicSelect label="Instruction alignment" value={asString(asRecord(blockThemeSettings._textAlignment)._instruction)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _instruction: value } }))} options={TEXT_ALIGN_OPTIONS} />
                                 </TopicNestedAccordion>
-                              </>
-                            );
-                          })()}
-                          <input
-                            value={block.title}
-                            onChange={(e) => updateBlock(page!.id, article!.id, block.id, { title: e.target.value })}
-                            className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm"
-                            placeholder="Content Group title"
-                          />
-                          <textarea
-                            value={block.description}
-                            onChange={(e) => updateBlock(page!.id, article!.id, block.id, { description: e.target.value })}
-                            className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm resize-none"
-                            rows={3}
-                            placeholder="Content Group body"
-                          />
-                          <textarea
-                            value={block.instruction}
-                            onChange={(e) => updateBlock(page!.id, article!.id, block.id, { instruction: e.target.value })}
-                            className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm resize-none"
-                            rows={2}
-                            placeholder="Content Group instruction"
-                          />
-                          <input
-                            value={block.id}
-                            readOnly
-                            className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm text-[#6b7280] bg-[#f8fafc]"
-                          />
-                          <p className="text-xs text-[#6b7280]">Unique identifier for this content group. Click to copy.</p>
-                        </div>
-                        <button type="button" className="w-full h-14 border-t border-[#e6ebf0] px-5 flex items-center justify-between text-[#4b5563] text-xs font-semibold tracking-wide">AVAILABILITY &amp; PROGRESSION <span>›</span></button>
-                        <button type="button" className="w-full h-14 border-t border-[#e6ebf0] px-5 flex items-center justify-between text-[#4b5563] text-xs font-semibold tracking-wide">EXTENSIONS <span>›</span></button>
-                        <button type="button" className="w-full h-14 border-t border-[#e6ebf0] px-5 flex items-center justify-between text-[#4b5563] text-xs font-semibold tracking-wide">THEME <span>›</span></button>
-                        <button type="button" className="w-full h-14 border-t border-[#e6ebf0] px-5 flex items-center justify-between text-[#4b5563] text-xs font-semibold tracking-wide">ADVANCED SETTINGS <span>›</span></button>
+                                <TopicNestedAccordion title="Block background image">
+                                  <div className="flex flex-col gap-1.5">
+                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(blockBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" }, initialValue: asString(blockBackgroundImage._xlarge), title: "Block background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" })} />
+                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(blockBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_large" }, initialValue: asString(blockBackgroundImage._large), title: "Block background image (_large)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_large" })} />
+                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(blockBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_medium" }, initialValue: asString(blockBackgroundImage._medium), title: "Block background image (_medium)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_medium" })} />
+                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(blockBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_small" }, initialValue: asString(blockBackgroundImage._small), title: "Block background image (_small)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_small" })} />
+                                  </div>
+                                </TopicNestedAccordion>
+                                <TopicNestedAccordion title="Block background image styles">
+                                  <TopicSelect label={BG_REPEAT_LABEL} value={asString(blockBackgroundStyles._backgroundRepeat)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundRepeat: value } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
+                                  <TopicSelect label={BG_SIZE_LABEL} value={asString(blockBackgroundStyles._backgroundSize)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundSize: value } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
+                                  <TopicSelect label={BG_POSITION_LABEL} value={asString(blockBackgroundStyles._backgroundPosition)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundPosition: value } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
+                                </TopicNestedAccordion>
+                                <TopicNestedAccordion title="Block minimum height">
+                                  <TopicTextInput label="_xlarge" type="number" value={String(asNumberOrEmpty(blockMinimumHeights._xlarge))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _minimumHeights: { ...asRecord(current._minimumHeights), _xlarge: parseNumberishInput(value) } }))} />
+                                  <TopicTextInput label="_large" type="number" value={String(asNumberOrEmpty(blockMinimumHeights._large))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _minimumHeights: { ...asRecord(current._minimumHeights), _large: parseNumberishInput(value) } }))} />
+                                  <TopicTextInput label="_medium" type="number" value={String(asNumberOrEmpty(blockMinimumHeights._medium))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _minimumHeights: { ...asRecord(current._minimumHeights), _medium: parseNumberishInput(value) } }))} />
+                                  <TopicTextInput label="_small" type="number" value={String(asNumberOrEmpty(blockMinimumHeights._small))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _minimumHeights: { ...asRecord(current._minimumHeights), _small: parseNumberishInput(value) } }))} />
+                                </TopicNestedAccordion>
+                                <TopicCheckbox
+                                  label="Divider block?"
+                                  checked={asBoolean(blockThemeSettings._isDivider)}
+                                  onChange={(checked) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _isDivider: checked }))}
+                                />
+                                <TopicNestedAccordion title="Block colours">
+                                  <TopicColorField label="Background colour" value={asString(blockColours._background)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColours: { ...asRecord(current._blockColours), _background: value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
+                                  <TopicColorField label="Font colour" value={asString(blockColours._font)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColours: { ...asRecord(current._blockColours), _font: value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
+                                  <TopicColorField label="Header colour" value={asString(blockColours._header)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColours: { ...asRecord(current._blockColours), _header: value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
+                                </TopicNestedAccordion>
+                                <TopicSelect label="Spacing top" value={asString(blockThemeSettings._spacingTop)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _spacingTop: value }))} options={SPACING_OPTIONS} emptyOptionLabel="Default" />
+                                <TopicSelect label="Spacing bottom" value={asString(blockThemeSettings._spacingBottom)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _spacingBottom: value }))} options={SPACING_OPTIONS} emptyOptionLabel="Default" />
+                                <TopicSelect label="Set the vertical alignment of the child component(s)" value={asString(blockThemeSettings._verticalAlignment)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _verticalAlignment: value }))} options={VERTICAL_ALIGN_OPTIONS} emptyOptionLabel="" />
+                                <TopicSelect label="Set the horizontal alignment of the child component(s)" value={asString(blockThemeSettings._horizontalAlignment)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _horizontalAlignment: value }))} options={HORIZONTAL_ALIGN_OPTIONS} emptyOptionLabel="" />
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Advanced Settings" open={!!openBlockAccordions.advanced} onToggle={(triggerEl) => toggleBlockAccordion("advanced", triggerEl)}>
+                                <TopicTextInput label="Content group class" value={block.classes} onChange={(value) => updateBlock(page!.id, article!.id, block.id, { classes: value })} />
+                                <TopicNestedAccordion title="Responsive classes">
+                                  <TopicTextInput label="_xlarge" value={asString(blockResponsiveClasses._xlarge)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _xlarge: value } }))} />
+                                  <TopicTextInput label="_large" value={asString(blockResponsiveClasses._large)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _large: value } }))} />
+                                  <TopicTextInput label="_medium" value={asString(blockResponsiveClasses._medium)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _medium: value } }))} />
+                                  <TopicTextInput label="_small" value={asString(blockResponsiveClasses._small)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _small: value } }))} />
+                                </TopicNestedAccordion>
+                              </TopicAccordion>
+                            </>
+                          );
+                        })()}
                       </div>
                     )}
 
