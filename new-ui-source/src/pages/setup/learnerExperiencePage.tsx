@@ -361,11 +361,6 @@ const COURSE_FEEDBACK_OPTIONS: { value: CourseFeedbackOption; label: string }[] 
 ];
 
 /* -- Ask AI Tutor types -- */
-interface AiTutorDocument {
-  id: string;
-  name: string;
-  document: string;
-}
 
 type AiTutorState = AiTutorSettings;
 
