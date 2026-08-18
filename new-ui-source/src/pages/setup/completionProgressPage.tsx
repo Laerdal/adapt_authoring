@@ -57,7 +57,7 @@ interface CompletionProgressSettings {
   progressIndicatorAriaLabel: string;
   progressType:         ProgressType;
   progressFormat:       ProgressFormat;
-  progressBarStyle:     "continuous" | "compact";
+  progressBarStyle:     "continuous" | "compact" | "";
   timeEnabled:          boolean;
   timeIconClass:        string;
   timeTextBefore:       string;
@@ -184,7 +184,7 @@ const DEFAULT_SETTINGS: CompletionProgressSettings = {
   progressIndicatorAriaLabel: "",
   progressType:         "pages",
   progressFormat:       "bar",
-  progressBarStyle:     "continuous",
+  progressBarStyle:     "",
   timeEnabled:          false,
   timeIconClass:        "icon-time",
   timeTextBefore:       "Remaining time to complete module:",
@@ -646,8 +646,8 @@ function ProgressBarStylePicker({
   value,
   onChange,
 }: {
-  value: "continuous" | "compact";
-  onChange: (v: "continuous" | "compact") => void;
+  value: "continuous" | "compact" | "";
+  onChange: (v: "continuous" | "compact" | "") => void;
 }) {
   const options: { value: "continuous" | "compact"; label: string; description: string }[] = [
     {
@@ -676,7 +676,7 @@ function ProgressBarStylePicker({
             <button
               key={opt.value}
               type="button"
-              onClick={() => onChange(opt.value)}
+              onClick={() => onChange(value === opt.value ? "" : opt.value)}
               className={`flex flex-col gap-3 rounded-xl border-2 p-3 text-left transition-all ${
                 selected
                   ? "border-[var(--life-base-black)] bg-white shadow-sm"
