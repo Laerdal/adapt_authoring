@@ -2379,6 +2379,158 @@ function fmtDate(v?: string): string {
   return isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-GB"); // dd/mm/yyyy
 }
 
+// ── CDN Deployment ────────────────────────────────────────────────────────────
+// Adapt Studio's "CDN Deployment" panel: enable/edit the course's adapt-cdn-config
+// extension settings, plus build-trigger / previous-links / restore / expiry
+// actions against the existing plugins/output/cdn REST API.
+
+const CDN_CONFIG_EXTENSION_NAME = "adapt-cdn-config";
+
+// Matches the adapt-cdn-config extension's properties.schema Select options
+// (pluginLocations.config._cdnConfig._courseDeployment.cdnid) — these are real
+// storage-container ids the `cdndeploy` CLI understands, not placeholders.
+export const CDN_STORAGE_CONTAINERS = ["cdn-esim-dev", "cdn-esim-prod", "cdn-esim-cn-dev"] as const;
+
+// Schema defaults (adapt-cdn-config/properties.schema) used when the extension
+// hasn't been configured on this course yet.
+const DEFAULT_CDN_DEPLOYMENT_SETTINGS: CdnDeploymentSettings = {
+  isEnabled: false,
+  cdnid: CDN_STORAGE_CONTAINERS[0],
+  groupid: "default-project",
+  courseid: "default-course",
+  version: "0.0.1",
+  buildTriggerComment: "Build Triggered",
+};
+
+export interface CdnDeploymentSettings {
+  isEnabled: boolean;
+  cdnid: string;
+  groupid: string;
+  courseid: string;
+  version: string;
+  buildTriggerComment: string;
+}
+
+export async function getCdnDeploymentSettings(courseId: string): Promise<CdnDeploymentSettings> {
+  const config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+  const cdnConfig = obj(obj(config._extensions)._cdnConfig);
+  const deployment = obj(cdnConfig._courseDeployment);
+  const isEnabled =
+    isExtensionInstalledByName(config, CDN_CONFIG_EXTENSION_NAME) && bool(cdnConfig._isEnabled, false);
+
+  return {
+    isEnabled,
+    cdnid: str(deployment.cdnid, DEFAULT_CDN_DEPLOYMENT_SETTINGS.cdnid),
+    groupid: str(deployment.groupid, DEFAULT_CDN_DEPLOYMENT_SETTINGS.groupid),
+    courseid: str(deployment.courseid, DEFAULT_CDN_DEPLOYMENT_SETTINGS.courseid),
+    version: str(deployment.version, DEFAULT_CDN_DEPLOYMENT_SETTINGS.version),
+    buildTriggerComment: str(deployment.buildTriggerComment, DEFAULT_CDN_DEPLOYMENT_SETTINGS.buildTriggerComment),
+  };
+}
+
+// Reconciles extension install state with `settings.isEnabled`, then writes the
+// course-deployment fields — mirrors setCompletionNotifierEnabledInConfig's
+// single-extension, config-location-only enable/disable + patch pattern.
+export async function saveCdnDeploymentSettings(courseId: string, settings: CdnDeploymentSettings): Promise<unknown> {
+  const config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+  const installed = isExtensionInstalledByName(config, CDN_CONFIG_EXTENSION_NAME);
+
+  if (settings.isEnabled && !installed) {
+    const ids = await resolveExtensionTypeIdsByNames([CDN_CONFIG_EXTENSION_NAME]);
+    if (ids.length) await apiClient.post(`/api/extension/enable/${courseId}`, { extensions: ids });
+  } else if (!settings.isEnabled && installed) {
+    const ids = await resolveExtensionTypeIdsByNames([CDN_CONFIG_EXTENSION_NAME]);
+    if (ids.length) await apiClient.post(`/api/extension/disable/${courseId}`, { extensions: ids });
+  }
+
+  // Re-read after (dis/en)abling: enabling seeds the extension's schema-default
+  // _cdnConfig block, which we then need to merge our field values onto.
+  const freshConfig = settings.isEnabled === installed
+    ? config
+    : await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+  const existingCdnConfig = obj(obj(freshConfig._extensions)._cdnConfig);
+
+  return apiClient.patch(`/api/content/config/${freshConfig._id}`, {
+    _id: freshConfig._id,
+    _courseId: courseId,
+    _extensions: {
+      ...obj(freshConfig._extensions),
+      _cdnConfig: {
+        ...existingCdnConfig,
+        _isEnabled: settings.isEnabled,
+        _courseDeployment: {
+          ...obj(existingCdnConfig._courseDeployment),
+          cdnid: settings.cdnid,
+          groupid: settings.groupid,
+          courseid: settings.courseid,
+          version: settings.version,
+          buildTriggerComment: settings.buildTriggerComment,
+        },
+      },
+    },
+  });
+}
+
+export async function getCdnVersion(): Promise<string> {
+  const result = await apiClient.get<{ data?: string }>("/api/cdn/version");
+  return result?.data ?? "";
+}
+
+// Shape returned by `cdndeploy ls` (adapt-cdn-deploy-cli's util/azcopy.js `list()`),
+// passed straight through by plugins/output/cdn/routes/getlinks.js.
+export interface CdnLinkEntry {
+  entry: string; // raw version folder name, or "latest"
+  link: string;
+  timestamp?: string;
+  timestampPretty?: string;
+  version?: string;
+  sourceInstance?: string;
+  [key: string]: unknown;
+}
+
+export async function getCdnPreviousLinks(groupid: string, courseid: string, cdnid: string): Promise<CdnLinkEntry[]> {
+  const result = await apiClient.get<{ data?: CdnLinkEntry[] }>(`/api/cdn/getlinks/${groupid}/${courseid}/${cdnid}`);
+  return Array.isArray(result?.data) ? result.data : [];
+}
+
+export interface CdnLinkStatus {
+  url: string;
+  statusCode: number;
+}
+
+export async function checkCdnLinkStatuses(urls: string[]): Promise<CdnLinkStatus[]> {
+  const result = await apiClient.post<{ success?: boolean; data?: CdnLinkStatus[] }>(
+    "/api/cdn/checklinkstatuses",
+    { urls },
+  );
+  return result?.success && Array.isArray(result.data) ? result.data : [];
+}
+
+export async function restoreCdnLink(
+  groupid: string,
+  courseid: string,
+  cdnid: string,
+  versionfolder: string,
+): Promise<CdnLinkEntry[]> {
+  const result = await apiClient.get<{ data?: CdnLinkEntry[] }>(
+    `/api/cdn/restoreLink/${groupid}/${courseid}/${cdnid}/${versionfolder}`,
+  );
+  return Array.isArray(result?.data) ? result.data : [];
+}
+
+export async function setCdnLinkExpiry(
+  groupid: string,
+  courseid: string,
+  cdnid: string,
+  versionfolder: string,
+  expiredate: string,
+): Promise<CdnLinkEntry[]> {
+  const result = await apiClient.get<{ data?: CdnLinkEntry[] }>(
+    `/api/cdn/setExpiry/${groupid}/${courseid}/${cdnid}/${versionfolder}/${expiredate}`,
+  );
+  return Array.isArray(result?.data) ? result.data : [];
+}
+
 // ── Users & roles ─────────────────────────────────────────────────────────────
 export type RoleName = "Super Admin" | "Authenticated User" | "Course Creator";
 const KNOWN_ROLES: RoleName[] = ["Super Admin", "Authenticated User", "Course Creator"];
