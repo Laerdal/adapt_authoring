@@ -570,12 +570,13 @@ function ResumeBookmarkingContent({
               value={cfg.bookmarkingLevel}
               onChange={(v) => set("bookmarkingLevel", v)}
               options={[
-                { value: "page",      label: "Page" },
-                { value: "block",     label: "Block" },
+                { value: "page",      label: "Topic" },
+                { value: "block",     label: "Content Group" },
                 { value: "component", label: "Component" },
               ]}
             />
             <CpInfoNote>Bookmarking done at component level will be the most accurate.</CpInfoNote>
+
             <CpSelect<BookmarkReturn>
               label="Bookmarking location – learner is taken back to"
               hint="Location: where the learner is returned on re-entry"
