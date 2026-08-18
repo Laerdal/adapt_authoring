@@ -151,8 +151,29 @@ function AddResourceDialog({
 }) {
   const [res, setRes] = useState<LearningResource>(initial ?? newResource());
   const [assetPickerOpen, setAssetPickerOpen] = useState(false);
+  const [errors, setErrors] = useState<{ title?: string; format?: string; source?: string }>({});
   const set = <K extends keyof LearningResource>(k: K, v: LearningResource[K]) =>
     setRes((prev) => ({ ...prev, [k]: v }));
+
+  function validateResource(): boolean {
+    const nextErrors: { title?: string; format?: string; source?: string } = {};
+    if (!res.format) nextErrors.format = "Format is required.";
+    if (!res.title.trim()) nextErrors.title = "Title is required.";
+
+    if (res.sourceType === "asset") {
+      if (!res.assetValue.trim()) nextErrors.source = "Source is required.";
+    } else if (!res.urlValue.trim()) {
+      nextErrors.source = "Source is required.";
+    }
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  }
+
+  function handleAddClick() {
+    if (!validateResource()) return;
+    onAdd(res);
+  }
 
   return (
     <>
@@ -176,9 +197,12 @@ function AddResourceDialog({
             <div className="relative">
               <select
                 value={res.format}
-                onChange={(e) => set("format", e.target.value as ResourceFormat)}
+                onChange={(e) => {
+                  set("format", e.target.value as ResourceFormat);
+                  setErrors((prev) => ({ ...prev, format: undefined }));
+                }}
                 aria-label="Resource Format"
-                className={`${LR_INPUT} appearance-none pr-8`}
+                className={`${LR_INPUT} appearance-none pr-8 ${errors.format ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
               >
                 {RESOURCE_FORMAT_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>{o.label}</option>
@@ -188,6 +212,7 @@ function AddResourceDialog({
                 <polyline points="6 9 12 15 18 9"/>
               </svg>
             </div>
+            {errors.format && <p className="text-xs text-[#dc2626] mt-1">{errors.format}</p>}
           </LrField>
 
           {/* Force Download */}
@@ -202,10 +227,14 @@ function AddResourceDialog({
             <input
               type="text"
               value={res.title}
-              onChange={(e) => set("title", e.target.value)}
+              onChange={(e) => {
+                set("title", e.target.value);
+                setErrors((prev) => ({ ...prev, title: undefined }));
+              }}
               placeholder="Enter resource title"
-              className={LR_INPUT}
+              className={`${LR_INPUT} ${errors.title ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
             />
+            {errors.title && <p className="text-xs text-[#dc2626] mt-1">{errors.title}</p>}
           </LrField>
 
           {/* File Name */}
@@ -237,7 +266,10 @@ function AddResourceDialog({
                 <button
                   key={t}
                   type="button"
-                  onClick={() => set("sourceType", t)}
+                  onClick={() => {
+                    set("sourceType", t);
+                    setErrors((prev) => ({ ...prev, source: undefined }));
+                  }}
                   className={`flex-1 py-2 text-xs font-medium transition-colors ${
                     res.sourceType === t ? "bg-[#2d6fa8] text-white" : "bg-white text-[#6b7280] hover:bg-[#f9fafb]"
                   }`}
@@ -249,8 +281,13 @@ function AddResourceDialog({
             {res.sourceType === "asset" ? (
               <button
                 type="button"
-                onClick={() => setAssetPickerOpen(true)}
-                className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-[#d1d5db] rounded-xl py-4 text-sm text-[#6b7280] hover:border-[#2d6fa8] hover:text-[#2d6fa8] hover:bg-[#f0f7ff] transition-colors"
+                onClick={() => {
+                  setAssetPickerOpen(true);
+                  setErrors((prev) => ({ ...prev, source: undefined }));
+                }}
+                className={`w-full flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-4 text-sm text-[#6b7280] hover:border-[#2d6fa8] hover:text-[#2d6fa8] hover:bg-[#f0f7ff] transition-colors ${
+                  errors.source ? "border-[#dc2626]" : "border-[#d1d5db]"
+                }`}
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
@@ -261,11 +298,15 @@ function AddResourceDialog({
               <input
                 type="url"
                 value={res.urlValue}
-                onChange={(e) => set("urlValue", e.target.value)}
+                onChange={(e) => {
+                  set("urlValue", e.target.value);
+                  setErrors((prev) => ({ ...prev, source: undefined }));
+                }}
                 placeholder="https://example.com/resource"
-                className={LR_INPUT}
+                className={`${LR_INPUT} ${errors.source ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
               />
             )}
+            {errors.source && <p className="text-xs text-[#dc2626] mt-1">{errors.source}</p>}
           </LrField>
 
           {/* Display on every page */}
@@ -287,7 +328,7 @@ function AddResourceDialog({
           </button>
           <button
             type="button"
-            onClick={() => onAdd(res)}
+            onClick={handleAddClick}
             className="px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors"
           >
             Add
@@ -300,6 +341,7 @@ function AddResourceDialog({
       <AssetPickerModal
         onSelect={(asset) => {
           set("assetValue", asset.assetLink);
+          setErrors((prev) => ({ ...prev, source: undefined }));
           setAssetPickerOpen(false);
         }}
         onClose={() => setAssetPickerOpen(false)}
@@ -366,6 +408,19 @@ type AiTutorState = AiTutorSettings;
 
 /* -- Learner Notes types -- */
 type LearnerNotesState = LearnerNotesSettings;
+type LearnerNotesRequiredKey =
+  | "searchErrorMessage"
+  | "successMessage"
+  | "errorMessage"
+  | "createANewNote"
+  | "exportANote"
+  | "saveNote"
+  | "downloadANote"
+  | "uploadANote"
+  | "searchNote"
+  | "deleteNote"
+  | "cancel"
+  | "editNote";
 
 /* -- Learner Search types -- */
 type LearnerSearchState = LearnerSearchSettings;
@@ -585,6 +640,8 @@ export function LearnerExperiencePanel({
   const [cfLoading, setCfLoading] = useState(false);
   const [lnSaving, setLnSaving] = useState(false);
   const [lnToast, setLnToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [lrFieldErrors, setLrFieldErrors] = useState<{ sectionTitle?: string }>({});
+  const [lnFieldErrors, setLnFieldErrors] = useState<Partial<Record<LearnerNotesRequiredKey, string>>>({});
   const [lsOpen, setLsOpen] = useState(false);
   const [lsState, setLsState] = useState<LearnerSearchState>(defaultLearnerSearchSettings());
   const [savedLsState, setSavedLsState] = useState<LearnerSearchState>(defaultLearnerSearchSettings());
@@ -789,12 +846,60 @@ export function LearnerExperiencePanel({
     setCfState(savedCfState);
     setLrState(savedLrState);
     setAtState(savedAtState);
+    setLrFieldErrors({});
+    setLnFieldErrors({});
+  }
+
+  function validateRequiredFields(): boolean {
+    let hasErrors = false;
+    const nextLrFieldErrors: { sectionTitle?: string } = {};
+
+    if (lrState.enabled && !lrState.sectionTitle.trim()) {
+      nextLrFieldErrors.sectionTitle = "Title is required.";
+      setLrOpen(true);
+      hasErrors = true;
+    }
+    setLrFieldErrors(nextLrFieldErrors);
+
+    const nextLnFieldErrors: Partial<Record<LearnerNotesRequiredKey, string>> = {};
+    if (lnState.enabled) {
+      const requiredLearnerNoteFields: { key: LearnerNotesRequiredKey; label: string }[] = [
+        { key: "searchErrorMessage", label: "Learner Notes: Search Error Message" },
+        { key: "successMessage", label: "Learner Notes: Success Message" },
+        { key: "errorMessage", label: "Learner Notes: Error Message" },
+        { key: "createANewNote", label: "Learner Notes: Create a note" },
+        { key: "exportANote", label: "Learner Notes: Export a note" },
+        { key: "saveNote", label: "Learner Notes: Save note" },
+        { key: "downloadANote", label: "Learner Notes: Download a note" },
+        { key: "uploadANote", label: "Learner Notes: Upload a note" },
+        { key: "searchNote", label: "Learner Notes: Search note" },
+        { key: "deleteNote", label: "Learner Notes: Delete note" },
+        { key: "cancel", label: "Learner Notes: Cancel" },
+        { key: "editNote", label: "Learner Notes: Edit note" },
+      ];
+
+      for (const { key, label } of requiredLearnerNoteFields) {
+        const value = lnState[key];
+        if (typeof value === "string" && !value.trim()) {
+          nextLnFieldErrors[key] = `${label} is required.`;
+          hasErrors = true;
+        }
+      }
+
+      if (Object.keys(nextLnFieldErrors).length > 0) {
+        setLnOpen(true);
+      }
+    }
+    setLnFieldErrors(nextLnFieldErrors);
+
+    return !hasErrors;
   }
 
   async function handleLnSave() {
     if (!courseId || lnSaving) return;
-    setLnSaving(true);
     setLnToast(null);
+    if (!validateRequiredFields()) return;
+    setLnSaving(true);
     try {
       await saveLearnerNotesSettings(courseId, lnState as LearnerNotesSettings);
       await saveLearnerSearchSettings(courseId, lsState);
@@ -816,8 +921,9 @@ export function LearnerExperiencePanel({
 
   async function handleConfirmSave() {
     if (!courseId || lnSaving) return;
-    setLnSaving(true);
     setLnToast(null);
+    if (!validateRequiredFields()) return;
+    setLnSaving(true);
     try {
       await saveLearnerNotesSettings(courseId, lnState);
       await saveLearnerSearchSettings(courseId, lsState);
@@ -911,10 +1017,14 @@ export function LearnerExperiencePanel({
                 <input
                   type="text"
                   value={lrState.sectionTitle}
-                  onChange={(e) => setLr("sectionTitle", e.target.value)}
+                  onChange={(e) => {
+                    setLr("sectionTitle", e.target.value);
+                    setLrFieldErrors((prev) => ({ ...prev, sectionTitle: undefined }));
+                  }}
                   placeholder="e.g. Additional Resources"
-                  className={LR_INPUT}
+                  className={`${LR_INPUT} ${lrFieldErrors.sectionTitle ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
                 />
+                {lrFieldErrors.sectionTitle && <p className="text-xs text-[#dc2626] mt-1">{lrFieldErrors.sectionTitle}</p>}
               </LrField>
 
               {/* Description */}
@@ -1079,40 +1189,160 @@ export function LearnerExperiencePanel({
                 <input type="text" value={lnState.placeholder} onChange={(e) => setLn("placeholder", e.target.value)} placeholder="e.g. Start typing your notes..." className={LR_INPUT} />
               </LrField>
               <LrField label="Search Error Message">
-                <input type="text" value={lnState.searchErrorMessage} onChange={(e) => setLn("searchErrorMessage", e.target.value)} placeholder="e.g. Sorry, no results were found" className={LR_INPUT} />
+                <input
+                  type="text"
+                  value={lnState.searchErrorMessage}
+                  onChange={(e) => {
+                    setLn("searchErrorMessage", e.target.value);
+                    setLnFieldErrors((prev) => ({ ...prev, searchErrorMessage: undefined }));
+                  }}
+                  placeholder="e.g. Sorry, no results were found"
+                  className={`${LR_INPUT} ${lnFieldErrors.searchErrorMessage ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lnFieldErrors.searchErrorMessage && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.searchErrorMessage}</p>}
               </LrField>
               <LrField label="Success Message">
-                <input type="text" value={lnState.successMessage} onChange={(e) => setLn("successMessage", e.target.value)} placeholder="e.g. Note saved successfully" className={LR_INPUT} />
+                <input
+                  type="text"
+                  value={lnState.successMessage}
+                  onChange={(e) => {
+                    setLn("successMessage", e.target.value);
+                    setLnFieldErrors((prev) => ({ ...prev, successMessage: undefined }));
+                  }}
+                  placeholder="e.g. Note saved successfully"
+                  className={`${LR_INPUT} ${lnFieldErrors.successMessage ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lnFieldErrors.successMessage && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.successMessage}</p>}
               </LrField>
               <LrField label="Error Message">
-                <input type="text" value={lnState.errorMessage} onChange={(e) => setLn("errorMessage", e.target.value)} placeholder="e.g. An error occurred. Please try again." className={LR_INPUT} />
+                <input
+                  type="text"
+                  value={lnState.errorMessage}
+                  onChange={(e) => {
+                    setLn("errorMessage", e.target.value);
+                    setLnFieldErrors((prev) => ({ ...prev, errorMessage: undefined }));
+                  }}
+                  placeholder="e.g. An error occurred. Please try again."
+                  className={`${LR_INPUT} ${lnFieldErrors.errorMessage ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lnFieldErrors.errorMessage && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.errorMessage}</p>}
               </LrField>
               <LrField label="Create a New Note">
-                <input type="text" value={lnState.createANewNote} onChange={(e) => setLn("createANewNote", e.target.value)} placeholder="e.g. Create a new note" className={LR_INPUT} />
+                <input
+                  type="text"
+                  value={lnState.createANewNote}
+                  onChange={(e) => {
+                    setLn("createANewNote", e.target.value);
+                    setLnFieldErrors((prev) => ({ ...prev, createANewNote: undefined }));
+                  }}
+                  placeholder="e.g. Create a new note"
+                  className={`${LR_INPUT} ${lnFieldErrors.createANewNote ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lnFieldErrors.createANewNote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.createANewNote}</p>}
               </LrField>
               <LrField label="Export a Note">
-                <input type="text" value={lnState.exportANote} onChange={(e) => setLn("exportANote", e.target.value)} placeholder="e.g. Export note" className={LR_INPUT} />
+                <input
+                  type="text"
+                  value={lnState.exportANote}
+                  onChange={(e) => {
+                    setLn("exportANote", e.target.value);
+                    setLnFieldErrors((prev) => ({ ...prev, exportANote: undefined }));
+                  }}
+                  placeholder="e.g. Export note"
+                  className={`${LR_INPUT} ${lnFieldErrors.exportANote ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lnFieldErrors.exportANote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.exportANote}</p>}
               </LrField>
               <LrField label="Save Note">
-                <input type="text" value={lnState.saveNote} onChange={(e) => setLn("saveNote", e.target.value)} placeholder="e.g. Save note" className={LR_INPUT} />
+                <input
+                  type="text"
+                  value={lnState.saveNote}
+                  onChange={(e) => {
+                    setLn("saveNote", e.target.value);
+                    setLnFieldErrors((prev) => ({ ...prev, saveNote: undefined }));
+                  }}
+                  placeholder="e.g. Save note"
+                  className={`${LR_INPUT} ${lnFieldErrors.saveNote ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lnFieldErrors.saveNote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.saveNote}</p>}
               </LrField>
               <LrField label="Download a Note">
-                <input type="text" value={lnState.downloadANote} onChange={(e) => setLn("downloadANote", e.target.value)} placeholder="e.g. Download note" className={LR_INPUT} />
+                <input
+                  type="text"
+                  value={lnState.downloadANote}
+                  onChange={(e) => {
+                    setLn("downloadANote", e.target.value);
+                    setLnFieldErrors((prev) => ({ ...prev, downloadANote: undefined }));
+                  }}
+                  placeholder="e.g. Download note"
+                  className={`${LR_INPUT} ${lnFieldErrors.downloadANote ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lnFieldErrors.downloadANote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.downloadANote}</p>}
               </LrField>
               <LrField label="Upload a Note">
-                <input type="text" value={lnState.uploadANote} onChange={(e) => setLn("uploadANote", e.target.value)} placeholder="e.g. Upload note" className={LR_INPUT} />
+                <input
+                  type="text"
+                  value={lnState.uploadANote}
+                  onChange={(e) => {
+                    setLn("uploadANote", e.target.value);
+                    setLnFieldErrors((prev) => ({ ...prev, uploadANote: undefined }));
+                  }}
+                  placeholder="e.g. Upload note"
+                  className={`${LR_INPUT} ${lnFieldErrors.uploadANote ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lnFieldErrors.uploadANote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.uploadANote}</p>}
               </LrField>
               <LrField label="Search Note">
-                <input type="text" value={lnState.searchNote} onChange={(e) => setLn("searchNote", e.target.value)} placeholder="e.g. Search notes" className={LR_INPUT} />
+                <input
+                  type="text"
+                  value={lnState.searchNote}
+                  onChange={(e) => {
+                    setLn("searchNote", e.target.value);
+                    setLnFieldErrors((prev) => ({ ...prev, searchNote: undefined }));
+                  }}
+                  placeholder="e.g. Search notes"
+                  className={`${LR_INPUT} ${lnFieldErrors.searchNote ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lnFieldErrors.searchNote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.searchNote}</p>}
               </LrField>
               <LrField label="Delete Note">
-                <input type="text" value={lnState.deleteNote} onChange={(e) => setLn("deleteNote", e.target.value)} placeholder="e.g. Delete note" className={LR_INPUT} />
+                <input
+                  type="text"
+                  value={lnState.deleteNote}
+                  onChange={(e) => {
+                    setLn("deleteNote", e.target.value);
+                    setLnFieldErrors((prev) => ({ ...prev, deleteNote: undefined }));
+                  }}
+                  placeholder="e.g. Delete note"
+                  className={`${LR_INPUT} ${lnFieldErrors.deleteNote ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lnFieldErrors.deleteNote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.deleteNote}</p>}
               </LrField>
               <LrField label="Cancel">
-                <input type="text" value={lnState.cancel} onChange={(e) => setLn("cancel", e.target.value)} placeholder="e.g. Cancel" className={LR_INPUT} />
+                <input
+                  type="text"
+                  value={lnState.cancel}
+                  onChange={(e) => {
+                    setLn("cancel", e.target.value);
+                    setLnFieldErrors((prev) => ({ ...prev, cancel: undefined }));
+                  }}
+                  placeholder="e.g. Cancel"
+                  className={`${LR_INPUT} ${lnFieldErrors.cancel ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lnFieldErrors.cancel && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.cancel}</p>}
               </LrField>
               <LrField label="Edit Note">
-                <input type="text" value={lnState.editNote} onChange={(e) => setLn("editNote", e.target.value)} placeholder="e.g. Edit note" className={LR_INPUT} />
+                <input
+                  type="text"
+                  value={lnState.editNote}
+                  onChange={(e) => {
+                    setLn("editNote", e.target.value);
+                    setLnFieldErrors((prev) => ({ ...prev, editNote: undefined }));
+                  }}
+                  placeholder="e.g. Edit note"
+                  className={`${LR_INPUT} ${lnFieldErrors.editNote ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lnFieldErrors.editNote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.editNote}</p>}
               </LrField>
             </>
           )}
