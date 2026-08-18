@@ -42,9 +42,23 @@ export interface SContentGroup {
 export interface SSection {
   id: string;
   title: string;
+  displayTitle?: string;
   description?: string;
   instruction?: string;
   themeSettings?: Record<string, unknown>;
+  classes?: string;
+  requireCompletionOf?: string;
+  isOptional?: boolean;
+  isAvailable?: boolean;
+  isHidden?: boolean;
+  isVisible?: boolean;
+  onScreen?: {
+    _isEnabled?: boolean;
+    _classes?: string;
+    _percentInviewVertical?: number;
+  };
+  ariaLevel?: string;
+  extensions?: Record<string, unknown>;
   contentGroups: SContentGroup[];
 }
 

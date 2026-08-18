@@ -2066,9 +2066,28 @@ export async function getCourseStructure(
         (article): SSection => ({
           id: article._id,
           title: label(article),
+          displayTitle: article.displayTitle || "",
           description: article.body || article.description || "",
           instruction: article.instruction || "",
           themeSettings: objectValue(article.themeSettings),
+          classes: article._classes || "",
+          requireCompletionOf: scalarString(
+            article.requirecompletionof ?? article.requireCompletionOf ?? article._requireCompletionOf ?? "-1"
+          ),
+          isOptional: !!article._isOptional,
+          isAvailable: article._isAvailable !== false,
+          isHidden: !!article._isHidden,
+          isVisible: article._isVisible !== false,
+          onScreen: (() => {
+            const os = objectValue(article._onScreen);
+            return {
+              _isEnabled: !!os._isEnabled,
+              _classes: scalarString(os._classes),
+              _percentInviewVertical: scalarNumber(os._percentInviewVertical, 50),
+            };
+          })(),
+          ariaLevel: scalarString(article._ariaLevel),
+          extensions: objectValue(article._extensions),
           contentGroups: childrenOf(blocks, article._id).map(
             (block): SContentGroup => ({
               id: block._id,
