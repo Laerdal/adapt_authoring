@@ -88,7 +88,11 @@ function sortedNames(value) {
 function computeFingerprint(tenantId, courseId, cb) {
   origin().outputmanager.getOutputPlugin('adapt', (err, plugin) => {
     if (err) return cb(err);
-    plugin.getCourseJSON(tenantId, courseId, (err, raw) => {
+    // The fingerprint needs ONLY the config (theme/menu/enabled component+extension
+    // sets), so use the config-only assembler — NOT getCourseJSON, which would also
+    // fetch and assemble the entire content tree on every ensure call. The returned
+    // config[0] is identical either way, so the fingerprint value is unchanged.
+    plugin.getCourseConfigJSON(courseId, (err, raw) => {
       if (err) return cb(err);
       installHelpers.getInstalledFrameworkVersion((err, fwVersion) => {
         if (err) return cb(err);
