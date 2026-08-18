@@ -620,6 +620,21 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
   };
 }
 
+/**
+ * Ensure a render shell exists for the course on the Studio surface. Builds the shell
+ * once on a cache miss (matching the course's current theme/menu/plugin fingerprint)
+ * and returns instantly when it is already cached. This is what makes a never-previewed
+ * course renderable without a full grunt rebuild on every open.
+ */
+export async function ensureCoursePreview(
+  tenantId: string,
+  courseId: string,
+): Promise<{ success: boolean; message?: string }> {
+  return apiClient.post<{ success: boolean; message?: string }>(
+    `/studio/ensure/${tenantId}/${courseId}`,
+  );
+}
+
 // ── Navigation Settings ───────────────────────────────────────────────────────
 // The Adapt Studio "Navigation" panel edits a mix of CORE course fields and three
 // togglable extensions, spread across two engine documents:
