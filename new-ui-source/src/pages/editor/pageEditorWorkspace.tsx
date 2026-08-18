@@ -1136,7 +1136,7 @@ export default function CourseEditor({
   }, [hasUnsavedChanges]);
 
   useEffect(() => {
-    if (!menuPageCreated || isLoadingStructure || !courseId || courseId === "new-course") {
+    if (!menuPageCreated || isLoadingStructure || !courseId || courseId === "new-course" || !user?._tenantId) {
       setIsPreviewLoading(false);
       setPreviewError(null);
       return;
@@ -1174,7 +1174,10 @@ export default function CourseEditor({
       setPreviewError(null);
 
       try {
-        const result = await apiClient.get<PreviewBuildResponse>(`/api/output/adapt/preview/${courseId}?force=false`);
+        // Studio surface: ensure a render shell exists (cached unless the theme/menu/
+        // plugin set changed), then let the iframe load live JSON from the DB. Content
+        // edits reuse the cached shell — no grunt rebuild per change.
+        const result = await apiClient.post<PreviewBuildResponse>(`/studio/ensure/${user._tenantId}/${courseId}`);
         if (!isCurrentRequest()) return;
 
         if (!result?.success) {
@@ -1204,14 +1207,14 @@ export default function CourseEditor({
     return () => {
       isDisposed = true;
     };
-  }, [courseId, isLoadingStructure, menuPageCreated, previewRefreshToken]);
+  }, [courseId, isLoadingStructure, menuPageCreated, previewRefreshToken, user?._tenantId]);
 
   const previewSrc = useMemo(() => {
     if (!user?._tenantId || !courseId || courseId === "new-course" || !menuPageCreated) {
       return null;
     }
 
-    const basePath = `/preview/${user._tenantId}/${courseId}/?_pe=${previewBuildVersion}`;
+    const basePath = `/studio/${user._tenantId}/${courseId}/?_pe=${previewBuildVersion}&embedded=1`;
     if (selectedPageId && !menuSelected) {
       return `${basePath}#/id/${selectedPageId}`;
     }
