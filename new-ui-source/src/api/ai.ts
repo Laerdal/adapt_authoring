@@ -1,91 +1,60 @@
-// AI service — wraps compress() from headroom-ai around Anthropic fetch calls.
-// headroom-ai intercepts messages before they reach Claude, compressing
-// repeated course context, conversation history, and tool outputs.
+// AI service (ADAPT-3760, AC7).
+//
+// The browser no longer holds any LLM key. All AI calls go through the engine's
+// server-side proxy (POST /api/storyboard/ai), which talks to Azure OpenAI with
+// credentials that stay on the server (see plugins/content/storyboard/utils/
+// aiClient.js). VITE_ANTHROPIC_API_KEY and the direct Anthropic call have been
+// removed.
 
-import { compress } from 'headroom-ai';
+import { apiClient } from "./client";
+
+export type StoryboardAiAction = "improve" | "rewrite" | "summarize" | "suggest";
+
+// Samaritan Assistance actions (parity with the legacy CKEditor tool). `custom`
+// carries a free-text instruction. All share the same server proxy.
+export type SamaritanAction = "improve" | "shorten" | "lengthen" | "spelling" | "custom";
+
+// Run an AI action on a piece of text via the server proxy. Returns the result.
+export async function storyboardAi(
+  action: StoryboardAiAction,
+  text: string,
+  context?: string
+): Promise<string> {
+  const res = await apiClient.post<{ text: string }>("/api/storyboard/ai", { action, text, context });
+  return res.text ?? "";
+}
+
+// Samaritan Assistance call: a fixed action (improve/shorten/lengthen/spelling)
+// or a free-text `custom` instruction. `text` is the content to operate on (may
+// be empty for generate-from-scratch). `context` is the course title. Keys stay
+// server-side — same /api/storyboard/ai proxy.
+export async function samaritanAssist(
+  action: SamaritanAction,
+  text: string,
+  opts?: { instruction?: string; context?: string }
+): Promise<string> {
+  const res = await apiClient.post<{ text: string }>("/api/storyboard/ai", {
+    action,
+    text,
+    instruction: opts?.instruction,
+    context: opts?.context,
+  });
+  return res.text ?? "";
+}
 
 export interface ChatMessage {
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   content: string;
 }
 
-export interface SendMessageOptions {
+// Back-compat helper for the (placeholder) AiAssistant chat widget: routes the
+// latest user turn through the server proxy. No client-side key.
+export async function sendMessage(opts: {
   messages: ChatMessage[];
-  systemPrompt?: string;
   courseContext?: unknown;
-  model?: string;
-  maxTokens?: number;
-}
-
-export interface SendMessageResult {
-  text: string;
-  tokensBefore: number;
-  tokensAfter: number;
-  tokensSaved: number;
-}
-
-const HEADROOM_BASE_URL = import.meta.env.VITE_HEADROOM_URL ?? 'http://localhost:8787';
-const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY ?? '';
-const DEFAULT_MODEL = 'claude-sonnet-4-6';
-
-export async function sendMessage(opts: SendMessageOptions): Promise<SendMessageResult> {
-  const { messages, systemPrompt, courseContext, model = DEFAULT_MODEL, maxTokens = 1024 } = opts;
-
-  // Build the raw messages array in Anthropic format
-  const rawMessages: Array<{ role: string; content: string }> = [];
-
-  // Inline course context into the first user turn if provided
-  if (courseContext && messages.length > 0) {
-    const [first, ...rest] = messages;
-    rawMessages.push({
-      role: 'user',
-      content: `Course context:\n${JSON.stringify(courseContext)}\n\n${first.content}`,
-    });
-    rawMessages.push(...rest);
-  } else {
-    rawMessages.push(...messages);
-  }
-
-  // Compress with Headroom before sending to Anthropic
-  const result = await compress(rawMessages, {
-    model,
-    baseUrl: HEADROOM_BASE_URL,
-    fallback: true, // pass through uncompressed if proxy is unreachable
-  });
-
-  // Build Anthropic messages API request
-  const body: Record<string, unknown> = {
-    model,
-    max_tokens: maxTokens,
-    messages: result.messages,
-  };
-
-  if (systemPrompt) {
-    body.system = systemPrompt;
-  }
-
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: { message: response.statusText } }));
-    throw new Error(error?.error?.message ?? `Anthropic API error ${response.status}`);
-  }
-
-  const data = await response.json();
-  const text: string = data.content?.[0]?.text ?? '';
-
-  return {
-    text,
-    tokensBefore: result.tokensBefore,
-    tokensAfter: result.tokensAfter,
-    tokensSaved: result.tokensSaved,
-  };
+}): Promise<{ text: string }> {
+  const lastUser = [...opts.messages].reverse().find((m) => m.role === "user");
+  const context = opts.courseContext ? JSON.stringify(opts.courseContext) : undefined;
+  const text = await storyboardAi("suggest", lastUser?.content ?? "", context);
+  return { text };
 }

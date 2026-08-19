@@ -1,0 +1,7 @@
+{
+  "name": "adapt-content-storyboardcomment",
+  "displayName": "Storyboard Comment",
+  "version": "0.1.0",
+  "main": "index",
+  "dependencies": {}
+}

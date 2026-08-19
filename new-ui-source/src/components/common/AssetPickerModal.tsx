@@ -1,11 +1,19 @@
 import { useState, useEffect, useRef } from "react";
-import { queryImages, uploadAsset } from "@/api/adaptAuthoring";
-import type { Asset } from "@/api/adaptAuthoring";
+import { queryAssets, uploadAsset } from "@/api/adaptAuthoring";
+import type { Asset, AssetKind } from "@/api/adaptAuthoring";
 
 interface AssetPickerModalProps {
   onSelect: (asset: { id: string; url: string; assetLink: string }) => void;
   onClose: () => void;
+  // Which media kind to browse/upload. Defaults to image (cover-image picker).
+  assetType?: AssetKind;
 }
+
+const KIND_TEXT: Record<AssetKind, { heading: string; confirm: string; noun: string; accept: string }> = {
+  image: { heading: "Select an Image", confirm: "Select Image", noun: "image", accept: "image/*" },
+  audio: { heading: "Select an Audio File", confirm: "Select Audio", noun: "audio file", accept: "audio/*" },
+  video: { heading: "Select a Video", confirm: "Select Video", noun: "video", accept: "video/*" },
+};
 
 function toAssetLink(asset: Asset): string {
   const path = (asset.path || "").trim().replace(/^\/+/, "");
@@ -14,7 +22,8 @@ function toAssetLink(asset: Asset): string {
   return `/api/asset/serve/${asset._id}`;
 }
 
-export default function AssetPickerModal({ onSelect, onClose }: AssetPickerModalProps) {
+export default function AssetPickerModal({ onSelect, onClose, assetType = "image" }: AssetPickerModalProps) {
+  const t = KIND_TEXT[assetType];
   const [assets, setAssets]         = useState<Asset[]>([]);
   const [loading, setLoading]       = useState(true);
   const [search, setSearch]         = useState("");
@@ -26,7 +35,7 @@ export default function AssetPickerModal({ onSelect, onClose }: AssetPickerModal
 
   async function loadAssets(term?: string) {
     setLoading(true);
-    const results = await queryImages(term);
+    const results = await queryAssets(assetType, term);
     setAssets(results);
     setLoading(false);
   }
@@ -98,7 +107,7 @@ export default function AssetPickerModal({ onSelect, onClose }: AssetPickerModal
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col overflow-hidden" style={{ maxHeight: "85vh" }}>
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#e5e7eb] shrink-0">
-          <h2 className="font-semibold text-[#111827] text-base">Select Cover Image</h2>
+          <h2 className="font-semibold text-[#111827] text-base">{t.heading}</h2>
           <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-[#f3f4f6] text-[#6b7280] transition-colors" aria-label="Close">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -116,7 +125,7 @@ export default function AssetPickerModal({ onSelect, onClose }: AssetPickerModal
               type="text"
               value={search}
               onChange={handleSearchChange}
-              placeholder="Search images..."
+              placeholder={`Search ${t.noun}s...`}
               className="w-full pl-9 pr-3 py-2 text-sm border border-[#d1d5db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent text-[#111827]"
             />
           </div>
@@ -137,7 +146,7 @@ export default function AssetPickerModal({ onSelect, onClose }: AssetPickerModal
             )}
             {uploading ? "Uploading…" : "Upload New"}
           </button>
-          <input ref={fileInputRef} type="file" accept="image/*" className="hidden" title="Upload image" onChange={handleUpload} />
+          <input ref={fileInputRef} type="file" accept={t.accept} className="hidden" title={`Upload ${t.noun}`} onChange={handleUpload} />
         </div>
 
         {uploadError && (
@@ -151,14 +160,14 @@ export default function AssetPickerModal({ onSelect, onClose }: AssetPickerModal
               <svg className="animate-spin mr-2" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 12a9 9 0 1 1-6.219-8.56" />
               </svg>
-              Loading images…
+              Loading {t.noun}s…
             </div>
           ) : assets.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 text-sm text-[#6b7280] gap-2">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                 <rect x="3" y="3" width="18" height="18" rx="2" ry="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" />
               </svg>
-              <p>No images found. Upload one to get started.</p>
+              <p>No {t.noun}s found. Upload one to get started.</p>
             </div>
           ) : (
             <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
@@ -176,15 +185,32 @@ export default function AssetPickerModal({ onSelect, onClose }: AssetPickerModal
                         : "border-transparent hover:border-[#93c5fd]"
                     }`}
                   >
-                    <img
-                      src={thumbUrl}
-                      alt={asset.title ?? asset.filename ?? "Image"}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        // Fall back to the full serve URL if thumb is unavailable
-                        (e.currentTarget as HTMLImageElement).src = `/api/asset/serve/${asset._id}`;
-                      }}
-                    />
+                    {assetType === "image" ? (
+                      <img
+                        src={thumbUrl}
+                        alt={asset.title ?? asset.filename ?? "Image"}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          // Fall back to the full serve URL if thumb is unavailable
+                          (e.currentTarget as HTMLImageElement).src = `/api/asset/serve/${asset._id}`;
+                        }}
+                      />
+                    ) : (
+                      <div className="flex h-full w-full flex-col items-center justify-center gap-1 px-2 text-[#6b7280]">
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                          {assetType === "audio" ? (
+                            <>
+                              <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
+                            </>
+                          ) : (
+                            <>
+                              <polygon points="23 7 16 12 23 17 23 7" /><rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                            </>
+                          )}
+                        </svg>
+                        <span className="line-clamp-2 text-center text-[10px] leading-tight">{asset.title ?? asset.filename}</span>
+                      </div>
+                    )}
                     {isSelected && (
                       <div className="absolute inset-0 bg-[#2d6fa8]/20 flex items-center justify-center">
                         <div className="w-6 h-6 rounded-full bg-[#2d6fa8] flex items-center justify-center">
@@ -209,7 +235,7 @@ export default function AssetPickerModal({ onSelect, onClose }: AssetPickerModal
         {/* Footer */}
         <div className="flex items-center justify-between px-5 py-4 border-t border-[#e5e7eb] shrink-0">
           <p className="text-xs text-[#9ca3af]">
-            {selected ? "1 image selected" : `${assets.length} image${assets.length !== 1 ? "s" : ""}`}
+            {selected ? `1 ${t.noun} selected` : `${assets.length} ${t.noun}${assets.length !== 1 ? "s" : ""}`}
           </p>
           <div className="flex items-center gap-2.5">
             <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors">
@@ -221,7 +247,7 @@ export default function AssetPickerModal({ onSelect, onClose }: AssetPickerModal
               disabled={!selected}
               className="px-4 py-2 text-sm font-medium text-white bg-[#2d6fa8] hover:bg-[#245c8f] disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
             >
-              Select Image
+              {t.confirm}
             </button>
           </div>
         </div>

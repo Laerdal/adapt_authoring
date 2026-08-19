@@ -93,6 +93,7 @@
     "p-limit": "^7.3.0",
     "passport": "^0.6.0",
     "passport-local": "^1.0.0",
+    "pdfkit": "^0.15.2",
     "rate-limit-redis": "^4.2.0",
     "redis": "^4.6.12",
     "request": "^2.88.0",

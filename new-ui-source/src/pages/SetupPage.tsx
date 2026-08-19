@@ -5,6 +5,7 @@ import AiAssistant from "../components/common/AiAssistant";
 import CourseStructureMapView from "../components/course/CourseStructureMapView";
 import CourseStructureTree from "../components/course/CourseStructureTree";
 import AddComponentDrawer from "../components/course/AddComponentDrawer";
+import { StoryboardWorkspace } from "../components/storyboard";
 import CommonCourseTopBarRow from "../components/course/CommonCourseTopBarRow";
 import { getCourseBootstrapData } from "../api/adaptAuthoring";
 import { useCourseStructure } from "../hooks/useCourseStructure";
@@ -3339,7 +3340,15 @@ function CourseCreationCenterContent() {
     if (activeNav === "technical-settings") return <TechnicalSettingPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "cdn-deployment") return <CdnDeploymentPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "publish") return <PublishPanel />;
-    return <ComingSoonPanel label={activeItem?.label ?? (activeNav === "storyboarding" ? "Storyboarding" : "")} />;
+    if (activeNav === "storyboarding")
+      return (
+        <StoryboardWorkspace
+          courseId={courseId}
+          courseTitle={title}
+          onBack={() => setActiveNav("overview")}
+        />
+      );
+    return <ComingSoonPanel label={activeItem?.label ?? ""} />;
   }
 
   function openExportDialog() {
@@ -3557,7 +3566,7 @@ function CourseCreationCenterContent() {
         </aside>
 
         {/* -- Right content panel -- */}
-        <main className={`flex-1 overflow-hidden bg-[#f8fafc] ${activeNav === "menu" || activeNav === "navigation" ? "" : "overflow-y-auto px-8 py-8 min-h-0"}`}>
+        <main className={`flex-1 overflow-hidden bg-[#f8fafc] ${activeNav === "menu" || activeNav === "navigation" || activeNav === "storyboarding" ? "" : "overflow-y-auto px-8 py-8 min-h-0"}`}>
           {renderPanel()}
         </main>
       </div>

@@ -109,11 +109,28 @@
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.07), 0 2px 4px -2px rgb(0 0 0 / 0.05);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.05);
+
+  /* ── Storyboard (ADAPT-3760) semantic tokens ────────────────────────
+     shadcn-style aliases used by the storyboard UI, mapped to LIFE palette
+     so the Lovable design ports over cleanly. `--samaritan` is the AI accent. */
+  --muted:            var(--life-neutral-050);
+  --muted-foreground: var(--life-neutral-500);
+  --secondary:        var(--life-neutral-050);
+  --primary:          var(--life-primary-500);
+  --primary-foreground: var(--life-base-white);
+  --samaritan:        var(--life-accent2-500);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-border: var(--border);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-samaritan: var(--samaritan);
   --font-sans: "Lato", var(--font-geist-sans), "Noto Sans", sans-serif;
   --font-mono: var(--font-geist-mono);
 }
