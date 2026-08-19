@@ -8,8 +8,11 @@ async function getVersion() {
   // with an `error` field. Non-empty stderr on its own isn't a failure signal
   // (the CLI can write warnings there on success), so only a genuine
   // rejection is treated as an error here — same fix as getlinks.js/restoreLink.js.
-  const { stdout } = await exec('cdndeploy --v');
-  return stdout;
+  //
+  // Use `-version` (matches the presence check in routes/health/index.js) and
+  // trim so the UI doesn't render a trailing newline.
+  const { stdout } = await exec('cdndeploy -version');
+  return stdout.trim();
 }
 
 module.exports = getVersion;
