@@ -161,6 +161,43 @@ const DATA_FILES = {
   'components.json': 'component'
 };
 
+/* ------------------------------------------------------------------ *
+ * Live-JSON assembly cache. The framework requests all six data files in a
+ * burst on every page open; assembling+sanitizing the whole course once per
+ * file meant SIX full getCourseJSON reads per open. Assemble ONCE and share it:
+ *   - in-flight de-duplication collapses the concurrent six requests into a
+ *     single DB assembly (they await the same in-progress result);
+ *   - a short TTL covers slightly-staggered requests without going stale —
+ *     content edits reload the surface, which re-assembles after the TTL.
+ * ------------------------------------------------------------------ */
+const LIVE_TTL_MS = 3000;
+const liveCache = new Map();     // key -> { at, data }
+const liveInflight = new Map();  // key -> [callback]
+
+function getSanitizedCourse(tenantId, courseId, cb) {
+  const key = tenantId + ':' + courseId;
+  const hit = liveCache.get(key);
+  if (hit && (Date.now() - hit.at) < LIVE_TTL_MS) return cb(null, hit.data);
+  if (liveInflight.has(key)) { liveInflight.get(key).push(cb); return; }
+  liveInflight.set(key, [cb]);
+  const settle = function (err, data) {
+    const waiters = liveInflight.get(key) || [];
+    liveInflight.delete(key);
+    if (!err && data) liveCache.set(key, { at: Date.now(), data: data });
+    waiters.forEach(function (fn) { fn(err, data); });
+  };
+  origin().outputmanager.getOutputPlugin('adapt', function (err, plugin) {
+    if (err) return settle(err);
+    plugin.getCourseJSON(tenantId, courseId, function (err, raw) {
+      if (err) return settle(err);
+      plugin.sanitizeCourseJSON(Constants.Modes.Preview, raw, function (err, sanitized) {
+        if (err) return settle(err);
+        settle(null, sanitized);
+      });
+    });
+  });
+}
+
 function StudioPermissionError(message, httpCode) {
   this.message = message || 'Permission denied';
   this.http_code = httpCode || 401;
@@ -290,24 +327,18 @@ server.get('/studio/:tenant/:course/*', (req, res, next) => {
     DATA_FILES.hasOwnProperty(basename) ? sendLiveData(basename) : sendStatic(requested);
   }
 
-  // ---- live data: assemble from DB on every request, no disk, no grunt ----
+  // ---- live data: one assembly per page-open burst (deduped + short-TTL cached), no disk, no grunt ----
   function sendLiveData(basename) {
-    origin().outputmanager.getOutputPlugin('adapt', (err, plugin) => {
+    getSanitizedCourse(tenantId, courseId, (err, sanitized) => {
       if (err) return next(err);
-      plugin.getCourseJSON(tenantId, courseId, (err, raw) => {
-        if (err) return next(err);
-        plugin.sanitizeCourseJSON(Constants.Modes.Preview, raw, (err, sanitized) => {
-          if (err) return next(err);
-          if (sanitized.config && sanitized.config.build) delete sanitized.config.build;
-          const lang = sanitized.config && sanitized.config._defaultLanguage;
-          let payload = sanitized[DATA_FILES[basename]];
-          if (payload === undefined) payload = [];
-          let body = JSON.stringify(payload);
-          if (lang) body = body.split('course/assets/').join('course/' + lang + '/assets/');
-          res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-          res.type('application/json').send(body);
-        });
-      });
+      if (sanitized.config && sanitized.config.build) delete sanitized.config.build;
+      const lang = sanitized.config && sanitized.config._defaultLanguage;
+      let payload = sanitized[DATA_FILES[basename]];
+      if (payload === undefined) payload = [];
+      let body = JSON.stringify(payload);
+      if (lang) body = body.split('course/assets/').join('course/' + lang + '/assets/');
+      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.type('application/json').send(body);
     });
   }
 
