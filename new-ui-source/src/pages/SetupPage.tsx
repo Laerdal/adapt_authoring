@@ -3223,6 +3223,26 @@ function ComingSoonPanel({ label }: { label: string }) {
   );
 }
 
+function LegacyTranslationPanel({ courseId }: { courseId: string }) {
+  if (!courseId) {
+    return (
+      <div className="rounded-lg border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b]">
+        No course is associated with this setup flow, so translation cannot be opened.
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full min-h-0 w-full overflow-hidden">
+      <iframe
+        title="Translation"
+        src={`/?embed=translation#/translation/${encodeURIComponent(courseId)}`}
+        className="w-full h-full border-0"
+      />
+    </div>
+  );
+}
+
 /* -- Main page -- */
 function CourseCreationCenterContent() {
   const [params] = useSearchParams();
@@ -3339,6 +3359,7 @@ function CourseCreationCenterContent() {
     if (activeNav === "completion") return <CompletionProgressPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "technical-settings") return <TechnicalSettingPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "cdn-deployment") return <CdnDeploymentPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+    if (activeNav === "translation") return <LegacyTranslationPanel courseId={courseId} />;
     if (activeNav === "publish") return <PublishPanel />;
     if (activeNav === "storyboarding")
       return (
@@ -3566,7 +3587,7 @@ function CourseCreationCenterContent() {
         </aside>
 
         {/* -- Right content panel -- */}
-        <main className={`flex-1 overflow-hidden bg-[#f8fafc] ${activeNav === "menu" || activeNav === "navigation" || activeNav === "storyboarding" ? "" : "overflow-y-auto px-8 py-8 min-h-0"}`}>
+        <main className={`flex-1 overflow-hidden bg-[#f8fafc] ${activeNav === "menu" || activeNav === "navigation" || activeNav === "storyboarding" || activeNav === "translation" ? "" : "overflow-y-auto px-8 py-8 min-h-0"}`}>
           {renderPanel()}
         </main>
       </div>
