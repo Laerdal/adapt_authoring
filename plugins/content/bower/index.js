@@ -31,6 +31,7 @@ var origin = require('../../../'),
     exec = require('child_process').exec,
     IncomingForm = require('formidable').IncomingForm,
     installHelpers = require('../../../lib/installHelpers'),
+    questionComponentHelper = require('../../../lib/questionComponentHelper'),
     bytes = require('bytes');
 
 // errors
@@ -40,6 +41,19 @@ function PluginPackageError (msg) {
 }
 
 util.inherits(PluginPackageError, Error);
+
+// Returns deprecated package names for a given DB plugin type string (e.g. 'extensiontype' -> 'extension')
+function getDeprecatedForType(pluginType) {
+  var typeKey = pluginType.replace('type', '');
+  var deprecated = configuration.getConfig('deprecatedPlugins') || {};
+  return deprecated[typeKey] || [];
+}
+
+// Only the built-in 'admin' account may see deprecated plugins
+function isAdminUser() {
+  var currentUser = usermanager.getCurrentUser();
+  return currentUser && currentUser.email === 'admin';
+}
 
 function BowerPlugin () {
 }
@@ -406,20 +420,19 @@ BowerPlugin.prototype.initialize = function (plugin) {
             return next(err);
           }
 
-          // Check if requests are on the master tenant
-          var currentUser = usermanager.getCurrentUser();
-          var isMasterTenantUser = currentUser
-            ? currentUser.tenant.isMaster
-            : false;
-
-          // Users on the master tenant should be able to see all plugins
-          var criteria = !isMasterTenantUser
-            ? {_isAvailableInEditor: true}
-            : {};
+          // Only the admin account may see deprecated/unavailable plugins
+          var adminUser = isAdminUser();
+          var criteria = adminUser ? {} : { _isAvailableInEditor: true };
 
           db.retrieve(plugin.type, criteria, function (err, results) {
             if (err) {
               return next(err);
+            }
+
+            // Strip deprecated plugins from the response for all non-admin users
+            if (!adminUser) {
+              var deprecated = getDeprecatedForType(plugin.type);
+              results = results.filter(function(r) { return deprecated.indexOf(r.name) === -1; });
             }
 
             res.statusCode = 200;
@@ -471,17 +484,33 @@ BowerPlugin.prototype.initialize = function (plugin) {
 
     // update a single plugin type definition by id
     rest.put('/' + plugin.type + '/:id', function (req, res, next) {
-      app.contentmanager.getContentPlugin(plugin.packageType, function (err, plugin) {
-        if (err) {
-          return next(err);
-        }
+      // Deprecated plugins cannot be re-enabled via the UI or API
+      if (req.body && req.body._isAvailableInEditor === true) {
+        database.getDatabase(function(err, db) {
+          if (err) return next(err);
+          db.retrieve(plugin.type, { _id: req.params.id }, function(err, results) {
+            if (err) return next(err);
+            var existing = results && results[0];
+            if (existing && getDeprecatedForType(plugin.type).indexOf(existing.name) !== -1) {
+              res.statusCode = 403;
+              return res.json({ success: false, message: 'Cannot re-enable a deprecated plugin' });
+            }
+            proceedWithUpdate();
+          });
+        }, configuration.getConfig('dbName'));
+      } else {
+        proceedWithUpdate();
+      }
 
-        if (plugin && plugin.updatePluginType) {
-          return plugin.updatePluginType(req, res, next);
-        }
-
-        return BowerPlugin.prototype.call(null, req, res, next);
-      });
+      function proceedWithUpdate() {
+        app.contentmanager.getContentPlugin(plugin.packageType, function (err, contentPlugin) {
+          if (err) return next(err);
+          if (contentPlugin && contentPlugin.updatePluginType) {
+            return contentPlugin.updatePluginType(req, res, next);
+          }
+          return BowerPlugin.prototype.call(null, req, res, next);
+        });
+      }
     });
 
     // check if a higher version is available for the plugin
@@ -563,6 +592,20 @@ BowerPlugin.prototype.initialize = function (plugin) {
         });
       }, configuration.getConfig('dbName'));
     });
+
+    // Startup sync: ensure every deprecated plugin is permanently locked in the DB
+    var deprecatedNames = getDeprecatedForType(plugin.type);
+    if (deprecatedNames.length > 0) {
+      database.getDatabase(function(err, db) {
+        if (err) return logger.log('error', 'deprecatedPlugins startup sync: DB error', err);
+        deprecatedNames.forEach(function(pluginName) {
+          db.update(plugin.type, { name: pluginName }, { _isAvailableInEditor: false }, function(syncErr) {
+            if (syncErr) logger.log('error', 'deprecatedPlugins startup sync failed for ' + pluginName, syncErr);
+            else logger.log('info', 'deprecatedPlugins startup sync: locked ' + pluginName + ' (' + plugin.type + ')');
+          });
+        });
+      }, configuration.getConfig('dbName'));
+    }
   });
 };
 
@@ -799,6 +842,11 @@ function addPackage (plugin, packageInfo, options, cb) {
   function addToDB(addCb) {
     // build the package information
     var package = extractPackageInfo(plugin, pkgMeta, schema);
+
+    if (plugin.packageType === 'component') {
+      package._isQuestionType = questionComponentHelper.isQuestionComponentPlugin(packageInfo.canonicalDir);
+    }
+
     // add the package to the modelname collection
     database.getDatabase(function (err, db) {
       if (err) {
@@ -857,6 +905,9 @@ function addPackage (plugin, packageInfo, options, cb) {
 
             logger.log('info', 'Added package: ' + package.name);
 
+            // Deprecated plugins must never be enabled; compute once and apply in both paths below.
+            var isDeprecated = getDeprecatedForType(plugin.type).indexOf(pkgMeta.name) !== -1;
+
             // #509 update content targeted by previous versions of this package
             logger.log('info', 'searching old package types ... ');
             db.retrieve(plugin.type, { name: package.name, version: { $ne: newPlugin.version } }, function (err, results) {
@@ -878,15 +929,17 @@ function addPackage (plugin, packageInfo, options, cb) {
                   }
                 });
 
-                // Persist the _isAvailableInEditor flag.
+                // Persist the _isAvailableInEditor flag; deprecated plugins are always locked false.
                 db.update(plugin.type, {_id: newPlugin._id}, {
-                  _isAvailableInEditor: oldPlugin._isAvailableInEditor,
+                  _isAvailableInEditor: isDeprecated ? false : oldPlugin._isAvailableInEditor,
                   _isAddedByDefault: oldPlugin._isAddedByDefault
                 }, function(err, results) {
                   if (err) {
                     logger.log('error', err);
                     return addCb(err);
                   }
+
+                  if (isDeprecated) logger.log('info', 'Deprecated plugin locked after upload: ' + pkgMeta.name);
 
                   plugin.updateLegacyContent(newPlugin, oldPlugin, function (err) {
                     if (err) {
@@ -917,7 +970,14 @@ function addPackage (plugin, packageInfo, options, cb) {
 
                   logger.log('info', 'Successfully removed versions of ' + package.name + '(' + plugin.type + ') older than ' + newPlugin.version);
 
-                  return addCb(null, newPlugin);
+                  if (!isDeprecated) return addCb(null, newPlugin);
+
+                  // No old version to inherit flags from — lock explicitly.
+                  db.update(plugin.type, { _id: newPlugin._id }, { _isAvailableInEditor: false }, function(updateErr) {
+                    if (updateErr) logger.log('error', 'Failed to lock deprecated plugin after upload: ' + pkgMeta.name, updateErr);
+                    else logger.log('info', 'Deprecated plugin locked after upload: ' + pkgMeta.name);
+                    return addCb(null, newPlugin);
+                  });
                 });
               }
             });

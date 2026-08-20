@@ -130,56 +130,57 @@ define(function(require) {
       },
       
       // Calculate and display heading sizes based on selected value
+      // Mirrors the cascade logic in custom-theme/less/_defaults/_font-config.less:
+      //   H1 = base, H2 = base - 0.5rem, H3 = base - 1rem,
+      //   H4 = base - 1.25rem, H5 = base - 1.5rem, H6 = base - 1.75rem
+      //   Each level is floored to be at least @min-font-step (1px) above the next.
+      //   H6 is floored at @min-paragraph-size (15px). Paragraph shares the H6 tier.
       calculateAndDisplayHeadingSizes: function($select) {
         var selectedValue = $select.val();
         
         if (!selectedValue) return;
         
         // Parse the rem value (e.g., "3rem" -> 3)
-        var baseSize = parseFloat(selectedValue);
-        if (isNaN(baseSize)) return;
+        var baseRem = parseFloat(selectedValue);
+        if (isNaN(baseRem)) return;
         
-        // Convert rem to pixels (1rem = 16px)
-        var h1Pixels = Math.round(baseSize * 16);
+        // Hierarchy minimums (must match _font-config.less)
+        var MIN_INSTRUCTION_REM = 0.875;                       // 14px
+        var MIN_FONT_STEP_REM = 0.0625;                        // 1px
+        var MIN_PARAGRAPH_REM = MIN_INSTRUCTION_REM + MIN_FONT_STEP_REM; // 0.9375rem = 15px
         
-        // Exact size lookup table based on H1 selection (exact values from design table)
-        var sizeTable = {
-          56: { h1: 56, h2: 48, h3: 40, h4: 32, h5: 24, p: 16 },
-          48: { h1: 48, h2: 40, h3: 32, h4: 24, h5: 20, p: 16 },
-          40: { h1: 40, h2: 32, h3: 24, h4: 20, h5: 18, p: 16 },
-          36: { h1: 36, h2: 28, h3: 22, h4: 18, h5: 16, p: 14 }
-        };
+        // Raw offsets from the base @page-heading-font-size
+        var h1Raw = baseRem;
+        var h2Raw = baseRem - 0.5;
+        var h3Raw = baseRem - 1;
+        var h4Raw = baseRem - 1.25;
+        var h5Raw = baseRem - 1.5;
+        var h6Raw = baseRem - 1.75;
         
-        // Get exact sizes from table
-        var sizes = sizeTable[h1Pixels];
+        // Cascade from H6 upward so each level is at least 1px above the next
+        var h6 = Math.max(h6Raw, MIN_PARAGRAPH_REM);
+        var h5 = Math.max(h5Raw, h6 + MIN_FONT_STEP_REM);
+        var h4 = Math.max(h4Raw, h5 + MIN_FONT_STEP_REM);
+        var h3 = Math.max(h3Raw, h4 + MIN_FONT_STEP_REM);
+        var h2 = Math.max(h2Raw, h3 + MIN_FONT_STEP_REM);
+        var h1 = Math.max(h1Raw, h2 + MIN_FONT_STEP_REM);
+        var p = h6; // paragraph shares the H6 tier
         
-        // If exact match not found, use closest value
-        if (!sizes) {
-          var availableSizes = Object.keys(sizeTable).map(Number).sort(function(a, b) { return a - b; });
-          var closestSize = availableSizes.reduce(function(prev, curr) {
-            return (Math.abs(curr - h1Pixels) < Math.abs(prev - h1Pixels) ? curr : prev);
-          });
-          sizes = sizeTable[closestSize];
-        }
-        
-        // Helper function to format numbers cleanly (remove trailing zeros) and add pixel values
-        var formatSize = function(pixels) {
-          var rem = (pixels / 16);
-          var formatted = rem.toFixed(4); // Use 4 decimal places to preserve exact values like 1.125
-          // Remove trailing zeros and decimal point if not needed
-          formatted = formatted.replace(/\.?0+$/, '');
-          
+        // Helper: format rem to "Xrem (Ypx)" with trailing zeros stripped
+        var formatSize = function(rem) {
+          var pixels = Math.round(rem * 16);
+          var formatted = rem.toFixed(4).replace(/\.?0+$/, '');
           return formatted + 'rem (' + pixels + 'px)';
         };
         
-        // Calculate sizes using exact table values
         var calculatedSizes = {
-          h1: formatSize(sizes.h1),
-          h2: formatSize(sizes.h2),
-          h3: formatSize(sizes.h3),
-          h4: formatSize(sizes.h4),
-          h5: formatSize(sizes.h5),
-          p: formatSize(sizes.p)
+          h1: formatSize(h1),
+          h2: formatSize(h2),
+          h3: formatSize(h3),
+          h4: formatSize(h4),
+          h5: formatSize(h5),
+          h6: formatSize(h6),
+          p: formatSize(p)
         };
         
         // Display the calculated values
@@ -209,6 +210,7 @@ define(function(require) {
         infoHtml += '<div><strong>H3:</strong> ' + sizes.h3 + '</div>';
         infoHtml += '<div><strong>H4:</strong> ' + sizes.h4 + '</div>';
         infoHtml += '<div><strong>H5:</strong> ' + sizes.h5 + '</div>';
+        infoHtml += '<div><strong>H6:</strong> ' + sizes.h6 + '</div>';
         infoHtml += '<div><strong>Paragraph:</strong> ' + sizes.p + '</div>';
         infoHtml += '</div>';
         infoHtml += '</div>';

@@ -13,6 +13,7 @@ var origin = require('../../../'),
     configuration = require('../../../lib/configuration'),
     database = require('../../../lib/database'),
     logger = require('../../../lib/logger'),
+    componentPropertyDefaults = require('../../../lib/componentPropertyDefaults'),
     defaultOptions = require('./defaults.json'),
     bower = require('bower'),
     async = require('async'),
@@ -136,6 +137,14 @@ Component.prototype.retrieve = function (search, options, next) {
   ContentPlugin.prototype.retrieve.call(this, search, options, next);
 };
 
+Component.prototype.create = function (data, next) {
+  if (data && data._component) {
+     componentPropertyDefaults.applyDefaultsToObject(data, data._component);
+  }
+  // componentPropertyDefaults.applyDefaultsToObject(data, data && data._component);
+  ContentPlugin.prototype.create.call(this, data, next);
+};
+
 Component.prototype.update = function (search, delta, next)  {
   var self = this;
 
@@ -177,36 +186,19 @@ Component.prototype.update = function (search, delta, next)  {
               _contentTypeParentId: existingParentId
             };
 
-            db.retrieve('courseasset', assetSearchCriteria, function(error, assets) {
-              if (error) {
-                return next(error);
-              }
-
-              if (assets && assets.length !== 0) {
-                // Iterate over each asset and change the _contentTypeParentId.
-                async.each(assets, function(asset, callback) {
-
-                  db.update('courseasset', {_id: asset._id}, {_contentTypeParentId: latestParentId}, function(err, doc) {
-                    if (err) {
-                      return callback(err);
-                    }
-
-                    callback(null);
-                  });
-
-                }, function(err) {
-                  if (err) {
-                    return next(err);
-                  }
-
-                  next(null);
-                });
-
-              } else {
-                // Nothing to do.
+            // OPTIMIZED: Use updateMany instead of N individual updates
+            // This reduces N database round-trips to a single operation
+            db.getModel('courseasset').updateMany(
+              assetSearchCriteria,
+              { $set: { _contentTypeParentId: latestParentId } },
+              function(err, result) {
+                if (err) {
+                  logger.log('error', 'Failed to batch update courseasset parentIds: ' + err.message);
+                  return next(err);
+                }
                 next(null);
               }
-            });
+            );
           });
         } else {
           next(null);

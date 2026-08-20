@@ -45,9 +45,9 @@ define(function(require) {
         'editorView:copyID': this.copyIdToClipboard,
         'editorView:paste': this.pasteFromClipboard,
         'editorCommon:download': this.downloadProject,
-        'editorCommon:preview': function(isForceRebuild) {
+        'editorCommon:preview': function(isForceRebuild, isStudio) {
           var previewWindow = window.open('loading', 'preview');
-          this.previewProject(previewWindow, isForceRebuild);
+          this.previewProject(previewWindow, isForceRebuild, isStudio);
         },
         'editorCommon:export': this.exportProject
       });
@@ -63,11 +63,12 @@ define(function(require) {
       this.renderCurrentEditorView();
     },
 
-    previewProject: function(previewWindow, forceRebuild) {
+    previewProject: function(previewWindow, forceRebuild, isStudio) {
       if(Origin.editor.isPreviewPending) {
         return;
       }
       Origin.editor.isPreviewPending = true;
+      this._isStudioPreview = isStudio === true;
       $('.navigation-loading-indicator').removeClass('display-none');
       $('.editor-common-sidebar-preview-inner').addClass('display-none');
       $('.editor-common-sidebar-previewing').removeClass('display-none');
@@ -241,7 +242,12 @@ define(function(require) {
     updateCoursePreview: function(previewWindow) {
       var courseId = Origin.editor.data.course.get('_id');
       var tenantId = Origin.sessionModel.get('tenantId');
-      previewWindow.location.href = 'preview/' + tenantId + '/' + courseId + '/';
+      var href = 'preview/' + tenantId + '/' + courseId + '/';
+      if (this._isStudioPreview) {
+        href += '?studio=true';
+      }
+      previewWindow.location.href = href;
+      this._isStudioPreview = false;
     },
 
     addToClipboard: function(model) {

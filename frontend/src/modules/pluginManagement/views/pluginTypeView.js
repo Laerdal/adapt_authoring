@@ -30,9 +30,23 @@ define(function(require){
     },
 
     toggleEnabled: function () {
-      this.model.save({
-        _isAvailableInEditor: this.$('.pluginType-enabled').is(':checked')
-      }, { patch: true });
+      var self = this;
+      var isChecked = this.$('.pluginType-enabled').is(':checked');
+      this.model.save({ _isAvailableInEditor: isChecked }, {
+        patch: true,
+        wait: true,
+        error: function (model, response) {
+          // Revert the checkbox to its previous state
+          self.$('.pluginType-enabled').prop('checked', !isChecked);
+          if (response.status === 403) {
+            Origin.Notify.alert({
+              type: 'warning',
+              title: Origin.l10n.t('app.warningdefaulttitle'),
+              text: 'This plugin has been deprecated and cannot be enabled. Contact your administrator if you need further assistance.'
+            });
+          }
+        }
+      });
     },
 
     toggleAddedDefault: function() {

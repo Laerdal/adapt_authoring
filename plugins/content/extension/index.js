@@ -141,7 +141,11 @@ function getEnabledExtensions(courseId, cb) {
       enabledExtensions && Object.keys(enabledExtensions).forEach(function (key) {
         extIds.push(enabledExtensions[key]._id);
       });
-      db.retrieve('extensiontype', { _id: { $in: extIds } }, cb);
+      var deprecated = (configuration.getConfig('deprecatedPlugins') || {}).extension || [];
+      db.retrieve('extensiontype', { _id: { $in: extIds } }, function(err, extResults) {
+        if (err) return cb(err);
+        cb(null, extResults.filter(function(ext) { return deprecated.indexOf(ext.name) === -1; }));
+      });
     });
   });
 }
@@ -308,22 +312,59 @@ function toggleExtensions (courseId, action, extensions, cb) {
 
     // retrieves specified components for the course and either adds or deletes
     // extension properties of the passed extensionItem
+    // OPTIMIZED: Use bulk updateMany for non-config types instead of N individual updates
     var updateComponentItems = function (tenantDb, componentType, schema, extensionItem, nextComponent) {
       var criteria = 'course' == componentType ? { _id : courseId } : { _courseId : courseId };
+      var isConfig = ('config' == componentType);
+      var generatedObject = helpers.schemaToObject(schema, extensionItem.name, extensionItem.version, componentType);
+      var targetAttribute = extensionItem.targetAttribute;
+
+      // For non-config types, use bulk updateMany with $set/$unset
+      if (!isConfig && generatedObject && targetAttribute) {
+        var Model = tenantDb.getModel(componentType);
+        if (Model && Model.updateMany) {
+          if ('enable' == action) {
+            // Use $set to add the extension properties
+            var setObj = {};
+            setObj['_extensions.' + targetAttribute] = generatedObject[targetAttribute];
+            return Model.updateMany(criteria, { $set: setObj }).exec(function(err) {
+              if (err) {
+                logger.log('warn', 'updateMany failed for ' + componentType + ', falling back to individual updates');
+                // Fall back to individual updates
+                return updateComponentItemsLegacy(tenantDb, componentType, criteria, generatedObject, targetAttribute, isConfig, extensionItem, nextComponent);
+              }
+              nextComponent();
+            });
+          } else {
+            // Use $unset to remove the extension properties
+            var unsetObj = {};
+            unsetObj['_extensions.' + targetAttribute] = "";
+            return Model.updateMany(criteria, { $unset: unsetObj }).exec(function(err) {
+              if (err) {
+                logger.log('warn', 'updateMany failed for ' + componentType + ', falling back to individual updates');
+                return updateComponentItemsLegacy(tenantDb, componentType, criteria, generatedObject, targetAttribute, isConfig, extensionItem, nextComponent);
+              }
+              nextComponent();
+            });
+          }
+        }
+      }
+
+      // For config type or fallback, use individual updates (needed for _enabledExtensions)
+      updateComponentItemsLegacy(tenantDb, componentType, criteria, generatedObject, targetAttribute, isConfig, extensionItem, nextComponent);
+    };
+
+    // Legacy individual update function for config type and fallback
+    var updateComponentItemsLegacy = function(tenantDb, componentType, criteria, generatedObject, targetAttribute, isConfig, extensionItem, nextComponent) {
       tenantDb.retrieve(componentType, criteria, { fields: '_id _extensions _enabledExtensions' }, function (err, results) {
         if (err) {
           return cb(err);
         }
 
-        var generatedObject = helpers.schemaToObject(schema, extensionItem.name, extensionItem.version, componentType);
-        var targetAttribute = extensionItem.targetAttribute;
-        // iterate components and update _extensions attribute
         async.each(results, function (component, next) {
-          var isConfig = ('config' == componentType);
           var updatedExtensions = component._extensions || {};
           var enabledExtensions = component._enabledExtensions || {};
           if ('enable' == action) {
-            // we need to store extra in the config object
             if (isConfig) {
               enabledExtensions[extensionItem.extension] = {
                 _id: extensionItem._id,
@@ -337,7 +378,6 @@ function toggleExtensions (courseId, action, extensions, cb) {
               updatedExtensions = _.extend(updatedExtensions, generatedObject);
             }
           } else {
-            // remove from list of enabled extensions in config object
             if (isConfig) {
               delete enabledExtensions[extensionItem.extension];
             }
@@ -345,7 +385,6 @@ function toggleExtensions (courseId, action, extensions, cb) {
             generatedObject && (delete updatedExtensions[targetAttribute]);
           }
 
-          // update using delta
           var delta = { _extensions : updatedExtensions };
           if (isConfig) {
             delta._enabledExtensions = enabledExtensions;
@@ -359,6 +398,15 @@ function toggleExtensions (courseId, action, extensions, cb) {
     db.retrieve('extensiontype', { _id: { $in: extensions } }, function (err, results) {
       if (err) {
         return cb(err);
+      }
+
+      // Deprecated extensions cannot be re-enabled on any course
+      if (action === 'enable') {
+        var deprecated = (configuration.getConfig('deprecatedPlugins') || {}).extension || [];
+        var blocked = results.filter(function(r) { return deprecated.indexOf(r.name) !== -1; });
+        if (blocked.length > 0) {
+          return cb(new ContentTypeError('Cannot enable deprecated extension(s): ' + blocked.map(function(r) { return r.name; }).join(', ')));
+        }
       }
 
       // Switch to the tenant database

@@ -1,0 +1,43 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+# package-lock.json is intentionally NOT committed: a lock generated on one OS
+# makes npm skip the platform-specific @tailwindcss/oxide native binary on
+# another OS (npm/cli#4828). Let each platform resolve its own lock at install.
+/package-lock.json
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# vite
+/dist/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo

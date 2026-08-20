@@ -9,6 +9,7 @@ define(function(require){
 
     initialize: function() {
       this.listenTo(Origin, 'login:changed', this.loginChanged);
+      this.listenTo(Origin, 'location:change', this.render);
       this.render();
     },
 
@@ -17,7 +18,10 @@ define(function(require){
     },
 
     render: function() {
-      var data = this.model ? this.model.toJSON() : null;
+      var data = this.model ? this.model.toJSON() : {};
+      data = $.extend({}, data, {
+        inEditor: Origin.location && Origin.location.module === 'editor'
+      });
       var template = Handlebars.templates[this.constructor.template];
       this.$el.html(template(data));
       return this;

@@ -29,6 +29,8 @@ function publishCourse(courseId, mode, request, response, next) {
   let menuName;
   let frameworkVersion;
   let isForceRebuild;
+  let computedFingerprint = '';
+  let isCacheHit = false;
 
   let resultObject = {};
 
@@ -158,8 +160,9 @@ function publishCourse(courseId, mode, request, response, next) {
         if (err) {
           return callback(err);
         }
-        // Store off the retrieved collections
         outputJson = data;
+        // PERF: fingerprint the raw course JSON now; used by cache gate below
+        computedFingerprint = self.computeFingerprint(outputJson);
         callback(null);
       });
     },
@@ -173,69 +176,107 @@ function publishCourse(courseId, mode, request, response, next) {
         callback(null);
       });
     },
-    //
+    // PERF: applyTheme, applyMenu, build-flag check, and framework-version read all run
+    // in parallel. These four are independent of each other and all require outputJson
+    // to still have course/config as arrays (before sanitizeCourseJSON converts them).
     function(callback) {
       var temporaryThemeFolder = path.join(SRC_FOLDER, Constants.Folders.Theme, customPluginName);
-      self.applyTheme(tenantId, courseId, outputJson, temporaryThemeFolder, function(err, appliedThemeName) {
-        if (err) {
-          return callback(err);
+      var temporaryMenuFolder  = path.join(SRC_FOLDER, Constants.Folders.Menu,  customPluginName);
+      async.parallel([
+        function(done) {
+          self.applyTheme(tenantId, courseId, outputJson, temporaryThemeFolder, function(err, appliedThemeName) {
+            if (err) return done(err);
+            self.writeCustomStyle(tenantId, courseId, temporaryThemeFolder, function(err) {
+              if (err) return done(err);
+              themeName = appliedThemeName;
+              outputJson['config'][0]._theme = themeName;
+              done(null);
+            });
+          });
+        },
+        function(done) {
+          self.applyMenu(tenantId, courseId, outputJson, temporaryMenuFolder, function(err, appliedMenuName) {
+            if (err) return done(err);
+            menuName = appliedMenuName;
+            done(null);
+          });
+        },
+        function(done) {
+          self.buildFlagExists(path.join(BUILD_FOLDER, Constants.Filenames.Rebuild), function(err, buildFlagExists) {
+            if (err) return done(err);
+            isForceRebuild = request && request.query.force === 'true';
+            if (!fs.existsSync(path.normalize(BUILD_FOLDER + '/index.html'))) {
+              buildFlagExists = true;
+            }
+            if (mode === Constants.Modes.Export || mode === Constants.Modes.Publish || buildFlagExists || isForceRebuild) {
+              isRebuildRequired = true;
+            }
+            if (mode === Constants.Modes.Export || mode === Constants.Modes.Publish || isForceRebuild) {
+              fs.emptyDirSync(BUILD_FOLDER);
+            }
+            done(null);
+          });
+        },
+        function(done) {
+          installHelpers.getInstalledFrameworkVersion(function(err, version) {
+            frameworkVersion = version;
+            done(err);
+          });
         }
-
-        self.writeCustomStyle(tenantId, courseId, temporaryThemeFolder, function(err) {
-          if (err) {
-            return callback(err);
-          }
-          // Replace the theme in outputJson with the applied theme name.
-          themeName = appliedThemeName;
-          outputJson['config'][0]._theme = themeName;
-          callback(null);
-        });
-      });
+      ], function(err) { callback(err); });
     },
+    // Inject the AI Tutor proxy endpoint into config for published output.
+    // The learner widget calls a server-side proxy (never Azure directly), so only the
+    // per-environment proxy URL is baked in — set via AI_TUTOR_PUBLIC_URL. When unset
+    // (e.g. preview on the authoring host) the widget falls back to a same-origin relative
+    // call. Runs while config is still array-form (sanitizeCourseJSON converts it next).
+    // Guarded so a failure here can never break the build.
+    function(callback) {
+      try {
+        var configObject = outputJson['config'] && outputJson['config'][0];
+        // getCourseJSON → flattenNestedObjects promotes _extensions.* to top-level and deletes
+        // _extensions, so by here the config carries _aiTutor at the top level (not nested).
+        var aiTutor = configObject && configObject._aiTutor;
+        if (aiTutor && aiTutor._isEnabled) {
+          var publicUrl = process.env.AI_TUTOR_PUBLIC_URL || '';
+          if (publicUrl) aiTutor.tutorEndpoint = publicUrl;
+          aiTutor.courseId = courseId;
+          // Auto-ingest this course's documents into its vector store (handled by the
+          // ai-tutor service plugin). Fire-and-forget via the app event bus so it neither
+          // blocks nor breaks the build; the plugin's handler is idempotent.
+          app.emit('aitutor:ensureIngested', { courseId: String(courseId), tenantId: String(tenantId) });
+        }
+      } catch (e) {
+        logger.log('warn', '[ai-tutor] endpoint injection skipped: ' + (e && e.message));
+      }
+      callback(null);
+    },
+    // sanitizeCourseJSON must run after applyTheme/applyMenu — it converts course and
+    // config from arrays to single objects, which would break applyTheme's course[0] reads.
     function(callback) {
       self.sanitizeCourseJSON(mode, outputJson, function(err, data) {
-        if (err) {
-          return callback(err);
-        }
-        // Update the JSON object
+        if (err) return callback(err);
         outputJson = data;
         callback(null);
       });
     },
+    // PERF: cache gate — if the course JSON fingerprint matches the last successful build,
+    // the built output is still valid; skip all file-writing steps and serve as-is.
     function(callback) {
-      self.buildFlagExists(path.join(BUILD_FOLDER, Constants.Filenames.Rebuild), function(err, buildFlagExists) {
-        if (err) {
-          return callback(err);
+      if (isRebuildRequired) return callback(); // structural change forces a full rebuild
+      const hashFile  = path.join(BUILD_FOLDER, '.build-hash');
+      const indexFile = path.normalize(BUILD_FOLDER + '/index.html');
+      try {
+        const storedHash = fs.readFileSync(hashFile, 'utf8').trim();
+        if (storedHash === computedFingerprint && fs.existsSync(indexFile)) {
+          logger.log('info', '[Preview] Build cache hit — content unchanged, serving existing build');
+          isCacheHit = true;
         }
-        isForceRebuild = request && request.query.force === 'true';
-
-        if (!fs.existsSync(path.normalize(BUILD_FOLDER + '/index.html'))) {
-          buildFlagExists = true;
-        }
-
-        if (mode === Constants.Modes.Export || mode === Constants.Modes.Publish || buildFlagExists || isForceRebuild) {
-          isRebuildRequired = true;
-        }
-        callback(null);
-      });
+      } catch (_) { /* no hash file yet — cold start */ }
+      callback();
     },
     function(callback) {
-      if (mode === Constants.Modes.Export || mode === Constants.Modes.Publish || isForceRebuild) {
-        fs.emptyDirSync(BUILD_FOLDER);
-      }
-      callback(null);
-    },
-    function(callback) {
-      var temporaryMenuFolder = path.join(SRC_FOLDER, Constants.Folders.Menu, customPluginName);
-      self.applyMenu(tenantId, courseId, outputJson, temporaryMenuFolder, function(err, appliedMenuName) {
-        if (err) {
-          return callback(err);
-        }
-        menuName = appliedMenuName;
-        callback(null);
-      });
-    },
-    function(callback) {
+      if (isCacheHit) return callback(); // content unchanged — skip asset copy
       var assetsJsonFolder = path.join(BUILD_FOLDER, Constants.Folders.Course, outputJson['config']._defaultLanguage);
       var assetsFolder = path.join(assetsJsonFolder, Constants.Folders.Assets);
 
@@ -280,6 +321,7 @@ function publishCourse(courseId, mode, request, response, next) {
       });
     },
     function (callback) {
+      if (isCacheHit) return callback(); // content unchanged — skip scriptSafe injection
       // Check if the Authoring Tool environment allows for plugins to run scripts
       // e.g. "*" for all plugins, or "adapt-plugin1, adapt-plugin2" for specific plugins
       const scriptSafe = configuration.getConfig('scriptSafe');
@@ -299,38 +341,34 @@ function publishCourse(courseId, mode, request, response, next) {
       callback(null);
     },
     function (callback) {
+      if (isCacheHit) return callback(); // content unchanged — skip UES injection
       // Inject UES Analytics token endpoint from server config
       // This keeps the token endpoint URL out of source control and course author UI
       const uesAnalyticsConfig = configuration.getConfig('uesAnalytics');
-      
+
       if (!uesAnalyticsConfig || !uesAnalyticsConfig.tokenEndpoint) {
         return callback(null);
       }
-      
+
       // Only inject if UES analytics is enabled in the course config
       if (outputJson.config._uesAnalytics && outputJson.config._uesAnalytics._isEnabled) {
         logger.log(
           'info',
           'Injecting UES Analytics token endpoint from server config'
         );
-        
+
         outputJson.config._uesAnalytics._tokenEndpoint = uesAnalyticsConfig.tokenEndpoint;
       }
 
       callback(null);
     },
     function(callback) {
+      if (isCacheHit) return callback(); // content unchanged — skip JSON write
       self.writeCourseJSON(outputJson, path.join(BUILD_FOLDER, Constants.Folders.Course), function(err) {
         if (err) {
           return callback(err);
         }
         callback(null);
-      });
-    },
-    function(callback) {
-      installHelpers.getInstalledFrameworkVersion(function(error, version) {
-        frameworkVersion = version;
-        callback(error);
       });
     },
     function(callback) {
@@ -423,6 +461,13 @@ function publishCourse(courseId, mode, request, response, next) {
         callback(null);
       });
     },
+    // PERF: persist fingerprint so the next preview can hit the cache gate
+    function(callback) {
+      if (isCacheHit) return callback(); // hash is already current — no need to rewrite
+      const hashFile = path.join(BUILD_FOLDER, '.build-hash');
+      try { fs.writeFileSync(hashFile, computedFingerprint); } catch (_) {}
+      callback();
+    },
     function(callback) {
       const configPath = path.join(BUILD_FOLDER, Constants.Folders.Course, Constants.CourseCollections.config.filename);
       self.removeBuildIncludes(configPath, err => callback(err));
@@ -486,8 +531,6 @@ function publishCourse(courseId, mode, request, response, next) {
             // Azure Function cold starts can take 15-25s; preview/publish result is not
             // dependent on CORS registration completing.
             callback(null);
-            // registerDeploymentUrl logs internally and always calls callback(null);
-            // the completion handler is retained for observability if that changes.
             async.each(deploymentURLs, registerDeploymentUrl, function(err) {
               if (err) logger.log('warn', 'Background URL registration error: ' + err.message);
             });

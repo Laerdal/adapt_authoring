@@ -1,0 +1,32 @@
+{
+  "name": "adapt-studio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "lint": "eslint src --ext ts,tsx --report-unused-disable-directives"
+  },
+  "dependencies": {
+    "headroom-ai": "^0.22.4",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "react-router-dom": "^7.0.0",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^26.0.0",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^4.2.1",
+    "eslint": "^9",
+    "tailwindcss": "^4",
+    "terser": "^5.48.0",
+    "typescript": "^5",
+    "vite": "^6.0.0",
+    "vite-tsconfig-paths": "^4.2.0"
+  }
+}
