@@ -2434,22 +2434,32 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
     }
     if (sbKind === "laerdalForm") {
       // Reverse of the generation mapping in storyboardGeneration.ts.
-      const controlFor = (t: string): string => {
+      //
+      // Generation collapses UI "Dropdown" and "Checkbox" onto the same
+      // backend `_inputType: "options"` because Adapt has no boolean control.
+      // The two are distinguished by the shape of the `options` array:
+      //   * Checkbox  → exactly one option (the yes/no marker)
+      //   * Dropdown  → zero or many options
+      // Without this check every Checkbox field would round-trip as a
+      // Dropdown, silently changing the author's intent on reload.
+      const controlFor = (t: string, opts: unknown): string => {
         switch ((t || "").toLowerCase()) {
           case "textarea":
             return "Multi-Line Text";
           case "number":
           case "range":
             return "Number";
-          case "options":
-            return "Dropdown";
+          case "options": {
+            const arr = Array.isArray(opts) ? opts : [];
+            return arr.length === 1 ? "Checkbox" : "Dropdown";
+          }
           default:
             return "Single-Line Text";
         }
       };
       const rawItems = Array.isArray(props._items) ? (props._items as Array<Record<string, unknown>>) : [];
       const fields = rawItems.map((it) => ({
-        control: controlFor(String(it._inputType || "text")),
+        control: controlFor(String(it._inputType || "text"), it.options),
         label: String(it._label || ""),
         placeholder: String(it._placeholder || ""),
         mandatory: !!it._isRequired,

@@ -146,8 +146,18 @@ export default function CoursePreviewPage() {
 
       <main className="flex-1 overflow-auto bg-[#e9edf2] px-3 md:px-6 py-4">
         {!previewUrl ? (
+          // Three distinct states share the empty-preview slot:
+          //   1. "unavailable"  — no `id` in the URL, or no tenant on the user.
+          //      Nothing to preview, and no seeding will ever make it appear.
+          //   2. "loading"      — id + tenant are known but `defaultsReady` is
+          //      still false while `seedMissingCourseDefaults` runs. Showing
+          //      "unavailable" here mis-communicates a transient state.
+          //   3. (implicit)     — once `defaultsReady` flips, `previewUrl` is
+          //      built and the iframe branch below renders instead.
           <div className="h-full flex items-center justify-center text-sm text-[#6b7280]">
-            Preview is unavailable for this course.
+            {(!id || !user?._tenantId)
+              ? "Preview is unavailable for this course."
+              : "Loading preview\u2026"}
           </div>
         ) : (
           <div className="h-full w-full flex justify-center">

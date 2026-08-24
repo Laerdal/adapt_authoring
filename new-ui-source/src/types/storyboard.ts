@@ -341,12 +341,20 @@ export function parseAssessmentData(
     data.options = items.map((it) => {
       const g = (it._graphic as { large?: string; small?: string; src?: string }) || {};
       const link = g.large || g.small || g.src || undefined;
+      // `image` is the persisted link and can legitimately be a
+      // `course/assets/<file>` path (DAM-picked) which the authoring UI
+      // cannot fetch directly. `imageUrl` is used to render the picker
+      // preview via a plain `<img src>`, so it must be directly loadable
+      // (external URL or absolute path). Leave it unset for DAM links so
+      // the picker shows an empty tile rather than a broken image icon;
+      // re-picking the asset repopulates a servable URL.
+      const isServable = !!link && (/^(https?:)?\/\//i.test(link) || link.startsWith('/'));
       return {
         text: String(it.text ?? ''),
         correct: !!it._shouldBeSelected,
         feedback: it.feedback ? String(it.feedback) : undefined,
         image: link,
-        imageUrl: link,
+        imageUrl: isServable ? link : undefined,
       } as McqOption;
     });
   } else if (kind === 'checklist') {

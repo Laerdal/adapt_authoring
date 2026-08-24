@@ -371,8 +371,11 @@ function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => string 
         comp.assessmentPatch = { _items: items };
       } else if (kind === "assessmentResult") {
         // adapt-contrib-assessmentResults: bind to an article-level assessment
-        // (`_assessmentId`), render bands ordered high\u2192low, offer retry, and
-        // template the completion body with `{{scoreAsPercent}}` etc.
+        // (`_assessmentId`), emit bands sorted ascending by `_score` (the
+        // plugin walks the array and picks the highest band whose `_score`
+        // ≤ the learner's score, so ascending order is the required contract),
+        // offer retry, and template the completion body with
+        // `{{scoreAsPercent}}` etc.
         const r = data.result || {};
         const bands = Array.isArray(r.bands) ? r.bands : [];
         comp.assessmentPatch = {
