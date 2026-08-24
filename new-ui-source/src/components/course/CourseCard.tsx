@@ -177,11 +177,13 @@ export default function CourseCard({
               title="Delete course"
               className="p-1.5 rounded-lg bg-white/90 hover:bg-white text-[#ef4444] shadow-sm"
             >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                <path d="M10 11v6M14 11v6" />
-                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round">
+                {/* delete-icon.svg */}
+                <path d="M2 4H14" />
+                <path d="M12.6673 4V13.3333C12.6673 14 12.0007 14.6667 11.334 14.6667H4.66732C4.00065 14.6667 3.33398 14 3.33398 13.3333V4" />
+                <path d="M5.33398 3.99999V2.66666C5.33398 1.99999 6.00065 1.33333 6.66732 1.33333H9.33398C10.0007 1.33333 10.6673 1.99999 10.6673 2.66666V3.99999" />
+                <path d="M6.66602 7.33333V11.3333" />
+                <path d="M9.33398 7.33333V11.3333" />
               </svg>
             </button>
             </div>
@@ -289,11 +291,13 @@ export default function CourseCard({
               title="Delete course"
               className="p-2 rounded-lg border border-[#e5e7eb] bg-white hover:bg-[#fef2f2] text-[#6b7280] hover:text-[#ef4444] transition-colors"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                <path d="M10 11v6M14 11v6" />
-                <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round">
+                {/* delete-icon.svg */}
+                <path d="M2 4H14" />
+                <path d="M12.6673 4V13.3333C12.6673 14 12.0007 14.6667 11.334 14.6667H4.66732C4.00065 14.6667 3.33398 14 3.33398 13.3333V4" />
+                <path d="M5.33398 3.99999V2.66666C5.33398 1.99999 6.00065 1.33333 6.66732 1.33333H9.33398C10.0007 1.33333 10.6673 1.99999 10.6673 2.66666V3.99999" />
+                <path d="M6.66602 7.33333V11.3333" />
+                <path d="M9.33398 7.33333V11.3333" />
               </svg>
             </button>
 
