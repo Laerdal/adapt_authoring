@@ -762,7 +762,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={handleNext}
-                disabled={!newTitle.trim() || isCreatingCourse}
+                disabled={!newTitle.trim() || isCreatingCourse || (isVanillaSelected && !/box/i.test(newMenu))}
                 className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
               >
                 {isCreatingCourse ? 'Creating...' : 'Next'}
