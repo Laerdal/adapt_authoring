@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { useAuth } from '@/context/AuthContext'
-import { logout, getInstanceName } from '@/api/adaptAuthoring'
+import { logout } from '@/api/adaptAuthoring'
 
 interface HeaderProps {
   onMenuToggle?: () => void;
@@ -17,12 +17,6 @@ export default function Header({ onMenuToggle, actions }: HeaderProps) {
   const displayName = fullName || user?.email || (loading ? 'Loading…' : 'Not signed in')
   const email = user?.email ?? ''
   const role = user?.rolesAsName?.[0] ?? ''
-
-  // Instance name (static) from config.json domainName → "Local Instance" if unset.
-  const [instanceName, setInstanceName] = useState('')
-  useEffect(() => {
-    getInstanceName().then(setInstanceName).catch(() => setInstanceName('Local Instance'))
-  }, [])
 
   async function handleLogout() {
     setProfileOpen(false)
@@ -68,16 +62,6 @@ export default function Header({ onMenuToggle, actions }: HeaderProps) {
           </div>
           <span className="font-semibold text-[#111827] text-sm tracking-tight">Adapt Studio</span>
         </div>
-
-        {/* Instance name — always visible, sourced from config (domainName) */}
-        {instanceName && (
-          <span
-            className="text-sm md:text-base font-semibold text-[#111827] truncate max-w-[45vw]"
-            title={instanceName}
-          >
-            {instanceName}
-          </span>
-        )}
       </div>
 
       {/* Right: optional action buttons + user */}
