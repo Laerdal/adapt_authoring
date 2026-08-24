@@ -318,6 +318,12 @@ export default function HomePage() {
   const activeSort = SORT_OPTIONS.find((o) => o.value === sort)!
   const hasFilters = search.trim() !== '' || selectedTags.length > 0
 
+  // When Vanilla theme is selected, only Box Menu is allowed
+  const isVanillaSelected = /vanilla/i.test(newTheme)
+  function pickBoxMenu(options: string[]): string {
+    return options.find((o) => /box/i.test(o)) ?? options[0] ?? 'Box Menu'
+  }
+
   return (
     <>
     <div className="px-4 sm:px-6 md:px-8 py-5 md:py-6">
@@ -683,7 +689,13 @@ export default function HomePage() {
                           <button
                             key={opt}
                             type="button"
-                            onClick={() => { setNewTheme(opt); setThemeOpen(false); }}
+                            onClick={() => {
+                              setNewTheme(opt)
+                              setThemeOpen(false)
+                              if (/vanilla/i.test(opt)) {
+                                setNewMenu(pickBoxMenu(menuOptions))
+                              }
+                            }}
                             className={`w-full text-left px-3 py-2 text-sm transition-colors ${newTheme === opt ? 'bg-[#dbeeff] text-[#2d6fa8] font-medium' : 'text-[#374151] hover:bg-[#f9fafb]'}`}
                           >
                             {opt}
@@ -710,16 +722,27 @@ export default function HomePage() {
                     </button>
                     {menuOpen && (
                       <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-10 py-1">
-                        {menuOptions.map((opt) => (
-                          <button
-                            key={opt}
-                            type="button"
-                            onClick={() => { setNewMenu(opt); setMenuOpen(false); }}
-                            className={`w-full text-left px-3 py-2 text-sm transition-colors ${newMenu === opt ? 'bg-[#dbeeff] text-[#2d6fa8] font-medium' : 'text-[#374151] hover:bg-[#f9fafb]'}`}
-                          >
-                            {opt}
-                          </button>
-                        ))}
+                        {menuOptions.map((opt) => {
+                            const isBoxOpt = /box/i.test(opt)
+                            const isDisabled = isVanillaSelected && !isBoxOpt
+                            return (
+                              <button
+                                key={opt}
+                                type="button"
+                                disabled={isDisabled}
+                                onClick={() => { if (!isDisabled) { setNewMenu(opt); setMenuOpen(false) } }}
+                                className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                                  isDisabled
+                                    ? 'text-[#d1d5db] cursor-not-allowed'
+                                    : newMenu === opt
+                                    ? 'bg-[#dbeeff] text-[#2d6fa8] font-medium'
+                                    : 'text-[#374151] hover:bg-[#f9fafb]'
+                                }`}
+                              >
+                                {opt}
+                              </button>
+                            )
+                          })}
                       </div>
                     )}
                   </div>

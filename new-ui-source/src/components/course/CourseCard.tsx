@@ -97,7 +97,7 @@ export default function CourseCard({
     <div ref={menuRef} className="absolute z-30 bg-white border border-[#e5e7eb] rounded-xl shadow-xl py-1 w-52"
       style={view === "grid" ? { top: "calc(100% + 4px)", right: 0 } : { top: "calc(100% + 4px)", right: 0 }}
     >
-      {/* Copy */}
+      {/* Duplicate Course */}
       <button
         type="button"
         onClick={() => handleMenuAction(onCopy)}
@@ -107,7 +107,7 @@ export default function CourseCard({
           <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
           <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
         </svg>
-        Copy
+        Duplicate Course
       </button>
 
       {/* Copy ID */}
