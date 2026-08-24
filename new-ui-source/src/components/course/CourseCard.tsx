@@ -157,7 +157,7 @@ export default function CourseCard({
           {/* Thumbnail */}
           <div className="h-44 flex items-center justify-center relative rounded-t-xl overflow-hidden" style={thumbnailStyle}>
             {!imageUrl && <span className="w-12 h-12">{placeholderIcon}</span>}
-            <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 transition-opacity">
             <button
               type="button"
               onClick={openModal}
@@ -274,7 +274,7 @@ export default function CourseCard({
               onClick={openModal}
               aria-label="Edit course details"
               title="Edit course details"
-              className="p-2 rounded-lg border border-[#e5e7eb] bg-white hover:bg-[#f3f4f6] text-[#6b7280] hover:text-[#2d6fa8] transition-colors opacity-0 group-hover:opacity-100"
+              className="p-2 rounded-lg border border-[#e5e7eb] bg-white hover:bg-[#f3f4f6] text-[#6b7280] hover:text-[#2d6fa8] transition-colors"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
@@ -287,7 +287,7 @@ export default function CourseCard({
               onClick={(e) => { e.preventDefault(); setDeleteOpen(true); }}
               aria-label="Delete course"
               title="Delete course"
-              className="p-2 rounded-lg border border-[#e5e7eb] bg-white hover:bg-[#fef2f2] text-[#6b7280] hover:text-[#ef4444] transition-colors opacity-0 group-hover:opacity-100"
+              className="p-2 rounded-lg border border-[#e5e7eb] bg-white hover:bg-[#fef2f2] text-[#6b7280] hover:text-[#ef4444] transition-colors"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="3 6 5 6 21 6" />
