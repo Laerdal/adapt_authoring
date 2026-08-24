@@ -454,8 +454,9 @@ export function CdnDeploymentPage({
     if (!cfg) return;
     setRestoringEntry(entry.entry);
     try {
-      const result = await restoreCdnLink(cfg.groupid, cfg.courseid, cfg.cdnid, entry.entry);
-      if (!result.length) throw new Error("No links found.");
+      // restoreCdnLink() resolves on success and throws on a non-2xx response —
+      // there's no result body shape to inspect (the CLI just returns "success").
+      await restoreCdnLink(cfg.groupid, cfg.courseid, cfg.cdnid, entry.entry);
       setRestoredEntries((prev) => new Set(prev).add(entry.entry));
       setToast({ type: "success", message: "Link restored successfully" });
     } catch {
@@ -472,8 +473,7 @@ export function CdnDeploymentPage({
     if (!cfg || !expiryDate) return;
     setExpirySaving(true);
     try {
-      const result = await setCdnLinkExpiry(cfg.groupid, cfg.courseid, cfg.cdnid, entry.entry, expiryDate);
-      if (!result.length) throw new Error("No links found.");
+      await setCdnLinkExpiry(cfg.groupid, cfg.courseid, cfg.cdnid, entry.entry, expiryDate);
       setToast({ type: "success", message: "Expiry date set successfully for this version" });
       setExpiryTarget(null);
       setExpiryDate("");
@@ -658,6 +658,8 @@ export function CdnDeploymentPage({
                             const restored = restoredEntries.has(entry.entry);
                             const status: LinkStatus = restored ? "active" : entry.status;
                             const badge = STATUS_BADGE[status];
+                            // The active link is already live — offering to "restore" it is meaningless.
+                            const canRestore = !isLatest && status !== "active";
                             return (
                               <tr key={entry.entry} className="border-t border-[#f3f4f6]">
                                 <td className="px-3 py-2">
@@ -681,15 +683,17 @@ export function CdnDeploymentPage({
                                 </td>
                                 <td className="px-3 py-2">
                                   <div className="flex items-center gap-1.5">
-                                    <button
-                                      type="button"
-                                      disabled={isLatest || restored || restoringEntry === entry.entry}
-                                      onClick={() => void handleRestore(entry)}
-                                      className="inline-flex items-center gap-1 rounded border border-[#d1d5db] px-2 py-0.5 text-[11px] text-[#374151] hover:bg-[#f9fafb] disabled:opacity-40 transition-colors"
-                                    >
-                                      {restoringEntry === entry.entry && <Spinner />}
-                                      Restore
-                                    </button>
+                                    {canRestore && (
+                                      <button
+                                        type="button"
+                                        disabled={restoringEntry === entry.entry}
+                                        onClick={() => void handleRestore(entry)}
+                                        className="inline-flex items-center gap-1 rounded border border-[#d1d5db] px-2 py-0.5 text-[11px] text-[#374151] hover:bg-[#f9fafb] disabled:opacity-40 transition-colors"
+                                      >
+                                        {restoringEntry === entry.entry && <Spinner />}
+                                        Restore
+                                      </button>
+                                    )}
                                     <button
                                       type="button"
                                       disabled={isLatest}

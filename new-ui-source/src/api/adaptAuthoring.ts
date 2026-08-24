@@ -3205,16 +3205,19 @@ export async function checkCdnLinkStatuses(urls: string[]): Promise<CdnLinkStatu
   return result?.success && Array.isArray(result.data) ? result.data : [];
 }
 
+// Both restoreLink (`cdndeploy mv`) and setExpiry respond with { success, data }
+// where `data` is a plain status string (e.g. "success" / "Insert completed
+// successfully."), never an array — apiClient.get() already throws on a
+// non-2xx response, so reaching the return here means the call succeeded.
 export async function restoreCdnLink(
   groupid: string,
   courseid: string,
   cdnid: string,
   versionfolder: string,
-): Promise<CdnLinkEntry[]> {
-  const result = await apiClient.get<{ data?: CdnLinkEntry[] }>(
+): Promise<void> {
+  await apiClient.get(
     `/api/cdn/restoreLink/${encodeURIComponent(groupid)}/${encodeURIComponent(courseid)}/${encodeURIComponent(cdnid)}/${encodeURIComponent(versionfolder)}`,
   );
-  return Array.isArray(result?.data) ? result.data : [];
 }
 
 export async function setCdnLinkExpiry(
@@ -3223,11 +3226,10 @@ export async function setCdnLinkExpiry(
   cdnid: string,
   versionfolder: string,
   expiredate: string,
-): Promise<CdnLinkEntry[]> {
-  const result = await apiClient.get<{ data?: CdnLinkEntry[] }>(
+): Promise<void> {
+  await apiClient.get(
     `/api/cdn/setExpiry/${encodeURIComponent(groupid)}/${encodeURIComponent(courseid)}/${encodeURIComponent(cdnid)}/${encodeURIComponent(versionfolder)}/${encodeURIComponent(expiredate)}`,
   );
-  return Array.isArray(result?.data) ? result.data : [];
 }
 
 // ── Users & roles ─────────────────────────────────────────────────────────────
