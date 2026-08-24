@@ -327,7 +327,6 @@ export default function HomePage() {
             <div>
               <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">{location.pathname === '/shared' ? 'Shared with Me' : location.pathname === '/my-courses' ? 'My Courses' : 'All Courses'}</h1>
               <p className="text-sm text-[#6b7280] mt-1">Manage and organize your courses</p>
-              <p className="text-xs text-[#b45309] mt-1">Partial write mode: copy, edit, delete, and create are persisted; import remains disabled.</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {/* Import */}
