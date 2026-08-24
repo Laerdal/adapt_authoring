@@ -303,7 +303,7 @@ export default function CourseCard({
           <div className={`bg-white rounded-2xl shadow-xl flex flex-col overflow-hidden ${cropSrc ? "w-full max-w-xl" : "w-full max-w-md"}`}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-[#e5e7eb] shrink-0">
               <h2 className="font-semibold text-[#111827] text-base">
-                {cropSrc ? "Crop & Adjust Image" : "Edit Course"}
+                {cropSrc ? "Crop & Adjust Image" : "Edit Course Details"}
               </h2>
               {!cropSrc && (
                 <button type="button" onClick={() => setModalOpen(false)} className="p-1.5 rounded-lg hover:bg-[#f3f4f6] text-[#6b7280] transition-colors" aria-label="Close">
