@@ -1,10 +1,17 @@
-// Storyboard top bar (spec AC8/AC10/AC11).
-//   Back · Draft status · Import · AI Actions ▾ · Export ▾ · Share for Review ·
+// Storyboard top bar (spec AC8/AC10/AC11), Figma-aligned (ADAPT-3842).
+//   Back · Draft status · Save · Import · Export ▾ · Share for Review ·
 //   Generate Course →
-// Backend-dependent actions (Import/AI/Export/Share/Generate) are stubbed with
-// a toast and a Phase note until their respective phases land.
+// Backend-dependent actions (Import/Export/Share/Generate) are stubbed with a
+// toast + phase note until their respective phases land. Visual language is
+// the LIFE design system (font-family-primary, --life-color-* tokens, the
+// `.sb-toolbar-btn` and `.sb-status-pill` utilities in index.css) so the port
+// from the Figma "Course Creation Center" prototype is 1:1.
+//
+// AI is no longer a top-bar action — it lives under Add Content → AI Assistance
+// (Samaritan Assistance popover). The underlying /api/storyboard/ai proxy and
+// the card-level AI buttons are unchanged.
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   ArrowLeft,
   Upload,
@@ -13,19 +20,23 @@ import {
   ArrowRight,
   ChevronDown,
   Save,
+  Loader2,
 } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import type { ReviewStatus } from '@/types/storyboard';
 
-// AI is no longer a top-bar action — it lives under Add Content → AI Assistance
-// (Samaritan Assistance popover). The underlying /api/storyboard/ai proxy and
-// the card-level AI buttons are unchanged.
-
-const STATUS_META: Record<ReviewStatus, { label: string; className: string; next: ReviewStatus }> = {
-  draft: { label: 'Draft', className: 'bg-muted text-foreground', next: 'in_review' },
-  in_review: { label: 'In Review', className: 'bg-[#FCE3CF] text-[#92400e]', next: 'approved' },
-  approved: { label: 'Approved', className: 'bg-[#CCEED2] text-[#166534]', next: 'draft' },
+const STATUS_META: Record<
+  ReviewStatus,
+  { label: string; pillClass: string; next: ReviewStatus; nextLabel: string }
+> = {
+  draft:     { label: 'Draft',     pillClass: 'sb-status-pill--draft',    next: 'in_review', nextLabel: 'Send for review' },
+  in_review: { label: 'In Review', pillClass: 'sb-status-pill--review',   next: 'approved',  nextLabel: 'Approve' },
+  approved:  { label: 'Approved',  pillClass: 'sb-status-pill--approved', next: 'draft',     nextLabel: 'Reopen as draft' },
 };
 
+// A small portal-hosted dropdown used for Export — mirrors the Figma popover
+// (subtle border, elevation-lg shadow, Life tokens) and can never be clipped
+// by the sticky header's overflow context.
 function Dropdown({
   label,
   Icon,
@@ -38,43 +49,75 @@ function Dropdown({
   onSelect: (item: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ left: number; top: number }>({ left: 0, top: 0 });
+
+  useLayoutEffect(() => {
+    if (!open || !btnRef.current) return;
+    const r = btnRef.current.getBoundingClientRect();
+    const MENU_W = 200;
+    const left = Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8);
+    setPos({ left: Math.max(8, left), top: r.bottom + 4 });
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
-    const h = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (btnRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
     };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
+    const close = () => setOpen(false);
+    document.addEventListener('mousedown', onDown);
+    window.addEventListener('resize', close);
+    window.addEventListener('scroll', close, true);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      window.removeEventListener('resize', close);
+      window.removeEventListener('scroll', close, true);
+    };
   }, [open]);
+
   return (
-    <div ref={ref} className="relative">
+    <>
       <button
+        ref={btnRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-secondary"
+        className="sb-toolbar-btn"
+        aria-haspopup="menu"
+        aria-expanded={open}
       >
         <Icon className="h-3.5 w-3.5" /> {label}
-        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+        <ChevronDown className="h-3.5 w-3.5" style={{ color: 'var(--life-color-text-subtle)' }} />
       </button>
-      {open && (
-        <div className="absolute right-0 top-full z-30 mt-1 w-52 rounded-md border bg-background py-1 shadow-lg">
-          {items.map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => {
-                onSelect(item);
-                setOpen(false);
-              }}
-              className="flex w-full items-center px-3 py-1.5 text-sm hover:bg-muted"
-            >
-              {item}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+      {open &&
+        createPortal(
+          <div
+            ref={menuRef}
+            role="menu"
+            className="sb-menu"
+            style={{ position: 'fixed', left: pos.left, top: pos.top, width: 200, zIndex: 1000 }}
+          >
+            {items.map((item) => (
+              <button
+                key={item}
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  onSelect(item);
+                  setOpen(false);
+                }}
+                className="sb-menu-item"
+              >
+                {item}
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
+    </>
   );
 }
 
@@ -104,54 +147,81 @@ export default function StoryboardTopBar({
   const meta = STATUS_META[status];
 
   return (
-    <header className="flex items-center gap-2 border-b bg-background px-4 py-2">
-      <button
-        type="button"
-        onClick={onBack}
-        className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-secondary"
-      >
+    <header
+      className="flex items-center gap-3 px-4 py-2.5"
+      style={{
+        background: 'var(--life-color-bg-surface-default)',
+        borderBottom: '1px solid var(--life-color-border-subtle)',
+        fontFamily: 'var(--font-family-primary)',
+      }}
+    >
+      <button type="button" onClick={onBack} className="sb-toolbar-btn" title="Back">
         <ArrowLeft className="h-3.5 w-3.5" /> Back
       </button>
+
       <button
         type="button"
         onClick={onCycleStatus}
-        title="Click to change review status"
-        className={`rounded-full px-3 py-1 text-xs font-medium ${meta.className}`}
+        title={`Click to ${meta.nextLabel.toLowerCase()}`}
+        className={`sb-status-pill ${meta.pillClass}`}
       >
         {meta.label}
       </button>
-      {dirty && <span className="text-xs text-[#92400e]">Unsaved changes</span>}
+
+      {dirty && (
+        <span
+          className="text-xs"
+          style={{ color: 'var(--life-color-text-warning)', fontWeight: 500 }}
+        >
+          Unsaved changes
+        </span>
+      )}
 
       <div className="ml-auto flex items-center gap-2">
         <button
           type="button"
           onClick={onSave}
           disabled={!dirty || saving}
-          className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-secondary disabled:opacity-50"
+          className="sb-toolbar-btn"
+          title="Save storyboard"
         >
-          <Save className="h-3.5 w-3.5" /> {saving ? 'Saving…' : 'Save'}
+          {saving ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Save className="h-3.5 w-3.5" />
+          )}
+          {saving ? 'Saving…' : 'Save'}
         </button>
+
         <button
           type="button"
           onClick={onImport}
           title="Import Word, PDF or PowerPoint"
-          className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-secondary"
+          className="sb-toolbar-btn"
         >
           <Upload className="h-3.5 w-3.5" /> Import
         </button>
-        <Dropdown label="Export" Icon={Download} items={['Word (.docx)', 'PDF (.pdf)']} onSelect={onExport} />
+
+        <Dropdown
+          label="Export"
+          Icon={Download}
+          items={['Word (.docx)', 'PDF (.pdf)']}
+          onSelect={onExport}
+        />
+
         <button
           type="button"
           onClick={() => onStub('Share for Review', 'Phase 5')}
-          className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-secondary"
+          className="sb-toolbar-btn"
         >
           <Users className="h-3.5 w-3.5" /> Share for Review
         </button>
+
         <button
           type="button"
           onClick={onGenerate}
-          className="inline-flex items-center gap-1.5 rounded-md px-4 py-1.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
-          style={{ background: 'var(--primary)' }}
+          className="sb-toolbar-btn sb-toolbar-btn-primary"
+          title="Generate the Adapt course from this storyboard"
         >
           Generate Course <ArrowRight className="h-3.5 w-3.5" />
         </button>

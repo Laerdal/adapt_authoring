@@ -62,6 +62,9 @@ export type StoryboardInsertKind =
   | 'reorder'
   | 'textInput'
   | 'slider'
+  | 'checklist'
+  // results / summary — configured on the storyboard, rendered as a component
+  | 'assessmentResult'
   // interactive placeholders (AC6)
   | 'hotgraphic'
   | 'hotgrid'
@@ -93,6 +96,8 @@ export const INSERT_META: Record<
   reorder: { label: 'Sentence Reordering', category: 'assessment', adaptComponent: 'adapt-contrib-resequence' },
   textInput: { label: 'Text Input', category: 'assessment', adaptComponent: 'adapt-contrib-textInput' },
   slider: { label: 'Slider', category: 'assessment', adaptComponent: 'adapt-contrib-slider' },
+  checklist: { label: 'Checklist', category: 'assessment', adaptComponent: 'adapt-laerdal-checklist' },
+  assessmentResult: { label: 'Assessment Result', category: 'assessment', adaptComponent: 'adapt-contrib-assessmentResults' },
   hotgraphic: { label: 'Hot Graphic', category: 'interactive', adaptComponent: 'adapt-contrib-hotgraphic' },
   hotgrid: { label: 'Hot Grid', category: 'interactive', adaptComponent: 'adapt-laerdal-hotgrid' },
   actionplan: { label: 'Laerdal Action Plan', category: 'interactive', adaptComponent: 'adapt-laerdal-actionplan' },
@@ -105,7 +110,7 @@ export const INSERT_META: Record<
 // configured later in the Page Editor. The Phase 4 generator maps this onto the
 // concrete Adapt component `properties`.
 
-export const ASSESSMENT_KINDS = ['mcq', 'gmcq', 'matching', 'reorder', 'textInput', 'slider'] as const;
+export const ASSESSMENT_KINDS = ['mcq', 'gmcq', 'matching', 'reorder', 'textInput', 'slider', 'checklist'] as const;
 export type AssessmentKind = (typeof ASSESSMENT_KINDS)[number];
 
 export function isAssessmentKind(kind: string): kind is AssessmentKind {
@@ -115,8 +120,16 @@ export function isAssessmentKind(kind: string): kind is AssessmentKind {
 export interface McqOption {
   text: string;
   correct: boolean;
-  /** Optional image reference for Graphic MCQ (gmcq). */
+  /** Optional image reference for Graphic MCQ (gmcq).
+   *  `image` is the persisted link written to `_graphic.src` (either
+   *  `course/assets/<file>` for a DAM asset or an external URL).
+   *  `imageUrl` is the servable preview URL (`/api/asset/serve/<id>`) — not
+   *  persisted; used only to render the picked asset in the editor.
+   *  `imageAssetId` is the DAM asset id, retained so generation can create
+   *  the courseasset publish link. */
   image?: string;
+  imageUrl?: string;
+  imageAssetId?: string;
   /** Answer-specific feedback shown when this option is selected. */
   feedback?: string;
 }
@@ -142,12 +155,14 @@ export interface AssessmentFeedback {
 export interface AssessmentData {
   question: string;
   showTitle?: boolean;
-  options?: McqOption[]; // mcq, gmcq
+  options?: McqOption[]; // mcq, gmcq, checklist
   pairs?: MatchPair[]; // matching
   items?: string[]; // reorder — array order is the correct order
   answers?: string[]; // textInput — acceptable answers
   slider?: SliderConfig; // slider
   feedback?: AssessmentFeedback; // whole-question feedback (all kinds)
+  /** checklist only: how many items the learner may select (1 → single-choice). */
+  selectable?: number;
 }
 
 export function emptyFeedback(): AssessmentFeedback {
@@ -162,6 +177,19 @@ export function defaultAssessmentData(kind: AssessmentKind): AssessmentData {
       return {
         ...base,
         question: '',
+        options: [
+          { text: 'Correct answer', correct: true, feedback: '' },
+          { text: 'Incorrect option', correct: false, feedback: '' },
+          { text: 'Incorrect option', correct: false, feedback: '' },
+        ],
+      };
+    case 'checklist':
+      // Checklist behaves like MCQ but drives the `_selectable` count (how many
+      // items are correct). Default: single-selection, one correct.
+      return {
+        ...base,
+        question: '',
+        selectable: 1,
         options: [
           { text: 'Correct answer', correct: true, feedback: '' },
           { text: 'Incorrect option', correct: false, feedback: '' },
@@ -193,6 +221,17 @@ export function validateAssessment(kind: AssessmentKind, data: AssessmentData): 
       const filled = opts.filter((o) => o.text.trim());
       if (filled.length < 2) issues.push('Add at least two answer options.');
       if (!filled.some((o) => o.correct)) issues.push('Mark at least one option correct.');
+      break;
+    }
+    case 'checklist': {
+      const opts = data.options ?? [];
+      const filled = opts.filter((o) => o.text.trim());
+      if (filled.length < 2) issues.push('Add at least two checklist items.');
+      const correctCount = filled.filter((o) => o.correct).length;
+      if (correctCount < 1) issues.push('Mark at least one item correct.');
+      const selectable = Math.max(1, Number(data.selectable ?? 1));
+      if (selectable > filled.length) issues.push('"Selectable" cannot exceed the number of items.');
+      if (correctCount > selectable) issues.push('More correct items than the "Selectable" limit — raise the limit or unmark items.');
       break;
     }
     case 'matching': {
@@ -242,8 +281,18 @@ export function buildAssessmentFields(kind: AssessmentKind, data: AssessmentData
       text: o.text,
       _shouldBeSelected: !!o.correct,
       feedback: o.feedback ?? '',
-      ...(o.image ? { _graphic: { src: o.image, large: o.image } } : {}),
+      ...(o.image ? { _graphic: { src: o.image, large: o.image, small: o.image, alt: o.text || '', attribution: '' } } : {}),
     }));
+  } else if (kind === 'checklist') {
+    // adapt-laerdal-checklist: `_items[].{ text, altText, _shouldBeSelected,
+    // feedback }` + top-level `_selectable`.
+    patch._items = (data.options ?? []).map((o) => ({
+      text: o.text,
+      altText: o.text,
+      _shouldBeSelected: !!o.correct,
+      feedback: o.feedback ?? '',
+    }));
+    patch._selectable = Math.max(1, Number(data.selectable ?? 1));
   } else if (kind === 'matching') {
     patch._items = (data.pairs ?? []).map((p) => ({
       text: p.prompt,
@@ -291,13 +340,22 @@ export function parseAssessmentData(
   if (kind === 'mcq' || kind === 'gmcq') {
     data.options = items.map((it) => {
       const g = (it._graphic as { large?: string; small?: string; src?: string }) || {};
+      const link = g.large || g.small || g.src || undefined;
       return {
         text: String(it.text ?? ''),
         correct: !!it._shouldBeSelected,
         feedback: it.feedback ? String(it.feedback) : undefined,
-        image: g.large || g.small || g.src || undefined,
+        image: link,
+        imageUrl: link,
       } as McqOption;
     });
+  } else if (kind === 'checklist') {
+    data.options = items.map((it) => ({
+      text: String(it.text ?? ''),
+      correct: !!it._shouldBeSelected,
+      feedback: it.feedback ? String(it.feedback) : undefined,
+    }));
+    data.selectable = Math.max(1, Number(p._selectable ?? 1));
   } else if (kind === 'matching') {
     data.pairs = items.map((it) => {
       const opts = Array.isArray(it._options) ? (it._options as Array<Record<string, unknown>>) : [];

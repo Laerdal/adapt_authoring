@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import CommonCourseTopBarRow from "../components/course/CommonCourseTopBarRow";
-import { getCourseBootstrapData, ensureCoursePreview } from "../api/adaptAuthoring";
+import { getCourseBootstrapData, seedMissingCourseDefaults } from "../api/adaptAuthoring";
 import { useAuth } from "../context/AuthContext";
 
 type DeviceMode = "desktop" | "tablet" | "mobile";
@@ -40,7 +40,9 @@ export default function CoursePreviewPage() {
   const [themeName, setThemeName] = useState("");
   const [menuName, setMenuName] = useState("");
   const [deviceMode, setDeviceMode] = useState<DeviceMode>("desktop");
-  const [previewState, setPreviewState] = useState<"preparing" | "ready" | "error">("preparing");
+  // Track when the one-shot defaults seed has resolved so the iframe waits for
+  // the possibly-issued PUT to complete before the framework loads course.json.
+  const [defaultsReady, setDefaultsReady] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -63,41 +65,34 @@ export default function CoursePreviewPage() {
       }
     })();
 
+    // Heal older courses (or courses freshly created via the minimal
+    // POST /api/courses flow) whose top-level fields the Adapt runtime
+    // dereferences — `_buttons`, `_globals`, `themeVariables._components`, … —
+    // are absent or empty. Idempotent + non-blocking on failure.
+    (async () => {
+      try {
+        await seedMissingCourseDefaults(id);
+      } catch {
+        /* seeding is best-effort */
+      } finally {
+        if (!cancelled) setDefaultsReady(true);
+      }
+    })();
+
     return () => {
       cancelled = true;
     };
   }, [id]);
 
-  // Ensure a render shell exists before loading the preview. On a never-built course
-  // this builds the shell once (matching its current fingerprint); otherwise it is an
-  // instant cache hit. Prevents the blank/"unavailable" state on first preview.
-  useEffect(() => {
-    const tenantId = user?._tenantId;
-    if (!id || !tenantId) return;
-    let cancelled = false;
-    setPreviewState("preparing");
-    (async () => {
-      try {
-        const result = await ensureCoursePreview(tenantId, id);
-        if (!cancelled) setPreviewState(result?.success ? "ready" : "error");
-      } catch {
-        if (!cancelled) setPreviewState("error");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [id, user?._tenantId]);
-
   const pageId = (params.get("pageId") || "").trim();
 
   const previewUrl = useMemo(() => {
-    if (!id || !user?._tenantId) return "";
-    const baseUrl = `/studio/${user._tenantId}/${id}/?embedded=1`;
+    if (!id || !user?._tenantId || !defaultsReady) return "";
+    const baseUrl = `/preview/${user._tenantId}/${id}/`;
     return pageId
-      ? `${baseUrl}&_cs=${Date.now()}#/id/${pageId}`
-      : `${baseUrl}&_cs=${Date.now()}`;
-  }, [id, pageId, user?._tenantId]);
+      ? `${baseUrl}?_cs=${Date.now()}#/id/${pageId}`
+      : `${baseUrl}?_cs=${Date.now()}`;
+  }, [id, pageId, user?._tenantId, defaultsReady]);
 
   const frameSizeClass = useMemo(() => {
     if (deviceMode === "mobile") return "w-[390px]";
@@ -150,11 +145,7 @@ export default function CoursePreviewPage() {
       </div>
 
       <main className="flex-1 overflow-auto bg-[#e9edf2] px-3 md:px-6 py-4">
-        {previewState === "preparing" ? (
-          <div className="h-full flex items-center justify-center text-sm text-[#6b7280]">
-            Preparing preview…
-          </div>
-        ) : previewState === "error" || !previewUrl ? (
+        {!previewUrl ? (
           <div className="h-full flex items-center justify-center text-sm text-[#6b7280]">
             Preview is unavailable for this course.
           </div>

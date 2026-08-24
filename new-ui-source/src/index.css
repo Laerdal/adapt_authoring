@@ -119,6 +119,67 @@
   --primary:          var(--life-primary-500);
   --primary-foreground: var(--life-base-white);
   --samaritan:        var(--life-accent2-500);
+  --card:             var(--life-base-white);
+  --card-foreground:  var(--life-base-black);
+  --destructive:      var(--life-critical-500);
+  --ring:             var(--life-primary-400);
+  --input-background: var(--life-base-white);
+
+  /* ── Storyboard Figma alignment (ADAPT-3842) — Life semantic surface/text tokens.
+     These mirror the naming used in the Figma prototype (`var(--life-color-*)`)
+     so screens ported from Figma render with the correct palette. Values map
+     onto the LIFE primitive scale already declared above. Do not inline hex —
+     always use these tokens. */
+  --life-color-bg-surface-default:         var(--life-base-white);
+  --life-color-bg-surface-subtle:          var(--life-neutral-020);
+  --life-color-bg-surface-hover:           var(--life-neutral-050);
+  --life-color-bg-surface-primary:         var(--life-primary-100);
+  --life-color-bg-surface-primary-subtle:  var(--life-primary-050);
+  --life-color-bg-surface-critical-subtle: var(--life-critical-050);
+  --life-color-bg-surface-warning-subtle:  var(--life-warning-050);
+  --life-color-bg-surface-positive-subtle: var(--life-positive-050);
+  --life-color-bg-surface-samaritan-subtle: color-mix(in oklab, var(--life-accent2-500) 8%, transparent);
+
+  --life-color-bg-fill-primary:            var(--life-primary-500);
+  --life-color-bg-fill-primary-hover:      var(--life-primary-600);
+  --life-color-bg-fill-positive:           var(--life-positive-500);
+  --life-color-bg-fill-warning:            var(--life-warning-500);
+  --life-color-bg-fill-critical:           var(--life-critical-500);
+
+  --life-color-border-default:             var(--life-neutral-200);
+  --life-color-border-primary:             var(--life-primary-500);
+  --life-color-border-subtle:              var(--life-neutral-100);
+  --life-color-border-critical:            var(--life-critical-500);
+  --life-color-border-warning:             var(--life-warning-500);
+
+  --life-color-text-default:               var(--life-neutral-850);
+  --life-color-text-subtle:                var(--life-neutral-500);
+  --life-color-text-muted:                 var(--life-neutral-600);
+  --life-color-text-primary:               var(--life-primary-600);
+  --life-color-text-primary-strong:        var(--life-primary-700);
+  --life-color-text-on-primary:            var(--life-base-white);
+  --life-color-text-positive:              var(--life-positive-500);
+  --life-color-text-warning:               var(--life-warning-500);
+  --life-color-text-critical:              var(--life-critical-600);
+
+  /* Typography aliases used in ported Figma code. */
+  --font-family-primary: "Lato", "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --text-h1:      1.75rem;
+  --text-h2:      1.5rem;
+  --text-h3:      1.25rem;
+  --text-h4:      1rem;
+  --text-p:       0.875rem;
+  --text-label:   0.75rem;
+  --text-button:  0.875rem;
+  --font-weight-regular: 400;
+  --font-weight-medium:  600;
+  --font-weight-bold:    700;
+
+  /* Radius + elevation aliases (shadcn parity). */
+  --radius:       8px;
+  --elevation-sm: 0 1px 2px rgba(15, 41, 52, 0.05), 0 1px 3px rgba(15, 41, 52, 0.06);
+  --elevation-md: 0 4px 8px rgba(15, 41, 52, 0.06), 0 2px 4px rgba(15, 41, 52, 0.05);
+  --elevation-lg: 0 10px 24px rgba(15, 41, 52, 0.10), 0 4px 8px rgba(15, 41, 52, 0.06);
 }
 
 @theme inline {
@@ -131,6 +192,10 @@
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-samaritan: var(--samaritan);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-destructive: var(--destructive);
+  --color-ring: var(--ring);
   --font-sans: "Lato", var(--font-geist-sans), "Noto Sans", sans-serif;
   --font-mono: var(--font-geist-mono);
 }
@@ -253,3 +318,206 @@ html, body {
   direction: ltr;
   unicode-bidi: embed;
 }
+
+/* ────────────────────────────────────────────────────────────────────
+   Storyboard (ADAPT-3842) — shared visual primitives ported from the
+   Figma "Course Creation Center" prototype. Everything uses the
+   `--life-color-*` semantic tokens declared at the top of this file.
+   ──────────────────────────────────────────────────────────────────── */
+
+/* Heading-level chip (H1/H2/H3) — used in the Add Heading dropdown, the
+   TOC and elsewhere the outline level needs to be surfaced. Matches the
+   Figma HeadingDropdown chip: bold, monospace-ish caps, primary tint. */
+.sb-heading-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-family-primary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 2px 6px;
+  min-width: 24px;
+  border-radius: 3px;
+  color: var(--life-color-text-primary);
+  background: var(--life-color-bg-surface-primary);
+  border: 1px solid var(--life-color-border-primary);
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+/* Storyboard menu container (portal dropdowns: Add Heading, Add Content). */
+.sb-menu {
+  background: var(--life-color-bg-surface-default);
+  border: 1px solid var(--life-color-border-subtle);
+  border-radius: var(--radius);
+  box-shadow: var(--elevation-lg);
+  padding: 4px 0;
+  overflow-y: auto;
+}
+.sb-menu-group-label {
+  font-family: var(--font-family-primary);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--life-color-text-subtle);
+  padding: 10px 14px 4px;
+}
+.sb-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 14px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  color: var(--life-color-text-default);
+  font-family: var(--font-family-primary);
+  font-size: 13px;
+  transition: background 0.12s ease;
+}
+.sb-menu-item:hover,
+.sb-menu-item:focus-visible {
+  background: var(--life-color-bg-surface-hover);
+  outline: none;
+}
+.sb-menu-item[aria-selected="true"] {
+  background: var(--life-color-bg-surface-primary-subtle);
+}
+.sb-menu-item .sb-menu-item-icon {
+  color: var(--life-color-text-subtle);
+  flex-shrink: 0;
+}
+
+/* Storyboard toolbar button — the tertiary/ghost bordered buttons used
+   throughout the top bar and document toolbar. */
+.sb-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--life-color-border-subtle);
+  background: var(--life-color-bg-surface-default);
+  color: var(--life-color-text-default);
+  font-family: var(--font-family-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.sb-toolbar-btn:hover:not(:disabled) {
+  background: var(--life-color-bg-surface-hover);
+  border-color: var(--life-color-border-default);
+}
+.sb-toolbar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sb-toolbar-btn-primary {
+  border: none;
+  background: var(--life-color-bg-fill-primary);
+  color: var(--life-color-text-on-primary);
+  font-weight: 600;
+}
+.sb-toolbar-btn-primary:hover:not(:disabled) {
+  background: var(--life-color-bg-fill-primary-hover);
+}
+
+.sb-toolbar-btn-samaritan {
+  border-color: color-mix(in oklab, var(--samaritan) 30%, transparent);
+  background: var(--life-color-bg-surface-samaritan-subtle);
+  color: var(--samaritan);
+}
+.sb-toolbar-btn-samaritan:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--samaritan) 14%, transparent);
+}
+
+/* Storyboard status pill — Draft / In Review / Approved. */
+.sb-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-family: var(--font-family-primary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.12s ease;
+}
+.sb-status-pill--draft {
+  background: var(--life-neutral-050);
+  color: var(--life-neutral-700);
+  border-color: var(--life-neutral-200);
+}
+.sb-status-pill--review {
+  background: var(--life-warning-050);
+  color: var(--life-warning-500);
+  border-color: var(--life-warning-100);
+}
+.sb-status-pill--approved {
+  background: var(--life-positive-050);
+  color: var(--life-positive-500);
+  border-color: var(--life-positive-100);
+}
+
+/* Storyboard panel chrome — Contents (left) and Review Center (right). */
+.sb-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--life-color-bg-surface-subtle);
+}
+.sb-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--life-color-border-subtle);
+  background: var(--life-color-bg-surface-default);
+}
+.sb-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-family-primary);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--life-color-text-subtle);
+}
+.sb-panel-collapse-btn {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--life-color-text-subtle);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.sb-panel-collapse-btn:hover {
+  background: var(--life-color-bg-surface-hover);
+}
+
+/* Storyboard card — comment threads, activity rows, generation results. */
+.sb-card {
+  background: var(--life-color-bg-surface-default);
+  border: 1px solid var(--life-color-border-subtle);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+.sb-card--samaritan {
+  border-color: color-mix(in oklab, var(--samaritan) 30%, transparent);
+  background: var(--life-color-bg-surface-samaritan-subtle);
+}
+

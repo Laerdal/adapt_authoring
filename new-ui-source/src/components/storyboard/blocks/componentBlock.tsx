@@ -18,6 +18,7 @@ import {
   AudioLines,
   Puzzle,
   ClipboardList,
+  Award,
   RefreshCw,
   Sparkles,
   Code,
@@ -63,7 +64,8 @@ export type ComponentKind =
   | 'video'
   | 'audio'
   | 'h5p'
-  | 'laerdalForm';
+  | 'laerdalForm'
+  | 'assessmentResult';
 
 export const COMPONENT_KINDS: ComponentKind[] = [
   'text',
@@ -73,6 +75,7 @@ export const COMPONENT_KINDS: ComponentKind[] = [
   'audio',
   'h5p',
   'laerdalForm',
+  'assessmentResult',
 ];
 
 const META: Record<ComponentKind, { badge: string; Icon: typeof Type; comp: string; suggest: ComponentKind[] }> = {
@@ -83,6 +86,7 @@ const META: Record<ComponentKind, { badge: string; Icon: typeof Type; comp: stri
   audio: { badge: 'Audio', Icon: AudioLines, comp: 'media', suggest: ['video', 'text'] },
   h5p: { badge: 'H5P', Icon: Puzzle, comp: 'h5p', suggest: ['video', 'groupedContent'] },
   laerdalForm: { badge: 'Laerdal Form', Icon: ClipboardList, comp: 'text', suggest: ['text'] },
+  assessmentResult: { badge: 'Assessment Result', Icon: Award, comp: 'assessmentResults', suggest: ['text'] },
 };
 
 const LABEL_TO_KIND: Record<string, ComponentKind> = Object.fromEntries(
@@ -104,6 +108,22 @@ interface FormField {
   placeholder: string;
   mandatory: boolean;
 }
+// adapt-contrib-assessmentResults: bands + retry + completion body. Bound to an
+// Adapt article-level assessment via `_assessmentId` — the user picks the
+// article id (visible in the Page Editor) or leaves it blank to use the first
+// assessment in the course at runtime.
+interface ResultBand {
+  score: number;
+  feedback: string;
+  allowRetry: boolean;
+}
+interface AssessmentResultConfig {
+  assessmentId: string;
+  completionBody: string;
+  retryButton: string;
+  retryFeedback: string;
+  bands: ResultBand[];
+}
 interface ComponentData {
   showTitle: boolean;
   description: string;
@@ -112,6 +132,7 @@ interface ComponentData {
   image?: ImageData; // image card (→ _graphic)
   media?: MediaData; // video/audio card (→ _media)
   fields?: FormField[];
+  result?: AssessmentResultConfig; // assessmentResult card
 }
 
 const FORM_CONTROLS = ['Single-Line Text', 'Multi-Line Text', 'Number', 'Checkbox', 'Dropdown'];
@@ -129,6 +150,20 @@ export function defaultComponentData(kind: ComponentKind): ComponentData {
       return { ...base, media: emptyMediaData() };
     case 'laerdalForm':
       return { ...base, fields: [{ control: 'Single-Line Text', label: 'Your answer', placeholder: 'Type here', mandatory: false }] };
+    case 'assessmentResult':
+      return {
+        ...base,
+        result: {
+          assessmentId: '',
+          completionBody: 'You scored {{scoreAsPercent}}%.',
+          retryButton: 'Try again',
+          retryFeedback: 'Take another go and see if you can improve your score.',
+          bands: [
+            { score: 0, feedback: 'You did not pass. Please review the material and try again.', allowRetry: true },
+            { score: 80, feedback: 'Well done — you passed!', allowRetry: false },
+          ],
+        },
+      };
     default:
       return base;
   }
@@ -184,6 +219,14 @@ function AssetPreview({ assetType, value }: { assetType: AssetKind; value: Asset
   if (!src) return null;
   if (assetType === 'image') return <img src={src} alt="" className="max-h-48 w-full rounded object-contain" />;
   if (assetType === 'audio') return <audio src={src} controls className="w-full" />;
+  if (assetType === 'h5p') {
+    // H5P files (.h5p) can't be played inline in the editor — show a badge.
+    return (
+      <div className="flex items-center gap-2 rounded border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        <Puzzle className="h-4 w-4" /> H5P package selected
+      </div>
+    );
+  }
   return <VideoView src={src} className="max-h-64 w-full rounded" />;
 }
 
@@ -392,10 +435,22 @@ function ComponentBody({ kind, data, set }: { kind: ComponentKind; data: Compone
   }
 
   if (kind === 'h5p') {
+    // laerdal-h5p supports EITHER a `.h5p` DAM asset (→ `h5pAsset`) OR an
+    // external embed URL (→ `_h5pExternalAsset`). The `.external` flag on the
+    // stored AssetRef distinguishes the two; the picker below only accepts
+    // `.h5p` uploads so the DAM branch is never fed an unsupported file.
+    const asset = data.media?.asset;
     return (
-      <div>
+      <div className="space-y-2">
         <span className={labelCls}>H5P source</span>
-        <AssetField assetType="video" value={data.media?.asset} onChange={(a) => set({ ...data, media: { ...(data.media ?? emptyMediaData()), asset: a } })} />
+        <AssetField
+          assetType="h5p"
+          value={asset}
+          onChange={(a) => set({ ...data, media: { ...(data.media ?? emptyMediaData()), asset: a } })}
+        />
+        <p className="text-[11px] italic text-muted-foreground">
+          Choose a <code>.h5p</code> package from the asset library, upload one, or paste an external URL.
+        </p>
       </div>
     );
   }
@@ -438,6 +493,110 @@ function ComponentBody({ kind, data, set }: { kind: ComponentKind; data: Compone
         <button type="button" onClick={() => setFields([...fields, { control: 'Single-Line Text', label: '', placeholder: '', mandatory: false }])} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
           <Plus className="h-3 w-3" /> Add form control
         </button>
+      </div>
+    );
+  }
+
+  if (kind === 'assessmentResult') {
+    const r = data.result ?? {
+      assessmentId: '',
+      completionBody: '',
+      retryButton: 'Try again',
+      retryFeedback: '',
+      bands: [] as ResultBand[],
+    };
+    const setR = (patch: Partial<AssessmentResultConfig>) => set({ ...data, result: { ...r, ...patch } });
+    const setBands = (bands: ResultBand[]) => setR({ bands });
+    const bands = r.bands ?? [];
+    return (
+      <div className="space-y-2">
+        <label className="block">
+          <span className={labelCls}>Assessment ID (article id)</span>
+          <input
+            value={r.assessmentId}
+            placeholder="Leave blank to bind to the first assessment on the page"
+            onKeyDown={stop}
+            onChange={(e) => setR({ assessmentId: e.target.value })}
+            className={inputCls}
+          />
+        </label>
+        <label className="block">
+          <span className={labelCls}>Completion body</span>
+          <textarea
+            value={r.completionBody}
+            placeholder="e.g. You scored {{scoreAsPercent}}%."
+            rows={2}
+            onKeyDown={stop}
+            onChange={(e) => setR({ completionBody: e.target.value })}
+            className={`${inputCls} resize-y`}
+          />
+          <span className="mt-0.5 block text-[11px] italic text-muted-foreground">
+            Supports {'{{score}}'}, {'{{scoreAsPercent}}'}, {'{{maxScore}}'}, {'{{correct}}'}, {'{{questionCount}}'}.
+          </span>
+        </label>
+        <div className="rounded border border-border p-2">
+          <div className={labelCls}>Score bands</div>
+          {bands.map((b, i) => (
+            <div key={i} className="mb-2 grid grid-cols-[80px_1fr_auto] gap-2 rounded border border-border p-2">
+              <label className="block">
+                <span className={labelCls}>Min %</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={b.score}
+                  onKeyDown={stop}
+                  onChange={(e) => setBands(bands.map((x, j) => (j === i ? { ...x, score: Math.max(0, Math.min(100, Number(e.target.value) || 0)) } : x)))}
+                  className={inputCls}
+                />
+              </label>
+              <label className="block">
+                <span className={labelCls}>Feedback</span>
+                <textarea
+                  value={b.feedback}
+                  rows={2}
+                  onKeyDown={stop}
+                  onChange={(e) => setBands(bands.map((x, j) => (j === i ? { ...x, feedback: e.target.value } : x)))}
+                  className={`${inputCls} resize-y`}
+                />
+                <label className="mt-1 flex items-center gap-1.5 text-xs text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={b.allowRetry}
+                    onChange={(e) => setBands(bands.map((x, j) => (j === i ? { ...x, allowRetry: e.target.checked } : x)))}
+                    className="h-4 w-4 accent-[color:var(--primary)]"
+                  />
+                  Allow retry
+                </label>
+              </label>
+              <button
+                type="button"
+                aria-label="Remove band"
+                onClick={() => setBands(bands.filter((_, j) => j !== i))}
+                className="self-start text-muted-foreground hover:text-foreground"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setBands([...bands, { score: 0, feedback: '', allowRetry: false }])}
+            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+          >
+            <Plus className="h-3 w-3" /> Add band
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-2 rounded border border-border p-2">
+          <label className="block">
+            <span className={labelCls}>Retry button label</span>
+            <input value={r.retryButton} onKeyDown={stop} onChange={(e) => setR({ retryButton: e.target.value })} className={inputCls} />
+          </label>
+          <label className="block">
+            <span className={labelCls}>Retry feedback</span>
+            <input value={r.retryFeedback} onKeyDown={stop} onChange={(e) => setR({ retryFeedback: e.target.value })} className={inputCls} />
+          </label>
+        </div>
       </div>
     );
   }
@@ -585,6 +744,41 @@ function ComponentPreview({ kind, title, data }: { kind: ComponentKind; title: s
               )}
             </label>
           ))}
+        </div>
+        {instruction}
+      </div>
+    );
+  }
+
+  if (kind === 'assessmentResult') {
+    const r = data.result;
+    const bands = r?.bands ?? [];
+    return (
+      <div>
+        {heading}
+        <div className="rounded-lg border border-dashed border-border bg-muted/40 p-3">
+          <div className="mb-2 inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <Award className="h-3.5 w-3.5" /> Assessment result
+          </div>
+          {r?.completionBody ? (
+            <p className="whitespace-pre-wrap text-sm text-foreground">{r.completionBody}</p>
+          ) : (
+            <p className="text-sm italic text-muted-foreground">Completion body not set.</p>
+          )}
+          {bands.length > 0 && (
+            <ul className="mt-2 space-y-1 text-xs">
+              {bands.map((b, i) => (
+                <li key={i} className="flex items-baseline gap-2">
+                  <span className="min-w-[3rem] rounded bg-background px-1 py-0.5 text-[10px] font-semibold text-muted-foreground">≥ {b.score}%</span>
+                  <span className="text-foreground">{b.feedback || <span className="italic text-muted-foreground">(no feedback)</span>}</span>
+                  {b.allowRetry && <span className="text-muted-foreground">· retry</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+          {r?.assessmentId && (
+            <div className="mt-2 text-[11px] text-muted-foreground">Bound to assessment id: <code>{r.assessmentId}</code></div>
+          )}
         </div>
         {instruction}
       </div>
