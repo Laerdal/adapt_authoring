@@ -175,7 +175,8 @@ export default function CourseCard({
             <button
               type="button"
               onClick={openModal}
-              aria-label="Edit course"
+              aria-label="Edit course details"
+              title="Edit course details"
               className="absolute top-2.5 right-2.5 p-1.5 rounded-lg bg-white/90 hover:bg-white text-[#2d6fa8] shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -270,7 +271,8 @@ export default function CourseCard({
             <button
               type="button"
               onClick={openModal}
-              aria-label="Edit course"
+              aria-label="Edit course details"
+              title="Edit course details"
               className="p-2 rounded-lg border border-[#e5e7eb] bg-white hover:bg-[#f3f4f6] text-[#6b7280] hover:text-[#2d6fa8] transition-colors opacity-0 group-hover:opacity-100"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
