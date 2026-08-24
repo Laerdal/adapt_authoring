@@ -71,13 +71,11 @@ export default function HomePage() {
 
   // Search / filter / sort / view
   const [search, setSearch]           = useState('')
-  const [themeFilter, setThemeFilter] = useState<Theme | 'All'>('All')
   const [themeOptions, setThemeOptions] = useState<Theme[]>(FALLBACK_THEME_OPTIONS)
   const [menuOptions, setMenuOptions] = useState<string[]>(FALLBACK_MENU_OPTIONS)
   const [sort, setSort]               = useState('recent')
   const [view, setView]               = useState<'grid' | 'list'>('grid')
   const [sortOpen, setSortOpen]       = useState(false)
-  const [filterOpen, setFilterOpen]   = useState(false)
   const [tagFilterOpen, setTagFilterOpen] = useState(false)
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [tagSearch, setTagSearch]         = useState('')
@@ -161,7 +159,6 @@ export default function HomePage() {
     function handleMouseDown(e: MouseEvent) {
       if (toolbarRef.current && !toolbarRef.current.contains(e.target as Node)) {
         setSortOpen(false)
-        setFilterOpen(false)
         setTagFilterOpen(false)
       }
     }
@@ -273,9 +270,8 @@ export default function HomePage() {
   }
 
   function clearSearch() { setSearch('') }
-  function clearTheme()  { setThemeFilter('All') }
   function clearTags()   { setSelectedTags([]) }
-  function clearAll()    { setSearch(''); setThemeFilter('All'); setSelectedTags([]) }
+  function clearAll()    { setSearch(''); setSelectedTags([]) }
 
   function toggleTag(tag: string) {
     setSelectedTags((prev) => (
@@ -306,12 +302,11 @@ export default function HomePage() {
     let list = courses.filter((c) => {
       const q = search.trim().toLowerCase()
       const matchSearch = q === '' || c.title.toLowerCase().includes(q)
-      const matchTheme  = themeFilter === 'All' || c.theme === themeFilter
       const courseTagLabels = c.tags.map((courseTag) => normalizeTagValue(courseTag)).filter(Boolean)
       const matchTags = selectedTags.length === 0 || selectedTags.every((selectedTag) => (
         courseTagLabels.some((courseTag) => courseTag.toLowerCase() === selectedTag.toLowerCase())
       ))
-      return matchSearch && matchTheme && matchTags
+      return matchSearch && matchTags
     })
     switch (sort) {
       case 'alpha-asc':  list = [...list].sort((a, b) => a.title.localeCompare(b.title)); break
@@ -320,10 +315,10 @@ export default function HomePage() {
       default:           list = [...list].sort((a, b) => b.savedDateTs - a.savedDateTs);  break // recent
     }
     return list
-  }, [courses, search, themeFilter, selectedTags, sort])
+  }, [courses, search, selectedTags, sort])
 
   const activeSort = SORT_OPTIONS.find((o) => o.value === sort)!
-  const hasFilters = search.trim() !== '' || themeFilter !== 'All' || selectedTags.length > 0
+  const hasFilters = search.trim() !== '' || selectedTags.length > 0
 
   return (
     <>
@@ -406,7 +401,7 @@ export default function HomePage() {
               <div className="relative shrink-0">
                 <button
                   type="button"
-                  onClick={() => { setTagFilterOpen((open) => !open); setFilterOpen(false); setSortOpen(false); setTagSearch('') }}
+                  onClick={() => { setTagFilterOpen((open) => !open); setSortOpen(false); setTagSearch('') }}
                   className={`flex items-center gap-1.5 px-3 py-2.5 text-sm border rounded-lg transition-colors whitespace-nowrap ${
                     selectedTags.length > 0
                       ? 'border-[#2d6fa8] bg-[#dbeeff] text-[#2d6fa8] font-medium'
@@ -479,65 +474,11 @@ export default function HomePage() {
             </div>
 
             <div className="flex items-center gap-2 ml-auto sm:ml-0">
-              {/* Theme filter */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => { setFilterOpen((o) => !o); setSortOpen(false) }}
-                  className={`flex items-center gap-1.5 px-3 py-2.5 text-sm border rounded-lg transition-colors whitespace-nowrap ${
-                    themeFilter !== 'All'
-                      ? 'border-[#2d6fa8] bg-[#dbeeff] text-[#2d6fa8] font-medium'
-                      : 'bg-white border-[#e5e7eb] text-[#374151] hover:bg-[#f9fafb]'
-                  }`}
-                >
-                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18M7 8h10M11 12h2" />
-                  </svg>
-                  <span className="hidden sm:inline">{themeFilter === 'All' ? 'Filter' : themeFilter}</span>
-                  {themeFilter !== 'All' && (
-                    <span className="w-4 h-4 rounded-full bg-[#2d6fa8] text-white text-[10px] font-bold flex items-center justify-center">1</span>
-                  )}
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${filterOpen ? 'rotate-180' : ''}`}>
-                    <path d="M6 9l6 6 6-6" />
-                  </svg>
-                </button>
-                {filterOpen && (
-                  <div className="absolute right-0 mt-1 w-52 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-20 py-1">
-                    <p className="px-3 py-1.5 text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">Filter by theme</p>
-                    {(['All', ...themeOptions]).map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => { setThemeFilter(opt as Theme | 'All'); setFilterOpen(false) }}
-                        className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${
-                          themeFilter === opt ? 'bg-[#dbeeff] text-[#2d6fa8] font-medium' : 'text-[#374151] hover:bg-[#f9fafb]'
-                        }`}
-                      >
-                        {opt === 'All' ? 'All Themes' : opt}
-                        {themeFilter === opt && (
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                        )}
-                      </button>
-                    ))}
-                    {themeFilter !== 'All' && (
-                      <>
-                        <div className="border-t border-[#f3f4f6] my-1" />
-                        <button type="button" onClick={() => { clearTheme(); setFilterOpen(false) }} className="w-full text-left px-3 py-2 text-sm text-[#ef4444] hover:bg-[#fef2f2] transition-colors">
-                          Clear filter
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-
               {/* Sort dropdown */}
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => { setSortOpen((o) => !o); setFilterOpen(false) }}
+                  onClick={() => { setSortOpen((o) => !o) }}
                   className="flex items-center gap-1.5 px-3 py-2.5 text-sm text-[#374151] bg-white border border-[#e5e7eb] rounded-lg hover:bg-[#f9fafb] transition-colors whitespace-nowrap"
                 >
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -607,16 +548,6 @@ export default function HomePage() {
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#f3f4f6] text-xs text-[#374151] font-medium">
                   Search: <span className="text-[#2d6fa8]">"{search.trim()}"</span>
                   <button type="button" onClick={clearSearch} aria-label="Remove search filter" className="text-[#9ca3af] hover:text-[#374151] ml-0.5">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
-                  </button>
-                </span>
-              )}
-              {themeFilter !== 'All' && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#dbeeff] text-xs text-[#2d6fa8] font-medium">
-                  Theme: {themeFilter}
-                  <button type="button" onClick={clearTheme} aria-label="Remove theme filter" className="text-[#2d6fa8] hover:text-[#1e4d73] ml-0.5">
                     <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
                       <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                     </svg>
