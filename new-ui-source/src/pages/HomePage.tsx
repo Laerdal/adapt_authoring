@@ -33,7 +33,6 @@ const SORT_OPTIONS = [
   { label: 'Recently Modified', value: 'recent'    },
   { label: 'Alphabetical A–Z',  value: 'alpha-asc' },
   { label: 'Alphabetical Z–A',  value: 'alpha-desc'},
-  { label: 'Date Created',      value: 'date'      },
 ]
 const FALLBACK_THEME_OPTIONS: Theme[] = ['LIFE Theme']
 const FALLBACK_MENU_OPTIONS = ['LIFE Menu']
@@ -311,7 +310,6 @@ export default function HomePage() {
     switch (sort) {
       case 'alpha-asc':  list = [...list].sort((a, b) => a.title.localeCompare(b.title)); break
       case 'alpha-desc': list = [...list].sort((a, b) => b.title.localeCompare(a.title)); break
-      case 'date':       list = [...list].sort((a, b) => a.savedDateTs - b.savedDateTs);  break
       default:           list = [...list].sort((a, b) => b.savedDateTs - a.savedDateTs);  break // recent
     }
     return list
