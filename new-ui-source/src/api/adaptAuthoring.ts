@@ -3210,11 +3210,18 @@ export async function restoreCdnLink(
   courseid: string,
   cdnid: string,
   versionfolder: string,
-): Promise<CdnLinkEntry[]> {
-  const result = await apiClient.get<{ data?: CdnLinkEntry[] }>(
+): Promise<boolean> {
+  // Backend `handleCDNRestoreLink` shells out to `cdndeploy mv` and returns
+  // whatever JSON.parse'd stdout produces — historically an array of link
+  // rows, but on some CLI versions/paths it's an object or a status string,
+  // and it isn't always wrapped in a `{ success }` envelope. The caller only
+  // needs to know whether the request succeeded (HTTP 2xx); apiClient.request
+  // already throws on non-2xx, so reaching this line at all IS the success
+  // signal — don't gate on a `success` field that may not be present.
+  await apiClient.get(
     `/api/cdn/restoreLink/${encodeURIComponent(groupid)}/${encodeURIComponent(courseid)}/${encodeURIComponent(cdnid)}/${encodeURIComponent(versionfolder)}`,
   );
-  return Array.isArray(result?.data) ? result.data : [];
+  return true;
 }
 
 export async function setCdnLinkExpiry(
@@ -3223,11 +3230,16 @@ export async function setCdnLinkExpiry(
   cdnid: string,
   versionfolder: string,
   expiredate: string,
-): Promise<CdnLinkEntry[]> {
-  const result = await apiClient.get<{ data?: CdnLinkEntry[] }>(
+): Promise<boolean> {
+  // Backend `handleCDNSaveLinks` inserts the row and now returns the
+  // refreshed rows for the key, but the caller only needs a success signal —
+  // the page reloads the previous-links table separately, which is the
+  // source of truth for what's displayed. See restoreCdnLink comment for
+  // why we don't gate on a `success` field in the payload.
+  await apiClient.get(
     `/api/cdn/setExpiry/${encodeURIComponent(groupid)}/${encodeURIComponent(courseid)}/${encodeURIComponent(cdnid)}/${encodeURIComponent(versionfolder)}/${encodeURIComponent(expiredate)}`,
   );
-  return Array.isArray(result?.data) ? result.data : [];
+  return true;
 }
 
 // ── Users & roles ─────────────────────────────────────────────────────────────
