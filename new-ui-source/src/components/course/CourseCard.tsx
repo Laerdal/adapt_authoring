@@ -97,7 +97,7 @@ export default function CourseCard({
     <div ref={menuRef} className="absolute z-30 bg-white border border-[#e5e7eb] rounded-xl shadow-xl py-1 w-52"
       style={view === "grid" ? { top: "calc(100% + 4px)", right: 0 } : { top: "calc(100% + 4px)", right: 0 }}
     >
-      {/* Copy */}
+      {/* Duplicate Course */}
       <button
         type="button"
         onClick={() => handleMenuAction(onCopy)}
@@ -107,7 +107,7 @@ export default function CourseCard({
           <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
           <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
         </svg>
-        Copy
+        Duplicate Course
       </button>
 
       {/* Copy ID */}
@@ -124,21 +124,6 @@ export default function CourseCard({
       </button>
 
       <div className="border-t border-[#f3f4f6] my-1" />
-
-      {/* Delete */}
-      <button
-        type="button"
-        onClick={() => handleMenuAction(() => setDeleteOpen(true))}
-        className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-[#ef4444] hover:bg-[#fef2f2] transition-colors"
-      >
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="3 6 5 6 21 6" />
-          <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-          <path d="M10 11v6M14 11v6" />
-          <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-        </svg>
-        Delete
-      </button>
     </div>
   );
 
@@ -172,17 +157,36 @@ export default function CourseCard({
           {/* Thumbnail */}
           <div className="h-44 flex items-center justify-center relative rounded-t-xl overflow-hidden" style={thumbnailStyle}>
             {!imageUrl && <span className="w-12 h-12">{placeholderIcon}</span>}
+            <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 transition-opacity">
             <button
               type="button"
               onClick={openModal}
-              aria-label="Edit course"
-              className="absolute top-2.5 right-2.5 p-1.5 rounded-lg bg-white/90 hover:bg-white text-[#2d6fa8] shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+              aria-label="Edit course details"
+              title="Edit course details"
+              className="p-1.5 rounded-lg bg-white/90 hover:bg-white text-[#2d6fa8] shadow-sm"
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
               </svg>
             </button>
+            <button
+              type="button"
+              onClick={(e) => { e.preventDefault(); setDeleteOpen(true); }}
+              aria-label="Delete course"
+              title="Delete course"
+              className="p-1.5 rounded-lg bg-white/90 hover:bg-white text-[#ef4444] shadow-sm"
+            >
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round">
+                {/* delete-icon.svg */}
+                <path d="M2 4H14" />
+                <path d="M12.6673 4V13.3333C12.6673 14 12.0007 14.6667 11.334 14.6667H4.66732C4.00065 14.6667 3.33398 14 3.33398 13.3333V4" />
+                <path d="M5.33398 3.99999V2.66666C5.33398 1.99999 6.00065 1.33333 6.66732 1.33333H9.33398C10.0007 1.33333 10.6673 1.99999 10.6673 2.66666V3.99999" />
+                <path d="M6.66602 7.33333V11.3333" />
+                <path d="M9.33398 7.33333V11.3333" />
+              </svg>
+            </button>
+            </div>
           </div>
 
           {/* Body */}
@@ -270,12 +274,30 @@ export default function CourseCard({
             <button
               type="button"
               onClick={openModal}
-              aria-label="Edit course"
-              className="p-2 rounded-lg border border-[#e5e7eb] bg-white hover:bg-[#f3f4f6] text-[#6b7280] hover:text-[#2d6fa8] transition-colors opacity-0 group-hover:opacity-100"
+              aria-label="Edit course details"
+              title="Edit course details"
+              className="p-2 rounded-lg border border-[#e5e7eb] bg-white hover:bg-[#f3f4f6] text-[#6b7280] hover:text-[#2d6fa8] transition-colors"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+            </button>
+
+            <button
+              type="button"
+              onClick={(e) => { e.preventDefault(); setDeleteOpen(true); }}
+              aria-label="Delete course"
+              title="Delete course"
+              className="p-2 rounded-lg border border-[#e5e7eb] bg-white hover:bg-[#fef2f2] text-[#6b7280] hover:text-[#ef4444] transition-colors"
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.33333" strokeLinecap="round" strokeLinejoin="round">
+                {/* delete-icon.svg */}
+                <path d="M2 4H14" />
+                <path d="M12.6673 4V13.3333C12.6673 14 12.0007 14.6667 11.334 14.6667H4.66732C4.00065 14.6667 3.33398 14 3.33398 13.3333V4" />
+                <path d="M5.33398 3.99999V2.66666C5.33398 1.99999 6.00065 1.33333 6.66732 1.33333H9.33398C10.0007 1.33333 10.6673 1.99999 10.6673 2.66666V3.99999" />
+                <path d="M6.66602 7.33333V11.3333" />
+                <path d="M9.33398 7.33333V11.3333" />
               </svg>
             </button>
 
@@ -301,7 +323,7 @@ export default function CourseCard({
           <div className={`bg-white rounded-2xl shadow-xl flex flex-col overflow-hidden ${cropSrc ? "w-full max-w-xl" : "w-full max-w-md"}`}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-[#e5e7eb] shrink-0">
               <h2 className="font-semibold text-[#111827] text-base">
-                {cropSrc ? "Crop & Adjust Image" : "Edit Course"}
+                {cropSrc ? "Crop & Adjust Image" : "Edit Course Details"}
               </h2>
               {!cropSrc && (
                 <button type="button" onClick={() => setModalOpen(false)} className="p-1.5 rounded-lg hover:bg-[#f3f4f6] text-[#6b7280] transition-colors" aria-label="Close">

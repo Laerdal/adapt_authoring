@@ -285,10 +285,7 @@ function InlineAddRow({
       >
         <span className="w-[14px] h-[14px] mr-[6px]" aria-hidden="true" />
         <span className="w-[18px] mr-[6px] shrink-0 flex items-center justify-center">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
+          <MaskIcon file="add-icon.svg" className="block w-[12px] h-[12px] shrink-0 bg-current" />
         </span>
         <span className="text-[13px] font-medium">{label}</span>
       </button>
@@ -691,12 +688,7 @@ export default function CourseOutlinePanel({
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm flex flex-col overflow-hidden">
             <div className="px-6 pt-6 pb-4 flex flex-col items-center text-center">
               <div className="w-12 h-12 rounded-full bg-[#fee2e2] flex items-center justify-center mb-4">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-                  <path d="M10 11v6M14 11v6" />
-                  <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
-                </svg>
+                <MaskIcon file="delete-icon.svg" className="block w-[22px] h-[22px] shrink-0 bg-[#dc2626]" />
               </div>
               <h2 className="font-semibold text-[#111827] text-base mb-1">Delete {deleteLabel(deleteTarget.level)}</h2>
               <p className="text-sm text-[#6b7280]">
