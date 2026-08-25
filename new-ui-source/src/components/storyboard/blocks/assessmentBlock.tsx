@@ -106,12 +106,22 @@ function FeedbackGroup({ fb, set }: { fb: AssessmentFeedback; set: (f: Assessmen
 // without re-fetching).
 function OptionImagePicker({ value, onChange }: { value: McqOption; onChange: (patch: Partial<McqOption>) => void }) {
   const [picking, setPicking] = useState(false);
-  const preview = value.imageUrl || value.image || '';
+  // `imageUrl` is only ever set when the persisted link is directly loadable
+  // (see parseAssessmentData) — a DAM-picked `course/assets/<file>` link is
+  // NOT servable, so it must never be used as an `<img src>`. Falling back to
+  // `value.image` here would resurrect the broken-image icon on round-trip.
+  const hasImage = !!(value.imageUrl || value.image);
   return (
     <div className="mb-1 rounded border border-dashed border-border p-2">
-      {preview ? (
+      {hasImage ? (
         <div className="flex items-start gap-2">
-          <img src={preview} alt={value.text || ''} className="h-20 w-24 shrink-0 rounded object-cover" />
+          {value.imageUrl ? (
+            <img src={value.imageUrl} alt={value.text || ''} className="h-20 w-24 shrink-0 rounded object-cover" />
+          ) : (
+            <div className="flex h-20 w-24 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground">
+              <ImageIcon className="h-6 w-6" />
+            </div>
+          )}
           <div className="min-w-0 flex-1">
             <div className="truncate text-[11px] text-muted-foreground" title={value.image}>{value.image}</div>
             <div className="mt-1 flex gap-1">
