@@ -444,10 +444,15 @@ export function CdnDeploymentPage({
     if (!cfg) return;
     setRestoringEntry(entry.entry);
     try {
-      const result = await restoreCdnLink(cfg.groupid, cfg.courseid, cfg.cdnid, entry.entry);
-      if (!result.length) throw new Error("No links found.");
+      // Success is signalled by the request not throwing (apiClient.request
+      // throws on non-2xx). The exact payload shape from `cdndeploy mv`
+      // varies by CLI version, so we don't try to shape-check it — instead
+      // we reload the previous-links table below, which is the source of
+      // truth for what's currently in storage.
+      await restoreCdnLink(cfg.groupid, cfg.courseid, cfg.cdnid, entry.entry);
       setRestoredEntries((prev) => new Set(prev).add(entry.entry));
       setToast({ type: "success", message: "Link restored successfully" });
+      void loadPreviousLinks(cfg);
     } catch {
       setToast({
         type: "error",
@@ -462,11 +467,12 @@ export function CdnDeploymentPage({
     if (!cfg || !expiryDate) return;
     setExpirySaving(true);
     try {
-      const result = await setCdnLinkExpiry(cfg.groupid, cfg.courseid, cfg.cdnid, entry.entry, expiryDate);
-      if (!result.length) throw new Error("No links found.");
+      // See handleRestore for why we don't shape-check the response.
+      await setCdnLinkExpiry(cfg.groupid, cfg.courseid, cfg.cdnid, entry.entry, expiryDate);
       setToast({ type: "success", message: "Expiry date set successfully for this version" });
       setExpiryTarget(null);
       setExpiryDate("");
+      void loadPreviousLinks(cfg);
     } catch (err) {
       setToast({ type: "error", message: err instanceof Error ? err.message : "Failed to set expiry." });
     } finally {
