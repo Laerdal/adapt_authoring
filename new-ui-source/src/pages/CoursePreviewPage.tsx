@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import CommonCourseTopBarRow from "../components/course/CommonCourseTopBarRow";
-import { getCourseBootstrapData, seedMissingCourseDefaults } from "../api/adaptAuthoring";
+import { getCourseBootstrapData, seedMissingCourseDefaults, ensureCoursePreview } from "../api/adaptAuthoring";
 import { useAuth } from "../context/AuthContext";
 
 type DeviceMode = "desktop" | "tablet" | "mobile";
@@ -43,6 +43,7 @@ export default function CoursePreviewPage() {
   // Track when the one-shot defaults seed has resolved so the iframe waits for
   // the possibly-issued PUT to complete before the framework loads course.json.
   const [defaultsReady, setDefaultsReady] = useState(false);
+  const [previewState, setPreviewState] = useState<"preparing" | "ready" | "error">("preparing");
 
   useEffect(() => {
     if (!id) return;
@@ -84,15 +85,36 @@ export default function CoursePreviewPage() {
     };
   }, [id]);
 
+  // Ensure a render shell exists before loading the preview. On a never-built course
+  // this builds the shell once (matching its current fingerprint); otherwise it is an
+  // instant cache hit. Prevents the blank/"unavailable" state on first preview.
+  useEffect(() => {
+    const tenantId = user?._tenantId;
+    if (!id || !tenantId) return;
+    let cancelled = false;
+    setPreviewState("preparing");
+    (async () => {
+      try {
+        const result = await ensureCoursePreview(tenantId, id);
+        if (!cancelled) setPreviewState(result?.success ? "ready" : "error");
+      } catch {
+        if (!cancelled) setPreviewState("error");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, user?._tenantId]);
+
   const pageId = (params.get("pageId") || "").trim();
 
   const previewUrl = useMemo(() => {
-    if (!id || !user?._tenantId || !defaultsReady) return "";
-    const baseUrl = `/preview/${user._tenantId}/${id}/`;
+    if (!id || !user?._tenantId || !defaultsReady || previewState !== "ready") return "";
+    const baseUrl = `/studio/${user._tenantId}/${id}/?embedded=1`;
     return pageId
-      ? `${baseUrl}?_cs=${Date.now()}#/id/${pageId}`
-      : `${baseUrl}?_cs=${Date.now()}`;
-  }, [id, pageId, user?._tenantId, defaultsReady]);
+      ? `${baseUrl}&_cs=${Date.now()}#/id/${pageId}`
+      : `${baseUrl}&_cs=${Date.now()}`;
+  }, [id, pageId, user?._tenantId, defaultsReady, previewState]);
 
   const frameSizeClass = useMemo(() => {
     if (deviceMode === "mobile") return "w-[390px]";
@@ -146,18 +168,20 @@ export default function CoursePreviewPage() {
 
       <main className="flex-1 overflow-auto bg-[#e9edf2] px-3 md:px-6 py-4">
         {!previewUrl ? (
-          // Three distinct states share the empty-preview slot:
-          //   1. "unavailable"  — no `id` in the URL, or no tenant on the user.
-          //      Nothing to preview, and no seeding will ever make it appear.
-          //   2. "loading"      — id + tenant are known but `defaultsReady` is
-          //      still false while `seedMissingCourseDefaults` runs. Showing
-          //      "unavailable" here mis-communicates a transient state.
-          //   3. (implicit)     — once `defaultsReady` flips, `previewUrl` is
-          //      built and the iframe branch below renders instead.
+          // Four distinct states share the empty-preview slot:
+          //   1. "unavailable"  — no `id` in the URL, no tenant on the user, or the
+          //      Studio render-shell build failed (`previewState === "error"`).
+          //      Nothing to preview, and no amount of waiting will make it appear.
+          //   2. "preparing"    — id + tenant are known but `defaultsReady` is still
+          //      false while `seedMissingCourseDefaults` runs, or the Studio shell is
+          //      still building on a cache miss. Showing "unavailable" here would
+          //      mis-communicate a transient state.
+          //   3. (implicit)     — once both flip ready, `previewUrl` is built and the
+          //      iframe branch below renders instead.
           <div className="h-full flex items-center justify-center text-sm text-[#6b7280]">
-            {(!id || !user?._tenantId)
+            {(!id || !user?._tenantId || previewState === "error")
               ? "Preview is unavailable for this course."
-              : "Loading preview\u2026"}
+              : "Preparing preview…"}
           </div>
         ) : (
           <div className="h-full w-full flex justify-center">
