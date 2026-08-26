@@ -3274,7 +3274,7 @@ export const CDN_STORAGE_CONTAINERS = ["cdn-esim-dev", "cdn-esim-prod", "cdn-esi
 
 // Schema defaults (adapt-cdn-config/properties.schema) used when the extension
 // hasn't been configured on this course yet.
-const DEFAULT_CDN_DEPLOYMENT_SETTINGS: CdnDeploymentSettings = {
+export const DEFAULT_CDN_DEPLOYMENT_SETTINGS: CdnDeploymentSettings = {
   isEnabled: false,
   cdnid: CDN_STORAGE_CONTAINERS[0],
   groupid: "default-project",

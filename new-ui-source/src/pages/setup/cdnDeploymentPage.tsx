@@ -10,6 +10,7 @@ import {
   restoreCdnLink,
   setCdnLinkExpiry,
   CDN_STORAGE_CONTAINERS,
+  DEFAULT_CDN_DEPLOYMENT_SETTINGS,
   type CdnDeploymentSettings,
   type CdnLinkEntry,
 } from "../../api/adaptAuthoring";
@@ -263,7 +264,9 @@ export function CdnDeploymentPage({
   const logIdRef = useRef(0);
 
   const [linksLoading, setLinksLoading] = useState(false);
-  const [links, setLinks] = useState<DisplayLinkEntry[]>([]);
+  // null = not yet fetched. Only an explicit "Get Previous Links" click should
+  // populate this — saving the config or triggering a build must not.
+  const [links, setLinks] = useState<DisplayLinkEntry[] | null>(null);
   const [restoringEntry, setRestoringEntry] = useState<string | null>(null);
   const [restoredEntries, setRestoredEntries] = useState<Set<string>>(new Set());
   const [expiryTarget, setExpiryTarget] = useState<string | null>(null);
@@ -308,7 +311,15 @@ export function CdnDeploymentPage({
         setCfg(settings);
         setSavedSnapshot(settings);
         setCdnCliVersion(version);
-        if (settings.isEnabled) void loadPreviousLinks(settings);
+      } catch {
+        // Without this, a failed fetch left `cfg` null forever and the page
+        // was stuck on the loading spinner indefinitely — fall back to the
+        // schema defaults (extension effectively "not configured") so the
+        // page always renders, and let the user know the load failed.
+        if (cancelled) return;
+        setCfg(DEFAULT_CDN_DEPLOYMENT_SETTINGS);
+        setSavedSnapshot(DEFAULT_CDN_DEPLOYMENT_SETTINGS);
+        setToast({ type: "error", message: "Couldn't load CDN deployment settings. Please refresh and try again." });
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -336,8 +347,9 @@ export function CdnDeploymentPage({
     try {
       await saveCdnDeploymentSettings(courseId, next);
       setSavedSnapshot(next);
-      if (next.isEnabled) void loadPreviousLinks(next);
-      else setLinks([]);
+      // Saving config must not auto-fetch/show previous links (QA:
+      // that list should only populate on an explicit button click).
+      setLinks(null);
       return true;
     } catch {
       setToast({ type: "error", message: "Couldn't save. Please try again." });
@@ -387,6 +399,10 @@ export function CdnDeploymentPage({
     if (!cfg || building) return;
     setBuilding(true);
     setLogEntries([]);
+    // Clear any previously-fetched previous-links table — after a build, only
+    // the latest/version-specific link (surfaced inline via the SSE log below)
+    // should be shown, not the full previous-links list.
+    setLinks(null);
 
     const url = new URL(`${API_BASE_URL}/api/cdn/deploy`, window.location.origin);
     // "courseid" must be the authoring tool's real course _id (used server-side to
@@ -431,7 +447,6 @@ export function CdnDeploymentPage({
       appendLog({ eventType: "close", message: "⚫ Connection closed" });
       setBuilding(false);
       es.close();
-      void loadPreviousLinks(cfg);
     };
     es.onerror = stop;
     es.addEventListener("server-error", (event) => {
@@ -631,8 +646,9 @@ export function CdnDeploymentPage({
                   </div>
                 )}
 
-                {/* Previous versions */}
-                {cfg.isEnabled && (
+                {/* Previous versions — only shown once the user explicitly clicks
+                    "Get Previous Links" (links stays null until then). */}
+                {cfg.isEnabled && (linksLoading || links !== null) && (
                   <div className="rounded-lg border border-[#e5e7eb] overflow-hidden">
                     <table className="w-full text-xs">
                       <thead className="bg-[#f9fafb] text-left">
@@ -646,7 +662,7 @@ export function CdnDeploymentPage({
                       <tbody>
                         {linksLoading ? (
                           <tr><td colSpan={4} className="px-3 py-4 text-center text-[#6b7280]"><Spinner className="inline mr-2" />Loading previous versions…</td></tr>
-                        ) : links.length === 0 ? (
+                        ) : !links || links.length === 0 ? (
                           <tr><td colSpan={4} className="px-3 py-4 text-center text-[#6b7280]">No previous versions found.</td></tr>
                         ) : (
                           links.map((entry) => {
