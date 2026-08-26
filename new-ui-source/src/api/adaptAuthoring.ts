@@ -2240,7 +2240,10 @@ export async function getCourseStructure(
                     isAvailable: comp._isAvailable !== false,
                     isHidden: !!comp._isHidden,
                     isVisible: comp._isVisible !== false,
-                    isResetOnRevisit: scalarString(comp._isResetOnRevisit) || "false",
+                    isResetOnRevisit:
+                       comp._isResetOnRevisit === true ? "hard"
+                       : comp._isResetOnRevisit === false ? "false"
+                       : scalarString(comp._isResetOnRevisit) || "false",
                     ariaLevel: scalarString(comp._ariaLevel),
                     isA11yCompletionDescriptionEnabled: comp._isA11yCompletionDescriptionEnabled !== false,
                     showDisplayTitleInPreview:
@@ -2714,7 +2717,7 @@ let componentTypePropertiesCache: Record<string, Record<string, unknown>> | null
 export async function getComponentBehaviourSchema(
   componentKey: string
 ): Promise<Record<string, unknown>> {
-  const key = (componentKey || "").trim();
+  const key = (componentKey || "").trim().toLowerCase();
   if (!key) return {};
 
   if (!componentTypePropertiesCache) {
@@ -2724,7 +2727,7 @@ export async function getComponentBehaviourSchema(
     componentTypePropertiesCache = {};
     (Array.isArray(rows) ? rows : []).forEach((row) => {
       if (row && row.component) {
-        componentTypePropertiesCache![row.component] =
+        componentTypePropertiesCache![row.component.toLowerCase()] =
           row.properties && typeof row.properties === "object" ? row.properties : {};
       }
     });

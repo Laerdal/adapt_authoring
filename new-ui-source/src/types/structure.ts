@@ -33,7 +33,7 @@ export interface SComponent {
   isAvailable?: boolean;
   isHidden?: boolean;
   isVisible?: boolean;
-  isResetOnRevisit?: string; // "false" | "soft" | "hard"
+  isResetOnRevisit?: "false" | "soft" | "hard";
   showDisplayTitleInPreview?: boolean;
   onScreen?: {
     _isEnabled?: boolean;

@@ -4442,7 +4442,7 @@ export default function CourseEditor({
     const article = page?.articles.find((a) => a.id === selectedArticleId);
     const block = article?.blocks.find((b) => b.id === selectedBlockId);
     const component = block?.components.find((c) => c.id === selectedComponentId);
-    const componentKey = component?.settings?.componentKey || "";
+    const componentKey = (component?.settings?.componentKey || "").toLowerCase();
     if (!componentKey || componentBehaviourSchemas[componentKey] !== undefined) {
       return;
     }
@@ -8027,7 +8027,7 @@ export default function CourseEditor({
                           const componentColours = asRecord(componentThemeSettings._componentColors);
                           const componentResponsiveClasses = asRecord(componentThemeSettings._responsiveClasses);
                           const componentProperties = asRecord(component.settings.properties);
-                          const behaviourSchema = componentBehaviourSchemas[component.settings.componentKey || ""];
+                          const behaviourSchema = componentBehaviourSchemas[(component.settings.componentKey || "").toLowerCase()];
                           const isCopied = copiedComponentId === component.id;
 
                           return (
