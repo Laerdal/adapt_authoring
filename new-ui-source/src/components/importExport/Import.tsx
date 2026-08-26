@@ -33,7 +33,8 @@ type ModalStep = 'form' | 'checking' | 'results' | 'importing'
 interface ImportCourseModalProps {
   isOpen: boolean
   onClose: () => void
-  onSuccess: () => void
+  /** Called after a successful import. deprecatedPlugins contains any plugin names that were skipped. */
+  onSuccess: (deprecatedPlugins?: string[]) => void
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -143,6 +144,7 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
       const formData = new FormData()
       formData.append('file', selectedFile)
       if (assetFolders.trim()) formData.append('formAssetFolders', assetFolders.trim())
+      // tags field: space-separated text input; server splits by comma internally
       if (tags.trim()) formData.append('tags', tags.trim())
 
       const response = await fetch('/importsourcecheck', {
@@ -153,7 +155,8 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
 
       if (!response.ok) {
         const err = await response.json().catch(() => ({ body: response.statusText }))
-        throw new Error(err.body || err.message || `HTTP ${response.status}`)
+        const title = err.title ? `${err.title}: ` : ''
+        throw new Error(`${title}${err.body || err.message || `HTTP ${response.status}`}`)
       }
 
       const data: CheckResult = await response.json()
@@ -179,12 +182,18 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
       })
 
       if (!response.ok) {
+        // PartialImportError → { title, body }; other errors → { body } or plain text
         const err = await response.json().catch(() => ({ body: response.statusText }))
-        throw new Error(err.body || err.title || err.message || `HTTP ${response.status}`)
+        const title = err.title ? `${err.title}: ` : ''
+        throw new Error(`${title}${err.body || err.message || `HTTP ${response.status}`}`)
       }
 
+      // Parse success body: { body: string, deprecatedPlugins?: string[] }
+      const result = await response.json().catch(() => ({})) as { body?: string; deprecatedPlugins?: string[] }
+      const deprecated = result.deprecatedPlugins ?? []
+
       resetAndClose()
-      onSuccess()
+      onSuccess(deprecated.length > 0 ? deprecated : undefined)
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Import failed.'
       setErrorMsg(msg)

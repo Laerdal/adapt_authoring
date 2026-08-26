@@ -270,9 +270,16 @@ export default function HomePage() {
     showToast(`${READ_ONLY_REASON} Import is blocked for now.`, 'info')
   }
 
-  async function handleImportSuccess() {
+  async function handleImportSuccess(deprecatedPlugins?: string[]) {
     await loadCourses()
-    showToast('Course imported successfully.')
+    if (deprecatedPlugins && deprecatedPlugins.length > 0) {
+      showToast(
+        `Course imported with warnings: deprecated plugin(s) found — ${deprecatedPlugins.join(', ')}. We recommend replacing or removing them.`,
+        'info'
+      )
+    } else {
+      showToast('Course imported successfully.')
+    }
   }
 
   function clearSearch() { setSearch('') }
