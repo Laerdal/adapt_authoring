@@ -264,7 +264,9 @@ export function CdnDeploymentPage({
   const logIdRef = useRef(0);
 
   const [linksLoading, setLinksLoading] = useState(false);
-  const [links, setLinks] = useState<DisplayLinkEntry[]>([]);
+  // null = not yet fetched (only an explicit "Get Previous Links" click populates
+  // this — QA: saving config or triggering a build must NOT fetch/show this list).
+  const [links, setLinks] = useState<DisplayLinkEntry[] | null>(null);
   const [restoringEntry, setRestoringEntry] = useState<string | null>(null);
   const [restoredEntries, setRestoredEntries] = useState<Set<string>>(new Set());
   const [expiryTarget, setExpiryTarget] = useState<string | null>(null);
@@ -309,7 +311,6 @@ export function CdnDeploymentPage({
         setCfg(settings);
         setSavedSnapshot(settings);
         setCdnCliVersion(version);
-        if (settings.isEnabled) void loadPreviousLinks(settings);
       } catch {
         // Without this, a failed fetch left `cfg` null forever and the page
         // was stuck on the loading spinner indefinitely — fall back to the
@@ -346,8 +347,10 @@ export function CdnDeploymentPage({
     try {
       await saveCdnDeploymentSettings(courseId, next);
       setSavedSnapshot(next);
-      if (next.isEnabled) void loadPreviousLinks(next);
-      else setLinks([]);
+      // QA: saving config must not fetch/show the previous-links list — only an
+      // explicit "Get Previous Links" click does that. Just clear any stale list
+      // if the target course/group/cdn identity changed under it.
+      setLinks(null);
       return true;
     } catch {
       setToast({ type: "error", message: "Couldn't save. Please try again." });
@@ -397,6 +400,10 @@ export function CdnDeploymentPage({
     if (!cfg || building) return;
     setBuilding(true);
     setLogEntries([]);
+    // Only the build output's own Latest/Version Specific links should be visible
+    // right after a build — hide any previously-fetched previous-links table
+    // rather than showing it stale until the user explicitly re-fetches it.
+    setLinks(null);
 
     const url = new URL(`${API_BASE_URL}/api/cdn/deploy`, window.location.origin);
     // "courseid" must be the authoring tool's real course _id (used server-side to
@@ -433,7 +440,10 @@ export function CdnDeploymentPage({
     };
 
     // es.onerror and the "server-error" listener can both fire for the same
-    // failure — guard so the closing log/state update/links refresh only run once.
+    // failure — guard so the closing log/state update only runs once. QA:
+    // triggering a build must NOT fetch/show the previous-links list — only the
+    // build output's own Latest/Version Specific links should appear here;
+    // "Get Previous Links" only runs on its own explicit button click.
     let stopped = false;
     const stop = () => {
       if (stopped) return;
@@ -441,7 +451,6 @@ export function CdnDeploymentPage({
       appendLog({ eventType: "close", message: "⚫ Connection closed" });
       setBuilding(false);
       es.close();
-      void loadPreviousLinks(cfg);
     };
     es.onerror = stop;
     es.addEventListener("server-error", (event) => {
@@ -635,8 +644,10 @@ export function CdnDeploymentPage({
                   </div>
                 )}
 
-                {/* Previous versions */}
-                {cfg.isEnabled && (
+                {/* Previous versions — only shown once the user has explicitly
+                    clicked "Get Previous Links" (or while that fetch is in flight);
+                    never auto-populated by save/build. */}
+                {cfg.isEnabled && (linksLoading || links !== null) && (
                   <div className="rounded-lg border border-[#e5e7eb] overflow-hidden">
                     <table className="w-full text-xs">
                       <thead className="bg-[#f9fafb] text-left">
@@ -650,7 +661,7 @@ export function CdnDeploymentPage({
                       <tbody>
                         {linksLoading ? (
                           <tr><td colSpan={4} className="px-3 py-4 text-center text-[#6b7280]"><Spinner className="inline mr-2" />Loading previous versions…</td></tr>
-                        ) : links.length === 0 ? (
+                        ) : !links || links.length === 0 ? (
                           <tr><td colSpan={4} className="px-3 py-4 text-center text-[#6b7280]">No previous versions found.</td></tr>
                         ) : (
                           links.map((entry) => {
