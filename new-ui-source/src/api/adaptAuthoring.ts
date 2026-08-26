@@ -603,6 +603,12 @@ async function applyCourseSelections(courseId: string, themeLabel?: string, menu
 
 export async function createCourse(input: CreateCourseInput): Promise<CreatedCourse> {
   const created = await apiClient.post<CreatedCourse>("/api/courses", input);
+
+  // The generic course-creation route leaves `_buttons` as the engine
+  // schema's own broken "" default (see ensureCourseButtonDefaults) — fix it
+  // up front so this course never hits the question-component crash at all.
+  await ensureCourseButtonDefaults(created.id);
+
   try {
     await seedDefaultStructure(created.id);
   } catch (err) {
@@ -2036,8 +2042,10 @@ interface EngineContentNode {
   _isAvailable?: boolean;
   _isHidden?: boolean;
   _isVisible?: boolean;
+  _isResetOnRevisit?: string | boolean;
   _onScreen?: Record<string, unknown>;
   _ariaLevel?: string;
+  _isA11yCompletionDescriptionEnabled?: boolean;
   _extensions?: Record<string, unknown>;
   themeSettings?: Record<string, unknown>;
   menuSettings?: Record<string, unknown>;
@@ -2159,6 +2167,7 @@ export async function getCourseStructure(
         _percentInviewVertical: scalarNumber(onScreen._percentInviewVertical, 50),
       },
       ariaLevel: scalarString(page._ariaLevel),
+      isA11yCompletionDescriptionEnabled: page._isA11yCompletionDescriptionEnabled !== false,
       extensions: objectValue(page._extensions),
       themeSettings: objectValue(page.themeSettings),
       menuSettings: objectValue(page.menuSettings),
@@ -2187,6 +2196,7 @@ export async function getCourseStructure(
             };
           })(),
           ariaLevel: scalarString(article._ariaLevel),
+          isA11yCompletionDescriptionEnabled: article._isA11yCompletionDescriptionEnabled !== false,
           extensions: objectValue(article._extensions),
           contentGroups: childrenOf(blocks, article._id).map(
             (block): SContentGroup => ({
@@ -2204,11 +2214,21 @@ export async function getCourseStructure(
               isAvailable: block._isAvailable !== false,
               isHidden: !!block._isHidden,
               isVisible: block._isVisible !== false,
+              onScreen: (() => {
+                const os = objectValue(block._onScreen);
+                return {
+                  _isEnabled: !!os._isEnabled,
+                  _classes: scalarString(os._classes),
+                  _percentInviewVertical: scalarNumber(os._percentInviewVertical, 50),
+                };
+              })(),
               ariaLevel: scalarString(block._ariaLevel),
+              isA11yCompletionDescriptionEnabled: block._isA11yCompletionDescriptionEnabled !== false,
               extensions: objectValue(block._extensions),
               components: childrenOf(components, block._id).map(
                 (comp): SComponent => {
                   const componentProperties = objectValue(comp.properties);
+                  const componentOnScreen = objectValue(comp._onScreen);
                   return {
                     id: comp._id,
                     title: label(comp),
@@ -2229,6 +2249,27 @@ export async function getCourseStructure(
                         : ""),
                     properties: componentProperties,
                     url: comp.url || "",
+                    classes: comp._classes || "",
+                    isOptional: !!comp._isOptional,
+                    isAvailable: comp._isAvailable !== false,
+                    isHidden: !!comp._isHidden,
+                    isVisible: comp._isVisible !== false,
+                    isResetOnRevisit:
+                       comp._isResetOnRevisit === true ? "hard"
+                       : comp._isResetOnRevisit === false ? "false"
+                       : scalarString(comp._isResetOnRevisit) === "soft" ? "soft"
+                       : scalarString(comp._isResetOnRevisit) === "hard" ? "hard"
+                       : "false",
+                    ariaLevel: scalarString(comp._ariaLevel),
+                    isA11yCompletionDescriptionEnabled: comp._isA11yCompletionDescriptionEnabled !== false,
+                    showDisplayTitleInPreview:
+                      typeof comp.displayTitle === "string" ? comp.displayTitle.trim().length > 0 : false,
+                    onScreen: {
+                      _isEnabled: !!componentOnScreen._isEnabled,
+                      _classes: scalarString(componentOnScreen._classes),
+                      _percentInviewVertical: scalarNumber(componentOnScreen._percentInviewVertical, 50),
+                    },
+                    extensions: objectValue(comp._extensions),
                   };
                 }
               ),
@@ -2769,6 +2810,35 @@ export async function componentSchemaSupportsPropertiesField(
   return false;
 }
 
+// Component-specific property schema (GET /api/componenttype, `.properties`),
+// keyed by `_component`. Ported from adapt-preview-edit/js/componentConfigView.js
+// (`ComponentConfigView` fetches `/api/componentType` and matches by `.component`).
+// Feeds the page editor's Component "Behaviour" accordion (dynamic per-component
+// fields), separately from `fetchMergedComponentSchema` above (used for defaults).
+let componentTypePropertiesCache: Record<string, Record<string, unknown>> | null = null;
+
+export async function getComponentBehaviourSchema(
+  componentKey: string
+): Promise<Record<string, unknown>> {
+  const key = (componentKey || "").trim().toLowerCase();
+  if (!key) return {};
+
+  if (!componentTypePropertiesCache) {
+    const rows = await apiClient.get<Array<{ component?: string; properties?: Record<string, unknown> }>>(
+      "/api/componenttype"
+    );
+    componentTypePropertiesCache = {};
+    (Array.isArray(rows) ? rows : []).forEach((row) => {
+      if (row && row.component) {
+        componentTypePropertiesCache![row.component.toLowerCase()] =
+          row.properties && typeof row.properties === "object" ? row.properties : {};
+      }
+    });
+  }
+
+  return componentTypePropertiesCache[key] ?? {};
+}
+
 // Walk a schema `properties` object, producing each property's default value.
 // Ported from adapt-preview-edit/js/contentEditView.js (buildSchemaDefaults).
 function buildSchemaDefaults(
@@ -3063,6 +3133,42 @@ export function createBlock(
   });
 }
 
+// The engine's own course model.schema declares `_buttons` as `type: "object"`
+// but its own `"default"` is the STRING "" (a copy/paste artifact, confirmed by
+// reading plugins/content/course/model.schema directly — not something we can
+// fix from here without touching backend schema files). Any course created
+// through the generic course-creation route without an explicit `_buttons`
+// therefore gets that literal empty string written into the DB. Question-type
+// components (mcq, sentenceOrdering, ...) read course-level `_buttons` at
+// runtime for their button text/ARIA label defaults — `"".anything` is
+// `undefined`, so the very first read (e.g. `_submit.buttonText`) throws,
+// which is exactly the "Cannot read properties of undefined" crash. Only
+// components that don't touch question-state button defaults (text, media,
+// ...) are unaffected, which is why it looks component-specific.
+const DEFAULT_COURSE_BUTTONS = {
+  _submit: { buttonText: "Submit", ariaLabel: "Submit" },
+  _reset: { buttonText: "Reset", ariaLabel: "Reset" },
+  _showCorrectAnswer: { buttonText: "Show correct answer", ariaLabel: "Show correct answer" },
+  _hideCorrectAnswer: { buttonText: "Hide correct answer", ariaLabel: "Hide correct answer" },
+  _showFeedback: { buttonText: "Show feedback", ariaLabel: "Show feedback" },
+  remainingAttemptsText: "remaining attempts",
+  remainingAttemptText: "final attempt",
+  disabledAriaLabel: "This button is disabled at the moment",
+};
+
+// Self-heals a course whose `_buttons` is the broken "" default (see above) —
+// safe to call repeatedly; it's a no-op once `_buttons` is a real object.
+async function ensureCourseButtonDefaults(courseId: string): Promise<void> {
+  try {
+    const course = await apiClient.get<{ _buttons?: unknown }>(`/api/content/course/${courseId}`);
+    const buttons = course?._buttons;
+    if (buttons && typeof buttons === "object" && !Array.isArray(buttons)) return;
+    await apiClient.put(`/api/content/course/${courseId}`, { _buttons: DEFAULT_COURSE_BUTTONS });
+  } catch {
+    /* non-fatal — worst case the pre-existing crash still happens */
+  }
+}
+
 // Create a component of the given type inside a content group (block), applying
 // schema defaults + a defensive PUT (mirrors adapt-preview-edit contentEditView).
 export async function createComponent(
@@ -3072,6 +3178,11 @@ export async function createComponent(
   sortOrder: number,
   layout: "full" | "left" | "right" = "full"
 ): Promise<string> {
+  // Must complete BEFORE the component exists, otherwise the new component's
+  // model can initialise (and throw — see ensureCourseButtonDefaults above)
+  // against the still-broken course document.
+  await ensureCourseButtonDefaults(courseId);
+
   const merged = await fetchMergedComponentSchema(componentType.component);
   const schemaSource =
     (merged && merged.properties) || componentType.properties || {};
@@ -3585,6 +3696,51 @@ export function pasteTemplateIntoCourse(
   payload: TemplatePasteRequest
 ): Promise<{ success?: boolean }> {
   return apiClient.post<{ success?: boolean }>("/api/templating/paste", payload);
+}
+
+// "Save as template" — reuses the exact same backend flow the legacy Authoring
+// Tool's frontend/src/plugins/templating uses (lib/contentmanager.js's
+// generic clipboard + templating content-plugin routes, unchanged, no backend
+// edits here): copy the node — and its full subtree, gathered server-side —
+// into a clipboard record, fetch that record back, then persist it as a
+// `templating` content document with the user-supplied title/description/
+// sharing layered on top.
+export interface SaveContentAsTemplateInput {
+  level: StructureLevel;
+  objectId: string;
+  courseId: string;
+  title: string;
+  description: string;
+  isShared: boolean;
+  shareWithUsers: string[];
+}
+
+export async function saveContentAsTemplate(input: SaveContentAsTemplateInput): Promise<void> {
+  const referenceType = LEVEL_TO_CONTENT_TYPE[input.level];
+
+  const copyResult = await apiClient.post<{ success: boolean; message?: string; clipboardId?: string }>(
+    "/api/content/clipboard/copy",
+    { objectId: input.objectId, courseId: input.courseId, referenceType }
+  );
+  if (!copyResult?.success || !copyResult.clipboardId) {
+    throw new Error(copyResult?.message || "Failed to copy content for templating");
+  }
+
+  const copiedData = await apiClient.get<Record<string, unknown>>(
+    `/api/content/clipboard/${copyResult.clipboardId}`
+  );
+
+  const templateData: Record<string, unknown> = {
+    ...copiedData,
+    title: input.title.trim() || "New template title",
+    description: input.description.trim() || "New template description",
+    _referenceId: copiedData?._id,
+    _isShared: !!input.isShared,
+    _shareWithUsers: Array.isArray(input.shareWithUsers) ? input.shareWithUsers : [],
+  };
+  delete templateData._id;
+
+  await apiClient.post("/api/content/templating", templateData);
 }
 
 // ── Assets ────────────────────────────────────────────────────────────────────
