@@ -270,9 +270,9 @@ export default function HomePage() {
     showToast(`${READ_ONLY_REASON} Import is blocked for now.`, 'info')
   }
 
-  function handleImportFromModal(file: File, _assetFolders: string, _tags: string) {
-    showToast(`"${file.name}" queued for import. This feature is coming soon.`, 'info')
-    setImportModalOpen(false)
+  async function handleImportSuccess() {
+    await loadCourses()
+    showToast('Course imported successfully.')
   }
 
   function clearSearch() { setSearch('') }
@@ -819,7 +819,7 @@ export default function HomePage() {
       <ImportCourseModal
         isOpen={importModalOpen}
         onClose={() => setImportModalOpen(false)}
-        onImport={handleImportFromModal}
+        onSuccess={handleImportSuccess}
       />
 
       <AiAssistant context="Dashboard" />
