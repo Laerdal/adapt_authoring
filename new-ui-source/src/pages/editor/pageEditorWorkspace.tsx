@@ -17,15 +17,19 @@ import {
   createArticle,
   createComponent,
   deleteStructureNode,
+  getComponentBehaviourSchema,
   getCourseAssetMappings,
   getCourseStructure,
   pasteTemplateIntoCourse,
   removeCourseAssetMappings,
+  saveContentAsTemplate,
+  searchUsersByEmailQuery,
   seedDefaultContentGroup,
   seedDefaultSection,
   seedDefaultTopic,
   type ComponentTypeOption,
   type DashboardTemplate,
+  type UserSummary,
   updateComponentLayout,
   updateStructureNode,
 } from "../../api/adaptAuthoring";
@@ -120,16 +124,27 @@ type TopicThemeSettings = {
   _responsiveClasses?: TopicResponsiveClasses;
   _textAlignment?: TopicTextAlignment;
   _minimumHeights?: TopicMinimumHeights;
-  _isDivider?: boolean;
-  _blockColours?: {
-    _background?: string;
-    _font?: string;
-    _header?: string;
+  _isDividerBlock?: boolean;
+  _blockColors?: {
+    "block-bg-color"?: string;
+    "block-font-color"?: string;
+    "block-header-color"?: string;
   };
-  _spacingTop?: string;
-  _spacingBottom?: string;
-  _verticalAlignment?: string;
-  _horizontalAlignment?: string;
+  _componentColors?: {
+    "component-bg-color"?: string;
+    "component-font-color"?: string;
+    "component-header-color"?: string;
+  };
+  _paddingTop?: string;
+  _paddingBottom?: string;
+  _componentVerticalAlignment?: string;
+  _componentHorizontalAlignment?: string;
+  _blockHeader?: {
+    _textAlignment?: TopicTextAlignment;
+    _backgroundImage?: TopicResponsiveAssetMap;
+    _backgroundStyles?: TopicBackgroundStyles;
+    _minimumHeights?: TopicMinimumHeights;
+  };
   _pageHeader?: {
     _graphic?: {
       _src?: string;
@@ -172,7 +187,9 @@ type TopicAssetTarget =
   | { scope: "sectionBackground"; articleId: string; bp: BreakpointKey }
   | { scope: "sectionArticleHeaderBackground"; articleId: string; bp: BreakpointKey }
   | { scope: "contentGroupBackground"; articleId: string; blockId: string; bp: BreakpointKey }
+  | { scope: "contentGroupHeaderBackground"; articleId: string; blockId: string; bp: BreakpointKey }
   | { scope: "componentBackground"; articleId: string; blockId: string; componentId: string; bp: BreakpointKey }
+  | { scope: "componentProperty"; articleId: string; blockId: string; componentId: string; path: string }
   | { scope: "themeHeaderGraphic" }
   | { scope: "themeHeaderBackground"; bp: BreakpointKey }
   | { scope: "menuGraphic" }
@@ -219,6 +236,7 @@ const ONSCREEN_CLASS_OPTIONS = [
 ] as const;
 const TEXT_ALIGN_OPTIONS = ["", "left", "center", "right"] as const;
 const LOCK_TYPE_OPTIONS = ["", "custom", "lockLast", "sequential", "unlockFirst"] as const;
+const RESET_ON_REVISIT_OPTIONS = ["false", "soft", "hard"] as const;
 
 // Palette rows match the adapt-laerdal-life / custom-theme properties.schema exactly.
 const LIFE_PALETTE_ROWS: readonly (readonly string[])[] = [
@@ -267,6 +285,523 @@ function parseNumberishInput(value: string): number | "" {
   if (!trimmed) return "";
   const parsed = Number(trimmed);
   return Number.isFinite(parsed) ? parsed : "";
+}
+
+// Perceived-brightness check for the Life v2 theme's auto-contrast component
+// font colour (ThemeComponentView.setComponentColors' isDarkColor): when a
+// component background colour is set with no explicit font colour, the
+// theme picks white/black text based on this. Approximated with the
+// standard YIQ luma formula; only understands hex input (what the
+// ColourPicker palette produces).
+function isPreviewColorDark(color: string): boolean {
+  const hex = color.trim().replace(/^#/, "");
+  if (![3, 6].includes(hex.length) || /[^0-9a-fA-F]/.test(hex)) return false;
+  const full = hex.length === 3 ? hex.split("").map((c) => c + c).join("") : hex;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  const luma = (r * 299 + g * 587 + b * 114) / 1000;
+  return luma < 128;
+}
+
+// ── Component "Behaviour" accordion: schema-driven field rendering ─────────
+// Renders a componenttype's own properties.schema fields (fetched via
+// getComponentBehaviourSchema, GET /api/componenttype) the same way
+// adapt-preview-edit/js/componentConfigView.js's buildFieldHtml/buildInputByType
+// do, minus the excluded/generic fields already covered by the other
+// accordions (General, Availability & Progression, Extensions, Theme
+// settings, Advanced Settings).
+const COMPONENT_BEHAVIOUR_EXCLUDED_FIELDS = new Set([
+  "_id", "__v", "_type", "_component", "_componentType", "_componentTypeDisplayName",
+  "_layout", "_parentId", "_courseId", "_sortOrder", "createdAt", "updatedAt",
+  "_contentType", "_enabledExtensions",
+  "title", "displayTitle", "body", "description",
+  "_classes", "_htmlClasses",
+  "_isOptional", "_isAvailable", "_isHidden", "_isVisible",
+  "requirecompletionof", "requireCompletionOf", "_requireCompletionOf", "_isResetOnRevisit",
+  "_onScreen", "_ariaLevel", "_extensions",
+  "themeSettings", "menuSettings", "_pageHeader", "properties",
+]);
+
+type BehaviourFieldSchema = {
+  type?: string;
+  title?: string;
+  legend?: string;
+  default?: unknown;
+  enum?: string[];
+  properties?: Record<string, BehaviourFieldSchema>;
+  items?: BehaviourFieldSchema;
+  help?: string;
+  description?: string;
+  inputType?: string | { type: string; options?: Array<{ val?: string; label?: string } | string> };
+  editorOnly?: boolean;
+  extra?: { palette?: string[][] };
+  minItems?: number;
+  maxItems?: number;
+};
+
+function formatBehaviourFieldName(fieldName: string): string {
+  const withoutPrefix = fieldName.replace(/^_/, "");
+  const spaced = withoutPrefix.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/_/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+function behaviourSelectOptions(fieldSchema: BehaviourFieldSchema): string[] {
+  if (fieldSchema.inputType && typeof fieldSchema.inputType === "object" && Array.isArray(fieldSchema.inputType.options)) {
+    return fieldSchema.inputType.options.map((option) =>
+      typeof option === "string" ? option : option.val ?? option.label ?? ""
+    );
+  }
+  return Array.isArray(fieldSchema.enum) ? fieldSchema.enum.map(String) : [];
+}
+
+// Splits a dotted/bracketed path ("_items[0]._graphic.src") into keys/indices.
+function parseBehaviourPath(path: string): Array<string | number> {
+  const segments: Array<string | number> = [];
+  path.split(".").forEach((part) => {
+    const match = part.match(/^([^[]+)((?:\[\d+])*)$/);
+    if (!match) {
+      segments.push(part);
+      return;
+    }
+    segments.push(match[1]);
+    const indices = match[2].match(/\d+/g);
+    if (indices) indices.forEach((i) => segments.push(Number(i)));
+  });
+  return segments;
+}
+
+function cloneBehaviourNode(value: unknown): any {
+  if (Array.isArray(value)) return value.slice();
+  if (value && typeof value === "object") return { ...(value as Record<string, unknown>) };
+  return value;
+}
+
+function setBehaviourPath(source: Record<string, unknown>, path: string, value: unknown): Record<string, unknown> {
+  const segments = parseBehaviourPath(path);
+  const root: any = cloneBehaviourNode(source) ?? {};
+  let cursor = root;
+  for (let i = 0; i < segments.length - 1; i++) {
+    const segment = segments[i];
+    const nextIsIndex = typeof segments[i + 1] === "number";
+    const existing = cursor[segment];
+    const container = existing && typeof existing === "object" ? cloneBehaviourNode(existing) : nextIsIndex ? [] : {};
+    cursor[segment] = container;
+    cursor = container;
+  }
+  cursor[segments[segments.length - 1]] = value;
+  return root;
+}
+
+// Behaviour fields that resolve to an image/asset (matches the field-name and
+// object-shape heuristics adapt-preview-edit/js/componentConfigView.js uses
+// in isAssetField/isAssetFieldByInputType) render the same TopicAssetField
+// picker used everywhere else in the panel, instead of a plain text input.
+const BEHAVIOUR_ASSET_FIELD_NAMES = new Set([
+  "poster", "mp4", "mp3", "ogg", "webm", "_backgroundImage",
+]);
+
+function isBehaviourAssetInputType(fieldSchema: BehaviourFieldSchema): boolean {
+  return typeof fieldSchema.inputType === "string" && fieldSchema.inputType.startsWith("Asset:");
+}
+
+type BehaviourAssetPath = { path: string; value: string };
+
+// Walks a component's Behaviour schema together with its saved
+// settings.properties, collecting every leaf field the Behaviour accordion
+// renders as an asset picker (same isBehaviourAssetInputType /
+// BEHAVIOUR_ASSET_FIELD_NAMES heuristic as BehaviourField above) along with
+// its current string value. Used to live-patch the canvas with the SAME
+// upsertPreviewImage mechanism topic/section graphics already use, instead
+// of an asset change only ever taking effect after a rebuild.
+function collectBehaviourAssetPaths(
+  schema: Record<string, BehaviourFieldSchema>,
+  value: unknown,
+  pathPrefix = ""
+): BehaviourAssetPath[] {
+  const results: BehaviourAssetPath[] = [];
+  const record = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+
+  Object.entries(schema).forEach(([fieldName, fieldSchema]) => {
+    if (!fieldSchema || typeof fieldSchema !== "object") return;
+    const path = pathPrefix ? `${pathPrefix}.${fieldName}` : fieldName;
+    const fieldValue = record[fieldName];
+
+    if (fieldSchema.type === "object" && fieldSchema.properties) {
+      results.push(...collectBehaviourAssetPaths(fieldSchema.properties, fieldValue, path));
+      return;
+    }
+
+    if (fieldSchema.type === "array" && fieldSchema.items?.type === "object" && fieldSchema.items.properties) {
+      const itemSchema = fieldSchema.items.properties;
+      (Array.isArray(fieldValue) ? fieldValue : []).forEach((item, index) => {
+        results.push(...collectBehaviourAssetPaths(itemSchema, item, `${path}[${index}]`));
+      });
+      return;
+    }
+
+    if (isBehaviourAssetInputType(fieldSchema) || BEHAVIOUR_ASSET_FIELD_NAMES.has(fieldName)) {
+      results.push({ path, value: typeof fieldValue === "string" ? fieldValue : "" });
+    }
+  });
+
+  return results;
+}
+
+// title/subtitle/body/instruction already live-sync through the dedicated
+// header pipeline (fixed canonical classes every component template uses) —
+// collectBehaviourTextPaths must not also walk them, or its generic text
+// diffing would race the header pipeline over the same DOM text.
+const COMPONENT_BEHAVIOUR_TEXT_SYNC_EXCLUDED_FIELDS = new Set(["subtitle", "instruction"]);
+
+// Component-specific Behaviour fields (a Graphic's alt text, an MCQ item's
+// label, a Narrative item's title, ...) have no canonical class the way
+// title/body/instruction do — there's no fixed selector to patch. Instead,
+// this collects every other plain string field's path + value so the caller
+// can diff against the previous value and find/replace the OLD text
+// wherever it's literally rendered, without needing to know the template.
+function collectBehaviourTextPaths(
+  schema: Record<string, BehaviourFieldSchema>,
+  value: unknown,
+  pathPrefix = ""
+): BehaviourAssetPath[] {
+  const results: BehaviourAssetPath[] = [];
+  const record = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+
+  Object.entries(schema).forEach(([fieldName, fieldSchema]) => {
+    if (!fieldSchema || typeof fieldSchema !== "object") return;
+    if (fieldSchema.editorOnly) return;
+    if (!pathPrefix && (COMPONENT_BEHAVIOUR_EXCLUDED_FIELDS.has(fieldName) || COMPONENT_BEHAVIOUR_TEXT_SYNC_EXCLUDED_FIELDS.has(fieldName))) {
+      return;
+    }
+
+    const path = pathPrefix ? `${pathPrefix}.${fieldName}` : fieldName;
+    const fieldValue = record[fieldName];
+
+    if (fieldSchema.type === "object" && fieldSchema.properties) {
+      results.push(...collectBehaviourTextPaths(fieldSchema.properties, fieldValue, path));
+      return;
+    }
+
+    if (fieldSchema.type === "array" && fieldSchema.items?.type === "object" && fieldSchema.items.properties) {
+      const itemSchema = fieldSchema.items.properties;
+      (Array.isArray(fieldValue) ? fieldValue : []).forEach((item, index) => {
+        results.push(...collectBehaviourTextPaths(itemSchema, item, `${path}[${index}]`));
+      });
+      return;
+    }
+
+    if (isBehaviourAssetInputType(fieldSchema) || BEHAVIOUR_ASSET_FIELD_NAMES.has(fieldName)) return;
+
+    if (fieldSchema.type === "string" && typeof fieldValue === "string") {
+      results.push({ path, value: fieldValue });
+    }
+  });
+
+  return results;
+}
+
+type BehaviourAssetContext = {
+  pageId: string;
+  articleId: string;
+  blockId: string;
+  componentId: string;
+  resolveAssetPreviewUrl: (value: string) => string | null;
+  onPickAsset: (path: string) => void;
+  onPickExternal: (path: string, currentValue: string) => void;
+  onClear: (path: string) => void;
+};
+
+function truncateBehaviourItemTitle(value: string): string {
+  const stripped = value.replace(/<[^>]*>/g, "").trim();
+  return stripped.length > 60 ? `${stripped.slice(0, 57)}…` : stripped;
+}
+
+// Identifies an array item by its own title-ish field, so a collapsed item
+// accordion is identifiable without expanding it (matches other authoring
+// tools: narrative/accordion/hotgraphic items are addressed by their title,
+// not by index).
+function pickBehaviourItemTitle(item: unknown, itemSchema: BehaviourFieldSchema | undefined, index: number): string {
+  const record = item && typeof item === "object" && !Array.isArray(item) ? (item as Record<string, unknown>) : {};
+  const preferredKeys = ["title", "displayTitle", "_title", "heading", "name", "label", "strapline", "text"];
+  for (const key of preferredKeys) {
+    const raw = record[key];
+    if (typeof raw === "string" && raw.trim()) return truncateBehaviourItemTitle(raw);
+  }
+  if (itemSchema?.properties) {
+    for (const key of Object.keys(itemSchema.properties)) {
+      if (itemSchema.properties[key]?.type === "string") {
+        const raw = record[key];
+        if (typeof raw === "string" && raw.trim()) return truncateBehaviourItemTitle(raw);
+      }
+    }
+  }
+  return `Item ${index + 1}`;
+}
+
+function BehaviourField({
+  path,
+  fieldName,
+  fieldSchema,
+  value,
+  onChange,
+  assetContext,
+}: {
+  path: string;
+  fieldName: string;
+  fieldSchema: BehaviourFieldSchema;
+  value: unknown;
+  onChange: (path: string, value: unknown) => void;
+  assetContext?: BehaviourAssetContext;
+}) {
+  const label = fieldSchema.legend || fieldSchema.title || formatBehaviourFieldName(fieldName);
+  const type = fieldSchema.type;
+  const inputTypeStr = typeof fieldSchema.inputType === "string" ? fieldSchema.inputType : undefined;
+  const inputTypeObj = typeof fieldSchema.inputType === "object" ? fieldSchema.inputType : undefined;
+  const selectOptions = behaviourSelectOptions(fieldSchema);
+  // Only used by the "array" branch below, but declared unconditionally per
+  // the rules of hooks — one open item at a time, per array field instance.
+  const [openItemIndex, setOpenItemIndex] = useState<number | null>(null);
+
+  if (type === "object" && fieldSchema.properties) {
+    const objectValue = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+    const hasAssetSrc = assetContext && Object.prototype.hasOwnProperty.call(fieldSchema.properties, "src");
+    return (
+      <TopicNestedAccordion title={label}>
+        {hasAssetSrc && assetContext && (
+          <TopicAssetField
+            resolveAssetPreviewUrl={assetContext.resolveAssetPreviewUrl}
+            label="Image"
+            value={asString(objectValue.src)}
+            onPickAsset={() => assetContext.onPickAsset(`${path}.src`)}
+            onPickExternal={() => assetContext.onPickExternal(`${path}.src`, asString(objectValue.src))}
+            onClear={() => assetContext.onClear(`${path}.src`)}
+          />
+        )}
+        {Object.keys(fieldSchema.properties).map((childKey) => {
+          if (hasAssetSrc && childKey === "src") return null;
+          const childSchema = fieldSchema.properties![childKey];
+          if (!childSchema || childSchema.editorOnly) return null;
+          return (
+            <BehaviourField
+              key={`${path}.${childKey}`}
+              path={`${path}.${childKey}`}
+              fieldName={childKey}
+              fieldSchema={childSchema}
+              value={objectValue[childKey]}
+              onChange={onChange}
+              assetContext={assetContext}
+            />
+          );
+        })}
+      </TopicNestedAccordion>
+    );
+  }
+
+  if (type === "array") {
+    const items = Array.isArray(value) ? value : [];
+    const itemSchema = fieldSchema.items;
+    const isObjectItems = itemSchema?.type === "object" && !!itemSchema.properties;
+    const canAddMore = typeof fieldSchema.maxItems !== "number" || items.length < fieldSchema.maxItems;
+
+    const handleAddItem = () => {
+      onChange(path, [...items, isObjectItems ? {} : ""]);
+      setOpenItemIndex(items.length);
+    };
+    const handleCopyItem = (index: number) => {
+      onChange(path, [...items, cloneBehaviourNode(items[index])]);
+      setOpenItemIndex(items.length);
+    };
+    const handleDeleteItem = (index: number) => {
+      onChange(path, items.filter((_, i) => i !== index));
+      setOpenItemIndex((current) => {
+        if (current === null) return null;
+        if (current === index) return null;
+        return current > index ? current - 1 : current;
+      });
+    };
+
+    return (
+      <div className="flex flex-col gap-2">
+        <TopicFieldLabel>{label}</TopicFieldLabel>
+        {items.map((item, index) => {
+          const isOpen = openItemIndex === index;
+          const itemTitle = pickBehaviourItemTitle(item, itemSchema, index);
+          return (
+            <div key={`${path}[${index}]`} className="w-full rounded-[8px] border border-[#d8dee6] bg-white overflow-hidden">
+              <div className="w-full flex items-center gap-2 px-3 py-2 bg-white hover:bg-[var(--life-neutral-020)] transition-colors">
+                <button
+                  type="button"
+                  onClick={() => setOpenItemIndex((current) => (current === index ? null : index))}
+                  aria-expanded={isOpen}
+                  className="flex-1 min-w-0 flex items-center gap-1.5 text-left"
+                >
+                  <svg
+                    className={`shrink-0 transition-transform duration-200 text-[#6b7280] ${isOpen ? "rotate-90" : ""}`}
+                    width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                  >
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                  <span className="truncate text-[13px] font-semibold text-[var(--life-base-black)]">{itemTitle}</span>
+                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    aria-label="Duplicate item"
+                    title="Duplicate"
+                    disabled={!canAddMore}
+                    onClick={() => handleCopyItem(index)}
+                    className="w-6 h-6 flex items-center justify-center rounded-md text-[#6b7280] hover:bg-[var(--life-primary-020)] hover:text-[var(--life-primary-500)] transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#6b7280] disabled:cursor-not-allowed"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Delete item"
+                    title="Delete"
+                    onClick={() => handleDeleteItem(index)}
+                    className="w-6 h-6 flex items-center justify-center rounded-md text-[#6b7280] hover:bg-[#fee2e2] hover:text-[#b42318] transition-colors"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6h14z" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              {isOpen && (
+                <div className="px-3 pb-3 pt-2.5 border-t border-[#eef2f6] flex flex-col gap-2.5">
+                  {isObjectItems ? (
+                    Object.keys(itemSchema!.properties!).map((childKey) => {
+                      const childSchema = itemSchema!.properties![childKey];
+                      if (!childSchema || childSchema.editorOnly) return null;
+                      const itemRecord = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+                      return (
+                        <BehaviourField
+                          key={`${path}[${index}].${childKey}`}
+                          path={`${path}[${index}].${childKey}`}
+                          fieldName={childKey}
+                          fieldSchema={childSchema}
+                          value={itemRecord[childKey]}
+                          onChange={onChange}
+                          assetContext={assetContext}
+                        />
+                      );
+                    })
+                  ) : (
+                    <TopicTextInput
+                      label="Value"
+                      value={typeof item === "string" ? item : item === undefined || item === null ? "" : String(item)}
+                      onChange={(v) => onChange(`${path}[${index}]`, v)}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {canAddMore && (
+          <button
+            type="button"
+            className="text-[12px] font-semibold text-[#2d6fa8] hover:underline self-start"
+            onClick={handleAddItem}
+          >
+            + Add {label}
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  if (assetContext && (isBehaviourAssetInputType(fieldSchema) || BEHAVIOUR_ASSET_FIELD_NAMES.has(fieldName))) {
+    const stringValue = asString(value);
+    return (
+      <TopicAssetField
+        resolveAssetPreviewUrl={assetContext.resolveAssetPreviewUrl}
+        label={label}
+        value={stringValue}
+        onPickAsset={() => assetContext.onPickAsset(path)}
+        onPickExternal={() => assetContext.onPickExternal(path, stringValue)}
+        onClear={() => assetContext.onClear(path)}
+      />
+    );
+  }
+
+  if (type === "boolean") {
+    return <TopicCheckbox label={label} checked={!!value} onChange={(checked) => onChange(path, checked)} />;
+  }
+
+  if (inputTypeStr === "ColourPicker") {
+    return (
+      <TopicColorField
+        label={label}
+        value={asString(value)}
+        onChange={(v) => onChange(path, v)}
+        paletteRows={fieldSchema.extra?.palette ?? LIFE_PALETTE_ROWS}
+      />
+    );
+  }
+
+  if (selectOptions.length) {
+    return (
+      <TopicSelect
+        label={label}
+        value={value !== undefined && value !== null ? String(value) : ""}
+        onChange={(v) => onChange(path, v)}
+        options={selectOptions}
+      />
+    );
+  }
+
+  if (type === "number") {
+    return (
+      <TopicTextInput
+        label={label}
+        type="number"
+        value={value !== undefined && value !== null ? String(value) : ""}
+        onChange={(v) => onChange(path, v === "" ? "" : Number(v))}
+      />
+    );
+  }
+
+  if (inputTypeStr === "TextArea" || fieldName === "body" || (inputTypeObj?.type === "CodeEditor")) {
+    const textValue =
+      inputTypeObj?.type === "CodeEditor"
+        ? (value && typeof value === "object" ? JSON.stringify(value, null, 2) : asString(value))
+        : asString(value);
+    return (
+      <div className="flex flex-col gap-1.5">
+        <TopicFieldLabel>{label}</TopicFieldLabel>
+        <textarea
+          defaultValue={textValue}
+          onBlur={(event) => {
+            if (inputTypeObj?.type === "CodeEditor") {
+              try {
+                onChange(path, JSON.parse(event.target.value || "{}"));
+              } catch {
+                // Keep current value on invalid JSON.
+              }
+              return;
+            }
+            onChange(path, event.target.value);
+          }}
+          rows={inputTypeObj?.type === "CodeEditor" ? 6 : 4}
+          className={`w-full px-2.5 py-1.5 text-[13px] rounded-md border border-[#e5e7eb] text-[#111827] bg-white focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors resize-y ${inputTypeObj?.type === "CodeEditor" ? "font-mono" : ""}`}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <TopicTextInput
+      label={label}
+      value={typeof value === "string" ? value : value === undefined || value === null ? "" : String(value)}
+      onChange={(v) => onChange(path, v)}
+    />
+  );
 }
 
 function isExternalAsset(value: string): boolean {
@@ -469,6 +1004,176 @@ function TopicTextInput({
         readOnly={readOnly}
         className={`w-full px-2.5 py-1.5 text-[13px] rounded-md border border-[#e5e7eb] text-[#111827] transition-colors ${readOnly ? "bg-[#f8fafc]" : "bg-white focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"}`}
       />
+    </div>
+  );
+}
+
+// A title consisting only of whitespace/line-breaks (e.g. everything
+// selected and deleted in a contenteditable canvas overlay, which can leave
+// a stray <br>) is still "empty" — title is mandatory everywhere.
+function isBlankTitleValue(value: string): boolean {
+  return value
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .trim().length === 0;
+}
+
+const TITLE_MANDATORY_MESSAGE =
+  'Title is mandatory and cannot be empty. If you want to hide the title from preview, please use the "Display title in preview" setting below.';
+
+// Standard duration a title-mandatory warning stays up before it auto-clears
+// and the blank title is restored to its last valid value — shared by the
+// panel field and the canvas overlay so both behave identically.
+const TITLE_WARNING_DURATION_MS = 6000;
+
+// Shared Title field for topic/section/content group/component General
+// accordions: title can never be saved blank. Like the canvas's inline
+// title, every non-blank keystroke commits live (via onChange) so the
+// canvas mirrors panel typing in real time, matching the canvas -> panel
+// direction. Blank keystrokes are never committed — otherwise the last
+// non-blank intermediate value (e.g. "N" from "New Topic 1" mid-backspace)
+// would become the wrong "revert to" target. `originalValueRef` captures
+// the true pre-edit value on focus so blur-while-blank can revert both the
+// local draft and the shared state (hence the canvas too) to it, and shows
+// the warning here since the edit originated in this panel.
+function TopicTitleField({
+  value,
+  onChange,
+  onDraftChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  // Fires on every keystroke, including blank ones that onChange skips —
+  // lets the canvas mirror the panel's literal text (blank included) live.
+  onDraftChange?: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  const [showWarning, setShowWarning] = useState(false);
+  const originalValueRef = useRef(value);
+  const autoRevertTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  const cancelAutoRevert = () => {
+    if (autoRevertTimeoutRef.current !== null) {
+      window.clearTimeout(autoRevertTimeoutRef.current);
+      autoRevertTimeoutRef.current = null;
+    }
+  };
+
+  // Reverts the blank draft to the pre-edit value and clears the warning —
+  // shared by both blur (immediate) and the auto-revert timeout (after
+  // TITLE_WARNING_DURATION_MS of being left blank, matching the canvas).
+  const revertToOriginal = () => {
+    cancelAutoRevert();
+    const revertValue = originalValueRef.current;
+    setShowWarning(false);
+    setDraft(revertValue);
+    onDraftChange?.(revertValue);
+    if (revertValue !== value) onChange(revertValue);
+  };
+
+  useEffect(() => cancelAutoRevert, []);
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <TopicFieldLabel>Title</TopicFieldLabel>
+      <input
+        type="text"
+        value={draft}
+        onFocus={() => {
+          originalValueRef.current = value;
+        }}
+        onChange={(event) => {
+          const nextValue = event.target.value;
+          setDraft(nextValue);
+          onDraftChange?.(nextValue);
+          if (isBlankTitleValue(nextValue)) {
+            // Warn immediately, not just on blur — the user shouldn't have
+            // to defocus the field to find out the title can't be blank.
+            setShowWarning(true);
+            if (autoRevertTimeoutRef.current === null) {
+              autoRevertTimeoutRef.current = window.setTimeout(revertToOriginal, TITLE_WARNING_DURATION_MS);
+            }
+          } else {
+            cancelAutoRevert();
+            if (showWarning) setShowWarning(false);
+            onChange(nextValue);
+          }
+        }}
+        onBlur={() => {
+          if (isBlankTitleValue(draft)) {
+            revertToOriginal();
+            return;
+          }
+          cancelAutoRevert();
+          setShowWarning(false);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") (event.target as HTMLInputElement).blur();
+        }}
+        className="w-full px-2.5 py-1.5 text-[13px] rounded-md border border-[#e5e7eb] text-[#111827] bg-white transition-colors focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
+      />
+      {showWarning && (
+        <p className="text-[11px] text-[#b42318]">{TITLE_MANDATORY_MESSAGE}</p>
+      )}
+    </div>
+  );
+}
+
+// Matches the old Authoring Tool's Backbone-Forms Number editor: a numeric
+// input with stacked increment/decrement buttons instead of the browser's
+// native spinner. Used for "Require completion of" (topic/section/content
+// group levels).
+function TopicNumberStepper({
+  label,
+  value,
+  onChange,
+  min,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  min?: number;
+}) {
+  const step = (delta: number) => {
+    const current = Number(value);
+    const base = Number.isFinite(current) ? current : (min ?? 0);
+    const next = base + delta;
+    onChange(String(min !== undefined ? Math.max(min, next) : next));
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <TopicFieldLabel>{label}</TopicFieldLabel>
+      <div className="relative">
+        <input
+          type="number"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="w-full px-2.5 py-1.5 pr-7 text-[13px] rounded-md border border-[#e5e7eb] text-[#111827] bg-white transition-colors focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        />
+        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
+          <button
+            type="button"
+            aria-label="Increment"
+            onClick={() => step(1)}
+            className="flex items-center justify-center w-4 h-3 text-[#6b7280] hover:text-[#2d6fa8]"
+          >
+            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15" /></svg>
+          </button>
+          <button
+            type="button"
+            aria-label="Decrement"
+            onClick={() => step(-1)}
+            className="flex items-center justify-center w-4 h-3 text-[#6b7280] hover:text-[#2d6fa8]"
+          >
+            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -748,6 +1453,173 @@ function ExternalAssetModal({
   );
 }
 
+// Matches the legacy Authoring Tool's "Save as template" popup — same fields
+// (name, description, share with all users / share with specific users),
+// same dynamic "Save {level} template" title/placeholders — in this UI's own
+// modal chrome. Level-specific wiring/labelling happens at the call site;
+// this component only collects the inputs and hands them back on Done.
+function SaveAsTemplateModal({
+  levelLabel,
+  isSaving,
+  errorMessage,
+  onDone,
+  onCancel,
+}: {
+  levelLabel: string;
+  isSaving: boolean;
+  errorMessage: string | null;
+  onDone: (data: { title: string; description: string; isShared: boolean; shareWithUsers: string[] }) => void;
+  onCancel: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [isShared, setIsShared] = useState(false);
+  const [collaborators, setCollaborators] = useState<{ userId: string; email: string }[]>([]);
+  const [emailInput, setEmailInput] = useState("");
+  const [emailSuggestions, setEmailSuggestions] = useState<UserSummary[]>([]);
+  const searchRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    const query = emailInput.trim();
+    if (!query || isShared) {
+      setEmailSuggestions([]);
+      return;
+    }
+    const requestId = ++searchRequestIdRef.current;
+    const timer = window.setTimeout(async () => {
+      const results = await searchUsersByEmailQuery(query);
+      if (searchRequestIdRef.current !== requestId) return;
+      setEmailSuggestions(results.filter((user) => !collaborators.some((c) => c.userId === user._id)));
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [emailInput, isShared, collaborators]);
+
+  const addCollaborator = (user: UserSummary) => {
+    setCollaborators((prev) => (prev.some((c) => c.userId === user._id) ? prev : [...prev, { userId: user._id, email: user.email }]));
+    setEmailInput("");
+    setEmailSuggestions([]);
+  };
+  const removeCollaborator = (userId: string) => {
+    setCollaborators((prev) => prev.filter((c) => c.userId !== userId));
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 px-4" onClick={onCancel}>
+      <div className="w-full max-w-xl rounded-2xl border border-[var(--life-neutral-200)] bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-[var(--life-neutral-200)] flex items-center justify-between">
+          <h3 className="text-[15px] font-bold text-[var(--life-base-black)]">Save {levelLabel} template</h3>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="w-7 h-7 rounded-md border border-[var(--life-neutral-200)] text-[var(--life-neutral-500)] hover:bg-[var(--life-neutral-050)] flex items-center justify-center cursor-pointer"
+            aria-label="Close save template dialog"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div className="px-5 py-4 flex flex-col gap-3 max-h-[65vh] overflow-y-auto">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-semibold text-[#374151]">Name of template</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder={`Name for the ${levelLabel} template`}
+              className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-semibold text-[#374151]">Description</label>
+            <input
+              type="text"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder={`Description for the ${levelLabel} template`}
+              className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
+            />
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={isShared}
+              onChange={(event) => setIsShared(event.target.checked)}
+              className="h-3.5 w-3.5 rounded-[6px] border-[#cbd5e1] text-[#2d6fa8] focus:ring-[#2d6fa8]"
+            />
+            <span className="text-sm font-semibold text-[#374151]">Share with all users</span>
+          </label>
+          <p className="text-[12px] text-[var(--life-neutral-300)] -mt-1">
+            Controls whether colleagues can see this template from the "Shared Templates" filter.
+          </p>
+          {!isShared && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-semibold text-[#374151]">Share with specific users</label>
+              <input
+                type="text"
+                value={emailInput}
+                onChange={(event) => setEmailInput(event.target.value)}
+                placeholder="Search by email"
+                className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
+              />
+              {emailSuggestions.length > 0 && (
+                <div className="border border-[#d1d5db] rounded-[8px] divide-y divide-[#e5e7eb] max-h-32 overflow-y-auto">
+                  {emailSuggestions.map((user) => (
+                    <button
+                      key={user._id}
+                      type="button"
+                      onClick={() => addCollaborator(user)}
+                      className="w-full text-left px-3 py-1.5 text-[13px] text-[#374151] hover:bg-[#f9fafb] cursor-pointer"
+                    >
+                      {user.email}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {collaborators.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {collaborators.map((collaborator) => (
+                    <span
+                      key={collaborator.userId}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#eef2f6] text-[12px] text-[#374151]"
+                    >
+                      {collaborator.email}
+                      <button
+                        type="button"
+                        onClick={() => removeCollaborator(collaborator.userId)}
+                        className="text-[#9ca3af] hover:text-[#374151] cursor-pointer"
+                        aria-label={`Remove ${collaborator.email}`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {errorMessage && <p className="text-[13px] text-[#b42318]">{errorMessage}</p>}
+        </div>
+        <div className="px-5 py-4 border-t border-[var(--life-neutral-200)] flex items-center justify-end gap-2.5">
+          <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors cursor-pointer">
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={isSaving || !title.trim()}
+            onClick={() => onDone({ title, description, isShared, shareWithUsers: collaborators.map((c) => c.userId) })}
+            className="px-4 py-2 text-sm font-medium text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSaving ? "Saving…" : "Done"}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 function cloneContentPages(pages: ContentPageData[]): ContentPageData[] {
   return JSON.parse(JSON.stringify(pages)) as ContentPageData[];
 }
@@ -800,6 +1672,7 @@ function mapStructureToPages(
     isVisible?: boolean;
     onScreen?: TopicOnScreenSettings;
     ariaLevel?: string;
+    isA11yCompletionDescriptionEnabled?: boolean;
     extensions?: Record<string, unknown>;
     displayTitle?: string;
     sections: Array<{
@@ -821,6 +1694,7 @@ function mapStructureToPages(
         _percentInviewVertical?: number;
       };
       ariaLevel?: string;
+      isA11yCompletionDescriptionEnabled?: boolean;
       extensions?: Record<string, unknown>;
       contentGroups: Array<{
         id: string;
@@ -835,9 +1709,41 @@ function mapStructureToPages(
         isAvailable?: boolean;
         isHidden?: boolean;
         isVisible?: boolean;
+        onScreen?: {
+          _isEnabled?: boolean;
+          _classes?: string;
+          _percentInviewVertical?: number;
+        };
         ariaLevel?: string;
+        isA11yCompletionDescriptionEnabled?: boolean;
         extensions?: Record<string, unknown>;
-          components: Array<{ id: string; title: string; componentKey: string; layout?: "full" | "left" | "right"; description?: string; instruction?: string; subtitle?: string; themeSettings?: Record<string, unknown>; properties?: Record<string, unknown>; url?: string }>;
+          components: Array<{
+            id: string;
+            title: string;
+            componentKey: string;
+            layout?: "full" | "left" | "right";
+            description?: string;
+            instruction?: string;
+            subtitle?: string;
+            themeSettings?: Record<string, unknown>;
+            properties?: Record<string, unknown>;
+            url?: string;
+            classes?: string;
+            isOptional?: boolean;
+            isAvailable?: boolean;
+            isHidden?: boolean;
+            isVisible?: boolean;
+            isResetOnRevisit?: string;
+            ariaLevel?: string;
+            isA11yCompletionDescriptionEnabled?: boolean;
+            showDisplayTitleInPreview?: boolean;
+            onScreen?: {
+              _isEnabled?: boolean;
+              _classes?: string;
+              _percentInviewVertical?: number;
+            };
+            extensions?: Record<string, unknown>;
+          }>;
       }>;
     }>;
   }) => {
@@ -882,6 +1788,7 @@ function mapStructureToPages(
             : 50,
       },
       ariaLevel: topic.ariaLevel || "",
+      isA11yCompletionDescriptionEnabled: topic.isA11yCompletionDescriptionEnabled !== false,
       extensions:
         topic.extensions && typeof topic.extensions === "object"
           ? topic.extensions
@@ -915,6 +1822,7 @@ function mapStructureToPages(
               : 50,
         },
         ariaLevel: section.ariaLevel || "",
+        isA11yCompletionDescriptionEnabled: section.isA11yCompletionDescriptionEnabled !== false,
         extensions: section.extensions ?? {},
         showDisplayTitleInPreview:
           typeof section.displayTitle === "string"
@@ -935,7 +1843,16 @@ function mapStructureToPages(
           isVisible: group.isVisible !== false,
           requireCompletionOf: group.requireCompletionOf ?? "-1",
           classes: group.classes || "",
+          onScreen: {
+            _isEnabled: !!group.onScreen?._isEnabled,
+            _classes: group.onScreen?._classes || "",
+            _percentInviewVertical:
+              typeof group.onScreen?._percentInviewVertical === "number"
+                ? group.onScreen._percentInviewVertical
+                : 50,
+          },
           ariaLevel: group.ariaLevel || "",
+          isA11yCompletionDescriptionEnabled: group.isA11yCompletionDescriptionEnabled !== false,
           extensions: group.extensions ?? {},
           showDisplayTitleInPreview:
             typeof group.displayTitle === "string"
@@ -968,6 +1885,27 @@ function mapStructureToPages(
             themeSettings:
               component.themeSettings && typeof component.themeSettings === "object"
                 ? component.themeSettings as TopicThemeSettings
+                : {},
+            classes: component.classes || "",
+            isOptional: !!component.isOptional,
+            isAvailable: component.isAvailable !== false,
+            isHidden: !!component.isHidden,
+            isVisible: component.isVisible !== false,
+            isResetOnRevisit: component.isResetOnRevisit || "false",
+            ariaLevel: component.ariaLevel || "",
+            isA11yCompletionDescriptionEnabled: component.isA11yCompletionDescriptionEnabled !== false,
+            showDisplayTitleInPreview: !!component.showDisplayTitleInPreview,
+            onScreen: {
+              _isEnabled: !!component.onScreen?._isEnabled,
+              _classes: component.onScreen?._classes || "",
+              _percentInviewVertical:
+                typeof component.onScreen?._percentInviewVertical === "number"
+                  ? component.onScreen._percentInviewVertical
+                  : 50,
+            },
+            extensions:
+              component.extensions && typeof component.extensions === "object"
+                ? component.extensions
                 : {},
           })),
         })),
@@ -1004,6 +1942,17 @@ export interface ComponentData {
     url?: string;
     [key: string]: any;
   };
+  classes: string;
+  isOptional: boolean;
+  isAvailable: boolean;
+  isHidden: boolean;
+  isVisible: boolean;
+  isResetOnRevisit: string;
+  ariaLevel: string;
+  isA11yCompletionDescriptionEnabled: boolean;
+  showDisplayTitleInPreview: boolean;
+  onScreen: TopicOnScreenSettings;
+  extensions: Record<string, unknown>;
 }
 
 export interface BlockData {
@@ -1019,7 +1968,9 @@ export interface BlockData {
   isVisible: boolean;
   requireCompletionOf: string;
   classes: string;
+  onScreen: TopicOnScreenSettings;
   ariaLevel: string;
+  isA11yCompletionDescriptionEnabled: boolean;
   extensions: Record<string, unknown>;
   showDisplayTitleInPreview: boolean;
 }
@@ -1039,6 +1990,7 @@ export interface ArticleData {
   classes: string;
   onScreen: TopicOnScreenSettings;
   ariaLevel: string;
+  isA11yCompletionDescriptionEnabled: boolean;
   extensions: Record<string, unknown>;
   showDisplayTitleInPreview: boolean;
 }
@@ -1072,6 +2024,7 @@ export interface ContentPageData {
   isVisible: boolean;
   onScreen: TopicOnScreenSettings;
   ariaLevel: string;
+  isA11yCompletionDescriptionEnabled: boolean;
   extensions: Record<string, unknown>;
   showDisplayTitleInPreview: boolean;
   articles: ArticleData[];
@@ -1116,14 +2069,37 @@ const DEFAULT_SECTION_ACCORDIONS: Record<string, boolean> = {
 const DEFAULT_BLOCK_ACCORDIONS: Record<string, boolean> = {
   general: true,
   availability: false,
+  accessibility: false,
   extensions: false,
   theme: false,
   advanced: false,
 };
 
-const SPACING_OPTIONS = ["", "default", "small", "medium", "large"] as const;
-const VERTICAL_ALIGN_OPTIONS = ["", "top", "middle", "bottom"] as const;
-const HORIZONTAL_ALIGN_OPTIONS = ["", "left", "center", "right"] as const;
+const DEFAULT_COMPONENT_ACCORDIONS: Record<string, boolean> = {
+  general: true,
+  behaviour: false,
+  availability: false,
+  accessibility: false,
+  extensions: false,
+  theme: false,
+  advanced: false,
+};
+
+// Matches the legacy Authoring Tool's dynamic "Save {level} template" popup
+// title/placeholders — only the naming differs (Topic vs. its old "Page").
+const SAVE_TEMPLATE_LEVEL_LABELS: Record<"topic" | "section" | "group" | "component", string> = {
+  topic: "Topic",
+  section: "Section",
+  group: "Content Group",
+  component: "Component",
+};
+
+// Matches the theme's own _paddingTop/_paddingBottom enum (theme
+// properties.schema, pluginLocations.block) exactly — these are persisted
+// values, not display labels.
+const SPACING_OPTIONS = ["default", "double", "standard", "half", "remove"] as const;
+const VERTICAL_ALIGN_OPTIONS = ["top", "center", "bottom"] as const;
+const HORIZONTAL_ALIGN_OPTIONS = ["left", "center", "right"] as const;
 
 interface CourseEditorProps {
   courseId?: string;
@@ -1158,6 +2134,15 @@ export default function CourseEditor({
   const [structureLoadError, setStructureLoadError] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [titleValidationWarning, setTitleValidationWarning] = useState<string | null>(null);
+  // Live text of the title currently being edited in the CANVAS, including
+  // transient blank states that are deliberately never committed to real
+  // state (see onInput's isBlankTitleValue guard) — the right panel's title
+  // field reads this in preference to the real value so it visually mirrors
+  // canvas edits keystroke-for-keystroke, exactly like the reverse direction.
+  // Only one node's title can be in-edit at a time, so no id-matching is
+  // needed: whichever TopicTitleField is mounted is for the selected node.
+  const [canvasTitleLiveOverride, setCanvasTitleLiveOverride] = useState<string | null>(null);
   const [previewRefreshToken, setPreviewRefreshToken] = useState(0);
   const [previewBuildVersion, setPreviewBuildVersion] = useState(0);
   const [previewHoverState, setPreviewHoverState] = useState<PreviewHoverState>({
@@ -1180,20 +2165,82 @@ export default function CourseEditor({
   const [isSavingSelection, setIsSavingSelection] = useState(false);
   const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
   const [componentSubtitleSchemaSupport, setComponentSubtitleSchemaSupport] = useState<Record<string, boolean>>({});
+  const [componentInstructionSchemaSupport, setComponentInstructionSchemaSupport] = useState<Record<string, boolean>>({});
   const [topicAssetPickerTarget, setTopicAssetPickerTarget] = useState<TopicAssetTarget | null>(null);
   const [topicExternalAssetTarget, setTopicExternalAssetTarget] = useState<TopicExternalAssetTarget | null>(null);
+  const [saveTemplateTarget, setSaveTemplateTarget] = useState<{
+    level: "topic" | "section" | "group" | "component";
+    objectId: string;
+  } | null>(null);
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [saveTemplateError, setSaveTemplateError] = useState<string | null>(null);
   const [copiedTopicId, setCopiedTopicId] = useState<string | null>(null);
   const [copiedSectionId, setCopiedSectionId] = useState<string | null>(null);
   const [copiedBlockId, setCopiedBlockId] = useState<string | null>(null);
+  const [copiedComponentId, setCopiedComponentId] = useState<string | null>(null);
   const [openTopicAccordions, setOpenTopicAccordions] = useState<Record<string, boolean>>(DEFAULT_TOPIC_ACCORDIONS);
   const [openSectionAccordions, setOpenSectionAccordions] = useState<Record<string, boolean>>(DEFAULT_SECTION_ACCORDIONS);
   const [openBlockAccordions, setOpenBlockAccordions] = useState<Record<string, boolean>>(DEFAULT_BLOCK_ACCORDIONS);
+  const [openComponentAccordions, setOpenComponentAccordions] = useState<Record<string, boolean>>(DEFAULT_COMPONENT_ACCORDIONS);
+  const [componentBehaviourSchemas, setComponentBehaviourSchemas] = useState<Record<string, Record<string, unknown>>>({});
   const [courseAssetMappings, setCourseAssetMappings] = useState<Record<string, string>>({});
   const [assetLinkIdMap, setAssetLinkIdMap] = useState<Record<string, string>>({});
   const structureLoadRequestIdRef = useRef(0);
   const isMountedRef = useRef(true);
   const pendingGuardedActionRef = useRef<(() => void) | null>(null);
   const isInlineEditingRef = useRef(false);
+  // The title's committed value at the moment inline editing started — used to
+  // revert BOTH the canvas DOM and the underlying state if the edit session
+  // ends blank. onInput commits every non-blank keystroke live (so the right
+  // panel tracks canvas typing in real time), which means state can already
+  // hold an intermediate non-blank value (e.g. "N" from "New Topic 1" mid
+  // backspace) by the time the field goes fully blank — reverting to "current
+  // state" at that point would revert to that stale intermediate value, not
+  // the true pre-edit title. This ref preserves the real pre-edit value.
+  const titleEditOriginalValueRef = useRef<string | null>(null);
+  // Auto-revert timer for a title left blank in the canvas without blurring —
+  // mirrors the panel field's identical timeout so both surfaces behave the
+  // same: the warning stays up for TITLE_WARNING_DURATION_MS, then the title
+  // is restored automatically even if the user never leaves the field.
+  const titleAutoRevertTimeoutRef = useRef<number | null>(null);
+  // The iframe's course-preview SPA can still be mid-render for a moment
+  // after its own `load` event fires (or after a React selection/content
+  // update) — querying for the selected node's root can transiently miss it.
+  // Without a retry, the default initial selection (the topic, selected
+  // before the user has ever "changed" selection) can end up stuck
+  // non-editable until some later selection change happens to re-trigger a
+  // sync after the SPA has caught up. These back the bounded rAF retry in
+  // syncPreviewInlineEditors.
+  const inlineEditorSyncRetryFrameRef = useRef<number | null>(null);
+  const inlineEditorSyncRetryCountRef = useRef(0);
+  // Previous Behaviour text-field values for the currently selected
+  // component, keyed by path — lets syncPreviewTopicSettings diff old vs
+  // new value and find/replace the literal old text in the canvas, since
+  // component-specific fields (unlike title/body/instruction) have no fixed
+  // selector to patch directly. Reset whenever the selected component
+  // changes so a freshly-selected component doesn't diff against another
+  // component's stale values.
+  const previousBehaviourTextValuesRef = useRef<{ componentId: string | null; values: Record<string, string> }>({
+    componentId: null,
+    values: {},
+  });
+  // Previous Behaviour ASSET-field resolved URLs for the currently selected
+  // component, keyed by path — mirrors previousBehaviourTextValuesRef but
+  // for images. Diffing by the item's own previous src (rather than a
+  // generic class selector) is what lets an item array's Nth item update
+  // its OWN image, instead of always hitting the first image that matches
+  // a class shared by every item (e.g. every narrative slide's graphic).
+  const previousBehaviourAssetValuesRef = useRef<{ componentId: string | null; values: Record<string, string> }>({
+    componentId: null,
+    values: {},
+  });
+  // Watches the selected component's DOM for changes the real framework
+  // makes on its own — e.g. a narrative/accordion swapping which item is
+  // visible when its own nav/expand controls are clicked, which happens
+  // entirely inside the iframe with no React state change on our side to
+  // react to. Disconnected and recreated on every syncPreviewInlineEditors
+  // run so our OWN mutations (while it's disconnected) never re-trigger it.
+  const componentMutationObserverRef = useRef<MutationObserver | null>(null);
   const [addComponentTarget, setAddComponentTarget] = useState<{
     pageId: string;
     articleId: string;
@@ -1209,6 +2256,7 @@ export default function CourseEditor({
   const copiedTopicIdResetTimerRef = useRef<number | null>(null);
   const copiedSectionIdResetTimerRef = useRef<number | null>(null);
   const copiedBlockIdResetTimerRef = useRef<number | null>(null);
+  const copiedComponentIdResetTimerRef = useRef<number | null>(null);
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const rightPanelScrollRef = useRef<HTMLElement | null>(null);
   const cleanupPreviewListenersRef = useRef<(() => void) | null>(null);
@@ -1355,6 +2403,12 @@ export default function CourseEditor({
   useEffect(() => {
     void loadStructureFromDatabase();
   }, [loadStructureFromDatabase]);
+
+  useEffect(() => {
+    if (!titleValidationWarning) return;
+    const timer = window.setTimeout(() => setTitleValidationWarning(null), TITLE_WARNING_DURATION_MS);
+    return () => window.clearTimeout(timer);
+  }, [titleValidationWarning]);
 
   useEffect(() => {
     if (!hasUnsavedChanges) return;
@@ -1572,6 +2626,25 @@ export default function CourseEditor({
         color: #9ca3af;
       }
 
+      .adapt-authoring-preview-title-hidden {
+        display: none !important;
+      }
+
+      .adapt-authoring-preview-title-dimmed {
+        opacity: 0.45 !important;
+      }
+
+      /* A muted, "not currently in focus" look for everything nested
+         inside whichever level is selected (e.g. a section's own content
+         groups/components while the SECTION is selected) — makes it clear
+         at a glance which header is actually being edited right now vs.
+         what's just along for the ride. Purely visual: hover/click/editing
+         all keep working normally, and selecting a dimmed item directly
+         clears this the same run (see applyPreviewSelectionStyles). */
+      .adapt-authoring-preview-unfocused-descendant {
+        opacity: 0.55 !important;
+      }
+
       .adapt-authoring-preview-inline-structured-header {
         display: flex !important;
         flex-direction: column !important;
@@ -1595,6 +2668,23 @@ export default function CourseEditor({
       .adapt-authoring-preview-inline-structured-header > .laerdal-text__subtitle {
         margin: 0 !important;
         padding: 0 !important;
+      }
+
+      /* Component is the one level whose header group shares its flex
+         container with the component's own real, non-header markup (item
+         lists, images, widgets, etc. rendered by the actual template inside
+         .component__inner) — those children never match a header selector
+         below, so without an explicit order they'd default to 0 and jump
+         ahead of the order:1 title despite already being correctly last in
+         DOM order. Default every child to order 5 (after instruction) so
+         only known header fields ever sort earlier, keeping this identical
+         to how the real, non-edited preview stacks them. Scoped to the
+         component-only modifier class — topic/section/content group each
+         get their OWN dedicated header wrapper with nothing else inside it,
+         so they never had this problem and must not be touched by it.
+       */
+      .adapt-authoring-preview-inline-structured-header--component > * {
+        order: 5 !important;
       }
 
       .adapt-authoring-preview-inline-structured-header > .page__title,
@@ -1644,7 +2734,7 @@ export default function CourseEditor({
     head.appendChild(style);
 
     doc
-      .querySelectorAll(".adapt-authoring-preview-hover, .adapt-authoring-preview-active, .adapt-authoring-preview-hover-header, .adapt-authoring-preview-active-header, .adapt-authoring-preview-clickable, .adapt-authoring-preview-topic-shell-active")
+      .querySelectorAll(".adapt-authoring-preview-hover, .adapt-authoring-preview-active, .adapt-authoring-preview-hover-header, .adapt-authoring-preview-active-header, .adapt-authoring-preview-clickable, .adapt-authoring-preview-topic-shell-active, .adapt-authoring-preview-unfocused-descendant")
       .forEach((node) => {
         node.classList.remove(
           "adapt-authoring-preview-hover",
@@ -1652,7 +2742,8 @@ export default function CourseEditor({
           "adapt-authoring-preview-hover-header",
           "adapt-authoring-preview-active-header",
           "adapt-authoring-preview-clickable",
-          "adapt-authoring-preview-topic-shell-active"
+          "adapt-authoring-preview-topic-shell-active",
+          "adapt-authoring-preview-unfocused-descendant"
         );
         node.removeAttribute("data-preview-bridge-label");
       });
@@ -1760,6 +2851,21 @@ export default function CourseEditor({
       if (activeNode) {
         activeNode.classList.add("adapt-authoring-preview-active");
         (activeNode as Element).setAttribute("data-preview-bridge-label", toBadgeLabel(activeLevel));
+
+        // Dim everything nested inside the selected level — its own
+        // header stays fully normal, only what's underneath (not what's
+        // actually being edited via the right panel right now) is muted.
+        // Components have nothing nested under them, so nothing to dim.
+        const unfocusedDescendantSelector: string | null =
+          activeLevel === "topic" ? ".article, .block, .component"
+          : activeLevel === "section" ? ".block, .component"
+          : activeLevel === "group" ? ".component"
+          : null;
+        if (unfocusedDescendantSelector) {
+          activeNode.querySelectorAll(unfocusedDescendantSelector).forEach((node) => {
+            node.classList.add("adapt-authoring-preview-unfocused-descendant");
+          });
+        }
       }
 
       if (activeLevel === "topic") {
@@ -1786,16 +2892,68 @@ export default function CourseEditor({
     const doc = iframe?.contentDocument;
     if (!doc) return;
 
+    if (inlineEditorSyncRetryFrameRef.current !== null) {
+      window.cancelAnimationFrame(inlineEditorSyncRetryFrameRef.current);
+      inlineEditorSyncRetryFrameRef.current = null;
+    }
+
+    // Disconnected up front, every run — re-created only for a selected
+    // component (see the end of the component branch below). Doing this
+    // BEFORE our own DOM patching (rather than trying to flag/ignore
+    // self-caused records after the fact) guarantees our own mutations can
+    // never be mistaken for the framework's.
+    componentMutationObserverRef.current?.disconnect();
+    componentMutationObserverRef.current = null;
+
+    if (hasCanvasSelection) {
+      const expectedRootSelector = selectedComponentId
+        ? `.component[data-adapt-id="${selectedComponentId}"]`
+        : selectedBlockId
+          ? `.block[data-adapt-id="${selectedBlockId}"]`
+          : selectedArticleId
+            ? `.article[data-adapt-id="${selectedArticleId}"]`
+            : selectedPageId && !menuSelected
+              ? `.page[data-adapt-id="${selectedPageId}"]`
+              : null;
+
+      // The selected node's real DOM root not existing yet almost always
+      // means the SPA hasn't finished rendering, not that the selection is
+      // invalid — retry a bounded number of frames instead of giving up, so
+      // the default initial selection doesn't end up permanently stuck
+      // non-editable just because it "arrived" before the iframe did.
+      if (expectedRootSelector && !doc.querySelector(expectedRootSelector)) {
+        if (inlineEditorSyncRetryCountRef.current < 90) {
+          inlineEditorSyncRetryCountRef.current += 1;
+          inlineEditorSyncRetryFrameRef.current = window.requestAnimationFrame(() => {
+            inlineEditorSyncRetryFrameRef.current = null;
+            syncPreviewInlineEditors();
+          });
+        } else {
+          inlineEditorSyncRetryCountRef.current = 0;
+        }
+        return;
+      }
+    }
+    inlineEditorSyncRetryCountRef.current = 0;
+
     const clearEditable = () => {
+      // Only tear down an injected placeholder (title/subtitle/body/
+      // instruction container the real template didn't render because the
+      // field was empty at last build) when it's STILL empty. One typed
+      // into while selected is real content the user just added to this
+      // component — deselecting must not make it disappear just because
+      // the underlying template happened to omit an empty version of it.
       doc.querySelectorAll("[data-preview-injected='true']").forEach((node) => {
-        const parent = node.parentElement;
-        node.remove();
+        const element = node as HTMLElement;
+        if ((element.textContent || "").trim().length > 0) return;
+        const parent = element.parentElement;
+        element.remove();
         if (parent?.getAttribute("data-preview-injected") === "true" && !parent.textContent?.trim() && !parent.querySelector("*")) {
           parent.remove();
         }
       });
       doc.querySelectorAll(".adapt-authoring-preview-inline-structured-header").forEach((node) => {
-        node.classList.remove("adapt-authoring-preview-inline-structured-header");
+        node.classList.remove("adapt-authoring-preview-inline-structured-header", "adapt-authoring-preview-inline-structured-header--component");
       });
 
       doc.querySelectorAll("[data-preview-inline-container-empty='true']").forEach((node) => {
@@ -1806,6 +2964,20 @@ export default function CourseEditor({
         const element = node as HTMLElement;
         const isInjected = element.getAttribute("data-preview-injected") === "true";
         const isEmpty = (element.textContent || "").trim().length === 0;
+
+        // On deselect, a title that was shown DIMMED (because "Display title
+        // in preview" is off) goes back to fully hidden — matching real
+        // preview, where an empty displayTitle renders nothing. The dimmed
+        // treatment is only for the currently-selected node being edited.
+        if (element.getAttribute("data-preview-edit-field") === "title") {
+          const container = element.closest(PREVIEW_INLINE_FIELD_CONTAINER_SELECTOR) as HTMLElement | null;
+          const titleTarget = container ?? element;
+          if (titleTarget.classList.contains("adapt-authoring-preview-title-dimmed")) {
+            titleTarget.classList.remove("adapt-authoring-preview-title-dimmed");
+            titleTarget.classList.add("adapt-authoring-preview-title-hidden");
+          }
+        }
+
         node.removeAttribute("data-preview-edit-enabled");
         node.removeAttribute("data-preview-edit-field");
         node.removeAttribute("data-preview-node-level");
@@ -1813,6 +2985,7 @@ export default function CourseEditor({
         node.removeAttribute("data-preview-article-id");
         node.removeAttribute("data-preview-block-id");
         node.removeAttribute("data-preview-component-id");
+        node.removeAttribute("data-preview-behaviour-path");
         node.removeAttribute("contenteditable");
         node.removeAttribute("spellcheck");
         node.removeAttribute("data-placeholder");
@@ -1826,56 +2999,6 @@ export default function CourseEditor({
           }
         }
       });
-    };
-
-    const ensureElement = (
-      host: Element,
-      selector: string,
-      className: string,
-      tagName: "div" | "p",
-      value: string
-    ): HTMLElement => {
-      const existing = host.querySelector(selector) as HTMLElement | null;
-      if (existing) {
-        return existing;
-      }
-
-      const next = doc.createElement(tagName);
-      next.className = className;
-      next.textContent = value;
-      next.setAttribute("data-preview-injected", "true");
-      host.appendChild(next);
-      return next;
-    };
-
-    const ensureContainerInner = (
-      host: Element,
-      containerSelector: string,
-      containerClassName: string,
-      innerSelector: string,
-      innerClassName: string,
-      value: string,
-      tagName: "div" | "p" = "div"
-    ): HTMLElement => {
-      const existingInner = host.querySelector(innerSelector) as HTMLElement | null;
-      if (existingInner) {
-        return existingInner;
-      }
-
-      let container = host.querySelector(containerSelector) as HTMLElement | null;
-      if (!container) {
-        container = doc.createElement("div");
-        container.className = containerClassName;
-        container.setAttribute("data-preview-injected", "true");
-        host.appendChild(container);
-      }
-
-      const inner = doc.createElement(tagName);
-      inner.className = innerClassName;
-      inner.textContent = value;
-      inner.setAttribute("data-preview-injected", "true");
-      container.appendChild(inner);
-      return inner;
     };
 
     const ensureHeaderInnerHost = (
@@ -1919,81 +3042,83 @@ export default function CourseEditor({
       return inner;
     };
 
-    const ensureTopicTitleInner = (
+    // Every level's title/subtitle/body/instruction placeholders are ensured
+    // and then forced into one fixed DOM order: title, subtitle (only where
+    // the level/component supports it), body, instruction — regardless of
+    // which of them the real rendered template already contains vs. which
+    // we have to inject as empty placeholders. This is the single shared
+    // ordering rule for all four levels (topic/section/content group/
+    // component); never special-case ordering per level — add/adjust field
+    // specs at the call site instead.
+    type OrderedInlineFieldSpec = {
+      key: "title" | "subtitle" | "body" | "instruction";
+      visible: boolean;
+      value: string;
+    } & (
+      | { kind: "pair"; containerSelector: string; containerClassName: string; innerSelector: string; innerClassName: string }
+      | { kind: "flat"; selector: string; className: string }
+    );
+
+    const ensureOrderedInlineFields = (
       host: Element,
-      value: string
-    ): HTMLElement => {
-      const existingInner = host.querySelector(".page__title-inner") as HTMLElement | null;
-      if (existingInner) {
-        return existingInner;
-      }
+      specs: OrderedInlineFieldSpec[]
+    ): Partial<Record<OrderedInlineFieldSpec["key"], HTMLElement>> => {
+      const result: Partial<Record<OrderedInlineFieldSpec["key"], HTMLElement>> = {};
+      const outerNodes: HTMLElement[] = [];
 
-      let container = host.querySelector(".page__title") as HTMLElement | null;
-      if (!container) {
-        container = doc.createElement("div");
-        container.className = "page__title";
-        container.setAttribute("data-preview-injected", "true");
+      specs.forEach((spec) => {
+        if (!spec.visible) return;
 
-        const firstBodyLikeBlock = host.querySelector(
-          ".page__subtitle, .page__body, .page__instruction"
-        );
-        if (firstBodyLikeBlock && firstBodyLikeBlock.parentElement === host) {
-          host.insertBefore(container, firstBodyLikeBlock);
-        } else if (host.firstChild) {
-          host.insertBefore(container, host.firstChild);
-        } else {
+        if (spec.kind === "flat") {
+          let el = host.querySelector(spec.selector) as HTMLElement | null;
+          if (!el) {
+            el = doc.createElement("div");
+            el.className = spec.className;
+            el.textContent = spec.value;
+            el.setAttribute("data-preview-injected", "true");
+            host.appendChild(el);
+          }
+          result[spec.key] = el;
+          outerNodes.push(el);
+          return;
+        }
+
+        const existingInner = host.querySelector(spec.innerSelector) as HTMLElement | null;
+        if (existingInner) {
+          const container = (existingInner.closest(spec.containerSelector) as HTMLElement | null) ?? existingInner;
+          result[spec.key] = existingInner;
+          outerNodes.push(container);
+          return;
+        }
+
+        let container = host.querySelector(spec.containerSelector) as HTMLElement | null;
+        if (!container) {
+          container = doc.createElement("div");
+          container.className = spec.containerClassName;
+          container.setAttribute("data-preview-injected", "true");
           host.appendChild(container);
         }
+        const inner = doc.createElement("div");
+        inner.className = spec.innerClassName;
+        inner.textContent = spec.value;
+        inner.setAttribute("data-preview-injected", "true");
+        container.appendChild(inner);
+        result[spec.key] = inner;
+        outerNodes.push(container);
+      });
+
+      // Pin the whole ordered group to the front of `host`, in spec order —
+      // inserting in reverse at host.firstChild is what makes the final
+      // order match `specs` regardless of each node's prior position.
+      for (let i = outerNodes.length - 1; i >= 0; i--) {
+        host.insertBefore(outerNodes[i], host.firstChild);
       }
 
-      const inner = doc.createElement("div");
-      inner.className = "page__title-inner";
-      inner.textContent = value;
-      inner.setAttribute("data-preview-injected", "true");
-      container.appendChild(inner);
-      return inner;
+      return result;
     };
 
-    const ensureTitleInner = (
-      host: Element,
-      containerSelector: string,
-      containerClassName: string,
-      innerSelector: string,
-      innerClassName: string,
-      value: string,
-      insertBeforeSelectors: string[]
-    ): HTMLElement => {
-      const existingInner = host.querySelector(innerSelector) as HTMLElement | null;
-      if (existingInner) {
-        return existingInner;
-      }
-
-      let container = host.querySelector(containerSelector) as HTMLElement | null;
-      if (!container) {
-        container = doc.createElement("div");
-        container.className = containerClassName;
-        container.setAttribute("data-preview-injected", "true");
-
-        const firstDirectChild = insertBeforeSelectors
-          .map((selector) => host.querySelector(selector))
-          .find((candidate) => candidate && candidate.parentElement === host);
-
-        if (firstDirectChild) {
-          host.insertBefore(container, firstDirectChild);
-        } else if (host.firstChild) {
-          host.insertBefore(container, host.firstChild);
-        } else {
-          host.appendChild(container);
-        }
-      }
-
-      const inner = doc.createElement("div");
-      inner.className = innerClassName;
-      inner.textContent = value;
-      inner.setAttribute("data-preview-injected", "true");
-      container.appendChild(inner);
-      return inner;
-    };
+    const PREVIEW_INLINE_FIELD_CONTAINER_SELECTOR =
+      ".page__title, .page__subtitle, .page__body, .page__instruction, .article__title, .article__body, .article__instruction, .block__title, .block__body, .block__instruction, .component__title, .component__body, .component__instruction, .laerdal-text__subtitle";
 
     const makeEditable = (
       element: HTMLElement,
@@ -2006,6 +3131,7 @@ export default function CourseEditor({
         articleId?: string;
         blockId?: string;
         componentId?: string;
+        hiddenFromPreview?: boolean;
       }
     ) => {
       const isRichTextField =
@@ -2031,9 +3157,7 @@ export default function CourseEditor({
       element.classList.add("adapt-authoring-preview-inline-editable");
 
       const hasText = (options.value || "").trim().length > 0;
-      const container = element.closest(
-        ".page__title, .page__subtitle, .page__body, .page__instruction, .article__title, .article__body, .article__instruction, .block__title, .block__body, .block__instruction, .component__title, .component__body, .component__instruction, .laerdal-text__subtitle"
-      ) as HTMLElement | null;
+      const container = element.closest(PREVIEW_INLINE_FIELD_CONTAINER_SELECTOR) as HTMLElement | null;
 
       if (!hasText) {
         element.classList.add("adapt-authoring-preview-inline-empty");
@@ -2043,6 +3167,17 @@ export default function CourseEditor({
         container?.removeAttribute("data-preview-inline-container-empty");
       }
       element.setAttribute("data-placeholder", options.placeholder);
+
+      if (options.field === "title") {
+        const titleTarget = container ?? element;
+        // While this node is selected (the only time makeEditable runs for
+        // it), a title that's excluded from the real preview is shown DIMMED
+        // rather than removed, so the editor can still see/edit it and get a
+        // visual cue that it won't render. "-title-hidden" (fully removed,
+        // matching real preview) is applied only on deselect, by clearEditable.
+        titleTarget.classList.remove("adapt-authoring-preview-title-hidden");
+        titleTarget.classList.toggle("adapt-authoring-preview-title-dimmed", !!options.hiddenFromPreview);
+      }
     };
 
     clearEditable();
@@ -2065,90 +3200,80 @@ export default function CourseEditor({
       : null;
 
     if (selectedComponent && selectedBlock && selectedArticle && selectedPage) {
-      const componentNode = doc.querySelector(`.component[data-adapt-id="${selectedComponent.id}"]`);
+      const componentNode = doc.querySelector(`.component[data-adapt-id="${selectedComponent.id}"]`) as HTMLElement | null;
       const componentHost = (componentNode?.querySelector(".component__inner") ?? componentNode) as HTMLElement | null;
       if (!componentHost) return;
 
-      componentHost.classList.add("adapt-authoring-preview-inline-structured-header");
+      // Some component templates render their own widget (image, H5P
+      // iframe, etc.) as a SIBLING of .component__inner rather than a child
+      // of it (e.g. `.component > .component__widget, .component__inner`).
+      // Reordering only inside componentHost can't fix that — the header
+      // group has to be pinned ahead of its container's own siblings too.
+      if (componentNode && componentHost !== componentNode && componentHost.parentElement === componentNode) {
+        componentNode.insertBefore(componentHost, componentNode.firstChild);
+      }
 
-      const titleEl = ensureTitleInner(
-        componentHost,
-        ".component__title",
-        "component__title",
-        ".component__title-inner",
-        "component__title-inner",
-        selectedComponent.settings.title || "",
-        [".laerdal-text__subtitle", ".component__body", ".component__instruction"]
-      );
-      const bodyEl = ensureContainerInner(
-        componentHost,
-        ".component__body",
-        "component__body",
-        ".component__body-inner",
-        "component__body-inner",
-        selectedComponent.settings.description || ""
-      );
-      const instructionEl = ensureContainerInner(
-        componentHost,
-        ".component__instruction",
-        "component__instruction",
-        ".component__instruction-inner",
-        "component__instruction-inner",
-        selectedComponent.settings.instruction || ""
-      );
-      const componentProperties =
-        selectedComponent.settings.properties &&
-        typeof selectedComponent.settings.properties === "object" &&
-        !Array.isArray(selectedComponent.settings.properties)
-          ? selectedComponent.settings.properties
-          : {};
+      componentHost.classList.add("adapt-authoring-preview-inline-structured-header", "adapt-authoring-preview-inline-structured-header--component");
+
       const componentKey = (selectedComponent.settings.componentKey || "").toLowerCase();
+      // Note: component.settings.properties always carries `subtitle`/
+      // `instruction` keys (seeded as empty strings) for every component
+      // regardless of type — createComponent() in adaptAuthoring.ts seeds
+      // both unconditionally when a component is first added — so
+      // hasOwnProperty on those keys is never a reliable signal here. Only
+      // trust actual saved text or the real merged-schema check
+      // (componentSubtitleSchemaSupport / componentInstructionSchemaSupport).
+      const hasComponentInstruction =
+        ((selectedComponent.settings.instruction || "").trim().length > 0) ||
+        componentInstructionSchemaSupport[componentKey] === true;
       const hasComponentSubtitle =
         ((selectedComponent.settings.subtitle || "").trim().length > 0) ||
-        Object.prototype.hasOwnProperty.call(componentProperties, "subtitle") ||
         componentSubtitleSchemaSupport[componentKey] === true;
-      const subtitleEl = hasComponentSubtitle
-        ? ensureElement(
-            componentHost,
-            ".laerdal-text__subtitle",
-            "laerdal-text__subtitle",
-            "div",
-            selectedComponent.settings.subtitle || ""
-          )
-        : null;
 
-      makeEditable(titleEl, {
-        level: "component",
-        field: "title",
-        placeholder: "Component title",
-        value: selectedComponent.settings.title || "",
-        pageId: selectedPage.id,
-        articleId: selectedArticle.id,
-        blockId: selectedBlock.id,
-        componentId: selectedComponent.id,
-      });
-      makeEditable(bodyEl, {
-        level: "component",
-        field: "body",
-        placeholder: "Add component body",
-        value: selectedComponent.settings.description || "",
-        pageId: selectedPage.id,
-        articleId: selectedArticle.id,
-        blockId: selectedBlock.id,
-        componentId: selectedComponent.id,
-      });
-      makeEditable(instructionEl, {
-        level: "component",
-        field: "instruction",
-        placeholder: "Add component instruction",
-        value: selectedComponent.settings.instruction || "",
-        pageId: selectedPage.id,
-        articleId: selectedArticle.id,
-        blockId: selectedBlock.id,
-        componentId: selectedComponent.id,
-      });
-      if (subtitleEl) {
-        makeEditable(subtitleEl, {
+      // Canonical order: title -> subtitle (laerdal-text-style components
+      // only) -> body -> instruction, then whatever component-specific
+      // markup (graphics, items, etc.) the real template renders after it.
+      const componentFields = ensureOrderedInlineFields(componentHost, [
+        {
+          key: "title", kind: "pair", visible: true,
+          value: selectedComponent.settings.title || "",
+          containerSelector: ".component__title", containerClassName: "component__title",
+          innerSelector: ".component__title-inner", innerClassName: "component__title-inner",
+        },
+        {
+          key: "subtitle", kind: "flat", visible: hasComponentSubtitle,
+          value: selectedComponent.settings.subtitle || "",
+          selector: ".laerdal-text__subtitle", className: "laerdal-text__subtitle",
+        },
+        {
+          key: "body", kind: "pair", visible: true,
+          value: selectedComponent.settings.description || "",
+          containerSelector: ".component__body", containerClassName: "component__body",
+          innerSelector: ".component__body-inner", innerClassName: "component__body-inner",
+        },
+        {
+          key: "instruction", kind: "pair", visible: hasComponentInstruction,
+          value: selectedComponent.settings.instruction || "",
+          containerSelector: ".component__instruction", containerClassName: "component__instruction",
+          innerSelector: ".component__instruction-inner", innerClassName: "component__instruction-inner",
+        },
+      ]);
+
+      if (componentFields.title) {
+        makeEditable(componentFields.title, {
+          level: "component",
+          field: "title",
+          placeholder: "Component title",
+          value: selectedComponent.settings.title || "",
+          pageId: selectedPage.id,
+          articleId: selectedArticle.id,
+          blockId: selectedBlock.id,
+          componentId: selectedComponent.id,
+          hiddenFromPreview: !selectedComponent.showDisplayTitleInPreview,
+        });
+      }
+      if (componentFields.subtitle) {
+        makeEditable(componentFields.subtitle, {
           level: "component",
           field: "subtitle",
           placeholder: "Add component subtitle",
@@ -2159,225 +3284,358 @@ export default function CourseEditor({
           componentId: selectedComponent.id,
         });
       }
+      if (componentFields.body) {
+        makeEditable(componentFields.body, {
+          level: "component",
+          field: "body",
+          placeholder: "Add component body",
+          value: selectedComponent.settings.description || "",
+          pageId: selectedPage.id,
+          articleId: selectedArticle.id,
+          blockId: selectedBlock.id,
+          componentId: selectedComponent.id,
+        });
+      }
+      if (componentFields.instruction) {
+        makeEditable(componentFields.instruction, {
+          level: "component",
+          field: "instruction",
+          placeholder: "Add component instruction",
+          value: selectedComponent.settings.instruction || "",
+          pageId: selectedPage.id,
+          articleId: selectedArticle.id,
+          blockId: selectedBlock.id,
+          componentId: selectedComponent.id,
+        });
+      }
+
+      // Make every OTHER Behaviour text field (item labels/titles, an MCQ
+      // option's text, ...) directly editable in the canvas too — matched
+      // by literal text content since, unlike title/body/instruction, these
+      // have no canonical class to target. Editing here writes straight
+      // back to the same settings.properties path the Behaviour accordion
+      // itself edits (see the "data-preview-behaviour-path" branch in
+      // onInput/onFocusOut below), so canvas and panel stay in sync both
+      // ways. Only currently-VISIBLE items (their text literally present in
+      // the DOM right now) can be matched this way — an item hidden behind
+      // a "only one visible at a time" component (e.g. a narrative slide
+      // that isn't the active one) has nothing to match until it's brought
+      // into view.
+      const behaviourSchemaForEditing = componentBehaviourSchemas[componentKey] as
+        | Record<string, BehaviourFieldSchema>
+        | undefined;
+      if (behaviourSchemaForEditing) {
+        const behaviourTextFields = collectBehaviourTextPaths(
+          behaviourSchemaForEditing,
+          asRecord(selectedComponent.settings.properties)
+        );
+        behaviourTextFields.forEach(({ path, value }) => {
+          const trimmed = value.trim();
+          if (!trimmed) return;
+
+          const walker = doc.createTreeWalker(componentHost, NodeFilter.SHOW_TEXT);
+          let node = walker.nextNode();
+          let matchedElement: HTMLElement | null = null;
+          while (node) {
+            if (node.textContent && node.textContent.trim() === trimmed && node.parentElement) {
+              matchedElement = node.parentElement;
+              break;
+            }
+            node = walker.nextNode();
+          }
+          // Don't reclaim an element the header pipeline above already owns.
+          if (!matchedElement || matchedElement.hasAttribute("data-preview-edit-field")) return;
+
+          matchedElement.setAttribute("data-preview-edit-enabled", "true");
+          matchedElement.setAttribute("data-preview-behaviour-path", path);
+          matchedElement.setAttribute("data-preview-page-id", selectedPage.id);
+          matchedElement.setAttribute("data-preview-article-id", selectedArticle.id);
+          matchedElement.setAttribute("data-preview-block-id", selectedBlock.id);
+          matchedElement.setAttribute("data-preview-component-id", selectedComponent.id);
+          matchedElement.setAttribute("contenteditable", "true");
+          matchedElement.setAttribute("spellcheck", "false");
+          matchedElement.classList.add("adapt-authoring-preview-inline-editable");
+        });
+      }
+
+      // Re-sync when the framework's OWN JS changes the DOM on its own —
+      // a narrative/accordion/tabs component swapping which item is
+      // visible when the user clicks its native nav/expand controls. That
+      // happens with no React state change on our side, so nothing would
+      // otherwise tell us the newly-visible item needs to become editable
+      // too. Debounced via the same retry-frame ref: a transition can fire
+      // a burst of mutations, so wait for them to settle before re-syncing.
+      const componentObserver = new MutationObserver(() => {
+        // Never re-sync while the user is actively typing — e.g. a browser
+        // inserting/removing a stray <br> as a contenteditable field goes
+        // empty is itself a childList mutation, and re-syncing mid-edit
+        // would tear down and rebuild the very field that's focused,
+        // losing focus and leaving state like canvasTitleLiveOverride
+        // stuck (its clearing only happens on blur, which never fires
+        // cleanly for a field that gets destroyed out from under it).
+        if (isInlineEditingRef.current) return;
+        if (inlineEditorSyncRetryFrameRef.current !== null) return;
+        inlineEditorSyncRetryFrameRef.current = window.requestAnimationFrame(() => {
+          inlineEditorSyncRetryFrameRef.current = null;
+          syncPreviewInlineEditors();
+        });
+      });
+      componentObserver.observe(componentHost, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ["class", "aria-expanded", "aria-selected", "aria-hidden", "hidden"],
+      });
+      componentMutationObserverRef.current = componentObserver;
+
       return;
     }
 
     if (selectedBlock && selectedArticle && selectedPage) {
       const blockNode = doc.querySelector(`.block[data-adapt-id="${selectedBlock.id}"]`);
+      // The real template nests .block__header INSIDE .block__inner (as its
+      // first child, before .component__container) — NOT as a sibling
+      // before .block__inner. .block__inner is what actually carries the
+      // theme's horizontal padding, so a synthetic header built as a
+      // sibling of it never inherits that padding and renders flush-left
+      // instead of aligned with everything else. Root against .block__inner
+      // itself (falling back to blockNode if it's somehow missing) so the
+      // synthetic header lands in the exact same place a real one does.
+      const blockInnerNode = (blockNode?.querySelector(".block__inner") as HTMLElement | null) ?? blockNode;
       const blockHeader = ensureHeaderInnerHost(
-        blockNode,
+        blockInnerNode,
         ".block__header",
         "block__header",
         ".block__header-inner",
         "block__header-inner",
-        [".block__inner"]
+        [".component__container"]
       );
       if (!blockHeader) return;
 
       blockHeader.classList.add("adapt-authoring-preview-inline-structured-header");
 
-      const titleEl = ensureTitleInner(
-        blockHeader,
-        ".block__title",
-        "block__title",
-        ".block__title-inner",
-        "block__title-inner",
-        selectedBlock.title || "",
-        [".block__body", ".block__instruction"]
-      );
-      const bodyEl = ensureContainerInner(
-        blockHeader,
-        ".block__body",
-        "block__body",
-        ".block__body-inner",
-        "block__body-inner",
-        selectedBlock.description || ""
-      );
-      const instructionEl = ensureContainerInner(
-        blockHeader,
-        ".block__instruction",
-        "block__instruction",
-        ".block__instruction-inner",
-        "block__instruction-inner",
-        selectedBlock.instruction || ""
-      );
+      const blockFields = ensureOrderedInlineFields(blockHeader, [
+        {
+          key: "title", kind: "pair", visible: true, value: selectedBlock.title || "",
+          containerSelector: ".block__title", containerClassName: "block__title",
+          innerSelector: ".block__title-inner", innerClassName: "block__title-inner",
+        },
+        {
+          key: "body", kind: "pair", visible: true, value: selectedBlock.description || "",
+          containerSelector: ".block__body", containerClassName: "block__body",
+          innerSelector: ".block__body-inner", innerClassName: "block__body-inner",
+        },
+        {
+          key: "instruction", kind: "pair", visible: true, value: selectedBlock.instruction || "",
+          containerSelector: ".block__instruction", containerClassName: "block__instruction",
+          innerSelector: ".block__instruction-inner", innerClassName: "block__instruction-inner",
+        },
+      ]);
 
-      makeEditable(titleEl, {
-        level: "group",
-        field: "title",
-        placeholder: "Content Group title",
-        value: selectedBlock.title || "",
-        pageId: selectedPage.id,
-        articleId: selectedArticle.id,
-        blockId: selectedBlock.id,
-      });
-      makeEditable(bodyEl, {
-        level: "group",
-        field: "body",
-        placeholder: "Add content group body",
-        value: selectedBlock.description || "",
-        pageId: selectedPage.id,
-        articleId: selectedArticle.id,
-        blockId: selectedBlock.id,
-      });
-      makeEditable(instructionEl, {
-        level: "group",
-        field: "instruction",
-        placeholder: "Add content group instruction",
-        value: selectedBlock.instruction || "",
-        pageId: selectedPage.id,
-        articleId: selectedArticle.id,
-        blockId: selectedBlock.id,
-      });
+      if (blockFields.title) {
+        makeEditable(blockFields.title, {
+          level: "group",
+          field: "title",
+          placeholder: "Content Group title",
+          value: selectedBlock.title || "",
+          pageId: selectedPage.id,
+          articleId: selectedArticle.id,
+          blockId: selectedBlock.id,
+          hiddenFromPreview: !selectedBlock.showDisplayTitleInPreview,
+        });
+      }
+      if (blockFields.body) {
+        makeEditable(blockFields.body, {
+          level: "group",
+          field: "body",
+          placeholder: "Add content group body",
+          value: selectedBlock.description || "",
+          pageId: selectedPage.id,
+          articleId: selectedArticle.id,
+          blockId: selectedBlock.id,
+        });
+      }
+      if (blockFields.instruction) {
+        makeEditable(blockFields.instruction, {
+          level: "group",
+          field: "instruction",
+          placeholder: "Add content group instruction",
+          value: selectedBlock.instruction || "",
+          pageId: selectedPage.id,
+          articleId: selectedArticle.id,
+          blockId: selectedBlock.id,
+        });
+      }
       return;
     }
 
     if (selectedArticle && selectedPage) {
       const articleNode = doc.querySelector(`.article[data-adapt-id="${selectedArticle.id}"]`);
+      // Real template: .article__header is the ONLY thing inside
+      // .article__inner (the next level's .block__container is a SIBLING
+      // of .article__inner, not nested in it) — .article__inner is what
+      // carries the theme's horizontal padding, so root against it
+      // directly rather than the outer .article, or a synthetic header
+      // renders flush-left instead of matching a real one.
+      const articleInnerNode = (articleNode?.querySelector(".article__inner") as HTMLElement | null) ?? articleNode;
       const articleHeader = ensureHeaderInnerHost(
-        articleNode,
+        articleInnerNode,
         ".article__header",
         "article__header",
         ".article__header-inner",
         "article__header-inner",
-        [".article__inner"]
+        []
       );
       if (!articleHeader) return;
 
       articleHeader.classList.add("adapt-authoring-preview-inline-structured-header");
 
-      const titleEl = ensureTitleInner(
-        articleHeader,
-        ".article__title",
-        "article__title",
-        ".article__title-inner",
-        "article__title-inner",
-        selectedArticle.title || "",
-        [".article__body", ".article__instruction"]
-      );
-      const bodyEl = ensureContainerInner(
-        articleHeader,
-        ".article__body",
-        "article__body",
-        ".article__body-inner",
-        "article__body-inner",
-        selectedArticle.description || ""
-      );
-      const instructionEl = ensureContainerInner(
-        articleHeader,
-        ".article__instruction",
-        "article__instruction",
-        ".article__instruction-inner",
-        "article__instruction-inner",
-        selectedArticle.instruction || ""
-      );
+      const articleFields = ensureOrderedInlineFields(articleHeader, [
+        {
+          key: "title", kind: "pair", visible: true, value: selectedArticle.title || "",
+          containerSelector: ".article__title", containerClassName: "article__title",
+          innerSelector: ".article__title-inner", innerClassName: "article__title-inner",
+        },
+        {
+          key: "body", kind: "pair", visible: true, value: selectedArticle.description || "",
+          containerSelector: ".article__body", containerClassName: "article__body",
+          innerSelector: ".article__body-inner", innerClassName: "article__body-inner",
+        },
+        {
+          key: "instruction", kind: "pair", visible: true, value: selectedArticle.instruction || "",
+          containerSelector: ".article__instruction", containerClassName: "article__instruction",
+          innerSelector: ".article__instruction-inner", innerClassName: "article__instruction-inner",
+        },
+      ]);
 
-      makeEditable(titleEl, {
-        level: "section",
-        field: "title",
-        placeholder: "Section title",
-        value: selectedArticle.title || "",
-        pageId: selectedPage.id,
-        articleId: selectedArticle.id,
-      });
-      makeEditable(bodyEl, {
-        level: "section",
-        field: "body",
-        placeholder: "Add section body",
-        value: selectedArticle.description || "",
-        pageId: selectedPage.id,
-        articleId: selectedArticle.id,
-      });
-      makeEditable(instructionEl, {
-        level: "section",
-        field: "instruction",
-        placeholder: "Add section instruction",
-        value: selectedArticle.instruction || "",
-        pageId: selectedPage.id,
-        articleId: selectedArticle.id,
-      });
+      if (articleFields.title) {
+        makeEditable(articleFields.title, {
+          level: "section",
+          field: "title",
+          placeholder: "Section title",
+          value: selectedArticle.title || "",
+          pageId: selectedPage.id,
+          articleId: selectedArticle.id,
+          hiddenFromPreview: !selectedArticle.showDisplayTitleInPreview,
+        });
+      }
+      if (articleFields.body) {
+        makeEditable(articleFields.body, {
+          level: "section",
+          field: "body",
+          placeholder: "Add section body",
+          value: selectedArticle.description || "",
+          pageId: selectedPage.id,
+          articleId: selectedArticle.id,
+        });
+      }
+      if (articleFields.instruction) {
+        makeEditable(articleFields.instruction, {
+          level: "section",
+          field: "instruction",
+          placeholder: "Add section instruction",
+          value: selectedArticle.instruction || "",
+          pageId: selectedPage.id,
+          articleId: selectedArticle.id,
+        });
+      }
       return;
     }
 
     if (selectedPage && !menuSelected) {
       const pageNode = doc.querySelector(`.page[data-adapt-id="${selectedPage.id}"]`);
+      // Real template: .page__header is the ONLY thing inside .page__inner
+      // (the next level's .article__container is a SIBLING of .page__inner,
+      // not nested in it) — .page__inner is what carries the theme's
+      // horizontal padding, so root against it directly rather than the
+      // outer .page, or a synthetic header renders flush-left instead of
+      // matching a real one.
+      const pageInnerNode = (pageNode?.querySelector(".page__inner") as HTMLElement | null) ?? pageNode;
       const pageHeader = ensureHeaderInnerHost(
-        pageNode,
+        pageInnerNode,
         ".page__header",
         "page__header",
         ".page__header-inner",
         "page__header-inner",
-        [".page__inner"]
+        []
       );
       if (!pageHeader) return;
 
       pageHeader.classList.add("adapt-authoring-preview-inline-structured-header");
 
-      const previewTopicTitle = selectedPage.title || "";
-      const titleEl = ensureTopicTitleInner(pageHeader, previewTopicTitle);
-      const subtitleEl = ensureContainerInner(
-        pageHeader,
-        ".page__subtitle",
-        "page__subtitle",
-        ".page__subtitle-inner",
-        "page__subtitle-inner",
-        selectedPage.subtitle || ""
-      );
-      const bodyEl = ensureContainerInner(
-        pageHeader,
-        ".page__body",
-        "page__body",
-        ".page__body-inner",
-        "page__body-inner",
-        selectedPage.body || ""
-      );
-      const instructionEl = ensureContainerInner(
-        pageHeader,
-        ".page__instruction",
-        "page__instruction",
-        ".page__instruction-inner",
-        "page__instruction-inner",
-        selectedPage.instruction || ""
-      );
+      const pageFields = ensureOrderedInlineFields(pageHeader, [
+        {
+          key: "title", kind: "pair", visible: true, value: selectedPage.title || "",
+          containerSelector: ".page__title", containerClassName: "page__title",
+          innerSelector: ".page__title-inner", innerClassName: "page__title-inner",
+        },
+        {
+          key: "subtitle", kind: "pair", visible: true, value: selectedPage.subtitle || "",
+          containerSelector: ".page__subtitle", containerClassName: "page__subtitle",
+          innerSelector: ".page__subtitle-inner", innerClassName: "page__subtitle-inner",
+        },
+        {
+          key: "body", kind: "pair", visible: true, value: selectedPage.body || "",
+          containerSelector: ".page__body", containerClassName: "page__body",
+          innerSelector: ".page__body-inner", innerClassName: "page__body-inner",
+        },
+        {
+          key: "instruction", kind: "pair", visible: true, value: selectedPage.instruction || "",
+          containerSelector: ".page__instruction", containerClassName: "page__instruction",
+          innerSelector: ".page__instruction-inner", innerClassName: "page__instruction-inner",
+        },
+      ]);
 
-      const titleContainer = titleEl.closest(".page__title") as HTMLElement | null;
-      if (titleContainer) {
-        titleContainer.style.display = "";
-      } else {
-        titleEl.style.display = "";
+      // The page title is hidden by default CSS until content exists —
+      // always reveal it while we're driving it as an editable placeholder.
+      if (pageFields.title) {
+        const titleContainer = pageFields.title.closest(".page__title") as HTMLElement | null;
+        (titleContainer ?? pageFields.title).style.display = "";
       }
-      makeEditable(titleEl, {
-        level: "topic",
-        field: "title",
-        placeholder: "TOPIC TITLE",
-        value: selectedPage.title || "",
-        pageId: selectedPage.id,
-      });
-      makeEditable(subtitleEl, {
-        level: "topic",
-        field: "subtitle",
-        placeholder: "Add subtitle",
-        value: selectedPage.subtitle || "",
-        pageId: selectedPage.id,
-      });
-      makeEditable(bodyEl, {
-        level: "topic",
-        field: "body",
-        placeholder: "Add page body",
-        value: selectedPage.body || "",
-        pageId: selectedPage.id,
-      });
-      makeEditable(instructionEl, {
-        level: "topic",
-        field: "instruction",
-        placeholder: "Add page instruction",
-        value: selectedPage.instruction || "",
-        pageId: selectedPage.id,
-      });
+
+      if (pageFields.title) {
+        makeEditable(pageFields.title, {
+          level: "topic",
+          field: "title",
+          placeholder: "TOPIC TITLE",
+          value: selectedPage.title || "",
+          pageId: selectedPage.id,
+          hiddenFromPreview: !selectedPage.showDisplayTitleInPreview,
+        });
+      }
+      if (pageFields.subtitle) {
+        makeEditable(pageFields.subtitle, {
+          level: "topic",
+          field: "subtitle",
+          placeholder: "Add subtitle",
+          value: selectedPage.subtitle || "",
+          pageId: selectedPage.id,
+        });
+      }
+      if (pageFields.body) {
+        makeEditable(pageFields.body, {
+          level: "topic",
+          field: "body",
+          placeholder: "Add page body",
+          value: selectedPage.body || "",
+          pageId: selectedPage.id,
+        });
+      }
+      if (pageFields.instruction) {
+        makeEditable(pageFields.instruction, {
+          level: "topic",
+          field: "instruction",
+          placeholder: "Add page instruction",
+          value: selectedPage.instruction || "",
+          pageId: selectedPage.id,
+        });
+      }
     }
   }, [
     hasCanvasSelection,
+    componentBehaviourSchemas,
     componentSubtitleSchemaSupport,
+    componentInstructionSchemaSupport,
     contentPages,
     menuSelected,
     selectedArticleId,
@@ -2553,12 +3811,26 @@ export default function CourseEditor({
       selectors: string[],
       src: string,
       alt: string,
-      key: string
+      key: string,
+      // When set, a selector that isn't the exact data-preview-asset-key
+      // match is treated as shared across every item in an array (e.g.
+      // every narrative slide's image matches ".component__widget img") —
+      // querySelector's first match would always land on item 0 regardless
+      // of which item actually changed, so pick the Nth match instead.
+      itemIndex: number | null = null
     ) => {
       if (!host) return;
 
       let image: HTMLImageElement | null = null;
       for (const selector of selectors) {
+        if (itemIndex !== null && !selector.includes("data-preview-asset-key")) {
+          const candidate = host.querySelectorAll(selector)[itemIndex] as HTMLImageElement | undefined;
+          if (candidate) {
+            image = candidate;
+            break;
+          }
+          continue;
+        }
         const candidate = host.querySelector(selector) as HTMLImageElement | null;
         if (candidate) {
           image = candidate;
@@ -2594,6 +3866,30 @@ export default function CourseEditor({
       image.src = src;
       image.alt = alt;
       image.style.removeProperty("display");
+    };
+
+    // Component-specific Behaviour text fields (an MCQ item's label, a
+    // Graphic's alt text, ...) have no canonical class the way
+    // title/body/instruction do, so there's no fixed selector to patch.
+    // Instead, find whichever text node still literally holds the OLD value
+    // and swap it for the new one — works regardless of the template, as
+    // long as the field is rendered as plain visible text somewhere within
+    // `host`. Returns false (a no-op, not an error) when nothing matches —
+    // e.g. the field isn't currently visible (a hidden narrative slide) or
+    // the real template renders it as HTML rather than plain text.
+    const replaceTextInHost = (host: Element, oldValue: string, newValue: string): boolean => {
+      const trimmedOld = oldValue.trim();
+      if (!trimmedOld) return false;
+      const walker = doc.createTreeWalker(host, NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode();
+      while (node) {
+        if (node.textContent && node.textContent.trim() === trimmedOld) {
+          node.textContent = newValue;
+          return true;
+        }
+        node = walker.nextNode();
+      }
+      return false;
     };
 
     const pageBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(pageBackgroundImage));
@@ -2652,17 +3948,62 @@ export default function CourseEditor({
       "page-graphic"
     );
 
+    // Applies an inline `color` (or clears it) across every element `selector`
+    // matches within `host` — mirrors the Life v2 theme's setBlockColor /
+    // setComponentColors, which use jQuery .css('color', …) against a fixed
+    // selector set rather than a single element.
+    const applyColorWithin = (host: ParentNode | null, selector: string, value: string) => {
+      if (!host) return;
+      host.querySelectorAll(selector).forEach((el) => {
+        if (value) {
+          (el as HTMLElement).style.color = value;
+        } else {
+          (el as HTMLElement).style.removeProperty("color");
+        }
+      });
+    };
+
     if (selectedArticle) {
       const articleNode = doc.querySelector(`.article[data-adapt-id="${selectedArticle.id}"]`) as HTMLElement | null;
       const articleInner =
         (articleNode?.querySelector(".article__inner") as HTMLElement | null) ??
         (articleNode?.querySelector(".article__header-inner") as HTMLElement | null) ??
         articleNode;
+      const articleHeaderNode =
+        (articleNode?.querySelector(".article__header") as HTMLElement | null) ?? articleInner;
       const articleThemeSettings = getActiveThemeSettings(selectedArticle.themeSettings);
       const articleBackgroundImage = asRecord(articleThemeSettings._backgroundImage) as TopicResponsiveAssetMap;
       const articleBackgroundStyles = asRecord(articleThemeSettings._backgroundStyles);
       const articleBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(articleBackgroundImage));
       applyBackgroundStyles(articleInner, articleBackgroundUrl, articleBackgroundStyles);
+
+      const articleTextAlignment = asRecord(articleThemeSettings._textAlignment);
+      applyTextAlignWithin(articleNode, ".article__title-inner", asString(articleTextAlignment._title));
+      applyTextAlignWithin(articleNode, ".article__body-inner", asString(articleTextAlignment._body));
+      applyTextAlignWithin(articleNode, ".article__instruction-inner", asString(articleTextAlignment._instruction));
+
+      const articleHeader = asRecord(articleThemeSettings._articleHeader);
+      const articleHeaderBackgroundImage = asRecord(articleHeader._backgroundImage) as TopicResponsiveAssetMap;
+      const articleHeaderBackgroundStyles = asRecord(articleHeader._backgroundStyles);
+      const articleHeaderBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(articleHeaderBackgroundImage));
+      applyBackgroundStyles(articleHeaderNode, articleHeaderBackgroundUrl, articleHeaderBackgroundStyles);
+      const articleHeaderTextAlignment = asRecord(articleHeader._textAlignment);
+      applyTextAlignWithin(articleHeaderNode, ".article__title-inner", asString(articleHeaderTextAlignment._title));
+      applyTextAlignWithin(articleHeaderNode, ".article__body-inner", asString(articleHeaderTextAlignment._body));
+      applyTextAlignWithin(articleHeaderNode, ".article__instruction-inner", asString(articleHeaderTextAlignment._instruction));
+      const articleHeaderMinHeight = pickResponsiveNumber(asRecord(articleHeader._minimumHeights) as TopicMinimumHeights);
+      if (typeof articleHeaderMinHeight === "number") {
+        articleHeaderNode?.style.setProperty("min-height", `${articleHeaderMinHeight}px`);
+      } else {
+        articleHeaderNode?.style.removeProperty("min-height");
+      }
+
+      const articleResponsiveClasses = asRecord(articleThemeSettings._responsiveClasses) as TopicResponsiveClasses;
+      const mergedArticleClasses = [
+        asString(selectedArticle.classes),
+        pickResponsiveClass(articleResponsiveClasses),
+      ].filter(Boolean).join(" ");
+      applyManagedClasses(articleNode, mergedArticleClasses);
     }
 
     if (selectedBlock) {
@@ -2676,6 +4017,64 @@ export default function CourseEditor({
       const blockBackgroundStyles = asRecord(blockThemeSettings._backgroundStyles);
       const blockBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(blockBackgroundImage));
       applyBackgroundStyles(blockInner, blockBackgroundUrl, blockBackgroundStyles);
+
+      const blockTextAlignment = asRecord(blockThemeSettings._textAlignment);
+      applyTextAlignWithin(blockNode, ".block__title-inner", asString(blockTextAlignment._title));
+      applyTextAlignWithin(blockNode, ".block__body-inner", asString(blockTextAlignment._body));
+      applyTextAlignWithin(blockNode, ".block__instruction-inner", asString(blockTextAlignment._instruction));
+
+      // Matches ThemeBlockView.setBlockColor exactly: background on the block
+      // root itself, font colour across title/body/instruction (+ the root),
+      // header colour on the title only (applied last so it wins there).
+      const blockColours = asRecord(blockThemeSettings._blockColors);
+      const blockBgColor = asString(blockColours["block-bg-color"]);
+      const blockFontColor = asString(blockColours["block-font-color"]);
+      const blockHeaderColor = asString(blockColours["block-header-color"]);
+      if (blockNode) {
+        if (blockBgColor) blockNode.style.background = blockBgColor;
+        else blockNode.style.removeProperty("background");
+      }
+      applyColorWithin(blockNode, ".block, .block__title, .block__body, .block__instruction", blockFontColor);
+      if (blockHeaderColor) applyColorWithin(blockNode, ".block__title", blockHeaderColor);
+
+      // Matches ThemeBlockView.processHeader: _blockHeader is the ONLY
+      // source the real theme actually renders from for a block's header
+      // text alignment/background/min-height — the top-level _textAlignment/
+      // _backgroundImage/_minimumHeights above exist in the schema but are
+      // never read by the theme. Applied last so it's what's actually
+      // visible, matching real behaviour.
+      const blockHeaderNode = (blockNode?.querySelector(".block__header") as HTMLElement | null) ?? blockInner;
+      const blockHeader = asRecord(blockThemeSettings._blockHeader);
+      const blockHeaderBackgroundImage = asRecord(blockHeader._backgroundImage) as TopicResponsiveAssetMap;
+      const blockHeaderBackgroundStyles = asRecord(blockHeader._backgroundStyles);
+      const blockHeaderBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(blockHeaderBackgroundImage));
+      applyBackgroundStyles(blockHeaderNode, blockHeaderBackgroundUrl, blockHeaderBackgroundStyles);
+      const blockHeaderTextAlignment = asRecord(blockHeader._textAlignment);
+      applyTextAlignWithin(blockHeaderNode, ".block__title-inner", asString(blockHeaderTextAlignment._title));
+      applyTextAlignWithin(blockHeaderNode, ".block__body-inner", asString(blockHeaderTextAlignment._body));
+      applyTextAlignWithin(blockHeaderNode, ".block__instruction-inner", asString(blockHeaderTextAlignment._instruction));
+      const blockHeaderMinHeight = pickResponsiveNumber(asRecord(blockHeader._minimumHeights) as TopicMinimumHeights);
+      if (typeof blockHeaderMinHeight === "number") {
+        blockHeaderNode?.style.setProperty("min-height", `${blockHeaderMinHeight}px`);
+      } else {
+        blockHeaderNode?.style.removeProperty("min-height");
+      }
+
+      const paddingTopRaw = asString(blockThemeSettings._paddingTop);
+      const paddingBottomRaw = asString(blockThemeSettings._paddingBottom);
+      const vertAlign = asString(blockThemeSettings._componentVerticalAlignment);
+      const horzAlign = asString(blockThemeSettings._componentHorizontalAlignment);
+      const blockResponsiveClasses = asRecord(blockThemeSettings._responsiveClasses) as TopicResponsiveClasses;
+      const mergedBlockClasses = [
+        asString(selectedBlock.classes),
+        pickResponsiveClass(blockResponsiveClasses),
+        blockThemeSettings._isDividerBlock ? "is-divider-block" : "",
+        paddingTopRaw && paddingTopRaw !== "default" ? `${paddingTopRaw}-padding-top` : "",
+        paddingBottomRaw && paddingBottomRaw !== "default" ? `${paddingBottomRaw}-padding-bottom` : "",
+        vertAlign === "center" ? "align-vert-center" : vertAlign === "bottom" ? "align-vert-bottom" : "",
+        horzAlign === "center" ? "align-horz-center" : horzAlign === "right" ? "align-horz-right" : "",
+      ].filter(Boolean).join(" ");
+      applyManagedClasses(blockNode, mergedBlockClasses);
     }
 
     if (selectedComponent) {
@@ -2688,6 +4087,134 @@ export default function CourseEditor({
       const componentBackgroundStyles = asRecord(componentThemeSettings._backgroundStyles);
       const componentBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(componentBackgroundImage));
       applyBackgroundStyles(componentInner, componentBackgroundUrl, componentBackgroundStyles);
+
+      const componentTextAlignment = asRecord(componentThemeSettings._textAlignment);
+      applyTextAlignWithin(componentNode, ".component__title-inner", asString(componentTextAlignment._title));
+      applyTextAlignWithin(componentNode, ".component__body-inner", asString(componentTextAlignment._body));
+      applyTextAlignWithin(componentNode, ".component__instruction-inner", asString(componentTextAlignment._instruction));
+
+      // Matches ThemeComponentView.setComponentColors: background (+ its
+      // padding/border-radius side effect) on .component__inner; font colour
+      // (or an auto white/black contrast colour when unset) across
+      // component/title/body/instruction; header colour on the title only.
+      const componentColours = asRecord(componentThemeSettings._componentColors);
+      const componentBgColor = asString(componentColours["component-bg-color"]);
+      const componentFontColor = asString(componentColours["component-font-color"]);
+      const componentHeaderColor = asString(componentColours["component-header-color"]);
+      if (componentInner) {
+        if (componentBgColor) {
+          componentInner.style.background = componentBgColor;
+          componentInner.style.padding = "2rem";
+          componentInner.style.borderRadius = "8px";
+        } else {
+          componentInner.style.removeProperty("background");
+          componentInner.style.removeProperty("padding");
+          componentInner.style.removeProperty("border-radius");
+        }
+      }
+      const componentFontColorResolved =
+        componentFontColor || (componentBgColor ? (isPreviewColorDark(componentBgColor) ? "white" : "black") : "");
+      applyColorWithin(componentNode, ".component, .component__title, .component__body, .component__instruction", componentFontColorResolved);
+      if (componentHeaderColor) applyColorWithin(componentNode, ".component__title", componentHeaderColor);
+
+      const componentResponsiveClasses = asRecord(componentThemeSettings._responsiveClasses) as TopicResponsiveClasses;
+      const mergedComponentClasses = [
+        asString(selectedComponent.classes),
+        pickResponsiveClass(componentResponsiveClasses),
+      ].filter(Boolean).join(" ");
+      applyManagedClasses(componentNode, mergedComponentClasses);
+
+      // Live-patch any Behaviour-accordion asset field (graphic, poster,
+      // etc.) the same way topic/section image fields already are — an
+      // asset change should show up immediately, not only after a rebuild.
+      const behaviourComponentKey = (selectedComponent.settings.componentKey || "").toLowerCase();
+      const behaviourSchema = componentBehaviourSchemas[behaviourComponentKey] as
+        | Record<string, BehaviourFieldSchema>
+        | undefined;
+      if (behaviourSchema) {
+        const behaviourAssetPaths = collectBehaviourAssetPaths(
+          behaviourSchema,
+          asRecord(selectedComponent.settings.properties)
+        );
+        const previousAssetValues =
+          previousBehaviourAssetValuesRef.current.componentId === selectedComponent.id
+            ? previousBehaviourAssetValuesRef.current.values
+            : {};
+        const nextAssetValues: Record<string, string> = {};
+        behaviourAssetPaths.forEach(({ path, value }) => {
+          const resolvedUrl = value ? resolveAssetForPreview(value) : "";
+          nextAssetValues[path] = resolvedUrl;
+
+          const previousUrl = previousAssetValues[path];
+          // Diff against THIS field's own previous src first — a generic
+          // class selector (".component__widget img") matches every item's
+          // image alike, so querySelector's first match would always land
+          // on item 0 regardless of which item actually changed. Finding
+          // the exact <img> that still shows the old URL targets the right
+          // one no matter its position.
+          if (componentInner && previousUrl && previousUrl !== resolvedUrl) {
+            const existingImage = Array.from(componentInner.querySelectorAll("img")).find(
+              (img) => img.getAttribute("src") === previousUrl
+            ) as HTMLImageElement | undefined;
+            if (existingImage) {
+              if (resolvedUrl) {
+                existingImage.src = resolvedUrl;
+                existingImage.style.removeProperty("display");
+              } else if (existingImage.getAttribute("data-preview-injected") === "true") {
+                existingImage.parentElement?.remove();
+              } else {
+                existingImage.removeAttribute("src");
+                existingImage.style.display = "none";
+              }
+              return;
+            }
+          }
+
+          // No previous src to diff against (a brand-new item, or this
+          // field never had an image before) — fall back to the generic
+          // selector, index-aware so at least the Nth item is targeted
+          // instead of always the first.
+          const itemIndexMatch = path.match(/\[(\d+)\]/);
+          const assetKey = `behaviour-asset-${path}`;
+          upsertPreviewImage(
+            componentInner,
+            [
+              `img[data-preview-asset-key="${assetKey}"]`,
+              ".graphic__widget img",
+              ".component__widget img",
+            ],
+            resolvedUrl,
+            "",
+            assetKey,
+            itemIndexMatch ? Number(itemIndexMatch[1]) : null
+          );
+        });
+        previousBehaviourAssetValuesRef.current = { componentId: selectedComponent.id, values: nextAssetValues };
+
+        // Any other plain-string Behaviour field (an MCQ item's label, a
+        // Graphic's alt text, ...) — diff against its previous value and
+        // find/replace the literal old text in the canvas. There's no fixed
+        // selector for these the way there is for title/body/instruction,
+        // so this is best-effort: it silently does nothing when the old
+        // text isn't currently visible in the DOM (see replaceTextInHost).
+        const behaviourTextPaths = collectBehaviourTextPaths(
+          behaviourSchema,
+          asRecord(selectedComponent.settings.properties)
+        );
+        const previousTextValues =
+          previousBehaviourTextValuesRef.current.componentId === selectedComponent.id
+            ? previousBehaviourTextValuesRef.current.values
+            : {};
+        const nextTextValues: Record<string, string> = {};
+        behaviourTextPaths.forEach(({ path, value }) => {
+          nextTextValues[path] = value;
+          const previousValue = previousTextValues[path];
+          if (componentInner && previousValue !== undefined && previousValue !== value) {
+            replaceTextInHost(componentInner, previousValue, value);
+          }
+        });
+        previousBehaviourTextValuesRef.current = { componentId: selectedComponent.id, values: nextTextValues };
+      }
     }
 
     const menuItemNode =
@@ -2852,7 +4379,90 @@ export default function CourseEditor({
       cancelled = true;
     };
   }, [
+    componentBehaviourSchemas,
     componentSubtitleSchemaSupport,
+    contentPages,
+    selectedArticleId,
+    selectedBlockId,
+    selectedComponentId,
+    selectedPageId,
+  ]);
+
+  useEffect(() => {
+    if (!selectedPageId || !selectedArticleId || !selectedBlockId || !selectedComponentId) {
+      return;
+    }
+
+    const page = contentPages.find((p) => p.id === selectedPageId);
+    const article = page?.articles.find((a) => a.id === selectedArticleId);
+    const block = article?.blocks.find((b) => b.id === selectedBlockId);
+    const component = block?.components.find((c) => c.id === selectedComponentId);
+    const componentKey = (component?.settings?.componentKey || "").toLowerCase();
+    if (!componentKey) return;
+
+    if (componentInstructionSchemaSupport[componentKey] !== undefined) {
+      return;
+    }
+
+    let cancelled = false;
+    void componentSchemaSupportsPropertiesField(componentKey, "instruction")
+      .then((supported) => {
+        if (cancelled) return;
+        setComponentInstructionSchemaSupport((prev) => ({
+          ...prev,
+          [componentKey]: supported,
+        }));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setComponentInstructionSchemaSupport((prev) => ({
+          ...prev,
+          [componentKey]: false,
+        }));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    componentInstructionSchemaSupport,
+    contentPages,
+    selectedArticleId,
+    selectedBlockId,
+    selectedComponentId,
+    selectedPageId,
+  ]);
+
+  useEffect(() => {
+    if (!selectedPageId || !selectedArticleId || !selectedBlockId || !selectedComponentId) {
+      return;
+    }
+
+    const page = contentPages.find((p) => p.id === selectedPageId);
+    const article = page?.articles.find((a) => a.id === selectedArticleId);
+    const block = article?.blocks.find((b) => b.id === selectedBlockId);
+    const component = block?.components.find((c) => c.id === selectedComponentId);
+    const componentKey = component?.settings?.componentKey || "";
+    if (!componentKey || componentBehaviourSchemas[componentKey] !== undefined) {
+      return;
+    }
+
+    let cancelled = false;
+    void getComponentBehaviourSchema(componentKey)
+      .then((schema) => {
+        if (cancelled) return;
+        setComponentBehaviourSchemas((prev) => ({ ...prev, [componentKey]: schema }));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setComponentBehaviourSchemas((prev) => ({ ...prev, [componentKey]: {} }));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    componentBehaviourSchemas,
     contentPages,
     selectedArticleId,
     selectedBlockId,
@@ -2986,8 +4596,39 @@ export default function CourseEditor({
         return;
       }
 
-      event.preventDefault();
-      event.stopPropagation();
+      // Our own editable overlay (title/body/instruction/behaviour-path
+      // fields) always takes priority — clicking it must place a cursor,
+      // never trigger the real template's own click handling (e.g. an
+      // accordion/narrative header that toggles expand/collapse on click).
+      // Everything else that looks like a genuine interactive control
+      // (a nav/expand button, a tab, a real link — "js-" is the Adapt
+      // framework's own convention for marking JS-driven elements) is left
+      // completely alone: no preventDefault/stopPropagation, so the real
+      // framework's narrative/accordion/tabs navigation keeps working while
+      // a component is selected, instead of every click being swallowed by
+      // selection handling.
+      const isEditableOverlayTarget = !!target.closest("[data-preview-edit-enabled='true']");
+      const isInteractiveControl =
+        !isEditableOverlayTarget &&
+        !!target.closest('button, [role="button"], [role="tab"], [class*="js-"], a[href], input, select, textarea, summary, [aria-expanded]');
+
+      if (!isInteractiveControl) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+
+      // Clicking a header field (title/subtitle/body/instruction) to edit
+      // it should always reveal the General accordion it lives in — but
+      // merged in, never replacing whatever else the user already has
+      // open. Clicking anywhere else in an already-selected node must leave
+      // accordion state completely untouched (see the selection handlers'
+      // isSameSelection guards below).
+      if (target.closest("[data-preview-edit-field]")) {
+        if (componentId) setOpenComponentAccordions((prev) => ({ ...prev, general: true }));
+        else if (blockId) setOpenBlockAccordions((prev) => ({ ...prev, general: true }));
+        else if (articleId) setOpenSectionAccordions((prev) => ({ ...prev, general: true }));
+        else if (pageId) setOpenTopicAccordions((prev) => ({ ...prev, general: true }));
+      }
 
       if (componentId && blockId && articleId && pageId) {
         handleSelectComponent(pageId, articleId, blockId, componentId, "preview");
@@ -3017,11 +4658,75 @@ export default function CourseEditor({
       }
     };
 
+    const cancelTitleAutoRevert = () => {
+      if (titleAutoRevertTimeoutRef.current !== null) {
+        window.clearTimeout(titleAutoRevertTimeoutRef.current);
+        titleAutoRevertTimeoutRef.current = null;
+      }
+    };
+
+    // Restores the pre-edit title (text + state) for a blank title — shared
+    // by the immediate blur revert and the auto-revert timeout so both paths
+    // resolve identically. Doesn't touch titleValidationWarning: callers
+    // decide whether to show it (blur) or clear it (the timeout, whose job
+    // is to end the warning's standard on-screen duration).
+    const performTitleRevert = (
+      target: HTMLElement,
+      level: "topic" | "section" | "group" | "component",
+      pageId: string,
+      articleId: string | null,
+      blockId: string | null,
+      componentId: string | null
+    ) => {
+      cancelTitleAutoRevert();
+      const page = contentPages.find((p) => p.id === pageId);
+      const article = page && articleId ? page.articles.find((a) => a.id === articleId) : null;
+      const block = article && blockId ? article.blocks.find((b) => b.id === blockId) : null;
+      const component = block && componentId ? block.components.find((c) => c.id === componentId) : null;
+      const fallbackTitle =
+        level === "topic" ? page?.title ?? ""
+        : level === "section" ? article?.title ?? ""
+        : level === "group" ? block?.title ?? ""
+        : component?.settings.title ?? "";
+      const revertTitle = titleEditOriginalValueRef.current ?? fallbackTitle;
+
+      target.textContent = revertTitle;
+      target.classList.toggle("adapt-authoring-preview-inline-empty", revertTitle.trim().length === 0);
+      setCanvasTitleLiveOverride(null);
+
+      if (level === "topic" && pageId) {
+        updatePageData(pageId, { title: revertTitle });
+      } else if (level === "section" && pageId && articleId) {
+        updateArticle(pageId, articleId, { title: revertTitle });
+      } else if (level === "group" && pageId && articleId && blockId) {
+        updateBlock(pageId, articleId, blockId, { title: revertTitle });
+      } else if (level === "component" && pageId && articleId && blockId && componentId) {
+        updateComponent(pageId, articleId, blockId, componentId, { settings: { title: revertTitle } });
+      }
+
+      titleEditOriginalValueRef.current = null;
+    };
+
     const onInput = (event: Event) => {
       const origin = event.target as Element | null;
       const target = origin?.closest("[data-preview-edit-enabled='true']") as HTMLElement | null;
       if (!target) return;
       isInlineEditingRef.current = true;
+
+      // A generic Behaviour item field (matched by text content, not a
+      // fixed class — see syncPreviewInlineEditors) writes straight back to
+      // its own settings.properties path, live, same as body/instruction.
+      const behaviourPath = target.getAttribute("data-preview-behaviour-path");
+      if (behaviourPath) {
+        const pageId = target.getAttribute("data-preview-page-id");
+        const articleId = target.getAttribute("data-preview-article-id");
+        const blockId = target.getAttribute("data-preview-block-id");
+        const componentId = target.getAttribute("data-preview-component-id");
+        if (pageId && articleId && blockId && componentId) {
+          updateComponentBehaviourProperty(pageId, articleId, blockId, componentId, behaviourPath, target.textContent || "");
+        }
+        return;
+      }
 
       const field = target.getAttribute("data-preview-edit-field") as
         | "title"
@@ -3055,8 +4760,32 @@ export default function CourseEditor({
 
       const resolvedField = level === "topic" ? resolveTopicField(target, field) : field;
 
+      if (resolvedField === "title") {
+        // Mirror the literal canvas text (including transient blank states)
+        // into the right panel's title field live — the panel field reads
+        // this in preference to real state, which never goes blank.
+        setCanvasTitleLiveOverride(value);
+        // Warn immediately, not just on blur — the user shouldn't have to
+        // defocus the field to find out the title can't be blank. If they
+        // leave it blank without blurring, auto-revert once the warning's
+        // standard on-screen duration elapses.
+        if (isBlankTitleValue(value)) {
+          setTitleValidationWarning(TITLE_MANDATORY_MESSAGE);
+          if (titleAutoRevertTimeoutRef.current === null) {
+            titleAutoRevertTimeoutRef.current = window.setTimeout(() => {
+              titleAutoRevertTimeoutRef.current = null;
+              setTitleValidationWarning(null);
+              performTitleRevert(target, level, pageId, articleId, blockId, componentId);
+            }, TITLE_WARNING_DURATION_MS);
+          }
+        } else {
+          setTitleValidationWarning(null);
+          cancelTitleAutoRevert();
+        }
+      }
+
       if (level === "topic") {
-        if (resolvedField === "title") updatePageData(pageId, { title: value });
+        if (resolvedField === "title" && !isBlankTitleValue(value)) updatePageData(pageId, { title: value });
         if (resolvedField === "subtitle") updatePageData(pageId, { subtitle: value });
         if (resolvedField === "body") updatePageData(pageId, { body: value, description: value });
         if (resolvedField === "instruction") updatePageData(pageId, { instruction: value });
@@ -3064,21 +4793,21 @@ export default function CourseEditor({
       }
 
       if (level === "section" && articleId) {
-        if (field === "title") updateArticle(pageId, articleId, { title: value });
+        if (field === "title" && !isBlankTitleValue(value)) updateArticle(pageId, articleId, { title: value });
         if (field === "body") updateArticle(pageId, articleId, { description: value });
         if (field === "instruction") updateArticle(pageId, articleId, { instruction: value });
         return;
       }
 
       if (level === "group" && articleId && blockId) {
-        if (field === "title") updateBlock(pageId, articleId, blockId, { title: value });
+        if (field === "title" && !isBlankTitleValue(value)) updateBlock(pageId, articleId, blockId, { title: value });
         if (field === "body") updateBlock(pageId, articleId, blockId, { description: value });
         if (field === "instruction") updateBlock(pageId, articleId, blockId, { instruction: value });
         return;
       }
 
       if (level === "component" && articleId && blockId && componentId) {
-        if (field === "title") {
+        if (field === "title" && !isBlankTitleValue(value)) {
           updateComponent(pageId, articleId, blockId, componentId, {
             settings: { title: value },
           });
@@ -3112,6 +4841,41 @@ export default function CourseEditor({
       const target = origin?.closest("[data-preview-edit-enabled='true']") as HTMLElement | null;
       if (!target) return;
       isInlineEditingRef.current = true;
+      // Starting a fresh edit session should never carry over a pending
+      // auto-revert from whatever was previously focused.
+      cancelTitleAutoRevert();
+
+      if (target.hasAttribute("data-preview-behaviour-path")) {
+        titleEditOriginalValueRef.current = null;
+        return;
+      }
+
+      const field = target.getAttribute("data-preview-edit-field");
+      const level = target.getAttribute("data-preview-node-level") as
+        | "topic"
+        | "section"
+        | "group"
+        | "component"
+        | null;
+      const resolvedField = level === "topic" ? resolveTopicField(target, field as "title" | "subtitle" | "body" | "instruction" | null) : field;
+      if (resolvedField !== "title" || !level) {
+        titleEditOriginalValueRef.current = null;
+        return;
+      }
+
+      const pageId = target.getAttribute("data-preview-page-id");
+      const articleId = target.getAttribute("data-preview-article-id");
+      const blockId = target.getAttribute("data-preview-block-id");
+      const componentId = target.getAttribute("data-preview-component-id");
+      const page = contentPages.find((p) => p.id === pageId);
+      const article = page && articleId ? page.articles.find((a) => a.id === articleId) : null;
+      const block = article && blockId ? article.blocks.find((b) => b.id === blockId) : null;
+      const component = block && componentId ? block.components.find((c) => c.id === componentId) : null;
+      titleEditOriginalValueRef.current =
+        level === "topic" ? page?.title ?? ""
+        : level === "section" ? article?.title ?? ""
+        : level === "group" ? block?.title ?? ""
+        : component?.settings.title ?? "";
     };
 
     const onFocusOut = (event: FocusEvent) => {
@@ -3119,6 +4883,10 @@ export default function CourseEditor({
       const target = origin?.closest("[data-preview-edit-enabled='true']") as HTMLElement | null;
       if (!target) return;
       isInlineEditingRef.current = false;
+
+      if (target.hasAttribute("data-preview-behaviour-path")) {
+        return;
+      }
 
       const field = target.getAttribute("data-preview-edit-field") as
         | "title"
@@ -3145,6 +4913,21 @@ export default function CourseEditor({
       if (!field || !level || !pageId) return;
 
       const resolvedField = level === "topic" ? resolveTopicField(target, field) : field;
+
+      if (resolvedField === "title" && isBlankTitleValue(normalizedValue)) {
+        // Blurring while blank reverts immediately — the warning still shows
+        // and fades on its own standard timer (see the titleValidationWarning
+        // auto-dismiss effect), it just no longer has to wait to also revert.
+        setTitleValidationWarning(TITLE_MANDATORY_MESSAGE);
+        performTitleRevert(target, level, pageId, articleId, blockId, componentId);
+        return;
+      }
+
+      if (resolvedField === "title") {
+        cancelTitleAutoRevert();
+        titleEditOriginalValueRef.current = null;
+        setCanvasTitleLiveOverride(null);
+      }
 
       if (level === "topic") {
         if (resolvedField === "title") {
@@ -3245,6 +5028,7 @@ export default function CourseEditor({
       if (hoverRafId !== null) {
         window.cancelAnimationFrame(hoverRafId);
       }
+      cancelTitleAutoRevert();
       doc.removeEventListener("mouseover", onMouseOver);
       doc.removeEventListener("mouseout", onMouseOut);
       doc.removeEventListener("click", onClick, true);
@@ -3273,6 +5057,17 @@ export default function CourseEditor({
     applyPreviewSelectionStyles();
   }, [applyPreviewSelectionStyles]);
 
+  // Defensive reset: canvasTitleLiveOverride is a single shared value (only
+  // one node's title can ever be live-edited at once), cleared on blur —
+  // but if a title's contenteditable element ever gets torn down without a
+  // clean blur (e.g. mid-edit while a mutation observer forces a rebuild),
+  // that clear can be skipped and the override would keep showing on
+  // whichever OTHER node's title field renders next, regardless of level.
+  // Selecting a different node should always start from real state.
+  useEffect(() => {
+    setCanvasTitleLiveOverride(null);
+  }, [selectedPageId, selectedArticleId, selectedBlockId, selectedComponentId, menuSelected]);
+
   useEffect(() => {
     if (isInlineEditingRef.current) return;
     syncPreviewInlineEditors();
@@ -3295,6 +5090,12 @@ export default function CourseEditor({
 
   useEffect(() => () => {
     cleanupPreviewListenersRef.current?.();
+    if (inlineEditorSyncRetryFrameRef.current !== null) {
+      window.cancelAnimationFrame(inlineEditorSyncRetryFrameRef.current);
+      inlineEditorSyncRetryFrameRef.current = null;
+    }
+    componentMutationObserverRef.current?.disconnect();
+    componentMutationObserverRef.current = null;
     if (copiedTopicIdResetTimerRef.current !== null) {
       window.clearTimeout(copiedTopicIdResetTimerRef.current);
       copiedTopicIdResetTimerRef.current = null;
@@ -3306,6 +5107,10 @@ export default function CourseEditor({
     if (copiedBlockIdResetTimerRef.current !== null) {
       window.clearTimeout(copiedBlockIdResetTimerRef.current);
       copiedBlockIdResetTimerRef.current = null;
+    }
+    if (copiedComponentIdResetTimerRef.current !== null) {
+      window.clearTimeout(copiedComponentIdResetTimerRef.current);
+      copiedComponentIdResetTimerRef.current = null;
     }
   }, []);
 
@@ -3408,6 +5213,37 @@ export default function CourseEditor({
     fallbackCopy();
   }
 
+  function handleCopyComponentId(componentId: string) {
+    if (!componentId) return;
+    const afterCopy = () => {
+      setCopiedComponentId(componentId);
+      if (copiedComponentIdResetTimerRef.current !== null) {
+        window.clearTimeout(copiedComponentIdResetTimerRef.current);
+      }
+      copiedComponentIdResetTimerRef.current = window.setTimeout(() => {
+        setCopiedComponentId((current) => (current === componentId ? null : current));
+        copiedComponentIdResetTimerRef.current = null;
+      }, 2000);
+    };
+    const fallbackCopy = () => {
+      const helperTextArea = document.createElement("textarea");
+      helperTextArea.value = componentId;
+      helperTextArea.style.position = "fixed";
+      helperTextArea.style.left = "-9999px";
+      document.body.appendChild(helperTextArea);
+      helperTextArea.focus();
+      helperTextArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(helperTextArea);
+      afterCopy();
+    };
+    if (navigator.clipboard?.writeText) {
+      void navigator.clipboard.writeText(componentId).then(afterCopy).catch(fallbackCopy);
+      return;
+    }
+    fallbackCopy();
+  }
+
   function handleMenuPageCreate() {
     setMenuPageCreated(true);
     setMenuSelected(true);
@@ -3500,7 +5336,7 @@ export default function CourseEditor({
   }
 
   function toggleBlockAccordion(
-    id: "general" | "availability" | "extensions" | "theme" | "advanced",
+    id: "general" | "availability" | "accessibility" | "extensions" | "theme" | "advanced",
     triggerEl?: HTMLButtonElement
   ) {
     const container = rightPanelScrollRef.current;
@@ -3509,6 +5345,44 @@ export default function CourseEditor({
     setOpenBlockAccordions((prev) => ({
       general: false,
       availability: false,
+      accessibility: false,
+      extensions: false,
+      theme: false,
+      advanced: false,
+      [id]: !prev[id],
+    }));
+
+    if (container && triggerEl) {
+      requestAnimationFrame(() => {
+        if (!triggerEl.isConnected) return;
+        const topAfter = triggerEl.getBoundingClientRect().top;
+        if (topBefore !== null) {
+          container.scrollTop += topAfter - topBefore;
+        }
+        const padding = 10;
+        const containerRect = container.getBoundingClientRect();
+        const triggerRect = triggerEl.getBoundingClientRect();
+        if (triggerRect.top < containerRect.top + padding) {
+          container.scrollTop -= (containerRect.top + padding) - triggerRect.top;
+        } else if (triggerRect.bottom > containerRect.bottom - padding) {
+          container.scrollTop += triggerRect.bottom - (containerRect.bottom - padding);
+        }
+      });
+    }
+  }
+
+  function toggleComponentAccordion(
+    id: "general" | "behaviour" | "availability" | "accessibility" | "extensions" | "theme" | "advanced",
+    triggerEl?: HTMLButtonElement
+  ) {
+    const container = rightPanelScrollRef.current;
+    const topBefore = container && triggerEl ? triggerEl.getBoundingClientRect().top : null;
+
+    setOpenComponentAccordions((prev) => ({
+      general: false,
+      behaviour: false,
+      availability: false,
+      accessibility: false,
       extensions: false,
       theme: false,
       advanced: false,
@@ -3627,6 +5501,12 @@ export default function CourseEditor({
   }
 
   function handleArticleSelect(pageId: string, articleId: string, source: SelectionSource = "internal") {
+    // Re-selecting the SAME article (e.g. clicking into its canvas text to
+    // edit it while it's already selected) must not reset the accordions —
+    // only a genuine change of selection should snap back to the defaults,
+    // otherwise whatever the user had expanded collapses every time they
+    // click to type.
+    const isSameSelection = selectedArticleId === articleId && selectedPageId === pageId;
     setSelectedPageId(pageId);
     setSelectedArticleId(articleId);
     setSelectedSubPageId(null);
@@ -3635,13 +5515,16 @@ export default function CourseEditor({
     setHasCanvasSelection(true);
     setRightPanelOpen(true);
     setRightPanelType("article");
-    setOpenSectionAccordions(DEFAULT_SECTION_ACCORDIONS);
+    if (!isSameSelection) {
+      setOpenSectionAccordions(DEFAULT_SECTION_ACCORDIONS);
+    }
     if (source === "leftPanel") {
       queuePreviewScrollFromLeftPanel({ level: "section", id: articleId });
     }
   }
 
   function handleBlockSelect(pageId: string, articleId: string, blockId: string, source: SelectionSource = "internal") {
+    const isSameSelection = selectedBlockId === blockId && selectedArticleId === articleId && selectedPageId === pageId;
     setSelectedPageId(pageId);
     setSelectedArticleId(articleId);
     setSelectedSubPageId(null);
@@ -3650,7 +5533,9 @@ export default function CourseEditor({
     setHasCanvasSelection(true);
     setRightPanelOpen(true);
     setRightPanelType("block");
-    setOpenBlockAccordions(DEFAULT_BLOCK_ACCORDIONS);
+    if (!isSameSelection) {
+      setOpenBlockAccordions(DEFAULT_BLOCK_ACCORDIONS);
+    }
     if (source === "leftPanel") {
       queuePreviewScrollFromLeftPanel({ level: "group", id: blockId });
     }
@@ -3687,6 +5572,7 @@ export default function CourseEditor({
   }
 
   function handlePageSelect(pageId: string, source: SelectionSource = "internal") {
+    const isSameSelection = selectedPageId === pageId && !menuSelected;
     setSelectedPageId(pageId);
     setMenuSelected(false);
     setSelectedSubPageId(null);
@@ -3696,9 +5582,38 @@ export default function CourseEditor({
     setHasCanvasSelection(true);
     setRightPanelOpen(true);
     setRightPanelType("page");
+    if (!isSameSelection) {
+      setOpenTopicAccordions(DEFAULT_TOPIC_ACCORDIONS);
+    }
     if (source === "leftPanel") {
       queuePreviewScrollFromLeftPanel({ level: "topic", id: pageId });
     }
+  }
+
+  // Mirrors panel title keystrokes into the canvas instantly, including
+  // transient blank text — the real title state is only ever committed for
+  // non-blank values (see TopicTitleField), so without this the canvas would
+  // keep showing the last non-blank character typed instead of going blank
+  // in step with the panel field.
+  function writeLiveTitleDraftToCanvas(
+    level: "topic" | "section" | "group" | "component",
+    ids: { pageId: string; articleId?: string; blockId?: string; componentId?: string },
+    value: string
+  ) {
+    const doc = previewFrameRef.current?.contentDocument;
+    if (!doc) return;
+    const selector = [
+      `[data-preview-edit-field="title"]`,
+      `[data-preview-node-level="${level}"]`,
+      `[data-preview-page-id="${ids.pageId}"]`,
+      ids.articleId ? `[data-preview-article-id="${ids.articleId}"]` : "",
+      ids.blockId ? `[data-preview-block-id="${ids.blockId}"]` : "",
+      ids.componentId ? `[data-preview-component-id="${ids.componentId}"]` : "",
+    ].join("");
+    const target = doc.querySelector(selector) as HTMLElement | null;
+    if (!target) return;
+    target.textContent = value;
+    target.classList.toggle("adapt-authoring-preview-inline-empty", value.trim().length === 0);
   }
 
   function updatePageData(pageId: string, patch: Partial<ContentPageData>) {
@@ -4070,6 +5985,20 @@ export default function CourseEditor({
       return;
     }
 
+    if (target.scope === "contentGroupHeaderBackground") {
+      updateBlockThemeSettings(pageId, target.articleId, target.blockId, (current) => ({
+        ...current,
+        _blockHeader: {
+          ...asRecord(current._blockHeader),
+          _backgroundImage: {
+            ...asRecord(asRecord(current._blockHeader)._backgroundImage),
+            [target.bp]: assetLink,
+          },
+        },
+      }));
+      return;
+    }
+
     if (target.scope === "componentBackground") {
       updateComponentThemeSettings(pageId, target.articleId, target.blockId, target.componentId, (current) => ({
         ...current,
@@ -4078,6 +6007,11 @@ export default function CourseEditor({
           [target.bp]: assetLink,
         },
       }));
+      return;
+    }
+
+    if (target.scope === "componentProperty") {
+      updateComponentBehaviourProperty(pageId, target.articleId, target.blockId, target.componentId, target.path, assetLink);
       return;
     }
 
@@ -4139,6 +6073,39 @@ export default function CourseEditor({
       await loadStructureFromDatabase();
     } catch (error) {
       console.error("Failed to delete topic", error);
+    }
+  }
+
+  function handleOpenSaveAsTemplate(level: "topic" | "section" | "group" | "component", objectId: string) {
+    setSaveTemplateError(null);
+    setSaveTemplateTarget({ level, objectId });
+  }
+
+  async function handleConfirmSaveAsTemplate(data: {
+    title: string;
+    description: string;
+    isShared: boolean;
+    shareWithUsers: string[];
+  }) {
+    if (!saveTemplateTarget) return;
+    setIsSavingTemplate(true);
+    setSaveTemplateError(null);
+    try {
+      await saveContentAsTemplate({
+        level: saveTemplateTarget.level === "group" ? "contentGroup" : saveTemplateTarget.level,
+        objectId: saveTemplateTarget.objectId,
+        courseId,
+        title: data.title,
+        description: data.description,
+        isShared: data.isShared,
+        shareWithUsers: data.shareWithUsers,
+      });
+      setSaveTemplateTarget(null);
+    } catch (error) {
+      console.error("Failed to save template", error);
+      setSaveTemplateError(error instanceof Error ? error.message : "Failed to save template.");
+    } finally {
+      setIsSavingTemplate(false);
     }
   }
 
@@ -4273,6 +6240,53 @@ export default function CourseEditor({
     setDirtyNodeKeys((prev) => ({ ...prev, [`component:${componentId}`]: true }));
   }
 
+  // Writes a single schema-driven Behaviour field (arbitrary dotted/bracketed
+  // path into settings.properties) against the freshest state, the same way
+  // updateComponentThemeSettings does for themeSettings — used by both the
+  // Behaviour accordion's field editors and its asset-picker fields.
+  function updateComponentBehaviourProperty(
+    pageId: string,
+    articleId: string,
+    blockId: string,
+    componentId: string,
+    path: string,
+    value: unknown
+  ) {
+    setContentPages((previousPages) =>
+      previousPages.map((p) =>
+        p.id === pageId
+          ? {
+              ...p,
+              articles: p.articles.map((a) =>
+                a.id === articleId
+                  ? {
+                      ...a,
+                      blocks: a.blocks.map((b) =>
+                        b.id === blockId
+                          ? {
+                              ...b,
+                              components: b.components.map((c) => {
+                                if (c.id !== componentId) return c;
+                                const currentProperties = asRecord(c.settings.properties);
+                                const nextProperties = setBehaviourPath(currentProperties, path, value);
+                                return {
+                                  ...c,
+                                  settings: { ...c.settings, properties: nextProperties },
+                                };
+                              }),
+                            }
+                          : b
+                      ),
+                    }
+                  : a
+              ),
+            }
+          : p
+      )
+    );
+    setDirtyNodeKeys((prev) => ({ ...prev, [`component:${componentId}`]: true }));
+  }
+
   async function saveDraftChanges(): Promise<boolean> {
     if (!hasUnsavedChanges) {
       return true;
@@ -4358,7 +6372,7 @@ export default function CourseEditor({
             _lockedBy: page.lockedBy,
             _classes: page.classes,
             _htmlClasses: page.htmlClasses,
-            requirecompletionof: page.requireCompletionOf,
+            _requireCompletionOf: isNaN(Number(page.requireCompletionOf)) ? -1 : Number(page.requireCompletionOf),
             _isOptional: page.isOptional,
             _isAvailable: page.isAvailable,
             _isHidden: page.isHidden,
@@ -4371,7 +6385,8 @@ export default function CourseEditor({
                   ? page.onScreen._percentInviewVertical
                   : 50,
             },
-            _ariaLevel: page.ariaLevel,
+            _ariaLevel: isNaN(Number(page.ariaLevel)) ? 0 : Number(page.ariaLevel),
+            _isA11yCompletionDescriptionEnabled: page.isA11yCompletionDescriptionEnabled,
             _extensions: page.extensions ?? {},
             _graphic: {
               src: page.graphic?.src || "",
@@ -4416,6 +6431,7 @@ export default function CourseEditor({
                   : 50,
             },
             _ariaLevel: isNaN(Number(article.ariaLevel)) ? 0 : Number(article.ariaLevel),
+            _isA11yCompletionDescriptionEnabled: article.isA11yCompletionDescriptionEnabled,
             _extensions: article.extensions ?? {},
           };
           await updateStructureNode("section", id, sectionPatch);
@@ -4438,7 +6454,16 @@ export default function CourseEditor({
             _isVisible: block.isVisible,
             _requireCompletionOf: isNaN(Number(block.requireCompletionOf)) ? -1 : Number(block.requireCompletionOf),
             _classes: block.classes,
+            _onScreen: {
+              _isEnabled: !!block.onScreen?._isEnabled,
+              _classes: block.onScreen?._classes || "",
+              _percentInviewVertical:
+                typeof block.onScreen?._percentInviewVertical === "number"
+                  ? block.onScreen._percentInviewVertical
+                  : 50,
+            },
             _ariaLevel: isNaN(Number(block.ariaLevel)) ? 0 : Number(block.ariaLevel),
+            _isA11yCompletionDescriptionEnabled: block.isA11yCompletionDescriptionEnabled,
             _extensions: block.extensions ?? {},
           });
           continue;
@@ -4454,11 +6479,20 @@ export default function CourseEditor({
             !Array.isArray(settings.properties)
               ? (settings.properties as Record<string, unknown>)
               : {};
-          const instructionValue = settings.instruction ?? "";
-          const subtitleValue = settings.subtitle;
+          // Instruction/subtitle can now be edited either via the Behaviour
+          // accordion (writes to settings.properties) or (for legacy data)
+          // via settings.instruction/subtitle directly — properties wins
+          // since that's what the Behaviour accordion's schema-driven fields
+          // read from and write to.
+          const instructionValue =
+            typeof existingProperties.instruction === "string"
+              ? existingProperties.instruction
+              : settings.instruction ?? "";
+          const subtitleValue =
+            typeof existingProperties.subtitle === "string" ? existingProperties.subtitle : settings.subtitle;
           await updateStructureNode("component", id, {
             title: settings.title ?? "",
-            displayTitle: settings.title ?? "",
+            displayTitle: component.showDisplayTitleInPreview ? settings.title ?? "" : "",
             body: settings.description ?? "",
             description: settings.description ?? "",
             instruction: instructionValue,
@@ -4468,6 +6502,23 @@ export default function CourseEditor({
               instruction: instructionValue,
               ...(subtitleValue !== undefined ? { subtitle: subtitleValue } : {}),
             },
+            _classes: component.classes,
+            _isOptional: component.isOptional,
+            _isAvailable: component.isAvailable,
+            _isHidden: component.isHidden,
+            _isVisible: component.isVisible,
+            _isResetOnRevisit: component.isResetOnRevisit || "false",
+            _ariaLevel: isNaN(Number(component.ariaLevel)) ? 0 : Number(component.ariaLevel),
+            _isA11yCompletionDescriptionEnabled: component.isA11yCompletionDescriptionEnabled,
+            _onScreen: {
+              _isEnabled: !!component.onScreen?._isEnabled,
+              _classes: component.onScreen?._classes || "",
+              _percentInviewVertical:
+                typeof component.onScreen?._percentInviewVertical === "number"
+                  ? component.onScreen._percentInviewVertical
+                  : 50,
+            },
+            _extensions: component.extensions ?? {},
           });
         }
       }
@@ -4561,6 +6612,11 @@ export default function CourseEditor({
     componentId: string,
     source: SelectionSource = "internal"
   ) {
+    const isSameSelection =
+      selectedComponentId === componentId &&
+      selectedBlockId === blockId &&
+      selectedArticleId === articleId &&
+      selectedPageId === pageId;
     setSelectedPageId(pageId);
     setSelectedArticleId(articleId);
     setSelectedBlockId(blockId);
@@ -4568,6 +6624,9 @@ export default function CourseEditor({
     setHasCanvasSelection(true);
     setRightPanelOpen(true);
     setRightPanelType("component");
+    if (!isSameSelection) {
+      setOpenComponentAccordions(DEFAULT_COMPONENT_ACCORDIONS);
+    }
     if (source === "leftPanel") {
       queuePreviewScrollFromLeftPanel({ level: "component", id: componentId });
     }
@@ -4963,6 +7022,20 @@ export default function CourseEditor({
                     {previewError}
                   </div>
                 )}
+
+                {titleValidationWarning && (
+                  <div className="absolute inset-x-4 top-4 rounded-xl border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b] shadow-sm flex items-start justify-between gap-3">
+                    <span>{titleValidationWarning}</span>
+                    <button
+                      type="button"
+                      onClick={() => setTitleValidationWarning(null)}
+                      className="shrink-0 text-[#991b1b] hover:opacity-70"
+                      aria-label="Dismiss"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -5141,12 +7214,23 @@ export default function CourseEditor({
                               })()}
                               <p className="text-xs text-[#6b7280]">Unique identifier for this topic. Click to copy.</p>
                             </div>
-                            <TopicTextInput label="Title" value={page.title} onChange={(value) => updatePageData(page.id, { title: value })} />
+                            <TopicTitleField
+                              value={canvasTitleLiveOverride ?? page.title}
+                              onChange={(value) => updatePageData(page.id, { title: value })}
+                              onDraftChange={(value) => writeLiveTitleDraftToCanvas("topic", { pageId: page.id }, value)}
+                            />
                             <TopicCheckbox
                               label="Display title in preview"
                               checked={!!page.showDisplayTitleInPreview}
                               onChange={(checked) => updatePageData(page.id, { showDisplayTitleInPreview: checked })}
                             />
+                            <button
+                              type="button"
+                              onClick={() => handleOpenSaveAsTemplate("topic", page.id)}
+                              className="mt-1 px-3 py-1.5 text-[13px] font-medium text-[#2d6fa8] border border-[#2d6fa8] rounded-md hover:bg-[#eef4fa] transition-colors cursor-pointer self-start"
+                            >
+                              Save as template
+                            </button>
                           </TopicAccordion>
 
                           <TopicAccordion title="Availability & Progression" open={!!openTopicAccordions.availability} onToggle={(triggerEl) => toggleTopicAccordion("availability", triggerEl)}>
@@ -5157,7 +7241,7 @@ export default function CourseEditor({
                             <TopicTextInput label="Duration" value={page.duration} onChange={(value) => updatePageData(page.id, { duration: value })} />
                             <TopicTextInput label="Button link text" value={page.linkText} onChange={(value) => updatePageData(page.id, { linkText: value })} />
                             <TopicSelect label="Menu lock type" value={page.lockType} onChange={(value) => updatePageData(page.id, { lockType: value })} options={LOCK_TYPE_OPTIONS} emptyOptionLabel="" />
-                            <TopicTextInput label="Require completion of" value={page.requireCompletionOf} onChange={(value) => updatePageData(page.id, { requireCompletionOf: value })} />
+                            <TopicNumberStepper label="Require completion of" min={-1} value={page.requireCompletionOf} onChange={(value) => updatePageData(page.id, { requireCompletionOf: value })} />
                             <TopicTextInput
                               label="Locked by"
                               value={page.lockedBy.join(", ")}
@@ -5168,7 +7252,12 @@ export default function CourseEditor({
                           </TopicAccordion>
 
                           <TopicAccordion title="Accessibility" open={!!openTopicAccordions.accessibility} onToggle={(triggerEl) => toggleTopicAccordion("accessibility", triggerEl)}>
-                            <TopicTextInput label="ARIA level" value={page.ariaLevel} onChange={(value) => updatePageData(page.id, { ariaLevel: value })} />
+                            <TopicCheckbox
+                              label="Enable accessibility completion description"
+                              checked={page.isA11yCompletionDescriptionEnabled}
+                              onChange={(checked) => updatePageData(page.id, { isA11yCompletionDescriptionEnabled: checked })}
+                            />
+                            <TopicNumberStepper label="ARIA level" min={0} value={page.ariaLevel} onChange={(value) => updatePageData(page.id, { ariaLevel: value })} />
                           </TopicAccordion>
 
                           <TopicAccordion title="Extensions" open={!!openTopicAccordions.extensions} onToggle={(triggerEl) => toggleTopicAccordion("extensions", triggerEl)}>
@@ -5270,19 +7359,25 @@ export default function CourseEditor({
                               <TopicSelect label={BG_POSITION_LABEL} value={asString(pageBackgroundStyles._backgroundPosition)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundPosition: value } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
                             </TopicNestedAccordion>
 
-                            <TopicNestedAccordion title="Header image">
-                              <TopicAssetField
-                                resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl}
-                                label="Header image"
-                                compact
-                                showLabel={false}
-                                value={asString(pageHeaderGraphic._src)}
-                                onPickAsset={() => setTopicAssetPickerTarget({ scope: "themeHeaderGraphic" })}
-                                onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "themeHeaderGraphic" }, initialValue: asString(pageHeaderGraphic._src), title: "Header image" })}
-                                onClear={() => clearTopicAssetSelection(page.id, { scope: "themeHeaderGraphic" })}
-                              />
-                              <TopicTextInput label="Alternative text" value={asString(pageHeaderGraphic.alt)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _graphic: { ...asRecord(asRecord(current._pageHeader)._graphic), alt: value } } }))} />
-                            </TopicNestedAccordion>
+                            {/* The Vanilla theme has no header-graphic support at all —
+                                only Life, Life v2 and Custom Theme render a page header
+                                image. Hiding it for Vanilla avoids exposing a setting
+                                that would silently do nothing in the real preview. */}
+                            {!courseTheme.toLowerCase().includes("vanilla") && (
+                              <TopicNestedAccordion title="Header image">
+                                <TopicAssetField
+                                  resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl}
+                                  label="Header image"
+                                  compact
+                                  showLabel={false}
+                                  value={asString(pageHeaderGraphic._src)}
+                                  onPickAsset={() => setTopicAssetPickerTarget({ scope: "themeHeaderGraphic" })}
+                                  onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "themeHeaderGraphic" }, initialValue: asString(pageHeaderGraphic._src), title: "Header image" })}
+                                  onClear={() => clearTopicAssetSelection(page.id, { scope: "themeHeaderGraphic" })}
+                                />
+                                <TopicTextInput label="Alternative text" value={asString(pageHeaderGraphic.alt)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _graphic: { ...asRecord(asRecord(current._pageHeader)._graphic), alt: value } } }))} />
+                              </TopicNestedAccordion>
+                            )}
 
                             <TopicNestedAccordion title="Text alignment">
                               <TopicSelect label="Title alignment" value={asString(pageHeaderTextAlignment._title)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _textAlignment: { ...asRecord(asRecord(current._pageHeader)._textAlignment), _title: value } } }))} options={TEXT_ALIGN_OPTIONS} />
@@ -5447,6 +7542,7 @@ export default function CourseEditor({
                       <div className="px-4 py-4 border-b border-[#e6ebf0] space-y-2">
                         {(() => {
                           const articleThemeSettings = getActiveThemeSettings(article.themeSettings);
+                          const articleTextAlignment = asRecord(articleThemeSettings._textAlignment);
                           const articleBackgroundImage = asRecord(articleThemeSettings._backgroundImage);
                           const articleBackgroundStyles = asRecord(articleThemeSettings._backgroundStyles);
                           const articleHeader = asRecord(articleThemeSettings._articleHeader);
@@ -5485,12 +7581,23 @@ export default function CourseEditor({
                                   </div>
                                   <p className="text-xs text-[#6b7280]">Unique identifier for this section. Click to copy.</p>
                                 </div>
-                                <TopicTextInput label="Title" value={article.title} onChange={(value) => updateArticle(page!.id, article.id, { title: value })} />
+                                <TopicTitleField
+                                  value={canvasTitleLiveOverride ?? article.title}
+                                  onChange={(value) => updateArticle(page!.id, article.id, { title: value })}
+                                  onDraftChange={(value) => writeLiveTitleDraftToCanvas("section", { pageId: page!.id, articleId: article.id }, value)}
+                                />
                                 <TopicCheckbox
                                   label="Display title in preview"
                                   checked={!!article.showDisplayTitleInPreview}
                                   onChange={(checked) => updateArticle(page!.id, article.id, { showDisplayTitleInPreview: checked })}
                                 />
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenSaveAsTemplate("section", article.id)}
+                                  className="mt-1 px-3 py-1.5 text-[13px] font-medium text-[#2d6fa8] border border-[#2d6fa8] rounded-md hover:bg-[#eef4fa] transition-colors cursor-pointer self-start"
+                                >
+                                  Save as template
+                                </button>
                               </TopicAccordion>
 
                               <TopicAccordion title="Availability & Progression" open={!!openSectionAccordions.availability} onToggle={(triggerEl) => toggleSectionAccordion("availability", triggerEl)}>
@@ -5498,11 +7605,16 @@ export default function CourseEditor({
                                 <TopicCheckbox label="Is this available?" checked={!!article.isAvailable} onChange={(checked) => updateArticle(page!.id, article.id, { isAvailable: checked })} />
                                 <TopicCheckbox label="Is this hidden?" checked={!!article.isHidden} onChange={(checked) => updateArticle(page!.id, article.id, { isHidden: checked })} />
                                 <TopicCheckbox label="Is this visible?" checked={!!article.isVisible} onChange={(checked) => updateArticle(page!.id, article.id, { isVisible: checked })} />
-                                <TopicTextInput label="Require completion of" value={article.requireCompletionOf} onChange={(value) => updateArticle(page!.id, article.id, { requireCompletionOf: value })} />
+                                <TopicNumberStepper label="Require completion of" min={-1} value={article.requireCompletionOf} onChange={(value) => updateArticle(page!.id, article.id, { requireCompletionOf: value })} />
                               </TopicAccordion>
 
                               <TopicAccordion title="Accessibility" open={!!openSectionAccordions.accessibility} onToggle={(triggerEl) => toggleSectionAccordion("accessibility", triggerEl)}>
-                                <TopicTextInput label="ARIA level" value={article.ariaLevel} onChange={(value) => updateArticle(page!.id, article.id, { ariaLevel: value })} />
+                                <TopicCheckbox
+                                  label="Enable accessibility completion description"
+                                  checked={article.isA11yCompletionDescriptionEnabled}
+                                  onChange={(checked) => updateArticle(page!.id, article.id, { isA11yCompletionDescriptionEnabled: checked })}
+                                />
+                                <TopicNumberStepper label="ARIA level" min={0} value={article.ariaLevel} onChange={(value) => updateArticle(page!.id, article.id, { ariaLevel: value })} />
                               </TopicAccordion>
 
                               <TopicAccordion title="Extensions" open={!!openSectionAccordions.extensions} onToggle={(triggerEl) => toggleSectionAccordion("extensions", triggerEl)}>
@@ -5555,9 +7667,9 @@ export default function CourseEditor({
 
                               <TopicAccordion title="Theme settings" open={!!openSectionAccordions.theme} onToggle={(triggerEl) => toggleSectionAccordion("theme", triggerEl)}>
                                 <TopicNestedAccordion title="Text alignment">
-                                  <TopicSelect label="Title alignment" value={asString(articleHeaderTextAlignment._title)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _textAlignment: { ...asRecord(asRecord(current._articleHeader)._textAlignment), _title: value } } }))} options={TEXT_ALIGN_OPTIONS} />
-                                  <TopicSelect label="Body alignment" value={asString(articleHeaderTextAlignment._body)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _textAlignment: { ...asRecord(asRecord(current._articleHeader)._textAlignment), _body: value } } }))} options={TEXT_ALIGN_OPTIONS} />
-                                  <TopicSelect label="Instruction alignment" value={asString(articleHeaderTextAlignment._instruction)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _textAlignment: { ...asRecord(asRecord(current._articleHeader)._textAlignment), _instruction: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                                  <TopicSelect label="Title alignment" value={asString(articleTextAlignment._title)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _title: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                  <TopicSelect label="Body alignment" value={asString(articleTextAlignment._body)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _body: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                  <TopicSelect label="Instruction alignment" value={asString(articleTextAlignment._instruction)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _instruction: value } }))} options={TEXT_ALIGN_OPTIONS} />
                                 </TopicNestedAccordion>
                                 <TopicNestedAccordion title="Article background image">
                                   <div className="flex flex-col gap-1.5">
@@ -5572,32 +7684,36 @@ export default function CourseEditor({
                                   <TopicSelect label={BG_SIZE_LABEL} value={asString(articleBackgroundStyles._backgroundSize)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundSize: value } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
                                   <TopicSelect label={BG_POSITION_LABEL} value={asString(articleBackgroundStyles._backgroundPosition)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundPosition: value } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
                                 </TopicNestedAccordion>
-                                <TopicNestedAccordion title="Article header">
-                                  <TopicNestedAccordion title="Text alignment">
-                                    <TopicSelect label="Title alignment" value={asString(articleHeaderTextAlignment._title)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _textAlignment: { ...asRecord(asRecord(current._articleHeader)._textAlignment), _title: value } } }))} options={TEXT_ALIGN_OPTIONS} />
-                                    <TopicSelect label="Body alignment" value={asString(articleHeaderTextAlignment._body)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _textAlignment: { ...asRecord(asRecord(current._articleHeader)._textAlignment), _body: value } } }))} options={TEXT_ALIGN_OPTIONS} />
-                                    <TopicSelect label="Instruction alignment" value={asString(articleHeaderTextAlignment._instruction)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _textAlignment: { ...asRecord(asRecord(current._articleHeader)._textAlignment), _instruction: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                                {/* Vanilla has no article-header support at all — only Life,
+                                    Life v2 and Custom Theme render one. */}
+                                {!courseTheme.toLowerCase().includes("vanilla") && (
+                                  <TopicNestedAccordion title="Article header">
+                                    <TopicNestedAccordion title="Text alignment">
+                                      <TopicSelect label="Title alignment" value={asString(articleHeaderTextAlignment._title)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _textAlignment: { ...asRecord(asRecord(current._articleHeader)._textAlignment), _title: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                                      <TopicSelect label="Body alignment" value={asString(articleHeaderTextAlignment._body)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _textAlignment: { ...asRecord(asRecord(current._articleHeader)._textAlignment), _body: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                                      <TopicSelect label="Instruction alignment" value={asString(articleHeaderTextAlignment._instruction)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _textAlignment: { ...asRecord(asRecord(current._articleHeader)._textAlignment), _instruction: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                                    </TopicNestedAccordion>
+                                    <TopicNestedAccordion title="Article header background image">
+                                      <div className="flex flex-col gap-1.5">
+                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(articleHeaderBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_xlarge" }, initialValue: asString(articleHeaderBackgroundImage._xlarge), title: "Article header background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_xlarge" })} />
+                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(articleHeaderBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_large" }, initialValue: asString(articleHeaderBackgroundImage._large), title: "Article header background image (_large)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_large" })} />
+                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(articleHeaderBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_medium" }, initialValue: asString(articleHeaderBackgroundImage._medium), title: "Article header background image (_medium)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_medium" })} />
+                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(articleHeaderBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_small" }, initialValue: asString(articleHeaderBackgroundImage._small), title: "Article header background image (_small)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_small" })} />
+                                      </div>
+                                    </TopicNestedAccordion>
+                                    <TopicNestedAccordion title="Article header background image styles">
+                                      <TopicSelect label={BG_REPEAT_LABEL} value={asString(articleHeaderBackgroundStyles._backgroundRepeat)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _backgroundStyles: { ...asRecord(asRecord(current._articleHeader)._backgroundStyles), _backgroundRepeat: value } } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
+                                      <TopicSelect label={BG_SIZE_LABEL} value={asString(articleHeaderBackgroundStyles._backgroundSize)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _backgroundStyles: { ...asRecord(asRecord(current._articleHeader)._backgroundStyles), _backgroundSize: value } } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
+                                      <TopicSelect label={BG_POSITION_LABEL} value={asString(articleHeaderBackgroundStyles._backgroundPosition)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _backgroundStyles: { ...asRecord(asRecord(current._articleHeader)._backgroundStyles), _backgroundPosition: value } } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
+                                    </TopicNestedAccordion>
+                                    <TopicNestedAccordion title="Article header minimum height">
+                                      <TopicTextInput label="_xlarge" type="number" value={String(asNumberOrEmpty(articleHeaderMinimumHeights._xlarge))} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _minimumHeights: { ...asRecord(asRecord(current._articleHeader)._minimumHeights), _xlarge: parseNumberishInput(value) } } }))} />
+                                      <TopicTextInput label="_large" type="number" value={String(asNumberOrEmpty(articleHeaderMinimumHeights._large))} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _minimumHeights: { ...asRecord(asRecord(current._articleHeader)._minimumHeights), _large: parseNumberishInput(value) } } }))} />
+                                      <TopicTextInput label="_medium" type="number" value={String(asNumberOrEmpty(articleHeaderMinimumHeights._medium))} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _minimumHeights: { ...asRecord(asRecord(current._articleHeader)._minimumHeights), _medium: parseNumberishInput(value) } } }))} />
+                                      <TopicTextInput label="_small" type="number" value={String(asNumberOrEmpty(articleHeaderMinimumHeights._small))} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _minimumHeights: { ...asRecord(asRecord(current._articleHeader)._minimumHeights), _small: parseNumberishInput(value) } } }))} />
+                                    </TopicNestedAccordion>
                                   </TopicNestedAccordion>
-                                  <TopicNestedAccordion title="Article header background image">
-                                    <div className="flex flex-col gap-1.5">
-                                      <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(articleHeaderBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_xlarge" }, initialValue: asString(articleHeaderBackgroundImage._xlarge), title: "Article header background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_xlarge" })} />
-                                      <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(articleHeaderBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_large" }, initialValue: asString(articleHeaderBackgroundImage._large), title: "Article header background image (_large)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_large" })} />
-                                      <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(articleHeaderBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_medium" }, initialValue: asString(articleHeaderBackgroundImage._medium), title: "Article header background image (_medium)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_medium" })} />
-                                      <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(articleHeaderBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_small" }, initialValue: asString(articleHeaderBackgroundImage._small), title: "Article header background image (_small)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_small" })} />
-                                    </div>
-                                  </TopicNestedAccordion>
-                                  <TopicNestedAccordion title="Article header background image styles">
-                                    <TopicSelect label={BG_REPEAT_LABEL} value={asString(articleHeaderBackgroundStyles._backgroundRepeat)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _backgroundStyles: { ...asRecord(asRecord(current._articleHeader)._backgroundStyles), _backgroundRepeat: value } } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
-                                    <TopicSelect label={BG_SIZE_LABEL} value={asString(articleHeaderBackgroundStyles._backgroundSize)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _backgroundStyles: { ...asRecord(asRecord(current._articleHeader)._backgroundStyles), _backgroundSize: value } } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
-                                    <TopicSelect label={BG_POSITION_LABEL} value={asString(articleHeaderBackgroundStyles._backgroundPosition)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _backgroundStyles: { ...asRecord(asRecord(current._articleHeader)._backgroundStyles), _backgroundPosition: value } } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
-                                  </TopicNestedAccordion>
-                                  <TopicNestedAccordion title="Article header minimum height">
-                                    <TopicTextInput label="_xlarge" type="number" value={String(asNumberOrEmpty(articleHeaderMinimumHeights._xlarge))} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _minimumHeights: { ...asRecord(asRecord(current._articleHeader)._minimumHeights), _xlarge: parseNumberishInput(value) } } }))} />
-                                    <TopicTextInput label="_large" type="number" value={String(asNumberOrEmpty(articleHeaderMinimumHeights._large))} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _minimumHeights: { ...asRecord(asRecord(current._articleHeader)._minimumHeights), _large: parseNumberishInput(value) } } }))} />
-                                    <TopicTextInput label="_medium" type="number" value={String(asNumberOrEmpty(articleHeaderMinimumHeights._medium))} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _minimumHeights: { ...asRecord(asRecord(current._articleHeader)._minimumHeights), _medium: parseNumberishInput(value) } } }))} />
-                                    <TopicTextInput label="_small" type="number" value={String(asNumberOrEmpty(articleHeaderMinimumHeights._small))} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _minimumHeights: { ...asRecord(asRecord(current._articleHeader)._minimumHeights), _small: parseNumberishInput(value) } } }))} />
-                                  </TopicNestedAccordion>
-                                </TopicNestedAccordion>
+                                )}
                                 <TopicNestedAccordion title="On-screen classes">
                                   <TopicCheckbox
                                     label="Enabled?"
@@ -5658,8 +7774,13 @@ export default function CourseEditor({
                           const blockBackgroundImage = asRecord(blockThemeSettings._backgroundImage);
                           const blockBackgroundStyles = asRecord(blockThemeSettings._backgroundStyles);
                           const blockMinimumHeights = asRecord(blockThemeSettings._minimumHeights);
-                          const blockColours = asRecord(blockThemeSettings._blockColours);
+                          const blockColours = asRecord(blockThemeSettings._blockColors);
                           const blockResponsiveClasses = asRecord(blockThemeSettings._responsiveClasses);
+                          const blockHeader = asRecord(blockThemeSettings._blockHeader);
+                          const blockHeaderTextAlignment = asRecord(blockHeader._textAlignment);
+                          const blockHeaderBackgroundImage = asRecord(blockHeader._backgroundImage);
+                          const blockHeaderBackgroundStyles = asRecord(blockHeader._backgroundStyles);
+                          const blockHeaderMinimumHeights = asRecord(blockHeader._minimumHeights);
                           const isCopied = copiedBlockId === block.id;
 
                           return (
@@ -5690,12 +7811,23 @@ export default function CourseEditor({
                                   </div>
                                   <p className="text-xs text-[#6b7280]">Unique identifier for this content group. Click to copy.</p>
                                 </div>
-                                <TopicTextInput label="Title" value={block.title} onChange={(value) => updateBlock(page!.id, article!.id, block.id, { title: value })} />
+                                <TopicTitleField
+                                  value={canvasTitleLiveOverride ?? block.title}
+                                  onChange={(value) => updateBlock(page!.id, article!.id, block.id, { title: value })}
+                                  onDraftChange={(value) => writeLiveTitleDraftToCanvas("group", { pageId: page!.id, articleId: article!.id, blockId: block.id }, value)}
+                                />
                                 <TopicCheckbox
                                   label="Display title in preview"
                                   checked={!!block.showDisplayTitleInPreview}
                                   onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { showDisplayTitleInPreview: checked })}
                                 />
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenSaveAsTemplate("group", block.id)}
+                                  className="mt-1 px-3 py-1.5 text-[13px] font-medium text-[#2d6fa8] border border-[#2d6fa8] rounded-md hover:bg-[#eef4fa] transition-colors cursor-pointer self-start"
+                                >
+                                  Save as template
+                                </button>
                               </TopicAccordion>
 
                               <TopicAccordion title="Availability & Progression" open={!!openBlockAccordions.availability} onToggle={(triggerEl) => toggleBlockAccordion("availability", triggerEl)}>
@@ -5703,7 +7835,16 @@ export default function CourseEditor({
                                 <TopicCheckbox label="Is this available?" checked={!!block.isAvailable} onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { isAvailable: checked })} />
                                 <TopicCheckbox label="Is this hidden?" checked={!!block.isHidden} onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { isHidden: checked })} />
                                 <TopicCheckbox label="Is this visible?" checked={!!block.isVisible} onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { isVisible: checked })} />
-                                <TopicTextInput label="Require completion of" value={block.requireCompletionOf} onChange={(value) => updateBlock(page!.id, article!.id, block.id, { requireCompletionOf: value })} />
+                                <TopicNumberStepper label="Require completion of" min={-1} value={block.requireCompletionOf} onChange={(value) => updateBlock(page!.id, article!.id, block.id, { requireCompletionOf: value })} />
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Accessibility" open={!!openBlockAccordions.accessibility} onToggle={(triggerEl) => toggleBlockAccordion("accessibility", triggerEl)}>
+                                <TopicCheckbox
+                                  label="Enable accessibility completion description"
+                                  checked={block.isA11yCompletionDescriptionEnabled}
+                                  onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { isA11yCompletionDescriptionEnabled: checked })}
+                                />
+                                <TopicNumberStepper label="ARIA level" min={0} value={block.ariaLevel} onChange={(value) => updateBlock(page!.id, article!.id, block.id, { ariaLevel: value })} />
                               </TopicAccordion>
 
                               <TopicAccordion title="Extensions" open={!!openBlockAccordions.extensions} onToggle={(triggerEl) => toggleBlockAccordion("extensions", triggerEl)}>
@@ -5775,6 +7916,36 @@ export default function CourseEditor({
                                   <TopicSelect label={BG_SIZE_LABEL} value={asString(blockBackgroundStyles._backgroundSize)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundSize: value } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
                                   <TopicSelect label={BG_POSITION_LABEL} value={asString(blockBackgroundStyles._backgroundPosition)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundPosition: value } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
                                 </TopicNestedAccordion>
+                                {/* Vanilla has no block-header support at all — only Life,
+                                    Life v2 and Custom Theme render one. */}
+                                {!courseTheme.toLowerCase().includes("vanilla") && (
+                                  <TopicNestedAccordion title="Block header">
+                                    <TopicNestedAccordion title="Text alignment">
+                                      <TopicSelect label="Title alignment" value={asString(blockHeaderTextAlignment._title)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _textAlignment: { ...asRecord(asRecord(current._blockHeader)._textAlignment), _title: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                                      <TopicSelect label="Body alignment" value={asString(blockHeaderTextAlignment._body)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _textAlignment: { ...asRecord(asRecord(current._blockHeader)._textAlignment), _body: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                                      <TopicSelect label="Instruction alignment" value={asString(blockHeaderTextAlignment._instruction)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _textAlignment: { ...asRecord(asRecord(current._blockHeader)._textAlignment), _instruction: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                                    </TopicNestedAccordion>
+                                    <TopicNestedAccordion title="Block header background image">
+                                      <div className="flex flex-col gap-1.5">
+                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(blockHeaderBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" }, initialValue: asString(blockHeaderBackgroundImage._xlarge), title: "Block header background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" })} />
+                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(blockHeaderBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_large" }, initialValue: asString(blockHeaderBackgroundImage._large), title: "Block header background image (_large)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_large" })} />
+                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(blockHeaderBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_medium" }, initialValue: asString(blockHeaderBackgroundImage._medium), title: "Block header background image (_medium)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_medium" })} />
+                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(blockHeaderBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_small" }, initialValue: asString(blockHeaderBackgroundImage._small), title: "Block header background image (_small)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_small" })} />
+                                      </div>
+                                    </TopicNestedAccordion>
+                                    <TopicNestedAccordion title="Block header background image styles">
+                                      <TopicSelect label={BG_REPEAT_LABEL} value={asString(blockHeaderBackgroundStyles._backgroundRepeat)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _backgroundStyles: { ...asRecord(asRecord(current._blockHeader)._backgroundStyles), _backgroundRepeat: value } } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
+                                      <TopicSelect label={BG_SIZE_LABEL} value={asString(blockHeaderBackgroundStyles._backgroundSize)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _backgroundStyles: { ...asRecord(asRecord(current._blockHeader)._backgroundStyles), _backgroundSize: value } } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
+                                      <TopicSelect label={BG_POSITION_LABEL} value={asString(blockHeaderBackgroundStyles._backgroundPosition)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _backgroundStyles: { ...asRecord(asRecord(current._blockHeader)._backgroundStyles), _backgroundPosition: value } } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
+                                    </TopicNestedAccordion>
+                                    <TopicNestedAccordion title="Block header minimum height">
+                                      <TopicTextInput label="_xlarge" type="number" value={String(asNumberOrEmpty(blockHeaderMinimumHeights._xlarge))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _minimumHeights: { ...asRecord(asRecord(current._blockHeader)._minimumHeights), _xlarge: parseNumberishInput(value) } } }))} />
+                                      <TopicTextInput label="_large" type="number" value={String(asNumberOrEmpty(blockHeaderMinimumHeights._large))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _minimumHeights: { ...asRecord(asRecord(current._blockHeader)._minimumHeights), _large: parseNumberishInput(value) } } }))} />
+                                      <TopicTextInput label="_medium" type="number" value={String(asNumberOrEmpty(blockHeaderMinimumHeights._medium))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _minimumHeights: { ...asRecord(asRecord(current._blockHeader)._minimumHeights), _medium: parseNumberishInput(value) } } }))} />
+                                      <TopicTextInput label="_small" type="number" value={String(asNumberOrEmpty(blockHeaderMinimumHeights._small))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _minimumHeights: { ...asRecord(asRecord(current._blockHeader)._minimumHeights), _small: parseNumberishInput(value) } } }))} />
+                                    </TopicNestedAccordion>
+                                  </TopicNestedAccordion>
+                                )}
                                 <TopicNestedAccordion title="Block minimum height">
                                   <TopicTextInput label="_xlarge" type="number" value={String(asNumberOrEmpty(blockMinimumHeights._xlarge))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _minimumHeights: { ...asRecord(current._minimumHeights), _xlarge: parseNumberishInput(value) } }))} />
                                   <TopicTextInput label="_large" type="number" value={String(asNumberOrEmpty(blockMinimumHeights._large))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _minimumHeights: { ...asRecord(current._minimumHeights), _large: parseNumberishInput(value) } }))} />
@@ -5783,18 +7954,38 @@ export default function CourseEditor({
                                 </TopicNestedAccordion>
                                 <TopicCheckbox
                                   label="Divider block?"
-                                  checked={asBoolean(blockThemeSettings._isDivider)}
-                                  onChange={(checked) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _isDivider: checked }))}
+                                  checked={asBoolean(blockThemeSettings._isDividerBlock)}
+                                  onChange={(checked) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _isDividerBlock: checked }))}
                                 />
                                 <TopicNestedAccordion title="Block colours">
-                                  <TopicColorField label="Background colour" value={asString(blockColours._background)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColours: { ...asRecord(current._blockColours), _background: value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
-                                  <TopicColorField label="Font colour" value={asString(blockColours._font)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColours: { ...asRecord(current._blockColours), _font: value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
-                                  <TopicColorField label="Header colour" value={asString(blockColours._header)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColours: { ...asRecord(current._blockColours), _header: value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
+                                  <TopicColorField label="Background colour" value={asString(blockColours["block-bg-color"])} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColors: { ...asRecord(current._blockColors), "block-bg-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
+                                  <TopicColorField label="Font colour" value={asString(blockColours["block-font-color"])} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColors: { ...asRecord(current._blockColors), "block-font-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
+                                  <TopicColorField label="Header colour" value={asString(blockColours["block-header-color"])} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColors: { ...asRecord(current._blockColors), "block-header-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
                                 </TopicNestedAccordion>
-                                <TopicSelect label="Spacing top" value={asString(blockThemeSettings._spacingTop)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _spacingTop: value }))} options={SPACING_OPTIONS} emptyOptionLabel="Default" />
-                                <TopicSelect label="Spacing bottom" value={asString(blockThemeSettings._spacingBottom)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _spacingBottom: value }))} options={SPACING_OPTIONS} emptyOptionLabel="Default" />
-                                <TopicSelect label="Set the vertical alignment of the child component(s)" value={asString(blockThemeSettings._verticalAlignment)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _verticalAlignment: value }))} options={VERTICAL_ALIGN_OPTIONS} emptyOptionLabel="" />
-                                <TopicSelect label="Set the horizontal alignment of the child component(s)" value={asString(blockThemeSettings._horizontalAlignment)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _horizontalAlignment: value }))} options={HORIZONTAL_ALIGN_OPTIONS} emptyOptionLabel="" />
+                                <TopicSelect label="Spacing top" value={asString(blockThemeSettings._paddingTop)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _paddingTop: value }))} options={SPACING_OPTIONS} emptyOptionLabel="Default" />
+                                <TopicSelect label="Spacing bottom" value={asString(blockThemeSettings._paddingBottom)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _paddingBottom: value }))} options={SPACING_OPTIONS} emptyOptionLabel="Default" />
+                                <TopicSelect label="Set the vertical alignment of the child component(s)" value={asString(blockThemeSettings._componentVerticalAlignment)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _componentVerticalAlignment: value }))} options={VERTICAL_ALIGN_OPTIONS} emptyOptionLabel="" />
+                                <TopicSelect label="Set the horizontal alignment of the child component(s)" value={asString(blockThemeSettings._componentHorizontalAlignment)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _componentHorizontalAlignment: value }))} options={HORIZONTAL_ALIGN_OPTIONS} emptyOptionLabel="" />
+                                <TopicNestedAccordion title="On-screen classes">
+                                  <TopicCheckbox
+                                    label="Enabled?"
+                                    checked={asBoolean(block.onScreen?._isEnabled)}
+                                    onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { onScreen: { ...(block.onScreen ?? {}), _isEnabled: checked } })}
+                                  />
+                                  <TopicSelect
+                                    label="Classes"
+                                    value={asString(block.onScreen?._classes)}
+                                    onChange={(value) => updateBlock(page!.id, article!.id, block.id, { onScreen: { ...(block.onScreen ?? {}), _classes: value } })}
+                                    options={ONSCREEN_CLASS_OPTIONS}
+                                    emptyOptionLabel=""
+                                  />
+                                  <TopicTextInput
+                                    label="Percent in view"
+                                    type="number"
+                                    value={String(asNumberOrEmpty(block.onScreen?._percentInviewVertical))}
+                                    onChange={(value) => updateBlock(page!.id, article!.id, block.id, { onScreen: { ...(block.onScreen ?? {}), _percentInviewVertical: parseNumberishInput(value) } })}
+                                  />
+                                </TopicNestedAccordion>
                               </TopicAccordion>
 
                               <TopicAccordion title="Advanced Settings" open={!!openBlockAccordions.advanced} onToggle={(triggerEl) => toggleBlockAccordion("advanced", triggerEl)}>
@@ -5830,122 +8021,216 @@ export default function CourseEditor({
                     </button>
                     {activeLevel === "component" && (
                       <div className="px-4 py-4 border-b border-[#e6ebf0]">
-                        {component && page && article && block ? (
-                          <div className="space-y-3">
-                            {(() => {
-                              const componentThemeSettings = getActiveThemeSettings(component.themeSettings);
-                              const componentBackgroundImage = asRecord(componentThemeSettings._backgroundImage);
-                              const componentBackgroundStyles = asRecord(componentThemeSettings._backgroundStyles);
-                              return (
-                                <>
-                                  <div className="flex flex-col gap-1.5">
-                                    <div className="text-[13px] font-semibold text-[var(--life-base-black)]">Component background image</div>
-                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(componentBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "componentBackground", articleId: article.id, blockId: block.id, componentId: component.id, bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "componentBackground", articleId: article.id, blockId: block.id, componentId: component.id, bp: "_xlarge" }, initialValue: asString(componentBackgroundImage._xlarge), title: "Component background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "componentBackground", articleId: article.id, blockId: block.id, componentId: component.id, bp: "_xlarge" })} />
-                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(componentBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "componentBackground", articleId: article.id, blockId: block.id, componentId: component.id, bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "componentBackground", articleId: article.id, blockId: block.id, componentId: component.id, bp: "_large" }, initialValue: asString(componentBackgroundImage._large), title: "Component background image (_large)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "componentBackground", articleId: article.id, blockId: block.id, componentId: component.id, bp: "_large" })} />
-                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(componentBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "componentBackground", articleId: article.id, blockId: block.id, componentId: component.id, bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "componentBackground", articleId: article.id, blockId: block.id, componentId: component.id, bp: "_medium" }, initialValue: asString(componentBackgroundImage._medium), title: "Component background image (_medium)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "componentBackground", articleId: article.id, blockId: block.id, componentId: component.id, bp: "_medium" })} />
-                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(componentBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "componentBackground", articleId: article.id, blockId: block.id, componentId: component.id, bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "componentBackground", articleId: article.id, blockId: block.id, componentId: component.id, bp: "_small" }, initialValue: asString(componentBackgroundImage._small), title: "Component background image (_small)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "componentBackground", articleId: article.id, blockId: block.id, componentId: component.id, bp: "_small" })} />
+                        {component && page && article && block ? (() => {
+                          const componentThemeSettings = getActiveThemeSettings(component.themeSettings);
+                          const componentTextAlignment = asRecord(componentThemeSettings._textAlignment);
+                          const componentColours = asRecord(componentThemeSettings._componentColors);
+                          const componentResponsiveClasses = asRecord(componentThemeSettings._responsiveClasses);
+                          const componentProperties = asRecord(component.settings.properties);
+                          const behaviourSchema = componentBehaviourSchemas[component.settings.componentKey || ""];
+                          const isCopied = copiedComponentId === component.id;
+
+                          return (
+                            <div className="flex flex-col gap-2.5">
+                              <TopicAccordion title="General" open={!!openComponentAccordions.general} onToggle={(triggerEl) => toggleComponentAccordion("general", triggerEl)}>
+                                <div className="flex flex-col gap-1.5">
+                                  <TopicFieldLabel>COMPONENT ID</TopicFieldLabel>
+                                  <div className="relative">
+                                    <button
+                                      type="button"
+                                      aria-label="Copy component id"
+                                      title="Copy component id"
+                                      onClick={() => handleCopyComponentId(component.id)}
+                                      className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors flex items-center justify-between gap-2 cursor-pointer ${isCopied ? "bg-[var(--life-positive-050)] border-[var(--life-positive-500)] text-[var(--life-positive-500)]" : "bg-white border-[var(--life-neutral-300)] text-[var(--life-base-black)] hover:bg-[#f8fafc] hover:border-[var(--life-primary-500)] hover:text-[var(--life-primary-500)]"}`}
+                                    >
+                                      <span className="truncate text-left">{component.id}</span>
+                                      {isCopied ? (
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
+                                      ) : (
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+                                      )}
+                                    </button>
+                                    {isCopied && (
+                                      <div className="absolute -top-8 right-0 px-2.5 py-1 rounded-[8px] border border-[var(--life-positive-500)] bg-[var(--life-positive-050)] text-[11px] font-semibold text-[var(--life-positive-500)] shadow-sm whitespace-nowrap">
+                                        Id copied to clipboard.
+                                      </div>
+                                    )}
                                   </div>
-                                  <TopicNestedAccordion title="Component background image styles">
-                                    <TopicSelect
-                                      label={BG_REPEAT_LABEL}
-                                      value={asString(componentBackgroundStyles._backgroundRepeat)}
-                                      onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({
-                                        ...current,
-                                        _backgroundStyles: {
-                                          ...asRecord(current._backgroundStyles),
-                                          _backgroundRepeat: value,
-                                        },
-                                      }))}
-                                      options={BG_REPEAT_OPTIONS}
-                                    />
-                                    <TopicSelect
-                                      label={BG_SIZE_LABEL}
-                                      value={asString(componentBackgroundStyles._backgroundSize)}
-                                      onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({
-                                        ...current,
-                                        _backgroundStyles: {
-                                          ...asRecord(current._backgroundStyles),
-                                          _backgroundSize: value,
-                                        },
-                                      }))}
-                                      options={BG_SIZE_OPTIONS}
-                                    />
-                                    <TopicSelect
-                                      label={BG_POSITION_LABEL}
-                                      value={asString(componentBackgroundStyles._backgroundPosition)}
-                                      onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({
-                                        ...current,
-                                        _backgroundStyles: {
-                                          ...asRecord(current._backgroundStyles),
-                                          _backgroundPosition: value,
-                                        },
-                                      }))}
-                                      options={BG_POSITION_OPTIONS}
-                                    />
-                                  </TopicNestedAccordion>
-                                </>
-                              );
-                            })()}
-                            {(() => {
-                              const componentProperties =
-                                component.settings.properties &&
-                                typeof component.settings.properties === "object" &&
-                                !Array.isArray(component.settings.properties)
-                                  ? component.settings.properties
-                                  : {};
-                              const componentKey = (component.settings.componentKey || "").toLowerCase();
-                              const shouldShowSubtitle =
-                                ((component.settings.subtitle || "").trim().length > 0) ||
-                                Object.prototype.hasOwnProperty.call(componentProperties, "subtitle") ||
-                                componentSubtitleSchemaSupport[componentKey] === true;
-                              return shouldShowSubtitle;
-                            })() && (
-                              <input
-                                value={component.settings.subtitle || ""}
-                                onChange={(e) => updateComponent(page.id, article.id, block.id, component.id, {
-                                  settings: {
-                                    ...component.settings,
-                                    subtitle: e.target.value,
-                                    properties: {
-                                      ...(component.settings.properties && typeof component.settings.properties === "object" && !Array.isArray(component.settings.properties)
-                                        ? component.settings.properties
-                                        : {}),
-                                      subtitle: e.target.value,
-                                    },
-                                  },
-                                })}
-                                className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm"
-                                placeholder="Component subtitle"
-                              />
-                            )}
-                            <input
-                              value={component.settings.title || ""}
-                              onChange={(e) => updateComponent(page.id, article.id, block.id, component.id, {
-                                settings: { ...component.settings, title: e.target.value },
-                              })}
-                              className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm"
-                              placeholder="Component title"
-                            />
-                            <textarea
-                              value={component.settings.description || ""}
-                              onChange={(e) => updateComponent(page.id, article.id, block.id, component.id, {
-                                settings: { ...component.settings, description: e.target.value },
-                              })}
-                              className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm resize-none"
-                              rows={3}
-                              placeholder="Component body"
-                            />
-                            <textarea
-                              value={component.settings.instruction || ""}
-                              onChange={(e) => updateComponent(page.id, article.id, block.id, component.id, {
-                                settings: { ...component.settings, instruction: e.target.value },
-                              })}
-                              className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm resize-none"
-                              rows={2}
-                              placeholder="Component instruction"
-                            />
-                          </div>
-                        ) : null}
+                                  <p className="text-xs text-[#6b7280]">Unique identifier for this component. Click to copy.</p>
+                                </div>
+                                <TopicTitleField
+                                  value={canvasTitleLiveOverride ?? component.settings.title ?? ""}
+                                  onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { settings: { ...component.settings, title: value } })}
+                                  onDraftChange={(value) => writeLiveTitleDraftToCanvas("component", { pageId: page.id, articleId: article.id, blockId: block.id, componentId: component.id }, value)}
+                                />
+                                <TopicCheckbox
+                                  label="Display title in preview"
+                                  checked={!!component.showDisplayTitleInPreview}
+                                  onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { showDisplayTitleInPreview: checked })}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenSaveAsTemplate("component", component.id)}
+                                  className="mt-1 px-3 py-1.5 text-[13px] font-medium text-[#2d6fa8] border border-[#2d6fa8] rounded-md hover:bg-[#eef4fa] transition-colors cursor-pointer self-start"
+                                >
+                                  Save as template
+                                </button>
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Behaviour" open={!!openComponentAccordions.behaviour} onToggle={(triggerEl) => toggleComponentAccordion("behaviour", triggerEl)}>
+                                {(() => {
+                                  if (behaviourSchema === undefined) {
+                                    return <p className="text-[13px] text-[var(--life-neutral-300)]">Loading component properties…</p>;
+                                  }
+                                  const fieldKeys = Object.keys(behaviourSchema).filter((key) => {
+                                    const fieldSchema = behaviourSchema[key] as BehaviourFieldSchema;
+                                    return fieldSchema && !fieldSchema.editorOnly && !COMPONENT_BEHAVIOUR_EXCLUDED_FIELDS.has(key);
+                                  });
+                                  if (!fieldKeys.length) {
+                                    return <p className="text-[13px] text-[var(--life-neutral-300)]">This component has no additional behaviour properties.</p>;
+                                  }
+                                  const handleBehaviourChange = (path: string, value: unknown) => {
+                                    updateComponentBehaviourProperty(page.id, article.id, block.id, component.id, path, value);
+                                  };
+                                  const behaviourAssetContext: BehaviourAssetContext = {
+                                    pageId: page.id,
+                                    articleId: article.id,
+                                    blockId: block.id,
+                                    componentId: component.id,
+                                    resolveAssetPreviewUrl: resolveTopicAssetPreviewUrl,
+                                    onPickAsset: (assetPath) => setTopicAssetPickerTarget({ scope: "componentProperty", articleId: article.id, blockId: block.id, componentId: component.id, path: assetPath }),
+                                    onPickExternal: (assetPath, currentValue) => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "componentProperty", articleId: article.id, blockId: block.id, componentId: component.id, path: assetPath }, initialValue: currentValue, title: "Select External Asset" }),
+                                    onClear: (assetPath) => clearTopicAssetSelection(page.id, { scope: "componentProperty", articleId: article.id, blockId: block.id, componentId: component.id, path: assetPath }),
+                                  };
+                                  return fieldKeys.map((key) => {
+                                    const fieldSchema = behaviourSchema[key] as BehaviourFieldSchema;
+                                    const fieldValue = componentProperties[key] !== undefined ? componentProperties[key] : fieldSchema.default;
+                                    return (
+                                      <BehaviourField key={key} path={key} fieldName={key} fieldSchema={fieldSchema} value={fieldValue} onChange={handleBehaviourChange} assetContext={behaviourAssetContext} />
+                                    );
+                                  });
+                                })()}
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Availability & Progression" open={!!openComponentAccordions.availability} onToggle={(triggerEl) => toggleComponentAccordion("availability", triggerEl)}>
+                                <TopicCheckbox label="Is this optional?" checked={!!component.isOptional} onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { isOptional: checked })} />
+                                <TopicCheckbox label="Is this available?" checked={!!component.isAvailable} onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { isAvailable: checked })} />
+                                <TopicCheckbox label="Is this hidden?" checked={!!component.isHidden} onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { isHidden: checked })} />
+                                <TopicCheckbox label="Is this visible?" checked={!!component.isVisible} onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { isVisible: checked })} />
+                                <TopicSelect
+                                  label="Reset when revisited?"
+                                  value={component.isResetOnRevisit || "false"}
+                                  onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { isResetOnRevisit: value })}
+                                  options={RESET_ON_REVISIT_OPTIONS}
+                                />
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Accessibility" open={!!openComponentAccordions.accessibility} onToggle={(triggerEl) => toggleComponentAccordion("accessibility", triggerEl)}>
+                                <TopicCheckbox
+                                  label="Enable accessibility completion description"
+                                  checked={component.isA11yCompletionDescriptionEnabled}
+                                  onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { isA11yCompletionDescriptionEnabled: checked })}
+                                />
+                                <TopicNumberStepper label="ARIA level" min={0} value={component.ariaLevel} onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { ariaLevel: value })} />
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Extensions" open={!!openComponentAccordions.extensions} onToggle={(triggerEl) => toggleComponentAccordion("extensions", triggerEl)}>
+                                {(() => {
+                                  const extensionKeySet = new Set<string>();
+                                  contentPages.forEach((contentPage) => {
+                                    contentPage.articles.forEach((art) => {
+                                      art.blocks.forEach((blk) => {
+                                        blk.components.forEach((cmp) => {
+                                          Object.keys(asRecord(cmp.extensions)).forEach((key) => {
+                                            if (key.trim()) extensionKeySet.add(key);
+                                          });
+                                        });
+                                      });
+                                    });
+                                  });
+                                  const extensionKeys = Array.from(extensionKeySet).sort((a, b) => a.localeCompare(b));
+                                  if (!extensionKeys.length) {
+                                    return <p className="text-[13px] text-[var(--life-neutral-300)]">No extensions are currently configured in this course.</p>;
+                                  }
+                                  return (
+                                    <div className="flex flex-col gap-2.5">
+                                      {extensionKeys.map((extensionKey) => {
+                                        const extensionConfig = asRecord(component.extensions)[extensionKey];
+                                        const extensionJson = JSON.stringify(extensionConfig ?? {}, null, 2);
+                                        return (
+                                          <TopicNestedAccordion key={`${component.id}-extension-${extensionKey}`} title={extensionKey}>
+                                            <div className="flex flex-col gap-1.5">
+                                              <TopicFieldLabel>Component-level settings</TopicFieldLabel>
+                                              <textarea
+                                                key={`${component.id}-extension-json-${extensionKey}`}
+                                                defaultValue={extensionJson}
+                                                onBlur={(event) => {
+                                                  try {
+                                                    const rawInput = event.target.value.trim();
+                                                    const parsed = JSON.parse(rawInput || "{}");
+                                                    updateComponent(page.id, article.id, block.id, component.id, {
+                                                      extensions: { ...asRecord(component.extensions), [extensionKey]: parsed },
+                                                    });
+                                                  } catch {
+                                                    // Keep current value on invalid JSON.
+                                                  }
+                                                }}
+                                                className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors resize-y min-h-[120px] font-mono"
+                                              />
+                                            </div>
+                                          </TopicNestedAccordion>
+                                        );
+                                      })}
+                                    </div>
+                                  );
+                                })()}
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Theme settings" open={!!openComponentAccordions.theme} onToggle={(triggerEl) => toggleComponentAccordion("theme", triggerEl)}>
+                                <TopicNestedAccordion title="Text alignment">
+                                  <TopicSelect label="Title alignment" value={asString(componentTextAlignment._title)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _title: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                  <TopicSelect label="Body alignment" value={asString(componentTextAlignment._body)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _body: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                  <TopicSelect label="Instruction alignment" value={asString(componentTextAlignment._instruction)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _instruction: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                </TopicNestedAccordion>
+                                <TopicNestedAccordion title="Component colours">
+                                  <TopicColorField label="Background colour" value={asString(componentColours["component-bg-color"])} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _componentColors: { ...asRecord(current._componentColors), "component-bg-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
+                                  <TopicColorField label="Font colour" value={asString(componentColours["component-font-color"])} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _componentColors: { ...asRecord(current._componentColors), "component-font-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
+                                  <TopicColorField label="Header colour" value={asString(componentColours["component-header-color"])} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _componentColors: { ...asRecord(current._componentColors), "component-header-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
+                                </TopicNestedAccordion>
+                                <TopicNestedAccordion title="On-screen classes">
+                                  <TopicCheckbox
+                                    label="Enabled?"
+                                    checked={asBoolean(component.onScreen?._isEnabled)}
+                                    onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { onScreen: { ...(component.onScreen ?? {}), _isEnabled: checked } })}
+                                  />
+                                  <TopicSelect
+                                    label="Classes"
+                                    value={asString(component.onScreen?._classes)}
+                                    onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { onScreen: { ...(component.onScreen ?? {}), _classes: value } })}
+                                    options={ONSCREEN_CLASS_OPTIONS}
+                                    emptyOptionLabel=""
+                                  />
+                                  <TopicTextInput
+                                    label="Percent in view"
+                                    type="number"
+                                    value={String(asNumberOrEmpty(component.onScreen?._percentInviewVertical))}
+                                    onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { onScreen: { ...(component.onScreen ?? {}), _percentInviewVertical: parseNumberishInput(value) } })}
+                                  />
+                                </TopicNestedAccordion>
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Advanced Settings" open={!!openComponentAccordions.advanced} onToggle={(triggerEl) => toggleComponentAccordion("advanced", triggerEl)}>
+                                <TopicTextInput label="Component class" value={component.classes} onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { classes: value })} />
+                                <TopicNestedAccordion title="Responsive classes">
+                                  <TopicTextInput label="_xlarge" value={asString(componentResponsiveClasses._xlarge)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _xlarge: value } }))} />
+                                  <TopicTextInput label="_large" value={asString(componentResponsiveClasses._large)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _large: value } }))} />
+                                  <TopicTextInput label="_medium" value={asString(componentResponsiveClasses._medium)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _medium: value } }))} />
+                                  <TopicTextInput label="_small" value={asString(componentResponsiveClasses._small)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _small: value } }))} />
+                                </TopicNestedAccordion>
+                              </TopicAccordion>
+                            </div>
+                          );
+                        })() : null}
                       </div>
                     )}
                   </>
@@ -6000,6 +8285,20 @@ export default function CourseEditor({
             setTopicExternalAssetTarget(null);
           }}
         />
+
+        {saveTemplateTarget && (
+          <SaveAsTemplateModal
+            levelLabel={SAVE_TEMPLATE_LEVEL_LABELS[saveTemplateTarget.level]}
+            isSaving={isSavingTemplate}
+            errorMessage={saveTemplateError}
+            onCancel={() => {
+              if (isSavingTemplate) return;
+              setSaveTemplateTarget(null);
+              setSaveTemplateError(null);
+            }}
+            onDone={handleConfirmSaveAsTemplate}
+          />
+        )}
 
         {addComponentTarget && (
           <AddComponentDrawer

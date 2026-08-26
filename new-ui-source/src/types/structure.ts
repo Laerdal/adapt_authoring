@@ -28,6 +28,21 @@ export interface SComponent {
   themeSettings?: Record<string, unknown>;
   properties?: Record<string, unknown>;
   url?: string;
+  classes?: string;
+  isOptional?: boolean;
+  isAvailable?: boolean;
+  isHidden?: boolean;
+  isVisible?: boolean;
+  isResetOnRevisit?: string; // "false" | "soft" | "hard"
+  showDisplayTitleInPreview?: boolean;
+  onScreen?: {
+    _isEnabled?: boolean;
+    _classes?: string;
+    _percentInviewVertical?: number;
+  };
+  ariaLevel?: string;
+  isA11yCompletionDescriptionEnabled?: boolean;
+  extensions?: Record<string, unknown>;
 }
 
 export interface SContentGroup {
@@ -43,7 +58,13 @@ export interface SContentGroup {
   isAvailable?: boolean;
   isHidden?: boolean;
   isVisible?: boolean;
+  onScreen?: {
+    _isEnabled?: boolean;
+    _classes?: string;
+    _percentInviewVertical?: number;
+  };
   ariaLevel?: string;
+  isA11yCompletionDescriptionEnabled?: boolean;
   extensions?: Record<string, unknown>;
   components: SComponent[];
 }
@@ -67,6 +88,7 @@ export interface SSection {
     _percentInviewVertical?: number;
   };
   ariaLevel?: string;
+  isA11yCompletionDescriptionEnabled?: boolean;
   extensions?: Record<string, unknown>;
   contentGroups: SContentGroup[];
 }
@@ -101,6 +123,7 @@ export interface STopic {
     _percentInviewVertical?: number;
   };
   ariaLevel?: string;
+  isA11yCompletionDescriptionEnabled?: boolean;
   extensions?: Record<string, unknown>;
   themeSettings?: Record<string, unknown>;
   menuSettings?: Record<string, unknown>;

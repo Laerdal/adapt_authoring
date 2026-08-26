@@ -2028,8 +2028,10 @@ interface EngineContentNode {
   _isAvailable?: boolean;
   _isHidden?: boolean;
   _isVisible?: boolean;
+  _isResetOnRevisit?: string | boolean;
   _onScreen?: Record<string, unknown>;
   _ariaLevel?: string;
+  _isA11yCompletionDescriptionEnabled?: boolean;
   _extensions?: Record<string, unknown>;
   themeSettings?: Record<string, unknown>;
   menuSettings?: Record<string, unknown>;
@@ -2151,6 +2153,7 @@ export async function getCourseStructure(
         _percentInviewVertical: scalarNumber(onScreen._percentInviewVertical, 50),
       },
       ariaLevel: scalarString(page._ariaLevel),
+      isA11yCompletionDescriptionEnabled: page._isA11yCompletionDescriptionEnabled !== false,
       extensions: objectValue(page._extensions),
       themeSettings: objectValue(page.themeSettings),
       menuSettings: objectValue(page.menuSettings),
@@ -2179,6 +2182,7 @@ export async function getCourseStructure(
             };
           })(),
           ariaLevel: scalarString(article._ariaLevel),
+          isA11yCompletionDescriptionEnabled: article._isA11yCompletionDescriptionEnabled !== false,
           extensions: objectValue(article._extensions),
           contentGroups: childrenOf(blocks, article._id).map(
             (block): SContentGroup => ({
@@ -2196,11 +2200,21 @@ export async function getCourseStructure(
               isAvailable: block._isAvailable !== false,
               isHidden: !!block._isHidden,
               isVisible: block._isVisible !== false,
+              onScreen: (() => {
+                const os = objectValue(block._onScreen);
+                return {
+                  _isEnabled: !!os._isEnabled,
+                  _classes: scalarString(os._classes),
+                  _percentInviewVertical: scalarNumber(os._percentInviewVertical, 50),
+                };
+              })(),
               ariaLevel: scalarString(block._ariaLevel),
+              isA11yCompletionDescriptionEnabled: block._isA11yCompletionDescriptionEnabled !== false,
               extensions: objectValue(block._extensions),
               components: childrenOf(components, block._id).map(
                 (comp): SComponent => {
                   const componentProperties = objectValue(comp.properties);
+                  const componentOnScreen = objectValue(comp._onScreen);
                   return {
                     id: comp._id,
                     title: label(comp),
@@ -2221,6 +2235,22 @@ export async function getCourseStructure(
                         : ""),
                     properties: componentProperties,
                     url: comp.url || "",
+                    classes: comp._classes || "",
+                    isOptional: !!comp._isOptional,
+                    isAvailable: comp._isAvailable !== false,
+                    isHidden: !!comp._isHidden,
+                    isVisible: comp._isVisible !== false,
+                    isResetOnRevisit: scalarString(comp._isResetOnRevisit) || "false",
+                    ariaLevel: scalarString(comp._ariaLevel),
+                    isA11yCompletionDescriptionEnabled: comp._isA11yCompletionDescriptionEnabled !== false,
+                    showDisplayTitleInPreview:
+                      typeof comp.displayTitle === "string" ? comp.displayTitle.trim().length > 0 : false,
+                    onScreen: {
+                      _isEnabled: !!componentOnScreen._isEnabled,
+                      _classes: scalarString(componentOnScreen._classes),
+                      _percentInviewVertical: scalarNumber(componentOnScreen._percentInviewVertical, 50),
+                    },
+                    extensions: objectValue(comp._extensions),
                   };
                 }
               ),
@@ -2672,6 +2702,35 @@ export async function componentSchemaSupportsPropertiesField(
   }
 
   return false;
+}
+
+// Component-specific property schema (GET /api/componenttype, `.properties`),
+// keyed by `_component`. Ported from adapt-preview-edit/js/componentConfigView.js
+// (`ComponentConfigView` fetches `/api/componentType` and matches by `.component`).
+// Feeds the page editor's Component "Behaviour" accordion (dynamic per-component
+// fields), separately from `fetchMergedComponentSchema` above (used for defaults).
+let componentTypePropertiesCache: Record<string, Record<string, unknown>> | null = null;
+
+export async function getComponentBehaviourSchema(
+  componentKey: string
+): Promise<Record<string, unknown>> {
+  const key = (componentKey || "").trim();
+  if (!key) return {};
+
+  if (!componentTypePropertiesCache) {
+    const rows = await apiClient.get<Array<{ component?: string; properties?: Record<string, unknown> }>>(
+      "/api/componenttype"
+    );
+    componentTypePropertiesCache = {};
+    (Array.isArray(rows) ? rows : []).forEach((row) => {
+      if (row && row.component) {
+        componentTypePropertiesCache![row.component] =
+          row.properties && typeof row.properties === "object" ? row.properties : {};
+      }
+    });
+  }
+
+  return componentTypePropertiesCache[key] ?? {};
 }
 
 // Walk a schema `properties` object, producing each property's default value.
@@ -3401,6 +3460,51 @@ export function pasteTemplateIntoCourse(
   payload: TemplatePasteRequest
 ): Promise<{ success?: boolean }> {
   return apiClient.post<{ success?: boolean }>("/api/templating/paste", payload);
+}
+
+// "Save as template" — reuses the exact same backend flow the legacy Authoring
+// Tool's frontend/src/plugins/templating uses (lib/contentmanager.js's
+// generic clipboard + templating content-plugin routes, unchanged, no backend
+// edits here): copy the node — and its full subtree, gathered server-side —
+// into a clipboard record, fetch that record back, then persist it as a
+// `templating` content document with the user-supplied title/description/
+// sharing layered on top.
+export interface SaveContentAsTemplateInput {
+  level: StructureLevel;
+  objectId: string;
+  courseId: string;
+  title: string;
+  description: string;
+  isShared: boolean;
+  shareWithUsers: string[];
+}
+
+export async function saveContentAsTemplate(input: SaveContentAsTemplateInput): Promise<void> {
+  const referenceType = LEVEL_TO_CONTENT_TYPE[input.level];
+
+  const copyResult = await apiClient.post<{ success: boolean; message?: string; clipboardId?: string }>(
+    "/api/content/clipboard/copy",
+    { objectId: input.objectId, courseId: input.courseId, referenceType }
+  );
+  if (!copyResult?.success || !copyResult.clipboardId) {
+    throw new Error(copyResult?.message || "Failed to copy content for templating");
+  }
+
+  const copiedData = await apiClient.get<Record<string, unknown>>(
+    `/api/content/clipboard/${copyResult.clipboardId}`
+  );
+
+  const templateData: Record<string, unknown> = {
+    ...copiedData,
+    title: input.title.trim() || "New template title",
+    description: input.description.trim() || "New template description",
+    _referenceId: copiedData?._id,
+    _isShared: !!input.isShared,
+    _shareWithUsers: Array.isArray(input.shareWithUsers) ? input.shareWithUsers : [],
+  };
+  delete templateData._id;
+
+  await apiClient.post("/api/content/templating", templateData);
 }
 
 // ── Assets ────────────────────────────────────────────────────────────────────
