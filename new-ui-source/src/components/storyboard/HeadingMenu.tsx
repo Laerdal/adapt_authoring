@@ -1,27 +1,31 @@
-// "Add Heading" dropdown (spec AC4). Matches the Lovable design: a HEADINGS
-// group offering H1 — Topic / H2 — Section / H3 — Content Group Heading.
+// "Add Heading" dropdown (spec AC4, Figma-aligned ADAPT-3842).
 //
-// Rendered in a portal with fixed positioning so it can never be clipped or
-// mis-stacked by the editor's scroll/overflow/backdrop-blur ancestors — the
-// same treatment as AddContentMenu.
+// Matches the Figma "Course Creation Center" HeadingDropdown: each option is
+// a two-line row with a bold H1/H2/H3 badge (`.sb-heading-chip`) and the
+// Topic / Section / Content Group label + descriptor. Rendered in a portal
+// with fixed positioning so it can never be clipped or mis-stacked by the
+// editor's scroll/overflow/backdrop-blur ancestors — same treatment as
+// AddContentMenu.
 
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Heading1, ChevronDown } from 'lucide-react';
 
 interface HeadingOption {
-  level: number;
-  label: string;
+  level: 1 | 2 | 3;
+  chip: string;
+  title: string;
+  desc: string;
 }
 
 // H1–H3 only (H4/component is authored via Add Content cards).
 const HEADINGS: HeadingOption[] = [
-  { level: 1, label: 'H1 — Topic' },
-  { level: 2, label: 'H2 — Section' },
-  { level: 3, label: 'H3 — Content Group Heading' },
+  { level: 1, chip: 'H1', title: 'H1 — Topic',         desc: 'Top-level heading' },
+  { level: 2, chip: 'H2', title: 'H2 — Section',       desc: 'Under a Topic' },
+  { level: 3, chip: 'H3', title: 'H3 — Content Group', desc: 'Under a Section' },
 ];
 
-const MENU_WIDTH = 240;
+const MENU_WIDTH = 260;
 
 export default function HeadingMenu({ onSelect }: { onSelect: (level: number) => void }) {
   const [open, setOpen] = useState(false);
@@ -68,34 +72,64 @@ export default function HeadingMenu({ onSelect }: { onSelect: (level: number) =>
         ref={btnRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-secondary"
+        className="sb-toolbar-btn"
+        aria-haspopup="menu"
+        aria-expanded={open}
       >
         <Heading1 className="h-3.5 w-3.5" /> Add Heading
-        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+        <ChevronDown className="h-3.5 w-3.5" style={{ color: 'var(--life-color-text-subtle)' }} />
       </button>
 
       {open &&
         createPortal(
           <div
             ref={menuRef}
-            style={{ position: 'fixed', left: pos.left, top: pos.top, width: MENU_WIDTH, maxHeight: pos.maxHeight }}
-            className="z-[1000] overflow-y-auto rounded-md border bg-background py-1 shadow-lg"
+            role="menu"
+            className="sb-menu"
+            style={{
+              position: 'fixed',
+              left: pos.left,
+              top: pos.top,
+              width: MENU_WIDTH,
+              maxHeight: pos.maxHeight,
+              zIndex: 1000,
+            }}
           >
-            <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Headings
-            </div>
-            {HEADINGS.map(({ level, label }) => (
+            <div className="sb-menu-group-label">Headings</div>
+            {HEADINGS.map(({ level, chip, title, desc }) => (
               <button
                 key={level}
                 type="button"
+                role="menuitem"
                 onClick={() => choose(level)}
-                className="flex w-full items-center px-3 py-1.5 text-sm hover:bg-muted"
+                className="sb-menu-item"
               >
-                {label}
+                <span className="sb-heading-chip">{chip}</span>
+                <span style={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
+                  <span
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: 'var(--life-color-text-default)',
+                      lineHeight: 1.25,
+                    }}
+                  >
+                    {title}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: 'var(--life-color-text-subtle)',
+                      lineHeight: 1.3,
+                    }}
+                  >
+                    {desc}
+                  </span>
+                </span>
               </button>
             ))}
           </div>,
-          document.body
+          document.body,
         )}
     </>
   );

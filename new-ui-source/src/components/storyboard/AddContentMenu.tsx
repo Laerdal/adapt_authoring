@@ -1,5 +1,8 @@
 // "Add Content" dropdown (spec AC3/AC5/AC6). Categorised insert menu matching
-// the reference: Text & Visual / Media / Survey / Assessment / Interactive.
+// the Figma design (Course Creation Center → StoryboardPanel
+// `CONTENT_TYPE_CATALOG`): Text & Visual / Media / Survey / Assessment.
+// Icons, labels, order and grouping are 1:1 with that catalog so the two
+// surfaces stay in lockstep.
 //
 // Rendered in a portal with fixed positioning so it can never be clipped or
 // mis-stacked by the editor's scroll/overflow/backdrop-blur ancestors (that was
@@ -12,20 +15,17 @@ import {
   Type,
   Layers,
   Image as ImageIcon,
-  Video,
-  AudioLines,
+  Film,
+  Mic,
   Puzzle,
   ClipboardList,
+  CheckSquare,
+  LayoutList,
+  PenLine,
+  ArrowUpDown,
   ListChecks,
-  Images,
-  Shuffle,
-  ArrowDownUp,
-  TextCursorInput,
   SlidersHorizontal,
-  Target,
-  Grid3x3,
-  ListTodo,
-  Rows3,
+  Trophy,
   ChevronDown,
 } from 'lucide-react';
 import type { StoryboardInsertKind } from '@/types/storyboard';
@@ -40,6 +40,8 @@ interface MenuGroup {
   items: MenuItem[];
 }
 
+// Groups + order mirror `CONTENT_TYPE_CATALOG` in the Figma Make source
+// (StoryboardPanel.tsx) exactly. Do not add/reorder without updating both.
 const GROUPS: MenuGroup[] = [
   {
     label: 'Text & Visual',
@@ -52,32 +54,26 @@ const GROUPS: MenuGroup[] = [
   {
     label: 'Media',
     items: [
-      { kind: 'video', label: 'Video', Icon: Video },
-      { kind: 'audio', label: 'Audio', Icon: AudioLines },
+      { kind: 'video', label: 'Video', Icon: Film },
+      { kind: 'audio', label: 'Audio', Icon: Mic },
       { kind: 'h5p', label: 'H5P', Icon: Puzzle },
     ],
   },
-  { label: 'Survey', items: [{ kind: 'laerdalForm', label: 'Laerdal Form', Icon: ClipboardList }] },
+  {
+    label: 'Survey',
+    items: [{ kind: 'laerdalForm', label: 'Laerdal Form', Icon: ClipboardList }],
+  },
   {
     label: 'Assessment',
     items: [
-      { kind: 'mcq', label: 'MCQ', Icon: ListChecks },
-      { kind: 'gmcq', label: 'Graphic MCQ', Icon: Images },
-      { kind: 'matching', label: 'Matching', Icon: Shuffle },
-      { kind: 'reorder', label: 'Sentence Reordering', Icon: ArrowDownUp },
-      { kind: 'textInput', label: 'Text Input', Icon: TextCursorInput },
+      { kind: 'mcq', label: 'MCQ', Icon: CheckSquare },
+      { kind: 'gmcq', label: 'GMCQ', Icon: CheckSquare },
+      { kind: 'matching', label: 'Matching', Icon: LayoutList },
+      { kind: 'textInput', label: 'Text Input', Icon: PenLine },
+      { kind: 'reorder', label: 'Sentence Reordering', Icon: ArrowUpDown },
+      { kind: 'checklist', label: 'Checklist', Icon: ListChecks },
       { kind: 'slider', label: 'Slider', Icon: SlidersHorizontal },
-    ],
-  },
-  {
-    label: 'Interactive',
-    items: [
-      // Accordion has no distinct storyboard block yet — map it to Grouped
-      // Content (heading + body rows), per product decision.
-      { kind: 'groupedContent', label: 'Accordion', Icon: Rows3 },
-      { kind: 'hotgraphic', label: 'Hot Graphic', Icon: Target },
-      { kind: 'hotgrid', label: 'Hot Grid', Icon: Grid3x3 },
-      { kind: 'actionplan', label: 'Laerdal Action Plan', Icon: ListTodo },
+      { kind: 'assessmentResult', label: 'Assessment Result', Icon: Trophy },
     ],
   },
 ];
@@ -139,32 +135,41 @@ export default function AddContentMenu({ onInsert }: { onInsert: (kind: Storyboa
         ref={btnRef}
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm hover:bg-secondary"
+        className="sb-toolbar-btn"
+        aria-haspopup="menu"
+        aria-expanded={open}
       >
         <Plus className="h-3.5 w-3.5" /> Add Content
-        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+        <ChevronDown className="h-3.5 w-3.5" style={{ color: 'var(--life-color-text-subtle)' }} />
       </button>
 
       {open &&
         createPortal(
           <div
             ref={menuRef}
-            style={{ position: 'fixed', left: pos.left, top: pos.top, width: MENU_WIDTH, maxHeight: pos.maxHeight }}
-            className="z-[1000] overflow-y-auto rounded-md border bg-background py-1 shadow-lg"
+            role="menu"
+            className="sb-menu"
+            style={{
+              position: 'fixed',
+              left: pos.left,
+              top: pos.top,
+              width: MENU_WIDTH,
+              maxHeight: pos.maxHeight,
+              zIndex: 1000,
+            }}
           >
             {GROUPS.map((group) => (
               <div key={group.label}>
-                <div className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {group.label}
-                </div>
+                <div className="sb-menu-group-label">{group.label}</div>
                 {group.items.map(({ kind, label, Icon }) => (
                   <button
                     key={label}
                     type="button"
+                    role="menuitem"
                     onClick={() => choose(kind)}
-                    className="flex w-full items-center gap-2.5 px-3 py-1.5 text-sm hover:bg-muted"
+                    className="sb-menu-item"
                   >
-                    <Icon className="h-4 w-4 text-muted-foreground" />
+                    <Icon className="sb-menu-item-icon h-4 w-4" />
                     {label}
                   </button>
                 ))}

@@ -1,6 +1,7 @@
-// Left panel — "CONTENTS": TOC tree (top) + AI guidance (bottom). Spec AC1/AC7.
+// Left panel — "CONTENTS": TOC tree (top) + AI guidance (bottom).
+// Spec AC1/AC7, Figma-aligned (ADAPT-3842) — LIFE tokens via .sb-panel utility.
 
-import { ListTree, ChevronDown } from 'lucide-react';
+import { ListTree, PanelLeftClose } from 'lucide-react';
 import type { StoryboardHeading, StoryboardSummary } from '@/types/storyboard';
 import TableOfContents from './TableOfContents';
 import AiGuidance from './AiGuidance';
@@ -19,9 +20,9 @@ export default function ContentsPanel({
   onCollapse?: () => void;
 }) {
   return (
-    <div className="flex h-full flex-col bg-muted/20">
-      <div className="flex items-center justify-between border-b bg-muted/40 px-3 py-2.5 backdrop-blur">
-        <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+    <div className="sb-panel" style={{ fontFamily: 'var(--font-family-primary)' }}>
+      <div className="sb-panel-header">
+        <div className="sb-panel-title">
           <ListTree className="h-4 w-4" />
           Contents
         </div>
@@ -30,18 +31,21 @@ export default function ContentsPanel({
             type="button"
             aria-label="Collapse contents"
             onClick={onCollapse}
-            className="grid h-6 w-6 place-items-center rounded text-muted-foreground hover:bg-muted"
+            className="sb-panel-collapse-btn"
           >
-            <ChevronDown className="h-4 w-4" />
+            <PanelLeftClose className="h-4 w-4" />
           </button>
         )}
       </div>
 
-      <nav className="flex-1 overflow-y-auto p-2">
+      <nav className="flex-1 overflow-y-auto px-2 py-3">
         <TableOfContents headings={headings} activeId={activeId} onNavigate={onNavigate} />
       </nav>
 
-      <div className="border-t p-3">
+      <div
+        className="p-3"
+        style={{ borderTop: '1px solid var(--life-color-border-subtle)', background: 'var(--life-color-bg-surface-default)' }}
+      >
         <AiGuidance summary={summary} />
       </div>
     </div>

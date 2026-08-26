@@ -89,10 +89,11 @@ function computeFingerprint(tenantId, courseId, cb) {
   origin().outputmanager.getOutputPlugin('adapt', (err, plugin) => {
     if (err) return cb(err);
     // The fingerprint needs ONLY the config (theme/menu/enabled component+extension
-    // sets), so use the config-only assembler — NOT getCourseJSON, which would also
-    // fetch and assemble the entire content tree on every ensure call. The returned
-    // config[0] is identical either way, so the fingerprint value is unchanged.
-    plugin.getCourseConfigJSON(courseId, (err, raw) => {
+    // sets). There is no config-only assembler on OutputPlugin — `getCourseJSON` is
+    // the only path that produces the `_enabledComponents`/`_enabledExtensions`
+    // aggregate on `config[0]`. It's assembled once per preview, so reusing it here
+    // is fine (and it's what publish.js consumes anyway).
+    plugin.getCourseJSON(tenantId, courseId, (err, raw) => {
       if (err) return cb(err);
       installHelpers.getInstalledFrameworkVersion((err, fwVersion) => {
         if (err) return cb(err);
@@ -138,15 +139,24 @@ function restoreShell(fingerprint, buildRoot, cb) {
   const app = origin();
   if (!app || typeof app.on !== 'function') return;
   app.on('previewCreated', (tenantId, courseId /*, outputFolder */) => {
-    const buildRoot = courseBuildRoot(String(tenantId), String(courseId));
-    computeFingerprint(String(tenantId), String(courseId), (err, fp) => {
-      if (err) return logger.log('warn', `Studio: fingerprint failed for ${courseId}: ${err.message}`);
-      snapshotShell(buildRoot, fp, (err2) => {
-        if (err2) return logger.log('warn', `Studio: shell snapshot failed for ${courseId}: ${err2.message}`);
-        fsx.writeFile(path.join(buildRoot, FP_MARKER), fp, () => {});
-        logger.log('info', `Studio: cached shell ${fp} for course ${courseId}`);
+    // Wrap in try/catch: this listener runs synchronously from the grunt
+    // exec-exit handler in publish.js, so any thrown error bubbles up through
+    // `app.emit` → node's uncaughtException handler and crashes the response
+    // (surfacing as a 500 to the client even though the build itself succeeded).
+    // Cache warming is best-effort; a failure here must never break preview.
+    try {
+      const buildRoot = courseBuildRoot(String(tenantId), String(courseId));
+      computeFingerprint(String(tenantId), String(courseId), (err, fp) => {
+        if (err) return logger.log('warn', `Studio: fingerprint failed for ${courseId}: ${err.message}`);
+        snapshotShell(buildRoot, fp, (err2) => {
+          if (err2) return logger.log('warn', `Studio: shell snapshot failed for ${courseId}: ${err2.message}`);
+          fsx.writeFile(path.join(buildRoot, FP_MARKER), fp, () => {});
+          logger.log('info', `Studio: cached shell ${fp} for course ${courseId}`);
+        });
       });
-    });
+    } catch (e) {
+      logger.log('warn', `Studio: previewCreated handler error for ${courseId}: ${e && e.message}`);
+    }
   });
 })();
 

@@ -24,6 +24,8 @@ export type StoryboardComponentKind =
   | 'reorder'
   | 'textInput'
   | 'slider'
+  | 'checklist'
+  | 'assessmentResult'
   | 'hotgraphic'
   | 'hotgrid'
   | 'actionplan'
@@ -43,7 +45,9 @@ export const COMPONENT_CANDIDATES: Record<StoryboardComponentKind, string[]> = {
   matching: ['matching'],
   reorder: ['sentenceOrdering'],
   textInput: ['textinput'],
-  slider: ['slider'],
+  slider: ['slider', 'laerdal-slider'],
+  checklist: ['laerdal-checklist'],
+  assessmentResult: ['assessmentResults'],
   hotgraphic: ['laerdal-hotgraphic', 'hotgraphic'],
   hotgrid: ['hotgrid'],
   actionplan: ['actionplan', 'laerdal-actionplan'],
@@ -85,6 +89,9 @@ const REVERSE: Record<string, StoryboardComponentKind | 'media'> = {
   sentenceOrdering: 'reorder',
   textinput: 'textInput',
   slider: 'slider',
+  'laerdal-slider': 'slider',
+  'laerdal-checklist': 'checklist',
+  assessmentResults: 'assessmentResult',
   'laerdal-hotgraphic': 'hotgraphic',
   hotgraphic: 'hotgraphic',
   hotgrid: 'hotgrid',
@@ -97,5 +104,5 @@ export function reverseKind(component?: string): StoryboardComponentKind | 'medi
   return REVERSE[component] ?? null;
 }
 
-export const ASSESSMENT_KINDS = new Set<string>(['mcq', 'gmcq', 'matching', 'reorder', 'textInput', 'slider']);
+export const ASSESSMENT_KINDS = new Set<string>(['mcq', 'gmcq', 'matching', 'reorder', 'textInput', 'slider', 'checklist']);
 export const isAssessmentComponentKind = (k: string): boolean => ASSESSMENT_KINDS.has(k);

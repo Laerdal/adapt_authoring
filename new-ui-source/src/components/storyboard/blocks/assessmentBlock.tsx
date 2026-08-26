@@ -6,10 +6,11 @@
 // ready — options + feedback are written into the Adapt component on Save.
 
 import { useState } from 'react';
-import { RefreshCw, Sparkles, Code, Trash2, Check, Plus, AlertTriangle, MessageSquare } from 'lucide-react';
+import { RefreshCw, Sparkles, Code, Trash2, Check, Plus, AlertTriangle, MessageSquare, FolderOpen, Image as ImageIcon } from 'lucide-react';
 import { storyboardActions } from '../storyboardActions';
 import { createReactBlockSpec } from '@blocknote/react';
 import { storyboardAi } from '@/api/ai';
+import AssetPickerModal from '@/components/common/AssetPickerModal';
 import {
   defaultAssessmentData,
   emptyFeedback,
@@ -29,6 +30,7 @@ const LABELS: Record<AssessmentKind, string> = {
   reorder: 'Sentence Reordering',
   textInput: 'Text Input',
   slider: 'Slider',
+  checklist: 'Checklist',
 };
 
 const FOOTER: Record<AssessmentKind, string> = {
@@ -38,6 +40,7 @@ const FOOTER: Record<AssessmentKind, string> = {
   reorder: 'Place the items in the correct order and then select Submit.',
   textInput: 'Type your answer and then select Submit.',
   slider: 'Move the slider to your answer and then select Submit.',
+  checklist: 'Tick the items that apply and then select Submit.',
 };
 
 const inputCls =
@@ -97,6 +100,74 @@ function FeedbackGroup({ fb, set }: { fb: AssessmentFeedback; set: (f: Assessmen
 
 // ── Per-kind bodies ──────────────────────────────────────────────────────────
 
+// Per-option image picker for Graphic MCQ. Opens the DAM AssetPickerModal and
+// stores the picked asset's course link + preview URL + DAM id on the option
+// (so publish can resolve the courseasset and the editor can show a thumbnail
+// without re-fetching).
+function OptionImagePicker({ value, onChange }: { value: McqOption; onChange: (patch: Partial<McqOption>) => void }) {
+  const [picking, setPicking] = useState(false);
+  // `imageUrl` is only ever set when the persisted link is directly loadable
+  // (see parseAssessmentData) — a DAM-picked `course/assets/<file>` link is
+  // NOT servable, so it must never be used as an `<img src>`. Falling back to
+  // `value.image` here would resurrect the broken-image icon on round-trip.
+  const hasImage = !!(value.imageUrl || value.image);
+  return (
+    <div className="mb-1 rounded border border-dashed border-border p-2">
+      {hasImage ? (
+        <div className="flex items-start gap-2">
+          {value.imageUrl ? (
+            <img src={value.imageUrl} alt={value.text || ''} className="h-20 w-24 shrink-0 rounded object-cover" />
+          ) : (
+            <div className="flex h-20 w-24 shrink-0 items-center justify-center rounded bg-muted text-muted-foreground">
+              <ImageIcon className="h-6 w-6" />
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[11px] text-muted-foreground" title={value.image}>{value.image}</div>
+            <div className="mt-1 flex gap-1">
+              <button
+                type="button"
+                onClick={() => setPicking(true)}
+                className="inline-flex items-center gap-1 rounded border border-primary px-2 py-0.5 text-xs text-primary hover:bg-primary/5"
+              >
+                <RefreshCw className="h-3 w-3" /> Change image
+              </button>
+              <button
+                type="button"
+                onClick={() => onChange({ image: '', imageUrl: '', imageAssetId: undefined })}
+                className="inline-flex items-center gap-1 rounded border border-red-500 px-2 py-0.5 text-xs text-red-600 hover:bg-red-50"
+              >
+                <Trash2 className="h-3 w-3" /> Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setPicking(true)}
+          className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
+        >
+          <FolderOpen className="h-3.5 w-3.5" /> Select an image
+          <span className="text-xs opacity-75">
+            <ImageIcon className="ml-1 inline h-3 w-3" />
+          </span>
+        </button>
+      )}
+      {picking && (
+        <AssetPickerModal
+          assetType="image"
+          onClose={() => setPicking(false)}
+          onSelect={(asset) => {
+            onChange({ image: asset.assetLink, imageUrl: asset.url, imageAssetId: asset.id });
+            setPicking(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 function OptionsForm({ data, graphic, update }: { data: AssessmentData; graphic: boolean; update: (n: AssessmentData) => void }) {
   const options = data.options ?? [];
   const setOptions = (next: McqOption[]) => update({ ...data, options: next });
@@ -118,9 +189,7 @@ function OptionsForm({ data, graphic, update }: { data: AssessmentData; graphic:
               <Trash2 className="h-3.5 w-3.5" />
             </button>
           </div>
-          {graphic && (
-            <input value={opt.image ?? ''} placeholder="Image source URL" onKeyDown={stop} onChange={(e) => patch(i, { image: e.target.value })} className={`${inputCls} mb-1`} />
-          )}
+          {graphic && <OptionImagePicker value={opt} onChange={(p) => patch(i, p)} />}
           <label className="block">
             <span className={labelCls}>Option text</span>
             <input value={opt.text} onKeyDown={stop} onChange={(e) => patch(i, { text: e.target.value })} className={inputCls} />
@@ -204,11 +273,63 @@ function SliderForm({ data, update }: { data: AssessmentData; update: (n: Assess
   );
 }
 
+function ChecklistForm({ data, update }: { data: AssessmentData; update: (n: AssessmentData) => void }) {
+  const options = data.options ?? [];
+  const setOptions = (next: McqOption[]) => update({ ...data, options: next });
+  const patch = (i: number, p: Partial<McqOption>) => setOptions(options.map((o, j) => (j === i ? { ...o, ...p } : o)));
+  const selectable = Math.max(1, Number(data.selectable ?? 1));
+  return (
+    <div className="mt-2 rounded border border-border p-2">
+      <div className={labelCls}>Items</div>
+      {options.map((opt, i) => (
+        <div key={i} className="mb-2 rounded border border-border p-2">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <label className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+              <input type="checkbox" checked={opt.correct} onChange={(e) => patch(i, { correct: e.target.checked })} className="h-4 w-4 accent-[color:var(--primary)]" />
+              Correct
+              <span className="ml-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Item {i + 1}/{options.length}
+              </span>
+            </label>
+            <button type="button" aria-label="Remove item" onClick={() => setOptions(options.filter((_, j) => j !== i))} className="text-muted-foreground hover:text-foreground">
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          </div>
+          <label className="block">
+            <span className={labelCls}>Item text</span>
+            <input value={opt.text} onKeyDown={stop} onChange={(e) => patch(i, { text: e.target.value })} className={inputCls} />
+          </label>
+          <label className="mt-1 block">
+            <span className={labelCls}>Answer-specific feedback</span>
+            <input value={opt.feedback ?? ''} placeholder="Shown when this item is selected" onKeyDown={stop} onChange={(e) => patch(i, { feedback: e.target.value })} className={inputCls} />
+          </label>
+        </div>
+      ))}
+      <button type="button" onClick={() => setOptions([...options, { text: '', correct: false, feedback: '' }])} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+        <Plus className="h-3 w-3" /> Add item
+      </button>
+      <label className="mt-2 block">
+        <span className={labelCls}>Selectable (how many items the learner may tick)</span>
+        <input
+          type="number"
+          min={1}
+          value={selectable}
+          onKeyDown={stop}
+          onChange={(e) => update({ ...data, selectable: Math.max(1, Number(e.target.value) || 1) })}
+          className={inputCls}
+        />
+      </label>
+    </div>
+  );
+}
+
 function Body({ kind, data, update }: { kind: AssessmentKind; data: AssessmentData; update: (n: AssessmentData) => void }) {
   switch (kind) {
     case 'mcq':
     case 'gmcq':
       return <OptionsForm data={data} graphic={kind === 'gmcq'} update={update} />;
+    case 'checklist':
+      return <ChecklistForm data={data} update={update} />;
     case 'matching':
       return <MatchingForm data={data} update={update} />;
     case 'reorder':
@@ -228,7 +349,7 @@ export const assessmentBlock = createReactBlockSpec(
   {
     type: 'sbAssessment',
     propSchema: {
-      kind: { default: 'mcq', values: ['mcq', 'gmcq', 'matching', 'reorder', 'textInput', 'slider'] },
+      kind: { default: 'mcq', values: ['mcq', 'gmcq', 'matching', 'reorder', 'textInput', 'slider', 'checklist'] },
       title: { default: '' },
       adaptComponent: { default: 'mcq' },
       data: { default: '{}' },

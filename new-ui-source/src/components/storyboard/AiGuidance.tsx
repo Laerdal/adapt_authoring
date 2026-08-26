@@ -30,12 +30,25 @@ export default function AiGuidance({ summary }: { summary: StoryboardSummary }) 
   if (hints.length === 0) return null;
 
   return (
-    <div className="rounded-lg border border-samaritan/30 bg-samaritan/5 p-3">
-      <div className="mb-2 flex items-center gap-1.5 text-sm font-semibold" style={{ color: 'var(--samaritan)' }}>
+    <div className="sb-card sb-card--samaritan" style={{ fontFamily: 'var(--font-family-primary)' }}>
+      <div
+        className="mb-2 flex items-center gap-1.5"
+        style={{ fontSize: 13, fontWeight: 700, color: 'var(--samaritan)' }}
+      >
         <Sparkles className="h-4 w-4" />
         AI guidance
       </div>
-      <ul className="space-y-1.5 text-[13px] leading-snug text-muted-foreground">
+      <ul
+        className="space-y-1.5"
+        style={{
+          fontSize: 13,
+          lineHeight: 1.45,
+          color: 'var(--life-color-text-muted)',
+          margin: 0,
+          padding: 0,
+          listStyle: 'none',
+        }}
+      >
         {hints.map((h, i) => (
           <li key={i}>• {h}</li>
         ))}

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import CommonCourseTopBarRow from "../components/course/CommonCourseTopBarRow";
-import { getCourseBootstrapData, ensureCoursePreview } from "../api/adaptAuthoring";
+import { getCourseBootstrapData, seedMissingCourseDefaults, ensureCoursePreview } from "../api/adaptAuthoring";
 import { useAuth } from "../context/AuthContext";
 
 type DeviceMode = "desktop" | "tablet" | "mobile";
@@ -40,6 +40,9 @@ export default function CoursePreviewPage() {
   const [themeName, setThemeName] = useState("");
   const [menuName, setMenuName] = useState("");
   const [deviceMode, setDeviceMode] = useState<DeviceMode>("desktop");
+  // Track when the one-shot defaults seed has resolved so the iframe waits for
+  // the possibly-issued PUT to complete before the framework loads course.json.
+  const [defaultsReady, setDefaultsReady] = useState(false);
   const [previewState, setPreviewState] = useState<"preparing" | "ready" | "error">("preparing");
 
   useEffect(() => {
@@ -60,6 +63,20 @@ export default function CoursePreviewPage() {
         setCourseDescription("");
         setThemeName("");
         setMenuName("");
+      }
+    })();
+
+    // Heal older courses (or courses freshly created via the minimal
+    // POST /api/courses flow) whose top-level fields the Adapt runtime
+    // dereferences — `_buttons`, `_globals`, `themeVariables._components`, … —
+    // are absent or empty. Idempotent + non-blocking on failure.
+    (async () => {
+      try {
+        await seedMissingCourseDefaults(id);
+      } catch {
+        /* seeding is best-effort */
+      } finally {
+        if (!cancelled) setDefaultsReady(true);
       }
     })();
 
@@ -92,12 +109,12 @@ export default function CoursePreviewPage() {
   const pageId = (params.get("pageId") || "").trim();
 
   const previewUrl = useMemo(() => {
-    if (!id || !user?._tenantId) return "";
+    if (!id || !user?._tenantId || !defaultsReady || previewState !== "ready") return "";
     const baseUrl = `/studio/${user._tenantId}/${id}/?embedded=1`;
     return pageId
       ? `${baseUrl}&_cs=${Date.now()}#/id/${pageId}`
       : `${baseUrl}&_cs=${Date.now()}`;
-  }, [id, pageId, user?._tenantId]);
+  }, [id, pageId, user?._tenantId, defaultsReady, previewState]);
 
   const frameSizeClass = useMemo(() => {
     if (deviceMode === "mobile") return "w-[390px]";
@@ -150,13 +167,21 @@ export default function CoursePreviewPage() {
       </div>
 
       <main className="flex-1 overflow-auto bg-[#e9edf2] px-3 md:px-6 py-4">
-        {previewState === "preparing" ? (
+        {!previewUrl ? (
+          // Four distinct states share the empty-preview slot:
+          //   1. "unavailable"  — no `id` in the URL, no tenant on the user, or the
+          //      Studio render-shell build failed (`previewState === "error"`).
+          //      Nothing to preview, and no amount of waiting will make it appear.
+          //   2. "preparing"    — id + tenant are known but `defaultsReady` is still
+          //      false while `seedMissingCourseDefaults` runs, or the Studio shell is
+          //      still building on a cache miss. Showing "unavailable" here would
+          //      mis-communicate a transient state.
+          //   3. (implicit)     — once both flip ready, `previewUrl` is built and the
+          //      iframe branch below renders instead.
           <div className="h-full flex items-center justify-center text-sm text-[#6b7280]">
-            Preparing preview…
-          </div>
-        ) : previewState === "error" || !previewUrl ? (
-          <div className="h-full flex items-center justify-center text-sm text-[#6b7280]">
-            Preview is unavailable for this course.
+            {(!id || !user?._tenantId || previewState === "error")
+              ? "Preview is unavailable for this course."
+              : "Preparing preview…"}
           </div>
         ) : (
           <div className="h-full w-full flex justify-center">

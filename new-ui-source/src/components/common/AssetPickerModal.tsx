@@ -13,6 +13,9 @@ const KIND_TEXT: Record<AssetKind, { heading: string; confirm: string; noun: str
   image: { heading: "Select an Image", confirm: "Select Image", noun: "image", accept: "image/*" },
   audio: { heading: "Select an Audio File", confirm: "Select Audio", noun: "audio file", accept: "audio/*" },
   video: { heading: "Select a Video", confirm: "Select Video", noun: "video", accept: "video/*" },
+  // H5P files are `.h5p` (zip) archives — the DAM mimeType prefix filter can't
+  // match them, so we constrain uploads and browsing to that extension.
+  h5p:   { heading: "Select an H5P File", confirm: "Select H5P", noun: "H5P file", accept: ".h5p,application/zip,application/x-zip-compressed,application/octet-stream" },
 };
 
 function toAssetLink(asset: Asset): string {
@@ -58,6 +61,12 @@ export default function AssetPickerModal({ onSelect, onClose, assetType = "image
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
+    // For H5P we require the `.h5p` extension — the browser's `accept` filter is
+    // a hint, not a guarantee, and the DAM has no server-side H5P mime.
+    if (assetType === "h5p" && !/\.h5p$/i.test(file.name)) {
+      setUploadError("Please choose a .h5p file.");
+      return;
+    }
     setUploading(true);
     setUploadError(null);
     try {
@@ -201,6 +210,11 @@ export default function AssetPickerModal({ onSelect, onClose, assetType = "image
                           {assetType === "audio" ? (
                             <>
                               <path d="M9 18V5l12-2v13" /><circle cx="6" cy="18" r="3" /><circle cx="18" cy="16" r="3" />
+                            </>
+                          ) : assetType === "h5p" ? (
+                            <>
+                              {/* Puzzle piece \u2014 recognisable H5P glyph */}
+                              <path d="M20.5 11H19V7a2 2 0 0 0-2-2h-4V3.5a2.5 2.5 0 0 0-5 0V5H4a2 2 0 0 0-2 2v3.8h1.5a2.2 2.2 0 0 1 0 4.4H2V19a2 2 0 0 0 2 2h3.8v-1.5a2.2 2.2 0 0 1 4.4 0V21H16a2 2 0 0 0 2-2v-4h1.5a2.5 2.5 0 0 0 0-5z" />
                             </>
                           ) : (
                             <>

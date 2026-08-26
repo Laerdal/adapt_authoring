@@ -155,16 +155,24 @@ export interface Asset {
   path?: string;
 }
 
-export type AssetKind = "image" | "audio" | "video";
+export type AssetKind = "image" | "audio" | "video" | "h5p";
 
 // Query assets of a given kind from the engine asset manager.
 // GET /api/asset/query?search[mimeType]=<kind>
+// H5P is a `.h5p` (zip) file — the DAM stores those under the generic
+// `application/…` mimetypes rather than a well-known prefix. So for `h5p` we
+// query WITHOUT the mimeType filter and narrow to .h5p files client-side.
 export async function queryAssets(kind: AssetKind, search?: string): Promise<Asset[]> {
-  const params = new URLSearchParams({ "search[mimeType]": kind });
+  const params = new URLSearchParams();
+  if (kind !== "h5p") params.append("search[mimeType]", kind);
   if (search) params.append("search[title]", search);
   try {
     const result = await apiClient.get<Asset[]>(`/api/asset/query?${params}`);
-    return Array.isArray(result) ? result : [];
+    const list = Array.isArray(result) ? result : [];
+    if (kind === "h5p") {
+      return list.filter((a) => /\.h5p$/i.test(a.filename || a.title || ""));
+    }
+    return list;
   } catch {
     return [];
   }
@@ -2416,13 +2424,89 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       });
       return;
     }
-    // H5P and Laerdal Form → their own cards (config round-trips minimally).
+    // H5P and Laerdal Form → their own cards. Config round-trips so a
+    // save/reopen cycle preserves the picked asset / form fields.
     if (sbKind === "h5p") {
-      emitCard(comp, "h5p", { showTitle: true, description: stripHtml(comp.body || ""), instruction: "" });
+      const external = String(props._h5pExternalAsset || "");
+      const asset = String(props.h5pAsset || "");
+      const link = external || asset;
+      const media = link
+        ? {
+            asset: {
+              link,
+              url: external ? external : resolveAssetUrl(asset, assetIdMap),
+              external: !!external,
+            },
+          }
+        : undefined;
+      emitCard(comp, "h5p", {
+        showTitle: true,
+        description: stripHtml(comp.body || ""),
+        instruction: "",
+        media,
+      });
       return;
     }
     if (sbKind === "laerdalForm") {
-      emitCard(comp, "laerdalForm", { showTitle: true, description: stripHtml(comp.body || ""), instruction: "" });
+      // Reverse of the generation mapping in storyboardGeneration.ts.
+      //
+      // Generation collapses UI "Dropdown" and "Checkbox" onto the same
+      // backend `_inputType: "options"` because Adapt has no boolean control.
+      // The two are distinguished by the shape of the `options` array:
+      //   * Checkbox  → exactly one option (the yes/no marker)
+      //   * Dropdown  → zero or many options
+      // Without this check every Checkbox field would round-trip as a
+      // Dropdown, silently changing the author's intent on reload.
+      const controlFor = (t: string, opts: unknown): string => {
+        switch ((t || "").toLowerCase()) {
+          case "textarea":
+            return "Multi-Line Text";
+          case "number":
+          case "range":
+            return "Number";
+          case "options": {
+            const arr = Array.isArray(opts) ? opts : [];
+            return arr.length === 1 ? "Checkbox" : "Dropdown";
+          }
+          default:
+            return "Single-Line Text";
+        }
+      };
+      const rawItems = Array.isArray(props._items) ? (props._items as Array<Record<string, unknown>>) : [];
+      const fields = rawItems.map((it) => ({
+        control: controlFor(String(it._inputType || "text"), it.options),
+        label: String(it._label || ""),
+        placeholder: String(it._placeholder || ""),
+        mandatory: !!it._isRequired,
+      }));
+      emitCard(comp, "laerdalForm", {
+        showTitle: true,
+        description: stripHtml(comp.body || ""),
+        instruction: "",
+        fields,
+      });
+      return;
+    }
+    // Assessment Results → dedicated card that round-trips its bands and retry.
+    if (sbKind === "assessmentResult") {
+      const rawBands = Array.isArray(props._bands) ? (props._bands as Array<Record<string, unknown>>) : [];
+      const retry = (props._retry as Record<string, unknown>) || {};
+      emitCard(comp, "assessmentResult", {
+        showTitle: true,
+        description: "",
+        instruction: "",
+        result: {
+          assessmentId: String(props._assessmentId || ""),
+          completionBody: String(props._completionBody || ""),
+          retryButton: String(retry.button || "Try again"),
+          retryFeedback: String(retry.feedback || ""),
+          bands: rawBands.map((b) => ({
+            score: Math.max(0, Math.min(100, Number(b._score) || 0)),
+            feedback: String(b.feedback || ""),
+            allowRetry: !!b._allowRetry,
+          })),
+        },
+      });
       return;
     }
     // Unknown / text → H4 heading + body paragraph (text write-back contract).
@@ -2434,8 +2518,19 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
     out.push({ id: page._id, type: "heading", props: { level: 1 }, content: label(page) });
     for (const article of childrenOf(articles, page._id)) {
       out.push({ id: article._id, type: "heading", props: { level: 2 }, content: label(article) });
+      // The generation engine caps each Adapt block at 2 components — extra
+      // components are placed in continuation blocks that carry the SAME H3
+      // title. When we round-trip the course, those continuation blocks would
+      // appear as duplicate H3 headings in the Storyboard (and duplicate again
+      // on the next Save/Generate). Merge adjacent same-title H3 blocks so the
+      // Storyboard shows one H3 with all its components in their original order.
+      let prevTitle: string | null = null;
       for (const blk of childrenOf(blocks, article._id)) {
-        out.push({ id: blk._id, type: "heading", props: { level: 3 }, content: label(blk) });
+        const title = label(blk);
+        if (title !== prevTitle) {
+          out.push({ id: blk._id, type: "heading", props: { level: 3 }, content: title });
+          prevTitle = title;
+        }
         for (const comp of childrenOf(components, blk._id)) emitComponent(comp);
       }
     }
@@ -2766,6 +2861,95 @@ export async function getGlobalsDefaults(): Promise<GlobalsObject> {
 export async function getCourseGlobalsMerged(courseId: string): Promise<GlobalsObject> {
   const [stored, defaults] = await Promise.all([getCourseGlobals(courseId), getGlobalsDefaults()]);
   return deepMergeGlobals(defaults, stored);
+}
+
+// ── Course schema defaults (for runtime-critical fields) ────────────────────
+// The Adapt runtime templates and views read a handful of top-level course
+// fields directly — `_buttons`, `_globals`, `_navigation`, `_start`, `_tooltips`,
+// `themeVariables._components` — and crash with `Cannot read properties of
+// undefined` when any of them is missing. Courses created via the minimal
+// `POST /api/courses` flow (new UI) don't get those seeded. This helper
+// deep-merges schema defaults into the persisted course document, filling only
+// missing branches (existing values ALWAYS win) and PATCHes the doc back so
+// preview + publish + Adapt runtime never see an undefined critical field.
+async function computeCourseSchemaDefaults(): Promise<Record<string, unknown>> {
+  if (!mergedSchemaCache) {
+    mergedSchemaCache = await apiClient.get("/api/content/schema");
+  }
+  const courseSchema = (mergedSchemaCache as Record<string, unknown> | null)?.course as
+    | Record<string, unknown>
+    | undefined;
+  if (!courseSchema || typeof courseSchema !== "object") return {};
+  // /api/content/schema returns each schema already unwrapped to `properties`,
+  // so `courseSchema` is directly the map of top-level fields (see contentmanager.js
+  // `filteredSchemas[key] = _.omit(_.pick(schema, 'properties').properties, blackList)`).
+  return buildSchemaDefaults(courseSchema);
+}
+
+function isDeepEmpty(v: unknown): boolean {
+  if (v === undefined || v === null) return true;
+  if (typeof v === "string") return v.trim() === "";
+  if (Array.isArray(v)) return v.length === 0;
+  if (typeof v === "object") return Object.keys(v as object).length === 0;
+  return false;
+}
+
+/**
+ * Seed any missing top-level course-schema defaults onto the persisted course
+ * document. Existing authored values are ALWAYS preserved (deep-merged wins);
+ * only branches that are absent or empty get filled from the schema. Idempotent
+ * — a second call with the same doc is a no-op.
+ */
+export async function seedMissingCourseDefaults(courseId: string): Promise<void> {
+  try {
+    const [defaults, course] = await Promise.all([
+      computeCourseSchemaDefaults(),
+      apiClient.get<Record<string, unknown>>(`/api/content/course/${courseId}`),
+    ]);
+
+    const patch: Record<string, unknown> = {};
+
+    for (const [k, defaultVal] of Object.entries(defaults || {})) {
+      const existing = course[k];
+      if (isDeepEmpty(existing)) {
+        patch[k] = defaultVal;
+        continue;
+      }
+      if (
+        defaultVal &&
+        typeof defaultVal === "object" &&
+        !Array.isArray(defaultVal) &&
+        typeof existing === "object" &&
+        existing &&
+        !Array.isArray(existing)
+      ) {
+        // Deep-merge to backfill any missing sub-keys (existing sub-value wins).
+        const merged = deepMergeGlobals(defaultVal as GlobalsObject, existing as GlobalsObject);
+        if (JSON.stringify(merged) !== JSON.stringify(existing)) {
+          patch[k] = merged;
+        }
+      }
+    }
+
+    // `themeVariables` is NOT part of the course JSON schema — the theme plugin
+    // stores per-theme customizations under this key, and the schema for it
+    // comes from the applied theme's `properties.variables`. Runtime theme code
+    // (e.g. adapt-laerdal-life-v2 `themeComponentView.js` line ~33) dereferences
+    // `Adapt.course.get('themeVariables')._components?._canShowFinalMarking`.
+    // The inner `?.` protects `_components` but NOT the outer object, so when
+    // `themeVariables` is undefined the framework crashes with
+    //   TypeError: Cannot read properties of undefined (reading '_components')
+    // Guarantee at least an empty object so `undefined._components → {}._components`.
+    if (course.themeVariables === undefined || course.themeVariables === null) {
+      patch.themeVariables = {};
+    }
+
+    if (Object.keys(patch).length) {
+      await apiClient.put(`/api/content/course/${courseId}`, patch);
+    }
+  } catch (err) {
+    console.warn("Failed to seed missing course schema defaults", err);
+  }
 }
 
 interface CreateContentResult { _id: string }

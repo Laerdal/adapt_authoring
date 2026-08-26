@@ -15,9 +15,12 @@ type Tab = 'open' | 'resolved' | 'approvals' | 'activity';
 
 function SummaryRow({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="flex items-center justify-between py-1 text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium text-foreground">{value}</span>
+    <div
+      className="flex items-center justify-between py-1"
+      style={{ fontSize: 13, fontFamily: 'var(--font-family-primary)' }}
+    >
+      <span style={{ color: 'var(--life-color-text-subtle)' }}>{label}</span>
+      <span style={{ fontWeight: 600, color: 'var(--life-color-text-default)' }}>{value}</span>
     </div>
   );
 }
@@ -41,9 +44,19 @@ interface CommentThreadProps {
 function CommentThread({ top, replies, label, onReply, onResolve, onDelete }: CommentThreadProps) {
   const [reply, setReply] = useState('');
   return (
-    <div className="rounded-lg border p-2.5">
+    <div className="sb-card" style={{ fontFamily: 'var(--font-family-primary)' }}>
       <div className="mb-1 flex items-center gap-2">
-        <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" title={label}>
+        <span
+          className="truncate"
+          title={label}
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            color: 'var(--life-color-text-subtle)',
+          }}
+        >
           {label}
         </span>
         <div className="ml-auto flex items-center gap-1">
@@ -51,7 +64,7 @@ function CommentThread({ top, replies, label, onReply, onResolve, onDelete }: Co
             type="button"
             title={top.resolved ? 'Reopen' : 'Resolve'}
             onClick={() => onResolve(top._id, !top.resolved)}
-            className="grid h-6 w-6 place-items-center rounded text-muted-foreground hover:bg-muted"
+            className="sb-panel-collapse-btn"
           >
             {top.resolved ? <RotateCcw className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
           </button>
@@ -59,21 +72,42 @@ function CommentThread({ top, replies, label, onReply, onResolve, onDelete }: Co
             type="button"
             title="Delete"
             onClick={() => onDelete(top._id)}
-            className="grid h-6 w-6 place-items-center rounded text-muted-foreground hover:bg-muted"
+            className="sb-panel-collapse-btn"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
-      <p className="whitespace-pre-wrap text-sm text-foreground">{top.body}</p>
-      <p className="mt-0.5 text-[11px] text-muted-foreground">{timeAgo(top.createdAt)}</p>
+      <p
+        className="whitespace-pre-wrap"
+        style={{ fontSize: 13, color: 'var(--life-color-text-default)' }}
+      >
+        {top.body}
+      </p>
+      <p style={{ marginTop: 2, fontSize: 11, color: 'var(--life-color-text-subtle)' }}>
+        {timeAgo(top.createdAt)}
+      </p>
 
       {replies.map((r) => (
-        <div key={r._id} className="mt-2 flex gap-1.5 border-l-2 border-border pl-2">
-          <CornerDownRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <div
+          key={r._id}
+          className="mt-2 flex gap-1.5 pl-2"
+          style={{ borderLeft: '2px solid var(--life-color-border-subtle)' }}
+        >
+          <CornerDownRight
+            className="mt-0.5 h-3.5 w-3.5 shrink-0"
+            style={{ color: 'var(--life-color-text-subtle)' }}
+          />
           <div className="min-w-0">
-            <p className="whitespace-pre-wrap text-sm text-foreground">{r.body}</p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">{timeAgo(r.createdAt)}</p>
+            <p
+              className="whitespace-pre-wrap"
+              style={{ fontSize: 13, color: 'var(--life-color-text-default)' }}
+            >
+              {r.body}
+            </p>
+            <p style={{ marginTop: 2, fontSize: 11, color: 'var(--life-color-text-subtle)' }}>
+              {timeAgo(r.createdAt)}
+            </p>
           </div>
         </div>
       ))}
@@ -93,9 +127,27 @@ function CommentThread({ top, replies, label, onReply, onResolve, onDelete }: Co
             value={reply}
             onChange={(e) => setReply(e.target.value)}
             placeholder="Reply…"
-            className="flex-1 rounded border border-border bg-background px-2 py-1 text-sm outline-none focus:border-primary"
+            className="flex-1 rounded px-2 py-1 outline-none"
+            style={{
+              fontSize: 13,
+              border: '1px solid var(--life-color-border-subtle)',
+              background: 'var(--life-color-bg-surface-default)',
+              color: 'var(--life-color-text-default)',
+            }}
           />
-          <button type="submit" disabled={!reply.trim()} className="text-xs font-medium text-primary disabled:opacity-40">
+          <button
+            type="submit"
+            disabled={!reply.trim()}
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: 'var(--life-color-text-primary)',
+              opacity: reply.trim() ? 1 : 0.4,
+              background: 'none',
+              border: 'none',
+              cursor: reply.trim() ? 'pointer' : 'not-allowed',
+            }}
+          >
             Reply
           </button>
         </form>
@@ -150,23 +202,38 @@ export default function ReviewCenter({
   };
 
   return (
-    <aside className="flex h-full flex-col bg-muted/20">
-      <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-2.5 backdrop-blur">
-        <h2 className="text-sm font-semibold text-foreground">Review Center</h2>
+    <aside className="sb-panel" style={{ fontFamily: 'var(--font-family-primary)' }}>
+      <div className="sb-panel-header">
+        <h2 className="sb-panel-title">Review Center</h2>
         {onCollapse && (
           <button
             type="button"
             aria-label="Collapse review center"
             onClick={onCollapse}
-            className="grid h-6 w-6 place-items-center rounded text-muted-foreground hover:bg-muted"
+            className="sb-panel-collapse-btn"
           >
             <PanelRightClose className="h-4 w-4" />
           </button>
         )}
       </div>
 
-      <div className="border-b px-4 py-3">
-        <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+      <div
+        className="px-4 py-3"
+        style={{
+          borderBottom: '1px solid var(--life-color-border-subtle)',
+          background: 'var(--life-color-bg-surface-default)',
+        }}
+      >
+        <div
+          className="mb-1"
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+            color: 'var(--life-color-text-subtle)',
+          }}
+        >
           Storyboard Summary
         </div>
         <SummaryRow label="Topics" value={summary.topics} />
@@ -178,28 +245,52 @@ export default function ReviewCenter({
         <SummaryRow label="Status" value={status.replace('_', ' ')} />
       </div>
 
-      <div className="flex items-center gap-4 border-b px-4">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={`-mb-px border-b-2 py-2 text-sm transition-colors ${
-              tab === t.id
-                ? 'border-primary font-medium text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+      <div
+        className="flex items-center gap-4 px-4"
+        style={{
+          borderBottom: '1px solid var(--life-color-border-subtle)',
+          background: 'var(--life-color-bg-surface-default)',
+        }}
+      >
+        {tabs.map((t) => {
+          const active = tab === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              className="-mb-px py-2"
+              style={{
+                fontSize: 13,
+                fontFamily: 'var(--font-family-primary)',
+                fontWeight: active ? 600 : 400,
+                borderBottom: `2px solid ${active ? 'var(--life-color-border-primary)' : 'transparent'}`,
+                color: active ? 'var(--life-color-text-default)' : 'var(--life-color-text-subtle)',
+                background: 'none',
+                cursor: 'pointer',
+                transition: 'color 0.12s ease, border-color 0.12s ease',
+              }}
+            >
+              {t.label}
+            </button>
+          );
+        })}
       </div>
 
       <div className="flex-1 space-y-2 overflow-y-auto p-4">
         {tab === 'open' && (
           <>
-            <div className="rounded-lg border p-2.5">
-              <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <div className="sb-card">
+              <div
+                className="mb-1 flex items-center gap-1.5"
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.06em',
+                  color: 'var(--life-color-text-subtle)',
+                }}
+              >
                 <MessageSquarePlus className="h-3.5 w-3.5" />
                 {activeBlock ? `Comment on: ${activeBlock.label}` : 'Select a block to comment'}
               </div>
@@ -209,14 +300,22 @@ export default function ReviewCenter({
                 placeholder="Add a comment…"
                 rows={2}
                 disabled={!activeBlock}
-                className="w-full resize-y rounded border border-border bg-background px-2 py-1 text-sm outline-none focus:border-primary disabled:opacity-50"
+                className="w-full resize-y rounded px-2 py-1 outline-none"
+                style={{
+                  fontSize: 13,
+                  border: '1px solid var(--life-color-border-subtle)',
+                  background: 'var(--life-color-bg-surface-default)',
+                  color: 'var(--life-color-text-default)',
+                  opacity: activeBlock ? 1 : 0.5,
+                }}
               />
               <div className="mt-1 flex justify-end">
                 <button
                   type="button"
                   onClick={addTopLevel}
                   disabled={!activeBlock || !draft.trim()}
-                  className="rounded-md bg-[color:var(--primary)] px-3 py-1 text-xs font-semibold text-primary-foreground disabled:opacity-40"
+                  className="sb-toolbar-btn sb-toolbar-btn-primary"
+                  style={{ fontSize: 12, padding: '5px 12px' }}
                 >
                   Comment
                 </button>
@@ -224,7 +323,12 @@ export default function ReviewCenter({
             </div>
 
             {openTops.length === 0 ? (
-              <p className="pt-2 text-center text-sm text-muted-foreground">No open comments.</p>
+              <p
+                className="pt-2 text-center"
+                style={{ fontSize: 13, color: 'var(--life-color-text-subtle)' }}
+              >
+                No open comments.
+              </p>
             ) : (
               openTops.map((c) => (
                 <CommentThread
@@ -243,7 +347,12 @@ export default function ReviewCenter({
 
         {tab === 'resolved' &&
           (resolvedTops.length === 0 ? (
-            <p className="text-center text-sm text-muted-foreground">No resolved comments yet.</p>
+            <p
+              className="text-center"
+              style={{ fontSize: 13, color: 'var(--life-color-text-subtle)' }}
+            >
+              No resolved comments yet.
+            </p>
           ) : (
             resolvedTops.map((c) => (
               <CommentThread
@@ -259,27 +368,47 @@ export default function ReviewCenter({
           ))}
 
         {tab === 'approvals' && (
-          <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
-            Current status: <span className="font-medium text-foreground">{status.replace('_', ' ')}</span>.
-            <br />
+          <div
+            className="p-4 text-center"
+            style={{
+              fontSize: 13,
+              color: 'var(--life-color-text-subtle)',
+              border: '1px dashed var(--life-color-border-subtle)',
+              borderRadius: 'var(--radius)',
+            }}
+          >
+            Current status:{' '}
+            <span style={{ fontWeight: 600, color: 'var(--life-color-text-default)' }}>
+              {status.replace('_', ' ')}
+            </span>
+            .<br />
             Use the status pill in the top bar to move Draft → In Review → Approved.
           </div>
         )}
 
         {tab === 'activity' &&
           (review.audit.length === 0 ? (
-            <p className="text-center text-sm text-muted-foreground">No activity yet.</p>
+            <p
+              className="text-center"
+              style={{ fontSize: 13, color: 'var(--life-color-text-subtle)' }}
+            >
+              No activity yet.
+            </p>
           ) : (
             review.audit.map((a: StoryboardAuditEvent) => (
-              <div key={a._id} className="rounded-lg border p-2.5 text-sm">
-                <span className="font-medium text-foreground">{a.event.replace('_', ' ')}</span>
+              <div key={a._id} className="sb-card" style={{ fontSize: 13 }}>
+                <span style={{ fontWeight: 600, color: 'var(--life-color-text-default)' }}>
+                  {a.event.replace('_', ' ')}
+                </span>
                 {a.fromStatus && a.toStatus && (
-                  <span className="text-muted-foreground">
+                  <span style={{ color: 'var(--life-color-text-subtle)' }}>
                     {' '}
                     — {a.fromStatus.replace('_', ' ')} → {a.toStatus.replace('_', ' ')}
                   </span>
                 )}
-                <p className="mt-0.5 text-[11px] text-muted-foreground">{timeAgo(a.createdAt)}</p>
+                <p style={{ marginTop: 2, fontSize: 11, color: 'var(--life-color-text-subtle)' }}>
+                  {timeAgo(a.createdAt)}
+                </p>
               </div>
             ))
           ))}
