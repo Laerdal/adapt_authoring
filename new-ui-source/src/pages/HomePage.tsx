@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { CourseCard } from '@/components/course'
 import AiAssistant from '@/components/common/AiAssistant'
 import { createCourse, deleteCourse, duplicateCourse, fetchDashboardCourses, getAuthoringMenuOptions, getAuthoringThemeOptions, updateCourse } from '@/api/adaptAuthoring'
+import ImportCourseModal from '@/components/importExport/Import'
 
 
 type Theme = string
@@ -260,12 +261,18 @@ export default function HomePage() {
 
   // Import
   const importInputRef = useRef<HTMLInputElement>(null)
+  const [importModalOpen, setImportModalOpen] = useState(false)
 
   function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     e.target.value = ''
     showToast(`${READ_ONLY_REASON} Import is blocked for now.`, 'info')
+  }
+
+  function handleImportFromModal(file: File, _assetFolders: string, _tags: string) {
+    showToast(`"${file.name}" queued for import. This feature is coming soon.`, 'info')
+    setImportModalOpen(false)
   }
 
   function clearSearch() { setSearch('') }
@@ -346,9 +353,7 @@ export default function HomePage() {
               />
               <button
                 type="button"
-                onClick={() => importInputRef.current?.click()}
-                title={READ_ONLY_REASON}
-                disabled
+                onClick={() => setImportModalOpen(true)}
                 className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[#d1d5db] hover:bg-[#f9fafb] text-[#374151] text-sm font-semibold rounded-lg transition-colors"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -810,6 +815,12 @@ export default function HomePage() {
           </div>
         ))}
       </div>
+
+      <ImportCourseModal
+        isOpen={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        onImport={handleImportFromModal}
+      />
 
       <AiAssistant context="Dashboard" />
     </>
