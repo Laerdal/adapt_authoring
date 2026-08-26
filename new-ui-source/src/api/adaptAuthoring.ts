@@ -595,6 +595,12 @@ async function applyCourseSelections(courseId: string, themeLabel?: string, menu
 
 export async function createCourse(input: CreateCourseInput): Promise<CreatedCourse> {
   const created = await apiClient.post<CreatedCourse>("/api/courses", input);
+
+  // The generic course-creation route leaves `_buttons` as the engine
+  // schema's own broken "" default (see ensureCourseButtonDefaults) — fix it
+  // up front so this course never hits the question-component crash at all.
+  await ensureCourseButtonDefaults(created.id);
+
   try {
     await seedDefaultStructure(created.id);
   } catch (err) {
@@ -2243,7 +2249,9 @@ export async function getCourseStructure(
                     isResetOnRevisit:
                        comp._isResetOnRevisit === true ? "hard"
                        : comp._isResetOnRevisit === false ? "false"
-                       : scalarString(comp._isResetOnRevisit) || "false",
+                       : scalarString(comp._isResetOnRevisit) === "soft" ? "soft"
+                       : scalarString(comp._isResetOnRevisit) === "hard" ? "hard"
+                       : "false",
                     ariaLevel: scalarString(comp._ariaLevel),
                     isA11yCompletionDescriptionEnabled: comp._isA11yCompletionDescriptionEnabled !== false,
                     showDisplayTitleInPreview:
@@ -2941,6 +2949,42 @@ export function createBlock(
   });
 }
 
+// The engine's own course model.schema declares `_buttons` as `type: "object"`
+// but its own `"default"` is the STRING "" (a copy/paste artifact, confirmed by
+// reading plugins/content/course/model.schema directly — not something we can
+// fix from here without touching backend schema files). Any course created
+// through the generic course-creation route without an explicit `_buttons`
+// therefore gets that literal empty string written into the DB. Question-type
+// components (mcq, sentenceOrdering, ...) read course-level `_buttons` at
+// runtime for their button text/ARIA label defaults — `"".anything` is
+// `undefined`, so the very first read (e.g. `_submit.buttonText`) throws,
+// which is exactly the "Cannot read properties of undefined" crash. Only
+// components that don't touch question-state button defaults (text, media,
+// ...) are unaffected, which is why it looks component-specific.
+const DEFAULT_COURSE_BUTTONS = {
+  _submit: { buttonText: "Submit", ariaLabel: "Submit" },
+  _reset: { buttonText: "Reset", ariaLabel: "Reset" },
+  _showCorrectAnswer: { buttonText: "Show correct answer", ariaLabel: "Show correct answer" },
+  _hideCorrectAnswer: { buttonText: "Hide correct answer", ariaLabel: "Hide correct answer" },
+  _showFeedback: { buttonText: "Show feedback", ariaLabel: "Show feedback" },
+  remainingAttemptsText: "remaining attempts",
+  remainingAttemptText: "final attempt",
+  disabledAriaLabel: "This button is disabled at the moment",
+};
+
+// Self-heals a course whose `_buttons` is the broken "" default (see above) —
+// safe to call repeatedly; it's a no-op once `_buttons` is a real object.
+async function ensureCourseButtonDefaults(courseId: string): Promise<void> {
+  try {
+    const course = await apiClient.get<{ _buttons?: unknown }>(`/api/content/course/${courseId}`);
+    const buttons = course?._buttons;
+    if (buttons && typeof buttons === "object" && !Array.isArray(buttons)) return;
+    await apiClient.put(`/api/content/course/${courseId}`, { _buttons: DEFAULT_COURSE_BUTTONS });
+  } catch {
+    /* non-fatal — worst case the pre-existing crash still happens */
+  }
+}
+
 // Create a component of the given type inside a content group (block), applying
 // schema defaults + a defensive PUT (mirrors adapt-preview-edit contentEditView).
 export async function createComponent(
@@ -2950,6 +2994,11 @@ export async function createComponent(
   sortOrder: number,
   layout: "full" | "left" | "right" = "full"
 ): Promise<string> {
+  // Must complete BEFORE the component exists, otherwise the new component's
+  // model can initialise (and throw — see ensureCourseButtonDefaults above)
+  // against the still-broken course document.
+  await ensureCourseButtonDefaults(courseId);
+
   const merged = await fetchMergedComponentSchema(componentType.component);
   const schemaSource =
     (merged && merged.properties) || componentType.properties || {};

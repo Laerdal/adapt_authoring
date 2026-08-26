@@ -7227,8 +7227,9 @@ export default function CourseEditor({
                             <button
                               type="button"
                               onClick={() => handleOpenSaveAsTemplate("topic", page.id)}
-                              className="mt-1 px-3 py-1.5 text-[13px] font-medium text-[#2d6fa8] border border-[#2d6fa8] rounded-md hover:bg-[#eef4fa] transition-colors cursor-pointer self-start"
+                              className="mt-1 inline-flex items-center gap-2 px-3 py-1.5 text-[13px] font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-md hover:bg-[#f9fafb] transition-colors cursor-pointer self-start"
                             >
+                              <MaskIcon file="template-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
                               Save as template
                             </button>
                           </TopicAccordion>
@@ -7594,8 +7595,9 @@ export default function CourseEditor({
                                 <button
                                   type="button"
                                   onClick={() => handleOpenSaveAsTemplate("section", article.id)}
-                                  className="mt-1 px-3 py-1.5 text-[13px] font-medium text-[#2d6fa8] border border-[#2d6fa8] rounded-md hover:bg-[#eef4fa] transition-colors cursor-pointer self-start"
+                                  className="mt-1 inline-flex items-center gap-2 px-3 py-1.5 text-[13px] font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-md hover:bg-[#f9fafb] transition-colors cursor-pointer self-start"
                                 >
+                                  <MaskIcon file="template-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
                                   Save as template
                                 </button>
                               </TopicAccordion>
@@ -7824,8 +7826,9 @@ export default function CourseEditor({
                                 <button
                                   type="button"
                                   onClick={() => handleOpenSaveAsTemplate("group", block.id)}
-                                  className="mt-1 px-3 py-1.5 text-[13px] font-medium text-[#2d6fa8] border border-[#2d6fa8] rounded-md hover:bg-[#eef4fa] transition-colors cursor-pointer self-start"
+                                  className="mt-1 inline-flex items-center gap-2 px-3 py-1.5 text-[13px] font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-md hover:bg-[#f9fafb] transition-colors cursor-pointer self-start"
                                 >
+                                  <MaskIcon file="template-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
                                   Save as template
                                 </button>
                               </TopicAccordion>
@@ -8071,8 +8074,9 @@ export default function CourseEditor({
                                 <button
                                   type="button"
                                   onClick={() => handleOpenSaveAsTemplate("component", component.id)}
-                                  className="mt-1 px-3 py-1.5 text-[13px] font-medium text-[#2d6fa8] border border-[#2d6fa8] rounded-md hover:bg-[#eef4fa] transition-colors cursor-pointer self-start"
+                                  className="mt-1 inline-flex items-center gap-2 px-3 py-1.5 text-[13px] font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-md hover:bg-[#f9fafb] transition-colors cursor-pointer self-start"
                                 >
+                                  <MaskIcon file="template-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
                                   Save as template
                                 </button>
                               </TopicAccordion>
