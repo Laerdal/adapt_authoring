@@ -23,7 +23,7 @@ import { useUnsavedChangesNavigationGuard } from "./setup/useUnsavedChangesNavig
 import { CompletionProgressPage } from "./setup/completionProgressPage";
 import { CdnDeploymentPage } from "./setup/cdnDeploymentPage";
 import ExportMenu from "../components/importExport/Export";
-import { runExportSourceAction } from "../helpers/importExportHelper";
+import { runExportSourceAction, runExportStoryboardAction } from "../helpers/importExportHelper";
 
 const ICON_BASE = "/new/assets/icons";
 
@@ -2876,6 +2876,7 @@ function CourseCreationCenterContent() {
   const [activeNav, setActiveNav] = useState(() => (initialPanel === "storyboarding" ? "storyboarding" : "overview"));
   const [collapsed, setCollapsed] = useState(false);
   const [exportingSource, setExportingSource] = useState(false);
+  const [exportingStoryboard, setExportingStoryboard] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(NAV_GROUPS.map((group) => [group.id, true]))
   );
@@ -3054,6 +3055,7 @@ function CourseCreationCenterContent() {
           <ExportMenu
             disabled={!courseId || !user?._tenantId}
             exportSourceLoading={exportingSource}
+            exportStoryboardLoading={exportingStoryboard}
             onExportSource={() => {
               void runExportSourceAction({
                 exportingSource,
@@ -3068,7 +3070,19 @@ function CourseCreationCenterContent() {
                 },
               });
             }}
-            onExportStoryboard={() => handleNavigation("storyboarding")}
+            onExportStoryboard={() => {
+              void runExportStoryboardAction({
+                exportingStoryboard,
+                courseId,
+                setExportingStoryboard,
+                onUnavailable: () => {
+                  window.alert("Storyboard export is not available right now.");
+                },
+                onError: (message) => {
+                  window.alert(`Unable to export storyboard. ${message}`);
+                },
+              });
+            }}
           />
 
           <button

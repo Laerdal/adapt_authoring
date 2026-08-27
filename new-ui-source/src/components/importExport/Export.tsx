@@ -6,6 +6,7 @@ interface ExportMenuProps {
   onExportStoryboard?: () => void;
   disabled?: boolean;
   exportSourceLoading?: boolean;
+  exportStoryboardLoading?: boolean;
 }
 
 interface ExportOption {
@@ -43,6 +44,7 @@ export default function ExportMenu({
   onExportStoryboard,
   disabled = false,
   exportSourceLoading = false,
+  exportStoryboardLoading = false,
 }: ExportMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -73,7 +75,7 @@ export default function ExportMenu({
   const options: ExportOption[] = [
     { id: "source", label: exportSourceLoading ? "Export Source..." : "Export Source", onSelect: onExportSource, disabled: exportSourceLoading },
     { id: "pdf", label: "Export as PDF", onSelect: onExportPdf },
-    { id: "storyboard", label: "Export Storyboard", onSelect: onExportStoryboard },
+    { id: "storyboard", label: exportStoryboardLoading ? "Export Storyboard..." : "Export Storyboard", onSelect: onExportStoryboard, disabled: exportStoryboardLoading },
   ];
 
   function onOptionClick(option: ExportOption) {
