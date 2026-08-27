@@ -8,6 +8,8 @@ export interface ExportSourceActionOptions {
   tenantId?: string;
   courseId: string;
   setExportingSource: (value: boolean) => void;
+  onProcessingStart?: () => void;
+  onDownloadStarted?: () => void;
   onUnavailable?: () => void;
   onError?: (message: string) => void;
 }
@@ -16,6 +18,8 @@ export interface ExportStoryboardActionOptions {
   exportingStoryboard: boolean;
   courseId: string;
   setExportingStoryboard: (value: boolean) => void;
+  onProcessingStart?: () => void;
+  onDownloadStarted?: () => void;
   onUnavailable?: () => void;
   onError?: (message: string) => void;
 }
@@ -69,6 +73,8 @@ export async function runExportSourceAction(options: ExportSourceActionOptions):
     tenantId,
     courseId,
     setExportingSource,
+    onProcessingStart,
+    onDownloadStarted,
     onUnavailable,
     onError,
   } = options;
@@ -81,8 +87,10 @@ export async function runExportSourceAction(options: ExportSourceActionOptions):
   }
 
   setExportingSource(true);
+  onProcessingStart?.();
   try {
     await exportSourceCourse(tenantId, courseId);
+    onDownloadStarted?.();
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Export failed";
     onError?.(message);
@@ -133,6 +141,8 @@ export async function runExportStoryboardAction(options: ExportStoryboardActionO
     exportingStoryboard,
     courseId,
     setExportingStoryboard,
+    onProcessingStart,
+    onDownloadStarted,
     onUnavailable,
     onError,
   } = options;
@@ -145,8 +155,10 @@ export async function runExportStoryboardAction(options: ExportStoryboardActionO
   }
 
   setExportingStoryboard(true);
+  onProcessingStart?.();
   try {
     await exportStoryboardCourseZip(courseId, false);
+    onDownloadStarted?.();
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Export failed";
     onError?.(message);
