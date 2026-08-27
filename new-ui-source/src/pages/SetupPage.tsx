@@ -23,6 +23,7 @@ import { useUnsavedChangesNavigationGuard } from "./setup/useUnsavedChangesNavig
 import { CompletionProgressPage } from "./setup/completionProgressPage";
 import { CdnDeploymentPage } from "./setup/cdnDeploymentPage";
 import ExportMenu from "../components/importExport/Export";
+import { runExportSourceAction } from "../helpers/importExportHelper";
 
 const ICON_BASE = "/new/assets/icons";
 
@@ -3017,44 +3018,6 @@ function CourseCreationCenterContent() {
     navigate(previewUrl);
   }
 
-  async function exportSource() {
-    if (exportingSource) return;
-
-    const tenantId = user?._tenantId;
-    if (!courseId || !tenantId) {
-      window.alert("Course export is not available right now.");
-      return;
-    }
-
-    setExportingSource(true);
-    try {
-      const exportPath = `/export/${encodeURIComponent(tenantId)}/${encodeURIComponent(courseId)}`;
-      const response = await fetch(exportPath, {
-        method: "GET",
-        credentials: "same-origin",
-      });
-
-      const result = await response.json().catch(() => null) as { success?: boolean; message?: string } | null;
-      if (!response.ok || !result?.success) {
-        throw new Error(result?.message || `Export failed (${response.status})`);
-      }
-
-      // Keep parity with legacy flow: trigger zip download via a form submit.
-      const form = document.createElement("form");
-      form.method = "GET";
-      form.action = `${exportPath}/download.zip`;
-      form.style.display = "none";
-      document.body.appendChild(form);
-      form.submit();
-      form.remove();
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Export failed";
-      window.alert(`Unable to export source. ${message}`);
-    } finally {
-      setExportingSource(false);
-    }
-  }
-
   const primaryTopNav: "settings" | "storyboard" | "editor" = activeNav === "storyboarding" ? "storyboard" : "settings";
 
   return (
@@ -3091,7 +3054,20 @@ function CourseCreationCenterContent() {
           <ExportMenu
             disabled={!courseId || !user?._tenantId}
             exportSourceLoading={exportingSource}
-            onExportSource={exportSource}
+            onExportSource={() => {
+              void runExportSourceAction({
+                exportingSource,
+                tenantId: user?._tenantId,
+                courseId,
+                setExportingSource,
+                onUnavailable: () => {
+                  window.alert("Course export is not available right now.");
+                },
+                onError: (message) => {
+                  window.alert(`Unable to export source. ${message}`);
+                },
+              });
+            }}
             onExportStoryboard={() => handleNavigation("storyboarding")}
           />
 
