@@ -5,12 +5,14 @@ interface ExportMenuProps {
   onExportPdf?: () => void;
   onExportStoryboard?: () => void;
   disabled?: boolean;
+  exportSourceLoading?: boolean;
 }
 
 interface ExportOption {
   id: "source" | "pdf" | "storyboard";
   label: string;
   onSelect?: () => void;
+  disabled?: boolean;
 }
 
 const ICON_BASE = "/new/assets/icons";
@@ -40,6 +42,7 @@ export default function ExportMenu({
   onExportPdf,
   onExportStoryboard,
   disabled = false,
+  exportSourceLoading = false,
 }: ExportMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -68,12 +71,13 @@ export default function ExportMenu({
   }, [isOpen]);
 
   const options: ExportOption[] = [
-    { id: "source", label: "Export Source", onSelect: onExportSource },
+    { id: "source", label: exportSourceLoading ? "Export Source..." : "Export Source", onSelect: onExportSource, disabled: exportSourceLoading },
     { id: "pdf", label: "Export as PDF", onSelect: onExportPdf },
     { id: "storyboard", label: "Export Storyboard", onSelect: onExportStoryboard },
   ];
 
   function onOptionClick(option: ExportOption) {
+    if (option.disabled) return;
     setIsOpen(false);
     option.onSelect?.();
   }
@@ -116,7 +120,8 @@ export default function ExportMenu({
               type="button"
               role="menuitem"
               onClick={() => onOptionClick(option)}
-              className="block w-full px-5 py-3 text-left font-[var(--font-family-primary)] text-[16px] leading-[1.3] text-[#1f2937] hover:bg-[#f8fafc] transition-colors"
+              disabled={option.disabled}
+              className="block w-full px-5 py-3 text-left font-[var(--font-family-primary)] text-[16px] leading-[1.3] text-[#1f2937] hover:bg-[#f8fafc] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {option.label}
             </button>
