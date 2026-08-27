@@ -77,6 +77,23 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (checked: b
   );
 }
 
+function ToggleRow({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-4 py-1 cursor-pointer">
+      <span className="text-sm font-semibold text-[var(--life-base-black)] leading-snug">{label}</span>
+      <Toggle checked={checked} onChange={onChange} />
+    </label>
+  );
+}
+
 function UploadCloudIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -172,6 +189,7 @@ function AssetPicker({ label }: { label: string }) {
 }
 
 export default function ExportPdfPage({ courseTitle }: { courseTitle?: string }) {
+  const [pdfExportEnabled, setPdfExportEnabled] = useState(false);
   const [tocPageTitles, setTocPageTitles] = useState(true);
   const [tocArticleTitles, setTocArticleTitles] = useState(true);
   const [tocBlockTitles, setTocBlockTitles] = useState(false);
@@ -190,6 +208,12 @@ export default function ExportPdfPage({ courseTitle }: { courseTitle?: string })
         <h1 className="text-[20px] font-bold text-[#111827]">Export as PDF</h1>
       </div>
 
+      <section className="flex flex-col gap-3.5">
+        <SectionTitle>PDF Export</SectionTitle>
+        <ToggleRow label="Enable PDF Export" checked={pdfExportEnabled} onChange={setPdfExportEnabled} />
+      </section>
+
+      {pdfExportEnabled && (
       <div className="flex flex-col gap-6">
         <section className="flex flex-col gap-3.5">
           <SectionTitle>Cover Page</SectionTitle>
@@ -289,6 +313,7 @@ export default function ExportPdfPage({ courseTitle }: { courseTitle?: string })
           </button>
         </div>
       </div>
+      )}
     </div>
   );
 }
