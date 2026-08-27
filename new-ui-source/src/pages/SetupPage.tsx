@@ -23,6 +23,7 @@ import { useUnsavedChangesNavigationGuard } from "./setup/useUnsavedChangesNavig
 import { CompletionProgressPage } from "./setup/completionProgressPage";
 import { CdnDeploymentPage } from "./setup/cdnDeploymentPage";
 import ExportMenu, { ExportStatusPopup } from "../components/importExport/Export";
+import ExportPdfPage from "../components/importExport/ExportPdfPage";
 import { runExportSourceAction, runExportStoryboardAction } from "../helpers/importExportHelper";
 
 const ICON_BASE = "/new/assets/icons";
@@ -2981,6 +2982,7 @@ function CourseCreationCenterContent() {
     if (activeNav === "cdn-deployment") return <CdnDeploymentPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "translation") return <LegacyTranslationPanel courseId={courseId} />;
     if (activeNav === "publish") return <PublishPanel />;
+    if (activeNav === "export-pdf") return <ExportPdfPage courseTitle={title} />;
     if (activeNav === "storyboarding")
       return (
         <StoryboardWorkspace
@@ -3084,6 +3086,10 @@ function CourseCreationCenterContent() {
                   window.alert(`Unable to export source. ${message}`);
                 },
               });
+            }}
+            onExportPdf={() => {
+              setExportPopup(null);
+              setActiveNav("export-pdf");
             }}
             onExportStoryboard={() => {
               void runExportStoryboardAction({
