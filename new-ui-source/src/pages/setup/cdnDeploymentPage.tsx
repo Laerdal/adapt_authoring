@@ -241,7 +241,9 @@ const STATUS_BADGE: Record<LinkStatus, { label: string; className: string }> = {
 // than trusting free-text label content ("Version Specific" / "Latest").
 function extractVersionFolder(href: string): string {
   try {
-    const segments = new URL(href).pathname.split("/").filter(Boolean);
+    // href may be protocol-relative ("//host/...") or root-relative ("/...") —
+    // both shapes appendIsCDNModeParam can produce — so a base is required.
+    const segments = new URL(href, window.location.origin).pathname.split("/").filter(Boolean);
     return segments.length >= 2 ? segments[segments.length - 2] : "latest";
   } catch {
     return "latest";
@@ -304,8 +306,9 @@ export function CdnDeploymentPage({
   const logIdRef = useRef(0);
 
   const [linksLoading, setLinksLoading] = useState(false);
-  // null = not yet fetched. Only an explicit "Get Previous Links" click should
-  // populate this — saving the config or triggering a build must not.
+  // null = not yet populated. Populated either by an explicit "Get Previous
+  // Links" click or by a completed build (showing just that build's links) —
+  // but never automatically by saving the config or starting a build.
   const [links, setLinks] = useState<DisplayLinkEntry[] | null>(null);
   const [restoringEntry, setRestoringEntry] = useState<string | null>(null);
   const [restoredEntries, setRestoredEntries] = useState<Set<string>>(new Set());
@@ -694,8 +697,9 @@ export function CdnDeploymentPage({
                   </div>
                 )}
 
-                {/* Previous versions — only shown once the user explicitly clicks
-                    "Get Previous Links" (links stays null until then). */}
+                {/* Previous versions — shown once populated by "Get Previous Links" or
+                    a completed build; stays hidden (links === null) until then, and is
+                    never auto-populated just by saving the config or starting a build. */}
                 {cfg.isEnabled && (linksLoading || links !== null) && (
                   <div className="rounded-lg border border-[#e5e7eb] overflow-hidden">
                     <table className="w-full text-xs">
