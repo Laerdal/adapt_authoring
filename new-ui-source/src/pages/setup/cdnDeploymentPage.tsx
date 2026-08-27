@@ -235,6 +235,46 @@ const STATUS_BADGE: Record<LinkStatus, { label: string; className: string }> = {
   inactive: { label: "Inactive", className: "text-[#9ca3af]" },
 };
 
+// Both the "specific" and "latest" deploy links always end in `<versionfolder>/index.html`
+// (destination.js: dest.specific = `${groupid}/courses/${courseid}/${version}.${timestamp}`,
+// dest.latest = `.../latest`) — recover the version-folder id from the path itself rather
+// than trusting free-text label content ("Version Specific" / "Latest").
+function extractVersionFolder(href: string): string {
+  try {
+    const segments = new URL(href).pathname.split("/").filter(Boolean);
+    return segments.length >= 2 ? segments[segments.length - 2] : "latest";
+  } catch {
+    return "latest";
+  }
+}
+
+function ordinal(n: number): string {
+  const suffixes = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${suffixes[(v - 20) % 10] ?? suffixes[v] ?? suffixes[0]}`;
+}
+
+function formatBuildTimestamp(epochMs: number): string {
+  const d = new Date(epochMs);
+  const month = d.toLocaleString("en-US", { month: "long" });
+  const time = d.toLocaleString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true }).toLowerCase();
+  return `${month} ${ordinal(d.getDate())} ${d.getFullYear()}, ${time}`;
+}
+
+// A version-folder id embeds its creation timestamp as the trailing dot-segment
+// (e.g. "0.0.1.1755500064000") — "latest" has no timestamp of its own.
+function buildDisplayLinkEntry(link: CdnLink): DisplayLinkEntry {
+  const entry = extractVersionFolder(link.href);
+  const rawTimestamp = entry !== "latest" ? Number(entry.split(".").pop()) : NaN;
+  return {
+    entry,
+    link: link.href,
+    timestampPretty: Number.isFinite(rawTimestamp) ? formatBuildTimestamp(rawTimestamp) : undefined,
+    href: link.href,
+    status: "active",
+  };
+}
+
 /* ── CDN Deployment Page ─────────────────────────────────────────────────── */
 
 export function CdnDeploymentPage({
@@ -426,13 +466,21 @@ export function CdnDeploymentPage({
       if (urlMatch) {
         const specificMatch = data.match(/<div class="specific">([\s\S]*?)<\/div>/);
         const latestMatch = data.match(/<div class="latest">([\s\S]*?)<\/div>/);
+        const specificLink = specificMatch ? parseCdnLinkHtml(specificMatch[1]) ?? undefined : undefined;
+        const latestLink = latestMatch ? parseCdnLinkHtml(latestMatch[1]) ?? undefined : undefined;
         appendLog({
           eventType: "link",
-          specificLink: specificMatch ? parseCdnLinkHtml(specificMatch[1]) ?? undefined : undefined,
-          latestLink: latestMatch ? parseCdnLinkHtml(latestMatch[1]) ?? undefined : undefined,
+          specificLink,
+          latestLink,
           comment: cfg.buildTriggerComment,
           triggeredBy: user?.email,
         });
+        // Show just the two links this build produced, in the same table used
+        // for "Get Previous Links" — not the full deployment history.
+        const freshEntries = [latestLink, specificLink]
+          .filter((l): l is CdnLink => !!l)
+          .map(buildDisplayLinkEntry);
+        if (freshEntries.length) setLinks(freshEntries);
       } else {
         appendLog({ eventType: "message", message: data });
       }
@@ -670,10 +718,20 @@ export function CdnDeploymentPage({
                             const restored = restoredEntries.has(entry.entry);
                             const status: LinkStatus = restored ? "active" : entry.status;
                             const badge = STATUS_BADGE[status];
+                            // Mirrors the AT tool's `linkdisabled`/`inactiveState` rule (cdnCourseView.js):
+                            // Restore is only for links that are actually down (expired/not-found) — an
+                            // active link has nothing to restore, and Set Expiry is what takes it down.
+                            const isExpired = status === "not-found" || status === "inactive";
+                            const canRestore = !isLatest && isExpired;
                             return (
-                              <tr key={entry.entry} className="border-t border-[#f3f4f6]">
+                              <tr key={entry.entry} className={`border-t border-[#f3f4f6] ${isExpired ? "bg-[#fff7e6]" : ""}`}>
                                 <td className="px-3 py-2">
-                                  <a href={entry.href} target="_blank" rel="noreferrer" className="underline text-[var(--life-primary-500)]">
+                                  <a
+                                    href={entry.href}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className={isExpired ? "line-through text-[#6b7280]" : "underline text-[var(--life-primary-500)]"}
+                                  >
                                     {/* Full version-folder name (e.g. "0.0.1.1755500064000"), not the
                                         CLI's truncated 3-part semver (entry.version) — matches what
                                         was actually deployed and keeps each row's link unambiguous. */}
@@ -695,7 +753,7 @@ export function CdnDeploymentPage({
                                   <div className="flex items-center gap-1.5">
                                     <button
                                       type="button"
-                                      disabled={isLatest || restored || restoringEntry === entry.entry}
+                                      disabled={!canRestore || restoringEntry === entry.entry}
                                       onClick={() => void handleRestore(entry)}
                                       className="inline-flex items-center gap-1 rounded border border-[#d1d5db] px-2 py-0.5 text-[11px] text-[#374151] hover:bg-[#f9fafb] disabled:opacity-40 transition-colors"
                                     >
