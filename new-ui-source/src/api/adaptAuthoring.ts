@@ -1711,6 +1711,79 @@ export async function saveCourseBookmarkingSettings(
   });
 }
 
+// ── Assessment Completion ───────────────────────────────────────────────────
+// The `adapt-contrib-assessment` extension only has course-level settings
+// (properties.schema `pluginLocations.course._assessment` — no config-level
+// location at all): `_isPercentageBased`, `_scoreToPass`, `_correctToPass`.
+// Same install/enable pattern as Bookmarking above: the toggle represents
+// whether the extension is installed (config._enabledExtensions), since the
+// schema itself has no `_isEnabled` field of its own.
+const ASSESSMENT_EXTENSION_NAME = "adapt-contrib-assessment";
+
+export interface CourseAssessmentSettings {
+  _isEnabled?: boolean;
+  _isPercentageBased?: boolean;
+  _scoreToPass?: number;
+  _correctToPass?: number;
+  [key: string]: unknown;
+}
+
+export async function getCourseAssessmentSettings(courseId: string): Promise<CourseAssessmentSettings> {
+  const [course, config] = await Promise.all([
+    apiClient.get<AnyRecord>(`/api/content/course/${courseId}`),
+    apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`),
+  ]);
+  const source = obj(obj(course._extensions)._assessment);
+
+  return {
+    ...source,
+    _isEnabled: isExtensionInstalledByName(config, ASSESSMENT_EXTENSION_NAME),
+    _isPercentageBased: bool(source._isPercentageBased, true),
+    _scoreToPass: typeof source._scoreToPass === "number" ? source._scoreToPass : 60,
+    _correctToPass: typeof source._correctToPass === "number" ? source._correctToPass : 60,
+  };
+}
+
+export async function saveCourseAssessmentSettings(
+  courseId: string,
+  settings: CourseAssessmentSettings,
+): Promise<void> {
+  let course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+  const config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+
+  const shouldEnable = bool(settings._isEnabled, false);
+  const isInstalled = isExtensionInstalledByName(config, ASSESSMENT_EXTENSION_NAME);
+
+  if (shouldEnable && !isInstalled) {
+    const ids = await resolveExtensionTypeIdsByNames([ASSESSMENT_EXTENSION_NAME]);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/enable/${courseId}`, { extensions: ids });
+      course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+    }
+  } else if (!shouldEnable && isInstalled) {
+    const ids = await resolveExtensionTypeIdsByNames([ASSESSMENT_EXTENSION_NAME]);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/disable/${courseId}`, { extensions: ids });
+      course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+    }
+  }
+
+  const existingAssessment = obj(obj(course._extensions)._assessment);
+  const nextAssessment: CourseAssessmentSettings = {
+    ...existingAssessment,
+    _isPercentageBased: bool(settings._isPercentageBased, bool(existingAssessment._isPercentageBased, true)),
+    _scoreToPass: typeof settings._scoreToPass === "number" ? settings._scoreToPass : typeof existingAssessment._scoreToPass === "number" ? existingAssessment._scoreToPass : 60,
+    _correctToPass: typeof settings._correctToPass === "number" ? settings._correctToPass : typeof existingAssessment._correctToPass === "number" ? existingAssessment._correctToPass : 60,
+  };
+
+  await apiClient.put(`/api/content/course/${courseId}`, {
+    _extensions: {
+      ...obj(course._extensions),
+      _assessment: nextAssessment,
+    },
+  });
+}
+
 // ── Estimated Time ───────────────────────────────────────────────────────────
 // The `adapt-estimated-time` extension stores its settings in two places:
 //   • course document `_extensions._estimatedTime` (or root `_estimatedTime`):
@@ -2839,9 +2912,132 @@ export async function getComponentBehaviourSchema(
   return componentTypePropertiesCache[key] ?? {};
 }
 
+// ── Extensions accordion (Topic/Section/Content Group/Component) ───────────
+// Installed extensions (GET /api/extensiontype) — the plugin-manager record,
+// keyed by `.name` (the bower package name, e.g. "adapt-contrib-trickle").
+export interface ExtensionTypeOption {
+  _id: string;
+  name: string;
+  displayName: string;
+  version?: string;
+}
+
+let extensionTypeOptionsCache: ExtensionTypeOption[] | null = null;
+
+export async function getExtensionTypeOptions(): Promise<ExtensionTypeOption[]> {
+  if (!extensionTypeOptionsCache) {
+    const rows = await apiClient.get<Array<Partial<ExtensionTypeOption>>>("/api/extensiontype");
+    extensionTypeOptionsCache = (Array.isArray(rows) ? rows : [])
+      .filter((row) => row && row.name)
+      .map((row) => ({
+        _id: row._id as string,
+        name: row.name as string,
+        displayName: row.displayName || (row.name as string),
+        version: row.version,
+      }));
+  }
+  return extensionTypeOptionsCache;
+}
+
+// Enables an extension type for a course (POST /api/extension/enable/:courseId),
+// so the framework build actually bundles it. Safe to call redundantly — the
+// server no-ops if the extension is already enabled for the course.
+export async function enableExtensionForCourse(courseId: string, extensionTypeId: string): Promise<void> {
+  if (!courseId || !extensionTypeId) return;
+  try {
+    await apiClient.post(`/api/extension/enable/${courseId}`, { extensions: [extensionTypeId] });
+  } catch (err) {
+    console.warn("Failed to enable extension for course", err);
+  }
+}
+
+export type ExtensionSchemaLevel = "course" | "contentobject" | "article" | "block" | "component";
+
+export interface ExtensionFieldSchema {
+  type?: string;
+  title?: string;
+  legend?: string;
+  name?: string; // extensiontype `.name` this settings key belongs to (set server-side from pluginLocations)
+  properties?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+const EXTENSION_SCHEMA_LEVELS: ExtensionSchemaLevel[] = ["course", "contentobject", "article", "block", "component"];
+let extensionSchemasByLevelCache: Record<ExtensionSchemaLevel, Record<string, ExtensionFieldSchema>> | null = null;
+
+// Extension settings fields available at each content level, sourced from
+// GET /api/content/schema: the server merges every installed extension's
+// `pluginLocations` schema onto the matching level's `_extensions.properties`
+// (see contentmanager.js `processPluginLocations`/`filterSchemas`). Only
+// extensions with a schema entry for a given level should be offered there
+// (e.g. Trickle only declares `article`/`block` locations, so it's only
+// ever listed as available on Section/Content Group, never Topic/Component).
+export async function getExtensionSchemasByLevel(): Promise<
+  Record<ExtensionSchemaLevel, Record<string, ExtensionFieldSchema>>
+> {
+  if (!extensionSchemasByLevelCache) {
+    if (!mergedSchemaCache) {
+      mergedSchemaCache = await apiClient.get("/api/content/schema");
+    }
+    const result = {} as Record<ExtensionSchemaLevel, Record<string, ExtensionFieldSchema>>;
+    for (const level of EXTENSION_SCHEMA_LEVELS) {
+      const levelSchema = (mergedSchemaCache as Record<string, unknown> | null)?.[level] as
+        | { _extensions?: { properties?: Record<string, ExtensionFieldSchema> } }
+        | undefined;
+      result[level] = levelSchema?._extensions?.properties ?? {};
+    }
+    extensionSchemasByLevelCache = result;
+  }
+  return extensionSchemasByLevelCache;
+}
+
+// Raw course-level `_extensions` (actual stored values, no schema defaults
+// merged in) — the ultimate ancestor when computing whether a Topic/Section/
+// Content Group/Component extension setting is Inherited from or Overridden
+// vs. its nearest configured parent.
+export async function getCourseExtensions(courseId: string): Promise<Record<string, unknown>> {
+  const course = await apiClient.get<{ _extensions?: Record<string, unknown> }>(`/api/content/course/${courseId}`);
+  return course._extensions ?? {};
+}
+
+// Per-component-type extension schema (GET /api/content/schema, keyed by the
+// componenttype's `.component` name, e.g. "mcq"/"text"). Unlike the generic
+// `component` level from getExtensionSchemasByLevel, this merge goes through
+// contentmanager.js's `isComponentTypeSchema` branch, which additionally runs
+// questionComponentHelper.filterQuestionOnlyExtensionProperties — so
+// question-only extension attrs (e.g. `_questionStateGraphic`) are stripped
+// out for every component type except actual question components (mcq,
+// gmcq, ...). Use this (not the generic level) to list "available extensions"
+// for a specific selected component instance.
+let componentExtensionSchemaIndex: Record<string, Record<string, ExtensionFieldSchema>> | null = null;
+
+export async function getComponentExtensionSchema(
+  componentKey: string
+): Promise<Record<string, ExtensionFieldSchema>> {
+  const key = (componentKey || "").trim().toLowerCase();
+  if (!key) return {};
+
+  if (!componentExtensionSchemaIndex) {
+    if (!mergedSchemaCache) {
+      mergedSchemaCache = await apiClient.get("/api/content/schema");
+    }
+    componentExtensionSchemaIndex = {};
+    Object.entries(mergedSchemaCache ?? {}).forEach(([schemaKey, schema]) => {
+      const extensionsProperties = (
+        schema as { _extensions?: { properties?: Record<string, ExtensionFieldSchema> } }
+      )?._extensions?.properties;
+      if (extensionsProperties) {
+        componentExtensionSchemaIndex![schemaKey.toLowerCase()] = extensionsProperties;
+      }
+    });
+  }
+
+  return componentExtensionSchemaIndex[key] ?? {};
+}
+
 // Walk a schema `properties` object, producing each property's default value.
 // Ported from adapt-preview-edit/js/contentEditView.js (buildSchemaDefaults).
-function buildSchemaDefaults(
+export function buildSchemaDefaults(
   schemaProperties: Record<string, unknown> | undefined
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};

@@ -1,16 +1,19 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   setCompletionNotifierEnabledInConfig,
+  getCourseAssessmentSettings,
   getCourseBookmarkingSettings,
   getCourseCompletionNotifier,
   getCourseEstimatedTimeSettings,
   getCoursePageLevelProgressSettings,
   getCourseTechnicalSettings,
+  saveCourseAssessmentSettings,
   saveCourseBookmarkingSettings,
   saveCourseCompletionNotifier,
   saveCourseEstimatedTimeSettings,
   saveCoursePageLevelProgressSettings,
   updateCourseTechnicalSettings,
+  type CourseAssessmentSettings,
   type CourseBookmarkingSettings,
   type CourseCompletionNotifier,
   type CourseEstimatedTimeSettings,
@@ -52,6 +55,10 @@ interface CompletionProgressSettings {
   bookmarkingPromptMessage: string;
   bookmarkingPromptYes: string;
   bookmarkingPromptNo: string;
+  assessmentCompletionEnabled: boolean;
+  assessmentIsPercentageBased: boolean;
+  assessmentScoreToPass: number;
+  assessmentCorrectToPass: number;
   progressIndicators:   ProgressIndicator[];
   progressIndicatorText: string;
   progressIndicatorAriaLabel: string;
@@ -68,6 +75,7 @@ interface CompletionProgressSettings {
 type CompletionCriteriaConfig = NonNullable<CourseTechnicalSettings["_completionCriteria"]>;
 type CompletionNotifierConfig = CourseCompletionNotifier;
 type BookmarkingConfig = CourseBookmarkingSettings;
+type AssessmentConfig = CourseAssessmentSettings;
 type EstimatedTimeConfig = CourseEstimatedTimeSettings;
 
 function completionNotifierEnabledFromConfig(
@@ -179,6 +187,10 @@ const DEFAULT_SETTINGS: CompletionProgressSettings = {
   bookmarkingPromptMessage: "Would you like to continue where you left off?",
   bookmarkingPromptYes: "Yes",
   bookmarkingPromptNo: "No",
+  assessmentCompletionEnabled: false,
+  assessmentIsPercentageBased: true,
+  assessmentScoreToPass: 60,
+  assessmentCorrectToPass: 60,
   progressIndicators:   [],
   progressIndicatorText: "",
   progressIndicatorAriaLabel: "",
@@ -269,19 +281,21 @@ function CpTextInput({
   value,
   onChange,
   placeholder,
+  type = "text",
 }: {
   label: string;
   hint?: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
+  type?: "text" | "number";
 }) {
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-xs font-semibold text-[#374151]">{label}</span>
       {hint && <p className="text-[11px] text-[var(--life-neutral-300)] leading-snug">{hint}</p>}
       <input
-        type="text"
+        type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
@@ -503,6 +517,41 @@ function CompletionRulesContent({
           ]}
         />
       </CpInnerCard>
+
+      <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
+        <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
+          <CpToggle
+            label="Enable Assessment Completion"
+            checked={cfg.assessmentCompletionEnabled}
+            onChange={(v) => set("assessmentCompletionEnabled", v)}
+          />
+        </div>
+        {cfg.assessmentCompletionEnabled && (
+          <div className="px-4 py-4 flex flex-col gap-4">
+            <CpCheckbox
+              label="Percentage based"
+              checked={cfg.assessmentIsPercentageBased}
+              onChange={(v) => set("assessmentIsPercentageBased", v)}
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <CpTextInput
+                label="Pass mark"
+                type="number"
+                value={String(cfg.assessmentScoreToPass)}
+                onChange={(v) => set("assessmentScoreToPass", Number(v) || 0)}
+                placeholder="60"
+              />
+              <CpTextInput
+                label="Correct pass mark"
+                type="number"
+                value={String(cfg.assessmentCorrectToPass)}
+                onChange={(v) => set("assessmentCorrectToPass", Number(v) || 0)}
+                placeholder="60"
+              />
+            </div>
+          </div>
+        )}
+      </div>
     </>
   );
 }
@@ -897,12 +946,13 @@ export function CompletionProgressPage({
 
       try {
         setLoadErrorMessage(null);
-        const [config, notifier, bookmarking, estimatedTime, pageLevelProgress] = await Promise.all([
+        const [config, notifier, bookmarking, estimatedTime, pageLevelProgress, assessment] = await Promise.all([
           getCourseTechnicalSettings(courseId),
           getCourseCompletionNotifier(courseId),
           getCourseBookmarkingSettings(courseId),
           getCourseEstimatedTimeSettings(courseId),
           getCoursePageLevelProgressSettings(courseId),
+          getCourseAssessmentSettings(courseId),
         ]);
         if (cancelled) return;
 
@@ -950,6 +1000,16 @@ export function CompletionProgressPage({
           progressIndicatorAriaLabel: pageLevelProgress.progressIndicatorAriaLabel,
           progressType: pageLevelProgress.progressType,
           progressFormat: pageLevelProgress.progressFormat,
+          assessmentCompletionEnabled: !!assessment._isEnabled,
+          assessmentIsPercentageBased: typeof assessment._isPercentageBased === "boolean"
+            ? assessment._isPercentageBased
+            : DEFAULT_SETTINGS.assessmentIsPercentageBased,
+          assessmentScoreToPass: typeof assessment._scoreToPass === "number"
+            ? assessment._scoreToPass
+            : DEFAULT_SETTINGS.assessmentScoreToPass,
+          assessmentCorrectToPass: typeof assessment._correctToPass === "number"
+            ? assessment._correctToPass
+            : DEFAULT_SETTINGS.assessmentCorrectToPass,
         };
 
         setConfigId(config._id ?? null);
@@ -1020,6 +1080,12 @@ export function CompletionProgressPage({
           no: cfg.bookmarkingPromptNo,
         },
       };
+      const nextAssessment: AssessmentConfig = {
+        _isEnabled: cfg.assessmentCompletionEnabled,
+        _isPercentageBased: cfg.assessmentIsPercentageBased,
+        _scoreToPass: cfg.assessmentScoreToPass,
+        _correctToPass: cfg.assessmentCorrectToPass,
+      };
       const changedFields: Partial<CourseTechnicalSettings> = {
         _id: configId,
         _courseId: courseId,
@@ -1038,6 +1104,7 @@ export function CompletionProgressPage({
 
       await updateCourseTechnicalSettings(configId, changedFields);
       await saveCourseBookmarkingSettings(courseId, nextBookmarking);
+      await saveCourseAssessmentSettings(courseId, nextAssessment);
       await saveCourseEstimatedTimeSettings(courseId, nextEstimatedTime);
       await saveCoursePageLevelProgressSettings(courseId, {
         progressBarStyle: cfg.progressBarStyle,

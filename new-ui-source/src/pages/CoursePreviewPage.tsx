@@ -128,7 +128,8 @@ export default function CoursePreviewPage() {
         courseTitle={courseTitle}
         loginName={user?.username || user?.email || "Not signed in"}
         activeNav="preview"
-        onBack={() => navigate("/")}
+        onBack={() => window.history.length > 1 ? navigate(-1) : navigate("/")}
+        onHome={() => navigate("/")}
         onOpenCourseSettings={() => navigate(`/course/${id}/setup`)}
         onOpenStoryboard={() => navigate(`/course/${id}/setup?panel=storyboarding`)}
         onOpenEditor={() => navigate(`/course/${id}`, { state: { title: courseTitle, description: courseDescription, theme: themeName, menu: menuName } })}
@@ -166,7 +167,7 @@ export default function CoursePreviewPage() {
         </div>
       </div>
 
-      <main className="flex-1 overflow-auto bg-[#e9edf2] px-3 md:px-6 py-4">
+      <main className="flex-1 overflow-auto bg-[#e9edf2] p-2">
         {!previewUrl ? (
           // Four distinct states share the empty-preview slot:
           //   1. "unavailable"  — no `id` in the URL, no tenant on the user, or the
