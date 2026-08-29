@@ -1751,9 +1751,8 @@ export async function saveCourseAssessmentSettings(
   let course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
   const config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
 
-  const shouldEnable = bool(settings._isEnabled, false);
   const isInstalled = isExtensionInstalledByName(config, ASSESSMENT_EXTENSION_NAME);
-
+  const shouldEnable = settings._isEnabled === undefined ? isInstalled : bool(settings._isEnabled, false);
   if (shouldEnable && !isInstalled) {
     const ids = await resolveExtensionTypeIdsByNames([ASSESSMENT_EXTENSION_NAME]);
     if (ids.length) {
