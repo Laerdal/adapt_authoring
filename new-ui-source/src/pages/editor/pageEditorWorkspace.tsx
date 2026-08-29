@@ -908,7 +908,10 @@ export type ExtensionInheritanceTag = "inherited" | "overridden" | null;
 const EXTENSION_ENABLE_FIELD_NAMES = new Set(["_isEnabled", "_enableOverride"]);
 
 function deepValuesEqual(a: unknown, b: unknown): boolean {
-  const an = a === undefined || a === null ? "" : a;
+  // Missing values are treated as "use schema default" at this level.
+  if (a === undefined) return true;
+
+  const an = a === null ? "" : a;
   const bn = b === undefined || b === null ? "" : b;
   if (an === bn) return true;
   try {
