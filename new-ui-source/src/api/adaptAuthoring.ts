@@ -637,10 +637,20 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
         .filter((s): s is string => !!s && !OBJECT_ID.test(s))
     : [];
 
+  // Every screen (Setup, Storyboard, Preview, Word/PDF export) sources the
+  // course title from this one call — resolve the backend's schema-default
+  // placeholder ("New Course Title", seeded when a course is created without
+  // one) here, ONCE, rather than in every consumer. A genuinely un-named
+  // course still needs a label, so it falls back to the friendly "Untitled
+  // Course" instead of leaking the backend's internal default string.
+  const isDefaultTitle = (t: string | undefined) => !t || !t.trim() || DEFAULT_SCHEMA_TITLES.has(t.trim());
+  const rawTitle = (course.displayTitle || course.title || "").trim();
+  const resolvedTitle = isDefaultTitle(rawTitle) ? "Untitled Course" : rawTitle;
+
   return {
     courseId,
-    title: course.title || "Untitled Course",
-    displayTitle: course.displayTitle ?? "",
+    title: resolvedTitle,
+    displayTitle: isDefaultTitle(course.displayTitle) ? "" : (course.displayTitle as string).trim(),
     subtitle: course.subtitle ?? course._subtitle ?? "",
     description: course.description || "",
     instruction: course.instruction ?? "",
@@ -2052,6 +2062,70 @@ interface EngineContentNode {
   properties?: Record<string, unknown>;
 }
 
+// Adapt's content model.schema falls back to placeholder titles ("New Article
+// Title", "New Block Title", "New Component Title", "New Menu/Page Title",
+// "New Course Title") whenever a node is created without an explicit title
+// (e.g. via the Course Structure panel's "add" actions). Those are backend
+// scaffolding, not authored content — the Storyboard must not project them as
+// if the author had typed them (ADAPT-3785).
+//
+// The Storyboard editor's own historical seed content ("New Page Title",
+// "New Section Title") and the editor's input placeholders ("Article Title",
+// "Component title", "Section Title") land in this same list so any legacy
+// storyboard record that captured them as heading text is also cleaned up on
+// load and on export.
+export const DEFAULT_SCHEMA_TITLES = new Set([
+  "New Article Title",
+  "New Block Title",
+  "New Component Title",
+  "New Menu/Page Title",
+  "New Course Title",
+  "New Page Title",
+  "New Section Title",
+  "Article Title",
+  "Block Title",
+  "Component title",
+  "Component Title",
+  "Section Title",
+  "Page Title",
+]);
+export function isDefaultSchemaTitle(text: string | undefined | null): boolean {
+  const t = (text || "").trim();
+  return !t || DEFAULT_SCHEMA_TITLES.has(t);
+}
+const storyboardLabel = (n: EngineContentNode): string => {
+  const t = (n.displayTitle || n.title || "").trim();
+  return DEFAULT_SCHEMA_TITLES.has(t) ? "" : t;
+};
+
+// Strip empty and schema-default heading blocks from a persisted storyboard
+// document. Legacy records — created before the storyboard projector filtered
+// placeholder titles — captured "New Article Title", "New Block Title" etc.
+// as heading text; those bleed into Preview and the Word export until the
+// document is regenerated. Called at load time on any doc used as the editor
+// seed so the user never sees inherited placeholder scaffolding.
+//
+// A block is dropped when it is a heading whose plain-text content is empty or
+// exactly matches one of the known placeholder titles. Every other block
+// (paragraph, sbComponent, sbAssessment, sbPlaceholder, list, etc.) is
+// preserved verbatim.
+export function stripPlaceholderHeadings(blocks: unknown[]): unknown[] {
+  if (!Array.isArray(blocks)) return blocks;
+  const inline = (content: unknown): string => {
+    if (typeof content === "string") return content;
+    if (!Array.isArray(content)) return "";
+    return content
+      .map((n) => (n && typeof (n as { text?: unknown }).text === "string" ? (n as { text: string }).text : ""))
+      .join("");
+  };
+  return blocks.filter((b) => {
+    if (!b || typeof b !== "object") return true;
+    const block = b as { type?: string; content?: unknown };
+    if (block.type !== "heading") return true;
+    return !isDefaultSchemaTitle(inline(block.content));
+  });
+}
+
 // A component type installed on the instance (GET /api/componenttype).
 export interface ComponentTypeOption {
   component: string; // engine `_component` key, e.g. 'text'
@@ -2360,7 +2434,7 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
     getCourseAssetIdMap(courseId),
   ]);
 
-  const label = (n: EngineContentNode) => n.displayTitle || n.title || "Untitled";
+  const label = storyboardLabel;
   // Plugin fields live under `properties`; fall back to the top level for any
   // legacy data written before that was fixed.
   const propOf = (n: EngineContentNode, key: "_graphic" | "_media") =>
@@ -2457,11 +2531,30 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
     }
     // Assessment question components → assessment card (options + feedback).
     if (sbKind && isAssessmentComponentKind(sbKind)) {
-      const data = parseAssessmentData(sbKind as AssessmentKind, props, stripHtml(comp.body || ""));
+      // ADAPT-3785 §2/§3 — Question Title source of truth + de-duplication:
+      //   • The question title lives on the backend component's `displayTitle`
+      //     (with `title` as a mirror). This IS the question shown to the
+      //     learner. `body` may hold legacy text on older records.
+      //   • The Storyboard round-trips it through `data.question` (the Body
+      //     textarea in the assessment card) — the block-level Title input
+      //     stays empty when displayTitle is the only source, so the same
+      //     text never appears in two edit fields at once.
+      //   • Only when `title` and `displayTitle` genuinely differ (an unusual
+      //     hand-edit) do we surface the block-level title separately.
+      const displayTitle = ((comp.displayTitle as string) || "").trim();
+      const rawTitle = ((comp.title as string) || "").trim();
+      const cleanDisplayTitle = isDefaultSchemaTitle(displayTitle) ? "" : displayTitle;
+      const cleanTitle = isDefaultSchemaTitle(rawTitle) ? "" : rawTitle;
+      const questionSeed = cleanDisplayTitle || cleanTitle || stripHtml(comp.body || "");
+      // Block-title input stays empty unless the AT stored a distinct `title`
+      // (independent of displayTitle) — avoids duplicating displayTitle into
+      // the block-title input on reload.
+      const blockTitleProp = cleanTitle && cleanTitle !== questionSeed ? cleanTitle : "";
+      const data = parseAssessmentData(sbKind as AssessmentKind, props, questionSeed);
       out.push({
         id: comp._id,
         type: "sbAssessment",
-        props: { kind: sbKind, title: label(comp), adaptComponent: kindOf, data: JSON.stringify(data) },
+        props: { kind: sbKind, title: blockTitleProp, adaptComponent: kindOf, data: JSON.stringify(data) },
       });
       return;
     }
@@ -2551,14 +2644,24 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       return;
     }
     // Unknown / text → H4 heading + body paragraph (text write-back contract).
-    out.push({ id: comp._id, type: "heading", props: { level: 4 }, content: label(comp) });
+    // Suppress the H4 entirely when the component has no authored title —
+    // otherwise the storyboard/export show an anonymous heading line above
+    // the body paragraph, which reads as an "empty title" placeholder.
+    const compTitle = label(comp);
+    if (compTitle) out.push({ id: comp._id, type: "heading", props: { level: 4 }, content: compTitle });
     const bodyText = stripHtml(comp.body || "");
     if (bodyText) out.push({ id: `${comp._id}${BODY_SUFFIX}`, type: "paragraph", content: bodyText });
   };
   const emitTopic = (page: EngineContentNode) => {
-    out.push({ id: page._id, type: "heading", props: { level: 1 }, content: label(page) });
+    // A page/article/block with no authored title (schema default like
+    // "New Menu/Page Title") is projected without its header — see the
+    // storyboardLabel + DEFAULT_SCHEMA_TITLES filter. Emitting empty headings
+    // clutters the document with blank lines and pollutes the Word export.
+    const topicTitle = label(page);
+    if (topicTitle) out.push({ id: page._id, type: "heading", props: { level: 1 }, content: topicTitle });
     for (const article of childrenOf(articles, page._id)) {
-      out.push({ id: article._id, type: "heading", props: { level: 2 }, content: label(article) });
+      const articleTitle = label(article);
+      if (articleTitle) out.push({ id: article._id, type: "heading", props: { level: 2 }, content: articleTitle });
       // The generation engine caps each Adapt block at 2 components — extra
       // components are placed in continuation blocks that carry the SAME H3
       // title. When we round-trip the course, those continuation blocks would
@@ -2568,7 +2671,8 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       let prevTitle: string | null = null;
       for (const blk of childrenOf(blocks, article._id)) {
         const title = label(blk);
-        if (title !== prevTitle) {
+        // Same suppression rule as pages/articles above.
+        if (title && title !== prevTitle) {
           out.push({ id: blk._id, type: "heading", props: { level: 3 }, content: title });
           prevTitle = title;
         }
@@ -2601,7 +2705,7 @@ export async function saveStoryboardToCourse(
     getContentByCourse("component", courseId),
   ]);
 
-  const label = (n: EngineContentNode) => n.displayTitle || n.title || "Untitled";
+  const label = storyboardLabel;
   const index = new Map<
     string,
     { level: StructureLevel; title: string; body?: string; component?: string; parentId?: string }

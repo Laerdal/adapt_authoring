@@ -403,12 +403,31 @@ function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => string 
     } else if (type === "sbAssessment") {
       const kind = ((raw.props && raw.props.kind) || "mcq") as AssessmentKind;
       const data = safeParseJson<AssessmentData>(raw.props && raw.props.data, { question: "" });
+      // Learner-facing title mapping (ADAPT-3785 §2 clarification):
+      //   • If the author filled in the question body, that IS the MCQ title
+      //     shown to the learner — it becomes the component's `title` +
+      //     `displayTitle` in the Adapt content model.
+      //   • Otherwise fall back to the block-level title input.
+      //   • Final fallback "Question" only when both are empty (schema needs
+      //     a non-empty title for the component to save).
+      //
+      // Body-vs-Title de-duplication (ADAPT-3785 §3):
+      //   The Storyboard `bn-inline-content` (question text) drives the
+      //   displayTitle. If we ALSO write it into `body`, the learner sees the
+      //   same text twice — once as the title, once as the description. So we
+      //   only emit body when it differs from the resolved title (i.e. when
+      //   the title came from the block-title fallback and the author wrote a
+      //   distinct question body — an edge case; empty otherwise).
+      const blockTitle = ((raw.props && (raw.props.title as string)) || "").trim();
+      const questionText = (data.question || "").trim();
+      const resolvedTitle = questionText || blockTitle || "Question";
+      const bodyText = questionText && questionText !== resolvedTitle ? questionText : "";
       comp = {
         sourceBlockId: id,
         existingId,
         componentKey: kind,
-        title: ((raw.props && raw.props.title) || data.question || "").trim() || "Question",
-        body: data.question || "",
+        title: resolvedTitle,
+        body: bodyText,
         assessmentPatch: buildAssessmentFields(kind, data),
       };
       // GMCQ: record per-option DAM-asset ids so we can create the courseasset
@@ -550,9 +569,11 @@ export async function planStoryboardGeneration(
     if (raw.type === "sbAssessment") {
       const kind = (raw.props && raw.props.kind) || "";
       const data = safeParseJson<AssessmentData>(raw.props && raw.props.data, { question: "" });
+      const blockTitle = ((raw.props && (raw.props.title as string)) || "").trim();
       if (isAssessmentKind(kind)) {
-        const problems = validateAssessment(kind, data);
-        if (problems.length) warnings.push(`Assessment "${data.question || kind}": ${problems[0]}`);
+        // Block Title is a valid question source (ADAPT-3785 §2 — feeds `displayTitle`).
+        const problems = validateAssessment(kind, data, blockTitle);
+        if (problems.length) warnings.push(`Assessment "${data.question || blockTitle || kind}": ${problems[0]}`);
       }
     }
   }
@@ -678,12 +699,15 @@ export async function generateStoryboardCourse(
         gSort += 1;
 
         let cSort = 1;
-        for (const c of g.components) {
+        for (let ci = 0; ci < g.components.length; ci += 1) {
+          const c = g.components[ci];
           const bodyHtml = bodyHtmlOf(c);
-          // Default component alignment is Left. New components added to the
-          // Storyboard are always generated (and saved) with left alignment so
-          // the Storyboard sequence and layout match the generated course.
-          const layout: "left" = "left";
+          // A Content Group (block) holding a single component should fill
+          // the full width (matches the Course Preview / real Adapt layout —
+          // there's nothing to sit beside it). Two components split left/right,
+          // as before. `enforceMaxComponentsPerBlock` guarantees ≤2 per group.
+          const layout: "full" | "left" | "right" =
+            g.components.length <= 1 ? "full" : ci === 0 ? "left" : "right";
           // Resolve the storyboard kind → installed Adapt component (source of
           // truth). null = unsupported (NO text fallback).
           const resolvedType = getType(c.componentKey);

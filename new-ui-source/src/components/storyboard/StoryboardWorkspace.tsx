@@ -31,6 +31,8 @@ import {
   importStoryboardDocument,
   updateStoryboard,
   addStoryboardAudit,
+  isDefaultSchemaTitle,
+  stripPlaceholderHeadings,
   type ImportFormat,
   type StoryboardStatus,
 } from '@/api/adaptAuthoring';
@@ -91,16 +93,18 @@ function readFileBase64(file: File): Promise<string> {
   });
 }
 
-// Starter content for a brand-new storyboard (mirrors the editor's own default).
+// Starter content for a brand-new storyboard. Deliberately EMPTY of any
+// placeholder title text — historically we seeded "New Page Title" / "New
+// Section Title" here, but those strings leaked into Preview and the Word
+// export as if they were authored content (ADAPT-3785). An empty paragraph
+// gives BlockNote a valid initial block without any visible scaffolding.
 const STARTER_DOCUMENT: unknown[] = [
-  { type: 'heading', props: { level: 1 }, content: 'New Page Title' },
-  { type: 'heading', props: { level: 2 }, content: 'New Section Title' },
   { type: 'paragraph', content: '' },
 ];
 
 export default function StoryboardWorkspace({
   courseId,
-  courseTitle = 'Untitled course',
+  courseTitle = '',
   initialDocument,
   onBack,
 }: {
@@ -109,6 +113,12 @@ export default function StoryboardWorkspace({
   initialDocument?: StoryboardDocument;
   onBack?: () => void;
 }) {
+  // Defensive filter against callers that pass the backend's schema-default
+  // course title ("New Course Title" and friends). The Setup / StoryboardPage
+  // routes already resolve this via getCourseBootstrapData, but embedders that
+  // hand-off a raw course record shouldn't leak the placeholder onto the
+  // storyboard header, into the export filename or into the docx title.
+  const resolvedCourseTitle = isDefaultSchemaTitle(courseTitle) ? '' : courseTitle;
   const sb = useStoryboard(courseId);
   const review = useStoryboardReview(sb.storyboardId);
   const editorRef = useRef<StoryboardEditorHandle>(null);
@@ -188,6 +198,13 @@ export default function StoryboardWorkspace({
               ? (initialDocument as unknown[])
               : STARTER_DOCUMENT;
       }
+      // Regardless of source, strip any placeholder heading text (ADAPT-3785).
+      // The course projector already skips defaults, but a persisted DB
+      // snapshot from before that filter — or a snapshot captured from a
+      // course that was later edited to remove real titles — can still carry
+      // "New Article Title", "New Block Title" etc. as heading content.
+      doc = stripPlaceholderHeadings(doc);
+      if (!doc.length) doc = STARTER_DOCUMENT;
       initialContent.current = doc;
       sb.setDocument(doc);
       sb.markSaved(doc); // seeding from the backend is not an unsaved edit
@@ -229,7 +246,7 @@ export default function StoryboardWorkspace({
     }
     flash('Refreshing from course…');
     try {
-      const fresh = await getCourseStoryboardBlocks(courseId);
+      const fresh = stripPlaceholderHeadings(await getCourseStoryboardBlocks(courseId));
       if (fresh.length) {
         editorRef.current?.setDocument(fresh);
         sb.setDocument(fresh);
@@ -285,7 +302,7 @@ export default function StoryboardWorkspace({
           }
           // 3. Re-seed from the backend so the storyboard mirrors the saved
           //    course (new content ids + canonical media) — no manual refresh.
-          const fresh = await getCourseStoryboardBlocks(courseId);
+          const fresh = stripPlaceholderHeadings(await getCourseStoryboardBlocks(courseId));
           if (fresh.length) {
             editorRef.current?.setDocument(fresh);
             sb.setDocument(fresh);
@@ -295,8 +312,10 @@ export default function StoryboardWorkspace({
           }
         }
       }
-      // 4. Persist the storyboard snapshot (documentJson).
-      if (sb.storyboardId) await sb.save();
+      // 4. Persist the storyboard snapshot (documentJson) — write what's
+      //    currently on screen, so the persisted record always matches the
+      //    editor content (this is what Preview + Export read from).
+      if (sb.storyboardId) await sb.save(editorRef.current?.getDocument() as unknown[] | undefined);
       flash(msg);
     } catch (e) {
       flash(`Save failed — ${e instanceof Error ? e.message : 'unknown error'}`);
@@ -353,13 +372,25 @@ export default function StoryboardWorkspace({
     const isPdf = label.toLowerCase().includes('pdf');
     flash('Exporting…');
     try {
-      if (sb.dirty) await sb.save(); // export reads the persisted document
+      // The export route reads the storyboard record's persisted documentJson
+      // — NOT this component's React state — so it must be written before
+      // every export, regardless of the `dirty` flag: content projected from
+      // the course on load is marked "saved" for the UI (no false "unsaved
+      // changes" pill) without ever having been PUT to the backend record.
+      // Pull straight from the live editor and scrub any placeholder-title
+      // headings so the persisted document (and therefore the export) matches
+      // exactly what Preview shows, not the legacy scaffolding.
+      const liveDoc = stripPlaceholderHeadings(
+        (editorRef.current?.getDocument() as unknown[] | undefined) ?? [],
+      );
+      await sb.save(liveDoc);
+      const titleForExport = resolvedCourseTitle;
       const { filename, mime, dataBase64 } = isPdf
-        ? await exportStoryboardPdf(sb.storyboardId, courseTitle)
-        : await exportStoryboardWord(sb.storyboardId, courseTitle);
+        ? await exportStoryboardPdf(sb.storyboardId, titleForExport)
+        : await exportStoryboardWord(sb.storyboardId, titleForExport);
       // Name the download after the course title (fall back to the server name).
       const ext = isPdf ? 'pdf' : 'docx';
-      const safeCourse = courseTitle.trim().replace(/[\\/:*?"<>|]+/g, '_');
+      const safeCourse = titleForExport.trim().replace(/[\\/:*?"<>|]+/g, '_');
       const downloadName = safeCourse ? `${safeCourse}.${ext}` : filename;
       triggerDownload(base64ToBlob(dataBase64, mime), downloadName);
     } catch (e) {
@@ -411,7 +442,7 @@ export default function StoryboardWorkspace({
       }
       // Re-seed from the freshly-generated course so every block carries a
       // content id — the next generation is then a no-op.
-      const fresh = await getCourseStoryboardBlocks(courseId);
+      const fresh = stripPlaceholderHeadings(await getCourseStoryboardBlocks(courseId));
       if (fresh.length) {
         editorRef.current?.setDocument(fresh);
         sb.setDocument(fresh);
@@ -483,14 +514,21 @@ export default function StoryboardWorkspace({
             {/* Authoring canvas ~60% of the viewport (Lovable proportions),
                 capped to the center column when the side panels squeeze it. */}
             <article className="mx-auto w-[60vw] max-w-full px-8 py-10">
-              <div className="mb-8 border-b pb-5">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.2em]" style={{ color: 'var(--samaritan)' }}>
-                  Course
+              {/* Show a course header ONLY when the backend has a real title.
+                  When the course is unnamed (or still carrying the schema
+                  default like "New Course Title") we suppress the entire
+                  Course/H1 block — ADAPT-3785 forbids rendering placeholder
+                  title text on the storyboard, in Preview, or in the export. */}
+              {resolvedCourseTitle ? (
+                <div className="mb-8 border-b pb-5">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.2em]" style={{ color: 'var(--samaritan)' }}>
+                    Course
+                  </div>
+                  <h1 className="mt-1 text-[2.6rem] font-bold leading-tight tracking-tight text-foreground">
+                    {resolvedCourseTitle}
+                  </h1>
                 </div>
-                <h1 className="mt-1 text-[2.6rem] font-bold leading-tight tracking-tight text-foreground">
-                  {courseTitle}
-                </h1>
-              </div>
+              ) : null}
               {booted ? (
                 <BlockNoteStoryboardEditor
                   key={sb.storyboardId ?? 'sb'}
@@ -546,7 +584,7 @@ export default function StoryboardWorkspace({
       {aiConfig && (
         <AiAssistPopover
           initialText={aiConfig.initialText || ''}
-          courseContext={courseTitle}
+          courseContext={resolvedCourseTitle}
           onInsert={(t) => {
             aiConfig.onInsert(t);
             flash('AI content inserted as a component. Save to persist it.');

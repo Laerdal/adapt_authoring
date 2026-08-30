@@ -209,10 +209,19 @@ export function defaultAssessmentData(kind: AssessmentKind): AssessmentData {
   }
 }
 
-/** Return a list of human-readable issues; empty ⇒ generation-ready (AC5). */
-export function validateAssessment(kind: AssessmentKind, data: AssessmentData): string[] {
+/** Return a list of human-readable issues; empty ⇒ generation-ready (AC5).
+ *
+ *  ADAPT-3785 §2 clarification: the block-level Title input feeds the backend
+ *  `displayTitle`. When the author fills it, that IS the question — the Body
+ *  field is optional and simply provides longer question copy when needed.
+ *  `blockTitle` is passed by callers so a filled Title alone satisfies the
+ *  "question required" rule (matches how the backend hydrates `displayTitle`
+ *  from `question || blockTitle` — see `storyboardGeneration.ts`). */
+export function validateAssessment(kind: AssessmentKind, data: AssessmentData, blockTitle: string = ''): string[] {
   const issues: string[] = [];
-  if (!data.question || !data.question.trim()) issues.push('Question text is required.');
+  const hasQuestion = !!(data.question && data.question.trim());
+  const hasTitle = !!blockTitle.trim();
+  if (!hasQuestion && !hasTitle) issues.push('Question text is required.');
 
   switch (kind) {
     case 'mcq':
