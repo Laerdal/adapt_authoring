@@ -8,6 +8,7 @@ type AssetSelectionFieldProps = {
   resolveUrl?: (value: string) => string | null;
   showLabel?: boolean;
   compact?: boolean;
+  required?: boolean;
 };
 
 function extractAssetIdFromCourseAssetPath(value: string): string | null {
@@ -43,6 +44,7 @@ export default function AssetSelectionField({
   resolveUrl,
   showLabel = true,
   compact = false,
+  required = false,
 }: AssetSelectionFieldProps) {
   const resolvePreview = resolveAssetPreviewUrl || resolveUrl;
   const resolvedPreviewUrl = resolvePreview ? resolvePreview(value) : null;
@@ -50,7 +52,11 @@ export default function AssetSelectionField({
 
   return (
     <div className={compact ? "flex flex-col gap-1.5" : "flex flex-col gap-2"}>
-      {showLabel ? <div className="text-[12px] text-[var(--life-base-black)]">{label}</div> : null}
+      {showLabel ? (
+        <div className="text-[12px] text-[var(--life-base-black)]">
+          {label}{required && <span className="ml-0.5 text-[#dc2626]">*</span>}
+        </div>
+      ) : null}
       {previewUrl ? (
         <div className="border border-[var(--life-neutral-200)] rounded-md overflow-hidden bg-[var(--life-neutral-020)]">
           <div className={compact ? "h-20 w-full flex items-center justify-center overflow-hidden bg-[var(--life-neutral-020)]" : "h-56 w-full flex items-center justify-center overflow-hidden bg-[var(--life-neutral-020)]"}>
@@ -60,24 +66,22 @@ export default function AssetSelectionField({
         </div>
       ) : null}
       {value ? (
-        <div className={compact ? "grid grid-cols-2 gap-1.5 min-w-0" : "flex items-center justify-end gap-1.5"}>
-          <button type="button" onClick={onPickAsset} className={compact ? "w-full min-w-0 px-1.5 py-1.5 text-[11px] leading-tight font-semibold rounded-md border border-[var(--life-primary-500)] text-[var(--life-primary-500)] bg-white hover:bg-[var(--life-primary-020)] transition-colors cursor-pointer text-center" : "px-2 py-1 text-[12px] font-semibold rounded-md border border-[var(--life-primary-500)] text-[var(--life-primary-500)] bg-white hover:bg-[var(--life-primary-020)] transition-colors cursor-pointer whitespace-nowrap"}>
+        <div className="flex min-w-0 flex-nowrap gap-1.5">
+          <button type="button" onClick={onPickAsset} className="flex-1 min-w-0 px-2 py-1.5 text-[11px] leading-tight font-semibold rounded-md border border-[var(--life-primary-500)] text-[var(--life-primary-500)] bg-white hover:bg-[var(--life-primary-020)] transition-colors cursor-pointer whitespace-nowrap truncate">
             Change Asset
           </button>
-          <button type="button" onClick={onClear} className={compact ? "w-full min-w-0 px-1.5 py-1.5 text-[11px] leading-tight font-semibold rounded-md border border-[var(--life-critical-500)] text-[var(--life-critical-500)] bg-white hover:bg-[var(--life-critical-050)] transition-colors cursor-pointer text-center" : "px-2 py-1 text-[12px] font-semibold rounded-md border border-[var(--life-critical-500)] text-[var(--life-critical-500)] bg-white hover:bg-[var(--life-critical-050)] transition-colors cursor-pointer whitespace-nowrap"}>
+          <button type="button" onClick={onClear} className="flex-1 min-w-0 px-2 py-1.5 text-[11px] leading-tight font-semibold rounded-md border border-[var(--life-critical-500)] text-[var(--life-critical-500)] bg-white hover:bg-[var(--life-critical-050)] transition-colors cursor-pointer whitespace-nowrap truncate">
             Remove Asset
           </button>
         </div>
       ) : (
-        <div className={compact ? "grid grid-cols-2 gap-1.5 min-w-0" : "flex gap-2.5 flex-wrap"}>
-          <button type="button" onClick={onPickAsset} className={compact ? "w-full min-w-0 px-1.5 py-1.5 text-[11px] leading-tight font-semibold rounded-md bg-[var(--life-primary-500)] text-white hover:bg-[var(--life-primary-700)] transition-colors cursor-pointer text-center" : "px-2.5 py-1.5 text-[13px] font-semibold rounded-md bg-[var(--life-primary-500)] text-white hover:bg-[var(--life-primary-700)] transition-colors cursor-pointer flex items-center gap-1.5"}>
-            {compact ? null : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8l2 3h6a2 2 0 0 1 2 2z" /></svg>}
-            {compact ? "Select Asset" : "Select an Asset"}
+        <div className="flex min-w-0 flex-nowrap gap-1.5">
+          <button type="button" onClick={onPickAsset} className="flex-1 min-w-0 px-2 py-1.5 text-[11px] leading-tight font-semibold rounded-md bg-[var(--life-primary-500)] text-white hover:bg-[var(--life-primary-700)] transition-colors cursor-pointer whitespace-nowrap truncate">
+            Select Asset
           </button>
           {onPickExternal ? (
-            <button type="button" onClick={onPickExternal} className={compact ? "w-full min-w-0 px-1.5 py-1.5 text-[11px] leading-tight font-semibold rounded-md border border-[var(--life-primary-500)] text-[var(--life-primary-500)] hover:bg-[var(--life-primary-020)] transition-colors cursor-pointer text-center" : "px-2.5 py-1.5 text-[13px] font-semibold rounded-md border border-[var(--life-primary-500)] text-[var(--life-primary-500)] hover:bg-[var(--life-primary-020)] transition-colors cursor-pointer flex items-center gap-1.5"}>
-              {compact ? null : <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07L11.65 5" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07L12.35 19" /></svg>}
-              {compact ? "External Asset" : "Select an External Asset"}
+            <button type="button" onClick={onPickExternal} className="flex-1 min-w-0 px-2 py-1.5 text-[11px] leading-tight font-semibold rounded-md border border-[var(--life-primary-500)] text-[var(--life-primary-500)] hover:bg-[var(--life-primary-020)] transition-colors cursor-pointer whitespace-nowrap truncate">
+              External Asset
             </button>
           ) : null}
         </div>

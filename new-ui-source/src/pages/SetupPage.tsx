@@ -3423,7 +3423,8 @@ function CourseCreationCenterContent() {
         courseTitle={title}
         loginName={loginName}
         activeNav={primaryTopNav}
-        onBack={() => navigate("/")}
+        onBack={() => window.history.length > 1 ? navigate(-1) : navigate("/")}
+        onHome={() => navigate("/")}
         onOpenCourseSettings={() => {
           navigate(`/course/${courseId}/setup`);
           setActiveNav("overview");

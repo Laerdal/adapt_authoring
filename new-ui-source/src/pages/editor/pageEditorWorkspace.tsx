@@ -12,14 +12,20 @@ import PageEditorNavigation from "./pageEditorNavigation";
 import { useNavigate } from "react-router-dom";
 import { apiClient } from "../../api/client";
 import {
+  buildSchemaDefaults,
   componentSchemaSupportsPropertiesField,
   createCourseAssetMapping,
   createArticle,
   createComponent,
   deleteStructureNode,
+  enableExtensionForCourse,
   getComponentBehaviourSchema,
+  getComponentExtensionSchema,
   getCourseAssetMappings,
   getCourseStructure,
+  getExtensionSchemasByLevel,
+  getExtensionTypeOptions,
+  getNavigationSettings,
   pasteTemplateIntoCourse,
   removeCourseAssetMappings,
   saveContentAsTemplate,
@@ -29,6 +35,11 @@ import {
   seedDefaultTopic,
   type ComponentTypeOption,
   type DashboardTemplate,
+  type ExtensionFieldSchema,
+  type ExtensionSchemaLevel,
+  type ExtensionTypeOption,
+  type NavFooterButton,
+  type NavFooterButtonKey,
   type UserSummary,
   updateComponentLayout,
   updateStructureNode,
@@ -190,6 +201,7 @@ type TopicAssetTarget =
   | { scope: "contentGroupHeaderBackground"; articleId: string; blockId: string; bp: BreakpointKey }
   | { scope: "componentBackground"; articleId: string; blockId: string; componentId: string; bp: BreakpointKey }
   | { scope: "componentProperty"; articleId: string; blockId: string; componentId: string; path: string }
+  | { scope: "extensionProperty"; level: "topic" | "section" | "contentGroup" | "component"; articleId?: string; blockId?: string; componentId?: string; extensionKey: string; path: string }
   | { scope: "themeHeaderGraphic" }
   | { scope: "themeHeaderBackground"; bp: BreakpointKey }
   | { scope: "menuGraphic" }
@@ -338,6 +350,8 @@ type BehaviourFieldSchema = {
   extra?: { palette?: string[][] };
   minItems?: number;
   maxItems?: number;
+  required?: boolean;
+  validators?: string[];
 };
 
 function formatBehaviourFieldName(fieldName: string): string {
@@ -401,8 +415,19 @@ const BEHAVIOUR_ASSET_FIELD_NAMES = new Set([
   "poster", "mp4", "mp3", "ogg", "webm", "_backgroundImage",
 ]);
 
+// Matches the old authoring tool's ScaffoldAssetView (frontend/src/modules/
+// scaffold/views/scaffoldAssetView.js), which derives its asset type from
+// `inputType.replace(/Asset|:/g, '')` — i.e. ANY inputType starting with
+// "Asset" is an asset field, with or without a ":subtype" (e.g. plain
+// "Asset" on adapt-contrib-resources' `_link`, not just "Asset:image").
 function isBehaviourAssetInputType(fieldSchema: BehaviourFieldSchema): boolean {
-  return typeof fieldSchema.inputType === "string" && fieldSchema.inputType.startsWith("Asset:");
+  return typeof fieldSchema.inputType === "string" && fieldSchema.inputType.startsWith("Asset");
+}
+
+// Matches the old authoring tool's required-field validation convention:
+// only an explicit "required" validator marks the field as required.
+function isBehaviourFieldRequired(fieldSchema: BehaviourFieldSchema): boolean {
+  return Array.isArray(fieldSchema.validators) && fieldSchema.validators.includes("required");
 }
 
 type BehaviourAssetPath = { path: string; value: string };
@@ -502,14 +527,14 @@ function collectBehaviourTextPaths(
 }
 
 type BehaviourAssetContext = {
-  pageId: string;
-  articleId: string;
-  blockId: string;
-  componentId: string;
+  pageId?: string;
+  articleId?: string;
+  blockId?: string;
+  componentId?: string;
   resolveAssetPreviewUrl: (value: string) => string | null;
-  onPickAsset: (path: string) => void;
-  onPickExternal: (path: string, currentValue: string) => void;
-  onClear: (path: string) => void;
+  onPickAsset: (path: string, extensionKey?: string) => void;
+  onPickExternal: (path: string, currentValue: string, extensionKey?: string) => void;
+  onClear: (path: string, extensionKey?: string) => void;
 };
 
 function truncateBehaviourItemTitle(value: string): string {
@@ -555,6 +580,7 @@ function BehaviourField({
   assetContext?: BehaviourAssetContext;
 }) {
   const label = fieldSchema.legend || fieldSchema.title || formatBehaviourFieldName(fieldName);
+  const isRequired = isBehaviourFieldRequired(fieldSchema);
   const type = fieldSchema.type;
   const inputTypeStr = typeof fieldSchema.inputType === "string" ? fieldSchema.inputType : undefined;
   const inputTypeObj = typeof fieldSchema.inputType === "object" ? fieldSchema.inputType : undefined;
@@ -566,20 +592,24 @@ function BehaviourField({
   if (type === "object" && fieldSchema.properties) {
     const objectValue = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
     const hasAssetSrc = assetContext && Object.prototype.hasOwnProperty.call(fieldSchema.properties, "src");
-    return (
-      <TopicNestedAccordion title={label}>
+    const hasEnabledToggle = fieldSchema.properties._isEnabled?.type === "boolean";
+    const objectFields = Object.keys(fieldSchema.properties).filter((childKey) =>
+      !(hasEnabledToggle && childKey === "_isEnabled") && !(hasAssetSrc && childKey === "src")
+    );
+    const fields = (
+      <>
         {hasAssetSrc && assetContext && (
           <TopicAssetField
             resolveAssetPreviewUrl={assetContext.resolveAssetPreviewUrl}
-            label="Image"
+            label={label}
+            required={isRequired}
             value={asString(objectValue.src)}
             onPickAsset={() => assetContext.onPickAsset(`${path}.src`)}
             onPickExternal={() => assetContext.onPickExternal(`${path}.src`, asString(objectValue.src))}
             onClear={() => assetContext.onClear(`${path}.src`)}
           />
         )}
-        {Object.keys(fieldSchema.properties).map((childKey) => {
-          if (hasAssetSrc && childKey === "src") return null;
+        {objectFields.map((childKey) => {
           const childSchema = fieldSchema.properties![childKey];
           if (!childSchema || childSchema.editorOnly) return null;
           return (
@@ -594,6 +624,22 @@ function BehaviourField({
             />
           );
         })}
+      </>
+    );
+    if (hasEnabledToggle) {
+      return (
+        <TopicEnabledNestedAccordion
+          title={<>{label}{isRequired && <span className="text-[#dc2626] ml-0.5">*</span>}</>}
+          enabled={objectValue._isEnabled !== false}
+          onEnabledChange={(enabled) => onChange(`${path}._isEnabled`, enabled)}
+        >
+          {fields}
+        </TopicEnabledNestedAccordion>
+      );
+    }
+    return (
+      <TopicNestedAccordion title={<>{label}{isRequired && <span className="text-[#dc2626] ml-0.5">*</span>}</>}>
+        {fields}
       </TopicNestedAccordion>
     );
   }
@@ -623,7 +669,7 @@ function BehaviourField({
 
     return (
       <div className="flex flex-col gap-2">
-        <TopicFieldLabel>{label}</TopicFieldLabel>
+        <TopicFieldLabel required={isRequired}>{label}</TopicFieldLabel>
         {items.map((item, index) => {
           const isOpen = openItemIndex === index;
           const itemTitle = pickBehaviourItemTitle(item, itemSchema, index);
@@ -722,6 +768,7 @@ function BehaviourField({
       <TopicAssetField
         resolveAssetPreviewUrl={assetContext.resolveAssetPreviewUrl}
         label={label}
+        required={isRequired}
         value={stringValue}
         onPickAsset={() => assetContext.onPickAsset(path)}
         onPickExternal={() => assetContext.onPickExternal(path, stringValue)}
@@ -731,7 +778,7 @@ function BehaviourField({
   }
 
   if (type === "boolean") {
-    return <TopicCheckbox label={label} checked={!!value} onChange={(checked) => onChange(path, checked)} />;
+    return <TopicCheckbox label={label} required={isRequired} checked={!!value} onChange={(checked) => onChange(path, checked)} />;
   }
 
   if (inputTypeStr === "ColourPicker") {
@@ -749,6 +796,7 @@ function BehaviourField({
     return (
       <TopicSelect
         label={label}
+        required={isRequired}
         value={value !== undefined && value !== null ? String(value) : ""}
         onChange={(v) => onChange(path, v)}
         options={selectOptions}
@@ -760,6 +808,7 @@ function BehaviourField({
     return (
       <TopicTextInput
         label={label}
+        required={isRequired}
         type="number"
         value={value !== undefined && value !== null ? String(value) : ""}
         onChange={(v) => onChange(path, v === "" ? "" : Number(v))}
@@ -774,7 +823,7 @@ function BehaviourField({
         : asString(value);
     return (
       <div className="flex flex-col gap-1.5">
-        <TopicFieldLabel>{label}</TopicFieldLabel>
+        <TopicFieldLabel required={isRequired}>{label}</TopicFieldLabel>
         <textarea
           defaultValue={textValue}
           onBlur={(event) => {
@@ -798,9 +847,479 @@ function BehaviourField({
   return (
     <TopicTextInput
       label={label}
+      required={isRequired}
       value={typeof value === "string" ? value : value === undefined || value === null ? "" : String(value)}
       onChange={(v) => onChange(path, v)}
     />
+  );
+}
+
+// ── Extensions accordion (Topic/Section/Content Group/Component) ───────────
+// Schema-driven "Added to this X" / "Available extensions" panel, shared by
+// all four content levels. `schemasForLevel` (getExtensionSchemasByLevel) is
+// already filtered server-side to the extensions that declare a schema for
+// this specific level, so an extension only ever appears where it actually
+// has settings (e.g. Trickle: Section + Content Group only).
+// A level-specific override for one extension field's rendering (e.g. the
+// navigation footer's `_buttons` field on Topic) — return null/undefined to
+// fall back to the generic schema-driven BehaviourField rendering.
+type ExtensionFieldRenderer = (args: {
+  extensionName: string | undefined;
+  fieldKey: string;
+  fieldSchema: BehaviourFieldSchema;
+  value: unknown;
+  onChange: (path: string, value: unknown) => void;
+}) => React.ReactNode | null | undefined;
+
+type ExtensionsAccordionBodyProps = {
+  levelLabel: string;
+  extensions: Record<string, unknown>;
+  onChange: (next: Record<string, unknown>) => void;
+  schemasForLevel: Record<string, ExtensionFieldSchema>;
+  extensionTypeOptions: ExtensionTypeOption[];
+  onExtensionAdded?: (extensionName: string | undefined) => void;
+  customFieldRenderer?: ExtensionFieldRenderer;
+  getInheritanceTag?: (key: string) => ExtensionInheritanceTag;
+  assetContext?: BehaviourAssetContext;
+};
+
+function extensionDisplayName(
+  key: string,
+  fieldSchema: ExtensionFieldSchema | undefined,
+  extensionTypeOptions: ExtensionTypeOption[]
+): string {
+  const typeOption = extensionTypeOptions.find((o) => o.name === fieldSchema?.name);
+  return typeOption?.displayName || fieldSchema?.title || formatBehaviourFieldName(key);
+}
+
+// ── Inherited/Overridden tags ───────────────────────────────────────────────
+// Simpler, self-contained rule (no cross-level ancestor data needed): an
+// extension's settings at a level are "Overridden" if ANY field (other than
+// `_isEnabled`/`_enableOverride`) differs from that field's own SCHEMA
+// DEFAULT at this same level — otherwise "Inherited". This also naturally
+// covers explicit inherit-sentinel fields for free (e.g. adapt-contrib-
+// bookmarking's `_level` defaults to the literal string `"inherit"`, so an
+// untouched value already equals its own default and reads as "Inherited"
+// with no special-casing needed). Only shown at all when the extension is
+// configurable at more than one level (nothing to inherit from/override
+// otherwise) — see countExtensionApplicableLevels.
+export type ExtensionInheritanceTag = "inherited" | "overridden" | null;
+
+const EXTENSION_ENABLE_FIELD_NAMES = new Set(["_isEnabled", "_enableOverride"]);
+
+function deepValuesEqual(a: unknown, b: unknown): boolean {
+  // Missing values are treated as "use schema default" at this level.
+  if (a === undefined) return true;
+
+  const an = a === null ? "" : a;
+  const bn = b === undefined || b === null ? "" : b;
+  if (an === bn) return true;
+  try {
+    return JSON.stringify(an) === JSON.stringify(bn);
+  } catch {
+    return false;
+  }
+}
+
+type ExtensionFieldSchemaNode = {
+  type?: string;
+  properties?: Record<string, ExtensionFieldSchemaNode>;
+};
+
+// Recurses into nested objects, comparing each LEAF field's stored value
+// against its own schema default (defaultValue mirrors props' shape, from
+// buildSchemaDefaults). Returns one boolean (matches default?) per leaf.
+function collectDefaultMatches(
+  props: Record<string, ExtensionFieldSchemaNode>,
+  defaultValue: Record<string, unknown>,
+  currentValue: Record<string, unknown>
+): boolean[] {
+  const results: boolean[] = [];
+
+  Object.keys(props).forEach((key) => {
+    if (EXTENSION_ENABLE_FIELD_NAMES.has(key)) return;
+    const fieldSchema = props[key];
+
+    if (fieldSchema?.type === "object" && fieldSchema.properties) {
+      results.push(
+        ...collectDefaultMatches(fieldSchema.properties, asRecord(defaultValue[key]), asRecord(currentValue[key]))
+      );
+      return;
+    }
+
+    results.push(deepValuesEqual(currentValue[key], defaultValue[key]));
+  });
+
+  return results;
+}
+
+function computeExtensionInheritanceTag(
+  currentSchema: ExtensionFieldSchema | undefined,
+  currentValue: Record<string, unknown>,
+  applicableLevelCount: number
+): ExtensionInheritanceTag {
+  if (applicableLevelCount <= 1) return null;
+
+  const currentProps = (currentSchema?.properties ?? {}) as Record<string, ExtensionFieldSchemaNode>;
+  if (!Object.keys(currentProps).length) return null;
+
+  const defaults = buildSchemaDefaults(currentProps as Record<string, unknown>);
+  const matches = collectDefaultMatches(currentProps, defaults, currentValue);
+  if (!matches.length) return null;
+
+  return matches.every(Boolean) ? "inherited" : "overridden";
+}
+
+// Not every extension uses `_isEnabled` at a given level — e.g.
+// adapt-navigation-footer's `contentobject` (Topic) schema has no
+// `_isEnabled` at all, only a plain settings field (`_enableOverride`).
+// Only a real `_isEnabled` boolean gets the header checkbox treatment;
+// anything else (including `_enableOverride`) is just rendered as a normal
+// field inside the accordion body via BehaviourField, same as any other
+// setting — no special header control for it.
+type ExtensionEnableControl = { kind: "checkbox"; key: string } | { kind: "none" };
+
+function detectExtensionEnableControl(fieldSchema: ExtensionFieldSchema | undefined): ExtensionEnableControl {
+  const props = (fieldSchema?.properties ?? {}) as Record<string, BehaviourFieldSchema>;
+  if (props._isEnabled?.type === "boolean") {
+    return { kind: "checkbox", key: "_isEnabled" };
+  }
+  return { kind: "none" };
+}
+
+// An extension is only worth surfacing at a given level if there's something
+// to actually do here: either an enable-style control (checkbox/select) or at
+// least one other configurable setting. If a level has neither — the
+// extension is purely inherited from its parent/global setting with nothing
+// to configure or override here — it's excluded entirely (not listed as
+// "Added"/"Available", no dangling checkbox-less/settings-less row).
+function extensionHasVisibleContentAtLevel(fieldSchema: ExtensionFieldSchema | undefined): boolean {
+  const control = detectExtensionEnableControl(fieldSchema);
+  if (control.kind !== "none") return true;
+  return Object.keys(fieldSchema?.properties ?? {}).length > 0;
+}
+
+function ExtensionListItem({
+  itemKey,
+  fieldSchema,
+  displayName,
+  config,
+  onEnableControlChange,
+  onRemove,
+  onFieldChange,
+  customFieldRenderer,
+  inheritanceTag,
+  assetContext,
+}: {
+  itemKey: string;
+  fieldSchema: ExtensionFieldSchema | undefined;
+  displayName: string;
+  config: Record<string, unknown>;
+  onEnableControlChange: (control: ExtensionEnableControl, value: unknown) => void;
+  onRemove: () => void;
+  onFieldChange: (path: string, value: unknown) => void;
+  customFieldRenderer?: ExtensionFieldRenderer;
+  inheritanceTag?: ExtensionInheritanceTag;
+  assetContext?: BehaviourAssetContext;
+}) {
+  const [open, setOpen] = useState(false);
+  const enableControl = detectExtensionEnableControl(fieldSchema);
+  const settingsFields = fieldSchema?.properties ?? {};
+  const settingsKeys = Object.keys(settingsFields).filter(
+    (k) => !(enableControl.kind !== "none" && k === enableControl.key)
+  );
+
+  return (
+    <div className="w-full rounded-[8px] border border-[#d8dee6] bg-white overflow-hidden">
+      <div className="w-full flex items-center gap-1.5 px-2 py-1.5">
+        {enableControl.kind === "checkbox" && (
+          <TopicToggle
+            checked={config[enableControl.key] !== false}
+            onChange={(enabled) => onEnableControlChange(enableControl, enabled)}
+            label={`${displayName} enabled`}
+          />
+        )}
+        <button
+          type="button"
+          onClick={() => setOpen((prev) => !prev)}
+          aria-expanded={open}
+          disabled={!settingsKeys.length}
+          className="flex-1 min-w-0 flex items-center gap-1 text-left disabled:cursor-default"
+        >
+          {!!settingsKeys.length && (
+            <svg
+              className={`shrink-0 transition-transform duration-200 text-[#6b7280] ${open ? "rotate-90" : ""}`}
+              width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+            >
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          )}
+          <span title={displayName} className="truncate text-[12px] font-semibold text-[var(--life-base-black)]">{displayName}</span>
+        </button>
+        {inheritanceTag === "overridden" && (
+          <span title="Overridden" className="shrink-0 px-1 py-0.5 rounded-full text-[9px] leading-none font-semibold bg-[#f3e8ff] text-[#7c3aed]">Overridden</span>
+        )}
+        {inheritanceTag === "inherited" && (
+          <span title="Inherited" className="shrink-0 px-1 py-0.5 rounded-full text-[9px] leading-none font-semibold bg-[#f1f5f9] text-[#64748b]">Inherited</span>
+        )}
+        <button
+          type="button"
+          aria-label={`Remove ${displayName}`}
+          title="Remove"
+          onClick={onRemove}
+          className="w-5 h-5 shrink-0 flex items-center justify-center rounded-md text-[#6b7280] hover:bg-[#fee2e2] hover:text-[#b42318] transition-colors"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+      {open && !!settingsKeys.length && (
+        <div className="px-3 pb-3 pt-2.5 border-t border-[#eef2f6] flex flex-col gap-2.5">
+          {settingsKeys.map((fieldKey) => {
+            const childSchema = settingsFields[fieldKey] as BehaviourFieldSchema;
+            if (!childSchema || typeof childSchema !== "object") return null;
+            const overridden = customFieldRenderer?.({
+              extensionName: fieldSchema?.name,
+              fieldKey,
+              fieldSchema: childSchema,
+              value: config[fieldKey],
+              onChange: onFieldChange,
+            });
+            if (overridden) return <div key={`${itemKey}-${fieldKey}`}>{overridden}</div>;
+            return (
+              <BehaviourField
+                key={`${itemKey}-${fieldKey}`}
+                path={fieldKey}
+                fieldName={fieldKey}
+                fieldSchema={childSchema}
+                value={config[fieldKey]}
+                onChange={onFieldChange}
+                assetContext={assetContext && {
+                  ...assetContext,
+                  onPickAsset: (path) => assetContext.onPickAsset(path, itemKey),
+                  onPickExternal: (path, currentValue) => assetContext.onPickExternal(path, currentValue, itemKey),
+                  onClear: (path) => assetContext.onClear(path, itemKey),
+                }}
+              />
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ExtensionsAccordionBody({
+  levelLabel,
+  extensions,
+  onChange,
+  schemasForLevel,
+  extensionTypeOptions,
+  onExtensionAdded,
+  customFieldRenderer,
+  getInheritanceTag,
+  assetContext,
+}: ExtensionsAccordionBodyProps) {
+  const allKeys = Object.keys(schemasForLevel)
+    .filter((key) => extensionHasVisibleContentAtLevel(schemasForLevel[key]))
+    .sort((a, b) => a.localeCompare(b));
+  const addedKeys = allKeys.filter((key) => Object.prototype.hasOwnProperty.call(extensions, key));
+  const availableKeys = allKeys.filter((key) => !addedKeys.includes(key));
+
+  const handleEnableControlChange = (key: string, control: ExtensionEnableControl, value: unknown) => {
+    if (control.kind === "none") return;
+    onChange({ ...extensions, [key]: { ...asRecord(extensions[key]), [control.key]: value } });
+  };
+  const handleRemove = (key: string) => {
+    const next = { ...extensions };
+    delete next[key];
+    onChange(next);
+  };
+  const handleAdd = (key: string) => {
+    const fieldSchema = schemasForLevel[key];
+    const defaults = buildSchemaDefaults(fieldSchema?.properties as Record<string, unknown> | undefined);
+    const control = detectExtensionEnableControl(fieldSchema);
+    // Newly-added extensions are enabled by default.
+    const patch = control.kind === "checkbox" ? { [control.key]: true } : {};
+    onChange({ ...extensions, [key]: { ...defaults, ...patch } });
+    onExtensionAdded?.(fieldSchema?.name);
+  };
+  const handleFieldChange = (key: string, path: string, value: unknown) => {
+    onChange({ ...extensions, [key]: setBehaviourPath(asRecord(extensions[key]), path, value) });
+  };
+
+  return (
+    <div className="flex flex-col gap-3.5">
+      <div className="flex flex-col gap-2">
+        <TopicFieldLabel>{`Added to this ${levelLabel}`}</TopicFieldLabel>
+        {!addedKeys.length && (
+          <p className="text-[13px] text-[var(--life-neutral-300)]">No extensions added to this {levelLabel} yet.</p>
+        )}
+        {addedKeys.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {addedKeys.map((key) => (
+              <ExtensionListItem
+                key={key}
+                itemKey={key}
+                fieldSchema={schemasForLevel[key]}
+                displayName={extensionDisplayName(key, schemasForLevel[key], extensionTypeOptions)}
+                config={asRecord(extensions[key])}
+                customFieldRenderer={customFieldRenderer}
+                assetContext={assetContext}
+                inheritanceTag={getInheritanceTag?.(key)}
+                onEnableControlChange={(control, value) => handleEnableControlChange(key, control, value)}
+                onRemove={() => handleRemove(key)}
+                onFieldChange={(path, value) => handleFieldChange(key, path, value)}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <TopicFieldLabel>Available extensions</TopicFieldLabel>
+        {!availableKeys.length && (
+          <p className="text-[13px] text-[var(--life-neutral-300)]">No additional extensions are available for this {levelLabel}.</p>
+        )}
+        {availableKeys.map((key) => (
+          <div key={key} className="w-full flex items-center gap-2 px-3 py-2 rounded-[8px] border border-[#d8dee6] bg-white">
+            <span className="flex-1 min-w-0 truncate text-[13px] font-semibold text-[var(--life-base-black)]">
+              {extensionDisplayName(key, schemasForLevel[key], extensionTypeOptions)}
+            </span>
+            <button
+              type="button"
+              onClick={() => handleAdd(key)}
+              className="shrink-0 px-2.5 py-1 text-[12px] font-semibold rounded-md border border-[#2d6fa8] text-[#2d6fa8] hover:bg-[var(--life-primary-020)] transition-colors"
+            >
+              + Add
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Icons for the Navigation Footer's per-button rows (Topic-level Extensions
+// accordion) — kept minimal/inline, matching the stroke style used elsewhere
+// in this panel (currentColor, strokeWidth 2).
+const NAV_FOOTER_BUTTON_ICONS: Record<string, React.ReactNode> = {
+  _home: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <polyline points="9 22 9 12 15 12 15 22" />
+    </svg>
+  ),
+  _up: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <line x1="12" y1="19" x2="12" y2="5" />
+      <polyline points="5 12 12 5 19 12" />
+    </svg>
+  ),
+  _previous: <MaskIcon file="back-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />,
+  _next: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <line x1="5" y1="12" x2="19" y2="12" />
+      <polyline points="12 5 19 12 12 19" />
+    </svg>
+  ),
+  _close: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  ),
+  _custom: (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+    </svg>
+  ),
+};
+
+const NAV_FOOTER_BUTTON_ORDER = ["_home", "_up", "_previous", "_next", "_close", "_custom"];
+
+// Mirrors NavigationFooterView.js's `getOverrideValue`/`updateOverrideValues`
+// (adapt-navigation-footer) exactly — an empty `_enableOverride` inherits the
+// course-level `_isEnabled`, and an empty `btnText` inherits the course-level
+// button text. Home never has editable text anywhere in the framework (its
+// schema default btnText is always "" — the button is icon-only), so its
+// resolved text always comes straight from the course level, never the topic
+// override. Shared by both the Extensions accordion field (display only) and
+// the live canvas sync (syncNavigationFooterPreview) so both use identically
+// resolved values.
+function resolveNavFooterButtonState(
+  buttonKey: string,
+  storedButtons: Record<string, unknown>,
+  courseButtons: Record<NavFooterButtonKey, NavFooterButton> | null
+): { enabled: boolean; text: string } {
+  const stored = asRecord(storedButtons[buttonKey]);
+  const override = typeof stored._enableOverride === "string" ? (stored._enableOverride as string) : "";
+  const inherited = courseButtons?.[buttonKey as NavFooterButtonKey];
+  const enabled = override === "enable" ? true : override === "disable" ? false : inherited?._isEnabled ?? true;
+  const storedText = typeof stored.btnText === "string" ? (stored.btnText as string) : "";
+  const text = buttonKey === "_home" ? inherited?.btnText || "" : storedText || inherited?.btnText || "";
+  return { enabled, text };
+}
+
+// Topic-level "Navigation Footer" → `_buttons`. The inherited value is only
+// ever shown (checkbox state / text placeholder-like display) — nothing is
+// written back to `_buttons` here until the user actually checks/unchecks or
+// types, at which point that button's own field gets an explicit value.
+function NavigationFooterButtonsField({
+  fieldSchema,
+  value,
+  onChange,
+  courseButtons,
+}: {
+  fieldSchema: BehaviourFieldSchema;
+  value: unknown;
+  onChange: (path: string, value: unknown) => void;
+  courseButtons: Record<NavFooterButtonKey, NavFooterButton> | null;
+}) {
+  const buttonsSchema = (fieldSchema.properties ?? {}) as Record<string, BehaviourFieldSchema>;
+  const storedButtons = asRecord(value);
+  const orderedKeys = NAV_FOOTER_BUTTON_ORDER.filter((k) => buttonsSchema[k]);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <TopicFieldLabel>Footer buttons</TopicFieldLabel>
+      {orderedKeys.map((buttonKey) => {
+        const { enabled: checked, text: displayText } = resolveNavFooterButtonState(buttonKey, storedButtons, courseButtons);
+        const label = (buttonsSchema[buttonKey]?.title as string) || formatBehaviourFieldName(buttonKey);
+        // Home has no editable text anywhere in the framework (its schema
+        // default btnText is always "" — the button is icon-only); show the
+        // course-level text read-only, falling back to a "Home" placeholder.
+        const isHomeButton = buttonKey === "_home";
+
+        return (
+          <div key={buttonKey} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[8px] border border-[#d8dee6] bg-white">
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={(event) => onChange(`_buttons.${buttonKey}._enableOverride`, event.target.checked ? "enable" : "disable")}
+              aria-label={`${label} button enabled`}
+              className="h-3.5 w-3.5 shrink-0 rounded-[6px] border-[#cbd5e1] text-[#2d6fa8] focus:ring-[#2d6fa8]"
+            />
+            <span className="shrink-0 text-[#6b7280]">{NAV_FOOTER_BUTTON_ICONS[buttonKey]}</span>
+            <input
+              type="text"
+              value={displayText}
+              onChange={(event) => !isHomeButton && onChange(`_buttons.${buttonKey}.btnText`, event.target.value)}
+              readOnly={isHomeButton}
+              placeholder={isHomeButton ? "Home" : label}
+              aria-label={`${label} button text`}
+              className={`flex-1 min-w-0 px-2 py-1 text-[13px] rounded-md border border-transparent transition-colors ${
+                isHomeButton
+                  ? "bg-[#f8fafc] text-[#6b7280] cursor-default"
+                  : "hover:border-[#e5e7eb] bg-transparent focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
+              }`}
+            />
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -940,7 +1459,7 @@ function TopicNestedAccordion({
   defaultOpen = false,
   children,
 }: {
-  title: string;
+  title: React.ReactNode;
   defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
@@ -974,8 +1493,84 @@ function TopicNestedAccordion({
   );
 }
 
-function TopicFieldLabel({ children }: { children: React.ReactNode }) {
-  return <span className="text-[11px] font-semibold text-[#374151]">{children}</span>;
+function TopicToggle({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full border-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--life-primary-500)] ${
+        checked
+          ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]"
+          : "bg-[#e5e7eb] border-[#e5e7eb]"
+      }`}
+    >
+      <span className={`inline-block h-2.5 w-2.5 rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-3" : "translate-x-0.5"}`} />
+    </button>
+  );
+}
+
+function TopicEnabledNestedAccordion({
+  title,
+  enabled,
+  onEnabledChange,
+  children,
+}: {
+  title: React.ReactNode;
+  enabled: boolean;
+  onEnabledChange: (enabled: boolean) => void;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(enabled);
+
+  const handleEnabledChange = (nextEnabled: boolean) => {
+    onEnabledChange(nextEnabled);
+    if (nextEnabled) setOpen(true);
+    else setOpen(false);
+  };
+
+  return (
+    <div className="w-full rounded-[8px] border border-[#d8dee6] bg-white overflow-hidden">
+      <div className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[var(--life-neutral-020)] transition-colors">
+        <button
+          type="button"
+          onClick={() => enabled && setOpen((previous) => !previous)}
+          aria-expanded={enabled && open}
+          disabled={!enabled}
+          className="flex-1 min-w-0 flex items-center gap-1.5 text-left disabled:cursor-default"
+        >
+          <span className="text-[13px] font-semibold text-[#21436b] underline underline-offset-[2px]">{title}</span>
+          <svg
+            className={`shrink-0 ml-auto transition-transform duration-200 text-[#21436b] ${enabled && open ? "rotate-90" : ""}`}
+            width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+          >
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+        <TopicToggle checked={enabled} onChange={handleEnabledChange} label="Enabled" />
+      </div>
+      {enabled && open ? <div className="px-3 pb-2.5 pt-1.5 border-t border-[#eef2f6] flex flex-col gap-2">{children}</div> : null}
+    </div>
+  );
+}
+
+function TopicFieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
+  return (
+    <span className="text-[11px] font-semibold text-[#374151]">
+      {children}
+      {required && <span className="text-[#dc2626] ml-0.5">*</span>}
+    </span>
+  );
 }
 
 function TopicTextInput({
@@ -985,6 +1580,7 @@ function TopicTextInput({
   placeholder,
   type = "text",
   readOnly = false,
+  required = false,
 }: {
   label: string;
   value: string;
@@ -992,10 +1588,11 @@ function TopicTextInput({
   placeholder?: string;
   type?: "text" | "number";
   readOnly?: boolean;
+  required?: boolean;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <TopicFieldLabel>{label}</TopicFieldLabel>
+      <TopicFieldLabel required={required}>{label}</TopicFieldLabel>
       <input
         type={type}
         value={value}
@@ -1184,22 +1781,30 @@ function TopicSelect({
   onChange,
   options,
   emptyOptionLabel = "",
+  required = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   options: readonly string[];
   emptyOptionLabel?: string;
+  required?: boolean;
 }) {
+  // A value that isn't among the real options (e.g. a freshly-added array
+  // item, whose field genuinely has no value yet) must render as blank, not
+  // silently fall back to displaying the first real option — otherwise the
+  // dropdown visually looks pre-filled even though nothing was chosen.
+  const needsBlankOption = !options.includes(value);
   return (
     <div className="flex flex-col gap-1.5">
-      <TopicFieldLabel>{label}</TopicFieldLabel>
+      <TopicFieldLabel required={required}>{label}</TopicFieldLabel>
       <div className="relative">
         <select
           value={value}
           onChange={(event) => onChange(event.target.value)}
           className="w-full border border-[#e5e7eb] rounded-md px-2.5 py-2 text-[13px] text-[var(--life-base-black)] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:border-transparent pr-8"
         >
+          {needsBlankOption && <option value={value}>{emptyOptionLabel}</option>}
           {options.map((option) => (
             <option key={option} value={option}>{option || emptyOptionLabel}</option>
           ))}
@@ -1216,20 +1821,22 @@ function TopicCheckbox({
   label,
   checked,
   onChange,
+  required = false,
 }: {
   label: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
+  required?: boolean;
 }) {
   return (
-    <label className="flex items-center gap-1.5 text-[13px] text-[#111827] cursor-pointer">
+    <label className="flex items-start gap-1.5 text-[13px] text-[#111827] cursor-pointer">
       <input
         type="checkbox"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
-        className="h-3.5 w-3.5 rounded-[6px] border-[#cbd5e1] text-[#2d6fa8] focus:ring-[#2d6fa8]"
+        className="mt-[2px] h-3.5 w-3.5 shrink-0 rounded-[6px] border-[#cbd5e1] text-[#2d6fa8] focus:ring-[#2d6fa8]"
       />
-      <span>{label}</span>
+      <span>{label}{required && <span className="text-[#dc2626] ml-0.5">*</span>}</span>
     </label>
   );
 }
@@ -2183,6 +2790,10 @@ export default function CourseEditor({
   const [openBlockAccordions, setOpenBlockAccordions] = useState<Record<string, boolean>>(DEFAULT_BLOCK_ACCORDIONS);
   const [openComponentAccordions, setOpenComponentAccordions] = useState<Record<string, boolean>>(DEFAULT_COMPONENT_ACCORDIONS);
   const [componentBehaviourSchemas, setComponentBehaviourSchemas] = useState<Record<string, Record<string, unknown>>>({});
+  const [extensionSchemasByLevel, setExtensionSchemasByLevel] = useState<Record<ExtensionSchemaLevel, Record<string, ExtensionFieldSchema>> | null>(null);
+  const [componentExtensionSchemas, setComponentExtensionSchemas] = useState<Record<string, Record<string, ExtensionFieldSchema>>>({});
+  const [extensionTypeOptions, setExtensionTypeOptions] = useState<ExtensionTypeOption[]>([]);
+  const [navFooterCourseButtons, setNavFooterCourseButtons] = useState<Record<NavFooterButtonKey, NavFooterButton> | null>(null);
   const [courseAssetMappings, setCourseAssetMappings] = useState<Record<string, string>>({});
   const [assetLinkIdMap, setAssetLinkIdMap] = useState<Record<string, string>>({});
   const structureLoadRequestIdRef = useRef(0);
@@ -2400,9 +3011,101 @@ export default function CourseEditor({
     };
   }, []);
 
+  // Extensions accordion data (Topic/Section/Content Group/Component): fixed,
+  // course-independent lookups — fetched once and reused for every level/item.
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([getExtensionSchemasByLevel(), getExtensionTypeOptions()])
+      .then(([schemasByLevel, typeOptions]) => {
+        if (cancelled) return;
+        setExtensionSchemasByLevel(schemasByLevel);
+        setExtensionTypeOptions(typeOptions);
+      })
+      .catch((err) => {
+        console.warn("Failed to load extension schemas", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     void loadStructureFromDatabase();
   }, [loadStructureFromDatabase]);
+
+  // Course-level Navigation Footer button settings (the "parent" values the
+  // Topic-level `_enableOverride`/`btnText` fields inherit from when empty —
+  // see NavigationFooterButtonsField). Display-only: never written back here.
+  useEffect(() => {
+    if (!courseId) return;
+    let cancelled = false;
+    void getNavigationSettings(courseId)
+      .then((settings) => {
+        if (cancelled) return;
+        setNavFooterCourseButtons(settings.navFooter.buttons);
+      })
+      .catch((err) => {
+        console.warn("Failed to load course navigation footer settings", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
+
+  // Ensures a newly-added extension is enabled for the course (adds it to
+  // config._enabledExtensions) so the framework build actually bundles it —
+  // mirrors the enable calls the hardcoded course-level extension helpers
+  // (course menu, topbar logos, ...) already make in adaptAuthoring.ts.
+  const handleExtensionAdded = useCallback(
+    (extensionName: string | undefined) => {
+      if (!extensionName || !courseId) return;
+      const typeOption = extensionTypeOptions.find((o) => o.name === extensionName);
+      if (typeOption) void enableExtensionForCourse(courseId, typeOption._id);
+    },
+    [courseId, extensionTypeOptions]
+  );
+
+  // How many of the 5 content levels (course/topic/section/content group/
+  // component) this extension has ANY schema for — the Inherited/Overridden
+  // badge only makes sense when there's more than one, i.e. an actual parent
+  // hierarchy to inherit from or override.
+  const countExtensionApplicableLevels = useCallback(
+    (key: string) => {
+      if (!extensionSchemasByLevel) return 0;
+      const levels: ExtensionSchemaLevel[] = ["course", "contentobject", "article", "block", "component"];
+      return levels.filter((level) => Object.keys(extensionSchemasByLevel[level]?.[key]?.properties ?? {}).length > 0)
+        .length;
+    },
+    [extensionSchemasByLevel]
+  );
+
+  const createExtensionAssetContext = useCallback(
+    (
+      level: "topic" | "section" | "contentGroup" | "component",
+      pageId: string,
+      ids: { articleId?: string; blockId?: string; componentId?: string } = {}
+    ): BehaviourAssetContext => ({
+      resolveAssetPreviewUrl: resolveTopicAssetPreviewUrl,
+      onPickAsset: (path, extensionKey) => {
+        if (!extensionKey) return;
+        setTopicAssetPickerTarget({ scope: "extensionProperty", level, ...ids, extensionKey, path });
+      },
+      onPickExternal: (path, currentValue, extensionKey) => {
+        if (!extensionKey) return;
+        setTopicExternalAssetTarget({
+          pageId,
+          target: { scope: "extensionProperty", level, ...ids, extensionKey, path },
+          initialValue: currentValue,
+          title: "Select External Asset",
+        });
+      },
+      onClear: (path, extensionKey) => {
+        if (!extensionKey) return;
+        clearTopicAssetSelection(pageId, { scope: "extensionProperty", level, ...ids, extensionKey, path });
+      },
+    }),
+    [resolveTopicAssetPreviewUrl]
+  );
 
   useEffect(() => {
     if (!titleValidationWarning) return;
@@ -2729,6 +3432,21 @@ export default function CourseEditor({
         display: inline-block !important;
         min-height: 0 !important;
         line-height: 1.25 !important;
+      }
+
+      /* The real course chrome (top nav bar/back button, bottom navigation
+         footer) stays visible for WYSIWYG fidelity while a page is being
+         edited, but must never actually navigate the iframe away from the
+         page being edited — it's kept in sync with unsaved draft settings
+         instead (see syncNavigationFooterPreview). */
+      .navigation-footer,
+      .navigation-footer *,
+      .nav,
+      .nav *,
+      .navigation,
+      .navigation * {
+        pointer-events: none !important;
+        cursor: default !important;
       }
     `;
     head.appendChild(style);
@@ -4259,6 +4977,57 @@ export default function CourseEditor({
     }
   }, [contentPages, resolveTopicAssetPreviewUrl, selectedArticleId, selectedBlockId, selectedComponentId, selectedPageId]);
 
+  // Live-syncs the Navigation Footer's resolved button state (enabled + text)
+  // straight into the preview iframe's real course chrome — so editing
+  // "Navigation Footer" in the Topic Extensions accordion reflects immediately
+  // in the canvas, exactly like syncPreviewTopicSettings does for theme/text.
+  // The footer stays visible but non-interactive (pointer-events disabled via
+  // applyPreviewSelectionStyles) while editing. Nothing here is persisted —
+  // it only ever mutates the already-rendered DOM; the actual buttons are
+  // rebuilt from the real saved data on the next full preview rebuild/save.
+  const syncNavigationFooterPreview = useCallback(() => {
+    const iframe = previewFrameRef.current;
+    const doc = iframe?.contentDocument;
+    if (!doc) return;
+
+    const footerEl = doc.querySelector(".navigation-footer") as HTMLElement | null;
+    if (!footerEl) return;
+
+    const selectedPage = contentPages.find((page) => page.id === selectedPageId);
+    const storedButtons = asRecord(asRecord(selectedPage?.extensions?._navigationFooter)._buttons);
+    const container = (footerEl.querySelector(".navigation-footer__btn-container") as HTMLElement | null) ?? footerEl;
+
+    NAV_FOOTER_BUTTON_ORDER.forEach((buttonKey) => {
+      const btnClass = `btn-${buttonKey.slice(1)}`;
+      const { enabled, text } = resolveNavFooterButtonState(buttonKey, storedButtons, navFooterCourseButtons);
+      let btnEl = container.querySelector(`.${btnClass}`) as HTMLButtonElement | null;
+
+      if (!enabled) {
+        btnEl?.remove();
+        return;
+      }
+
+      if (!btnEl) {
+        btnEl = doc.createElement("button");
+        btnEl.className = `navigation-footer__btn-container__btn ${btnClass} btn-text js-navigation-footer-btn-click`;
+        if (buttonKey === "_home") btnEl.classList.add("icon", "icon-home");
+        if (buttonKey === "_home" || buttonKey === "_up" || buttonKey === "_previous") {
+          btnEl.classList.add("btn-secondary");
+        }
+      }
+      btnEl.textContent = text;
+      container.appendChild(btnEl); // re-appended in canonical order just below
+    });
+
+    // appendChild MOVES an already-attached node rather than duplicating it,
+    // so a second pass in fixed order corrects any button re-created/re-added
+    // out of sequence above without needing per-button position lookups.
+    NAV_FOOTER_BUTTON_ORDER.forEach((buttonKey) => {
+      const btnEl = container.querySelector(`.btn-${buttonKey.slice(1)}`);
+      if (btnEl) container.appendChild(btnEl);
+    });
+  }, [contentPages, navFooterCourseButtons, selectedPageId]);
+
   const syncPreviewScrollFromLeftPanel = useCallback(() => {
     const iframe = previewFrameRef.current;
     const doc = iframe?.contentDocument;
@@ -4463,6 +5232,47 @@ export default function CourseEditor({
     };
   }, [
     componentBehaviourSchemas,
+    contentPages,
+    selectedArticleId,
+    selectedBlockId,
+    selectedComponentId,
+    selectedPageId,
+  ]);
+
+  // Component-level Extensions accordion: per-component-type schema (not the
+  // generic "component" level) so question-only extension attrs (e.g.
+  // _questionStateGraphic) only ever appear as "available" on question
+  // components (mcq, gmcq, ...) — see questionComponentHelper.js.
+  useEffect(() => {
+    if (!selectedPageId || !selectedArticleId || !selectedBlockId || !selectedComponentId) {
+      return;
+    }
+
+    const page = contentPages.find((p) => p.id === selectedPageId);
+    const article = page?.articles.find((a) => a.id === selectedArticleId);
+    const block = article?.blocks.find((b) => b.id === selectedBlockId);
+    const component = block?.components.find((c) => c.id === selectedComponentId);
+    const componentKey = (component?.settings?.componentKey || "").toLowerCase();
+    if (!componentKey || componentExtensionSchemas[componentKey] !== undefined) {
+      return;
+    }
+
+    let cancelled = false;
+    void getComponentExtensionSchema(componentKey)
+      .then((schema) => {
+        if (cancelled) return;
+        setComponentExtensionSchemas((prev) => ({ ...prev, [componentKey]: schema }));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setComponentExtensionSchemas((prev) => ({ ...prev, [componentKey]: {} }));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    componentExtensionSchemas,
     contentPages,
     selectedArticleId,
     selectedBlockId,
@@ -5022,6 +5832,7 @@ export default function CourseEditor({
     applyPreviewSelectionStyles();
     syncPreviewInlineEditors();
     syncPreviewTopicSettings();
+    syncNavigationFooterPreview();
     syncPreviewScrollFromLeftPanel();
 
     cleanupPreviewListenersRef.current = () => {
@@ -5049,6 +5860,7 @@ export default function CourseEditor({
     handleSelectComponent,
     syncPreviewInlineEditors,
     syncPreviewTopicSettings,
+    syncNavigationFooterPreview,
     syncPreviewScrollFromLeftPanel,
     contentPages,
   ]);
@@ -5076,6 +5888,10 @@ export default function CourseEditor({
   useEffect(() => {
     syncPreviewTopicSettings();
   }, [syncPreviewTopicSettings]);
+
+  useEffect(() => {
+    syncNavigationFooterPreview();
+  }, [syncNavigationFooterPreview]);
 
   useEffect(() => {
     syncPreviewScrollFromLeftPanel();
@@ -6015,6 +6831,33 @@ export default function CourseEditor({
       return;
     }
 
+    if (target.scope === "extensionProperty") {
+      const updateExtensions = (extensions: Record<string, unknown>) => ({
+        ...extensions,
+        [target.extensionKey]: setBehaviourPath(asRecord(extensions[target.extensionKey]), target.path, assetLink),
+      });
+      if (target.level === "topic") {
+        const page = contentPages.find((item) => item.id === pageId);
+        updatePageData(pageId, { extensions: updateExtensions(asRecord(page?.extensions)) });
+        return;
+      }
+      if (target.level === "section" && target.articleId) {
+        const article = contentPages.find((item) => item.id === pageId)?.articles.find((item) => item.id === target.articleId);
+        updateArticle(pageId, target.articleId, { extensions: updateExtensions(asRecord(article?.extensions)) });
+        return;
+      }
+      if (target.level === "contentGroup" && target.articleId && target.blockId) {
+        const block = contentPages.find((item) => item.id === pageId)?.articles.find((item) => item.id === target.articleId)?.blocks.find((item) => item.id === target.blockId);
+        updateBlock(pageId, target.articleId, target.blockId, { extensions: updateExtensions(asRecord(block?.extensions)) });
+        return;
+      }
+      if (target.level === "component" && target.articleId && target.blockId && target.componentId) {
+        const component = contentPages.find((item) => item.id === pageId)?.articles.find((item) => item.id === target.articleId)?.blocks.find((item) => item.id === target.blockId)?.components.find((item) => item.id === target.componentId);
+        updateComponent(pageId, target.articleId, target.blockId, target.componentId, { extensions: updateExtensions(asRecord(component?.extensions)) });
+      }
+      return;
+    }
+
     if (target.scope === "themeHeaderBackground") {
       updatePageThemeSettings(pageId, (current) => ({
         ...current,
@@ -6896,7 +7739,8 @@ export default function CourseEditor({
         courseTitle={courseTitle}
         onCourseTitleChange={setCourseTitle}
         onToggleLeftPanel={() => setLeftPanelOpen((o) => !o)}
-        onBack={() => runWithEditorExitGuard(() => navigate("/"))}
+        onBack={() => runWithEditorExitGuard(() => window.history.length > 1 ? navigate(-1) : navigate("/"))}
+        onHome={() => runWithEditorExitGuard(() => navigate("/"))}
         onOpenCourseSettings={() => openSetupPanel()}
         onOpenStoryboard={() => openSetupPanel("storyboarding")}
         onOpenPreview={(startFromCurrentPage) => openEditorPreview(startFromCurrentPage)}
@@ -6990,9 +7834,9 @@ export default function CourseEditor({
               </div>
             </div>
           ) : (
-            <div className="h-full flex flex-col min-h-0 p-6">
+            <div className="h-full flex flex-col min-h-0 p-2">
               <div className="relative flex-1 min-h-0 overflow-hidden rounded-[18px] border border-[#d8dee6] bg-white">
-                <div className="h-full w-full box-border p-6">
+                <div className="h-full w-full box-border p-2">
                   {previewSrc ? (
                     <iframe
                       ref={previewFrameRef}
@@ -7127,7 +7971,7 @@ export default function CourseEditor({
                     <button
                       type="button"
                       onClick={() => setRightPanelOpen(false)}
-                      className="w-full h-[56px] border-b border-[#d8dee6] px-3.5 flex items-center gap-2 text-[#3b4753]"
+                      className="sticky top-0 z-10 w-full h-[56px] shrink-0 border-b border-[#d8dee6] bg-white px-3.5 flex items-center gap-2 text-[#3b4753]"
                       aria-label="Collapse properties"
                       title="Collapse properties"
                     >
@@ -7262,55 +8106,32 @@ export default function CourseEditor({
                           </TopicAccordion>
 
                           <TopicAccordion title="Extensions" open={!!openTopicAccordions.extensions} onToggle={(triggerEl) => toggleTopicAccordion("extensions", triggerEl)}>
-                            {(() => {
-                              const extensionKeySet = new Set<string>();
-                              contentPages.forEach((contentPage) => {
-                                Object.keys(asRecord(contentPage.extensions)).forEach((key) => {
-                                  if (key.trim()) extensionKeySet.add(key);
-                                });
-                              });
-                              const extensionKeys = Array.from(extensionKeySet).sort((a, b) => a.localeCompare(b));
-
-                              if (!extensionKeys.length) {
-                                return <p className="text-[13px] text-[var(--life-neutral-300)]">No extensions are currently configured in this course.</p>;
+                            <ExtensionsAccordionBody
+                              levelLabel="topic"
+                              extensions={asRecord(page.extensions)}
+                              schemasForLevel={extensionSchemasByLevel?.contentobject ?? {}}
+                              extensionTypeOptions={extensionTypeOptions}
+                              onExtensionAdded={handleExtensionAdded}
+                              onChange={(next) => updatePageData(page.id, { extensions: next })}
+                              assetContext={createExtensionAssetContext("topic", page.id)}
+                              customFieldRenderer={({ extensionName, fieldKey, fieldSchema, value, onChange }) =>
+                                extensionName === "adapt-navigation-footer" && fieldKey === "_buttons" ? (
+                                  <NavigationFooterButtonsField
+                                    fieldSchema={fieldSchema}
+                                    value={value}
+                                    onChange={onChange}
+                                    courseButtons={navFooterCourseButtons}
+                                  />
+                                ) : null
                               }
-
-                              return (
-                                <div className="flex flex-col gap-2.5">
-                                  {extensionKeys.map((extensionKey) => {
-                                    const extensionConfig = asRecord(page.extensions)[extensionKey];
-                                    const extensionJson = JSON.stringify(extensionConfig ?? {}, null, 2);
-
-                                    return (
-                                      <TopicNestedAccordion key={`${page.id}-extension-${extensionKey}`} title={extensionKey}>
-                                        <div className="flex flex-col gap-1.5">
-                                          <TopicFieldLabel>Page-level settings</TopicFieldLabel>
-                                          <textarea
-                                            key={`${page.id}-extension-json-${extensionKey}`}
-                                            defaultValue={extensionJson}
-                                            onBlur={(event) => {
-                                              try {
-                                                const rawInput = event.target.value.trim();
-                                                const parsed = JSON.parse(rawInput || "{}");
-                                                updatePageData(page.id, {
-                                                  extensions: {
-                                                    ...asRecord(page.extensions),
-                                                    [extensionKey]: parsed,
-                                                  },
-                                                });
-                                              } catch {
-                                                // Keep current value when invalid JSON is entered.
-                                              }
-                                            }}
-                                            className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors resize-y min-h-[120px] font-mono"
-                                          />
-                                        </div>
-                                      </TopicNestedAccordion>
-                                    );
-                                  })}
-                                </div>
-                              );
-                            })()}
+                              getInheritanceTag={(key) =>
+                                computeExtensionInheritanceTag(
+                                  extensionSchemasByLevel?.contentobject?.[key],
+                                  asRecord(asRecord(page.extensions)[key]),
+                                  countExtensionApplicableLevels(key)
+                                )
+                              }
+                            />
                           </TopicAccordion>
 
                           <TopicAccordion title="Theme settings" open={!!openTopicAccordions.theme} onToggle={(triggerEl) => toggleTopicAccordion("theme", triggerEl)}>
@@ -7620,51 +8441,22 @@ export default function CourseEditor({
                               </TopicAccordion>
 
                               <TopicAccordion title="Extensions" open={!!openSectionAccordions.extensions} onToggle={(triggerEl) => toggleSectionAccordion("extensions", triggerEl)}>
-                                {(() => {
-                                  const extensionKeySet = new Set<string>();
-                                  contentPages.forEach((contentPage) => {
-                                    contentPage.articles.forEach((art) => {
-                                      Object.keys(asRecord(art.extensions)).forEach((key) => {
-                                        if (key.trim()) extensionKeySet.add(key);
-                                      });
-                                    });
-                                  });
-                                  const extensionKeys = Array.from(extensionKeySet).sort((a, b) => a.localeCompare(b));
-                                  if (!extensionKeys.length) {
-                                    return <p className="text-[13px] text-[var(--life-neutral-300)]">No extensions are currently configured in this course.</p>;
+                                <ExtensionsAccordionBody
+                                  levelLabel="section"
+                                  extensions={asRecord(article.extensions)}
+                                  schemasForLevel={extensionSchemasByLevel?.article ?? {}}
+                                  extensionTypeOptions={extensionTypeOptions}
+                                  onExtensionAdded={handleExtensionAdded}
+                                  onChange={(next) => updateArticle(page!.id, article.id, { extensions: next })}
+                                  assetContext={createExtensionAssetContext("section", page!.id, { articleId: article.id })}
+                                  getInheritanceTag={(key) =>
+                                    computeExtensionInheritanceTag(
+                                      extensionSchemasByLevel?.article?.[key],
+                                      asRecord(asRecord(article.extensions)[key]),
+                                      countExtensionApplicableLevels(key)
+                                    )
                                   }
-                                  return (
-                                    <div className="flex flex-col gap-2.5">
-                                      {extensionKeys.map((extensionKey) => {
-                                        const extensionConfig = asRecord(article.extensions)[extensionKey];
-                                        const extensionJson = JSON.stringify(extensionConfig ?? {}, null, 2);
-                                        return (
-                                          <TopicNestedAccordion key={`${article.id}-extension-${extensionKey}`} title={extensionKey}>
-                                            <div className="flex flex-col gap-1.5">
-                                              <TopicFieldLabel>Section-level settings</TopicFieldLabel>
-                                              <textarea
-                                                key={`${article.id}-extension-json-${extensionKey}`}
-                                                defaultValue={extensionJson}
-                                                onBlur={(event) => {
-                                                  try {
-                                                    const rawInput = event.target.value.trim();
-                                                    const parsed = JSON.parse(rawInput || "{}");
-                                                    updateArticle(page!.id, article.id, {
-                                                      extensions: { ...asRecord(article.extensions), [extensionKey]: parsed },
-                                                    });
-                                                  } catch {
-                                                    // Keep current value on invalid JSON.
-                                                  }
-                                                }}
-                                                className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors resize-y min-h-[120px] font-mono"
-                                              />
-                                            </div>
-                                          </TopicNestedAccordion>
-                                        );
-                                      })}
-                                    </div>
-                                  );
-                                })()}
+                                />
                               </TopicAccordion>
 
                               <TopicAccordion title="Theme settings" open={!!openSectionAccordions.theme} onToggle={(triggerEl) => toggleSectionAccordion("theme", triggerEl)}>
@@ -7851,53 +8643,22 @@ export default function CourseEditor({
                               </TopicAccordion>
 
                               <TopicAccordion title="Extensions" open={!!openBlockAccordions.extensions} onToggle={(triggerEl) => toggleBlockAccordion("extensions", triggerEl)}>
-                                {(() => {
-                                  const extensionKeySet = new Set<string>();
-                                  contentPages.forEach((contentPage) => {
-                                    contentPage.articles.forEach((art) => {
-                                      art.blocks.forEach((blk) => {
-                                        Object.keys(asRecord(blk.extensions)).forEach((key) => {
-                                          if (key.trim()) extensionKeySet.add(key);
-                                        });
-                                      });
-                                    });
-                                  });
-                                  const extensionKeys = Array.from(extensionKeySet).sort((a, b) => a.localeCompare(b));
-                                  if (!extensionKeys.length) {
-                                    return <p className="text-[13px] text-[var(--life-neutral-300)]">No extensions are currently configured in this course.</p>;
+                                <ExtensionsAccordionBody
+                                  levelLabel="content group"
+                                  extensions={asRecord(block.extensions)}
+                                  schemasForLevel={extensionSchemasByLevel?.block ?? {}}
+                                  extensionTypeOptions={extensionTypeOptions}
+                                  onExtensionAdded={handleExtensionAdded}
+                                  onChange={(next) => updateBlock(page!.id, article!.id, block.id, { extensions: next })}
+                                  assetContext={createExtensionAssetContext("contentGroup", page!.id, { articleId: article!.id, blockId: block.id })}
+                                  getInheritanceTag={(key) =>
+                                    computeExtensionInheritanceTag(
+                                      extensionSchemasByLevel?.block?.[key],
+                                      asRecord(asRecord(block.extensions)[key]),
+                                      countExtensionApplicableLevels(key)
+                                    )
                                   }
-                                  return (
-                                    <div className="flex flex-col gap-2.5">
-                                      {extensionKeys.map((extensionKey) => {
-                                        const extensionConfig = asRecord(block.extensions)[extensionKey];
-                                        const extensionJson = JSON.stringify(extensionConfig ?? {}, null, 2);
-                                        return (
-                                          <TopicNestedAccordion key={`${block.id}-extension-${extensionKey}`} title={extensionKey}>
-                                            <div className="flex flex-col gap-1.5">
-                                              <TopicFieldLabel>Content group-level settings</TopicFieldLabel>
-                                              <textarea
-                                                key={`${block.id}-extension-json-${extensionKey}`}
-                                                defaultValue={extensionJson}
-                                                onBlur={(event) => {
-                                                  try {
-                                                    const rawInput = event.target.value.trim();
-                                                    const parsed = JSON.parse(rawInput || "{}");
-                                                    updateBlock(page!.id, article!.id, block.id, {
-                                                      extensions: { ...asRecord(block.extensions), [extensionKey]: parsed },
-                                                    });
-                                                  } catch {
-                                                    // Keep current value on invalid JSON.
-                                                  }
-                                                }}
-                                                className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors resize-y min-h-[120px] font-mono"
-                                              />
-                                            </div>
-                                          </TopicNestedAccordion>
-                                        );
-                                      })}
-                                    </div>
-                                  );
-                                })()}
+                                />
                               </TopicAccordion>
 
                               <TopicAccordion title="Theme settings" open={!!openBlockAccordions.theme} onToggle={(triggerEl) => toggleBlockAccordion("theme", triggerEl)}>
@@ -8139,55 +8900,22 @@ export default function CourseEditor({
                               </TopicAccordion>
 
                               <TopicAccordion title="Extensions" open={!!openComponentAccordions.extensions} onToggle={(triggerEl) => toggleComponentAccordion("extensions", triggerEl)}>
-                                {(() => {
-                                  const extensionKeySet = new Set<string>();
-                                  contentPages.forEach((contentPage) => {
-                                    contentPage.articles.forEach((art) => {
-                                      art.blocks.forEach((blk) => {
-                                        blk.components.forEach((cmp) => {
-                                          Object.keys(asRecord(cmp.extensions)).forEach((key) => {
-                                            if (key.trim()) extensionKeySet.add(key);
-                                          });
-                                        });
-                                      });
-                                    });
-                                  });
-                                  const extensionKeys = Array.from(extensionKeySet).sort((a, b) => a.localeCompare(b));
-                                  if (!extensionKeys.length) {
-                                    return <p className="text-[13px] text-[var(--life-neutral-300)]">No extensions are currently configured in this course.</p>;
+                                <ExtensionsAccordionBody
+                                  levelLabel="component"
+                                  extensions={asRecord(component.extensions)}
+                                  schemasForLevel={componentExtensionSchemas[(component.settings.componentKey || "").toLowerCase()] ?? {}}
+                                  extensionTypeOptions={extensionTypeOptions}
+                                  onExtensionAdded={handleExtensionAdded}
+                                  onChange={(next) => updateComponent(page.id, article.id, block.id, component.id, { extensions: next })}
+                                  assetContext={createExtensionAssetContext("component", page.id, { articleId: article.id, blockId: block.id, componentId: component.id })}
+                                  getInheritanceTag={(key) =>
+                                    computeExtensionInheritanceTag(
+                                      componentExtensionSchemas[(component.settings.componentKey || "").toLowerCase()]?.[key],
+                                      asRecord(asRecord(component.extensions)[key]),
+                                      countExtensionApplicableLevels(key)
+                                    )
                                   }
-                                  return (
-                                    <div className="flex flex-col gap-2.5">
-                                      {extensionKeys.map((extensionKey) => {
-                                        const extensionConfig = asRecord(component.extensions)[extensionKey];
-                                        const extensionJson = JSON.stringify(extensionConfig ?? {}, null, 2);
-                                        return (
-                                          <TopicNestedAccordion key={`${component.id}-extension-${extensionKey}`} title={extensionKey}>
-                                            <div className="flex flex-col gap-1.5">
-                                              <TopicFieldLabel>Component-level settings</TopicFieldLabel>
-                                              <textarea
-                                                key={`${component.id}-extension-json-${extensionKey}`}
-                                                defaultValue={extensionJson}
-                                                onBlur={(event) => {
-                                                  try {
-                                                    const rawInput = event.target.value.trim();
-                                                    const parsed = JSON.parse(rawInput || "{}");
-                                                    updateComponent(page.id, article.id, block.id, component.id, {
-                                                      extensions: { ...asRecord(component.extensions), [extensionKey]: parsed },
-                                                    });
-                                                  } catch {
-                                                    // Keep current value on invalid JSON.
-                                                  }
-                                                }}
-                                                className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors resize-y min-h-[120px] font-mono"
-                                              />
-                                            </div>
-                                          </TopicNestedAccordion>
-                                        );
-                                      })}
-                                    </div>
-                                  );
-                                })()}
+                                />
                               </TopicAccordion>
 
                               <TopicAccordion title="Theme settings" open={!!openComponentAccordions.theme} onToggle={(triggerEl) => toggleComponentAccordion("theme", triggerEl)}>
