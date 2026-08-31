@@ -107,7 +107,13 @@ async function _getRawMongo() {
       // own database segment (if any) doesn't need rewriting here.
       url = cfg.dbConnectionUri;
     } else {
-      const auth = cfg.dbUser && cfg.dbPass ? `${cfg.dbUser}:${cfg.dbPass}@` : '';
+      // Credentials must be URL-encoded — reserved characters (@ : /) in the
+      // user/password would otherwise make the URI's authority segment
+      // ambiguous and MongoClient would fail to parse it.
+      const auth =
+        cfg.dbUser && cfg.dbPass
+          ? `${encodeURIComponent(cfg.dbUser)}:${encodeURIComponent(cfg.dbPass)}@`
+          : '';
       const hosts =
         Array.isArray(cfg.dbReplicaset) && cfg.dbReplicaset.length
           ? cfg.dbReplicaset.join(',')
