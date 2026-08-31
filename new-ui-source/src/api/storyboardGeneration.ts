@@ -403,24 +403,22 @@ function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => string 
     } else if (type === "sbAssessment") {
       const kind = ((raw.props && raw.props.kind) || "mcq") as AssessmentKind;
       const data = safeParseJson<AssessmentData>(raw.props && raw.props.data, { question: "" });
-      // Learner-facing title mapping (ADAPT-3785 §2 clarification):
-      //   • If the author filled in the question body, that IS the MCQ title
-      //     shown to the learner — it becomes the component's `title` +
-      //     `displayTitle` in the Adapt content model.
-      //   • Otherwise fall back to the block-level title input.
+      // Learner-facing Title/Body mapping (PR review — Title is primary):
+      //   • The block-level Title input is the primary question header — it
+      //     becomes the component's `title` + `displayTitle` in the Adapt
+      //     content model.
+      //   • When the Title is empty, the question body stands in as the title.
       //   • Final fallback "Question" only when both are empty (schema needs
       //     a non-empty title for the component to save).
       //
-      // Body-vs-Title de-duplication (ADAPT-3785 §3):
-      //   The Storyboard `bn-inline-content` (question text) drives the
-      //   displayTitle. If we ALSO write it into `body`, the learner sees the
-      //   same text twice — once as the title, once as the description. So we
-      //   only emit body when it differs from the resolved title (i.e. when
-      //   the title came from the block-title fallback and the author wrote a
-      //   distinct question body — an edge case; empty otherwise).
+      // Body-vs-Title de-duplication:
+      //   The question body is written into `body` only when it differs from
+      //   the resolved title, so authors who provide a distinct Title and Body
+      //   get both, while a body that already became the title is never
+      //   rendered twice (once as title, once as description).
       const blockTitle = ((raw.props && (raw.props.title as string)) || "").trim();
       const questionText = (data.question || "").trim();
-      const resolvedTitle = questionText || blockTitle || "Question";
+      const resolvedTitle = blockTitle || questionText || "Question";
       const bodyText = questionText && questionText !== resolvedTitle ? questionText : "";
       comp = {
         sourceBlockId: id,

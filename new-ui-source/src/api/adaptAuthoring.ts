@@ -19,6 +19,13 @@ import {
   type ImageData,
   type MediaData,
 } from "@/components/storyboard/mediaMapping";
+// Placeholder-title filtering is a Storyboard concern — the helpers live in
+// the Storyboard folder and are used here only by the storyboard read/write
+// projectors (getCourseStoryboardBlocks / saveStoryboardToCourse).
+import {
+  isDefaultSchemaTitle,
+  storyboardLabel,
+} from "@/components/storyboard/placeholderTitles";
 import { reverseKind, isAssessmentComponentKind } from "./componentMapping";
 import { parseAssessmentData, type AssessmentKind } from "@/types/storyboard";
 export {
@@ -637,20 +644,10 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
         .filter((s): s is string => !!s && !OBJECT_ID.test(s))
     : [];
 
-  // Every screen (Setup, Storyboard, Preview, Word/PDF export) sources the
-  // course title from this one call — resolve the backend's schema-default
-  // placeholder ("New Course Title", seeded when a course is created without
-  // one) here, ONCE, rather than in every consumer. A genuinely un-named
-  // course still needs a label, so it falls back to the friendly "Untitled
-  // Course" instead of leaking the backend's internal default string.
-  const isDefaultTitle = (t: string | undefined) => !t || !t.trim() || DEFAULT_SCHEMA_TITLES.has(t.trim());
-  const rawTitle = (course.displayTitle || course.title || "").trim();
-  const resolvedTitle = isDefaultTitle(rawTitle) ? "Untitled Course" : rawTitle;
-
   return {
     courseId,
-    title: resolvedTitle,
-    displayTitle: isDefaultTitle(course.displayTitle) ? "" : (course.displayTitle as string).trim(),
+    title: course.title || "Untitled Course",
+    displayTitle: course.displayTitle ?? "",
     subtitle: course.subtitle ?? course._subtitle ?? "",
     description: course.description || "",
     instruction: course.instruction ?? "",
@@ -2063,68 +2060,9 @@ interface EngineContentNode {
 }
 
 // Adapt's content model.schema falls back to placeholder titles ("New Article
-// Title", "New Block Title", "New Component Title", "New Menu/Page Title",
-// "New Course Title") whenever a node is created without an explicit title
-// (e.g. via the Course Structure panel's "add" actions). Those are backend
-// scaffolding, not authored content — the Storyboard must not project them as
-// if the author had typed them (ADAPT-3785).
-//
-// The Storyboard editor's own historical seed content ("New Page Title",
-// "New Section Title") and the editor's input placeholders ("Article Title",
-// "Component title", "Section Title") land in this same list so any legacy
-// storyboard record that captured them as heading text is also cleaned up on
-// load and on export.
-export const DEFAULT_SCHEMA_TITLES = new Set([
-  "New Article Title",
-  "New Block Title",
-  "New Component Title",
-  "New Menu/Page Title",
-  "New Course Title",
-  "New Page Title",
-  "New Section Title",
-  "Article Title",
-  "Block Title",
-  "Component title",
-  "Component Title",
-  "Section Title",
-  "Page Title",
-]);
-export function isDefaultSchemaTitle(text: string | undefined | null): boolean {
-  const t = (text || "").trim();
-  return !t || DEFAULT_SCHEMA_TITLES.has(t);
-}
-const storyboardLabel = (n: EngineContentNode): string => {
-  const t = (n.displayTitle || n.title || "").trim();
-  return DEFAULT_SCHEMA_TITLES.has(t) ? "" : t;
-};
-
-// Strip empty and schema-default heading blocks from a persisted storyboard
-// document. Legacy records — created before the storyboard projector filtered
-// placeholder titles — captured "New Article Title", "New Block Title" etc.
-// as heading text; those bleed into Preview and the Word export until the
-// document is regenerated. Called at load time on any doc used as the editor
-// seed so the user never sees inherited placeholder scaffolding.
-//
-// A block is dropped when it is a heading whose plain-text content is empty or
-// exactly matches one of the known placeholder titles. Every other block
-// (paragraph, sbComponent, sbAssessment, sbPlaceholder, list, etc.) is
-// preserved verbatim.
-export function stripPlaceholderHeadings(blocks: unknown[]): unknown[] {
-  if (!Array.isArray(blocks)) return blocks;
-  const inline = (content: unknown): string => {
-    if (typeof content === "string") return content;
-    if (!Array.isArray(content)) return "";
-    return content
-      .map((n) => (n && typeof (n as { text?: unknown }).text === "string" ? (n as { text: string }).text : ""))
-      .join("");
-  };
-  return blocks.filter((b) => {
-    if (!b || typeof b !== "object") return true;
-    const block = b as { type?: string; content?: unknown };
-    if (block.type !== "heading") return true;
-    return !isDefaultSchemaTitle(inline(block.content));
-  });
-}
+// Title" etc.) whenever a node is created without an explicit title. Filtering
+// those out is a Storyboard concern — see the placeholderTitles import at the
+// top of this file.
 
 // A component type installed on the instance (GET /api/componenttype).
 export interface ComponentTypeOption {

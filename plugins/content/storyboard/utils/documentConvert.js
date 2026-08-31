@@ -78,8 +78,8 @@ const HEADING_SPACING = {
 // the storyboard editor's historical seed text). These must never be emitted
 // into the exported document — a defensive, last-line-of-defence filter for
 // legacy storyboard records whose documentJson still carries them from before
-// the projector was fixed. Keep in sync with new-ui-source/src/api/
-// adaptAuthoring.ts::DEFAULT_SCHEMA_TITLES.
+// the projector was fixed. Keep in sync with new-ui-source/src/components/
+// storyboard/placeholderTitles.ts::DEFAULT_SCHEMA_TITLES.
 // Kept lowercase so match is case-insensitive — a legacy record might carry
 // "Article title" (small t) which shouldn't sneak past the filter.
 const DEFAULT_PLACEHOLDER_TITLES = new Set([
@@ -89,12 +89,17 @@ const DEFAULT_PLACEHOLDER_TITLES = new Set([
   'new menu/page title',
   'new course title',
   'new page title',
+  // New-UI structure terminology (Topic / Section / Content Group)
+  'new topic title',
   'new section title',
+  'new content group title',
   'article title',
   'block title',
   'component title',
   'section title',
   'page title',
+  'topic title',
+  'content group title',
 ]);
 function isPlaceholderTitle(text) {
   const t = String(text || '').trim().toLowerCase();
@@ -442,14 +447,13 @@ async function sbAssessmentToDocxParagraphs(children, props, ctx) {
     return;
   }
 
-  // MCQ Title resolution (ADAPT-3785 §2 clarification):
-  //   • Question body IS the MCQ Title when the author wrote one — that same
-  //     text becomes the backend `displayTitle` (see storyboardGeneration.ts).
-  //   • Block-level title input is only used as a fallback header.
-  //   • The question body is emitted as a separate paragraph only when the
-  //     header came from the block title (avoids duplicating it).
-  const headerText = question || title;
-  const showQuestionParagraph = !!question && !!title && question !== title;
+  // Question Title/Body resolution (PR review — no duplicated text):
+  //   • The block-level Title is the primary header; when the author left it
+  //     empty the question Body stands in as the header.
+  //   • The question Body is emitted as its own paragraph only when it isn't
+  //     already the header text — so the same sentence never renders twice.
+  const headerText = title || question;
+  const showQuestionParagraph = !!question && question !== headerText;
 
   // Type badge + title (mirrors the collapsed Preview header).
   const kindLabel = ASSESSMENT_KIND_LABEL[kind] || 'Question';
@@ -629,9 +633,13 @@ async function blocksToDocx(blocks, title, ctx) {
     );
   }
 
+  // Ordered-list numbering: consecutive numberedListItem blocks share one
+  // counter; any other block type ends the run and resets it.
+  let numberedIndex = 0;
   for (const b of Array.isArray(blocks) ? blocks : []) {
     const props = (b && b.props) || {};
     if (!b || !b.type) continue;
+    if (b.type !== 'numberedListItem') numberedIndex = 0;
     if (b.type === 'heading') {
       const text = inlineToText(b.content);
       // Skip empty headings and headings whose only text is a schema default —
@@ -660,11 +668,12 @@ async function blocksToDocx(blocks, title, ctx) {
     } else if (b.type === 'bulletListItem' || b.type === 'numberedListItem') {
       const runs = inlineToRuns(b.content);
       if (!runs.length) continue;
+      const prefix = b.type === 'numberedListItem' ? `${++numberedIndex}. ` : '• ';
       children.push(
         new Paragraph({
           indent: { left: 360 },
           spacing: { before: 40, after: 40 },
-          children: [new TextRun('• '), ...runs],
+          children: [new TextRun(prefix), ...runs],
         }),
       );
     } else {
@@ -918,9 +927,10 @@ async function pdfWriteAssessment(doc, props, ctx) {
   doc.moveDown(0.6);
   pdfResetText(doc);
   const kindLabel = ASSESSMENT_KIND_LABEL[kind] || 'Question';
-  // See docx-side comment: question body is the MCQ Title when present.
-  const headerText = question || title;
-  const showQuestionParagraph = !!question && !!title && question !== title;
+  // See docx-side comment: Title is the primary header, Body renders as its
+  // own paragraph only when it isn't already the header (no duplication).
+  const headerText = title || question;
+  const showQuestionParagraph = !!question && question !== headerText;
   doc.font('Helvetica-Bold').fontSize(11).text(`${kindLabel}${headerText ? ' — ' : ''}${headerText}`);
   if (showQuestionParagraph) {
     doc.font('Helvetica').fontSize(11);
@@ -1015,8 +1025,11 @@ async function blocksToPdf(blocks, title, ctx) {
     doc.moveDown(1.0);
   }
 
+  // Ordered-list numbering — same run-based counter as the docx path.
+  let numberedIndex = 0;
   for (const b of Array.isArray(blocks) ? blocks : []) {
     if (!b || !b.type) continue;
+    if (b.type !== 'numberedListItem') numberedIndex = 0;
     const props = b.props || {};
     // Reset color between blocks so a lingering fillColor from an image alt
     // or feedback row doesn't bleed into the next block's heading/body.
@@ -1045,7 +1058,10 @@ async function blocksToPdf(blocks, title, ctx) {
       doc.moveDown(0.3);
     } else if (b.type === 'bulletListItem' || b.type === 'numberedListItem') {
       const text = inlineToText(b.content);
-      if (text) doc.font('Helvetica').fontSize(11).text(`• ${text}`, { indent: 12 });
+      if (text) {
+        const prefix = b.type === 'numberedListItem' ? `${++numberedIndex}. ` : '• ';
+        doc.font('Helvetica').fontSize(11).text(`${prefix}${text}`, { indent: 12 });
+      }
     } else {
       const text = inlineToText(b.content);
       if (text) {

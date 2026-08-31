@@ -404,17 +404,16 @@ export const assessmentBlock = createReactBlockSpec(
       const displayedPairs = (model.pairs ?? []).filter((p) => p && (p.prompt || p.answer));
       const displayedAnswers = (model.answers ?? []).filter((a) => a && a.trim());
 
-      // MCQ Title resolution (ADAPT-3785 §2 clarification):
-      //   • When the author writes the question body, that IS the MCQ Title
-      //     (matches how it flows into the backend `displayTitle`).
-      //   • When the question body is empty, fall back to the block-level
-      //     Title input.
-      //   • The question is only rendered as a separate paragraph when the
-      //     header came from the block title — otherwise it'd be duplicated.
+      // Question Title/Body resolution (PR review — no duplicated text):
+      //   • The block-level Title is the primary header; when the author left
+      //     it empty the question Body stands in as the header (matches how
+      //     the backend hydrates `displayTitle` from `blockTitle || question`).
+      //   • The question Body is rendered as its own paragraph only when it
+      //     isn't already the header text — the same sentence never shows twice.
       const questionText = (model.question || '').trim();
       const blockTitle = (title || '').trim();
-      const headerText = questionText || blockTitle || 'Untitled question';
-      const showQuestionParagraph = !!questionText && !!blockTitle && questionText !== blockTitle;
+      const headerText = blockTitle || questionText || 'Untitled question';
+      const showQuestionParagraph = !!questionText && questionText !== headerText;
 
       if (collapsed) {
         return (

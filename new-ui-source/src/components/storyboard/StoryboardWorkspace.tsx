@@ -31,11 +31,10 @@ import {
   importStoryboardDocument,
   updateStoryboard,
   addStoryboardAudit,
-  isDefaultSchemaTitle,
-  stripPlaceholderHeadings,
   type ImportFormat,
   type StoryboardStatus,
 } from '@/api/adaptAuthoring';
+import { isDefaultSchemaTitle, stripPlaceholderHeadings } from './placeholderTitles';
 import {
   planStoryboardGeneration,
   generateStoryboardCourse,
@@ -113,11 +112,10 @@ export default function StoryboardWorkspace({
   initialDocument?: StoryboardDocument;
   onBack?: () => void;
 }) {
-  // Defensive filter against callers that pass the backend's schema-default
-  // course title ("New Course Title" and friends). The Setup / StoryboardPage
-  // routes already resolve this via getCourseBootstrapData, but embedders that
-  // hand-off a raw course record shouldn't leak the placeholder onto the
-  // storyboard header, into the export filename or into the docx title.
+  // Filter out the backend's schema-default course title ("New Course Title"
+  // and friends) so the placeholder never leaks onto the storyboard header,
+  // into the export filename or into the docx title. This is the storyboard's
+  // own concern — callers pass the raw course title through unchanged.
   const resolvedCourseTitle = isDefaultSchemaTitle(courseTitle) ? '' : courseTitle;
   const sb = useStoryboard(courseId);
   const review = useStoryboardReview(sb.storyboardId);

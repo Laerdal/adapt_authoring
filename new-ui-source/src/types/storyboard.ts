@@ -211,12 +211,12 @@ export function defaultAssessmentData(kind: AssessmentKind): AssessmentData {
 
 /** Return a list of human-readable issues; empty ⇒ generation-ready (AC5).
  *
- *  ADAPT-3785 §2 clarification: the block-level Title input feeds the backend
- *  `displayTitle`. When the author fills it, that IS the question — the Body
- *  field is optional and simply provides longer question copy when needed.
- *  `blockTitle` is passed by callers so a filled Title alone satisfies the
- *  "question required" rule (matches how the backend hydrates `displayTitle`
- *  from `question || blockTitle` — see `storyboardGeneration.ts`). */
+ *  Title/Body precedence: the block-level Title input is the primary question
+ *  header and feeds the backend `displayTitle` (hydrated from
+ *  `blockTitle || question` — see `storyboardGeneration.ts`). The Body field
+ *  is optional longer question copy, rendered separately only when distinct
+ *  from the Title. `blockTitle` is passed by callers so either a filled Title
+ *  or a filled Body satisfies the "question required" rule. */
 export function validateAssessment(kind: AssessmentKind, data: AssessmentData, blockTitle: string = ''): string[] {
   const issues: string[] = [];
   const hasQuestion = !!(data.question && data.question.trim());
