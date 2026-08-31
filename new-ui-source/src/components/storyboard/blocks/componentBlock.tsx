@@ -196,18 +196,27 @@ function parseData(kind: ComponentKind, raw: string): ComponentData {
 // opens collapsed in read-only Preview (ADAPT-3785); a brand-new, still-blank
 // component (just inserted from Add Content) opens expanded so the author can
 // start typing immediately instead of clicking Edit first.
+//
+// A DAM-picked asset counts as content even when its persisted `link` is
+// still empty (the publish link is derived from `assetId` later), so every
+// media check also looks at the asset id.
+const refHasMedia = (a?: AssetRef): boolean =>
+  !!(a && ((a.assetId || '').trim() || (a.link || '').trim() || (a.url || '').trim()));
+
 function hasComponentContent(kind: ComponentKind, data: ComponentData, title: string): boolean {
   if (title.trim() || data.description.trim() || data.instruction.trim()) return true;
   switch (kind) {
     case 'groupedContent':
-      return (data.items || []).some((it) => it.title.trim() || it.body.trim() || it.image.trim());
+      return (data.items || []).some(
+        (it) => it.title.trim() || it.body.trim() || it.image.trim() || (it.imageUrl || '').trim() || (it.imageAssetId || '').trim()
+      );
     case 'image':
-      return !!(data.image?.link || data.image?.url);
+      return refHasMedia(data.image);
     case 'video':
     case 'audio':
-      return !!(data.media?.asset?.link || data.media?.asset?.url || data.media?.poster?.link || data.media?.poster?.url);
+      return refHasMedia(data.media?.asset) || refHasMedia(data.media?.poster);
     case 'h5p':
-      return !!(data.media?.asset?.link || data.media?.asset?.url);
+      return refHasMedia(data.media?.asset);
     case 'laerdalForm':
       return (data.fields || []).some((f) => f.label.trim());
     case 'assessmentResult':

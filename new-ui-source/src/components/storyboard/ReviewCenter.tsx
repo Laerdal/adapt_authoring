@@ -190,9 +190,8 @@ export default function ReviewCenter({
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'open', label: `Open (${review.openCount})` },
-    { id: 'resolved', label: `Resolved (${review.resolvedCount})` },
-    { id: 'approvals', label: 'Approvals' },
-    { id: 'activity', label: 'Activity' },
+    { id: 'resolved', label: `Resolved (${review.resolvedCount})` }
+    
   ];
 
   const addTopLevel = () => {
@@ -364,52 +363,6 @@ export default function ReviewCenter({
                 onResolve={review.setResolved}
                 onDelete={review.removeComment}
               />
-            ))
-          ))}
-
-        {tab === 'approvals' && (
-          <div
-            className="p-4 text-center"
-            style={{
-              fontSize: 13,
-              color: 'var(--life-color-text-subtle)',
-              border: '1px dashed var(--life-color-border-subtle)',
-              borderRadius: 'var(--radius)',
-            }}
-          >
-            Current status:{' '}
-            <span style={{ fontWeight: 600, color: 'var(--life-color-text-default)' }}>
-              {status.replace('_', ' ')}
-            </span>
-            .<br />
-            Use the status pill in the top bar to move Draft → In Review → Approved.
-          </div>
-        )}
-
-        {tab === 'activity' &&
-          (review.audit.length === 0 ? (
-            <p
-              className="text-center"
-              style={{ fontSize: 13, color: 'var(--life-color-text-subtle)' }}
-            >
-              No activity yet.
-            </p>
-          ) : (
-            review.audit.map((a: StoryboardAuditEvent) => (
-              <div key={a._id} className="sb-card" style={{ fontSize: 13 }}>
-                <span style={{ fontWeight: 600, color: 'var(--life-color-text-default)' }}>
-                  {a.event.replace('_', ' ')}
-                </span>
-                {a.fromStatus && a.toStatus && (
-                  <span style={{ color: 'var(--life-color-text-subtle)' }}>
-                    {' '}
-                    — {a.fromStatus.replace('_', ' ')} → {a.toStatus.replace('_', ' ')}
-                  </span>
-                )}
-                <p style={{ marginTop: 2, fontSize: 11, color: 'var(--life-color-text-subtle)' }}>
-                  {timeAgo(a.createdAt)}
-                </p>
-              </div>
             ))
           ))}
       </div>

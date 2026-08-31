@@ -88,19 +88,38 @@ function dbRetrieveAsset(query, ctx) {
 
 // Raw MongoClient fallback used when the Adapt application layer isn't fully
 // bootstrapped (verification scripts) OR when database.getDatabase() throws
-// because `app` isn't initialised in the current async context. Uses the same
-// dbHost/dbPort/dbName the running server does, so results are identical.
+// because `app` isn't initialised in the current async context. The
+// connection string mirrors lib/dml/mongoose/index.js::connect — honouring
+// dbConnectionUri, dbUser/dbPass, dbReplicaset and dbAuthSource, not just
+// dbHost/dbPort — so deployments that rely on auth/URI config behave the
+// same as the running server.
 let _rawMongoClient = null;
 async function _getRawMongo() {
   if (_rawMongoClient) return _rawMongoClient;
   try {
     const { MongoClient } = require('mongodb');
-    const cfg = configuration.getConfig();
-    const host = cfg && cfg.dbHost;
-    const port = cfg && cfg.dbPort;
-    const name = cfg && cfg.dbName;
-    if (!host || !port || !name) return null;
-    const url = `mongodb://${host}:${port}`;
+    const cfg = configuration.getConfig() || {};
+    const name = cfg.dbName;
+    if (!name) return null;
+    let url;
+    if (cfg.dbConnectionUri) {
+      // The db to use is selected via client.db(dbName) below, so the URI's
+      // own database segment (if any) doesn't need rewriting here.
+      url = cfg.dbConnectionUri;
+    } else {
+      const auth = cfg.dbUser && cfg.dbPass ? `${cfg.dbUser}:${cfg.dbPass}@` : '';
+      const hosts =
+        Array.isArray(cfg.dbReplicaset) && cfg.dbReplicaset.length
+          ? cfg.dbReplicaset.join(',')
+          : cfg.dbHost
+            ? `${cfg.dbHost}${cfg.dbPort ? `:${cfg.dbPort}` : ''}`
+            : null;
+      if (!hosts) return null;
+      url = `mongodb://${auth}${hosts}/${name}`;
+      if (typeof cfg.dbAuthSource === 'string' && cfg.dbAuthSource) {
+        url += `?authSource=${cfg.dbAuthSource}`;
+      }
+    }
     _rawMongoClient = { client: new MongoClient(url), dbName: name };
     await _rawMongoClient.client.connect();
     return _rawMongoClient;
@@ -146,18 +165,57 @@ function amRetrieveAsset(query) {
   });
 }
 
+// Tenant isolation for the raw lookup paths. Asset records live in the
+// master DB's shared `assets` collection with no `_tenantId` of their own —
+// tenancy is derived from the uploading user (`createdBy`, whose user record
+// carries `_tenantId`). assetmanager's API layer enforces this via ACL
+// resource strings, but the raw Mongo path bypasses it, so re-impose the
+// check here: an asset is visible when its creator belongs to the requesting
+// tenant or to the master tenant (Adapt's shared-asset convention). Records
+// whose creator can't be resolved (legacy data) are allowed through — this
+// is defence-in-depth, not a new gate that breaks existing exports.
+const _userTenantCache = new Map();
+async function _lookupUserTenantId(userId) {
+  const key = String(userId);
+  if (_userTenantCache.has(key)) return _userTenantCache.get(key);
+  try {
+    const m = await _getRawMongo();
+    if (!m) return null;
+    const { ObjectId } = require('mongodb');
+    let query;
+    try { query = { _id: new ObjectId(key) }; } catch (e) { query = { _id: userId }; }
+    const rec = await m.client.db(m.dbName).collection('users').findOne(query);
+    const tid = rec && rec._tenantId ? String(rec._tenantId) : null;
+    _userTenantCache.set(key, tid);
+    return tid;
+  } catch (e) {
+    return null;
+  }
+}
+
+async function _assetVisibleToTenant(assetRec, tenantId) {
+  if (!assetRec || !tenantId || !assetRec.createdBy) return true;
+  const creatorTenant = await _lookupUserTenantId(assetRec.createdBy);
+  if (!creatorTenant) return true;
+  const cfg = configuration.getConfig() || {};
+  const masterTenant = cfg.masterTenantID ? String(cfg.masterTenantID) : null;
+  return creatorTenant === String(tenantId) || creatorTenant === masterTenant;
+}
+
 async function retrieveAsset(query, ctx) {
   // Raw Mongo first — deterministic, no dependency on process.domain or on
   // the Adapt application layer being fully bootstrapped in this async
-  // context. The export use-case doesn't need permission checking beyond the
-  // implicit "you can read a storyboard you already opened" contract.
-  const raw = await rawRetrieveAsset(query);
-  if (raw) return raw;
-  // Fall back to the Adapt db path (in case the caller has an unusual Mongo
-  // topology where the master DB doesn't hold the asset).
-  const rec = await dbRetrieveAsset(query, ctx);
-  if (rec) return rec;
-  return amRetrieveAsset(query);
+  // context. Then the Adapt db path (in case of an unusual Mongo topology),
+  // then assetmanager as a last resort. Whichever path produced the record,
+  // it must pass the tenant-visibility check before being returned —
+  // assetmanager.retrieveAsset doesn't tenant-scope individual assets either,
+  // so filtering only the raw path would leave the fallback paths open.
+  const rec =
+    (await rawRetrieveAsset(query)) ||
+    (await dbRetrieveAsset(query, ctx)) ||
+    (await amRetrieveAsset(query));
+  if (!rec) return null;
+  return (await _assetVisibleToTenant(rec, resolveTenantId(ctx))) ? rec : null;
 }
 
 function getStorage(repository) {
@@ -232,9 +290,15 @@ async function readAssetBuffer(assetRec, ctx) {
     }
     if (!tenantName) tenantName = cfg.masterTenantName || 'master';
     // assetRec.path may have leading separator ("\assets\..."); normalise to
-    // a relative segment before joining so we don't accidentally hop up.
+    // a relative segment before joining. Filesystem safety must not rely on
+    // the DB being well-formed: resolve the final path and reject anything
+    // that escapes the tenant's data directory (e.g. ".." segments smuggled
+    // into assetRec.path — path traversal).
     const rel = String(assetRec.path || '').replace(/^[\\/]+/, '');
-    const abs = path.join(dataRoot, tenantName, rel);
+    const tenantRoot = path.resolve(dataRoot, tenantName);
+    const abs = path.resolve(tenantRoot, rel);
+    const contained = path.relative(tenantRoot, abs);
+    if (!contained || contained.startsWith('..') || path.isAbsolute(contained)) return null;
     if (fs.existsSync(abs)) return await fs.promises.readFile(abs);
   } catch (e) {
     /* nothing more to try */
