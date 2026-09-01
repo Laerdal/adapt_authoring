@@ -1,4 +1,4 @@
-// Storyboard top bar (spec AC8/AC10/AC11), Figma-aligned (ADAPT-3842).
+// Storyboard top bar (spec AC8/AC10/AC11), Figma-aligned.
 //   Back · Draft status · Save · Import · Export ▾ · Share for Review ·
 //   Generate Course →
 // Backend-dependent actions (Import/Export/Share/Generate) are stubbed with a

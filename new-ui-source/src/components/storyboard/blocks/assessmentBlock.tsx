@@ -360,7 +360,7 @@ export const assessmentBlock = createReactBlockSpec(
     render: ({ block, editor }) => {
       const kind = (isAssessmentKind(block.props.kind as string) ? block.props.kind : 'mcq') as AssessmentKind;
       const [model, setModel] = useState<AssessmentData>(() => parseData(kind, block.props.data as string));
-      // ADAPT-3785 §2: assessments open in Preview by default so the reader
+      //assessments open in Preview by default so the reader
       // sees the full question + options + feedback exactly as rendered in
       // the Word/PDF export. Editing is opt-in via the "Edit" button in the
       // preview header. This applies uniformly to loaded AND brand-new
@@ -387,7 +387,6 @@ export const assessmentBlock = createReactBlockSpec(
         }
       };
 
-      // Block Title acts as the question when Body is empty (ADAPT-3785 §2).
       const issues = validateAssessment(kind, model, title);
 
       // Only these top-level labels have authored text worth showing.

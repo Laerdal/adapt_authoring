@@ -1,4 +1,4 @@
-// Storyboard workspace — full 3-panel document experience (ADAPT-3760),
+// Storyboard workspace — full 3-panel document experience,
 // matching the Lovable reference. Chrome-free of any route concerns so it can
 // be a full-screen route (StoryboardPage) or embedded in Course Configuration.
 //
@@ -6,7 +6,7 @@
 //   Left       — ContentsPanel (TOC + AI guidance)
 //   Center     — DocumentToolbar + COURSE header + BlockNote canvas
 //
-// Persistence is backed by useStoryboard (ADAPT-3779): the document is loaded
+// Persistence is backed by useStoryboard : the document is loaded
 // once, edits are staged in the hook's draft, and Save PUTs it back. Because
 // BlockNote reads its initial content only once, the editor is mounted *after*
 // the storyboard has loaded (and starter content seeded), keyed on the id.
@@ -95,7 +95,7 @@ function readFileBase64(file: File): Promise<string> {
 // Starter content for a brand-new storyboard. Deliberately EMPTY of any
 // placeholder title text — historically we seeded "New Page Title" / "New
 // Section Title" here, but those strings leaked into Preview and the Word
-// export as if they were authored content (ADAPT-3785). An empty paragraph
+// export as if they were authored content. An empty paragraph
 // gives BlockNote a valid initial block without any visible scaffolding.
 const STARTER_DOCUMENT: unknown[] = [
   { type: 'paragraph', content: '' },
@@ -196,7 +196,7 @@ export default function StoryboardWorkspace({
               ? (initialDocument as unknown[])
               : STARTER_DOCUMENT;
       }
-      // Regardless of source, strip any placeholder heading text (ADAPT-3785).
+      // Regardless of source, strip any placeholder heading text.
       // The course projector already skips defaults, but a persisted DB
       // snapshot from before that filter — or a snapshot captured from a
       // course that was later edited to remove real titles — can still carry
@@ -515,7 +515,7 @@ export default function StoryboardWorkspace({
               {/* Show a course header ONLY when the backend has a real title.
                   When the course is unnamed (or still carrying the schema
                   default like "New Course Title") we suppress the entire
-                  Course/H1 block — ADAPT-3785 forbids rendering placeholder
+                  Course/H1 block — forbids rendering placeholder
                   title text on the storyboard, in Preview, or in the export. */}
               {resolvedCourseTitle ? (
                 <div className="mb-8 border-b pb-5">

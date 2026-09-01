@@ -1,4 +1,3 @@
-// Center toolbar above the canvas (spec AC2/AC3/AC7, Figma-aligned ADAPT-3842/ADAPT-3785).
 //   Single row: STORYBOARD DOCUMENT · Add Heading · Add Content ·
 //          (Refresh from course · Enrich with AI, right-aligned)
 

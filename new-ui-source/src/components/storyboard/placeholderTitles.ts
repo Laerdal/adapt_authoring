@@ -1,4 +1,4 @@
-// Storyboard placeholder-title filtering (ADAPT-3785).
+// Storyboard placeholder-title filtering.
 //
 // Adapt's content model.schema falls back to placeholder titles ("New Article
 // Title", "New Block Title", "New Component Title", "New Menu/Page Title",
