@@ -1,4 +1,3 @@
-// "Add Heading" dropdown (spec AC4, Figma-aligned ADAPT-3842).
 //
 // Matches the Figma "Course Creation Center" HeadingDropdown: each option is
 // a two-line row with a bold H1/H2/H3 badge (`.sb-heading-chip`) and the

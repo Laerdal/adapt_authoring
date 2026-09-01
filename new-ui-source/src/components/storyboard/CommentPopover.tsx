@@ -1,4 +1,4 @@
-// Block-anchored comment popover for the storyboard (ADAPT-3760).
+// Block-anchored comment popover for the storyboard.
 //
 // Opened from Add Content → Comment. Reuses the existing storyboardcomment
 // backend via useStoryboardReview (add / resolve / delete / reply) — comments

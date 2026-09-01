@@ -1,4 +1,4 @@
-// Shared media/asset mapping for storyboard component cards (ADAPT-3760).
+// Shared media/asset mapping for storyboard component cards.
 //
 // This module has NO React/BlockNote dependency so it can be imported by both
 // the editor card (componentBlock.tsx) and the persistence layer

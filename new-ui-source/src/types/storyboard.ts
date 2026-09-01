@@ -209,10 +209,19 @@ export function defaultAssessmentData(kind: AssessmentKind): AssessmentData {
   }
 }
 
-/** Return a list of human-readable issues; empty ⇒ generation-ready (AC5). */
-export function validateAssessment(kind: AssessmentKind, data: AssessmentData): string[] {
+/** Return a list of human-readable issues; empty ⇒ generation-ready (AC5).
+ *
+ *  Title/Body precedence: the block-level Title input is the primary question
+ *  header and feeds the backend `displayTitle` (hydrated from
+ *  `blockTitle || question` — see `storyboardGeneration.ts`). The Body field
+ *  is optional longer question copy, rendered separately only when distinct
+ *  from the Title. `blockTitle` is passed by callers so either a filled Title
+ *  or a filled Body satisfies the "question required" rule. */
+export function validateAssessment(kind: AssessmentKind, data: AssessmentData, blockTitle: string = ''): string[] {
   const issues: string[] = [];
-  if (!data.question || !data.question.trim()) issues.push('Question text is required.');
+  const hasQuestion = !!(data.question && data.question.trim());
+  const hasTitle = !!blockTitle.trim();
+  if (!hasQuestion && !hasTitle) issues.push('Question text is required.');
 
   switch (kind) {
     case 'mcq':

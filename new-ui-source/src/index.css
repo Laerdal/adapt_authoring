@@ -429,9 +429,11 @@ html, body {
 }
 
 .sb-toolbar-btn-samaritan {
+  border-radius: 9999px;
   border-color: color-mix(in oklab, var(--samaritan) 30%, transparent);
   background: var(--life-color-bg-surface-samaritan-subtle);
   color: var(--samaritan);
+  font-weight: 600;
 }
 .sb-toolbar-btn-samaritan:hover:not(:disabled) {
   background: color-mix(in oklab, var(--samaritan) 14%, transparent);

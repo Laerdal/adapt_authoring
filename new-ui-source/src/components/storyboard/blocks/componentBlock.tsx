@@ -192,6 +192,31 @@ function parseData(kind: ComponentKind, raw: string): ComponentData {
   return defaultComponentData(kind);
 }
 
+// A component with real content (loaded from an existing document/course)
+// opens collapsed in read-only Preview; a brand-new, still-blank
+// component (just inserted from Add Content) opens expanded so the author can
+// start typing immediately instead of clicking Edit first.
+function hasComponentContent(kind: ComponentKind, data: ComponentData, title: string): boolean {
+  if (title.trim() || data.description.trim() || data.instruction.trim()) return true;
+  switch (kind) {
+    case 'groupedContent':
+      return (data.items || []).some((it) => it.title.trim() || it.body.trim() || it.image.trim());
+    case 'image':
+      return !!(data.image?.link || data.image?.url);
+    case 'video':
+    case 'audio':
+      return !!(data.media?.asset?.link || data.media?.asset?.url || data.media?.poster?.link || data.media?.poster?.url);
+    case 'h5p':
+      return !!(data.media?.asset?.link || data.media?.asset?.url);
+    case 'laerdalForm':
+      return (data.fields || []).some((f) => f.label.trim());
+    case 'assessmentResult':
+      return !!(data.result?.assessmentId.trim() || (data.result?.bands || []).some((b) => b.feedback.trim()));
+    default:
+      return false;
+  }
+}
+
 // ── Presentational helpers ───────────────────────────────────────────────────
 
 const inputCls =
@@ -806,7 +831,11 @@ export const componentBlock = createReactBlockSpec(
       const kind = (COMPONENT_KINDS.includes(block.props.kind as ComponentKind) ? block.props.kind : 'text') as ComponentKind;
       const meta = META[kind];
       const [model, setModel] = useState<ComponentData>(() => parseData(kind, block.props.data as string));
-      const [collapsed, setCollapsed] = useState(false);
+      // content already on the page opens in read-only Preview —
+      // the author clicks "Edit" to reveal the editable fields, rather than
+      // landing in edit mode every time the document loads. A brand-new,
+      // still-blank component (just inserted) opens expanded instead.
+      const [collapsed, setCollapsed] = useState(() => hasComponentContent(kind, model, block.props.title as string));
       const [source, setSource] = useState(false);
       const [dismissed, setDismissed] = useState(false);
       const title = block.props.title as string;

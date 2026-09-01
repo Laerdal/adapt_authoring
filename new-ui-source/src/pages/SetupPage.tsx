@@ -3437,40 +3437,51 @@ function CourseCreationCenterContent() {
       />
 
       {/* -- Second Row Header -- */}
-      <div className="h-[56px] bg-white border-b border-[#d8dde6] flex items-center px-4 md:px-6 gap-3 shrink-0 relative z-10">
-        <div className="flex items-center gap-2 text-[#111827] min-w-0">
-          <SidebarMaskIcon file="overview-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current opacity-80" />
-          <span className="text-base font-semibold truncate">{activeItem?.label ?? "Course Overview"}</span>
-        </div>
+      {/* Hidden on Storyboard: it isn't part of the Course Configuration nav
+          (activeItem resolves to nothing there) and StoryboardTopBar already
+          provides its own Export/Publish-equivalent actions. */}
+      {activeNav !== "storyboarding" && (
+        <div className="h-[56px] bg-white border-b border-[#d8dde6] flex items-center px-4 md:px-6 gap-3 shrink-0 relative z-10">
+          <div className="flex items-center gap-2 text-[#111827] min-w-0">
+            <SidebarMaskIcon file="overview-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current opacity-80" />
+            <span className="text-base font-semibold truncate">{activeItem?.label ?? "Course Overview"}</span>
+          </div>
 
-        <div className="ml-auto flex items-center gap-4">
-          <button
-            type="button"
-            onClick={openExportDialog}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold bg-transparent text-[var(--life-base-black)] rounded-[8px] hover:bg-[var(--life-primary-050)] hover:text-[var(--life-primary-700)] active:bg-[var(--life-primary-100)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer"
-          >
-            <SidebarMaskIcon file="export-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-            <span className="hidden lg:inline">Export</span>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </button>
+          <div className="ml-auto flex items-center gap-4">
+            <button
+              type="button"
+              onClick={openExportDialog}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold bg-transparent text-[var(--life-base-black)] rounded-[8px] hover:bg-[var(--life-primary-050)] hover:text-[var(--life-primary-700)] active:bg-[var(--life-primary-100)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer"
+            >
+              <SidebarMaskIcon file="export-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+              <span className="hidden lg:inline">Export</span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => handleNavigation("publish")}
-            className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold rounded-[8px] transition-colors active:bg-[var(--life-primary-800)] cursor-pointer ${activeNav === "publish" ? "bg-[var(--life-primary-700)] text-[var(--life-base-white)]" : "bg-[var(--life-primary-500)] text-[var(--life-base-white)] hover:bg-[var(--life-primary-700)]"}`}
-          >
-            <SidebarMaskIcon file="publish-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-            <span className="hidden lg:inline">Publish</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => handleNavigation("publish")}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold rounded-[8px] transition-colors active:bg-[var(--life-primary-800)] cursor-pointer ${activeNav === "publish" ? "bg-[var(--life-primary-700)] text-[var(--life-base-white)]" : "bg-[var(--life-primary-500)] text-[var(--life-base-white)] hover:bg-[var(--life-primary-700)]"}`}
+            >
+              <SidebarMaskIcon file="publish-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+              <span className="hidden lg:inline">Publish</span>
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* -- Body -- */}
       <div className="flex flex-1 overflow-hidden">
 
         {/* -- Left panel -- */}
+        {/* Hidden on Storyboard (ADAPT-3785): the Storyboard workspace is not
+            one of this sidebar's nav items and ships its own full-bleed chrome
+            (StoryboardTopBar) per the Figma design — showing Course
+            Configuration alongside it duplicated navigation/export actions.
+            Course Configuration itself is unaffected on every other tab. */}
+        {activeNav !== "storyboarding" && (
         <aside
           className={`h-full bg-white border-r border-[#d8dde6] flex flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-16" : "w-[256px]"}`}
         >
@@ -3586,6 +3597,7 @@ function CourseCreationCenterContent() {
           </nav>
 
         </aside>
+        )}
 
         {/* -- Right content panel -- */}
         <main className={`flex-1 overflow-hidden bg-[#f8fafc] ${activeNav === "menu" || activeNav === "navigation" || activeNav === "storyboarding" || activeNav === "translation" ? "" : "overflow-y-auto px-8 py-8 min-h-0"}`}>
