@@ -1,6 +1,8 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { UnsavedChangesModal } from "../../pages/setup/unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "../../pages/setup/useUnsavedChangesNavigationGuard";
+import { ensureCoursePreview } from "../../api/adaptAuthoring";
+import { useAuth } from "../../context/AuthContext";
 import {
   DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS,
   getValidatorEnablerPdfSettings,
@@ -269,10 +271,14 @@ export default function ExportPdfPage({
   pendingNavigation?: string | null;
   onPendingNavigationHandled?: () => void;
 }) {
+  const { user } = useAuth();
+  const exportFrameRef = useRef<HTMLIFrameElement | null>(null);
   const [cfg, setCfg] = useState<ValidatorEnablerPdfSettings>(DEFAULT_SETTINGS);
   const [savedCfg, setSavedCfg] = useState<ValidatorEnablerPdfSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportFrameUrl, setExportFrameUrl] = useState("");
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const dirty = JSON.stringify(cfg) !== JSON.stringify(savedCfg);
@@ -387,6 +393,78 @@ export default function ExportPdfPage({
     const target = consumePendingNavigation();
     if (target) onNavigationRequest?.(target);
   }
+
+  async function handleExportAsPdf() {
+    if (loading || saving || exporting) return;
+
+    if (!cfg.pdfExportEnabled) {
+      setToast({ type: "error", message: "Enable PDF export before exporting" });
+      return;
+    }
+
+    setExporting(true);
+    let waitingForIframeTrigger = false;
+    try {
+      if (dirty) {
+        const saved = await handleSave();
+        if (!saved) return;
+      }
+
+      const tenantId = user?._tenantId;
+      if (!tenantId) {
+        setToast({ type: "error", message: "Unable to start PDF export (missing tenant context)" });
+        return;
+      }
+
+      const ensured = await ensureCoursePreview(tenantId, courseId);
+      if (!ensured?.success) {
+        setToast({ type: "error", message: ensured?.message || "Unable to prepare preview for PDF export" });
+        return;
+      }
+
+      setToast({ type: "success", message: "Starting PDF export..." });
+      setExportFrameUrl(`/studio/${tenantId}/${courseId}/?embedded=1&isCDNMode=true&_cs=${Date.now()}`);
+      waitingForIframeTrigger = true;
+    } finally {
+      if (!waitingForIframeTrigger) {
+        setExporting(false);
+      }
+    }
+  }
+
+  useEffect(() => {
+    if (!exporting || !exportFrameUrl) return;
+
+    let cancelled = false;
+    let attempts = 0;
+
+    const clickRuntimeExport = () => {
+      if (cancelled) return;
+      attempts += 1;
+
+      const button = exportFrameRef.current?.contentDocument?.querySelector<HTMLButtonElement>("#pdf-export-btn");
+      if (button) {
+        button.click();
+        setToast({ type: "success", message: "PDF download started" });
+        setExporting(false);
+        return;
+      }
+
+      if (attempts >= 40) {
+        setToast({ type: "error", message: "Could not start PDF export. Open Preview once and try again." });
+        setExporting(false);
+        return;
+      }
+
+      window.setTimeout(clickRuntimeExport, 500);
+    };
+
+    window.setTimeout(clickRuntimeExport, 700);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [exporting, exportFrameUrl]);
 
   return (
     <div className="flex w-full max-w-[672px] flex-col gap-7">
@@ -542,11 +620,12 @@ export default function ExportPdfPage({
         <div>
           <button
             type="button"
-            disabled={saving}
+            disabled={saving || exporting || loading}
+            onClick={() => void handleExportAsPdf()}
             className="inline-flex h-11 items-center gap-2 rounded-lg bg-[#2d6fa8] px-6 text-sm font-bold text-white transition-colors hover:bg-[#245c8f]"
           >
             <DownloadIcon />
-            Export as PDF
+            {exporting ? "Exporting..." : "Export as PDF"}
           </button>
         </div>
       </div>
@@ -612,6 +691,17 @@ export default function ExportPdfPage({
         onSave={() => void handleConfirmSave()}
         onClose={clearPendingNavigation}
       />
+
+      {exportFrameUrl && (
+        <iframe
+          ref={exportFrameRef}
+          title="PDF Export Runner"
+          src={exportFrameUrl}
+          className="hidden"
+          aria-hidden="true"
+          tabIndex={-1}
+        />
+      )}
     </div>
   );
 }
