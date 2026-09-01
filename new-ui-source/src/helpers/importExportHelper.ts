@@ -175,6 +175,11 @@ function str(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
 }
 
+function nonEmptyStr(value: unknown, fallback: string): string {
+  if (typeof value !== "string") return fallback;
+  return value.trim() ? value : fallback;
+}
+
 function bool(value: unknown, fallback = false): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
@@ -249,9 +254,9 @@ export async function getValidatorEnablerPdfSettings(courseId: string): Promise<
     tocBlockTitles: bool(courseConfig._tocIncludeH3, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.tocBlockTitles),
     tocComponentTitles: bool(courseConfig._tocIncludeH4, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.tocComponentTitles),
     pdfTitle: str(courseConfig._pdfTitle, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.pdfTitle),
-    pdfAuthor: str(courseConfig._pdfAuthor, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.pdfAuthor),
-    pdfSubject: str(courseConfig._pdfSubject, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.pdfSubject),
-    pdfCopyright: str(courseConfig._pdfCopyright, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.pdfCopyright),
+    pdfAuthor: nonEmptyStr(courseConfig._pdfAuthor, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.pdfAuthor),
+    pdfSubject: nonEmptyStr(courseConfig._pdfSubject, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.pdfSubject),
+    pdfCopyright: nonEmptyStr(courseConfig._pdfCopyright, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.pdfCopyright),
     passwordEnabled: bool(courseConfig._passwordProtection, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.passwordEnabled),
     userPassword: str(courseConfig._openPassword, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.userPassword),
     ownerPassword: str(courseConfig._ownerPassword, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.ownerPassword),
