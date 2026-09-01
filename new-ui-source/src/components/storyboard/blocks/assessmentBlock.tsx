@@ -360,7 +360,13 @@ export const assessmentBlock = createReactBlockSpec(
     render: ({ block, editor }) => {
       const kind = (isAssessmentKind(block.props.kind as string) ? block.props.kind : 'mcq') as AssessmentKind;
       const [model, setModel] = useState<AssessmentData>(() => parseData(kind, block.props.data as string));
-      const [collapsed, setCollapsed] = useState(false);
+      //assessments open in Preview by default so the reader
+      // sees the full question + options + feedback exactly as rendered in
+      // the Word/PDF export. Editing is opt-in via the "Edit" button in the
+      // preview header. This applies uniformly to loaded AND brand-new
+      // questions — a blank question still shows an empty preview until the
+      // author explicitly hits Edit.
+      const [collapsed, setCollapsed] = useState(true);
       const [source, setSource] = useState(false);
       const title = block.props.title as string;
       const fb = model.feedback ?? emptyFeedback();
@@ -381,24 +387,153 @@ export const assessmentBlock = createReactBlockSpec(
         }
       };
 
-      const issues = validateAssessment(kind, model);
+      const issues = validateAssessment(kind, model, title);
+
+      // Only these top-level labels have authored text worth showing.
+      const feedbackRows: Array<[keyof AssessmentFeedback, string]> = [
+        ['correct', 'Correct'],
+        ['incorrect', 'Incorrect'],
+        ['incorrectNotFinal', 'Incorrect — not final'],
+        ['partlyCorrectFinal', 'Partly correct — final'],
+        ['partlyCorrectNotFinal', 'Partly correct — not final'],
+      ];
+      const displayedFeedback = feedbackRows.filter(([k]) => fb[k] && fb[k].trim());
+      const displayedOptions = (model.options ?? []).filter((o) => o.text.trim());
+      const displayedItems = (model.items ?? []).filter((i) => i && i.trim());
+      const displayedPairs = (model.pairs ?? []).filter((p) => p && (p.prompt || p.answer));
+      const displayedAnswers = (model.answers ?? []).filter((a) => a && a.trim());
+
+      // Question Title/Body resolution (PR review — no duplicated text):
+      //   • The block-level Title is the primary header; when the author left
+      //     it empty the question Body stands in as the header (matches how
+      //     the backend hydrates `displayTitle` from `blockTitle || question`).
+      //   • The question Body is rendered as its own paragraph only when it
+      //     isn't already the header text — the same sentence never shows twice.
+      const questionText = (model.question || '').trim();
+      const blockTitle = (title || '').trim();
+      const headerText = blockTitle || questionText || 'Untitled question';
+      const showQuestionParagraph = !!questionText && questionText !== headerText;
 
       if (collapsed) {
         return (
-          <div className="group relative my-2 rounded-lg border bg-muted/20 p-3" contentEditable={false}>
-            <div className="mb-1 flex items-center gap-2">
-              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{LABELS[kind]}</span>
-              <span className="truncate text-sm font-medium text-foreground">{title || model.question || 'Untitled question'}</span>
+          <div
+            className="group relative my-2 rounded-lg border bg-muted/20 p-4"
+            contentEditable={false}
+          >
+            <div className="mb-2 flex items-center gap-2">
+              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {LABELS[kind]}
+              </span>
+              <span className="truncate text-base font-semibold text-foreground">
+                {headerText}
+              </span>
             </div>
-            {model.question && <p className="text-sm text-foreground">{model.question}</p>}
-            <ul className="mt-1 space-y-0.5">
-              {(model.options ?? []).filter((o) => o.text.trim()).map((o, i) => (
-                <li key={i} className={`text-sm ${o.correct ? 'font-medium text-[#166534]' : 'text-muted-foreground'}`}>
-                  {o.correct ? '✓ ' : '• '}{o.text}
-                </li>
-              ))}
-            </ul>
-            <button type="button" onClick={() => setCollapsed(false)} className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-xs text-muted-foreground opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100">
+            {showQuestionParagraph && (
+              <p className="mb-2 whitespace-pre-wrap text-sm text-foreground">{questionText}</p>
+            )}
+
+            {/* MCQ / graphic MCQ / checklist — option list with correct/incorrect glyph + per-option feedback */}
+            {(kind === 'mcq' || kind === 'gmcq' || kind === 'checklist') && displayedOptions.length > 0 && (
+              <ul className="mt-2 space-y-1.5">
+                {displayedOptions.map((o, i) => (
+                  <li key={i} className="text-sm">
+                    <div className="flex items-start gap-2">
+                      <span
+                        aria-hidden
+                        className={`mt-[3px] inline-block h-3 w-3 shrink-0 rounded-full ${
+                          o.correct ? 'bg-foreground' : 'border border-foreground/60'
+                        }`}
+                      />
+                      <span className={o.correct ? 'font-medium text-foreground' : 'text-foreground'}>
+                        {o.text}
+                      </span>
+                    </div>
+                    {kind === 'gmcq' && (o.imageUrl || o.image) && (
+                      <img
+                        src={o.imageUrl || o.image}
+                        alt={o.text}
+                        className="ml-5 mt-1 h-20 w-32 rounded object-cover"
+                      />
+                    )}
+                    {o.feedback && o.feedback.trim() && (
+                      <div className="ml-5 mt-0.5 text-[13px] italic text-muted-foreground">
+                        {o.feedback}
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* Matching */}
+            {kind === 'matching' && displayedPairs.length > 0 && (
+              <ul className="mt-2 space-y-1 text-sm">
+                {displayedPairs.map((p, i) => (
+                  <li key={i} className="flex items-baseline gap-2">
+                    <span aria-hidden>•</span>
+                    <span>{p.prompt}</span>
+                    <span className="font-semibold">→</span>
+                    <span className="italic text-muted-foreground">{p.answer}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* Reorder */}
+            {kind === 'reorder' && displayedItems.length > 0 && (
+              <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm">
+                {displayedItems.map((i, idx) => <li key={idx}>{i}</li>)}
+              </ol>
+            )}
+
+            {/* Text input */}
+            {kind === 'textInput' && displayedAnswers.length > 0 && (
+              <ul className="mt-2 space-y-1 text-sm">
+                {displayedAnswers.map((a, i) => (
+                  <li key={i} className="flex items-baseline gap-2">
+                    <span aria-hidden>•</span>
+                    <span className="italic text-muted-foreground">Accepted answer:</span>
+                    <span>{a}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {/* Slider */}
+            {kind === 'slider' && model.slider && (
+              <p className="mt-2 text-sm text-foreground">
+                Range: {model.slider.min ?? 0}–{model.slider.max ?? 10} step{' '}
+                {model.slider.step ?? 1}, correct answer {model.slider.correct ?? ''}
+              </p>
+            )}
+
+            {/* Whole-question feedback (only labels with authored text) */}
+            {displayedFeedback.length > 0 && (
+              <div className="mt-3 space-y-0.5 text-sm">
+                {displayedFeedback.map(([k, lbl]) => (
+                  <div key={k}>
+                    <span className="font-semibold text-foreground">{lbl}:</span>{' '}
+                    <span className="text-foreground">{fb[k]}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Submit instruction */}
+            <p className="mt-3 text-sm italic text-muted-foreground">{FOOTER[kind]}</p>
+
+            {issues.length > 0 && (
+              <div className="mt-2 inline-flex items-center gap-1 text-xs text-[#92400e]" title={issues.join('\n')}>
+                <AlertTriangle className="h-3.5 w-3.5" /> {issues.length} to fix
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setCollapsed(false)}
+              className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-xs text-muted-foreground opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100 focus:opacity-100"
+              title="Edit this question"
+            >
               <RefreshCw className="h-3 w-3" /> Edit
             </button>
           </div>

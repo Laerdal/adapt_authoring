@@ -1,4 +1,4 @@
-// TOC tree (spec AC1, Figma-aligned ADAPT-3842). Pure projection of document
+// TOC tree (spec AC1, Figma-aligned. Pure projection of document
 // headings, with H1–H4 chip badges (`.sb-heading-chip`), expand/collapse, and
 // click-to-navigate. Selected row uses the LIFE primary-subtle surface.
 

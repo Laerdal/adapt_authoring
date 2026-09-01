@@ -19,6 +19,13 @@ import {
   type ImageData,
   type MediaData,
 } from "@/components/storyboard/mediaMapping";
+// Placeholder-title filtering is a Storyboard concern — the helpers live in
+// the Storyboard folder and are used here only by the storyboard read/write
+// projectors (getCourseStoryboardBlocks / saveStoryboardToCourse).
+import {
+  isDefaultSchemaTitle,
+  storyboardLabel,
+} from "@/components/storyboard/placeholderTitles";
 import { reverseKind, isAssessmentComponentKind } from "./componentMapping";
 import { parseAssessmentData, type AssessmentKind } from "@/types/storyboard";
 export {
@@ -1711,6 +1718,78 @@ export async function saveCourseBookmarkingSettings(
   });
 }
 
+// ── Assessment Completion ───────────────────────────────────────────────────
+// The `adapt-contrib-assessment` extension only has course-level settings
+// (properties.schema `pluginLocations.course._assessment` — no config-level
+// location at all): `_isPercentageBased`, `_scoreToPass`, `_correctToPass`.
+// Same install/enable pattern as Bookmarking above: the toggle represents
+// whether the extension is installed (config._enabledExtensions), since the
+// schema itself has no `_isEnabled` field of its own.
+const ASSESSMENT_EXTENSION_NAME = "adapt-contrib-assessment";
+
+export interface CourseAssessmentSettings {
+  _isEnabled?: boolean;
+  _isPercentageBased?: boolean;
+  _scoreToPass?: number;
+  _correctToPass?: number;
+  [key: string]: unknown;
+}
+
+export async function getCourseAssessmentSettings(courseId: string): Promise<CourseAssessmentSettings> {
+  const [course, config] = await Promise.all([
+    apiClient.get<AnyRecord>(`/api/content/course/${courseId}`),
+    apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`),
+  ]);
+  const source = obj(obj(course._extensions)._assessment);
+
+  return {
+    ...source,
+    _isEnabled: isExtensionInstalledByName(config, ASSESSMENT_EXTENSION_NAME),
+    _isPercentageBased: bool(source._isPercentageBased, true),
+    _scoreToPass: typeof source._scoreToPass === "number" ? source._scoreToPass : 60,
+    _correctToPass: typeof source._correctToPass === "number" ? source._correctToPass : 60,
+  };
+}
+
+export async function saveCourseAssessmentSettings(
+  courseId: string,
+  settings: CourseAssessmentSettings,
+): Promise<void> {
+  let course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+  const config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+
+  const isInstalled = isExtensionInstalledByName(config, ASSESSMENT_EXTENSION_NAME);
+  const shouldEnable = settings._isEnabled === undefined ? isInstalled : bool(settings._isEnabled, false);
+  if (shouldEnable && !isInstalled) {
+    const ids = await resolveExtensionTypeIdsByNames([ASSESSMENT_EXTENSION_NAME]);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/enable/${courseId}`, { extensions: ids });
+      course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+    }
+  } else if (!shouldEnable && isInstalled) {
+    const ids = await resolveExtensionTypeIdsByNames([ASSESSMENT_EXTENSION_NAME]);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/disable/${courseId}`, { extensions: ids });
+      course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+    }
+  }
+
+  const existingAssessment = obj(obj(course._extensions)._assessment);
+  const nextAssessment: CourseAssessmentSettings = {
+    ...existingAssessment,
+    _isPercentageBased: bool(settings._isPercentageBased, bool(existingAssessment._isPercentageBased, true)),
+    _scoreToPass: typeof settings._scoreToPass === "number" ? settings._scoreToPass : typeof existingAssessment._scoreToPass === "number" ? existingAssessment._scoreToPass : 60,
+    _correctToPass: typeof settings._correctToPass === "number" ? settings._correctToPass : typeof existingAssessment._correctToPass === "number" ? existingAssessment._correctToPass : 60,
+  };
+
+  await apiClient.put(`/api/content/course/${courseId}`, {
+    _extensions: {
+      ...obj(course._extensions),
+      _assessment: nextAssessment,
+    },
+  });
+}
+
 // ── Estimated Time ───────────────────────────────────────────────────────────
 // The `adapt-estimated-time` extension stores its settings in two places:
 //   • course document `_extensions._estimatedTime` (or root `_estimatedTime`):
@@ -2052,6 +2131,11 @@ interface EngineContentNode {
   properties?: Record<string, unknown>;
 }
 
+// Adapt's content model.schema falls back to placeholder titles ("New Article
+// Title" etc.) whenever a node is created without an explicit title. Filtering
+// those out is a Storyboard concern — see the placeholderTitles import at the
+// top of this file.
+
 // A component type installed on the instance (GET /api/componenttype).
 export interface ComponentTypeOption {
   component: string; // engine `_component` key, e.g. 'text'
@@ -2360,7 +2444,7 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
     getCourseAssetIdMap(courseId),
   ]);
 
-  const label = (n: EngineContentNode) => n.displayTitle || n.title || "Untitled";
+  const label = storyboardLabel;
   // Plugin fields live under `properties`; fall back to the top level for any
   // legacy data written before that was fixed.
   const propOf = (n: EngineContentNode, key: "_graphic" | "_media") =>
@@ -2457,11 +2541,30 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
     }
     // Assessment question components → assessment card (options + feedback).
     if (sbKind && isAssessmentComponentKind(sbKind)) {
-      const data = parseAssessmentData(sbKind as AssessmentKind, props, stripHtml(comp.body || ""));
+      // ADAPT-3785 §2/§3 — Question Title source of truth + de-duplication:
+      //   • The question title lives on the backend component's `displayTitle`
+      //     (with `title` as a mirror). This IS the question shown to the
+      //     learner. `body` may hold legacy text on older records.
+      //   • The Storyboard round-trips it through `data.question` (the Body
+      //     textarea in the assessment card) — the block-level Title input
+      //     stays empty when displayTitle is the only source, so the same
+      //     text never appears in two edit fields at once.
+      //   • Only when `title` and `displayTitle` genuinely differ (an unusual
+      //     hand-edit) do we surface the block-level title separately.
+      const displayTitle = ((comp.displayTitle as string) || "").trim();
+      const rawTitle = ((comp.title as string) || "").trim();
+      const cleanDisplayTitle = isDefaultSchemaTitle(displayTitle) ? "" : displayTitle;
+      const cleanTitle = isDefaultSchemaTitle(rawTitle) ? "" : rawTitle;
+      const questionSeed = cleanDisplayTitle || cleanTitle || stripHtml(comp.body || "");
+      // Block-title input stays empty unless the AT stored a distinct `title`
+      // (independent of displayTitle) — avoids duplicating displayTitle into
+      // the block-title input on reload.
+      const blockTitleProp = cleanTitle && cleanTitle !== questionSeed ? cleanTitle : "";
+      const data = parseAssessmentData(sbKind as AssessmentKind, props, questionSeed);
       out.push({
         id: comp._id,
         type: "sbAssessment",
-        props: { kind: sbKind, title: label(comp), adaptComponent: kindOf, data: JSON.stringify(data) },
+        props: { kind: sbKind, title: blockTitleProp, adaptComponent: kindOf, data: JSON.stringify(data) },
       });
       return;
     }
@@ -2551,14 +2654,24 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       return;
     }
     // Unknown / text → H4 heading + body paragraph (text write-back contract).
-    out.push({ id: comp._id, type: "heading", props: { level: 4 }, content: label(comp) });
+    // Suppress the H4 entirely when the component has no authored title —
+    // otherwise the storyboard/export show an anonymous heading line above
+    // the body paragraph, which reads as an "empty title" placeholder.
+    const compTitle = label(comp);
+    if (compTitle) out.push({ id: comp._id, type: "heading", props: { level: 4 }, content: compTitle });
     const bodyText = stripHtml(comp.body || "");
     if (bodyText) out.push({ id: `${comp._id}${BODY_SUFFIX}`, type: "paragraph", content: bodyText });
   };
   const emitTopic = (page: EngineContentNode) => {
-    out.push({ id: page._id, type: "heading", props: { level: 1 }, content: label(page) });
+    // A page/article/block with no authored title (schema default like
+    // "New Menu/Page Title") is projected without its header — see the
+    // storyboardLabel + DEFAULT_SCHEMA_TITLES filter. Emitting empty headings
+    // clutters the document with blank lines and pollutes the Word export.
+    const topicTitle = label(page);
+    if (topicTitle) out.push({ id: page._id, type: "heading", props: { level: 1 }, content: topicTitle });
     for (const article of childrenOf(articles, page._id)) {
-      out.push({ id: article._id, type: "heading", props: { level: 2 }, content: label(article) });
+      const articleTitle = label(article);
+      if (articleTitle) out.push({ id: article._id, type: "heading", props: { level: 2 }, content: articleTitle });
       // The generation engine caps each Adapt block at 2 components — extra
       // components are placed in continuation blocks that carry the SAME H3
       // title. When we round-trip the course, those continuation blocks would
@@ -2568,7 +2681,8 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       let prevTitle: string | null = null;
       for (const blk of childrenOf(blocks, article._id)) {
         const title = label(blk);
-        if (title !== prevTitle) {
+        // Same suppression rule as pages/articles above.
+        if (title && title !== prevTitle) {
           out.push({ id: blk._id, type: "heading", props: { level: 3 }, content: title });
           prevTitle = title;
         }
@@ -2601,7 +2715,7 @@ export async function saveStoryboardToCourse(
     getContentByCourse("component", courseId),
   ]);
 
-  const label = (n: EngineContentNode) => n.displayTitle || n.title || "Untitled";
+  const label = storyboardLabel;
   const index = new Map<
     string,
     { level: StructureLevel; title: string; body?: string; component?: string; parentId?: string }
@@ -2839,9 +2953,132 @@ export async function getComponentBehaviourSchema(
   return componentTypePropertiesCache[key] ?? {};
 }
 
+// ── Extensions accordion (Topic/Section/Content Group/Component) ───────────
+// Installed extensions (GET /api/extensiontype) — the plugin-manager record,
+// keyed by `.name` (the bower package name, e.g. "adapt-contrib-trickle").
+export interface ExtensionTypeOption {
+  _id: string;
+  name: string;
+  displayName: string;
+  version?: string;
+}
+
+let extensionTypeOptionsCache: ExtensionTypeOption[] | null = null;
+
+export async function getExtensionTypeOptions(): Promise<ExtensionTypeOption[]> {
+  if (!extensionTypeOptionsCache) {
+    const rows = await apiClient.get<Array<Partial<ExtensionTypeOption>>>("/api/extensiontype");
+    extensionTypeOptionsCache = (Array.isArray(rows) ? rows : [])
+      .filter((row) => row && row.name)
+      .map((row) => ({
+        _id: row._id as string,
+        name: row.name as string,
+        displayName: row.displayName || (row.name as string),
+        version: row.version,
+      }));
+  }
+  return extensionTypeOptionsCache;
+}
+
+// Enables an extension type for a course (POST /api/extension/enable/:courseId),
+// so the framework build actually bundles it. Safe to call redundantly — the
+// server no-ops if the extension is already enabled for the course.
+export async function enableExtensionForCourse(courseId: string, extensionTypeId: string): Promise<void> {
+  if (!courseId || !extensionTypeId) return;
+  try {
+    await apiClient.post(`/api/extension/enable/${courseId}`, { extensions: [extensionTypeId] });
+  } catch (err) {
+    console.warn("Failed to enable extension for course", err);
+  }
+}
+
+export type ExtensionSchemaLevel = "course" | "contentobject" | "article" | "block" | "component";
+
+export interface ExtensionFieldSchema {
+  type?: string;
+  title?: string;
+  legend?: string;
+  name?: string; // extensiontype `.name` this settings key belongs to (set server-side from pluginLocations)
+  properties?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+const EXTENSION_SCHEMA_LEVELS: ExtensionSchemaLevel[] = ["course", "contentobject", "article", "block", "component"];
+let extensionSchemasByLevelCache: Record<ExtensionSchemaLevel, Record<string, ExtensionFieldSchema>> | null = null;
+
+// Extension settings fields available at each content level, sourced from
+// GET /api/content/schema: the server merges every installed extension's
+// `pluginLocations` schema onto the matching level's `_extensions.properties`
+// (see contentmanager.js `processPluginLocations`/`filterSchemas`). Only
+// extensions with a schema entry for a given level should be offered there
+// (e.g. Trickle only declares `article`/`block` locations, so it's only
+// ever listed as available on Section/Content Group, never Topic/Component).
+export async function getExtensionSchemasByLevel(): Promise<
+  Record<ExtensionSchemaLevel, Record<string, ExtensionFieldSchema>>
+> {
+  if (!extensionSchemasByLevelCache) {
+    if (!mergedSchemaCache) {
+      mergedSchemaCache = await apiClient.get("/api/content/schema");
+    }
+    const result = {} as Record<ExtensionSchemaLevel, Record<string, ExtensionFieldSchema>>;
+    for (const level of EXTENSION_SCHEMA_LEVELS) {
+      const levelSchema = (mergedSchemaCache as Record<string, unknown> | null)?.[level] as
+        | { _extensions?: { properties?: Record<string, ExtensionFieldSchema> } }
+        | undefined;
+      result[level] = levelSchema?._extensions?.properties ?? {};
+    }
+    extensionSchemasByLevelCache = result;
+  }
+  return extensionSchemasByLevelCache;
+}
+
+// Raw course-level `_extensions` (actual stored values, no schema defaults
+// merged in) — the ultimate ancestor when computing whether a Topic/Section/
+// Content Group/Component extension setting is Inherited from or Overridden
+// vs. its nearest configured parent.
+export async function getCourseExtensions(courseId: string): Promise<Record<string, unknown>> {
+  const course = await apiClient.get<{ _extensions?: Record<string, unknown> }>(`/api/content/course/${courseId}`);
+  return course._extensions ?? {};
+}
+
+// Per-component-type extension schema (GET /api/content/schema, keyed by the
+// componenttype's `.component` name, e.g. "mcq"/"text"). Unlike the generic
+// `component` level from getExtensionSchemasByLevel, this merge goes through
+// contentmanager.js's `isComponentTypeSchema` branch, which additionally runs
+// questionComponentHelper.filterQuestionOnlyExtensionProperties — so
+// question-only extension attrs (e.g. `_questionStateGraphic`) are stripped
+// out for every component type except actual question components (mcq,
+// gmcq, ...). Use this (not the generic level) to list "available extensions"
+// for a specific selected component instance.
+let componentExtensionSchemaIndex: Record<string, Record<string, ExtensionFieldSchema>> | null = null;
+
+export async function getComponentExtensionSchema(
+  componentKey: string
+): Promise<Record<string, ExtensionFieldSchema>> {
+  const key = (componentKey || "").trim().toLowerCase();
+  if (!key) return {};
+
+  if (!componentExtensionSchemaIndex) {
+    if (!mergedSchemaCache) {
+      mergedSchemaCache = await apiClient.get("/api/content/schema");
+    }
+    componentExtensionSchemaIndex = {};
+    Object.entries(mergedSchemaCache ?? {}).forEach(([schemaKey, schema]) => {
+      const extensionsProperties = (
+        schema as { _extensions?: { properties?: Record<string, ExtensionFieldSchema> } }
+      )?._extensions?.properties;
+      if (extensionsProperties) {
+        componentExtensionSchemaIndex![schemaKey.toLowerCase()] = extensionsProperties;
+      }
+    });
+  }
+
+  return componentExtensionSchemaIndex[key] ?? {};
+}
+
 // Walk a schema `properties` object, producing each property's default value.
 // Ported from adapt-preview-edit/js/contentEditView.js (buildSchemaDefaults).
-function buildSchemaDefaults(
+export function buildSchemaDefaults(
   schemaProperties: Record<string, unknown> | undefined
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};

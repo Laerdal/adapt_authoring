@@ -1,4 +1,4 @@
-// Action channel for storyboard component cards (ADAPT-3760).
+// Action channel for storyboard component cards.
 //
 // AI and Comment are authoring ACTIONS attached to a component card, not course
 // components. The cards are rendered inside BlockNote's block layer, so instead
