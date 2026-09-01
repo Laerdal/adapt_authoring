@@ -205,9 +205,10 @@ const NAV_GROUPS = NAV_ITEMS.reduce<{ id: string; label: string; items: NavLeafI
 // To guard a page in future (unsaved-changes interception), add `guarded: true`
 // on that page item in NAV_ITEMS. It will automatically be included here.
 
-const GUARDED_NAV_IDS = new Set(
-  NAV_ITEMS.filter((item) => item.heading !== true && item.guarded).map((item) => item.id)
-);
+const GUARDED_NAV_IDS = new Set([
+  ...NAV_ITEMS.filter((item) => item.heading !== true && item.guarded).map((item) => item.id),
+  "export-pdf",
+]);
 
 /* -- Course Structure panel -- */
 function CourseStructurePanel({
@@ -2982,7 +2983,16 @@ function CourseCreationCenterContent() {
     if (activeNav === "cdn-deployment") return <CdnDeploymentPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "translation") return <LegacyTranslationPanel courseId={courseId} />;
     if (activeNav === "publish") return <PublishPanel />;
-    if (activeNav === "export-pdf") return <ExportPdfPage courseTitle={title} />;
+    if (activeNav === "export-pdf") {
+      return (
+        <ExportPdfPage
+          courseTitle={title}
+          onNavigationRequest={setActiveNav}
+          pendingNavigation={pendingNavigation}
+          onPendingNavigationHandled={() => setPendingNavigation(null)}
+        />
+      );
+    }
     if (activeNav === "storyboarding")
       return (
         <StoryboardWorkspace
