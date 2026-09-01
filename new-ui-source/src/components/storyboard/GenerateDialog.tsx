@@ -1,4 +1,4 @@
-// Generate-course dialog (ADAPT-3760, Phase 4 / AC11, Figma-aligned ADAPT-3842).
+
 // Shows a pre-generation validation report + plan summary, then the result.
 
 import { Loader2, X, AlertTriangle, CheckCircle2, ArrowRight } from 'lucide-react';

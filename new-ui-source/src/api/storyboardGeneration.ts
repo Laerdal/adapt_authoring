@@ -403,12 +403,29 @@ function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => string 
     } else if (type === "sbAssessment") {
       const kind = ((raw.props && raw.props.kind) || "mcq") as AssessmentKind;
       const data = safeParseJson<AssessmentData>(raw.props && raw.props.data, { question: "" });
+      // Learner-facing Title/Body mapping (PR review — Title is primary):
+      //   • The block-level Title input is the primary question header — it
+      //     becomes the component's `title` + `displayTitle` in the Adapt
+      //     content model.
+      //   • When the Title is empty, the question body stands in as the title.
+      //   • Final fallback "Question" only when both are empty (schema needs
+      //     a non-empty title for the component to save).
+      //
+      // Body-vs-Title de-duplication:
+      //   The question body is written into `body` only when it differs from
+      //   the resolved title, so authors who provide a distinct Title and Body
+      //   get both, while a body that already became the title is never
+      //   rendered twice (once as title, once as description).
+      const blockTitle = ((raw.props && (raw.props.title as string)) || "").trim();
+      const questionText = (data.question || "").trim();
+      const resolvedTitle = blockTitle || questionText || "Question";
+      const bodyText = questionText && questionText !== resolvedTitle ? questionText : "";
       comp = {
         sourceBlockId: id,
         existingId,
         componentKey: kind,
-        title: ((raw.props && raw.props.title) || data.question || "").trim() || "Question",
-        body: data.question || "",
+        title: resolvedTitle,
+        body: bodyText,
         assessmentPatch: buildAssessmentFields(kind, data),
       };
       // GMCQ: record per-option DAM-asset ids so we can create the courseasset
@@ -550,9 +567,11 @@ export async function planStoryboardGeneration(
     if (raw.type === "sbAssessment") {
       const kind = (raw.props && raw.props.kind) || "";
       const data = safeParseJson<AssessmentData>(raw.props && raw.props.data, { question: "" });
+      const blockTitle = ((raw.props && (raw.props.title as string)) || "").trim();
       if (isAssessmentKind(kind)) {
-        const problems = validateAssessment(kind, data);
-        if (problems.length) warnings.push(`Assessment "${data.question || kind}": ${problems[0]}`);
+        // Block Title is a valid question source (ADAPT-3785 §2 — feeds `displayTitle`).
+        const problems = validateAssessment(kind, data, blockTitle);
+        if (problems.length) warnings.push(`Assessment "${data.question || blockTitle || kind}": ${problems[0]}`);
       }
     }
   }
@@ -678,12 +697,15 @@ export async function generateStoryboardCourse(
         gSort += 1;
 
         let cSort = 1;
-        for (const c of g.components) {
+        for (let ci = 0; ci < g.components.length; ci += 1) {
+          const c = g.components[ci];
           const bodyHtml = bodyHtmlOf(c);
-          // Default component alignment is Left. New components added to the
-          // Storyboard are always generated (and saved) with left alignment so
-          // the Storyboard sequence and layout match the generated course.
-          const layout: "left" = "left";
+          // A Content Group (block) holding a single component should fill
+          // the full width (matches the Course Preview / real Adapt layout —
+          // there's nothing to sit beside it). Two components split left/right,
+          // as before. `enforceMaxComponentsPerBlock` guarantees ≤2 per group.
+          const layout: "full" | "left" | "right" =
+            g.components.length <= 1 ? "full" : ci === 0 ? "left" : "right";
           // Resolve the storyboard kind → installed Adapt component (source of
           // truth). null = unsupported (NO text fallback).
           const resolvedType = getType(c.componentKey);

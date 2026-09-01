@@ -6,6 +6,7 @@ interface PageEditorTopBarProps {
   onCourseTitleChange: (title: string) => void;
   onToggleLeftPanel: () => void;
   onBack: () => void;
+  onHome: () => void;
   onSave: () => void;
   onSelectPreflight: () => void;
   onSelectPublish: () => void;
@@ -45,6 +46,7 @@ export default function PageEditorTopBar({
   onCourseTitleChange,
   onToggleLeftPanel,
   onBack,
+  onHome,
   onSave,
   onSelectPreflight,
   onSelectPublish,
@@ -99,6 +101,7 @@ export default function PageEditorTopBar({
         loginName={loginName}
         activeNav="editor"
         onBack={onBack}
+        onHome={onHome}
         onOpenCourseSettings={onOpenCourseSettings}
         onOpenStoryboard={onOpenStoryboard}
         onOpenEditor={() => undefined}

@@ -1,4 +1,4 @@
-// "Samaritan Assistance" AI popover for the storyboard (ADAPT-3760).
+// "Samaritan Assistance" AI popover for the storyboard.
 //
 // Functional parity with the legacy CKEditor "Samaritan Assistance" tool
 // (frontend/src/modules/scaffold/backboneFormsOverrides.js): four fixed actions

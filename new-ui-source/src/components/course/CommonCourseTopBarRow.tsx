@@ -10,6 +10,7 @@ interface CommonCourseTopBarRowProps {
   loginName: string;
   activeNav: TopBarNav;
   onBack: () => void;
+  onHome: () => void;
   onOpenCourseSettings: () => void;
   onOpenStoryboard: () => void;
   onOpenEditor: () => void;
@@ -61,6 +62,7 @@ export default function CommonCourseTopBarRow({
   loginName,
   activeNav,
   onBack,
+  onHome,
   onOpenCourseSettings,
   onOpenStoryboard,
   onOpenEditor,
@@ -93,7 +95,15 @@ export default function CommonCourseTopBarRow({
     <header className={className ?? "h-[64px] bg-white border-b border-[#d8dde6] flex items-center shrink-0 px-4 md:px-6 gap-3 relative z-20"}>
       <div className="flex items-center gap-3 md:gap-4 min-w-0">
         {leadingSlot}
-        <img src="/adapt-logo.jpeg" alt="Adapt logo" width={34} height={34} className="rounded-lg shrink-0" />
+        <button
+          type="button"
+          onClick={onHome}
+          aria-label="Go to course dashboard"
+          title="Course dashboard"
+          className="shrink-0 rounded-lg cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--life-primary-500)]"
+        >
+          <img src="/adapt-logo.jpeg" alt="Adapt Studio" width={34} height={34} className="rounded-lg" />
+        </button>
         <div className="min-w-0 flex items-center gap-3">
           <p className="text-[15px] leading-none font-semibold text-[#1f2937] tracking-tight hidden lg:block">Adapt Studio</p>
           <div className="hidden lg:block w-px h-5 bg-[#d8dde6]" />
