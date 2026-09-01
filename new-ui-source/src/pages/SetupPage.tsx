@@ -2986,6 +2986,7 @@ function CourseCreationCenterContent() {
     if (activeNav === "export-pdf") {
       return (
         <ExportPdfPage
+          courseId={courseId}
           courseTitle={title}
           onNavigationRequest={setActiveNav}
           pendingNavigation={pendingNavigation}

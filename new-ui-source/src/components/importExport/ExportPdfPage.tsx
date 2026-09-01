@@ -1,6 +1,11 @@
 import { useEffect, useId, useState } from "react";
 import { UnsavedChangesModal } from "../../pages/setup/unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "../../pages/setup/useUnsavedChangesNavigationGuard";
+import {
+  getValidatorEnablerPdfSettings,
+  saveValidatorEnablerPdfSettings,
+  type ValidatorEnablerPdfSettings,
+} from "../../helpers/importExportHelper";
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-[#9ca3af]">{children}</div>;
@@ -248,33 +253,7 @@ function AssetPicker({
   );
 }
 
-type ExportPdfSettings = {
-  pdfExportEnabled: boolean;
-  coverPageSource: "library" | "url";
-  coverPageUrl: string;
-  footerLogoSource: "library" | "url";
-  footerLogoUrl: string;
-  tocPageTitles: boolean;
-  tocArticleTitles: boolean;
-  tocBlockTitles: boolean;
-  tocComponentTitles: boolean;
-  pdfTitle: string;
-  pdfAuthor: string;
-  pdfSubject: string;
-  pdfCopyright: string;
-  passwordEnabled: boolean;
-  userPassword: string;
-  ownerPassword: string;
-  encryptionLevel: string;
-  disablePrinting: boolean;
-  disableCopying: boolean;
-  disableAnnotation: boolean;
-  allowWatermarking: boolean;
-  watermarkText: string;
-  watermarkPosition: string;
-};
-
-const DEFAULT_SETTINGS: ExportPdfSettings = {
+const DEFAULT_SETTINGS: ValidatorEnablerPdfSettings = {
   pdfExportEnabled: true,
   coverPageSource: "library",
   coverPageUrl: "",
@@ -301,20 +280,23 @@ const DEFAULT_SETTINGS: ExportPdfSettings = {
 };
 
 export default function ExportPdfPage({
+  courseId,
   courseTitle,
   onNavigationRequest,
   pendingNavigation,
   onPendingNavigationHandled,
 }: {
+  courseId: string;
   courseTitle?: string;
   onNavigationRequest?: (nav: string) => void;
   pendingNavigation?: string | null;
   onPendingNavigationHandled?: () => void;
 }) {
-  const [cfg, setCfg] = useState<ExportPdfSettings>(DEFAULT_SETTINGS);
-  const [savedCfg, setSavedCfg] = useState<ExportPdfSettings>(DEFAULT_SETTINGS);
+  const [cfg, setCfg] = useState<ValidatorEnablerPdfSettings>(DEFAULT_SETTINGS);
+  const [savedCfg, setSavedCfg] = useState<ValidatorEnablerPdfSettings>(DEFAULT_SETTINGS);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState<{ type: "success"; message: string } | null>(null);
+  const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const dirty = JSON.stringify(cfg) !== JSON.stringify(savedCfg);
 
@@ -332,7 +314,35 @@ export default function ExportPdfPage({
     return () => window.clearTimeout(timer);
   }, [toast]);
 
-  function setField<K extends keyof ExportPdfSettings>(key: K, value: ExportPdfSettings[K]) {
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSettings() {
+      setLoading(true);
+      try {
+        const loaded = await getValidatorEnablerPdfSettings(courseId);
+        if (cancelled) return;
+        setCfg(loaded);
+        setSavedCfg(loaded);
+      } catch (error) {
+        if (!cancelled) {
+          console.warn("Failed to load validator enabler PDF settings", error);
+          setToast({ type: "error", message: "Failed to load saved settings" });
+          setCfg(DEFAULT_SETTINGS);
+          setSavedCfg(DEFAULT_SETTINGS);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void loadSettings();
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
+
+  function setField<K extends keyof ValidatorEnablerPdfSettings>(key: K, value: ValidatorEnablerPdfSettings[K]) {
     setCfg((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -341,16 +351,26 @@ export default function ExportPdfPage({
     setToast(null);
   }
 
-  async function handleSave() {
-    if (saving) return;
+  async function handleSave(): Promise<boolean> {
+    if (saving) return false;
     setSaving(true);
-    setSavedCfg(cfg);
-    setToast({ type: "success", message: "Changes saved successfully" });
-    setSaving(false);
+    try {
+      await saveValidatorEnablerPdfSettings(courseId, cfg);
+      setSavedCfg(cfg);
+      setToast({ type: "success", message: "Changes saved successfully" });
+      return true;
+    } catch (error) {
+      console.warn("Failed to save validator enabler PDF settings", error);
+      setToast({ type: "error", message: "Failed to save changes" });
+      return false;
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleConfirmSave() {
-    await handleSave();
+    const saved = await handleSave();
+    if (!saved) return;
     const target = consumePendingNavigation();
     if (target) onNavigationRequest?.(target);
   }
@@ -367,6 +387,12 @@ export default function ExportPdfPage({
         <h1 className="text-[20px] font-bold text-[#111827]">Export as PDF</h1>
       </div>
 
+      {loading ? (
+        <section className="rounded-lg border border-[#e5e7eb] bg-white px-4 py-4 text-sm text-[#6b7280]">
+          Loading saved PDF settings...
+        </section>
+      ) : (
+      <>
       <section className="flex flex-col gap-3.5">
         <SectionTitle>PDF Export</SectionTitle>
         <ToggleRow label="Enable PDF Export" checked={cfg.pdfExportEnabled} onChange={(value) => setField("pdfExportEnabled", value)} />
@@ -518,6 +544,8 @@ export default function ExportPdfPage({
         </div>
       </div>
       )}
+      </>
+      )}
 
       {dirty && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-3 rounded-xl bg-white border border-[var(--life-warning-100)] shadow-lg">
@@ -557,9 +585,13 @@ export default function ExportPdfPage({
 
       {toast && (
         <div className="fixed top-4 right-4 z-[60] pointer-events-none">
-          <div className="flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium border pointer-events-auto min-w-[260px] max-w-sm bg-[var(--life-positive-050)] border-[var(--life-positive-100)] text-[var(--life-positive-500)]">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-positive-500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-              <polyline points="20 6 9 17 4 12" />
+          <div className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium border pointer-events-auto min-w-[260px] max-w-sm ${
+            toast.type === "error"
+              ? "bg-[#fef2f2] border-[#fecaca] text-[#b91c1c]"
+              : "bg-[var(--life-positive-050)] border-[var(--life-positive-100)] text-[var(--life-positive-500)]"
+          }`}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={toast.type === "error" ? "#b91c1c" : "var(--life-positive-500)"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+              {toast.type === "error" ? <path d="M18 6 6 18M6 6l12 12" /> : <polyline points="20 6 9 17 4 12" />}
             </svg>
             <span className="flex-1">{toast.message}</span>
           </div>
