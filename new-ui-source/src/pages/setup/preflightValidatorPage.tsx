@@ -19,7 +19,7 @@
 // platform today (the extension itself only offers an in-page "Download
 // Report" button), so results are surfaced there, not in an integrated panel
 // here.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   getPreflightReport,
   getAccessibilityScormPrerequisites,
@@ -205,6 +205,11 @@ export function PreflightValidatorPage({
   const [building, setBuilding] = useState(false);
   const [validationWarning, setValidationWarning] = useState<string | null>(null);
   const [buildStatus, setBuildStatus] = useState<string | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
+
+  // Close any in-flight validation-build SSE stream when the page unmounts —
+  // mirrors cdnDeploymentPage.tsx's cleanup for the same underlying endpoint.
+  useEffect(() => () => eventSourceRef.current?.close(), []);
 
   useEffect(() => {
     if (!courseId) return;
@@ -248,7 +253,13 @@ export function PreflightValidatorPage({
     setAccessibilityPrereqError(null);
     setEnablingAccessibilityPrereqs(true);
     try {
-      await ensureValidatorEnablerEnabled(courseId);
+      const validatorEnabled = await ensureValidatorEnablerEnabled(courseId);
+      if (!validatorEnabled) {
+        setAccessibilityPrereqError(
+          "Couldn't automatically enable the Laerdal Validator Enabler extension. Please enable it in Course Settings and try again.",
+        );
+        return;
+      }
       setExtensionState((prev) => (prev ? { ...prev, validatorEnablerInstalled: true } : prev));
 
       const cdnSettings = await getCdnDeploymentSettings(courseId);
@@ -290,7 +301,11 @@ export function PreflightValidatorPage({
     setScormValidatorEnableError(null);
     setEnablingValidatorFromScorm(true);
     try {
-      await ensureValidatorEnablerEnabled(courseId);
+      const validatorEnabled = await ensureValidatorEnablerEnabled(courseId);
+      if (!validatorEnabled) {
+        setScormValidatorEnableError("Couldn't automatically enable the Laerdal Validator Enabler extension. Please try again.");
+        return;
+      }
       setExtensionState((prev) => (prev ? { ...prev, validatorEnablerInstalled: true } : prev));
     } catch {
       setScormValidatorEnableError("Couldn't automatically enable the Laerdal Validator Enabler extension. Please try again.");
@@ -338,32 +353,39 @@ export function PreflightValidatorPage({
       url.searchParams.append("version", cdnSettings.version);
 
       const es = new EventSource(url.toString());
-      let opened = false;
+      eventSourceRef.current = es;
       let stopped = false;
       const stop = () => {
         if (stopped) return;
         stopped = true;
         setBuilding(false);
         es.close();
+        if (eventSourceRef.current === es) eventSourceRef.current = null;
       };
 
       es.onmessage = (event) => {
         const data = event.data as string;
         const latestMatch = data.match(/<div class="latest">([\s\S]*?)<\/div>/);
         const hrefMatch = latestMatch ? latestMatch[1].match(/href="([^"]+)"/) : null;
-        if (hrefMatch && !opened) {
-          opened = true;
+        if (hrefMatch) {
           try {
             const deployedUrl = new URL(hrefMatch[1], window.location.origin);
             deployedUrl.searchParams.set("autoComplete", "true");
             if (options.accessibility) deployedUrl.searchParams.set("isAccessibilityChecker", "true");
             if (options.scorm) deployedUrl.searchParams.set("isSuspendReport", "true");
-            window.open(deployedUrl.toString(), "_blank");
+            // noopener,noreferrer: this opens a URL derived from the CDN deploy
+            // response — without it, the new tab could reach back into this
+            // window via window.opener (reverse tabnabbing).
+            window.open(deployedUrl.toString(), "_blank", "noopener,noreferrer");
             setBuildStatus("Validation build opened in a new tab. The report is available from the Course Complete screen once the course finishes auto-completing.");
           } catch {
             setBuildStatus("Build finished, but the deployed link could not be opened automatically.");
           }
-        } else if (!hrefMatch) {
+          // The stream's only job was to hand us this link — nothing further
+          // it emits is needed, so stop listening instead of holding the
+          // connection open for the rest of the (possibly long) build.
+          stop();
+        } else {
           setBuildStatus(data);
         }
       };

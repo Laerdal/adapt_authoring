@@ -3597,9 +3597,15 @@ export interface PreflightReport {
 
 // GET /api/preflight/report/:courseid → { success, data } (utils/sendResponse.js envelope).
 export async function getPreflightReport(courseId: string): Promise<PreflightReport> {
-  const result = await apiClient.get<{ success: boolean; data: PreflightReport }>(
+  const result = await apiClient.get<{ success: boolean; data?: PreflightReport; error?: string; message?: string }>(
     `/api/preflight/report/${courseId}`,
   );
+  // The engine can respond 200 with { success: false, error/message } (utils/sendResponse.js)
+  // rather than a non-2xx status, so apiClient's own throw-on-non-2xx doesn't catch this case —
+  // callers must not be handed `undefined` as if it were a valid report.
+  if (!result.success || !result.data) {
+    throw new Error(result.error || result.message || "Couldn't generate the preflight report.");
+  }
   return result.data;
 }
 
