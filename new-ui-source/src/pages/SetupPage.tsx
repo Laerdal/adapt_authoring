@@ -24,7 +24,8 @@ import { CompletionProgressPage } from "./setup/completionProgressPage";
 import { CdnDeploymentPage } from "./setup/cdnDeploymentPage";
 import ExportMenu, { ExportStatusPopup } from "../components/importExport/Export";
 import ExportPdfPage from "../components/importExport/ExportPdfPage";
-import { runExportSourceAction, runExportStoryboardAction } from "../helpers/importExportHelper";
+import ExportStoryboardPage from "../components/importExport/ExportStoryboardPage";
+import { runExportSourceAction } from "../helpers/importExportHelper";
 
 const ICON_BASE = "/new/assets/icons";
 
@@ -208,6 +209,7 @@ const NAV_GROUPS = NAV_ITEMS.reduce<{ id: string; label: string; items: NavLeafI
 const GUARDED_NAV_IDS = new Set([
   ...NAV_ITEMS.filter((item) => item.heading !== true && item.guarded).map((item) => item.id),
   "export-pdf",
+  "export-storyboard",
 ]);
 
 /* -- Course Structure panel -- */
@@ -2878,7 +2880,6 @@ function CourseCreationCenterContent() {
   const [activeNav, setActiveNav] = useState(() => (initialPanel === "storyboarding" ? "storyboarding" : "overview"));
   const [collapsed, setCollapsed] = useState(false);
   const [exportingSource, setExportingSource] = useState(false);
-  const [exportingStoryboard, setExportingStoryboard] = useState(false);
   const [exportPopup, setExportPopup] = useState<{ status: "processing" | "success"; message: string } | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(NAV_GROUPS.map((group) => [group.id, true]))
@@ -2994,6 +2995,9 @@ function CourseCreationCenterContent() {
         />
       );
     }
+    if (activeNav === "export-storyboard") {
+      return <ExportStoryboardPage courseId={courseId} />;
+    }
     if (activeNav === "storyboarding")
       return (
         <StoryboardWorkspace
@@ -3075,7 +3079,7 @@ function CourseCreationCenterContent() {
           <ExportMenu
             disabled={!courseId || !user?._tenantId}
             exportSourceLoading={exportingSource}
-            exportStoryboardLoading={exportingStoryboard}
+            exportStoryboardLoading={false}
             onExportSource={() => {
               void runExportSourceAction({
                 exportingSource,
@@ -3103,25 +3107,8 @@ function CourseCreationCenterContent() {
               setActiveNav("export-pdf");
             }}
             onExportStoryboard={() => {
-              void runExportStoryboardAction({
-                exportingStoryboard,
-                courseId,
-                setExportingStoryboard,
-                onProcessingStart: () => {
-                  setExportPopup({ status: "processing", message: "Preparing storyboard export…" });
-                },
-                onDownloadStarted: () => {
-                  setExportPopup({ status: "success", message: "Storyboard exported successfully" });
-                },
-                onUnavailable: () => {
-                  setExportPopup(null);
-                  window.alert("Storyboard export is not available right now.");
-                },
-                onError: (message) => {
-                  setExportPopup(null);
-                  window.alert(`Unable to export storyboard. ${message}`);
-                },
-              });
+              setExportPopup(null);
+              setActiveNav("export-storyboard");
             }}
           />
 
