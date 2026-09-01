@@ -3,14 +3,12 @@ import { useEffect, useRef, useState } from "react";
 interface ExportMenuProps {
   onExportSource?: () => void;
   onExportPdf?: () => void;
-  onExportStoryboard?: () => void;
   disabled?: boolean;
   exportSourceLoading?: boolean;
-  exportStoryboardLoading?: boolean;
 }
 
 interface ExportOption {
-  id: "source" | "pdf" | "storyboard";
+  id: "source" | "pdf";
   label: string;
   onSelect?: () => void;
   disabled?: boolean;
@@ -72,10 +70,8 @@ function SidebarMaskIcon({ file, className }: { file: string; className?: string
 export default function ExportMenu({
   onExportSource,
   onExportPdf,
-  onExportStoryboard,
   disabled = false,
   exportSourceLoading = false,
-  exportStoryboardLoading = false,
 }: ExportMenuProps) {
   const [isOpen, setIsOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -106,7 +102,6 @@ export default function ExportMenu({
   const options: ExportOption[] = [
     { id: "source", label: exportSourceLoading ? "Export Source..." : "Export Source", onSelect: onExportSource, disabled: exportSourceLoading },
     { id: "pdf", label: "Export as PDF", onSelect: onExportPdf },
-    { id: "storyboard", label: exportStoryboardLoading ? "Export Storyboard..." : "Export Storyboard", onSelect: onExportStoryboard, disabled: exportStoryboardLoading },
   ];
 
   function onOptionClick(option: ExportOption) {

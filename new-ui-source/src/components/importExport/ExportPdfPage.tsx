@@ -3,6 +3,7 @@ import { UnsavedChangesModal } from "../../pages/setup/unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "../../pages/setup/useUnsavedChangesNavigationGuard";
 import { ensureCoursePreview } from "../../api/adaptAuthoring";
 import { useAuth } from "../../context/AuthContext";
+import AssetPickerModal from "../common/AssetPickerModal";
 import {
   DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS,
   getValidatorEnablerPdfSettings,
@@ -188,15 +189,22 @@ function AssetPicker({
   onSourceChange,
   url,
   onUrlChange,
+  onChooseLibrary,
 }: {
   label: string;
   source: "library" | "url";
   onSourceChange: (value: "library" | "url") => void;
   url: string;
   onUrlChange: (value: string) => void;
+  onChooseLibrary: () => void;
 }) {
   const libraryId = useId();
   const urlId = useId();
+  const [urlPreviewFailed, setUrlPreviewFailed] = useState(false);
+
+  useEffect(() => {
+    setUrlPreviewFailed(false);
+  }, [url]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -204,7 +212,10 @@ function AssetPicker({
       <div className="inline-flex self-start overflow-hidden rounded-lg border border-[#d1d5db] bg-white">
         <button
           type="button"
-          onClick={() => onSourceChange("library")}
+          onClick={() => {
+            onSourceChange("library");
+            onChooseLibrary();
+          }}
           className={`px-4 py-2 text-[13px] font-semibold transition-colors ${
             source === "library" ? "bg-[#2d6fa8] text-white" : "bg-white text-[#374151] hover:bg-[#f8fafc]"
           }`}
@@ -225,32 +236,61 @@ function AssetPicker({
       </div>
 
       {source === "library" ? (
-        <div className="flex items-center gap-3 rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5">
-          <span className="text-[#9ca3af] shrink-0">
-            <ImageIcon />
-          </span>
-          <span className="flex-1 text-[13px] text-[#9ca3af]">No asset selected</span>
-          <button
-            id={libraryId}
-            type="button"
-            className="rounded-md border border-[#d1d5db] bg-white px-3.5 py-1.5 text-[13px] font-semibold text-[#374151] transition-colors hover:bg-[#f3f4f6]"
-          >
-            Browse
-          </button>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-3 rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5">
+            <span className="text-[#9ca3af] shrink-0">
+              <ImageIcon />
+            </span>
+            <span className={`flex-1 text-[13px] ${url ? "text-[#374151]" : "text-[#9ca3af]"}`}>
+              {url ? "Asset selected" : "No asset selected"}
+            </span>
+            <button
+              id={libraryId}
+              type="button"
+              onClick={onChooseLibrary}
+              className="rounded-md border border-[#d1d5db] bg-white px-3.5 py-1.5 text-[13px] font-semibold text-[#374151] transition-colors hover:bg-[#f3f4f6]"
+            >
+              {url ? "Change" : "Browse"}
+            </button>
+          </div>
+          {url && (
+            <div className="overflow-hidden rounded-lg border border-[#e5e7eb] bg-[#f8fafc]">
+              <img
+                src={url}
+                alt={`${label} preview`}
+                className="h-36 w-full object-contain bg-white"
+              />
+            </div>
+          )}
         </div>
       ) : (
         <label htmlFor={urlId} className="sr-only">{label} URL</label>
       )}
 
       {source === "url" && (
-        <input
-          id={urlId}
-          type="text"
-          value={url}
-          onChange={(event) => onUrlChange(event.target.value)}
-          placeholder="https://example.com/image.png"
-          className="w-full rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5 text-sm text-[#111827] placeholder:text-[#9ca3af] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors"
-        />
+        <div className="flex flex-col gap-2">
+          <input
+            id={urlId}
+            type="text"
+            value={url}
+            onChange={(event) => onUrlChange(event.target.value)}
+            placeholder="https://example.com/image.png"
+            className="w-full rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5 text-sm text-[#111827] placeholder:text-[#9ca3af] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors"
+          />
+          {url.trim() && !urlPreviewFailed && (
+            <div className="overflow-hidden rounded-lg border border-[#e5e7eb] bg-[#f8fafc]">
+              <img
+                src={url.trim()}
+                alt={`${label} URL preview`}
+                className="h-36 w-full object-contain bg-white"
+                onError={() => setUrlPreviewFailed(true)}
+              />
+            </div>
+          )}
+          {url.trim() && urlPreviewFailed && (
+            <p className="text-xs text-[#b91c1c]">Unable to load image from this URL.</p>
+          )}
+        </div>
       )}
     </div>
   );
@@ -279,6 +319,7 @@ export default function ExportPdfPage({
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportFrameUrl, setExportFrameUrl] = useState("");
+  const [assetPickerTarget, setAssetPickerTarget] = useState<"cover" | "footer" | null>(null);
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
   const dirty = JSON.stringify(cfg) !== JSON.stringify(savedCfg);
@@ -493,6 +534,7 @@ export default function ExportPdfPage({
             onSourceChange={(value) => setField("coverPageSource", value)}
             url={cfg.coverPageUrl}
             onUrlChange={(value) => setField("coverPageUrl", value)}
+            onChooseLibrary={() => setAssetPickerTarget("cover")}
           />
         </section>
 
@@ -550,6 +592,7 @@ export default function ExportPdfPage({
             onSourceChange={(value) => setField("footerLogoSource", value)}
             url={cfg.footerLogoUrl}
             onUrlChange={(value) => setField("footerLogoUrl", value)}
+            onChooseLibrary={() => setAssetPickerTarget("footer")}
           />
         </section>
 
@@ -700,6 +743,23 @@ export default function ExportPdfPage({
           className="hidden"
           aria-hidden="true"
           tabIndex={-1}
+        />
+      )}
+
+      {assetPickerTarget && (
+        <AssetPickerModal
+          assetType="image"
+          onClose={() => setAssetPickerTarget(null)}
+          onSelect={(asset) => {
+            if (assetPickerTarget === "cover") {
+              setField("coverPageSource", "library");
+              setField("coverPageUrl", asset.url);
+            } else {
+              setField("footerLogoSource", "library");
+              setField("footerLogoUrl", asset.url);
+            }
+            setAssetPickerTarget(null);
+          }}
         />
       )}
     </div>

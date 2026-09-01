@@ -16,16 +16,6 @@ export interface ExportSourceActionOptions {
   onError?: (message: string) => void;
 }
 
-export interface ExportStoryboardActionOptions {
-  exportingStoryboard: boolean;
-  courseId: string;
-  setExportingStoryboard: (value: boolean) => void;
-  onProcessingStart?: () => void;
-  onDownloadStarted?: () => void;
-  onUnavailable?: () => void;
-  onError?: (message: string) => void;
-}
-
 function triggerDownload(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -101,73 +91,6 @@ export async function runExportSourceAction(options: ExportSourceActionOptions):
   }
 }
 
-export async function exportStoryboardCourseZip(courseId: string, includeDisplayProp = false): Promise<void> {
-  const params = new URLSearchParams();
-  if (includeDisplayProp) {
-    params.append("includeDisplayProp", "true");
-  }
-  params.append("optimize", "true");
-  params.append("maxImageWidth", "800");
-  params.append("maxImageHeight", "600");
-
-  const query = params.toString();
-  const url = `/api/storyboard/zip/${encodeURIComponent(courseId)}${query ? `?${query}` : ""}`;
-  const response = await fetch(url, {
-    method: "GET",
-    headers: {
-      Accept: "application/zip, application/json",
-      "Cache-Control": "no-cache",
-    },
-    credentials: "same-origin",
-  });
-
-  if (!response.ok) {
-    const contentType = response.headers.get("content-type") || "";
-    if (contentType.includes("application/json")) {
-      const err = await response.json().catch(() => null) as { error?: string; details?: string } | null;
-      throw new Error(err?.details || err?.error || `Storyboard export failed (${response.status})`);
-    }
-    throw new Error(`Storyboard export failed (${response.status})`);
-  }
-
-  const blob = await response.blob();
-  const filename = getFilenameFromDisposition(
-    response.headers.get("content-disposition"),
-    `storyboard-${courseId}.zip`
-  );
-  triggerDownload(blob, filename);
-}
-
-export async function runExportStoryboardAction(options: ExportStoryboardActionOptions): Promise<void> {
-  const {
-    exportingStoryboard,
-    courseId,
-    setExportingStoryboard,
-    onProcessingStart,
-    onDownloadStarted,
-    onUnavailable,
-    onError,
-  } = options;
-
-  if (exportingStoryboard) return;
-
-  if (!courseId) {
-    onUnavailable?.();
-    return;
-  }
-
-  setExportingStoryboard(true);
-  onProcessingStart?.();
-  try {
-    await exportStoryboardCourseZip(courseId, false);
-    onDownloadStarted?.();
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Export failed";
-    onError?.(message);
-  } finally {
-    setExportingStoryboard(false);
-  }
-}
 
 type AnyRecord = Record<string, unknown>;
 type ValidatorAssetSource = "library" | "url";

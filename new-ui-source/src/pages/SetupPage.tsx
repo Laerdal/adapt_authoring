@@ -24,7 +24,6 @@ import { CompletionProgressPage } from "./setup/completionProgressPage";
 import { CdnDeploymentPage } from "./setup/cdnDeploymentPage";
 import ExportMenu, { ExportStatusPopup } from "../components/importExport/Export";
 import ExportPdfPage from "../components/importExport/ExportPdfPage";
-import ExportStoryboardPage from "../components/importExport/ExportStoryboardPage";
 import { runExportSourceAction } from "../helpers/importExportHelper";
 
 const ICON_BASE = "/new/assets/icons";
@@ -209,7 +208,6 @@ const NAV_GROUPS = NAV_ITEMS.reduce<{ id: string; label: string; items: NavLeafI
 const GUARDED_NAV_IDS = new Set([
   ...NAV_ITEMS.filter((item) => item.heading !== true && item.guarded).map((item) => item.id),
   "export-pdf",
-  "export-storyboard",
 ]);
 
 /* -- Course Structure panel -- */
@@ -2884,6 +2882,7 @@ function CourseCreationCenterContent() {
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(NAV_GROUPS.map((group) => [group.id, true]))
   );
+  const contentScrollRef = useRef<HTMLElement | null>(null);
 
   // Tracks requested navigation when on a panel with unsaved changes
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
@@ -2931,6 +2930,18 @@ function CourseCreationCenterContent() {
     const timer = window.setTimeout(() => setExportPopup(null), 3200);
     return () => window.clearTimeout(timer);
   }, [exportPopup]);
+
+  useEffect(() => {
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
+    };
+  }, []);
 
   const activeItem = NAV_ITEMS.find((n) => !n.heading && n.id === activeNav);
   const loginName = user?.username || user?.email || "Not signed in";
@@ -2995,9 +3006,6 @@ function CourseCreationCenterContent() {
         />
       );
     }
-    if (activeNav === "export-storyboard") {
-      return <ExportStoryboardPage courseId={courseId} />;
-    }
     if (activeNav === "storyboarding")
       return (
         <StoryboardWorkspace
@@ -3045,6 +3053,11 @@ function CourseCreationCenterContent() {
 
   const primaryTopNav: "settings" | "storyboard" | "editor" = activeNav === "storyboarding" ? "storyboard" : "settings";
 
+  useEffect(() => {
+    // Avoid carrying scroll position across panels (e.g. opening Export PDF mid-page).
+    contentScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+  }, [activeNav]);
+
   return (
     <div className="flex flex-col h-screen bg-[#f8fafc] overflow-hidden">
       {!courseId && (
@@ -3079,7 +3092,6 @@ function CourseCreationCenterContent() {
           <ExportMenu
             disabled={!courseId || !user?._tenantId}
             exportSourceLoading={exportingSource}
-            exportStoryboardLoading={false}
             onExportSource={() => {
               void runExportSourceAction({
                 exportingSource,
@@ -3106,10 +3118,6 @@ function CourseCreationCenterContent() {
               setExportPopup(null);
               setActiveNav("export-pdf");
             }}
-            onExportStoryboard={() => {
-              setExportPopup(null);
-              setActiveNav("export-storyboard");
-            }}
           />
 
           <button
@@ -3124,7 +3132,7 @@ function CourseCreationCenterContent() {
       </div>
 
       {/* -- Body -- */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden min-h-0">
 
         {/* -- Left panel -- */}
         <aside
@@ -3244,7 +3252,7 @@ function CourseCreationCenterContent() {
         </aside>
 
         {/* -- Right content panel -- */}
-        <main className={`flex-1 overflow-hidden bg-[#f8fafc] ${activeNav === "menu" || activeNav === "navigation" || activeNav === "storyboarding" || activeNav === "translation" ? "" : "overflow-y-auto px-8 py-8 min-h-0"}`}>
+        <main ref={contentScrollRef} className={`flex-1 overflow-hidden min-h-0 bg-[#f8fafc] ${activeNav === "menu" || activeNav === "navigation" || activeNav === "storyboarding" || activeNav === "translation" ? "" : "overflow-y-auto px-8 py-8"}`}>
           {renderPanel()}
         </main>
       </div>
