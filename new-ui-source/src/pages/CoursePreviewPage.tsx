@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import CommonCourseTopBarRow from "../components/course/CommonCourseTopBarRow";
-import { getCourseBootstrapData, seedMissingCourseDefaults, ensureCoursePreview } from "../api/adaptAuthoring";
+import { getCourseBootstrapData, seedMissingCourseDefaults, ensureCoursePreview, publishCoursePackage } from "../api/adaptAuthoring";
 import { useAuth } from "../context/AuthContext";
+import ExportDialog from "../components/common/ExportDialog";
+import PublishMenuButton from "../components/publish/PublishMenuButton";
+import PublishCourseDialog, { type PublishCoursePhase } from "../components/publish/PublishCourseDialog";
 
 type DeviceMode = "desktop" | "tablet" | "mobile";
 
@@ -44,6 +47,9 @@ export default function CoursePreviewPage() {
   // the possibly-issued PUT to complete before the framework loads course.json.
   const [defaultsReady, setDefaultsReady] = useState(false);
   const [previewState, setPreviewState] = useState<"preparing" | "ready" | "error">("preparing");
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [publishDialogPhase, setPublishDialogPhase] = useState<PublishCoursePhase | null>(null);
+  const [publishResult, setPublishResult] = useState<{ zipName?: string; downloadUrl?: string; message?: string }>({});
 
   useEffect(() => {
     if (!id) return;
@@ -122,6 +128,38 @@ export default function CoursePreviewPage() {
     return "w-full";
   }, [deviceMode]);
 
+  function openPublishDialog() {
+    setPublishResult({});
+    setPublishDialogPhase("confirm");
+  }
+
+  function closePublishDialog() {
+    setPublishDialogPhase(null);
+  }
+
+  async function handleConfirmPublish() {
+    const tenantId = user?._tenantId;
+    if (!id || !tenantId) {
+      setPublishResult({ message: "No course or tenant context available." });
+      setPublishDialogPhase("error");
+      return;
+    }
+    setPublishDialogPhase("running");
+    try {
+      const result = await publishCoursePackage(tenantId, id);
+      if (result.success) {
+        setPublishResult({ zipName: result.zipName, downloadUrl: result.downloadUrl });
+        setPublishDialogPhase("success");
+      } else {
+        setPublishResult({ message: result.message });
+        setPublishDialogPhase("error");
+      }
+    } catch (err) {
+      setPublishResult({ message: err instanceof Error ? err.message : "Publish failed." });
+      setPublishDialogPhase("error");
+    }
+  }
+
   return (
     <div className="flex flex-col h-screen bg-[#f8fafc] overflow-hidden">
       <CommonCourseTopBarRow
@@ -163,6 +201,23 @@ export default function CoursePreviewPage() {
           >
             Quick Edit
           </button>
+
+          <button
+            type="button"
+            onClick={() => setShowExportDialog(true)}
+            className="inline-flex items-center gap-1.5 h-9 px-3 text-[13px] font-bold bg-transparent text-[var(--life-base-black)] rounded-[8px] hover:bg-[var(--life-primary-050)] hover:text-[var(--life-primary-700)] active:bg-[var(--life-primary-100)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer"
+          >
+            <MaskIcon file="export-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+            Export
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+
+          <PublishMenuButton
+            onSelectPreflight={() => navigate(`/course/${id}/setup?panel=publish`)}
+            onSelectPublish={openPublishDialog}
+          />
         </div>
       </div>
 
@@ -195,6 +250,20 @@ export default function CoursePreviewPage() {
           </div>
         )}
       </main>
+
+      {showExportDialog && <ExportDialog onClose={() => setShowExportDialog(false)} />}
+
+      {publishDialogPhase && (
+        <PublishCourseDialog
+          phase={publishDialogPhase}
+          courseTitle={courseTitle}
+          zipName={publishResult.zipName}
+          downloadUrl={publishResult.downloadUrl}
+          errorMessage={publishResult.message}
+          onConfirm={() => void handleConfirmPublish()}
+          onClose={closePublishDialog}
+        />
+      )}
     </div>
   );
 }
