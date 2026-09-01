@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from "react";
 import { UnsavedChangesModal } from "../../pages/setup/unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "../../pages/setup/useUnsavedChangesNavigationGuard";
 import {
+  DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS,
   getValidatorEnablerPdfSettings,
   saveValidatorEnablerPdfSettings,
   type ValidatorEnablerPdfSettings,
@@ -254,7 +255,7 @@ function AssetPicker({
 }
 
 const DEFAULT_SETTINGS: ValidatorEnablerPdfSettings = {
-  pdfExportEnabled: true,
+  pdfExportEnabled: false,
   coverPageSource: "library",
   coverPageUrl: "",
   footerLogoSource: "library",
@@ -328,8 +329,8 @@ export default function ExportPdfPage({
         if (!cancelled) {
           console.warn("Failed to load validator enabler PDF settings", error);
           setToast({ type: "error", message: "Failed to load saved settings" });
-          setCfg(DEFAULT_SETTINGS);
-          setSavedCfg(DEFAULT_SETTINGS);
+          setCfg(DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS);
+          setSavedCfg(DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS);
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -341,6 +342,36 @@ export default function ExportPdfPage({
       cancelled = true;
     };
   }, [courseId]);
+
+  useEffect(() => {
+    async function refreshFromServer() {
+      if (dirty || saving) return;
+      try {
+        const loaded = await getValidatorEnablerPdfSettings(courseId);
+        setCfg(loaded);
+        setSavedCfg(loaded);
+      } catch {
+        // Keep current UI state if background refresh fails.
+      }
+    }
+
+    function handleFocus() {
+      void refreshFromServer();
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        void refreshFromServer();
+      }
+    }
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [courseId, dirty, saving]);
 
   function setField<K extends keyof ValidatorEnablerPdfSettings>(key: K, value: ValidatorEnablerPdfSettings[K]) {
     setCfg((prev) => ({ ...prev, [key]: value }));

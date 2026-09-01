@@ -213,7 +213,7 @@ export interface ValidatorEnablerPdfSettings {
 }
 
 export const DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS: ValidatorEnablerPdfSettings = {
-  pdfExportEnabled: true,
+  pdfExportEnabled: false,
   coverPageSource: "library",
   coverPageUrl: "",
   footerLogoSource: "library",
@@ -329,7 +329,7 @@ export async function saveValidatorEnablerPdfSettings(
   courseId: string,
   settings: ValidatorEnablerPdfSettings,
 ): Promise<void> {
-  const shouldEnable = bool(settings.pdfExportEnabled, true);
+  const shouldEnable = bool(settings.pdfExportEnabled, false);
   const config = await apiClient.get<EngineConfigDetails>(`/api/content/config/${courseId}`);
   const installed = isExtensionInstalledByTargetOrNames(
     config,
