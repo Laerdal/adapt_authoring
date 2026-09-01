@@ -178,6 +178,12 @@ interface EngineConfigDetails {
   _enabledExtensions?: Record<string, { _id: string; name: string; version?: string; targetAttribute?: string }>;
 }
 
+interface EngineCourseDetails {
+  _id: string;
+  _extensions?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
 const VALIDATOR_ENABLER_EXTENSION_TARGET = "_validatorEnabler";
 const VALIDATOR_ENABLER_EXTENSION_NAME_CANDIDATES = [
   "adapt-laerdal-validator-enabler",
@@ -223,9 +229,9 @@ export const DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS: ValidatorEnablerPdfSettings
   tocBlockTitles: true,
   tocComponentTitles: true,
   pdfTitle: "",
-  pdfAuthor: "",
-  pdfSubject: "",
-  pdfCopyright: "",
+  pdfAuthor: "Adapt Learning Framework",
+  pdfSubject: "eLearning Course Material",
+  pdfCopyright: "© 2026 Laerdal Medical. All rights reserved.",
   passwordEnabled: false,
   userPassword: "",
   ownerPassword: "",
@@ -234,7 +240,7 @@ export const DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS: ValidatorEnablerPdfSettings
   disableCopying: false,
   disableAnnotation: false,
   allowWatermarking: false,
-  watermarkText: "",
+  watermarkText: "Confidential",
   watermarkPosition: "Diagonal",
 };
 
@@ -294,34 +300,45 @@ function isExtensionInstalledByTargetOrNames(config: EngineConfigDetails, target
 }
 
 export async function getValidatorEnablerPdfSettings(courseId: string): Promise<ValidatorEnablerPdfSettings> {
-  const config = await apiClient.get<EngineConfigDetails>(`/api/content/config/${courseId}`);
-  const extensionConfig = obj(obj(config._extensions)[VALIDATOR_ENABLER_EXTENSION_TARGET]);
+  const [course, config] = await Promise.all([
+    apiClient.get<EngineCourseDetails>(`/api/content/course/${courseId}`),
+    apiClient.get<EngineConfigDetails>(`/api/content/config/${courseId}`),
+  ]);
+  const courseRootConfig = obj(course[VALIDATOR_ENABLER_EXTENSION_TARGET]);
+  const courseExtensionConfig = obj(obj(course._extensions)[VALIDATOR_ENABLER_EXTENSION_TARGET]);
+  const courseConfig = {
+    ...courseRootConfig,
+    ...courseExtensionConfig,
+  };
+  const globalConfig = obj(obj(config._extensions)[VALIDATOR_ENABLER_EXTENSION_TARGET]);
+  const coverPageImage = str(courseConfig._coverPageImage, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.coverPageUrl);
+  const footerLogoImage = str(courseConfig._pdfLogoImage, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.footerLogoUrl);
 
   return {
     ...DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS,
-    pdfExportEnabled: bool(extensionConfig._isEnabled, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.pdfExportEnabled),
-    coverPageSource: toValidatorAssetSource(extensionConfig._coverPageSource, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.coverPageSource),
-    coverPageUrl: str(extensionConfig._coverPageUrl, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.coverPageUrl),
-    footerLogoSource: toValidatorAssetSource(extensionConfig._footerLogoSource, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.footerLogoSource),
-    footerLogoUrl: str(extensionConfig._footerLogoUrl, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.footerLogoUrl),
-    tocPageTitles: bool(extensionConfig._tocPageTitles, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.tocPageTitles),
-    tocArticleTitles: bool(extensionConfig._tocArticleTitles, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.tocArticleTitles),
-    tocBlockTitles: bool(extensionConfig._tocBlockTitles, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.tocBlockTitles),
-    tocComponentTitles: bool(extensionConfig._tocComponentTitles, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.tocComponentTitles),
-    pdfTitle: str(extensionConfig._pdfTitle, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.pdfTitle),
-    pdfAuthor: str(extensionConfig._pdfAuthor, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.pdfAuthor),
-    pdfSubject: str(extensionConfig._pdfSubject, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.pdfSubject),
-    pdfCopyright: str(extensionConfig._pdfCopyright, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.pdfCopyright),
-    passwordEnabled: bool(extensionConfig._passwordEnabled, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.passwordEnabled),
-    userPassword: str(extensionConfig._userPassword, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.userPassword),
-    ownerPassword: str(extensionConfig._ownerPassword, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.ownerPassword),
-    encryptionLevel: str(extensionConfig._encryptionLevel, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.encryptionLevel),
-    disablePrinting: bool(extensionConfig._disablePrinting, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.disablePrinting),
-    disableCopying: bool(extensionConfig._disableCopying, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.disableCopying),
-    disableAnnotation: bool(extensionConfig._disableAnnotation, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.disableAnnotation),
-    allowWatermarking: bool(extensionConfig._allowWatermarking, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.allowWatermarking),
-    watermarkText: str(extensionConfig._watermarkText, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.watermarkText),
-    watermarkPosition: str(extensionConfig._watermarkPosition, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.watermarkPosition),
+    pdfExportEnabled: bool(courseConfig._enablePdfExport, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.pdfExportEnabled),
+    coverPageSource: coverPageImage.startsWith("http://") || coverPageImage.startsWith("https://") ? "url" : "library",
+    coverPageUrl: coverPageImage,
+    footerLogoSource: footerLogoImage.startsWith("http://") || footerLogoImage.startsWith("https://") ? "url" : "library",
+    footerLogoUrl: footerLogoImage,
+    tocPageTitles: bool(courseConfig._tocIncludeH1, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.tocPageTitles),
+    tocArticleTitles: bool(courseConfig._tocIncludeH2, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.tocArticleTitles),
+    tocBlockTitles: bool(courseConfig._tocIncludeH3, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.tocBlockTitles),
+    tocComponentTitles: bool(courseConfig._tocIncludeH4, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.tocComponentTitles),
+    pdfTitle: str(courseConfig._pdfTitle, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.pdfTitle),
+    pdfAuthor: str(courseConfig._pdfAuthor, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.pdfAuthor),
+    pdfSubject: str(courseConfig._pdfSubject, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.pdfSubject),
+    pdfCopyright: str(courseConfig._pdfCopyright, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.pdfCopyright),
+    passwordEnabled: bool(courseConfig._passwordProtection, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.passwordEnabled),
+    userPassword: str(courseConfig._openPassword, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.userPassword),
+    ownerPassword: str(courseConfig._ownerPassword, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.ownerPassword),
+    encryptionLevel: str(courseConfig._encryptionLevel, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.encryptionLevel),
+    disablePrinting: bool(courseConfig._disablePrinting, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.disablePrinting),
+    disableCopying: bool(courseConfig._disableCopying, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.disableCopying),
+    disableAnnotation: bool(courseConfig._disableAnnotations, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.disableAnnotation),
+    allowWatermarking: bool(courseConfig._allowWatermark, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.allowWatermarking),
+    watermarkText: str(courseConfig._watermarkText, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.watermarkText),
+    watermarkPosition: str(courseConfig._position, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.watermarkPosition),
   };
 }
 
@@ -330,7 +347,7 @@ export async function saveValidatorEnablerPdfSettings(
   settings: ValidatorEnablerPdfSettings,
 ): Promise<void> {
   const shouldEnable = bool(settings.pdfExportEnabled, false);
-  const config = await apiClient.get<EngineConfigDetails>(`/api/content/config/${courseId}`);
+  let config = await apiClient.get<EngineConfigDetails>(`/api/content/config/${courseId}`);
   const installed = isExtensionInstalledByTargetOrNames(
     config,
     VALIDATOR_ENABLER_EXTENSION_TARGET,
@@ -351,44 +368,61 @@ export async function saveValidatorEnablerPdfSettings(
     if (ids.length) await apiClient.post(`/api/extension/disable/${courseId}`, { extensions: ids });
   }
 
-  const freshConfig = shouldEnable === installed
-    ? config
-    : await apiClient.get<EngineConfigDetails>(`/api/content/config/${courseId}`);
-  const existing = obj(obj(freshConfig._extensions)[VALIDATOR_ENABLER_EXTENSION_TARGET]);
+  if (shouldEnable !== installed) {
+    config = await apiClient.get<EngineConfigDetails>(`/api/content/config/${courseId}`);
+  }
+  const course = await apiClient.get<EngineCourseDetails>(`/api/content/course/${courseId}`);
 
-  const nextValidatorConfig = {
-    ...existing,
+  const existingConfig = obj(obj(config._extensions)[VALIDATOR_ENABLER_EXTENSION_TARGET]);
+  const nextGlobalValidatorConfig = {
+    ...existingConfig,
     _isEnabled: shouldEnable,
-    _coverPageSource: settings.coverPageSource,
-    _coverPageUrl: settings.coverPageUrl,
-    _footerLogoSource: settings.footerLogoSource,
-    _footerLogoUrl: settings.footerLogoUrl,
-    _tocPageTitles: settings.tocPageTitles,
-    _tocArticleTitles: settings.tocArticleTitles,
-    _tocBlockTitles: settings.tocBlockTitles,
-    _tocComponentTitles: settings.tocComponentTitles,
+  };
+
+  const existingCourseRoot = obj(course[VALIDATOR_ENABLER_EXTENSION_TARGET]);
+  const existingCourseExtension = obj(obj(course._extensions)[VALIDATOR_ENABLER_EXTENSION_TARGET]);
+  const coverPageImage = settings.coverPageSource === "url" ? settings.coverPageUrl : settings.coverPageUrl;
+  const footerLogoImage = settings.footerLogoSource === "url" ? settings.footerLogoUrl : settings.footerLogoUrl;
+  const nextCourseValidatorConfig = {
+    ...existingCourseRoot,
+    ...existingCourseExtension,
+    _enablePdfExport: shouldEnable,
+    _coverPageImage: coverPageImage,
+    _tocIncludeH1: settings.tocPageTitles,
+    _tocIncludeH2: settings.tocArticleTitles,
+    _tocIncludeH3: settings.tocBlockTitles,
+    _tocIncludeH4: settings.tocComponentTitles,
     _pdfTitle: settings.pdfTitle,
     _pdfAuthor: settings.pdfAuthor,
     _pdfSubject: settings.pdfSubject,
     _pdfCopyright: settings.pdfCopyright,
-    _passwordEnabled: settings.passwordEnabled,
-    _userPassword: settings.userPassword,
+    _pdfLogoImage: footerLogoImage,
+    _passwordProtection: settings.passwordEnabled,
+    _openPassword: settings.userPassword,
     _ownerPassword: settings.ownerPassword,
     _encryptionLevel: settings.encryptionLevel,
     _disablePrinting: settings.disablePrinting,
     _disableCopying: settings.disableCopying,
-    _disableAnnotation: settings.disableAnnotation,
-    _allowWatermarking: settings.allowWatermarking,
+    _disableAnnotations: settings.disableAnnotation,
+    _allowWatermark: settings.allowWatermarking,
     _watermarkText: settings.watermarkText,
-    _watermarkPosition: settings.watermarkPosition,
+    _position: settings.watermarkPosition,
   };
 
-  await apiClient.patch(`/api/content/config/${freshConfig._id}`, {
-    _id: freshConfig._id,
+  await apiClient.patch(`/api/content/config/${config._id}`, {
+    _id: config._id,
     _courseId: courseId,
     _extensions: {
-      ...obj(freshConfig._extensions),
-      [VALIDATOR_ENABLER_EXTENSION_TARGET]: nextValidatorConfig,
+      ...obj(config._extensions),
+      [VALIDATOR_ENABLER_EXTENSION_TARGET]: nextGlobalValidatorConfig,
+    },
+  });
+
+  await apiClient.put(`/api/content/course/${courseId}`, {
+    [VALIDATOR_ENABLER_EXTENSION_TARGET]: nextCourseValidatorConfig,
+    _extensions: {
+      ...obj(course._extensions),
+      [VALIDATOR_ENABLER_EXTENSION_TARGET]: nextCourseValidatorConfig,
     },
   });
 }

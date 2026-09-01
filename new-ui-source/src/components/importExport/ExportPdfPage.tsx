@@ -254,31 +254,7 @@ function AssetPicker({
   );
 }
 
-const DEFAULT_SETTINGS: ValidatorEnablerPdfSettings = {
-  pdfExportEnabled: false,
-  coverPageSource: "library",
-  coverPageUrl: "",
-  footerLogoSource: "library",
-  footerLogoUrl: "",
-  tocPageTitles: true,
-  tocArticleTitles: true,
-  tocBlockTitles: true,
-  tocComponentTitles: true,
-  pdfTitle: "",
-  pdfAuthor: "",
-  pdfSubject: "",
-  pdfCopyright: "",
-  passwordEnabled: false,
-  userPassword: "",
-  ownerPassword: "",
-  encryptionLevel: "AES-256",
-  disablePrinting: false,
-  disableCopying: false,
-  disableAnnotation: false,
-  allowWatermarking: false,
-  watermarkText: "",
-  watermarkPosition: "Diagonal",
-};
+const DEFAULT_SETTINGS: ValidatorEnablerPdfSettings = DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS;
 
 export default function ExportPdfPage({
   courseId,
