@@ -57,6 +57,64 @@ function TextField({
   );
 }
 
+function TextAreaField({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className="text-xs font-semibold text-[#6b7280]">{label}</span>
+      <textarea
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        rows={3}
+        className="w-full rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5 text-sm text-[#111827] placeholder:text-[#9ca3af] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors resize-y"
+      />
+    </label>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+}) {
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className="text-xs font-semibold text-[#6b7280]">{label}</span>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          aria-label={label}
+          className="w-full appearance-none rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5 pr-8 text-sm text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors"
+        >
+          {options.map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
+        </select>
+        <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </div>
+    </label>
+  );
+}
+
 function Toggle({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) {
   return (
     <button
@@ -91,16 +149,6 @@ function ToggleRow({
       <span className="text-sm font-semibold text-[var(--life-base-black)] leading-snug">{label}</span>
       <Toggle checked={checked} onChange={onChange} />
     </label>
-  );
-}
-
-function UploadCloudIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-      <polyline points="17 8 12 3 7 8" />
-      <line x1="12" y1="3" x2="12" y2="15" />
-    </svg>
   );
 }
 
@@ -189,7 +237,7 @@ function AssetPicker({ label }: { label: string }) {
 }
 
 export default function ExportPdfPage({ courseTitle }: { courseTitle?: string }) {
-  const [pdfExportEnabled, setPdfExportEnabled] = useState(false);
+  const [pdfExportEnabled, setPdfExportEnabled] = useState(true);
   const [tocPageTitles, setTocPageTitles] = useState(true);
   const [tocArticleTitles, setTocArticleTitles] = useState(true);
   const [tocBlockTitles, setTocBlockTitles] = useState(false);
@@ -199,8 +247,15 @@ export default function ExportPdfPage({ courseTitle }: { courseTitle?: string })
   const [pdfSubject, setPdfSubject] = useState("");
   const [pdfCopyright, setPdfCopyright] = useState("");
   const [passwordEnabled, setPasswordEnabled] = useState(false);
-  const [password, setPassword] = useState("");
-  const [addWatermark, setAddWatermark] = useState(false);
+  const [userPassword, setUserPassword] = useState("");
+  const [ownerPassword, setOwnerPassword] = useState("");
+  const [encryptionLevel, setEncryptionLevel] = useState("AES-256");
+  const [disablePrinting, setDisablePrinting] = useState(false);
+  const [disableCopying, setDisableCopying] = useState(false);
+  const [disableAnnotation, setDisableAnnotation] = useState(false);
+  const [allowWatermarking, setAllowWatermarking] = useState(false);
+  const [watermarkText, setWatermarkText] = useState("");
+  const [watermarkPosition, setWatermarkPosition] = useState("Diagonal");
 
   return (
     <div className="flex w-full max-w-[672px] flex-col gap-7">
@@ -281,13 +336,20 @@ export default function ExportPdfPage({ courseTitle }: { courseTitle?: string })
               <span className="text-sm text-[#374151]">Enable Password Protection</span>
             </label>
             {passwordEnabled && (
-              <div className="max-w-[320px] border-l-2 border-[#e5e7eb] pl-4">
+              <div className="grid grid-cols-1 gap-4 border-l-2 border-[#e5e7eb] pl-4 md:grid-cols-2">
                 <TextField
-                  label="PDF Password"
+                  label="User Password"
                   type="password"
-                  value={password}
-                  onChange={setPassword}
-                  placeholder="Enter password"
+                  value={userPassword}
+                  onChange={setUserPassword}
+                  placeholder="Enter user password"
+                />
+                <TextField
+                  label="Owner Password (Optional)"
+                  type="password"
+                  value={ownerPassword}
+                  onChange={setOwnerPassword}
+                  placeholder="Enter owner password"
                 />
               </div>
             )}
@@ -297,8 +359,33 @@ export default function ExportPdfPage({ courseTitle }: { courseTitle?: string })
         <Divider />
 
         <section className="flex flex-col gap-3.5">
-          <SectionTitle>Watermark</SectionTitle>
-          <CheckboxRow label="Add Watermark" checked={addWatermark} onChange={setAddWatermark} />
+          <SectionTitle>Security and Watermark</SectionTitle>
+          <div className="flex flex-col gap-1.5">
+            <SelectField
+              label="Encryption Level"
+              value={encryptionLevel}
+              onChange={setEncryptionLevel}
+              options={["AES-256", "AES-128", "RC4-128"]}
+            />
+            <div className="pt-1" />
+            <CheckboxRow label="Disable Printing" checked={disablePrinting} onChange={setDisablePrinting} />
+            <CheckboxRow label="Disable Copying" checked={disableCopying} onChange={setDisableCopying} />
+            <CheckboxRow label="Disable Annotation" checked={disableAnnotation} onChange={setDisableAnnotation} />
+            <CheckboxRow label="Allow watermarking" checked={allowWatermarking} onChange={setAllowWatermarking} />
+            <div className="pt-1" />
+            <TextAreaField
+              label="Watermark Text"
+              value={watermarkText}
+              onChange={setWatermarkText}
+              placeholder="Enter watermark text"
+            />
+            <SelectField
+              label="Watermark Position"
+              value={watermarkPosition}
+              onChange={setWatermarkPosition}
+              options={["Diagonal", "Top Left", "Top Right", "Bottom Left", "Bottom Right"]}
+            />
+          </div>
         </section>
 
         <Divider />
