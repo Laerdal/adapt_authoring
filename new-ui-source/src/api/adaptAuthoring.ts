@@ -2992,6 +2992,30 @@ export async function enableExtensionForCourse(courseId: string, extensionTypeId
   }
 }
 
+const PREVIEW_EDIT_EXTENSION_NAME = "adapt-preview-edit";
+
+// New UI Preview always needs this extension available: Quick Edit invokes its
+// text-only iframe bridge. This is intentionally strict (unlike the generic
+// editor helper above) so Preview can surface a real failure instead of
+// building a shell that lacks the bridge.
+export async function ensurePreviewEditEnabledForCourse(courseId: string): Promise<void> {
+  if (!courseId) throw new Error("Course id is required to prepare Quick Edit.");
+
+  const config = await apiClient.get<EngineConfigDetails>(`/api/content/config/${courseId}`);
+  const installed = Object.values(config._enabledExtensions ?? {}).some(
+    (extension) => extension?.name === PREVIEW_EDIT_EXTENSION_NAME
+  );
+  if (installed) return;
+
+  const extensionTypes = await getExtensionTypeOptions();
+  const previewEdit = extensionTypes.find((extension) => extension.name === PREVIEW_EDIT_EXTENSION_NAME);
+  if (!previewEdit?._id) {
+    throw new Error("The Adapt Preview Editor extension is not installed on this environment.");
+  }
+
+  await apiClient.post(`/api/extension/enable/${courseId}`, { extensions: [previewEdit._id] });
+}
+
 export type ExtensionSchemaLevel = "course" | "contentobject" | "article" | "block" | "component";
 
 export interface ExtensionFieldSchema {

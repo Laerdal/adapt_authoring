@@ -253,6 +253,7 @@ server.post('/studio/ensure/:tenant/:course', (req, res, next) => {
   const courseId = req.params.course;
   const user = usermanager.getCurrentUser();
   const masterTenantId = configuration.getConfig('masterTenantID');
+  const force = String(req.query.force || '') === 'true';
 
   if (!user) return next(new StudioPermissionError());
   if (tenantId !== user.tenant._id.toString() && tenantId !== masterTenantId) return next(new StudioPermissionError());
@@ -267,11 +268,11 @@ server.post('/studio/ensure/:tenant/:course', (req, res, next) => {
 
       fsx.readFile(path.join(buildRoot, FP_MARKER), 'utf8', (_e, marker) => {
         // 1) Already materialised for this fingerprint.
-        if (marker === fp && fsx.existsSync(indexPath)) {
+        if (!force && marker === fp && fsx.existsSync(indexPath)) {
           return res.json({ success: true, built: false, cached: true, fingerprint: fp });
         }
         // 2) Shell cached AND this course already has a build folder (its assets) → restore, no grunt.
-        if (fsx.existsSync(path.join(shellCacheDir(fp), Constants.Filenames.Main)) && fsx.existsSync(buildRoot)) {
+        if (!force && fsx.existsSync(path.join(shellCacheDir(fp), Constants.Filenames.Main)) && fsx.existsSync(buildRoot)) {
           return restoreShell(fp, buildRoot, (rErr) => {
             if (rErr) return next(rErr);
             logger.log('info', `Studio: restored cached shell ${fp} for course ${courseId} (no build)`);

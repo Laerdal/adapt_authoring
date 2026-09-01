@@ -1,6 +1,8 @@
 const express = require('express');
 
 const app = require('../../')();
+const configuration = require('../../lib/configuration');
+const database = require('../../lib/database');
 const logger = require('../../lib/logger');
 
 const server = module.exports = express();
@@ -28,6 +30,18 @@ function toApiCourse(course, extras) {
     theme: extras.theme,
     pages: []
   };
+}
+
+function enableStudioPreviewEdit(courseId, callback) {
+  database.getDatabase(function(error, db) {
+    if (error) return callback(error);
+    db.retrieve('extensiontype', { name: 'adapt-preview-edit' }, function(error, extensions) {
+      if (error) return callback(error);
+      const previewEdit = extensions && extensions[0];
+      if (!previewEdit) return callback(new Error('adapt-preview-edit extension type is unavailable'));
+      app.emit('extensions:enable', courseId, [previewEdit._id], callback);
+    });
+  }, configuration.getConfig('dbName'));
 }
 
 server.post('/api/courses', function(req, res) {
@@ -62,10 +76,18 @@ server.post('/api/courses', function(req, res) {
       return res.status(error.name === 'ContentPermissionError' ? 403 : 500).json({ success: false, message: error.message });
     }
 
-    res.status(200).json(toApiCourse(course, {
-      instanceId: body.instanceId,
-      menuStyle: body.menuStyle,
-      theme: body.theme
-    }));
+    // New Studio's Quick Edit is an opt-in text-only mode of this extension.
+    // Enable it up front so the first Studio preview shell already contains
+    // the plugin; legacy course creation and legacy Preview Edit are unchanged.
+    enableStudioPreviewEdit(course._id, function(enableError) {
+      if (enableError) {
+        logger.log('warn', 'Created new Studio course without Preview Edit enabled', enableError);
+      }
+      res.status(200).json(toApiCourse(course, {
+        instanceId: body.instanceId,
+        menuStyle: body.menuStyle,
+        theme: body.theme
+      }));
+    });
   });
 });
