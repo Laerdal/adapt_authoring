@@ -3774,6 +3774,145 @@ export async function setCdnLinkExpiry(
   return true;
 }
 
+// ── Preflight Validation & Publish ────────────────────────────────────────────
+// Adapt Studio's "Publish ▾" workflow: a Preflight Validator settings page
+// (Course Evaluation + Accessibility Checker / SCORM-HyperBridge Validation)
+// and a Publish Course action. Both reuse existing engine plugins rather than
+// introducing new backend surface area:
+//   • Course Evaluation results come from the existing plugins/output/preflight
+//     plugin's report endpoint.
+//   • Publish Course reuses the existing legacy `/download/:tenant/:course`
+//     route, which already runs the full build+zip pipeline
+//     (plugin.publish(..., Constants.Modes.Publish, ...)).
+//   • Accessibility/SCORM validation reuses the existing CDN deploy pipeline +
+//     the adapt-validator-enabler framework extension's query-param contract
+//     (isAccessibilityChecker / isSuspendReport) — there is no machine-readable
+//     result channel for these two checks anywhere in the platform today, so
+//     results surface the same way they always have: in the deployed course's
+//     own "Course Complete" screen, opened in a new tab.
+
+export interface PreflightCheckIssue {
+  id: string;
+  title: string;
+  errorDescription?: string;
+}
+
+export interface PreflightAssessmentArticle {
+  assessmentId: string;
+  articleId: string;
+  articleTitle?: string;
+  isAsciiValid: boolean;
+  isWhiteSpaceValid: boolean;
+  isDuplicateId: boolean;
+  isBlankId: boolean;
+}
+
+export interface PreflightAssessmentComponentBand {
+  review: { _reviewPageId?: string; _isValid: boolean };
+  retry: { _retryPageId?: string; _isValid: boolean };
+}
+
+export interface PreflightAssessmentComponent {
+  componentTitle?: string;
+  componentId: string;
+  bandsInfo: PreflightAssessmentComponentBand[];
+  hasErrors: boolean;
+}
+
+export interface PreflightReport {
+  assessmentArticles: PreflightAssessmentArticle[];
+  asciiErrors: PreflightAssessmentArticle[];
+  whiteSpaceErrors: PreflightAssessmentArticle[];
+  duplicateErrors: PreflightAssessmentArticle[];
+  blankErrors: PreflightAssessmentArticle[];
+  extensionConflicts: PreflightCheckIssue[];
+  extensionDependencies: PreflightCheckIssue[];
+  completionCriteriaErrors: PreflightCheckIssue[];
+  assessmentComponents: PreflightAssessmentComponent[];
+  hasCourseErrors: number;
+}
+
+// GET /api/preflight/report/:courseid → { success, data } (utils/sendResponse.js envelope).
+export async function getPreflightReport(courseId: string): Promise<PreflightReport> {
+  const result = await apiClient.get<{ success: boolean; data?: PreflightReport; error?: string; message?: string }>(
+    `/api/preflight/report/${courseId}`,
+  );
+  // The engine can respond 200 with { success: false, error/message } (utils/sendResponse.js)
+  // rather than a non-2xx status, so apiClient's own throw-on-non-2xx doesn't catch this case —
+  // callers must not be handed `undefined` as if it were a valid report.
+  if (!result.success || !result.data) {
+    throw new Error(result.error || result.message || "Couldn't generate the preflight report.");
+  }
+  return result.data;
+}
+
+const VALIDATOR_ENABLER_EXTENSION_NAME = "adapt-validator-enabler";
+const SPOOR_EXTENSION_NAME = "adapt-contrib-spoor";
+const HYPER_BRIDGE_EXTENSION_NAME = "adapt-hyper-bridge";
+
+export interface AccessibilityScormPrerequisites {
+  validatorEnablerInstalled: boolean;
+  trackingExtensionInstalled: boolean; // SPOOR or HyperBridge
+  cdnConfigEnabled: boolean;
+}
+
+// Mirrors the "Prerequisites: Dependent Extensions for Validation" banner on
+// the Preflight Validator page — checked before running Accessibility/SCORM
+// validation, since that flow needs a CDN-deployed build with tracking enabled.
+export async function getAccessibilityScormPrerequisites(courseId: string): Promise<AccessibilityScormPrerequisites> {
+  const config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+  const cdnConfig = obj(obj(config._extensions)._cdnConfig);
+  return {
+    validatorEnablerInstalled: isExtensionInstalledByName(config, VALIDATOR_ENABLER_EXTENSION_NAME),
+    trackingExtensionInstalled:
+      isExtensionInstalledByName(config, SPOOR_EXTENSION_NAME) ||
+      isExtensionInstalledByName(config, HYPER_BRIDGE_EXTENSION_NAME),
+    cdnConfigEnabled: isExtensionInstalledByName(config, CDN_CONFIG_EXTENSION_NAME) && bool(cdnConfig._isEnabled, false),
+  };
+}
+
+export interface PublishCourseResult {
+  success: boolean;
+  zipName?: string;
+  downloadUrl?: string;
+  message?: string;
+}
+
+// GET /download/:tenant/:course (routes/download/index.js) — NOT under /api/,
+// a pre-existing top-level route that runs the full build+zip pipeline
+// (plugin.publish(course, Constants.Modes.Publish, ...)) and returns
+// { success, filename, zipName }. The actual file is served separately by
+// GET /download/:tenant/:course/:title/download.zip, where `:title` is only
+// used for the downloaded file's display name.
+export async function publishCoursePackage(tenantId: string, courseId: string): Promise<PublishCourseResult> {
+  const result = await apiClient.get<{ success: boolean; zipName?: string; message?: string }>(
+    `/download/${tenantId}/${courseId}`,
+  );
+  if (!result.success || !result.zipName) {
+    return { success: false, message: result.message || "Publish failed." };
+  }
+  return {
+    success: true,
+    zipName: result.zipName,
+    downloadUrl: `/download/${tenantId}/${courseId}/${encodeURIComponent(result.zipName)}/download.zip`,
+  };
+}
+
+// Auto-installs the Laerdal Validator Enabler extension when the user turns on
+// Accessibility Checker in the Course Evaluation accordion, so they never have
+// to go find and enable it manually elsewhere in Course Settings. No-ops (and
+// returns true) if it's already installed. Mirrors the enable-dance already
+// used by saveCdnDeploymentSettings/Navigation Settings for other extensions.
+export async function ensureValidatorEnablerEnabled(courseId: string): Promise<boolean> {
+  const config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+  if (isExtensionInstalledByName(config, VALIDATOR_ENABLER_EXTENSION_NAME)) return true;
+
+  const ids = await resolveExtensionTypeIdsByNames([VALIDATOR_ENABLER_EXTENSION_NAME]);
+  if (!ids.length) return false;
+  await apiClient.post(`/api/extension/enable/${courseId}`, { extensions: ids });
+  return true;
+}
+
 // ── Users & roles ─────────────────────────────────────────────────────────────
 export type RoleName = "Super Admin" | "Authenticated User" | "Course Creator";
 const KNOWN_ROLES: RoleName[] = ["Super Admin", "Authenticated User", "Course Creator"];
