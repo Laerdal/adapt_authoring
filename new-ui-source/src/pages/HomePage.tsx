@@ -602,6 +602,7 @@ export default function HomePage() {
                 <CourseCard
                   key={course.id}
                   {...course}
+                  showAuthor={location.pathname === '/shared'}
                   viewHref={course.backendId ? `/course/${course.backendId}/preview` : ""}
                   onUpdate={(patch) => handleUpdate(course.id, patch)}
                   onCopy={() => handleCopy(course.id)}

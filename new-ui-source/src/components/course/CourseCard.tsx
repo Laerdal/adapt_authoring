@@ -8,10 +8,12 @@ interface CourseCardProps {
   title: string;
   description: string;
   savedDate: string;
+  authorName?: string | null;
   imageUrl?: string | null;
   heroAssetId?: string | null;
   tags?: string[];
   view?: "grid" | "list";
+  showAuthor?: boolean;
   onUpdate: (patch: { title?: string; description?: string; heroAssetId?: string | null; tags?: string[] }) => void;
   onCopy: () => void;
   onCopyId: () => void;
@@ -20,8 +22,8 @@ interface CourseCardProps {
 }
 
 export default function CourseCard({
-  id, title, description, savedDate, imageUrl, heroAssetId = null, tags = [],
-  view = "grid", onUpdate, onCopy, onCopyId, onDelete, viewHref,
+  id, title, description, savedDate, authorName = null, imageUrl, heroAssetId = null, tags = [],
+  view = "grid", showAuthor = false, onUpdate, onCopy, onCopyId, onDelete, viewHref,
 }: CourseCardProps) {
   const [modalOpen, setModalOpen]           = useState(false);
   const [menuOpen, setMenuOpen]             = useState(false);
@@ -229,6 +231,15 @@ export default function CourseCard({
               </svg>
               Saved {savedDate}
             </div>
+            {showAuthor && authorName && (
+              <div className="flex items-center gap-1.5 text-xs text-[#6b7280]">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 21a8 8 0 0 0-16 0" />
+                  <circle cx="12" cy="7" r="4" />
+                </svg>
+                {authorName}
+              </div>
+            )}
             <Link
               to={viewHref}
               className="mt-1 w-full py-2.5 rounded-lg bg-[#2d6fa8] hover:bg-[#245c8f] text-white text-sm font-medium transition-colors text-center"
@@ -256,6 +267,15 @@ export default function CourseCard({
                 </svg>
                 Saved {savedDate}
               </div>
+              {showAuthor && authorName && (
+                <div className="flex items-center gap-1 text-xs text-[#6b7280]">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 21a8 8 0 0 0-16 0" />
+                    <circle cx="12" cy="7" r="4" />
+                  </svg>
+                  {authorName}
+                </div>
+              )}
               {tags.slice(0, 3).map((tag) => (
                 <span key={tag} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#dbeeff] text-[#1e4d73]">
                   {tag}
