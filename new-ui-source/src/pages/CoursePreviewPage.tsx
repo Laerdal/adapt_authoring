@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import CommonCourseTopBarRow from "../components/course/CommonCourseTopBarRow";
-import { ensureCoursePreview, ensurePreviewEditEnabledForCourse, getCourseBootstrapData, seedMissingCourseDefaults } from "../api/adaptAuthoring";
+import { ensureCoursePreview, ensurePreviewEditEnabledForCourse, getCourseBootstrapData, publishCoursePackage, seedMissingCourseDefaults } from "../api/adaptAuthoring";
 import { useAuth } from "../context/AuthContext";
 import { UnsavedChangesModal } from "./setup/unsavedChangesModal";
-import { getCourseBootstrapData, seedMissingCourseDefaults, ensureCoursePreview, publishCoursePackage } from "../api/adaptAuthoring";
-import { useAuth } from "../context/AuthContext";
 import ExportDialog from "../components/common/ExportDialog";
 import PublishMenuButton from "../components/publish/PublishMenuButton";
 import PublishCourseDialog, { type PublishCoursePhase } from "../components/publish/PublishCourseDialog";
@@ -417,18 +415,13 @@ export default function CoursePreviewPage() {
               </button>
             </>
           )}
-          <button
-            type="button"
-            onClick={() => navigate(`/course/${id}`, { state: { title: courseTitle, description: courseDescription, theme: themeName, menu: menuName } })}
-            className="h-9 px-4 rounded-[8px] border border-[#d8dde6] bg-white text-[#111827] text-[13px] font-bold hover:bg-[var(--life-neutral-020)] hover:border-[#c4cfda] active:bg-[var(--life-neutral-100)] transition-colors cursor-pointer inline-flex items-center"
-          >
-            Quick Edit
-          </button>
 
           <button
             type="button"
-            onClick={() => setShowExportDialog(true)}
-            className="inline-flex items-center gap-1.5 h-9 px-3 text-[13px] font-bold bg-transparent text-[var(--life-base-black)] rounded-[8px] hover:bg-[var(--life-primary-050)] hover:text-[var(--life-primary-700)] active:bg-[var(--life-primary-100)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer"
+            onClick={() => runWithQuickEditGuard(() => setShowExportDialog(true))}
+            disabled={quickEditEnabled}
+            title={quickEditEnabled ? "Export is disabled during Quick Edit" : "Export course"}
+            className="inline-flex items-center gap-1.5 h-9 px-3 text-[13px] font-bold bg-transparent text-[var(--life-base-black)] rounded-[8px] hover:bg-[var(--life-primary-050)] hover:text-[var(--life-primary-700)] active:bg-[var(--life-primary-100)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer disabled:text-[#9ca3af] disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#9ca3af]"
           >
             <MaskIcon file="export-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
             Export
@@ -438,8 +431,9 @@ export default function CoursePreviewPage() {
           </button>
 
           <PublishMenuButton
-            onSelectPreflight={() => navigate(`/course/${id}/setup?panel=publish`)}
-            onSelectPublish={openPublishDialog}
+            disabled={quickEditEnabled}
+            onSelectPreflight={() => runWithQuickEditGuard(() => navigate(`/course/${id}/setup?panel=publish`))}
+            onSelectPublish={() => runWithQuickEditGuard(openPublishDialog)}
           />
         </div>
       </div>
