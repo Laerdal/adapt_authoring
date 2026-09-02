@@ -1,13 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import CommonCourseTopBarRow from "../components/course/CommonCourseTopBarRow";
-import { getCourseBootstrapData, seedMissingCourseDefaults, ensureCoursePreview, publishCoursePackage } from "../api/adaptAuthoring";
+import { ensureCoursePreview, ensurePreviewEditEnabledForCourse, getCourseBootstrapData, publishCoursePackage, seedMissingCourseDefaults } from "../api/adaptAuthoring";
 import { useAuth } from "../context/AuthContext";
+import { UnsavedChangesModal } from "./setup/unsavedChangesModal";
 import ExportDialog from "../components/common/ExportDialog";
 import PublishMenuButton from "../components/publish/PublishMenuButton";
 import PublishCourseDialog, { type PublishCoursePhase } from "../components/publish/PublishCourseDialog";
 
 type DeviceMode = "desktop" | "tablet" | "mobile";
+type QuickEditGuardMode = "leave-preview" | "course-navigation";
 
 const deviceButtonBase = "h-full w-9 rounded-[8px] flex items-center justify-center transition-colors cursor-pointer";
 const ICON_BASE = "/new/assets/icons";
@@ -43,6 +45,19 @@ export default function CoursePreviewPage() {
   const [themeName, setThemeName] = useState("");
   const [menuName, setMenuName] = useState("");
   const [deviceMode, setDeviceMode] = useState<DeviceMode>("desktop");
+  const [fullscreen, setFullscreen] = useState(false);
+  const [quickEditEnabled, setQuickEditEnabled] = useState(false);
+  const [quickEditDirty, setQuickEditDirty] = useState(false);
+  const [quickEditSaving, setQuickEditSaving] = useState(false);
+  const [quickEditAvailable, setQuickEditAvailable] = useState(false);
+  const [currentPreviewPageId, setCurrentPreviewPageId] = useState<string | null>(null);
+  const [fullscreenPageId, setFullscreenPageId] = useState<string | null>(null);
+  const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
+  const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const fullscreenFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const pendingGuardedActionRef = useRef<(() => void) | null>(null);
+  const runPendingActionAfterSaveRef = useRef(false);
+  const pendingGuardModeRef = useRef<QuickEditGuardMode | null>(null);
   // Track when the one-shot defaults seed has resolved so the iframe waits for
   // the possibly-issued PUT to complete before the framework loads course.json.
   const [defaultsReady, setDefaultsReady] = useState(false);
@@ -96,11 +111,13 @@ export default function CoursePreviewPage() {
   // instant cache hit. Prevents the blank/"unavailable" state on first preview.
   useEffect(() => {
     const tenantId = user?._tenantId;
-    if (!id || !tenantId) return;
+    if (!id || !tenantId || !defaultsReady) return;
     let cancelled = false;
     setPreviewState("preparing");
     (async () => {
       try {
+        await ensurePreviewEditEnabledForCourse(id);
+        if (cancelled) return;
         const result = await ensureCoursePreview(tenantId, id);
         if (!cancelled) setPreviewState(result?.success ? "ready" : "error");
       } catch {
@@ -110,7 +127,7 @@ export default function CoursePreviewPage() {
     return () => {
       cancelled = true;
     };
-  }, [id, user?._tenantId]);
+  }, [defaultsReady, id, user?._tenantId]);
 
   const pageId = (params.get("pageId") || "").trim();
 
@@ -122,12 +139,184 @@ export default function CoursePreviewPage() {
       : `${baseUrl}&_cs=${Date.now()}`;
   }, [id, pageId, user?._tenantId, defaultsReady, previewState]);
 
+  const fullscreenPreviewUrl = useMemo(() => {
+    if (!previewUrl || !fullscreenPageId) return previewUrl;
+    return `${previewUrl.split("#")[0]}#/id/${fullscreenPageId}`;
+  }, [fullscreenPageId, previewUrl]);
+
   const frameSizeClass = useMemo(() => {
     if (deviceMode === "mobile") return "w-[390px]";
     if (deviceMode === "tablet") return "w-[820px]";
     return "w-full";
   }, [deviceMode]);
 
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      const activePageId =
+        getFramePageId(fullscreenFrameRef.current) ?? currentPreviewPageId;
+      if (activePageId) {
+        sendPreviewEditCommand("adapt-preview-edit:navigate-to-page", activePageId);
+      }
+      setFullscreenPageId(null);
+      setFullscreen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [fullscreen]);
+
+  const sendPreviewEditCommand = (type: string, pageId?: string | null) => {
+    previewFrameRef.current?.contentWindow?.postMessage({ type, pageId }, window.location.origin);
+  };
+
+  const getFramePageId = (frame: HTMLIFrameElement | null) => {
+    try {
+      const match = frame?.contentWindow?.location.hash.match(/^#\/id\/([^/?]+)/);
+      return match?.[1] ?? null;
+    } catch {
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent<{ type?: string; canEditText?: boolean; pageId?: string | null }>) => {
+      const isNormalPreview = event.source === previewFrameRef.current?.contentWindow;
+      const isFullscreenPreview = event.source === fullscreenFrameRef.current?.contentWindow;
+      if (event.origin !== window.location.origin || (!isNormalPreview && !isFullscreenPreview)) return;
+      switch (event.data?.type) {
+        case "adapt-preview-edit:text-only-route":
+          if (isNormalPreview) setQuickEditAvailable(event.data.canEditText === true);
+          setCurrentPreviewPageId(event.data.canEditText ? event.data.pageId ?? null : null);
+          break;
+        case "adapt-preview-edit:text-only-dirty":
+          setQuickEditDirty(true);
+          break;
+        case "adapt-preview-edit:text-only-saved":
+          setQuickEditDirty(false);
+          setQuickEditSaving(false);
+          if (runPendingActionAfterSaveRef.current) {
+            runPendingActionAfterSaveRef.current = false;
+            setQuickEditEnabled(false);
+            setShowUnsavedChangesModal(false);
+            const action = pendingGuardedActionRef.current;
+            pendingGuardedActionRef.current = null;
+            pendingGuardModeRef.current = null;
+            action?.();
+          }
+          break;
+        case "adapt-preview-edit:text-only-save-failed":
+          setQuickEditSaving(false);
+          runPendingActionAfterSaveRef.current = false;
+          break;
+        case "adapt-preview-edit:text-only-disabled":
+          setQuickEditEnabled(false);
+          setQuickEditDirty(false);
+          setQuickEditSaving(false);
+          break;
+        case "adapt-preview-edit:text-only-navigation-blocked":
+          pendingGuardedActionRef.current = () => {
+            sendPreviewEditCommand("adapt-preview-edit:text-only-continue-navigation");
+          };
+          pendingGuardModeRef.current = "course-navigation";
+          setShowUnsavedChangesModal(true);
+          break;
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+
+  useEffect(() => {
+    if (!previewUrl || quickEditAvailable) return;
+    let attempts = 0;
+    let retryId: number | undefined;
+
+    const requestRouteState = () => {
+      sendPreviewEditCommand("adapt-preview-edit:text-only-route-request");
+      attempts += 1;
+      if (attempts < 10) {
+        retryId = window.setTimeout(requestRouteState, 500);
+      }
+    };
+
+    requestRouteState();
+    return () => {
+      if (retryId !== undefined) window.clearTimeout(retryId);
+    };
+  }, [previewUrl, quickEditAvailable]);
+
+  const startQuickEdit = () => {
+    if (!quickEditAvailable) return;
+    setQuickEditEnabled(true);
+    setQuickEditDirty(false);
+    sendPreviewEditCommand("adapt-preview-edit:text-only-enable");
+  };
+
+  const saveQuickEdit = () => {
+    if (!quickEditDirty || quickEditSaving) return;
+    setQuickEditSaving(true);
+    sendPreviewEditCommand("adapt-preview-edit:text-only-save");
+  };
+
+  const runPendingGuardedAction = () => {
+    const action = pendingGuardedActionRef.current;
+    pendingGuardedActionRef.current = null;
+    pendingGuardModeRef.current = null;
+    setShowUnsavedChangesModal(false);
+    action?.();
+  };
+
+  const runWithQuickEditGuard = (action: () => void) => {
+    if (quickEditEnabled && quickEditDirty) {
+      pendingGuardedActionRef.current = action;
+      pendingGuardModeRef.current = "leave-preview";
+      setShowUnsavedChangesModal(true);
+      return;
+    }
+    if (quickEditEnabled) {
+      setQuickEditEnabled(false);
+      sendPreviewEditCommand("adapt-preview-edit:text-only-disable");
+    }
+    action();
+  };
+
+  const saveAndRunPendingAction = () => {
+    if (!pendingGuardedActionRef.current || quickEditSaving) return;
+    runPendingActionAfterSaveRef.current = true;
+    saveQuickEdit();
+  };
+
+  const discardAndRunPendingAction = () => {
+    runPendingActionAfterSaveRef.current = false;
+    setQuickEditEnabled(false);
+    if (pendingGuardModeRef.current !== "course-navigation") {
+      sendPreviewEditCommand("adapt-preview-edit:text-only-discard");
+    }
+    setQuickEditDirty(false);
+    runPendingGuardedAction();
+  };
+
+  const cancelGuardedAction = () => {
+    runPendingActionAfterSaveRef.current = false;
+    pendingGuardedActionRef.current = null;
+    pendingGuardModeRef.current = null;
+    setShowUnsavedChangesModal(false);
+  };
+
+  const finishQuickEdit = () => {
+    if (quickEditDirty) {
+      pendingGuardedActionRef.current = () => {
+        sendPreviewEditCommand("adapt-preview-edit:text-only-disable");
+        setQuickEditEnabled(false);
+      };
+      pendingGuardModeRef.current = "leave-preview";
+      setShowUnsavedChangesModal(true);
+      return;
+    }
+    setQuickEditEnabled(false);
+    sendPreviewEditCommand("adapt-preview-edit:text-only-disable");
+  };
   function openPublishDialog() {
     setPublishResult({});
     setPublishDialogPhase("confirm");
@@ -166,11 +355,11 @@ export default function CoursePreviewPage() {
         courseTitle={courseTitle}
         loginName={user?.username || user?.email || "Not signed in"}
         activeNav="preview"
-        onBack={() => window.history.length > 1 ? navigate(-1) : navigate("/")}
-        onHome={() => navigate("/")}
-        onOpenCourseSettings={() => navigate(`/course/${id}/setup`)}
-        onOpenStoryboard={() => navigate(`/course/${id}/setup?panel=storyboarding`)}
-        onOpenEditor={() => navigate(`/course/${id}`, { state: { title: courseTitle, description: courseDescription, theme: themeName, menu: menuName } })}
+        onBack={() => runWithQuickEditGuard(() => window.history.length > 1 ? navigate(-1) : navigate("/"))}
+        onHome={() => runWithQuickEditGuard(() => navigate("/"))}
+        onOpenCourseSettings={() => runWithQuickEditGuard(() => navigate(`/course/${id}/setup`))}
+        onOpenStoryboard={() => runWithQuickEditGuard(() => navigate(`/course/${id}/setup?panel=storyboarding`))}
+        onOpenEditor={() => runWithQuickEditGuard(() => navigate(`/course/${id}`, { state: { title: courseTitle, description: courseDescription, theme: themeName, menu: menuName, pageId: currentPreviewPageId ?? (pageId || undefined) } }))}
         onOpenPreview={() => undefined}
         previewDisabled={!id || !user?._tenantId}
         previewMode="button"
@@ -186,8 +375,10 @@ export default function CoursePreviewPage() {
                   key={mode}
                   type="button"
                   onClick={() => setDeviceMode(mode)}
+                  disabled={quickEditEnabled}
                   aria-label={`Switch to ${mode} preview`}
-                  className={`${deviceButtonBase} ${active ? "bg-[var(--life-primary-500)] text-white" : "text-[#1f2937] hover:bg-white active:bg-[var(--life-primary-100)]"}`}
+                  title={quickEditEnabled ? "Preview size is locked during Quick Edit" : `Switch to ${mode} preview`}
+                  className={`${deviceButtonBase} ${active ? "bg-[var(--life-primary-500)] text-white" : "text-[#1f2937] hover:bg-white active:bg-[var(--life-primary-100)]"} disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent`}
                 >
                   <MaskIcon file={`${mode}-icon.svg`} className="block w-4 h-4 shrink-0 bg-current" />
                 </button>
@@ -195,18 +386,42 @@ export default function CoursePreviewPage() {
             })}
           </div>
 
-          <button
-            type="button"
-            onClick={() => navigate(`/course/${id}`, { state: { title: courseTitle, description: courseDescription, theme: themeName, menu: menuName } })}
-            className="h-9 px-4 rounded-[8px] border border-[#d8dde6] bg-white text-[#111827] text-[13px] font-bold hover:bg-[var(--life-neutral-020)] hover:border-[#c4cfda] active:bg-[var(--life-neutral-100)] transition-colors cursor-pointer inline-flex items-center"
-          >
-            Quick Edit
-          </button>
+          {!quickEditEnabled ? (
+            <button
+              type="button"
+              onClick={startQuickEdit}
+              disabled={!quickEditAvailable}
+              title={quickEditAvailable ? "Edit text on this page" : "Open a course page to edit text"}
+              className="h-9 px-4 rounded-[8px] border border-[#d8dde6] bg-white text-[#111827] text-[13px] font-bold hover:bg-[var(--life-neutral-020)] hover:border-[#c4cfda] active:bg-[var(--life-neutral-100)] transition-colors cursor-pointer inline-flex items-center disabled:bg-[#e5e7eb] disabled:text-[#9ca3af] disabled:cursor-not-allowed disabled:hover:bg-[#e5e7eb] disabled:hover:border-[#d8dde6]"
+            >
+              Quick Edit
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={saveQuickEdit}
+                disabled={!quickEditDirty || quickEditSaving}
+                className="h-9 px-4 rounded-[8px] bg-[var(--life-primary-500)] text-white text-[13px] font-bold hover:bg-[var(--life-primary-700)] transition-colors cursor-pointer inline-flex items-center disabled:bg-[#e5e7eb] disabled:text-[#9ca3af] disabled:cursor-not-allowed"
+              >
+                {quickEditSaving ? "Saving..." : "Save"}
+              </button>
+              <button
+                type="button"
+                onClick={finishQuickEdit}
+                className="h-9 px-4 rounded-[8px] border border-[#d8dde6] bg-white text-[#374151] text-[13px] font-bold hover:bg-[var(--life-neutral-020)] hover:border-[#c4cfda] transition-colors cursor-pointer inline-flex items-center"
+              >
+                Done Editing
+              </button>
+            </>
+          )}
 
           <button
             type="button"
-            onClick={() => setShowExportDialog(true)}
-            className="inline-flex items-center gap-1.5 h-9 px-3 text-[13px] font-bold bg-transparent text-[var(--life-base-black)] rounded-[8px] hover:bg-[var(--life-primary-050)] hover:text-[var(--life-primary-700)] active:bg-[var(--life-primary-100)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer"
+            onClick={() => runWithQuickEditGuard(() => setShowExportDialog(true))}
+            disabled={quickEditEnabled}
+            title={quickEditEnabled ? "Export is disabled during Quick Edit" : "Export course"}
+            className="inline-flex items-center gap-1.5 h-9 px-3 text-[13px] font-bold bg-transparent text-[var(--life-base-black)] rounded-[8px] hover:bg-[var(--life-primary-050)] hover:text-[var(--life-primary-700)] active:bg-[var(--life-primary-100)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer disabled:text-[#9ca3af] disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#9ca3af]"
           >
             <MaskIcon file="export-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
             Export
@@ -216,8 +431,9 @@ export default function CoursePreviewPage() {
           </button>
 
           <PublishMenuButton
-            onSelectPreflight={() => navigate(`/course/${id}/setup?panel=publish`)}
-            onSelectPublish={openPublishDialog}
+            disabled={quickEditEnabled}
+            onSelectPreflight={() => runWithQuickEditGuard(() => navigate(`/course/${id}/setup?panel=publish`))}
+            onSelectPublish={() => runWithQuickEditGuard(openPublishDialog)}
           />
         </div>
       </div>
@@ -240,18 +456,88 @@ export default function CoursePreviewPage() {
               : "Preparing preview…"}
           </div>
         ) : (
-          <div className="h-full w-full flex justify-center">
+          <div className="relative h-full w-full flex justify-center">
             <div className={`${frameSizeClass} h-full bg-white rounded-[10px] overflow-hidden shadow-[0_8px_30px_rgba(15,41,52,0.14)]`}>
               <iframe
+                ref={previewFrameRef}
                 title="Course Preview"
                 src={previewUrl}
+                onLoad={() => {
+                  setQuickEditAvailable(false);
+                  setCurrentPreviewPageId(null);
+                  sendPreviewEditCommand("adapt-preview-edit:text-only-available");
+                  sendPreviewEditCommand("adapt-preview-edit:text-only-route-request");
+                  if (quickEditEnabled) sendPreviewEditCommand("adapt-preview-edit:text-only-enable");
+                }}
                 className="w-full h-full border-0"
               />
             </div>
+            <button
+              type="button"
+              disabled={quickEditEnabled}
+              onClick={() => {
+                if (quickEditEnabled) return;
+                setFullscreenPageId(
+                  getFramePageId(previewFrameRef.current) ?? currentPreviewPageId
+                );
+                setFullscreen(true);
+              }}
+              aria-label="Open fullscreen preview"
+              title={quickEditEnabled ? "Fullscreen is disabled during Quick Edit" : "Open fullscreen"}
+              className="absolute right-0 top-0 z-10 -translate-y-[32%] translate-x-[10%] p-1.5 rounded-lg border border-[#e5e7eb] bg-white text-[#6b7280] shadow-sm hover:text-[#2d6fa8] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:text-[#6b7280]"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" />
+              </svg>
+            </button>
           </div>
         )}
       </main>
 
+      {fullscreen && previewUrl && (
+        <div className="fixed inset-0 z-50 bg-white">
+          <iframe
+            ref={fullscreenFrameRef}
+            title="Fullscreen Course Preview"
+            src={fullscreenPreviewUrl}
+            className="block h-full w-full border-0"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              const activePageId =
+                getFramePageId(fullscreenFrameRef.current) ?? currentPreviewPageId;
+              if (activePageId) {
+                sendPreviewEditCommand(
+                  "adapt-preview-edit:navigate-to-page",
+                  activePageId
+                );
+              }
+              setFullscreenPageId(null);
+              setFullscreen(false);
+            }}
+            aria-label="Close fullscreen preview"
+            title="Close fullscreen"
+            className="absolute right-0 top-0 z-10 p-1 rounded-md border border-[#e5e7eb] bg-white/95 text-[#4b5563] shadow-md hover:bg-white hover:text-[#111827] transition-colors cursor-pointer"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      <UnsavedChangesModal
+        isOpen={showUnsavedChangesModal}
+        isSaving={quickEditSaving}
+        onDiscard={discardAndRunPendingAction}
+        onSave={saveAndRunPendingAction}
+        onClose={cancelGuardedAction}
+        title="Unsaved Quick Edit Changes"
+        message="Save your Quick Edit changes before leaving Preview?"
+        discardLabel="Discard"
+        saveLabel="Save"
+      />
       {showExportDialog && <ExportDialog onClose={() => setShowExportDialog(false)} />}
 
       {publishDialogPhase && (

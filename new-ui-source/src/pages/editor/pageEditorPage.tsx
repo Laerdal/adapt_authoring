@@ -30,6 +30,7 @@ export default function PageEditorPage() {
         initialDescription={state?.description}
         initialTheme={state?.theme}
         initialMenu={state?.menu}
+        initialPageId={state?.pageId}
       />
       <AiAssistant context="Course Editor" suggestions={EDITOR_SUGGESTIONS} />
     </>

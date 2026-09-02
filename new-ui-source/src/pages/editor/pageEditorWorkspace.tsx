@@ -2716,6 +2716,7 @@ interface CourseEditorProps {
   initialDescription?: string;
   initialTheme?: string;
   initialMenu?: string;
+  initialPageId?: string;
 }
 
 export default function CourseEditor({
@@ -2724,6 +2725,7 @@ export default function CourseEditor({
   initialDescription = "",
   initialTheme = "LIFE Theme",
   initialMenu = "LIFE Menu",
+  initialPageId,
 }: CourseEditorProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -3034,8 +3036,10 @@ export default function CourseEditor({
   }, []);
 
   useEffect(() => {
-    void loadStructureFromDatabase();
-  }, [loadStructureFromDatabase]);
+    void loadStructureFromDatabase(
+      initialPageId ? { pageId: initialPageId } : undefined
+    );
+  }, [initialPageId, loadStructureFromDatabase]);
 
   // Course-level Navigation Footer button settings (the "parent" values the
   // Topic-level `_enableOverride`/`btnText` fields inherit from when empty —
