@@ -39,7 +39,8 @@ function enableStudioPreviewEdit(courseId, callback) {
       if (error) return callback(error);
       const previewEdit = extensions && extensions[0];
       if (!previewEdit) return callback(new Error('adapt-preview-edit extension type is unavailable'));
-      app.emit('extensions:enable', courseId, [previewEdit._id], callback);
+      const handled = app.emit('extensions:enable', courseId, [previewEdit._id], callback);
+      if (!handled) return callback(new Error('No handler registered for extensions:enable'));
     });
   }, configuration.getConfig('dbName'));
 }
