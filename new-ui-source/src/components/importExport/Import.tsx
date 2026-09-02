@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -27,6 +27,17 @@ interface CheckResult {
 }
 
 type ModalStep = 'form' | 'checking' | 'results' | 'importing'
+
+interface TagItem {
+  _id: string
+  title: string
+}
+
+interface TagSuggestion {
+  _id?: string
+  title?: string
+  value?: string
+}
 
 // ── Props ────────────────────────────────────────────────────────────────────
 
@@ -107,25 +118,30 @@ const CATEGORY_KEY_DESC: Record<string, string> = {
 
 export default function ImportCourseModal({ isOpen, onClose, onSuccess }: ImportCourseModalProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const tagInputRef = useRef<HTMLInputElement>(null)
 
   // Form state
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [assetFolders, setAssetFolders]   = useState('')
-  const [tags, setTags]                   = useState('')
+  const [tagInput, setTagInput]           = useState('')
+  const [tags, setTags]                   = useState<TagItem[]>([])
+  const [tagSuggestions, setTagSuggestions] = useState<TagItem[]>([])
+  const [showTagSuggestions, setShowTagSuggestions] = useState(false)
 
   // Flow state
   const [step, setStep]           = useState<ModalStep>('form')
   const [checkResult, setCheckResult] = useState<CheckResult | null>(null)
   const [errorMsg, setErrorMsg]   = useState<string | null>(null)
 
-  if (!isOpen) return null
-
   // ── Reset ────────────────────────────────────────────────────────────────
 
   function resetAndClose() {
     setSelectedFile(null)
     setAssetFolders('')
-    setTags('')
+    setTagInput('')
+    setTags([])
+    setTagSuggestions([])
+    setShowTagSuggestions(false)
     setStep('form')
     setCheckResult(null)
     setErrorMsg(null)
@@ -134,6 +150,133 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
   }
 
   // ── Step 1 → 2: Check versions ───────────────────────────────────────────
+
+  function hasTagTitle(title: string): boolean {
+    const compare = title.trim().toLowerCase()
+    return tags.some((tag) => tag.title.trim().toLowerCase() === compare)
+  }
+
+  function removeTagById(id: string) {
+    setTags((prev) => prev.filter((tag) => tag._id !== id))
+  }
+
+  async function resolveTag(title: string): Promise<TagItem | null> {
+    const cleanTitle = title.trim().replace(/,/g, '')
+    if (!cleanTitle || hasTagTitle(cleanTitle)) return null
+
+    const response = await fetch('/api/content/tag', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ title: cleanTitle }),
+    })
+
+    if (!response.ok) {
+      throw new Error('Unable to add tag. Please try again.')
+    }
+
+    const json = await response.json() as { _id?: string; id?: string; title?: string }
+    const id = json._id ?? json.id
+    if (!id) {
+      throw new Error('Unable to add tag. Missing tag id from server response.')
+    }
+
+    return { _id: id, title: json.title ?? cleanTitle }
+  }
+
+  async function addTagFromTitle(title: string) {
+    try {
+      const tag = await resolveTag(title)
+      if (!tag) return
+      setTags((prev) => {
+        if (prev.some((item) => item._id === tag._id || item.title.trim().toLowerCase() === tag.title.trim().toLowerCase())) {
+          return prev
+        }
+        return [...prev, tag]
+      })
+      setErrorMsg(null)
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Unable to add tag.'
+      setErrorMsg(msg)
+    }
+  }
+
+  function mergeUniqueTags(existing: TagItem[], incoming: TagItem[]): TagItem[] {
+    const merged = [...existing]
+    for (const tag of incoming) {
+      const exists = merged.some((item) => item._id === tag._id || item.title.trim().toLowerCase() === tag.title.trim().toLowerCase())
+      if (!exists) merged.push(tag)
+    }
+    return merged
+  }
+
+  async function resolveTagsFromInput(rawInput: string): Promise<TagItem[]> {
+    const candidates = rawInput
+      .split(/[\n,]+/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+    const resolved: TagItem[] = []
+    for (const title of candidates) {
+      try {
+        const tag = await resolveTag(title)
+        if (tag) resolved.push(tag)
+      } catch (error: unknown) {
+        const msg = error instanceof Error ? error.message : 'Unable to add tag.'
+        setErrorMsg(msg)
+      }
+    }
+    return resolved
+  }
+
+  async function addTagsFromInput(rawInput: string, clearInput = false): Promise<TagItem[]> {
+    const resolved = await resolveTagsFromInput(rawInput)
+    const merged = mergeUniqueTags(tags, resolved)
+    setTags(merged)
+    if (clearInput) setTagInput('')
+    return merged
+  }
+
+  function selectedTagIdsCsv(sourceTags = tags): string {
+    return sourceTags.map((tag) => tag._id).join(',')
+  }
+
+  useEffect(() => {
+    const term = tagInput.trim()
+    if (term.length < 3) {
+      setTagSuggestions([])
+      return
+    }
+
+    let cancelled = false
+    const timeout = window.setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/autocomplete/tag?term=${encodeURIComponent(term)}`, {
+          credentials: 'same-origin',
+        })
+        if (!response.ok || cancelled) return
+        const data = await response.json() as TagSuggestion[]
+        if (cancelled) return
+
+        const results = (Array.isArray(data) ? data : [])
+          .map((item) => {
+            const id = item._id
+            const title = item.title ?? item.value ?? ''
+            return id && title ? { _id: id, title } : null
+          })
+          .filter((item): item is TagItem => Boolean(item))
+          .filter((item) => !hasTagTitle(item.title))
+
+        setTagSuggestions(results.slice(0, 8))
+      } catch {
+        if (!cancelled) setTagSuggestions([])
+      }
+    }, 180)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeout)
+    }
+  }, [tagInput, tags])
 
   async function handleCheckVersions() {
     if (!selectedFile) return
@@ -144,8 +287,12 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
       const formData = new FormData()
       formData.append('file', selectedFile)
       if (assetFolders.trim()) formData.append('formAssetFolders', assetFolders.trim())
-      // tags field: space-separated text input; server splits by comma internally
-      if (tags.trim()) formData.append('tags', tags.trim())
+      let tagsToSubmit = tags
+      if (tagInput.trim()) {
+        tagsToSubmit = await addTagsFromInput(tagInput, true)
+      }
+      const tagIds = selectedTagIdsCsv(tagsToSubmit)
+      if (tagIds) formData.append('tags', tagIds)
 
       const response = await fetch('/importsourcecheck', {
         method: 'POST',
@@ -216,7 +363,7 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
 
   const PLUGIN_ORDER = ['red', 'amber', 'green-update', 'green-install'] as const
 
-  return createPortal(
+  return isOpen ? createPortal(
     <div
       className="fixed inset-0 flex items-center justify-center p-4"
       style={{ background: 'rgba(0,0,0,0.5)', zIndex: 99999 }}
@@ -305,14 +452,78 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
               {/* Tags */}
               <div>
                 <p className="text-sm font-bold text-[#111827] mb-2.5">Tags</p>
-                <textarea
-                  value={tags}
-                  onChange={(e) => setTags(e.target.value)}
-                  disabled={step === 'checking'}
-                  placeholder="add a tag"
-                  rows={4}
-                  className="w-full border border-[#d1d5db] rounded-lg px-3.5 py-2.5 text-sm text-[#111827] placeholder:text-[#9ca3af] bg-white outline-none focus:border-[#2d6fa8] disabled:opacity-50 transition-colors resize-y leading-relaxed"
-                />
+                <div className="relative">
+                  <div className="w-full min-h-[44px] border border-[#d1d5db] rounded-lg px-2 py-2 bg-white focus-within:border-[#2d6fa8] transition-colors">
+                    <div className="flex flex-wrap gap-2 items-center">
+                      {tags.map((tag) => (
+                        <span
+                          key={tag._id}
+                          className="inline-flex items-center gap-1.5 max-w-full px-2.5 py-1 rounded-full bg-[#e6f0f8] text-[#1f4f75] text-xs font-medium"
+                          title={tag.title}
+                        >
+                          <span className="truncate max-w-[180px]">{tag.title}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeTagById(tag._id)}
+                            disabled={step === 'checking'}
+                            className="w-4 h-4 rounded-full hover:bg-[#c9deee] text-[#1f4f75] leading-none disabled:opacity-50"
+                            aria-label={`Remove ${tag.title}`}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                      <input
+                        ref={tagInputRef}
+                        type="text"
+                        value={tagInput}
+                        onChange={(e) => {
+                          setTagInput(e.target.value)
+                          setShowTagSuggestions(true)
+                        }}
+                        onFocus={() => setShowTagSuggestions(true)}
+                        onBlur={() => {
+                          window.setTimeout(() => setShowTagSuggestions(false), 120)
+                        }}
+                        onKeyDown={async (e) => {
+                          if (e.key === 'Enter' || e.key === ',') {
+                            e.preventDefault()
+                            await addTagsFromInput(tagInput, true)
+                            return
+                          }
+                          if (e.key === 'Backspace' && !tagInput && tags.length) {
+                            removeTagById(tags[tags.length - 1]._id)
+                          }
+                        }}
+                        disabled={step === 'checking'}
+                        placeholder={tags.length ? 'Type and press comma or Enter' : 'Add tags'}
+                        className="flex-1 min-w-[180px] h-7 px-1 text-sm text-[#111827] placeholder:text-[#9ca3af] bg-transparent outline-none disabled:opacity-50"
+                      />
+                    </div>
+                  </div>
+
+                  {showTagSuggestions && tagSuggestions.length > 0 && (
+                    <div className="absolute z-20 mt-1 w-full bg-white border border-[#e5e7eb] rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                      {tagSuggestions.map((suggestion) => (
+                        <button
+                          key={suggestion._id}
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            if (hasTagTitle(suggestion.title)) return
+                            setTags((prev) => [...prev, suggestion])
+                            setTagInput('')
+                            setShowTagSuggestions(false)
+                          }}
+                          className="w-full text-left px-3 py-2 text-sm text-[#111827] hover:bg-[#f3f4f6]"
+                        >
+                          {suggestion.title}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-[#6b7280] mt-2">Type at least 3 characters for suggestions. Press comma or Enter to add a tag.</p>
               </div>
             </div>
           )}
@@ -478,5 +689,5 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
       </div>
     </div>,
     document.body
-  )
+  ) : null
 }
