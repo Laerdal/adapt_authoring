@@ -18,6 +18,7 @@ import {
   createBlock,
   createComponent,
   linkContentAsset,
+  seedMissingCourseDefaults,
 } from "./adaptAuthoring";
 import {
   buildAssessmentFields,
@@ -103,6 +104,9 @@ interface GenComponent {
   pendingImage?: ImageData;
   pendingMedia?: MediaData;
   pendingItems?: Array<{ title?: string; body?: string; image?: string; imageAssetId?: string }>;
+  /** GMCQ per-option images that came from the DAM — linked as courseassets
+   *  after the component is created so publish resolves them. */
+  pendingOptionImages?: Array<{ image?: string; imageAssetId?: string }>;
 }
 interface GenGroup {
   sourceBlockId?: string;
@@ -278,6 +282,14 @@ function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => string 
         image?: ImageData;
         media?: MediaData;
         items?: Array<{ title?: string; body?: string; image?: string }>;
+        fields?: Array<{ control?: string; label?: string; placeholder?: string; mandatory?: boolean }>;
+        result?: {
+          assessmentId?: string;
+          completionBody?: string;
+          retryButton?: string;
+          retryFeedback?: string;
+          bands?: Array<{ score?: number; feedback?: string; allowRetry?: boolean }>;
+        };
       }>(raw.props && raw.props.data, {});
       // `componentKey` now holds the STORYBOARD KIND; the Adapt _component is
       // resolved later via resolveAdaptComponent against installed types.
@@ -301,18 +313,128 @@ function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => string 
       } else if (kind === "groupedContent") {
         comp.pendingKind = "groupedContent";
         comp.pendingItems = data.items;
+      } else if (kind === "h5p") {
+        // laerdal-h5p accepts EITHER a DAM asset (`h5pAsset`) OR an external
+        // embed URL (`_h5pExternalAsset`). External asset refs write the URL;
+        // picked DAM assets write the course-relative link AND record a
+        // courseasset link below so publish can resolve it.
+        const asset = data.media?.asset;
+        const patch: Record<string, unknown> = { instruction: "" };
+        if (asset?.external || (asset?.link && /^https?:\/\//i.test(asset.link))) {
+          patch._h5pExternalAsset = asset.link || asset.url || "";
+        } else if (asset?.link) {
+          patch.h5pAsset = asset.link;
+        }
+        comp.assessmentPatch = patch;
+        comp.assetLink = asset?.link;
+        comp.assetId = asset?.assetId;
+      } else if (kind === "laerdalForm") {
+        // laerdal-form `_items[]` mirrors the sbComponent form-field editor.
+        // Backend accepts these `_inputType` values:
+        // text|textarea|email|url|range|hidden|tel|options|number.
+        const inputTypeFor = (ctl: string): string => {
+          switch ((ctl || "").toLowerCase()) {
+            case "multi-line text":
+              return "textarea";
+            case "number":
+              return "number";
+            case "dropdown":
+              return "options";
+            case "checkbox":
+              // No boolean type on the backend; render as a single-option
+              // multi-select so the field persists and validates.
+              return "options";
+            case "single-line text":
+            default:
+              return "text";
+          }
+        };
+        const slugify = (s: string, i: number) =>
+          (s || `field-${i + 1}`)
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "") || `field-${i + 1}`;
+        const items = (data.fields || []).map((f, i) => {
+          const _inputType = inputTypeFor(f.control || "");
+          const item: Record<string, unknown> = {
+            _inputType,
+            _label: f.label || "",
+            _name: slugify(f.label || "", i),
+            _isRequired: !!f.mandatory,
+            _placeholder: f.placeholder || "",
+          };
+          if (_inputType === "options" && (f.control || "").toLowerCase() === "checkbox") {
+            item.options = [{ text: f.placeholder || "Yes", value: "yes" }];
+          }
+          return item;
+        });
+        comp.assessmentPatch = { _items: items };
+      } else if (kind === "assessmentResult") {
+        // adapt-contrib-assessmentResults: bind to an article-level assessment
+        // (`_assessmentId`), emit bands sorted ascending by `_score` (the
+        // plugin walks the array and picks the highest band whose `_score`
+        // ≤ the learner's score, so ascending order is the required contract),
+        // offer retry, and template the completion body with
+        // `{{scoreAsPercent}}` etc.
+        const r = data.result || {};
+        const bands = Array.isArray(r.bands) ? r.bands : [];
+        comp.assessmentPatch = {
+          _assessmentId: (r.assessmentId || "").trim() || undefined,
+          _completionBody: r.completionBody || "",
+          _isVisibleBeforeCompletion: false,
+          _setCompletionOn: "pass",
+          _resetType: "hard",
+          _retry: {
+            button: r.retryButton || "Try again",
+            feedback: r.retryFeedback || "",
+            _routeToAssessment: true,
+          },
+          _bands: bands
+            .slice()
+            .sort((a, b) => (Number(a.score) || 0) - (Number(b.score) || 0))
+            .map((b) => ({
+              _score: Math.max(0, Math.min(100, Number(b.score) || 0)),
+              feedback: b.feedback || "",
+              feedbackNotFinal: b.feedback || "",
+              _allowRetry: !!b.allowRetry,
+            })),
+        };
       }
     } else if (type === "sbAssessment") {
       const kind = ((raw.props && raw.props.kind) || "mcq") as AssessmentKind;
       const data = safeParseJson<AssessmentData>(raw.props && raw.props.data, { question: "" });
+      // Learner-facing Title/Body mapping (PR review — Title is primary):
+      //   • The block-level Title input is the primary question header — it
+      //     becomes the component's `title` + `displayTitle` in the Adapt
+      //     content model.
+      //   • When the Title is empty, the question body stands in as the title.
+      //   • Final fallback "Question" only when both are empty (schema needs
+      //     a non-empty title for the component to save).
+      //
+      // Body-vs-Title de-duplication:
+      //   The question body is written into `body` only when it differs from
+      //   the resolved title, so authors who provide a distinct Title and Body
+      //   get both, while a body that already became the title is never
+      //   rendered twice (once as title, once as description).
+      const blockTitle = ((raw.props && (raw.props.title as string)) || "").trim();
+      const questionText = (data.question || "").trim();
+      const resolvedTitle = blockTitle || questionText || "Question";
+      const bodyText = questionText && questionText !== resolvedTitle ? questionText : "";
       comp = {
         sourceBlockId: id,
         existingId,
         componentKey: kind,
-        title: ((raw.props && raw.props.title) || data.question || "").trim() || "Question",
-        body: data.question || "",
+        title: resolvedTitle,
+        body: bodyText,
         assessmentPatch: buildAssessmentFields(kind, data),
       };
+      // GMCQ: record per-option DAM-asset ids so we can create the courseasset
+      // publish links after the component is created.
+      if (kind === "gmcq" && Array.isArray(data.options)) {
+        comp.pendingOptionImages = data.options
+          .filter((o) => o.image && o.imageAssetId)
+          .map((o) => ({ image: o.image, imageAssetId: o.imageAssetId }));
+      }
     } else if (type === "sbPlaceholder") {
       const label = (raw.props && (raw.props.title || raw.props.label)) || "Placeholder";
       const rawLabel = (raw.props && raw.props.label) || "";
@@ -445,9 +567,11 @@ export async function planStoryboardGeneration(
     if (raw.type === "sbAssessment") {
       const kind = (raw.props && raw.props.kind) || "";
       const data = safeParseJson<AssessmentData>(raw.props && raw.props.data, { question: "" });
+      const blockTitle = ((raw.props && (raw.props.title as string)) || "").trim();
       if (isAssessmentKind(kind)) {
-        const problems = validateAssessment(kind, data);
-        if (problems.length) warnings.push(`Assessment "${data.question || kind}": ${problems[0]}`);
+        // Block Title is a valid question source (ADAPT-3785 §2 — feeds `displayTitle`).
+        const problems = validateAssessment(kind, data, blockTitle);
+        if (problems.length) warnings.push(`Assessment "${data.question || blockTitle || kind}": ${problems[0]}`);
       }
     }
   }
@@ -573,11 +697,15 @@ export async function generateStoryboardCourse(
         gSort += 1;
 
         let cSort = 1;
-        for (const c of g.components) {
+        for (let ci = 0; ci < g.components.length; ci += 1) {
+          const c = g.components[ci];
           const bodyHtml = bodyHtmlOf(c);
-          // Default component alignment is Right (spec: newly generated blocks
-          // hold up to 2 right-aligned components).
-          const layout: "right" = "right";
+          // A Content Group (block) holding a single component should fill
+          // the full width (matches the Course Preview / real Adapt layout —
+          // there's nothing to sit beside it). Two components split left/right,
+          // as before. `enforceMaxComponentsPerBlock` guarantees ≤2 per group.
+          const layout: "full" | "left" | "right" =
+            g.components.length <= 1 ? "full" : ci === 0 ? "left" : "right";
           // Resolve the storyboard kind → installed Adapt component (source of
           // truth). null = unsupported (NO text fallback).
           const resolvedType = getType(c.componentKey);
@@ -637,6 +765,20 @@ export async function generateStoryboardCourse(
               }
             }
           }
+          // GMCQ per-option images need their own courseasset link so publish
+          // can copy the image into the exported course.
+          if (Array.isArray(c.pendingOptionImages)) {
+            for (const opt of c.pendingOptionImages) {
+              const fn = filenameFromLink(opt?.image);
+              if (fn && opt?.imageAssetId) {
+                try {
+                  await linkContentAsset(courseId, "component", compId, grpId, fn, opt.imageAssetId);
+                } catch {
+                  /* best-effort */
+                }
+              }
+            }
+          }
           cSort += 1;
         }
       }
@@ -662,6 +804,24 @@ export async function generateStoryboardCourse(
         /* already removed by a cascade */
       }
     }
+  }
+
+  // Seed the course's top-level schema defaults (`_globals`, `_buttons`,
+  // `_navigation`, `_start`, `_tooltips`, `themeVariables`, …) into any branches
+  // still missing on the course document. The Adapt runtime templates and views
+  // dereference these directly at render time:
+  //   • questionModel/buttonsView → `Adapt.course.get('_buttons')._<state>.ariaLabel`
+  //   • themeComponentView        → `Adapt.course.get('themeVariables')._components...`
+  //   • mcq template / a11y       → `_globals._accessibility._ariaLabels.*`
+  //   • buttons/question globals  → `_globals._components._<plugin>.aria*`
+  // Missing branches used to crash preview with
+  //   TypeError: Cannot read properties of undefined (reading '_ariaLabels' | 'ariaLabel' | '_components')
+  // Existing authored values are ALWAYS preserved (deep-merge, existing wins),
+  // and the call is idempotent. Non-fatal to the generation itself.
+  try {
+    await seedMissingCourseDefaults(courseId);
+  } catch (err) {
+    console.warn("Storyboard generation: failed to seed course schema defaults", err);
   }
 
   return { created, updated, deleted, blockToContent, missingTypes: [...unsupported] };

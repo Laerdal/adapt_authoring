@@ -1,4 +1,4 @@
-// Block-anchored comment popover for the storyboard (ADAPT-3760).
+// Block-anchored comment popover for the storyboard.
 //
 // Opened from Add Content → Comment. Reuses the existing storyboardcomment
 // backend via useStoryboardReview (add / resolve / delete / reply) — comments
@@ -84,40 +84,63 @@ export default function CommentPopover({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[1100] flex items-start justify-center bg-black/20 pt-24" onMouseDown={onClose}>
+    <div
+      className="fixed inset-0 z-[1100] flex items-start justify-center pt-24"
+      style={{ background: 'rgba(4, 30, 41, 0.35)' }}
+      onMouseDown={onClose}
+    >
       <div
-        className="w-[min(92vw,420px)] rounded-xl border bg-background p-4 shadow-2xl"
+        className="w-[min(92vw,420px)] p-4"
+        style={{
+          borderRadius: 12,
+          background: 'var(--life-color-bg-surface-default)',
+          border: '1px solid var(--life-color-border-subtle)',
+          boxShadow: 'var(--elevation-lg)',
+          fontFamily: 'var(--font-family-primary)',
+        }}
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="mb-3 flex items-center gap-2">
-          <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" title={blockLabel}>
+          <span
+            className="truncate"
+            title={blockLabel}
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+              color: 'var(--life-color-text-subtle)',
+            }}
+          >
             {blockLabel}
           </span>
-          <button type="button" onClick={onClose} title="Close" className="ml-auto rounded p-1 hover:bg-muted">
+          <button type="button" onClick={onClose} title="Close" className="ml-auto sb-panel-collapse-btn">
             <X className="h-4 w-4" />
           </button>
         </div>
 
         {!blockId ? (
-          <p className="mb-3 text-sm text-muted-foreground">
+          <p className="mb-3" style={{ fontSize: 13, color: 'var(--life-color-text-subtle)' }}>
             Place the cursor in a block to comment on it.
           </p>
         ) : (
           <div className="mb-3 max-h-64 space-y-2 overflow-y-auto">
             {tops.length === 0 && !loading && (
-              <p className="text-sm text-muted-foreground">No comments yet.</p>
+              <p style={{ fontSize: 13, color: 'var(--life-color-text-subtle)' }}>No comments yet.</p>
             )}
             {tops.map((top) => (
-              <div key={top._id} className="rounded-lg border p-2.5">
+              <div key={top._id} className="sb-card">
                 <div className="mb-1 flex items-center gap-1">
-                  <span className="text-[11px] text-muted-foreground">{timeAgo(top.createdAt)}</span>
+                  <span style={{ fontSize: 11, color: 'var(--life-color-text-subtle)' }}>
+                    {timeAgo(top.createdAt)}
+                  </span>
                   <div className="ml-auto flex items-center gap-1">
                     <button
                       type="button"
                       title={top.resolved ? 'Reopen' : 'Resolve'}
                       onClick={() => onResolve(top._id, !top.resolved)}
-                      className="grid h-6 w-6 place-items-center rounded text-muted-foreground hover:bg-muted"
+                      className="sb-panel-collapse-btn"
                     >
                       {top.resolved ? <RotateCcw className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}
                     </button>
@@ -125,20 +148,39 @@ export default function CommentPopover({
                       type="button"
                       title="Delete"
                       onClick={() => onDelete(top._id)}
-                      className="grid h-6 w-6 place-items-center rounded text-muted-foreground hover:bg-muted"
+                      className="sb-panel-collapse-btn"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 </div>
-                <p className="whitespace-pre-wrap text-sm text-foreground">{top.body}</p>
+                <p
+                  className="whitespace-pre-wrap"
+                  style={{ fontSize: 13, color: 'var(--life-color-text-default)' }}
+                >
+                  {top.body}
+                </p>
 
                 {repliesOf(top._id).map((r) => (
-                  <div key={r._id} className="mt-2 flex gap-1.5 border-l-2 border-border pl-2">
-                    <CornerDownRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <div
+                    key={r._id}
+                    className="mt-2 flex gap-1.5 pl-2"
+                    style={{ borderLeft: '2px solid var(--life-color-border-subtle)' }}
+                  >
+                    <CornerDownRight
+                      className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                      style={{ color: 'var(--life-color-text-subtle)' }}
+                    />
                     <div className="min-w-0">
-                      <p className="whitespace-pre-wrap text-sm text-foreground">{r.body}</p>
-                      <p className="mt-0.5 text-[11px] text-muted-foreground">{timeAgo(r.createdAt)}</p>
+                      <p
+                        className="whitespace-pre-wrap"
+                        style={{ fontSize: 13, color: 'var(--life-color-text-default)' }}
+                      >
+                        {r.body}
+                      </p>
+                      <p style={{ marginTop: 2, fontSize: 11, color: 'var(--life-color-text-subtle)' }}>
+                        {timeAgo(r.createdAt)}
+                      </p>
                     </div>
                   </div>
                 ))}
@@ -157,9 +199,27 @@ export default function CommentPopover({
                         value={reply.text}
                         onChange={(e) => setReply({ id: top._id, text: e.target.value })}
                         placeholder="Reply…"
-                        className="flex-1 rounded border border-border bg-background px-2 py-1 text-sm outline-none focus:border-primary"
+                        className="flex-1 rounded px-2 py-1 outline-none"
+                        style={{
+                          fontSize: 13,
+                          border: '1px solid var(--life-color-border-subtle)',
+                          background: 'var(--life-color-bg-surface-default)',
+                          color: 'var(--life-color-text-default)',
+                        }}
                       />
-                      <button type="submit" disabled={!reply.text.trim() || busy} className="text-xs font-medium text-primary disabled:opacity-40">
+                      <button
+                        type="submit"
+                        disabled={!reply.text.trim() || busy}
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 600,
+                          color: 'var(--life-color-text-primary)',
+                          opacity: reply.text.trim() && !busy ? 1 : 0.4,
+                          background: 'none',
+                          border: 'none',
+                          cursor: reply.text.trim() && !busy ? 'pointer' : 'not-allowed',
+                        }}
+                      >
                         Reply
                       </button>
                     </form>
@@ -167,7 +227,15 @@ export default function CommentPopover({
                     <button
                       type="button"
                       onClick={() => setReply({ id: top._id, text: '' })}
-                      className="mt-1.5 text-xs font-medium text-primary"
+                      style={{
+                        marginTop: 6,
+                        fontSize: 12,
+                        fontWeight: 600,
+                        color: 'var(--life-color-text-primary)',
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                      }}
                     >
                       Reply
                     </button>
@@ -188,14 +256,21 @@ export default function CommentPopover({
               }}
               placeholder="Comment... use @ to mention"
               rows={2}
-              className="mb-2 w-full resize-y rounded-lg bg-muted/60 p-2.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+              className="mb-2 w-full resize-y p-2.5 outline-none"
+              style={{
+                borderRadius: 'var(--radius)',
+                background: 'var(--life-color-bg-surface-subtle)',
+                border: '1px solid var(--life-color-border-subtle)',
+                fontSize: 13,
+                color: 'var(--life-color-text-default)',
+              }}
             />
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setBody((b) => `${b}@`)}
                 title="Mention someone"
-                className="inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm hover:bg-secondary"
+                className="sb-toolbar-btn"
               >
                 <AtSign className="h-3.5 w-3.5" /> Mention
               </button>
@@ -203,8 +278,7 @@ export default function CommentPopover({
                 type="button"
                 onClick={() => void post()}
                 disabled={!body.trim() || busy}
-                className="ml-auto rounded-md px-4 py-1.5 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-40"
-                style={{ background: 'var(--primary)' }}
+                className="ml-auto sb-toolbar-btn sb-toolbar-btn-primary"
               >
                 Post
               </button>

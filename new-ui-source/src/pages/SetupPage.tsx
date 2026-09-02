@@ -7,7 +7,7 @@ import CourseStructureTree from "../components/course/CourseStructureTree";
 import AddComponentDrawer from "../components/course/AddComponentDrawer";
 import { StoryboardWorkspace } from "../components/storyboard";
 import CommonCourseTopBarRow from "../components/course/CommonCourseTopBarRow";
-import { getCourseBootstrapData } from "../api/adaptAuthoring";
+import { getCourseBootstrapData, publishCoursePackage } from "../api/adaptAuthoring";
 import { useCourseStructure } from "../hooks/useCourseStructure";
 import { STRUCTURE_LABELS } from "../types/structure";
 import { CourseOverviewPage } from "./setup/courseOverviewPage";
@@ -25,6 +25,10 @@ import { CdnDeploymentPage } from "./setup/cdnDeploymentPage";
 import ExportMenu, { ExportStatusPopup } from "../components/importExport/Export";
 import ExportPdfPage from "../components/importExport/ExportPdfPage";
 import { runExportSourceAction } from "../helpers/importExportHelper";
+import { PreflightValidatorPage } from "./setup/preflightValidatorPage";
+import PublishMenuButton from "../components/publish/PublishMenuButton";
+import PublishCourseDialog, { type PublishCoursePhase } from "../components/publish/PublishCourseDialog";
+import ExportDialog from "../components/common/ExportDialog";
 
 const ICON_BASE = "/new/assets/icons";
 
@@ -2605,223 +2609,6 @@ function CompletionProgressPanel() {
   );
 }
 
-/* -- Publish Panel -- */
-function PublishCheckbox({ checked, onChange, children }: { checked: boolean; onChange: (v: boolean) => void; children: React.ReactNode }) {
-  return (
-    <label className="flex items-start gap-3 cursor-pointer select-none group">
-      <span
-        onClick={() => onChange(!checked)}
-        className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${checked ? "bg-[#2d6fa8] border-[#2d6fa8]" : "border-[#d1d5db] bg-white group-hover:border-[#2d6fa8]"}`}
-      >
-        {checked && (
-          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="2 6 5 9 10 3" />
-          </svg>
-        )}
-      </span>
-      <span className="text-sm text-[#374151] leading-snug">{children}</span>
-    </label>
-  );
-}
-
-function PublishPanel() {
-  const [preflight, setPreflight]               = useState(true);
-  const [includeCourseVal, setIncludeCourseVal] = useState(true);
-  const [includeA11y, setIncludeA11y]           = useState(false);
-  const [includeScorm, setIncludeScorm]         = useState(false);
-  const [a11yChecked, setA11yChecked]           = useState(false);
-  const [scormChecked, setScormChecked]         = useState(false);
-
-  return (
-    <div className="max-w-2xl w-full flex flex-col gap-8">
-
-      {/* Heading */}
-      <div>
-        <h2 className="text-xl font-semibold text-[#111827]">Publish</h2>
-        <p className="text-sm text-[#6b7280] mt-1.5 leading-relaxed">
-          Configure your publish settings and optionally run a Preflight Validation to generate a report before publishing.
-        </p>
-      </div>
-
-      {/* Preflight Validation toggle */}
-      <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 bg-[#f9fafb] border-b border-[#e5e7eb]">
-          <div>
-            <p className="text-sm font-semibold text-[#111827]">Preflight Validation</p>
-            <p className="text-xs text-[#6b7280] mt-0.5">Generate a validation report before publishing</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setPreflight((v) => !v)}
-            aria-label="Toggle preflight validation"
-            className={`relative inline-flex w-12 h-7 rounded-full transition-colors duration-200 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2d6fa8] focus-visible:ring-offset-2 ${preflight ? "bg-[#2d6fa8]" : "bg-[#d1d5db]"}`}
-          >
-            <span className={`absolute top-[3px] left-[3px] w-[22px] h-[22px] rounded-full shadow-sm transition-transform duration-200 flex items-center justify-center ${preflight ? "bg-white translate-x-[18px]" : "bg-[#3d3d3d] translate-x-0"}`}>
-              {preflight && (
-                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="#2d6fa8" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="2 6 5 9 10 3" />
-                </svg>
-              )}
-            </span>
-          </button>
-        </div>
-
-        {preflight && (
-          <div className="px-5 py-4 flex flex-col gap-3 bg-white">
-            <p className="text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">Include in report</p>
-            <PublishCheckbox checked={includeCourseVal} onChange={setIncludeCourseVal}>Course Validation</PublishCheckbox>
-            <PublishCheckbox checked={includeA11y}      onChange={setIncludeA11y}>Accessibility Report</PublishCheckbox>
-            <PublishCheckbox checked={includeScorm}     onChange={setIncludeScorm}>SCORM Validation for LMS</PublishCheckbox>
-          </div>
-        )}
-      </div>
-
-      {/* Course Validation section */}
-      <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-        <div className="px-5 py-4 bg-[#f9fafb] border-b border-[#e5e7eb]">
-          <p className="text-sm font-semibold text-[#111827]">Course Evaluation</p>
-        </div>
-        <div className="px-5 py-5 flex flex-col gap-4 bg-white">
-          <p className="text-sm text-[#374151] leading-relaxed">
-            It is recommended to do the Course Evaluation and correct any findings before proceeding to the SCORM/Hyperbridge Validation.
-          </p>
-          <ul className="flex flex-col gap-2 pl-1">
-            {[
-              "Identifies duplicate IDs within the course",
-              "Validates the syntax of the IDs for Assessments",
-              "Finds if all necessary extensions are included; for example, courses with the Hyperbridge extension should also include the CDN Deployment extension",
-              "Alerts if both SPOOR and Hyperbridge extensions are included in a course",
-              "Alerts when assessment completion is set as the course completion criteria, but assessment extension is not enabled for any article in the course",
-            ].map((item) => (
-              <li key={item} className="flex items-start gap-2.5 text-sm text-[#6b7280]">
-                <svg className="shrink-0 mt-0.5" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2d6fa8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-                {item}
-              </li>
-            ))}
-          </ul>
-          <div className="pt-1">
-            <button type="button" className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 12l2 2 4-4" /><circle cx="12" cy="12" r="10" />
-              </svg>
-              Validation
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Accessibility Checker + SCORM/HyperBridge Validation */}
-      <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-        <div className="px-5 py-4 bg-[#f9fafb] border-b border-[#e5e7eb]">
-          <p className="text-sm font-semibold text-[#111827]">Accessibility Checker &amp; SCORM/HyperBridge Validation</p>
-        </div>
-        <div className="px-5 py-5 flex flex-col gap-5 bg-white">
-
-          {/* Prerequisites */}
-          <div className="rounded-lg bg-[#fffbeb] border border-[#fcd34d] px-4 py-3 flex flex-col gap-1.5">
-            <p className="text-xs font-semibold text-[#92400e] uppercase tracking-wide flex items-center gap-1.5">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-              </svg>
-              Prerequisites: Dependent Extensions for Validation
-            </p>
-            <p className="text-xs text-[#78350f] leading-relaxed">
-              To run these validation reports it is required to enable the below extensions well in advance to ensure successful validation.
-            </p>
-            <ul className="flex flex-col gap-1 mt-1">
-              {["Laerdal Validator Enabler", "SPOOR/HyperBridge Extension", "CDN config"].map((ext) => (
-                <li key={ext} className="flex items-center gap-2 text-xs text-[#92400e]">
-                  <span className="w-1 h-1 rounded-full bg-[#d97706] shrink-0" />
-                  {ext}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Validation options */}
-          <div className="flex flex-col gap-5">
-            <p className="text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">Select validations to run</p>
-
-            {/* Accessibility Checker */}
-            <div
-              onClick={() => setA11yChecked((v) => !v)}
-              className={`flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-all ${a11yChecked ? "border-[#2d6fa8] bg-[#f0f7ff]" : "border-[#e5e7eb] bg-white hover:border-[#93c5fd]"}`}
-            >
-              <span className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${a11yChecked ? "bg-[#2d6fa8] border-[#2d6fa8]" : "border-[#d1d5db] bg-white"}`}>
-                {a11yChecked && (
-                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="2 6 5 9 10 3" />
-                  </svg>
-                )}
-              </span>
-              <div className="flex flex-col gap-1">
-                <p className="text-sm font-semibold text-[#111827]">Accessibility Checker</p>
-                <p className="text-xs text-[#6b7280] leading-relaxed">
-                  Runs the course through the AXE library from Deque to identify potential errors and warnings in compliance with WCAG A and AA standards. This includes checks for color contrast ratios, missing alternative text for images, heading structures, and keyboard navigation support.
-                </p>
-              </div>
-            </div>
-
-            {/* SCORM/Hyperbridge Validation */}
-            <div
-              onClick={() => setScormChecked((v) => !v)}
-              className={`flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-all ${scormChecked ? "border-[#2d6fa8] bg-[#f0f7ff]" : "border-[#e5e7eb] bg-white hover:border-[#93c5fd]"}`}
-            >
-              <span className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${scormChecked ? "bg-[#2d6fa8] border-[#2d6fa8]" : "border-[#d1d5db] bg-white"}`}>
-                {scormChecked && (
-                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="2 6 5 9 10 3" />
-                  </svg>
-                )}
-              </span>
-              <div className="flex flex-col gap-1.5">
-                <p className="text-sm font-semibold text-[#111827]">SCORM/Hyperbridge Validation</p>
-                <ul className="flex flex-col gap-1">
-                  {[
-                    "Checks the suspend data length varies for SPOOR and HyperBridge.",
-                    "Identifies any potential bugs that may occur during LMS deployment.",
-                    "Confirms if the course registers completion and if the assessment score is pushed where relevant.",
-                  ].map((item) => (
-                    <li key={item} className="flex items-start gap-2 text-xs text-[#6b7280]">
-                      <span className="w-1 h-1 rounded-full bg-[#9ca3af] shrink-0 mt-1.5" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          {/* Run validations button */}
-          {(a11yChecked || scormChecked) && (
-            <button type="button" className="self-start flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 12l2 2 4-4" /><circle cx="12" cy="12" r="10" />
-              </svg>
-              Run {[a11yChecked && "Accessibility", scormChecked && "SCORM"].filter(Boolean).join(" & ")} Validation
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Publish action */}
-      <div className="flex items-center justify-between pt-2 border-t border-[#f3f4f6]">
-        <p className="text-xs text-[#9ca3af]">Complete any outstanding validations before publishing.</p>
-        <button type="button" className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-[#2E7FA1] hover:bg-[#266580] rounded-lg transition-colors">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-          </svg>
-          Publish Course
-        </button>
-      </div>
-
-    </div>
-  );
-}
-
 /* -- Placeholder panel for sections not yet built -- */
 function ComingSoonPanel({ label }: { label: string }) {
   return (
@@ -2875,10 +2662,15 @@ function CourseCreationCenterContent() {
   const [savedThemeVariables, setSavedThemeVariables] = useState<Record<string, unknown>>({});
   const [savedPresetId, setSavedPresetId] = useState("");
 
-  const [activeNav, setActiveNav] = useState(() => (initialPanel === "storyboarding" ? "storyboarding" : "overview"));
+  const [activeNav, setActiveNav] = useState(() =>
+    initialPanel === "storyboarding" ? "storyboarding" : initialPanel === "publish" ? "publish" : "overview",
+  );
   const [collapsed, setCollapsed] = useState(false);
   const [exportingSource, setExportingSource] = useState(false);
   const [exportPopup, setExportPopup] = useState<{ status: "processing" | "success"; message: string } | null>(null);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [publishDialogPhase, setPublishDialogPhase] = useState<PublishCoursePhase | null>(null);
+  const [publishResult, setPublishResult] = useState<{ zipName?: string; downloadUrl?: string; message?: string }>({});
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(NAV_GROUPS.map((group) => [group.id, true]))
   );
@@ -2994,7 +2786,7 @@ function CourseCreationCenterContent() {
     if (activeNav === "technical-settings") return <TechnicalSettingPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "cdn-deployment") return <CdnDeploymentPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "translation") return <LegacyTranslationPanel courseId={courseId} />;
-    if (activeNav === "publish") return <PublishPanel />;
+    if (activeNav === "publish") return <PreflightValidatorPage courseId={courseId} onNavigationRequest={setActiveNav} />;
     if (activeNav === "export-pdf") {
       return (
         <ExportPdfPage
@@ -3015,6 +2807,42 @@ function CourseCreationCenterContent() {
         />
       );
     return <ComingSoonPanel label={activeItem?.label ?? ""} />;
+  }
+
+  function openExportDialog() {
+    setShowExportDialog(true);
+  }
+
+  function openPublishDialog() {
+    setPublishResult({});
+    setPublishDialogPhase("confirm");
+  }
+
+  function closePublishDialog() {
+    setPublishDialogPhase(null);
+  }
+
+  async function handleConfirmPublish() {
+    const tenantId = user?._tenantId;
+    if (!courseId || !tenantId) {
+      setPublishResult({ message: "No course or tenant context available." });
+      setPublishDialogPhase("error");
+      return;
+    }
+    setPublishDialogPhase("running");
+    try {
+      const result = await publishCoursePackage(tenantId, courseId);
+      if (result.success) {
+        setPublishResult({ zipName: result.zipName, downloadUrl: result.downloadUrl });
+        setPublishDialogPhase("success");
+      } else {
+        setPublishResult({ message: result.message });
+        setPublishDialogPhase("error");
+      }
+    } catch (err) {
+      setPublishResult({ message: err instanceof Error ? err.message : "Publish failed." });
+      setPublishDialogPhase("error");
+    }
   }
 
   function buildPageEditorState(pageId?: string) {
@@ -3069,7 +2897,8 @@ function CourseCreationCenterContent() {
         courseTitle={title}
         loginName={loginName}
         activeNav={primaryTopNav}
-        onBack={() => navigate("/")}
+        onBack={() => window.history.length > 1 ? navigate(-1) : navigate("/")}
+        onHome={() => navigate("/")}
         onOpenCourseSettings={() => {
           navigate(`/course/${courseId}/setup`);
           setActiveNav("overview");
@@ -3082,11 +2911,15 @@ function CourseCreationCenterContent() {
       />
 
       {/* -- Second Row Header -- */}
-      <div className="h-[56px] bg-white border-b border-[#d8dde6] flex items-center px-4 md:px-6 gap-3 shrink-0 relative z-10">
-        <div className="flex items-center gap-2 text-[#111827] min-w-0">
-          <SidebarMaskIcon file="overview-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current opacity-80" />
-          <span className="text-base font-semibold truncate">{activeItem?.label ?? "Course Overview"}</span>
-        </div>
+      {/* Hidden on Storyboard: it isn't part of the Course Configuration nav
+          (activeItem resolves to nothing there) and StoryboardTopBar already
+          provides its own Export/Publish-equivalent actions. */}
+      {activeNav !== "storyboarding" && (
+        <div className="h-[56px] bg-white border-b border-[#d8dde6] flex items-center px-4 md:px-6 gap-3 shrink-0 relative z-10">
+          <div className="flex items-center gap-2 text-[#111827] min-w-0">
+            <SidebarMaskIcon file="overview-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current opacity-80" />
+            <span className="text-base font-semibold truncate">{activeItem?.label ?? "Course Overview"}</span>
+          </div>
 
         <div className="ml-auto flex items-center gap-4">
           <ExportMenu
@@ -3120,21 +2953,25 @@ function CourseCreationCenterContent() {
             }}
           />
 
-          <button
-            type="button"
-            onClick={() => handleNavigation("publish")}
-            className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold rounded-[8px] transition-colors active:bg-[var(--life-primary-800)] cursor-pointer ${activeNav === "publish" ? "bg-[var(--life-primary-700)] text-[var(--life-base-white)]" : "bg-[var(--life-primary-500)] text-[var(--life-base-white)] hover:bg-[var(--life-primary-700)]"}`}
-          >
-            <SidebarMaskIcon file="publish-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-            <span className="hidden lg:inline">Publish</span>
-          </button>
+            <PublishMenuButton
+              active={activeNav === "publish"}
+              onSelectPreflight={() => handleNavigation("publish")}
+              onSelectPublish={openPublishDialog}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* -- Body -- */}
       <div className="flex flex-1 overflow-hidden min-h-0">
 
         {/* -- Left panel -- */}
+        {/* Hidden on Storyboard (ADAPT-3785): the Storyboard workspace is not
+            one of this sidebar's nav items and ships its own full-bleed chrome
+            (StoryboardTopBar) per the Figma design — showing Course
+            Configuration alongside it duplicated navigation/export actions.
+            Course Configuration itself is unaffected on every other tab. */}
+        {activeNav !== "storyboarding" && (
         <aside
           className={`h-full bg-white border-r border-[#d8dde6] flex flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-16" : "w-[256px]"}`}
         >
@@ -3250,12 +3087,26 @@ function CourseCreationCenterContent() {
           </nav>
 
         </aside>
+        )}
 
         {/* -- Right content panel -- */}
         <main ref={contentScrollRef} className={`flex-1 overflow-hidden min-h-0 bg-[#f8fafc] ${activeNav === "menu" || activeNav === "navigation" || activeNav === "storyboarding" || activeNav === "translation" ? "" : "overflow-y-auto px-8 py-8"}`}>
           {renderPanel()}
         </main>
       </div>
+      {showExportDialog && <ExportDialog onClose={() => setShowExportDialog(false)} />}
+
+      {publishDialogPhase && (
+        <PublishCourseDialog
+          phase={publishDialogPhase}
+          courseTitle={title}
+          zipName={publishResult.zipName}
+          downloadUrl={publishResult.downloadUrl}
+          errorMessage={publishResult.message}
+          onConfirm={() => void handleConfirmPublish()}
+          onClose={closePublishDialog}
+        />
+      )}
       <AiAssistant context="Course Creation Center" suggestions={[
         'How do I set up my course structure?',
         'What does the Preflight Validator check?',

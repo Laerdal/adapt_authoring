@@ -314,7 +314,12 @@ async function exportWord(req, res) {
     // and filename match the course, not the internal storyboard record title.
     const docTitle = (req.query && req.query.title) || rec.title || 'Storyboard';
     const blocks = safeParse(rec.documentJson, []);
-    const buffer = await convert.blocksToDocx(blocks, docTitle);
+    // Explicit user/tenant context so the asset resolver doesn't depend on
+    // process.domain.session surviving through async awaits (ADAPT-3785 image
+    // embedding fix).
+    const { userId, tenantId } = userCtx(req);
+    const ctx = { user: req.user, userId, tenantId };
+    const buffer = await convert.blocksToDocx(blocks, docTitle, ctx);
     const safeName = String(docTitle).replace(/[^\w.-]+/g, '_') || 'storyboard';
     return res.status(200).json({
       filename: `${safeName}.docx`,
@@ -335,7 +340,9 @@ async function exportPdf(req, res) {
     const rec = toPlain(results[0]);
     const docTitle = (req.query && req.query.title) || rec.title || 'Storyboard';
     const blocks = safeParse(rec.documentJson, []);
-    const buffer = await convert.blocksToPdf(blocks, docTitle);
+    const { userId, tenantId } = userCtx(req);
+    const ctx = { user: req.user, userId, tenantId };
+    const buffer = await convert.blocksToPdf(blocks, docTitle, ctx);
     const safeName = String(docTitle).replace(/[^\w.-]+/g, '_') || 'storyboard';
     return res.status(200).json({
       filename: `${safeName}.pdf`,

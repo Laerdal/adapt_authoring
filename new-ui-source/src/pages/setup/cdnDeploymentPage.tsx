@@ -10,6 +10,7 @@ import {
   restoreCdnLink,
   setCdnLinkExpiry,
   CDN_STORAGE_CONTAINERS,
+  DEFAULT_CDN_DEPLOYMENT_SETTINGS,
   type CdnDeploymentSettings,
   type CdnLinkEntry,
 } from "../../api/adaptAuthoring";
@@ -234,6 +235,48 @@ const STATUS_BADGE: Record<LinkStatus, { label: string; className: string }> = {
   inactive: { label: "Inactive", className: "text-[#9ca3af]" },
 };
 
+// Both the "specific" and "latest" deploy links always end in `<versionfolder>/index.html`
+// (destination.js: dest.specific = `${groupid}/courses/${courseid}/${version}.${timestamp}`,
+// dest.latest = `.../latest`) — recover the version-folder id from the path itself rather
+// than trusting free-text label content ("Version Specific" / "Latest").
+function extractVersionFolder(href: string): string {
+  try {
+    // href may be protocol-relative ("//host/...") or root-relative ("/...") —
+    // both shapes appendIsCDNModeParam can produce — so a base is required.
+    const segments = new URL(href, window.location.origin).pathname.split("/").filter(Boolean);
+    return segments.length >= 2 ? segments[segments.length - 2] : "latest";
+  } catch {
+    return "latest";
+  }
+}
+
+function ordinal(n: number): string {
+  const suffixes = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return `${n}${suffixes[(v - 20) % 10] ?? suffixes[v] ?? suffixes[0]}`;
+}
+
+function formatBuildTimestamp(epochMs: number): string {
+  const d = new Date(epochMs);
+  const month = d.toLocaleString("en-US", { month: "long" });
+  const time = d.toLocaleString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true }).toLowerCase();
+  return `${month} ${ordinal(d.getDate())} ${d.getFullYear()}, ${time}`;
+}
+
+// A version-folder id embeds its creation timestamp as the trailing dot-segment
+// (e.g. "0.0.1.1755500064000") — "latest" has no timestamp of its own.
+function buildDisplayLinkEntry(link: CdnLink): DisplayLinkEntry {
+  const entry = extractVersionFolder(link.href);
+  const rawTimestamp = entry !== "latest" ? Number(entry.split(".").pop()) : NaN;
+  return {
+    entry,
+    link: link.href,
+    timestampPretty: Number.isFinite(rawTimestamp) ? formatBuildTimestamp(rawTimestamp) : undefined,
+    href: link.href,
+    status: "active",
+  };
+}
+
 /* ── CDN Deployment Page ─────────────────────────────────────────────────── */
 
 export function CdnDeploymentPage({
@@ -263,7 +306,10 @@ export function CdnDeploymentPage({
   const logIdRef = useRef(0);
 
   const [linksLoading, setLinksLoading] = useState(false);
-  const [links, setLinks] = useState<DisplayLinkEntry[]>([]);
+  // null = not yet populated. Populated either by an explicit "Get Previous
+  // Links" click or by a completed build (showing just that build's links) —
+  // but never automatically by saving the config or starting a build.
+  const [links, setLinks] = useState<DisplayLinkEntry[] | null>(null);
   const [restoringEntry, setRestoringEntry] = useState<string | null>(null);
   const [restoredEntries, setRestoredEntries] = useState<Set<string>>(new Set());
   const [expiryTarget, setExpiryTarget] = useState<string | null>(null);
@@ -308,7 +354,15 @@ export function CdnDeploymentPage({
         setCfg(settings);
         setSavedSnapshot(settings);
         setCdnCliVersion(version);
-        if (settings.isEnabled) void loadPreviousLinks(settings);
+      } catch {
+        // Without this, a failed fetch left `cfg` null forever and the page
+        // was stuck on the loading spinner indefinitely — fall back to the
+        // schema defaults (extension effectively "not configured") so the
+        // page always renders, and let the user know the load failed.
+        if (cancelled) return;
+        setCfg(DEFAULT_CDN_DEPLOYMENT_SETTINGS);
+        setSavedSnapshot(DEFAULT_CDN_DEPLOYMENT_SETTINGS);
+        setToast({ type: "error", message: "Couldn't load CDN deployment settings. Please refresh and try again." });
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -336,8 +390,9 @@ export function CdnDeploymentPage({
     try {
       await saveCdnDeploymentSettings(courseId, next);
       setSavedSnapshot(next);
-      if (next.isEnabled) void loadPreviousLinks(next);
-      else setLinks([]);
+      // Saving config must not auto-fetch/show previous links (QA:
+      // that list should only populate on an explicit button click).
+      setLinks(null);
       return true;
     } catch {
       setToast({ type: "error", message: "Couldn't save. Please try again." });
@@ -387,6 +442,10 @@ export function CdnDeploymentPage({
     if (!cfg || building) return;
     setBuilding(true);
     setLogEntries([]);
+    // Clear any previously-fetched previous-links table — after a build, only
+    // the latest/version-specific link (surfaced inline via the SSE log below)
+    // should be shown, not the full previous-links list.
+    setLinks(null);
 
     const url = new URL(`${API_BASE_URL}/api/cdn/deploy`, window.location.origin);
     // "courseid" must be the authoring tool's real course _id (used server-side to
@@ -410,13 +469,21 @@ export function CdnDeploymentPage({
       if (urlMatch) {
         const specificMatch = data.match(/<div class="specific">([\s\S]*?)<\/div>/);
         const latestMatch = data.match(/<div class="latest">([\s\S]*?)<\/div>/);
+        const specificLink = specificMatch ? parseCdnLinkHtml(specificMatch[1]) ?? undefined : undefined;
+        const latestLink = latestMatch ? parseCdnLinkHtml(latestMatch[1]) ?? undefined : undefined;
         appendLog({
           eventType: "link",
-          specificLink: specificMatch ? parseCdnLinkHtml(specificMatch[1]) ?? undefined : undefined,
-          latestLink: latestMatch ? parseCdnLinkHtml(latestMatch[1]) ?? undefined : undefined,
+          specificLink,
+          latestLink,
           comment: cfg.buildTriggerComment,
           triggeredBy: user?.email,
         });
+        // Show just the two links this build produced, in the same table used
+        // for "Get Previous Links" — not the full deployment history.
+        const freshEntries = [latestLink, specificLink]
+          .filter((l): l is CdnLink => !!l)
+          .map(buildDisplayLinkEntry);
+        if (freshEntries.length) setLinks(freshEntries);
       } else {
         appendLog({ eventType: "message", message: data });
       }
@@ -431,7 +498,6 @@ export function CdnDeploymentPage({
       appendLog({ eventType: "close", message: "⚫ Connection closed" });
       setBuilding(false);
       es.close();
-      void loadPreviousLinks(cfg);
     };
     es.onerror = stop;
     es.addEventListener("server-error", (event) => {
@@ -444,10 +510,15 @@ export function CdnDeploymentPage({
     if (!cfg) return;
     setRestoringEntry(entry.entry);
     try {
-      const result = await restoreCdnLink(cfg.groupid, cfg.courseid, cfg.cdnid, entry.entry);
-      if (!result.length) throw new Error("No links found.");
+      // Success is signalled by the request not throwing (apiClient.request
+      // throws on non-2xx). The exact payload shape from `cdndeploy mv`
+      // varies by CLI version, so we don't try to shape-check it — instead
+      // we reload the previous-links table below, which is the source of
+      // truth for what's currently in storage.
+      await restoreCdnLink(cfg.groupid, cfg.courseid, cfg.cdnid, entry.entry);
       setRestoredEntries((prev) => new Set(prev).add(entry.entry));
       setToast({ type: "success", message: "Link restored successfully" });
+      void loadPreviousLinks(cfg);
     } catch {
       setToast({
         type: "error",
@@ -462,11 +533,12 @@ export function CdnDeploymentPage({
     if (!cfg || !expiryDate) return;
     setExpirySaving(true);
     try {
-      const result = await setCdnLinkExpiry(cfg.groupid, cfg.courseid, cfg.cdnid, entry.entry, expiryDate);
-      if (!result.length) throw new Error("No links found.");
+      // See handleRestore for why we don't shape-check the response.
+      await setCdnLinkExpiry(cfg.groupid, cfg.courseid, cfg.cdnid, entry.entry, expiryDate);
       setToast({ type: "success", message: "Expiry date set successfully for this version" });
       setExpiryTarget(null);
       setExpiryDate("");
+      void loadPreviousLinks(cfg);
     } catch (err) {
       setToast({ type: "error", message: err instanceof Error ? err.message : "Failed to set expiry." });
     } finally {
@@ -625,8 +697,10 @@ export function CdnDeploymentPage({
                   </div>
                 )}
 
-                {/* Previous versions */}
-                {cfg.isEnabled && (
+                {/* Previous versions — shown once populated by "Get Previous Links" or
+                    a completed build; stays hidden (links === null) until then, and is
+                    never auto-populated just by saving the config or starting a build. */}
+                {cfg.isEnabled && (linksLoading || links !== null) && (
                   <div className="rounded-lg border border-[#e5e7eb] overflow-hidden">
                     <table className="w-full text-xs">
                       <thead className="bg-[#f9fafb] text-left">
@@ -640,7 +714,7 @@ export function CdnDeploymentPage({
                       <tbody>
                         {linksLoading ? (
                           <tr><td colSpan={4} className="px-3 py-4 text-center text-[#6b7280]"><Spinner className="inline mr-2" />Loading previous versions…</td></tr>
-                        ) : links.length === 0 ? (
+                        ) : !links || links.length === 0 ? (
                           <tr><td colSpan={4} className="px-3 py-4 text-center text-[#6b7280]">No previous versions found.</td></tr>
                         ) : (
                           links.map((entry) => {
@@ -648,10 +722,20 @@ export function CdnDeploymentPage({
                             const restored = restoredEntries.has(entry.entry);
                             const status: LinkStatus = restored ? "active" : entry.status;
                             const badge = STATUS_BADGE[status];
+                            // Mirrors the AT tool's `linkdisabled`/`inactiveState` rule (cdnCourseView.js):
+                            // Restore is only for links that are actually down (expired/not-found) — an
+                            // active link has nothing to restore, and Set Expiry is what takes it down.
+                            const isExpired = status === "not-found" || status === "inactive";
+                            const canRestore = !isLatest && isExpired;
                             return (
-                              <tr key={entry.entry} className="border-t border-[#f3f4f6]">
+                              <tr key={entry.entry} className={`border-t border-[#f3f4f6] ${isExpired ? "bg-[#fff7e6]" : ""}`}>
                                 <td className="px-3 py-2">
-                                  <a href={entry.href} target="_blank" rel="noreferrer" className="underline text-[var(--life-primary-500)]">
+                                  <a
+                                    href={entry.href}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className={isExpired ? "line-through text-[#6b7280]" : "underline text-[var(--life-primary-500)]"}
+                                  >
                                     {/* Full version-folder name (e.g. "0.0.1.1755500064000"), not the
                                         CLI's truncated 3-part semver (entry.version) — matches what
                                         was actually deployed and keeps each row's link unambiguous. */}
@@ -673,7 +757,7 @@ export function CdnDeploymentPage({
                                   <div className="flex items-center gap-1.5">
                                     <button
                                       type="button"
-                                      disabled={isLatest || restored || restoringEntry === entry.entry}
+                                      disabled={!canRestore || restoringEntry === entry.entry}
                                       onClick={() => void handleRestore(entry)}
                                       className="inline-flex items-center gap-1 rounded border border-[#d1d5db] px-2 py-0.5 text-[11px] text-[#374151] hover:bg-[#f9fafb] disabled:opacity-40 transition-colors"
                                     >

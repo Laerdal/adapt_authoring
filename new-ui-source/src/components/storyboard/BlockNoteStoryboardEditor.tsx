@@ -45,6 +45,7 @@ const COMPONENT_CARD_KINDS = new Set<StoryboardInsertKind>([
   'audio',
   'h5p',
   'laerdalForm',
+  'assessmentResult',
 ]);
 
 const DEFAULT_CONTENT: PartialBlock[] = [

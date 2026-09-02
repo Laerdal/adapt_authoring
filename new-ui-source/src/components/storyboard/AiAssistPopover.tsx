@@ -1,4 +1,4 @@
-// "Samaritan Assistance" AI popover for the storyboard (ADAPT-3760).
+// "Samaritan Assistance" AI popover for the storyboard.
 //
 // Functional parity with the legacy CKEditor "Samaritan Assistance" tool
 // (frontend/src/modules/scaffold/backboneFormsOverrides.js): four fixed actions
@@ -97,20 +97,36 @@ export default function AiAssistPopover({
   const canApply = !!result && !loading;
 
   return createPortal(
-    <div className="fixed inset-0 z-[1100] flex items-start justify-center bg-black/20 pt-24" onMouseDown={onClose}>
+    <div
+      className="fixed inset-0 z-[1100] flex items-start justify-center pt-24"
+      style={{ background: 'rgba(4, 30, 41, 0.35)' }}
+      onMouseDown={onClose}
+    >
       <div
-        className="w-[min(92vw,520px)] rounded-xl border bg-background p-5 shadow-2xl"
+        className="w-[min(92vw,520px)] p-5"
+        style={{
+          borderRadius: 12,
+          background: 'var(--life-color-bg-surface-default)',
+          border: '1px solid var(--life-color-border-subtle)',
+          boxShadow: 'var(--elevation-lg)',
+          fontFamily: 'var(--font-family-primary)',
+        }}
         onMouseDown={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="mb-4 flex items-center gap-2">
           <HeartHandshake className="h-5 w-5" style={{ color: 'var(--samaritan)' }} />
-          <h3 className="text-base font-semibold">Samaritan Assistance</h3>
-          <div className="ml-auto flex items-center gap-1 text-muted-foreground">
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--life-color-text-default)' }}>
+            Samaritan Assistance
+          </h3>
+          <div
+            className="ml-auto flex items-center gap-1"
+            style={{ color: 'var(--life-color-text-subtle)' }}
+          >
             <span title="Improve, shorten, prolong or spell-check the content, or type your own instruction.">
               <HelpCircle className="h-4 w-4" />
             </span>
-            <button type="button" onClick={onClose} title="Close" className="rounded p-1 hover:bg-muted">
+            <button type="button" onClick={onClose} title="Close" className="sb-panel-collapse-btn">
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -119,8 +135,14 @@ export default function AiAssistPopover({
         {/* Content / result */}
         {result ? (
           <div
-            className="mb-3 max-h-56 overflow-y-auto whitespace-pre-wrap rounded-lg border p-3 text-sm"
-            style={{ background: 'linear-gradient(90deg, #FBDBFB 0%, #E0E6FA 100%)' }}
+            className="mb-3 max-h-56 overflow-y-auto whitespace-pre-wrap p-3"
+            style={{
+              borderRadius: 'var(--radius)',
+              border: '1px solid color-mix(in oklab, var(--samaritan) 30%, transparent)',
+              background: 'linear-gradient(90deg, #FBDBFB 0%, #E0E6FA 100%)',
+              fontSize: 13,
+              color: 'var(--life-color-text-default)',
+            }}
           >
             {result}
           </div>
@@ -131,14 +153,28 @@ export default function AiAssistPopover({
             placeholder="Add your content here..."
             rows={4}
             disabled={loading}
-            className="mb-3 w-full resize-y rounded-lg bg-muted/60 p-3 text-sm outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
+            className="mb-3 w-full resize-y p-3 outline-none"
+            style={{
+              borderRadius: 'var(--radius)',
+              background: 'var(--life-color-bg-surface-subtle)',
+              border: '1px solid var(--life-color-border-subtle)',
+              fontSize: 13,
+              color: 'var(--life-color-text-default)',
+              opacity: loading ? 0.6 : 1,
+            }}
           />
         )}
 
         {loading && (
-          <div className="mb-3 text-sm text-muted-foreground">Loading response from Samaritan…</div>
+          <div className="mb-3" style={{ fontSize: 13, color: 'var(--life-color-text-subtle)' }}>
+            Loading response from Samaritan…
+          </div>
         )}
-        {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
+        {error && (
+          <div className="mb-3" style={{ fontSize: 13, color: 'var(--life-color-text-critical)' }}>
+            {error}
+          </div>
+        )}
 
         {/* Quick actions */}
         {!result && (
@@ -149,7 +185,8 @@ export default function AiAssistPopover({
                 type="button"
                 disabled={loading}
                 onClick={() => void run(a.action)}
-                className="rounded-full border px-3 py-1.5 text-sm hover:bg-secondary disabled:opacity-50"
+                className="sb-toolbar-btn"
+                style={{ borderRadius: 9999, fontSize: 13 }}
               >
                 {a.label}
               </button>
@@ -158,7 +195,14 @@ export default function AiAssistPopover({
         )}
 
         {/* Free-text prompt */}
-        <div className="mb-4 flex items-center gap-2 rounded-full border px-3 py-1.5">
+        <div
+          className="mb-4 flex items-center gap-2 px-3 py-1.5"
+          style={{
+            borderRadius: 9999,
+            border: '1px solid var(--life-color-border-subtle)',
+            background: 'var(--life-color-bg-surface-default)',
+          }}
+        >
           <input
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
@@ -167,14 +211,16 @@ export default function AiAssistPopover({
             }}
             placeholder="Ask Samaritan to edit or generate from scratch..."
             disabled={loading}
-            className="min-w-0 flex-1 bg-transparent text-sm outline-none disabled:opacity-60"
+            className="min-w-0 flex-1 bg-transparent outline-none"
+            style={{ fontSize: 13, color: 'var(--life-color-text-default)', opacity: loading ? 0.6 : 1 }}
           />
           <button
             type="button"
             onClick={submitPrompt}
             disabled={loading}
             title="Send"
-            className="rounded-full p-1 text-muted-foreground hover:bg-muted disabled:opacity-50"
+            className="sb-panel-collapse-btn"
+            style={{ borderRadius: 9999 }}
           >
             <Send className="h-4 w-4" />
           </button>
@@ -187,16 +233,12 @@ export default function AiAssistPopover({
             onClick={tryAgain}
             disabled={!lastRun.current || loading}
             title="Try again"
-            className="rounded-md p-2 text-muted-foreground hover:bg-muted disabled:opacity-40"
+            className="sb-panel-collapse-btn"
           >
             <RefreshCw className="h-4 w-4" />
           </button>
           <div className="ml-auto flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md border px-3 py-1.5 text-sm hover:bg-secondary"
-            >
+            <button type="button" onClick={onClose} className="sb-toolbar-btn">
               Dismiss
             </button>
             <button
@@ -207,7 +249,7 @@ export default function AiAssistPopover({
               }}
               disabled={!canApply}
               title="Replace the current block's content"
-              className="rounded-md border px-3 py-1.5 text-sm hover:bg-secondary disabled:opacity-40"
+              className="sb-toolbar-btn"
             >
               Replace
             </button>
@@ -219,8 +261,7 @@ export default function AiAssistPopover({
               }}
               disabled={!canApply}
               title="Insert the generated content"
-              className="rounded-md px-4 py-1.5 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-40"
-              style={{ background: 'var(--primary)' }}
+              className="sb-toolbar-btn sb-toolbar-btn-primary"
             >
               Insert
             </button>

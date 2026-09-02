@@ -27,8 +27,15 @@ export interface UseStoryboardResult {
   setDocument: (doc: unknown[]) => void;
   /** Reset the dirty baseline to `doc` (or the current draft) without saving. */
   markSaved: (doc?: unknown[]) => void;
-  /** Persist the draft document to the backend. */
-  save: () => Promise<void>;
+  /**
+   * Persist a document to the backend. Defaults to the draft, but callers
+   * that hold a fresher document (e.g. read straight off the live editor)
+   * can pass it explicitly so what's persisted always matches what's on
+   * screen — see the Export flow, which must not rely on the `dirty` flag
+   * (bootstrap-projected content is marked "saved" for UI purposes without
+   * ever having been PUT to the backend record).
+   */
+  save: (doc?: unknown[]) => Promise<void>;
   /** Revert the draft to the last-saved document. */
   discard: () => void;
   /** Change review status (persists + records an audit event server-side). */
@@ -86,14 +93,16 @@ export function useStoryboard(courseId?: string): UseStoryboardResult {
     [draftDoc]
   );
 
-  const save = useCallback(async () => {
+  const save = useCallback(async (doc?: unknown[]) => {
     if (!record) return;
+    const docToSave = doc ?? draftDoc;
     setSaving(true);
     setError(undefined);
     try {
-      const updated = await updateStoryboard(record._id, { documentJson: draftDoc });
+      const updated = await updateStoryboard(record._id, { documentJson: docToSave });
       setRecord(updated);
-      savedJson.current = JSON.stringify(updated.documentJson ?? draftDoc);
+      setDraftDoc(updated.documentJson ?? docToSave);
+      savedJson.current = JSON.stringify(updated.documentJson ?? docToSave);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to save storyboard");
       throw e;
