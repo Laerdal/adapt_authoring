@@ -1,4 +1,4 @@
-import { createBrowserRouter, RouterProvider } from 'react-router-dom'
+import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
 import RootLayout from './components/layout/RootLayout'
 import DashboardLayout from './components/layout/DashboardLayout'
 import HomePage from './pages/HomePage'
@@ -21,7 +21,7 @@ export const router = createBrowserRouter([
         // Dashboard shell — Sidebar + Header shared across these routes
         element: <DashboardLayout />,
         children: [
-          { path: '/', element: <HomePage /> },
+          { path: '/', element: <Navigate to="/my-courses" replace /> },
           { path: '/my-courses', element: <HomePage /> },
           { path: '/shared', element: <HomePage /> },
           { path: '/users', element: <UserManagementPage /> },

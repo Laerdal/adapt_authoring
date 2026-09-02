@@ -3,14 +3,6 @@ import { Link, useLocation } from "react-router-dom";
 
 const navMain = [
   {
-    label: "All Courses",
-    icon: (
-      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
-      </svg>
-    ),
-  },
-  {
     label: "My Courses",
     icon: (
       <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -78,9 +70,8 @@ export default function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
     location.pathname === "/plugins" ? "Plugin Management" :
     location.pathname === "/assets" ? "Asset Management" :
     location.pathname === "/templates" ? "Template Management" :
-    location.pathname === "/my-courses" ? "My Courses" :
     location.pathname === "/shared" ? "Shared with Me" :
-    "All Courses"
+    "My Courses"
   );
 
   // Close drawer on route change / escape key
@@ -103,7 +94,6 @@ export default function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
   }, [mobileOpen]);
 
   const NAV_ROUTES: Record<string, string> = {
-    "All Courses": "/",
     "My Courses": "/my-courses",
     "Shared with Me": "/shared",
     "User Management": "/users",
