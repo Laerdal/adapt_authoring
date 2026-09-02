@@ -7,6 +7,7 @@ import TopicAssetField, { toRenderableAssetUrl } from "../../components/common/A
 import CourseStructureMap from "../../components/course/CourseStructureMap";
 import { StructureIcon, STRUCTURE_ICON_COLOR_CLASS } from "../../components/course/StructureIcons";
 import { UnsavedChangesModal } from "../setup/unsavedChangesModal";
+import PublishCourseDialog, { type PublishCoursePhase } from "../../components/publish/PublishCourseDialog";
 import PageEditorTopBar from "./pageEditorTopBar";
 import PageEditorNavigation from "./pageEditorNavigation";
 import { useNavigate } from "react-router-dom";
@@ -27,6 +28,7 @@ import {
   getExtensionTypeOptions,
   getNavigationSettings,
   pasteTemplateIntoCourse,
+  publishCoursePackage,
   removeCourseAssetMappings,
   saveContentAsTemplate,
   searchUsersByEmailQuery,
@@ -2773,6 +2775,8 @@ export default function CourseEditor({
   const [dirtyNodeKeys, setDirtyNodeKeys] = useState<Record<string, true>>({});
   const [isSavingSelection, setIsSavingSelection] = useState(false);
   const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
+  const [publishDialogPhase, setPublishDialogPhase] = useState<PublishCoursePhase | null>(null);
+  const [publishResult, setPublishResult] = useState<{ zipName?: string; downloadUrl?: string; message?: string }>({});
   const [componentSubtitleSchemaSupport, setComponentSubtitleSchemaSupport] = useState<Record<string, boolean>>({});
   const [componentInstructionSchemaSupport, setComponentInstructionSchemaSupport] = useState<Record<string, boolean>>({});
   const [topicAssetPickerTarget, setTopicAssetPickerTarget] = useState<TopicAssetTarget | null>(null);
@@ -7417,10 +7421,42 @@ export default function CourseEditor({
     action();
   }
 
-  function openSetupPanel(panel?: "storyboarding") {
+  function openSetupPanel(panel?: "storyboarding" | "publish") {
     if (!courseId || courseId === "new-course") return;
     const suffix = panel ? `?panel=${panel}` : "";
     runWithEditorExitGuard(() => navigate(`/course/${courseId}/setup${suffix}`));
+  }
+
+  function openPublishDialog() {
+    setPublishResult({});
+    setPublishDialogPhase("confirm");
+  }
+
+  function closePublishDialog() {
+    setPublishDialogPhase(null);
+  }
+
+  async function handleConfirmPublish() {
+    const tenantId = user?._tenantId;
+    if (!courseId || courseId === "new-course" || !tenantId) {
+      setPublishResult({ message: "No course or tenant context available." });
+      setPublishDialogPhase("error");
+      return;
+    }
+    setPublishDialogPhase("running");
+    try {
+      const result = await publishCoursePackage(tenantId, courseId);
+      if (result.success) {
+        setPublishResult({ zipName: result.zipName, downloadUrl: result.downloadUrl });
+        setPublishDialogPhase("success");
+      } else {
+        setPublishResult({ message: result.message });
+        setPublishDialogPhase("error");
+      }
+    } catch (err) {
+      setPublishResult({ message: err instanceof Error ? err.message : "Publish failed." });
+      setPublishDialogPhase("error");
+    }
   }
 
   function openEditorPreview(startFromCurrentPage: boolean) {
@@ -7753,9 +7789,8 @@ export default function CourseEditor({
         onSave={() => {
           void saveDraftChanges();
         }}
-        onPublish={() => {
-          void 0;
-        }}
+        onSelectPreflight={() => openSetupPanel("publish")}
+        onSelectPublish={openPublishDialog}
         isSaving={isSavingSelection}
         isSaveDisabled={!hasUnsavedChanges}
       />
@@ -9079,6 +9114,18 @@ export default function CourseEditor({
           }}
           message="You have unsaved changes. Save before leaving this page?"
         />
+
+        {publishDialogPhase && (
+          <PublishCourseDialog
+            phase={publishDialogPhase}
+            courseTitle={courseTitle}
+            zipName={publishResult.zipName}
+            downloadUrl={publishResult.downloadUrl}
+            errorMessage={publishResult.message}
+            onConfirm={() => void handleConfirmPublish()}
+            onClose={closePublishDialog}
+          />
+        )}
       </div>
     </div>
   );

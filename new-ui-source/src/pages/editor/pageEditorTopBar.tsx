@@ -1,4 +1,5 @@
 import CommonCourseTopBarRow from "../../components/course/CommonCourseTopBarRow";
+import PublishMenuButton from "../../components/publish/PublishMenuButton";
 
 interface PageEditorTopBarProps {
   courseTitle: string;
@@ -7,7 +8,8 @@ interface PageEditorTopBarProps {
   onBack: () => void;
   onHome: () => void;
   onSave: () => void;
-  onPublish: () => void;
+  onSelectPreflight: () => void;
+  onSelectPublish: () => void;
   onOpenCourseSettings: () => void;
   onOpenStoryboard: () => void;
   onOpenPreview: (startFromCurrentPage: boolean) => void;
@@ -46,7 +48,8 @@ export default function PageEditorTopBar({
   onBack,
   onHome,
   onSave,
-  onPublish,
+  onSelectPreflight,
+  onSelectPublish,
   onOpenCourseSettings,
   onOpenStoryboard,
   onOpenPreview,
@@ -80,14 +83,7 @@ export default function PageEditorTopBar({
         <span className="hidden lg:inline">{isSaving ? "Saving..." : "Save"}</span>
       </button>
 
-      <button
-        type="button"
-        onClick={onPublish}
-        className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold rounded-[8px] transition-colors active:bg-[var(--life-primary-800)] cursor-pointer bg-[var(--life-primary-500)] text-[var(--life-base-white)] hover:bg-[var(--life-primary-700)]"
-      >
-        <HeaderMaskIcon file="publish-icon.svg" />
-        <span className="hidden lg:inline">Publish</span>
-      </button>
+      <PublishMenuButton onSelectPreflight={onSelectPreflight} onSelectPublish={onSelectPublish} />
     </div>
   );
 
