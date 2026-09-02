@@ -147,7 +147,14 @@ export default function CoursePreviewPage() {
   useEffect(() => {
     if (!fullscreen) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setFullscreen(false);
+      if (event.key !== "Escape") return;
+      const activePageId =
+        getFramePageId(fullscreenFrameRef.current) ?? currentPreviewPageId;
+      if (activePageId) {
+        sendPreviewEditCommand("adapt-preview-edit:navigate-to-page", activePageId);
+      }
+      setFullscreenPageId(null);
+      setFullscreen(false);
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
