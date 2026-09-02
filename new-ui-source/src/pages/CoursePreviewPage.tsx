@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import CommonCourseTopBarRow from "../components/course/CommonCourseTopBarRow";
 import { getCourseBootstrapData, ensureCoursePreview } from "../api/adaptAuthoring";
@@ -41,7 +41,6 @@ export default function CoursePreviewPage() {
   const [menuName, setMenuName] = useState("");
   const [deviceMode, setDeviceMode] = useState<DeviceMode>("desktop");
   const [previewState, setPreviewState] = useState<"preparing" | "ready" | "error">("preparing");
-  const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -92,7 +91,6 @@ export default function CoursePreviewPage() {
 
   const pageId = (params.get("pageId") || "").trim();
   const isCdnMode = params.get("isCDNMode") === "true";
-  const exportPdfRequested = params.get("exportPdf") === "true";
 
   const previewUrl = useMemo(() => {
     if (!id || !user?._tenantId) return "";
@@ -101,36 +99,6 @@ export default function CoursePreviewPage() {
       ? `${baseUrl}&_cs=${Date.now()}#/id/${pageId}`
       : `${baseUrl}&_cs=${Date.now()}`;
   }, [id, isCdnMode, pageId, user?._tenantId]);
-
-  useEffect(() => {
-    if (!exportPdfRequested || previewState !== "ready") return;
-
-    let cancelled = false;
-    let attempts = 0;
-
-    const clickExportButton = () => {
-      if (cancelled) return;
-      attempts += 1;
-      const iframe = previewFrameRef.current;
-      const doc = iframe?.contentDocument;
-      const button = doc?.querySelector<HTMLButtonElement>("#pdf-export-btn");
-
-      if (button) {
-        button.click();
-        return;
-      }
-
-      if (attempts < 30) {
-        window.setTimeout(clickExportButton, 500);
-      }
-    };
-
-    window.setTimeout(clickExportButton, 600);
-
-    return () => {
-      cancelled = true;
-    };
-  }, [exportPdfRequested, previewState, previewUrl]);
 
   const frameSizeClass = useMemo(() => {
     if (deviceMode === "mobile") return "w-[390px]";
@@ -195,7 +163,6 @@ export default function CoursePreviewPage() {
           <div className="h-full w-full flex justify-center">
             <div className={`${frameSizeClass} h-full bg-white rounded-[10px] overflow-hidden shadow-[0_8px_30px_rgba(15,41,52,0.14)]`}>
               <iframe
-                ref={previewFrameRef}
                 title="Course Preview"
                 src={previewUrl}
                 className="w-full h-full border-0"
