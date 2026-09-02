@@ -312,13 +312,12 @@ export default function ExportPdfPage({
   onPendingNavigationHandled?: () => void;
 }) {
   const { user } = useAuth();
-  const exportFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const exportWindowRef = useRef<Window | null>(null);
   const [cfg, setCfg] = useState<ValidatorEnablerPdfSettings>(DEFAULT_SETTINGS);
   const [savedCfg, setSavedCfg] = useState<ValidatorEnablerPdfSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [exportFrameUrl, setExportFrameUrl] = useState("");
   const [assetPickerTarget, setAssetPickerTarget] = useState<"cover" | "footer" | null>(null);
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
@@ -435,6 +434,37 @@ export default function ExportPdfPage({
     if (target) onNavigationRequest?.(target);
   }
 
+  function triggerRuntimePdfExport(previewWindow: Window): Promise<boolean> {
+    return new Promise((resolve) => {
+      let attempts = 0;
+      const maxAttempts = 80;
+
+      const clickExportButton = () => {
+        if (previewWindow.closed) {
+          resolve(false);
+          return;
+        }
+
+        attempts += 1;
+        const button = previewWindow.document?.querySelector<HTMLButtonElement>("#pdf-export-btn");
+        if (button) {
+          button.click();
+          resolve(true);
+          return;
+        }
+
+        if (attempts >= maxAttempts) {
+          resolve(false);
+          return;
+        }
+
+        window.setTimeout(clickExportButton, 500);
+      };
+
+      window.setTimeout(clickExportButton, 700);
+    });
+  }
+
   async function handleExportAsPdf() {
     if (loading || saving || exporting) return;
 
@@ -444,7 +474,6 @@ export default function ExportPdfPage({
     }
 
     setExporting(true);
-    let waitingForIframeTrigger = false;
     try {
       if (dirty) {
         const saved = await handleSave();
@@ -464,48 +493,28 @@ export default function ExportPdfPage({
       }
 
       setToast({ type: "success", message: "Starting PDF export..." });
-      setExportFrameUrl(`/studio/${tenantId}/${courseId}/?embedded=1&isCDNMode=true&_cs=${Date.now()}`);
-      waitingForIframeTrigger = true;
-    } finally {
-      if (!waitingForIframeTrigger) {
-        setExporting(false);
+      const previewUrl = `/preview/${tenantId}/${courseId}/?isCDNMode=true&_cs=${Date.now()}`;
+      const previewWindow = window.open(previewUrl, "preview");
+
+      if (!previewWindow) {
+        setToast({ type: "error", message: "Popup blocked. Allow popups and try PDF export again." });
+        return;
       }
+
+      exportWindowRef.current = previewWindow;
+      previewWindow.focus();
+
+      const exportStarted = await triggerRuntimePdfExport(previewWindow);
+      if (!exportStarted) {
+        setToast({ type: "error", message: "Could not start PDF export in Preview. Keep Preview open and try again." });
+        return;
+      }
+
+      setToast({ type: "success", message: "PDF export started in Preview" });
+    } finally {
+      setExporting(false);
     }
   }
-
-  useEffect(() => {
-    if (!exporting || !exportFrameUrl) return;
-
-    let cancelled = false;
-    let attempts = 0;
-
-    const clickRuntimeExport = () => {
-      if (cancelled) return;
-      attempts += 1;
-
-      const button = exportFrameRef.current?.contentDocument?.querySelector<HTMLButtonElement>("#pdf-export-btn");
-      if (button) {
-        button.click();
-        setToast({ type: "success", message: "PDF download started" });
-        setExporting(false);
-        return;
-      }
-
-      if (attempts >= 40) {
-        setToast({ type: "error", message: "Could not start PDF export. Open Preview once and try again." });
-        setExporting(false);
-        return;
-      }
-
-      window.setTimeout(clickRuntimeExport, 500);
-    };
-
-    window.setTimeout(clickRuntimeExport, 700);
-
-    return () => {
-      cancelled = true;
-    };
-  }, [exporting, exportFrameUrl]);
 
   return (
     <div className="flex w-full max-w-[672px] flex-col gap-7">
@@ -734,17 +743,6 @@ export default function ExportPdfPage({
         onSave={() => void handleConfirmSave()}
         onClose={clearPendingNavigation}
       />
-
-      {exportFrameUrl && (
-        <iframe
-          ref={exportFrameRef}
-          title="PDF Export Runner"
-          src={exportFrameUrl}
-          className="hidden"
-          aria-hidden="true"
-          tabIndex={-1}
-        />
-      )}
 
       {assetPickerTarget && (
         <AssetPickerModal
