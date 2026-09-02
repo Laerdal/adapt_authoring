@@ -2893,11 +2893,12 @@ function CourseCreationCenterContent() {
               </svg>
             </button>
 
-          <PublishMenuButton
-            active={activeNav === "publish"}
-            onSelectPreflight={() => handleNavigation("publish")}
-            onSelectPublish={openPublishDialog}
-          />
+            <PublishMenuButton
+              active={activeNav === "publish"}
+              onSelectPreflight={() => handleNavigation("publish")}
+              onSelectPublish={openPublishDialog}
+            />
+          </div>
         </div>
       )}
 
