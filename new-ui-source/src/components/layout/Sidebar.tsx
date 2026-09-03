@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { canAccessDashboardSection, type DashboardSection, useAuth } from "@/context/AuthContext";
 
 const navMain = [
   {
@@ -21,9 +22,10 @@ const navMain = [
   },
 ];
 
-const navSecondary = [
+const navSecondary: Array<{ label: string; sectionKey: DashboardSection; icon: React.ReactNode }> = [
   {
     label: "Asset Management",
+    sectionKey: "asset-management",
     icon: (
       <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -32,6 +34,7 @@ const navSecondary = [
   },
   {
     label: "Template Management",
+    sectionKey: "template-management",
     icon: (
       <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
@@ -40,6 +43,7 @@ const navSecondary = [
   },
   {
     label: "User Management",
+    sectionKey: "user-management",
     icon: (
       <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m9-4a4 4 0 11-8 0 4 4 0 018 0zm6 4a3 3 0 00-3-3m-12 3a3 3 0 013-3" />
@@ -48,6 +52,7 @@ const navSecondary = [
   },
   {
     label: "Plugin Management",
+    sectionKey: "plugin-management",
     icon: (
       <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M11 4H6a2 2 0 00-2 2v14a2 2 0 002 2h12a2 2 0 002-2v-5M16 4l4 4-8 8H8v-4l8-8z" />
@@ -65,6 +70,8 @@ interface SidebarProps {
 
 export default function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
   const location = useLocation();
+  const { user } = useAuth();
+  const visibleSecondaryNav = navSecondary.filter((item) => canAccessDashboardSection(user, item.sectionKey));
   const [active, setActive] = useState(
     location.pathname === "/users" ? "User Management" :
     location.pathname === "/plugins" ? "Plugin Management" :
@@ -169,7 +176,7 @@ export default function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
 
       {/* Secondary nav */}
       <nav className="px-3 space-y-0.5 overflow-y-auto flex-1 pb-4">
-        {navSecondary.map((item) => (
+        {visibleSecondaryNav.map((item) => (
           <NavItem key={item.label} label={item.label} icon={item.icon} />
         ))}
       </nav>
