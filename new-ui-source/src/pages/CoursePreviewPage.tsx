@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import CommonCourseTopBarRow from "../components/course/CommonCourseTopBarRow";
 import { ensureCoursePreview, ensurePreviewEditEnabledForCourse, getCourseBootstrapData, publishCoursePackage, seedMissingCourseDefaults } from "../api/adaptAuthoring";
-import { useAuth } from "../context/AuthContext";
+import { getUserRole, useAuth } from "../context/AuthContext";
 import { UnsavedChangesModal } from "./setup/unsavedChangesModal";
 import ExportDialog from "../components/common/ExportDialog";
 import PublishMenuButton from "../components/publish/PublishMenuButton";
@@ -39,6 +39,9 @@ export default function CoursePreviewPage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const userRole = getUserRole(user);
+  const canUseQuickEdit = userRole === "Super Admin" || userRole === "Course Creator";
+  const canUseExport = userRole === "Super Admin";
 
   const [courseTitle, setCourseTitle] = useState("Untitled Course");
   const [courseDescription, setCourseDescription] = useState("");
@@ -247,7 +250,7 @@ export default function CoursePreviewPage() {
   }, [previewUrl, quickEditAvailable]);
 
   const startQuickEdit = () => {
-    if (!quickEditAvailable) return;
+    if (!canUseQuickEdit || !quickEditAvailable) return;
     setQuickEditEnabled(true);
     setQuickEditDirty(false);
     sendPreviewEditCommand("adapt-preview-edit:text-only-enable");
@@ -317,6 +320,12 @@ export default function CoursePreviewPage() {
     setQuickEditEnabled(false);
     sendPreviewEditCommand("adapt-preview-edit:text-only-disable");
   };
+
+  const openExportDialog = () => {
+    if (!canUseExport) return;
+    runWithQuickEditGuard(() => setShowExportDialog(true));
+  };
+
   function openPublishDialog() {
     setPublishResult({});
     setPublishDialogPhase("confirm");
@@ -386,7 +395,7 @@ export default function CoursePreviewPage() {
             })}
           </div>
 
-          {!quickEditEnabled ? (
+          {canUseQuickEdit && (!quickEditEnabled ? (
             <button
               type="button"
               onClick={startQuickEdit}
@@ -420,21 +429,23 @@ export default function CoursePreviewPage() {
                  Exit Editing
               </button>
             </>
-          )}
+          ))}
 
-          <button
-            type="button"
-            onClick={() => runWithQuickEditGuard(() => setShowExportDialog(true))}
-            disabled={quickEditEnabled}
-            title={quickEditEnabled ? "Export is disabled during Quick Edit" : "Export course"}
-            className="inline-flex items-center gap-1.5 h-9 px-3 text-[13px] font-bold bg-transparent text-[var(--life-base-black)] rounded-[8px] hover:bg-[var(--life-primary-050)] hover:text-[var(--life-primary-700)] active:bg-[var(--life-primary-100)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer disabled:text-[#9ca3af] disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#9ca3af]"
-          >
-            <MaskIcon file="export-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-            Export
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </button>
+          {canUseExport && (
+            <button
+              type="button"
+              onClick={openExportDialog}
+              disabled={quickEditEnabled}
+              title={quickEditEnabled ? "Export is disabled during Quick Edit" : "Export course"}
+              className="inline-flex items-center gap-1.5 h-9 px-3 text-[13px] font-bold bg-transparent text-[var(--life-base-black)] rounded-[8px] hover:bg-[var(--life-primary-050)] hover:text-[var(--life-primary-700)] active:bg-[var(--life-primary-100)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer disabled:text-[#9ca3af] disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#9ca3af]"
+            >
+              <MaskIcon file="export-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+              Export
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+          )}
 
           <PublishMenuButton
             disabled={quickEditEnabled}
