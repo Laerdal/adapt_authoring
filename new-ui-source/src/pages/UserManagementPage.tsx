@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { getUsers, setUserRole, deleteUser } from "@/api/adaptAuthoring";
+import AiAssistant from "@/components/common/AiAssistant";
 
 type Role = "Super Admin" | "Authenticated User" | "Course Creator";
 
@@ -663,6 +664,8 @@ export default function UserManagementPage() {
           </div>
         </div>
       </div>
+
+      <AiAssistant context="User Management" />
 
       {/* ── Add User modal ── */}
       {addOpen && (

@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { getPlugins } from "@/api/adaptAuthoring";
+import AiAssistant from "@/components/common/AiAssistant";
 
 type PluginStatus = "Enabled" | "Disabled";
 type PluginCategory = "Content" | "Assessment" | "Media" | "Analytics" | "Accessibility";
@@ -251,6 +252,8 @@ export default function PluginManagementPage() {
           ))}
         </div>
       )}
+
+      <AiAssistant context="Plugin Management" />
 
       {/* Toast notifications */}
       <div className="fixed top-4 right-4 z-[60] flex flex-col gap-2 pointer-events-none">
