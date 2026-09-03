@@ -130,8 +130,6 @@ export default function CoursePreviewPage() {
   }, [defaultsReady, id, user?._tenantId]);
 
   const pageId = (params.get("pageId") || "").trim();
-  const isCdnMode = params.get("isCDNMode") === "true";
-  const exportPdfRequested = params.get("exportPdf") === "true";
 
   const previewUrl = useMemo(() => {
     if (!id || !user?._tenantId || !defaultsReady || previewState !== "ready") return "";
