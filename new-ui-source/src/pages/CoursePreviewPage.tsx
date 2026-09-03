@@ -390,8 +390,14 @@ export default function CoursePreviewPage() {
             <button
               type="button"
               onClick={startQuickEdit}
-              disabled={!quickEditAvailable}
-              title={quickEditAvailable ? "Edit text on this page" : "Open a course page to edit text"}
+              disabled={!quickEditAvailable || deviceMode !== "desktop"}
+              title={
+                deviceMode !== "desktop"
+                  ? "Quick Edit is available in desktop preview only"
+                  : quickEditAvailable
+                    ? "Edit text on this page"
+                    : "Open a course page to edit text"
+              }
               className="h-9 px-4 rounded-[8px] border border-[#d8dde6] bg-white text-[#111827] text-[13px] font-bold hover:bg-[var(--life-neutral-020)] hover:border-[#c4cfda] active:bg-[var(--life-neutral-100)] transition-colors cursor-pointer inline-flex items-center disabled:bg-[#e5e7eb] disabled:text-[#9ca3af] disabled:cursor-not-allowed disabled:hover:bg-[#e5e7eb] disabled:hover:border-[#d8dde6]"
             >
               Quick Edit
@@ -411,7 +417,7 @@ export default function CoursePreviewPage() {
                 onClick={finishQuickEdit}
                 className="h-9 px-4 rounded-[8px] border border-[#d8dde6] bg-white text-[#374151] text-[13px] font-bold hover:bg-[var(--life-neutral-020)] hover:border-[#c4cfda] transition-colors cursor-pointer inline-flex items-center"
               >
-                Done Editing
+                 Exit Editing
               </button>
             </>
           )}
