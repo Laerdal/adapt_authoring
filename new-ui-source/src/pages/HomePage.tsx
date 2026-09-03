@@ -2,7 +2,8 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { CourseCard } from '@/components/course'
 import AiAssistant from '@/components/common/AiAssistant'
-import { useAuth, isSuperAdmin } from '@/context/AuthContext'
+import PermissionDeniedModal from '@/components/common/PermissionDeniedModal'
+import { useAuth, isSuperAdmin, canManageCourses } from '@/context/AuthContext'
 import { createCourse, deleteCourse, duplicateCourse, fetchDashboardCourses, getAuthoringMenuOptions, getAuthoringThemeOptions, updateCourse } from '@/api/adaptAuthoring'
 
 
@@ -67,8 +68,10 @@ export default function HomePage() {
   const location = useLocation()
   const { user } = useAuth()
   const canImportCourses = isSuperAdmin(user)
+  const canCreateOrManageCourses = canManageCourses(user)
   const [courses, setCourses] = useState<Course[]>([])
   const [isLoadingCourses, setIsLoadingCourses] = useState(true)
+  const [permissionDialog, setPermissionDialog] = useState<{ title: string; message: string } | null>(null)
   const READ_ONLY_REASON = 'Import is temporarily disabled until the matching Adapt API endpoint is wired.'
 
   // Search / filter / sort / view
@@ -271,6 +274,10 @@ export default function HomePage() {
     showToast(`${READ_ONLY_REASON} Import is blocked for now.`, 'info')
   }
 
+  function showPermissionDenied(title: string, message: string) {
+    setPermissionDialog({ title, message })
+  }
+
   function clearSearch() { setSearch('') }
   function clearTags()   { setSelectedTags([]) }
   function clearAll()    { setSearch(''); setSelectedTags([]) }
@@ -369,7 +376,13 @@ export default function HomePage() {
               {/* Create New Course */}
               <button
                 type="button"
-                onClick={openCreateModal}
+                onClick={() => {
+                  if (!canCreateOrManageCourses) {
+                    showPermissionDenied('Create Course', 'You do not have permission to create a new course.');
+                    return;
+                  }
+                  openCreateModal();
+                }}
                 className="flex items-center gap-2 px-4 py-2.5 bg-[#2d6fa8] hover:bg-[#245c8f] text-white text-sm font-semibold rounded-lg transition-colors"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -609,6 +622,14 @@ export default function HomePage() {
                   key={course.id}
                   {...course}
                   showAuthor={location.pathname === '/shared'}
+                  canManageCourses={canCreateOrManageCourses}
+                  onPermissionDenied={(action) => {
+                    if (action === 'edit') {
+                      showPermissionDenied('Edit Course', 'You do not have permission to edit this course.');
+                    } else if (action === 'delete') {
+                      showPermissionDenied('Delete Course', 'You do not have permission to delete this course.');
+                    }
+                  }}
                   viewHref={course.backendId ? `/course/${course.backendId}/preview` : ""}
                   onUpdate={(patch) => handleUpdate(course.id, patch)}
                   onCopy={() => handleCopy(course.id)}
@@ -619,6 +640,13 @@ export default function HomePage() {
             </div>
           )}
     </div>
+
+      <PermissionDeniedModal
+        open={!!permissionDialog}
+        title={permissionDialog?.title ?? 'Permission Denied'}
+        message={permissionDialog?.message ?? 'You do not have permission to perform this action.'}
+        onClose={() => setPermissionDialog(null)}
+      />
 
       {/* Create Course Modal */}
       {createOpen && (

@@ -43,6 +43,11 @@ export function isSuperAdmin(user: CurrentUser | null | undefined): boolean {
   return getUserRole(user) === "Super Admin";
 }
 
+export function canManageCourses(user: CurrentUser | null | undefined): boolean {
+  const role = getUserRole(user);
+  return role === "Super Admin" || role === "Course Creator";
+}
+
 export function canAccessDashboardSection(
   user: CurrentUser | null | undefined,
   section: DashboardSection

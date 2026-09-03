@@ -14,6 +14,8 @@ interface CourseCardProps {
   tags?: string[];
   view?: "grid" | "list";
   showAuthor?: boolean;
+  canManageCourses?: boolean;
+  onPermissionDenied?: (action: "create" | "edit" | "delete") => void;
   onUpdate: (patch: { title?: string; description?: string; heroAssetId?: string | null; tags?: string[] }) => void;
   onCopy: () => void;
   onCopyId: () => void;
@@ -23,7 +25,7 @@ interface CourseCardProps {
 
 export default function CourseCard({
   id, title, description, savedDate, authorName = null, imageUrl, heroAssetId = null, tags = [],
-  view = "grid", showAuthor = false, onUpdate, onCopy, onCopyId, onDelete, viewHref,
+  view = "grid", showAuthor = false, canManageCourses = true, onPermissionDenied, onUpdate, onCopy, onCopyId, onDelete, viewHref,
 }: CourseCardProps) {
   const [modalOpen, setModalOpen]           = useState(false);
   const [menuOpen, setMenuOpen]             = useState(false);
@@ -51,6 +53,10 @@ export default function CourseCard({
   }
 
   function openModal() {
+    if (!canManageCourses) {
+      onPermissionDenied?.("edit");
+      return;
+    }
     setEditTitle(title);
     setEditDesc(description);
     setEditImage(imageUrl ?? null);
@@ -174,7 +180,14 @@ export default function CourseCard({
             </button>
             <button
               type="button"
-              onClick={(e) => { e.preventDefault(); setDeleteOpen(true); }}
+              onClick={(e) => {
+                e.preventDefault();
+                if (!canManageCourses) {
+                  onPermissionDenied?.("delete");
+                  return;
+                }
+                setDeleteOpen(true);
+              }}
               aria-label="Delete course"
               title="Delete course"
               className="p-1.5 rounded-lg bg-white/90 hover:bg-white text-[#ef4444] shadow-sm"
@@ -306,7 +319,14 @@ export default function CourseCard({
 
             <button
               type="button"
-              onClick={(e) => { e.preventDefault(); setDeleteOpen(true); }}
+              onClick={(e) => {
+                e.preventDefault();
+                if (!canManageCourses) {
+                  onPermissionDenied?.("delete");
+                  return;
+                }
+                setDeleteOpen(true);
+              }}
               aria-label="Delete course"
               title="Delete course"
               className="p-2 rounded-lg border border-[#e5e7eb] bg-white hover:bg-[#fef2f2] text-[#6b7280] hover:text-[#ef4444] transition-colors"
