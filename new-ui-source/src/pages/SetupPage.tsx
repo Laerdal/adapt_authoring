@@ -2667,7 +2667,7 @@ function CourseCreationCenterContent() {
   );
   const [collapsed, setCollapsed] = useState(false);
   const [exportingSource, setExportingSource] = useState(false);
-  const [exportPopup, setExportPopup] = useState<{ status: "processing" | "success"; message: string } | null>(null);
+  const [exportPopup, setExportPopup] = useState<{ status: "processing" | "success" | "error"; message: string } | null>(null);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [publishDialogPhase, setPublishDialogPhase] = useState<PublishCoursePhase | null>(null);
   const [publishResult, setPublishResult] = useState<{ zipName?: string; downloadUrl?: string; message?: string }>({});
@@ -2718,7 +2718,7 @@ function CourseCreationCenterContent() {
   }, [courseId, initialDescription, initialTitle]);
 
   useEffect(() => {
-    if (!exportPopup || exportPopup.status !== "success") return;
+    if (!exportPopup || (exportPopup.status !== "success" && exportPopup.status !== "error")) return;
     const timer = window.setTimeout(() => setExportPopup(null), 3200);
     return () => window.clearTimeout(timer);
   }, [exportPopup]);
@@ -2938,12 +2938,10 @@ function CourseCreationCenterContent() {
                   setExportPopup({ status: "success", message: "Course source exported successfully" });
                 },
                 onUnavailable: () => {
-                  setExportPopup(null);
-                  window.alert("Course export is not available right now.");
+                  setExportPopup({ status: "error", message: "Course export is not available right now." });
                 },
                 onError: (message) => {
-                  setExportPopup(null);
-                  window.alert(`Unable to export source. ${message}`);
+                  setExportPopup({ status: "error", message: `Unable to export source. ${message}` });
                 },
               });
             }}
