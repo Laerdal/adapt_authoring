@@ -1,6 +1,6 @@
 import { useSearchParams, useNavigate, useParams } from "react-router-dom";
 import { Suspense, useEffect, useState, useRef, useCallback } from "react";
-import { useAuth } from "../context/AuthContext";
+import { useAuth, isSuperAdmin } from "../context/AuthContext";
 import AiAssistant from "../components/common/AiAssistant";
 import CourseStructureMapView from "../components/course/CourseStructureMapView";
 import CourseStructureTree from "../components/course/CourseStructureTree";
@@ -2646,6 +2646,7 @@ function CourseCreationCenterContent() {
   const routeParams = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const canExportCourse = isSuperAdmin(user);
   const initialTitle = params.get("title") ?? "Untitled Course";
   const initialDescription = params.get("description") ?? "";
   const initialPanel = params.get("panel") ?? "";
@@ -2881,17 +2882,19 @@ function CourseCreationCenterContent() {
           </div>
 
           <div className="ml-auto flex items-center gap-4">
-            <button
-              type="button"
-              onClick={openExportDialog}
-              className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold bg-transparent text-[var(--life-base-black)] rounded-[8px] hover:bg-[var(--life-primary-050)] hover:text-[var(--life-primary-700)] active:bg-[var(--life-primary-100)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer"
-            >
-              <SidebarMaskIcon file="export-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-              <span className="hidden lg:inline">Export</span>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </button>
+            {canExportCourse && (
+              <button
+                type="button"
+                onClick={openExportDialog}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold bg-transparent text-[var(--life-base-black)] rounded-[8px] hover:bg-[var(--life-primary-050)] hover:text-[var(--life-primary-700)] active:bg-[var(--life-primary-100)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer"
+              >
+                <SidebarMaskIcon file="export-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+                <span className="hidden lg:inline">Export</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+            )}
 
             <PublishMenuButton
               active={activeNav === "publish"}
