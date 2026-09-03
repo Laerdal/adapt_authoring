@@ -79,6 +79,8 @@ export default function CommonCourseTopBarRow({
   const previewMenuRef = useRef<HTMLDivElement | null>(null);
   const { user } = useAuth();
   const canOpenCourseSettings = canManageCourses(user);
+  const canOpenCourseEditor = canManageCourses(user);
+  const canOpenStoryboard = canManageCourses(user);
 
   useEffect(() => {
     if (!previewMenuOpen || previewMode !== "menu") return;
@@ -141,24 +143,28 @@ export default function CommonCourseTopBarRow({
           </button>
         )}
 
-        <button
-          type="button"
-          onClick={onOpenStoryboard}
-          className={navButtonClass(activeNav === "storyboard")}
-        >
-          <MaskIcon file="storyboard-icon.svg" />
-          <span className="hidden lg:inline">Storyboard</span>
-        </button>
+        {canOpenStoryboard && (
+          <button
+            type="button"
+            onClick={onOpenStoryboard}
+            className={navButtonClass(activeNav === "storyboard")}
+          >
+            <MaskIcon file="storyboard-icon.svg" />
+            <span className="hidden lg:inline">Storyboard</span>
+          </button>
+        )}
 
-        <button
-          type="button"
-          disabled={editorDisabled}
-          onClick={onOpenEditor}
-          className={`${navButtonClass(activeNav === "editor")} disabled:opacity-50 disabled:cursor-not-allowed`}
-        >
-          <MaskIcon file="component-icon.svg" />
-          <span className="hidden lg:inline">Editor</span>
-        </button>
+        {canOpenCourseEditor && (
+          <button
+            type="button"
+            disabled={editorDisabled}
+            onClick={onOpenEditor}
+            className={`${navButtonClass(activeNav === "editor")} disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            <MaskIcon file="component-icon.svg" />
+            <span className="hidden lg:inline">Editor</span>
+          </button>
+        )}
 
         <div ref={previewMenuRef} className="relative">
           {previewMode === "menu" ? (

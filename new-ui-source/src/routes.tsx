@@ -52,6 +52,20 @@ function CourseSetupRouteGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function CourseWorkspaceRouteGate({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <div className="h-screen w-full bg-[#f8fafc]" />;
+  }
+
+  if (!user || !canAccessCourseSettings(user)) {
+    return <Navigate to="/my-courses" replace />;
+  }
+
+  return <>{children}</>;
+}
+
 export const router = createBrowserRouter([
   {
     element: <RootLayout />,
@@ -73,8 +87,8 @@ export const router = createBrowserRouter([
       { path: '/course/new', element: <NewCoursePage /> },
       { path: '/course/new/setup', element: <CourseSetupRouteGate><SetupPage /></CourseSetupRouteGate> },
       { path: '/course/:id/setup', element: <CourseSetupRouteGate><SetupPage /></CourseSetupRouteGate> },
-      { path: '/course/:id', element: <PageEditorPage /> },
-      { path: '/course/:id/storyboard', element: <StoryboardPage /> },
+      { path: '/course/:id', element: <CourseWorkspaceRouteGate><PageEditorPage /></CourseWorkspaceRouteGate> },
+      { path: '/course/:id/storyboard', element: <CourseWorkspaceRouteGate><StoryboardPage /></CourseWorkspaceRouteGate> },
       { path: '/course/:id/preview', element: <CoursePreviewPage /> },
       { path: '/course-structure-demo', element: <CourseStructureDemoPage /> },
     ],
