@@ -43,7 +43,6 @@ export default function PluginManagementPage() {
   useEffect(() => { getPlugins().then(setPlugins).catch(() => setPlugins([])); }, []);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<PluginCategory | "All">("All");
-  const [statusFilter, setStatusFilter] = useState<PluginStatus | "All">("All");
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
 
@@ -72,10 +71,9 @@ export default function PluginManagementPage() {
     return plugins.filter((p) => {
       const matchSearch = q === "" || p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q) || p.author.toLowerCase().includes(q);
       const matchCat = categoryFilter === "All" || p.category === categoryFilter;
-      const matchStatus = statusFilter === "All" || p.status === statusFilter;
-      return matchSearch && matchCat && matchStatus;
+      return matchSearch && matchCat;
     });
-  }, [plugins, search, categoryFilter, statusFilter]);
+  }, [plugins, search, categoryFilter]);
 
   const enabledCount = plugins.filter((p) => p.status === "Enabled").length;
 
@@ -124,20 +122,6 @@ export default function PluginManagementPage() {
         </div>
 
         <div className="flex items-center gap-2 ml-auto sm:ml-0" ref={filterRef}>
-          {/* Status filter */}
-          <div className="flex items-center border border-[#e5e7eb] rounded-lg overflow-hidden bg-white text-sm">
-            {(["All", "Enabled", "Disabled"] as const).map((opt) => (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => setStatusFilter(opt)}
-                className={`px-3 py-2 transition-colors ${statusFilter === opt ? "bg-[#2d6fa8] text-white font-medium" : "text-[#374151] hover:bg-[#f9fafb]"} ${opt !== "All" ? "border-l border-[#e5e7eb]" : ""}`}
-              >
-                {opt}
-              </button>
-            ))}
-          </div>
-
           {/* Category filter */}
           <div className="relative">
             <button
