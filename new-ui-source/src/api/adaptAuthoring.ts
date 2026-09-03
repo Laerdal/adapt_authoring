@@ -4242,7 +4242,7 @@ export function trashAsset(backendId: string): Promise<unknown> {
 // ── Plugins (extension types) ─────────────────────────────────────────────────
 // Read-only for now: the engine enable/disable contract is not yet defined.
 export type PluginStatus = "Enabled" | "Disabled";
-export type PluginCategory = "Content" | "Assessment" | "Media" | "Analytics" | "Accessibility";
+export type PluginCategory = "extensions" | "components" | "themes" | "menus";
 
 export interface DashboardPlugin {
   id: number;
@@ -4276,7 +4276,7 @@ export async function getPlugins(): Promise<DashboardPlugin[]> {
     description: p.description || "",
     version: p.version || "",
     author: p.author || "",
-    category: "Content",
+    category: "extensions",
     status: p._isAvailableInEditor === false ? "Disabled" : "Enabled",
     installedDate: fmtDate(p.createdAt),
   }));
