@@ -12,7 +12,7 @@ import UserManagementPage from './pages/UserManagementPage'
 import AssetManagementPage from './pages/AssetManagementPage'
 import TemplateManagementPage from './pages/TemplateManagementPage'
 import PluginManagementPage from './pages/PluginManagementPage'
-import { canAccessDashboardSection, type DashboardSection, useAuth } from '@/context/AuthContext'
+import { canAccessCourseSettings, canAccessDashboardSection, type DashboardSection, useAuth } from '@/context/AuthContext'
 
 function DashboardSectionGate({
   section,
@@ -38,6 +38,20 @@ function DashboardSectionGate({
   return <>{children}</>;
 }
 
+function CourseSetupRouteGate({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <div className="h-screen w-full bg-[#f8fafc]" />;
+  }
+
+  if (!user || !canAccessCourseSettings(user)) {
+    return <Navigate to="/my-courses" replace />;
+  }
+
+  return <>{children}</>;
+}
+
 export const router = createBrowserRouter([
   {
     element: <RootLayout />,
@@ -57,8 +71,8 @@ export const router = createBrowserRouter([
       },
       // Full-screen routes (own chrome)
       { path: '/course/new', element: <NewCoursePage /> },
-      { path: '/course/new/setup', element: <SetupPage /> },
-      { path: '/course/:id/setup', element: <SetupPage /> },
+      { path: '/course/new/setup', element: <CourseSetupRouteGate><SetupPage /></CourseSetupRouteGate> },
+      { path: '/course/:id/setup', element: <CourseSetupRouteGate><SetupPage /></CourseSetupRouteGate> },
       { path: '/course/:id', element: <PageEditorPage /> },
       { path: '/course/:id/storyboard', element: <StoryboardPage /> },
       { path: '/course/:id/preview', element: <CoursePreviewPage /> },

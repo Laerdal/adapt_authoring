@@ -48,6 +48,10 @@ export function canManageCourses(user: CurrentUser | null | undefined): boolean 
   return role === "Super Admin" || role === "Course Creator";
 }
 
+export function canAccessCourseSettings(user: CurrentUser | null | undefined): boolean {
+  return canManageCourses(user);
+}
+
 export function canAccessDashboardSection(
   user: CurrentUser | null | undefined,
   section: DashboardSection

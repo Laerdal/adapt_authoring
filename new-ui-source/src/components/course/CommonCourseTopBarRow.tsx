@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { canManageCourses, useAuth } from "@/context/AuthContext";
 
 type PrimaryTopNav = "settings" | "storyboard" | "editor";
 type TopBarNav = PrimaryTopNav | "preview";
@@ -76,6 +77,8 @@ export default function CommonCourseTopBarRow({
 }: CommonCourseTopBarRowProps) {
   const [previewMenuOpen, setPreviewMenuOpen] = useState(false);
   const previewMenuRef = useRef<HTMLDivElement | null>(null);
+  const { user } = useAuth();
+  const canOpenCourseSettings = canManageCourses(user);
 
   useEffect(() => {
     if (!previewMenuOpen || previewMode !== "menu") return;
@@ -123,18 +126,20 @@ export default function CommonCourseTopBarRow({
 
         <div className="w-px h-8 bg-[#d8dde6] mx-1" />
 
-        <button
-          type="button"
-          onClick={onOpenCourseSettings}
-          className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold rounded-[8px] transition-colors cursor-pointer ${
-            activeNav === "settings"
-              ? "bg-[var(--life-primary-100)] text-[var(--life-primary-700)] hover:bg-[var(--life-primary-100)]"
-              : "bg-transparent text-[var(--life-base-black)] hover:bg-[var(--life-primary-050)] hover:text-[var(--life-primary-700)] active:bg-[var(--life-primary-100)] active:text-[var(--life-primary-800)]"
-          }`}
-        >
-          <MaskIcon file="setting-icon.svg" />
-          <span className="hidden md:inline">Course Settings</span>
-        </button>
+        {canOpenCourseSettings && (
+          <button
+            type="button"
+            onClick={onOpenCourseSettings}
+            className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold rounded-[8px] transition-colors cursor-pointer ${
+              activeNav === "settings"
+                ? "bg-[var(--life-primary-100)] text-[var(--life-primary-700)] hover:bg-[var(--life-primary-100)]"
+                : "bg-transparent text-[var(--life-base-black)] hover:bg-[var(--life-primary-050)] hover:text-[var(--life-primary-700)] active:bg-[var(--life-primary-100)] active:text-[var(--life-primary-800)]"
+            }`}
+          >
+            <MaskIcon file="setting-icon.svg" />
+            <span className="hidden md:inline">Course Settings</span>
+          </button>
+        )}
 
         <button
           type="button"
