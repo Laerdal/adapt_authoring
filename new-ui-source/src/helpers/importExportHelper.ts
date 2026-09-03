@@ -16,27 +16,6 @@ export interface ExportSourceActionOptions {
   onError?: (message: string) => void;
 }
 
-function triggerDownload(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-function getFilenameFromDisposition(disposition: string | null, fallback: string): string {
-  if (!disposition) return fallback;
-  const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
-  const raw = match?.[1] ?? match?.[2];
-  if (!raw) return fallback;
-  try {
-    return decodeURIComponent(raw);
-  } catch {
-    return raw;
-  }
-}
-
 export async function exportSourceCourse(tenantId: string, courseId: string): Promise<void> {
   const exportPath = `/export/${encodeURIComponent(tenantId)}/${encodeURIComponent(courseId)}`;
   const response = await fetch(exportPath, {
@@ -194,11 +173,6 @@ function normalizeTargetAttribute(value: string): string {
   return trimmed.startsWith("_") ? trimmed : `_${trimmed}`;
 }
 
-function toValidatorAssetSource(value: unknown, fallback: ValidatorAssetSource): ValidatorAssetSource {
-  const normalized = str(value, fallback);
-  return normalized === "url" ? "url" : "library";
-}
-
 async function resolveExtensionTypeIdsByTargetOrNames(target: string, names: string[]): Promise<string[]> {
   const normalizedTarget = normalizeTargetAttribute(target).toLowerCase();
   const nameSet = new Set(names.map((name) => normalizePluginName(name)));
@@ -238,7 +212,6 @@ export async function getValidatorEnablerPdfSettings(courseId: string): Promise<
     ...courseRootConfig,
     ...courseExtensionConfig,
   };
-  const globalConfig = obj(obj(config._extensions)[VALIDATOR_ENABLER_EXTENSION_TARGET]);
   const coverPageImage = str(courseConfig._coverPageImage, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.coverPageUrl);
   const footerLogoImage = str(courseConfig._pdfLogoImage, DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS.footerLogoUrl);
 
