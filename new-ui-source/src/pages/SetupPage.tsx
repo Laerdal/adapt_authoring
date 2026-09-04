@@ -1,6 +1,6 @@
 import { useSearchParams, useNavigate, useParams } from "react-router-dom";
 import { Suspense, useEffect, useState, useRef, useCallback } from "react";
-import { useAuth } from "../context/AuthContext";
+import { useAuth, isSuperAdmin } from "../context/AuthContext";
 import AiAssistant from "../components/common/AiAssistant";
 import CourseStructureMapView from "../components/course/CourseStructureMapView";
 import CourseStructureTree from "../components/course/CourseStructureTree";
@@ -2650,6 +2650,7 @@ function CourseCreationCenterContent() {
   const routeParams = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const canExportCourse = isSuperAdmin(user);
   const initialTitle = params.get("title") ?? "Untitled Course";
   const initialDescription = params.get("description") ?? "";
   const initialPanel = params.get("panel") ?? "";
@@ -2922,6 +2923,36 @@ function CourseCreationCenterContent() {
           </div>
 
         <div className="ml-auto flex items-center gap-4">
+          {canExportCourse && (
+            <ExportMenu
+              disabled={!courseId || !user?._tenantId}
+              exportSourceLoading={exportingSource}
+              onExportSource={() => {
+                void runExportSourceAction({
+                  exportingSource,
+                  tenantId: user?._tenantId,
+                  courseId,
+                  setExportingSource,
+                  onProcessingStart: () => {
+                    setExportPopup({ status: "processing", message: "Preparing course source export…" });
+                  },
+                  onDownloadStarted: () => {
+                    setExportPopup({ status: "success", message: "Course source exported successfully" });
+                  },
+                  onUnavailable: () => {
+                    setExportPopup({ status: "error", message: "Course export is not available right now." });
+                  },
+                  onError: (message) => {
+                    setExportPopup({ status: "error", message: `Unable to export source. ${message}` });
+                  },
+                });
+              }}
+              onExportPdf={() => {
+                setExportPopup(null);
+                setActiveNav("export-pdf");
+              }}
+            />
+          )}
           <ExportMenu
             disabled={!courseId || !user?._tenantId}
             exportSourceLoading={exportingSource}

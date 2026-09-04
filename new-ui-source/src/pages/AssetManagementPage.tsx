@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback, useDeferredValue, memo } from "react";
 import { getAssets, trashAsset } from "@/api/adaptAuthoring";
+import AiAssistant from "@/components/common/AiAssistant";
 
 type AssetFormat = "image" | "audio" | "video" | "other";
 
@@ -709,6 +710,8 @@ export default function AssetManagementPage() {
           </div>
         )}
       </div>
+
+      <AiAssistant context="Asset Management" />
 
       {/* ════════════════════════════════════════════════════════════════
           Upload Modal — multi-step: pick → details → uploading → done

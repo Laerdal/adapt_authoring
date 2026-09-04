@@ -302,7 +302,7 @@ function toggleExtensions (courseId, action, extensions, cb) {
 
   if (user && user.tenant && user.tenant._id) {
     // Changes to extensions warrants a full course rebuild
-    app.emit('rebuildCourse', user.tenant._id, courseId);
+    app.emit('rebuildCourse', String(user.tenant._id), String(courseId));
   }
 
   database.getDatabase(function (err, db) {

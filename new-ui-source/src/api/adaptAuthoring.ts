@@ -235,6 +235,7 @@ export interface DashboardCourse {
   heroAssetId: string | null;
   theme: "LIFE Theme" | "Vanilla Theme" | "Custom Theme";
   tags: string[];
+  authorName?: string | null;
 }
 
 interface EngineCourse {
@@ -245,9 +246,40 @@ interface EngineCourse {
   heroImage?: string | null;
   updatedAt?: string;
   tags?: Array<string | { title?: string }>;
+  createdBy?: string | {
+    _id?: string;
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+    name?: string;
+    displayName?: string;
+    fullName?: string;
+  };
 }
 
 const OBJECT_ID = /^[a-f0-9]{24}$/i;
+
+function courseAuthorName(createdBy: EngineCourse["createdBy"]): string | null {
+  if (!createdBy) return null;
+
+  if (typeof createdBy === "string") {
+    const value = createdBy.trim();
+    if (!value || OBJECT_ID.test(value)) return null;
+    if (value.includes("@")) return value.split("@")[0].replace(/[._-]+/g, " ").trim() || null;
+    return value;
+  }
+
+  const nameCandidates = [
+    createdBy.name,
+    createdBy.displayName,
+    createdBy.fullName,
+    [createdBy.firstName, createdBy.lastName].filter(Boolean).join(" ").trim(),
+    createdBy.email?.split("@")[0]?.replace(/[._-]+/g, " ").trim(),
+  ];
+
+  const matchedName = nameCandidates.find((value): value is string => !!value && value.trim().length > 0);
+  return matchedName?.trim() || null;
+}
 
 function toDashboardCourse(doc: EngineCourse, index: number): DashboardCourse {
   const ts = doc.updatedAt ? new Date(doc.updatedAt).getTime() : 0;
@@ -271,6 +303,7 @@ function toDashboardCourse(doc: EngineCourse, index: number): DashboardCourse {
           .map((t) => (typeof t === "string" ? t : t?.title ?? ""))
           .filter((s): s is string => !!s && !OBJECT_ID.test(s))
       : [],
+    authorName: courseAuthorName(doc.createdBy),
   };
 }
 
@@ -4209,7 +4242,7 @@ export function trashAsset(backendId: string): Promise<unknown> {
 // ── Plugins (extension types) ─────────────────────────────────────────────────
 // Read-only for now: the engine enable/disable contract is not yet defined.
 export type PluginStatus = "Enabled" | "Disabled";
-export type PluginCategory = "Content" | "Assessment" | "Media" | "Analytics" | "Accessibility";
+export type PluginCategory = "extensions" | "components" | "themes" | "menus";
 
 export interface DashboardPlugin {
   id: number;
@@ -4243,7 +4276,7 @@ export async function getPlugins(): Promise<DashboardPlugin[]> {
     description: p.description || "",
     version: p.version || "",
     author: p.author || "",
-    category: "Content",
+    category: "extensions",
     status: p._isAvailableInEditor === false ? "Disabled" : "Enabled",
     installedDate: fmtDate(p.createdAt),
   }));
