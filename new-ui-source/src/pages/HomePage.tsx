@@ -5,6 +5,7 @@ import AiAssistant from '@/components/common/AiAssistant'
 import PermissionDeniedModal from '@/components/common/PermissionDeniedModal'
 import { useAuth, isSuperAdmin, canManageCourses } from '@/context/AuthContext'
 import { createCourse, deleteCourse, duplicateCourse, fetchDashboardCourses, getAuthoringMenuOptions, getAuthoringThemeOptions, updateCourse } from '@/api/adaptAuthoring'
+import ImportCourseModal from '@/components/importExport/Import'
 
 
 type Theme = string
@@ -266,6 +267,7 @@ export default function HomePage() {
 
   // Import
   const importInputRef = useRef<HTMLInputElement>(null)
+  const [importModalOpen, setImportModalOpen] = useState(false)
 
   function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -274,6 +276,17 @@ export default function HomePage() {
     showToast(`${READ_ONLY_REASON} Import is blocked for now.`, 'info')
   }
 
+  async function handleImportSuccess(deprecatedPlugins?: string[]) {
+    await loadCourses()
+    if (deprecatedPlugins && deprecatedPlugins.length > 0) {
+      showToast(
+        `Course imported with warnings: deprecated plugin(s) found — ${deprecatedPlugins.join(', ')}. We recommend replacing or removing them.`,
+        'info'
+      )
+    } else {
+      showToast('Course imported successfully.')
+    }
+  }
   function showPermissionDenied(title: string, message: string) {
     setPermissionDialog({ title, message })
   }
@@ -345,32 +358,31 @@ export default function HomePage() {
               <p className="text-sm text-[#6b7280] mt-1">Manage and organize your courses</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
+              {/* Import */}
               {canImportCourses && (
-                <>
-                  <input
-                    ref={importInputRef}
-                    type="file"
-                    accept=".zip,.json"
-                    className="hidden"
-                    aria-label="Import course file"
-                    onChange={handleImport}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => importInputRef.current?.click()}
-                    title={READ_ONLY_REASON}
-                    disabled
-                    className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[#d1d5db] hover:bg-[#f9fafb] text-[#374151] text-sm font-semibold rounded-lg transition-colors"
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="17 8 12 3 7 8" />
-                      <line x1="12" y1="3" x2="12" y2="15" />
-                    </svg>
-                    <span className="hidden sm:inline">Import Course</span>
-                    <span className="sm:hidden">Import</span>
-                  </button>
-                </>
+              <>  
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept=".zip,.json"
+                  className="hidden"
+                  aria-label="Import course file"
+                  onChange={handleImport}
+                />
+                <button
+                  type="button"
+                  onClick={() => setImportModalOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[#d1d5db] hover:bg-[#f9fafb] text-[#374151] text-sm font-semibold rounded-lg transition-colors"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                  <span className="hidden sm:inline">Import Course</span>
+                  <span className="sm:hidden">Import</span>
+                </button>
+              </>
               )}
 
               {/* Create New Course */}
@@ -845,6 +857,12 @@ export default function HomePage() {
           </div>
         ))}
       </div>
+
+      <ImportCourseModal
+        isOpen={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        onSuccess={handleImportSuccess}
+      />
 
       <AiAssistant context="Dashboard" />
     </>

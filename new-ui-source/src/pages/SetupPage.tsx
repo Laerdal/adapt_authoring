@@ -22,6 +22,9 @@ import { UnsavedChangesModal } from "./setup/unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./setup/useUnsavedChangesNavigationGuard";
 import { CompletionProgressPage } from "./setup/completionProgressPage";
 import { CdnDeploymentPage } from "./setup/cdnDeploymentPage";
+import ExportMenu, { ExportStatusPopup } from "../components/importExport/Export";
+import ExportPdfPage from "../components/importExport/ExportPdfPage";
+import { runExportSourceAction } from "../helpers/importExportHelper";
 import { PreflightValidatorPage } from "./setup/preflightValidatorPage";
 import PublishMenuButton from "../components/publish/PublishMenuButton";
 import PublishCourseDialog, { type PublishCoursePhase } from "../components/publish/PublishCourseDialog";
@@ -206,9 +209,10 @@ const NAV_GROUPS = NAV_ITEMS.reduce<{ id: string; label: string; items: NavLeafI
 // To guard a page in future (unsaved-changes interception), add `guarded: true`
 // on that page item in NAV_ITEMS. It will automatically be included here.
 
-const GUARDED_NAV_IDS = new Set(
-  NAV_ITEMS.filter((item) => item.heading !== true && item.guarded).map((item) => item.id)
-);
+const GUARDED_NAV_IDS = new Set([
+  ...NAV_ITEMS.filter((item) => item.heading !== true && item.guarded).map((item) => item.id),
+  "export-pdf",
+]);
 
 /* -- Course Structure panel -- */
 function CourseStructurePanel({
@@ -2663,12 +2667,15 @@ function CourseCreationCenterContent() {
     initialPanel === "storyboarding" ? "storyboarding" : initialPanel === "publish" ? "publish" : "overview",
   );
   const [collapsed, setCollapsed] = useState(false);
+  const [exportingSource, setExportingSource] = useState(false);
+  const [exportPopup, setExportPopup] = useState<{ status: "processing" | "success" | "error"; message: string } | null>(null);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [publishDialogPhase, setPublishDialogPhase] = useState<PublishCoursePhase | null>(null);
   const [publishResult, setPublishResult] = useState<{ zipName?: string; downloadUrl?: string; message?: string }>({});
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(NAV_GROUPS.map((group) => [group.id, true]))
   );
+  const contentScrollRef = useRef<HTMLElement | null>(null);
 
   // Tracks requested navigation when on a panel with unsaved changes
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
@@ -2710,6 +2717,24 @@ function CourseCreationCenterContent() {
       cancelled = true;
     };
   }, [courseId, initialDescription, initialTitle]);
+
+  useEffect(() => {
+    if (!exportPopup || (exportPopup.status !== "success" && exportPopup.status !== "error")) return;
+    const timer = window.setTimeout(() => setExportPopup(null), 3200);
+    return () => window.clearTimeout(timer);
+  }, [exportPopup]);
+
+  useEffect(() => {
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
+    };
+  }, []);
 
   const activeItem = NAV_ITEMS.find((n) => !n.heading && n.id === activeNav);
   const loginName = user?.username || user?.email || "Not signed in";
@@ -2763,6 +2788,17 @@ function CourseCreationCenterContent() {
     if (activeNav === "cdn-deployment") return <CdnDeploymentPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "translation") return <LegacyTranslationPanel courseId={courseId} />;
     if (activeNav === "publish") return <PreflightValidatorPage courseId={courseId} onNavigationRequest={setActiveNav} />;
+    if (activeNav === "export-pdf") {
+      return (
+        <ExportPdfPage
+          courseId={courseId}
+          courseTitle={title}
+          onNavigationRequest={setActiveNav}
+          pendingNavigation={pendingNavigation}
+          onPendingNavigationHandled={() => setPendingNavigation(null)}
+        />
+      );
+    }
     if (activeNav === "storyboarding")
       return (
         <StoryboardWorkspace
@@ -2846,6 +2882,11 @@ function CourseCreationCenterContent() {
 
   const primaryTopNav: "settings" | "storyboard" | "editor" = activeNav === "storyboarding" ? "storyboard" : "settings";
 
+  useEffect(() => {
+    // Avoid carrying scroll position across panels (e.g. opening Export PDF mid-page).
+    contentScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+  }, [activeNav]);
+
   return (
     <div className="flex flex-col h-screen bg-[#f8fafc] overflow-hidden">
       {!courseId && (
@@ -2881,20 +2922,65 @@ function CourseCreationCenterContent() {
             <span className="text-base font-semibold truncate">{activeItem?.label ?? "Course Overview"}</span>
           </div>
 
-          <div className="ml-auto flex items-center gap-4">
-            {canExportCourse && (
-              <button
-                type="button"
-                onClick={openExportDialog}
-                className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold bg-transparent text-[var(--life-base-black)] rounded-[8px] hover:bg-[var(--life-primary-050)] hover:text-[var(--life-primary-700)] active:bg-[var(--life-primary-100)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer"
-              >
-                <SidebarMaskIcon file="export-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-                <span className="hidden lg:inline">Export</span>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
-              </button>
-            )}
+        <div className="ml-auto flex items-center gap-4">
+          {canExportCourse && (
+            <ExportMenu
+              disabled={!courseId || !user?._tenantId}
+              exportSourceLoading={exportingSource}
+              onExportSource={() => {
+                void runExportSourceAction({
+                  exportingSource,
+                  tenantId: user?._tenantId,
+                  courseId,
+                  setExportingSource,
+                  onProcessingStart: () => {
+                    setExportPopup({ status: "processing", message: "Preparing course source export…" });
+                  },
+                  onDownloadStarted: () => {
+                    setExportPopup({ status: "success", message: "Course source exported successfully" });
+                  },
+                  onUnavailable: () => {
+                    setExportPopup({ status: "error", message: "Course export is not available right now." });
+                  },
+                  onError: (message) => {
+                    setExportPopup({ status: "error", message: `Unable to export source. ${message}` });
+                  },
+                });
+              }}
+              onExportPdf={() => {
+                setExportPopup(null);
+                setActiveNav("export-pdf");
+              }}
+            />
+          )}
+          <ExportMenu
+            disabled={!courseId || !user?._tenantId}
+            exportSourceLoading={exportingSource}
+            onExportSource={() => {
+              void runExportSourceAction({
+                exportingSource,
+                tenantId: user?._tenantId,
+                courseId,
+                setExportingSource,
+                onProcessingStart: () => {
+                  setExportPopup({ status: "processing", message: "Preparing course source export…" });
+                },
+                onDownloadStarted: () => {
+                  setExportPopup({ status: "success", message: "Course source exported successfully" });
+                },
+                onUnavailable: () => {
+                  setExportPopup({ status: "error", message: "Course export is not available right now." });
+                },
+                onError: (message) => {
+                  setExportPopup({ status: "error", message: `Unable to export source. ${message}` });
+                },
+              });
+            }}
+            onExportPdf={() => {
+              setExportPopup(null);
+              setActiveNav("export-pdf");
+            }}
+          />
 
             <PublishMenuButton
               active={activeNav === "publish"}
@@ -2906,7 +2992,7 @@ function CourseCreationCenterContent() {
       )}
 
       {/* -- Body -- */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden min-h-0">
 
         {/* -- Left panel -- */}
         {/* Hidden on Storyboard (ADAPT-3785): the Storyboard workspace is not
@@ -3033,7 +3119,7 @@ function CourseCreationCenterContent() {
         )}
 
         {/* -- Right content panel -- */}
-        <main className={`flex-1 overflow-hidden bg-[#f8fafc] ${activeNav === "menu" || activeNav === "navigation" || activeNav === "storyboarding" || activeNav === "translation" ? "" : "overflow-y-auto px-8 py-8 min-h-0"}`}>
+        <main ref={contentScrollRef} className={`flex-1 overflow-hidden min-h-0 bg-[#f8fafc] ${activeNav === "menu" || activeNav === "navigation" || activeNav === "storyboarding" || activeNav === "translation" ? "" : "overflow-y-auto px-8 py-8"}`}>
           {renderPanel()}
         </main>
       </div>
@@ -3055,6 +3141,7 @@ function CourseCreationCenterContent() {
         'What does the Preflight Validator check?',
         'How do I configure SCORM tracking?',
       ]} />
+      {exportPopup && <ExportStatusPopup status={exportPopup.status} message={exportPopup.message} />}
     </div>
   );
 }
