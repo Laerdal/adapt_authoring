@@ -3025,6 +3025,24 @@ export async function enableExtensionForCourse(courseId: string, extensionTypeId
   }
 }
 
+// Disables an extension type for a course (POST /api/extension/disable/:courseId).
+// The server cascades this across the WHOLE course in one shot — it $unsets the
+// extension's `_extensions.<targetAttribute>` from every course/contentobject/
+// article/block/component document belonging to this course, and removes its
+// entry from config._enabledExtensions (see plugins/content/extension/index.js
+// toggleExtensions) — i.e. this is the single source of truth for "remove this
+// extension from everywhere", not something the client needs to replicate
+// document-by-document.
+export async function disableExtensionForCourse(courseId: string, extensionTypeId: string): Promise<void> {
+  if (!courseId || !extensionTypeId) return;
+  try {
+    await apiClient.post(`/api/extension/disable/${courseId}`, { extensions: [extensionTypeId] });
+  } catch (err) {
+    console.warn("Failed to disable extension for course", err);
+    throw err;
+  }
+}
+
 const PREVIEW_EDIT_EXTENSION_NAME = "adapt-preview-edit";
 
 // New UI Preview always needs this extension available: Quick Edit invokes its
