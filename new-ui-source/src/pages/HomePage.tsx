@@ -97,19 +97,33 @@ export default function HomePage() {
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500)
   }, [])
 
+  const loadGenRef = useRef(0)
   const loadCourses = useCallback(async () => {
+    const gen = ++loadGenRef.current
+    const shared = location.pathname === '/shared'
+    const PAGE = 50
+    setIsLoadingCourses(true)
     try {
-      setIsLoadingCourses(true)
-      const shared = location.pathname === '/shared'
-      const apiCourses = await fetchDashboardCourses(shared)
-      // Always reflect the live result — including empty (e.g. no shared courses),
-      // so the UI matches the engine instead of falling back to sample data.
-      setCourses(apiCourses)
+      // Load progressively: render the first page immediately, then stream the
+      // rest in the background and append. A user with 1000s of courses no longer
+      // waits on one huge request (the server pages via operators.skip/limit);
+      // client-side search/sort/tags keep working over the growing set.
+      let skip = 0
+      for (;;) {
+        const page = await fetchDashboardCourses(shared, skip, PAGE)
+        if (gen !== loadGenRef.current) return // superseded (route change / newer load)
+        setCourses((prev) => (skip === 0 ? page : [...prev, ...page]))
+        if (skip === 0) setIsLoadingCourses(false) // first page is on screen
+        if (page.length < PAGE) break // last page
+        skip += PAGE
+      }
     } catch {
-      setCourses([])
-      showToast('Could not load live course data.', 'info')
+      if (gen === loadGenRef.current) {
+        setCourses([])
+        showToast('Could not load live course data.', 'info')
+      }
     } finally {
-      setIsLoadingCourses(false)
+      if (gen === loadGenRef.current) setIsLoadingCourses(false)
     }
   }, [location.pathname, showToast])
 

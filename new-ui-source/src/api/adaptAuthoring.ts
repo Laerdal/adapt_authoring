@@ -308,9 +308,13 @@ function toDashboardCourse(doc: EngineCourse, index: number): DashboardCourse {
 }
 
 // shared=false → my courses; shared=true → courses shared with me.
-export async function fetchDashboardCourses(shared = false): Promise<DashboardCourse[]> {
+export async function fetchDashboardCourses(shared = false, skip = 0, limit = 0): Promise<DashboardCourse[]> {
   const endpoint = shared ? "/api/shared/course" : "/api/my/course";
-  const docs = await apiClient.get<EngineCourse[]>(endpoint);
+  // Paginate via the same operators the old UI uses (server applies skip/limit),
+  // so a user with 1000s of courses doesn't pull them all in one request. limit=0
+  // keeps the old unpaginated behaviour for any caller that wants everything.
+  const qs = limit > 0 ? `?operators%5Bskip%5D=${skip}&operators%5Blimit%5D=${limit}` : "";
+  const docs = await apiClient.get<EngineCourse[]>(endpoint + qs);
   return Array.isArray(docs) ? docs.map(toDashboardCourse) : [];
 }
 
