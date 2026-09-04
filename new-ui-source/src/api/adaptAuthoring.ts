@@ -3039,6 +3039,7 @@ export async function disableExtensionForCourse(courseId: string, extensionTypeI
     await apiClient.post(`/api/extension/disable/${courseId}`, { extensions: [extensionTypeId] });
   } catch (err) {
     console.warn("Failed to disable extension for course", err);
+    throw err;
   }
 }
 
