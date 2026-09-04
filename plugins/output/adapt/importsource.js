@@ -200,7 +200,7 @@ function ImportSource(req, done) {
             path: assetPath,
             tags: tags,
             repository: repository,
-            createdBy: req.user._id
+            createdBy: app.usermanager.getCurrentUser()._id
           };
 
           if (!assetJson) return helpers.importAsset(fileMeta, metadata, function(err, assetRec) {
@@ -629,7 +629,7 @@ function ImportSource(req, done) {
               path: thumbnailPath,
               tags: [], // Empty tags array to avoid validation issues
               repository: configuration.getConfig('filestorage') || 'localfs',
-              createdBy: req.user._id
+              createdBy: app.usermanager.getCurrentUser()._id
             };
             
             logger.log('info', `Asset metadata created for ${thumbnailFile}:`);
@@ -907,7 +907,7 @@ function ImportSource(req, done) {
       // Use req.user._id (Mongoose ObjectId) so the stored createdBy matches the
       // ObjectId used by the /api/my/course query filter. getCurrentUser()._id
       // returns a plain string which MongoDB stores as a different type.
-      data.createdBy = req.user._id;
+      data.createdBy = app.usermanager.getCurrentUser()._id;;
       if (type !== 'course') {
         data._courseId = courseId;
       }
@@ -1105,7 +1105,7 @@ function ImportSource(req, done) {
         }
         Object.assign(assetData, {
           _assetId: matchingAssetId,
-          createdBy: req.user._id,
+          createdBy: app.usermanager.getCurrentUser(),
           _fieldName: results.length > 0 ? _.pluck(results, 'filename')[0] : assetBaseName
         });
         app.contentmanager.getContentPlugin('courseasset', function (error, plugin) {
