@@ -361,38 +361,6 @@ type BehaviourFieldSchema = {
 };
 
 // Mirrors the old authoring tool's conditional-field mechanism
-// (frontend/src/modules/scaffold/backboneFormsOverrides.js
-// updateConditionalView + index.js's editorAttrs/fieldAttrs split): the
-// CONTROLLING field marks itself with `editorAttrs['data-is-conditional']`,
-// while each DEPENDENT field carries `fieldAttrs['data-depends-on']`
-// (the controller's key) and, for non-boolean controllers,
-// `fieldAttrs['data-option-match']` — the value the controller must
-// currently (or by default, if unset) hold for the dependent field to show.
-// A boolean (checkbox) controller shows dependents purely on truthiness.
-//
-// Crucially (confirmed against a real schema, adapt-additional-material),
-// the controller and its dependent(s) are NOT necessarily direct siblings —
-// e.g. `_drawerType` lives nested inside `_viewTypeDrawer.properties`, while
-// its dependents `_simpleViewInline`/`_simpleViewAsset` are flat top-level
-// siblings of `_viewTypeDrawer` itself. The old tool's jQuery-based
-// `$('[data-depends-on=key]')` lookup is effectively GLOBAL across the whole
-// rendered form, keyed only by the bare field name — so visibility here must
-// be resolved against a flattened map of every field (at any nesting depth)
-// within the current value "scope" (a component's behaviour properties, one
-// array item, one extension's settings), not just immediate object siblings.
-//
-// Visibility is also STRUCTURALLY chained, not just a single fieldAttrs hop:
-// `_drawerType` has no fieldAttrs of its own (only `_viewTypeDrawer`, its
-// containing object, is gated on `_viewType === 'drawer'`), yet
-// `_simpleViewInline` depends directly on `_drawerType`. So switching
-// `_viewType` away from "drawer" and back to "modal" must ALSO hide
-// `_simpleViewInline` even though `_drawerType`'s own stale value
-// ("simpleViewInline") never changed — otherwise a leftover selection from
-// a previous branch of the radio "bleeds through" once its container is
-// hidden and re-shown. `parents` records each field's immediate structural
-// container key, and visibility recurses through it: a field is visible
-// only if its structural parent (if any) is ALSO currently visible, in
-// addition to satisfying its own fieldAttrs condition (if any).
 type ConditionalContext = {
   schemas: Record<string, BehaviourFieldSchema>;
   values: Record<string, unknown>;
@@ -3259,6 +3227,12 @@ export default function CourseEditor({
     };
   }, [courseId]);
 
+  // Bridges the dirty keys computed inside seedExtensionDefaultsEverywhere's
+  // setContentPages updater over to its follow-up setDirtyNodeKeys call —
+  // see the comment at that call site for why a ref is used instead of a
+  // plain local variable.
+  const seedDirtyUpdatesRef = useRef<Record<string, true>>({});
+
   // Mirrors what POST /api/extension/enable/:courseId seeds server-side
   // (schema-default settings onto EVERY course/topic/section/content-group/
   // component document) into the currently-loaded draft, so a newly-added
@@ -3290,12 +3264,19 @@ export default function CourseEditor({
       // CURRENT level — with a plain value-based setContentPages call here,
       // this would race that update and silently overwrite it with a stale
       // snapshot from before it was applied.
-      const dirtyUpdates: Record<string, true> = {};
-      let didSeedAny = false;
+      //
+      // The resulting dirty keys are handed off via a ref rather than read
+      // back from local variables right after calling setContentPages —
+      // React may defer invoking the updater, so those variables aren't
+      // guaranteed to be populated yet at that point. The ref is instead
+      // read from INSIDE the setDirtyNodeKeys updater below, which React
+      // guarantees runs after the setContentPages updater above (state
+      // updates queued in the same tick are processed in call order), so by
+      // the time it reads seedDirtyUpdatesRef.current it's already set.
+      seedDirtyUpdatesRef.current = {};
 
       setContentPages((previousPages) => {
-        Object.keys(dirtyUpdates).forEach((key) => delete dirtyUpdates[key]);
-        didSeedAny = false;
+        const dirtyUpdates: Record<string, true> = {};
 
         const nextPages = previousPages.map((page) => {
         const pageHasKey = Object.prototype.hasOwnProperty.call(asRecord(page.extensions), extensionKey);
@@ -3344,13 +3325,14 @@ export default function CourseEditor({
         });
 
         if (!Object.keys(dirtyUpdates).length) return previousPages;
-        didSeedAny = true;
+        seedDirtyUpdatesRef.current = dirtyUpdates;
         return nextPages;
       });
 
-      if (didSeedAny) {
-        setDirtyNodeKeys((prev) => ({ ...prev, ...dirtyUpdates }));
-      }
+      setDirtyNodeKeys((prev) => {
+        const updates = seedDirtyUpdatesRef.current;
+        return Object.keys(updates).length ? { ...prev, ...updates } : prev;
+      });
     },
     [extensionSchemasByLevel]
   );
