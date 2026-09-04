@@ -1,3 +1,5 @@
+import type * as React from "react";
+
 // Shared destructive-action confirmation modal — extracted from the inline
 // delete-confirmation markup that originally lived only in
 // components/editor/CourseOutlinePanel.tsx, so any other feature (e.g. the
