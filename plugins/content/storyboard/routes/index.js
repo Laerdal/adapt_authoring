@@ -18,6 +18,7 @@ class Routes {
     rest.get('/storyboard/documents/:id', h.getStoryboard);
     rest.put('/storyboard/documents/:id', h.updateStoryboard);
     rest.put('/storyboard/documents/:id/status', h.setStoryboardStatus);
+    rest.put('/storyboard/documents/:id/share', h.shareStoryboard);
     rest.delete('/storyboard/documents/:id', h.deleteStoryboard);
 
     // ── Comments (AC9) ────────────────────────────────────────────────────

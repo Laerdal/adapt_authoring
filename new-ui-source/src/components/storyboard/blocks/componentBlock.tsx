@@ -1,7 +1,7 @@
 // Rich component authoring card (spec AC3). One BlockNote block renders the
 // full inline editor for every non-assessment content type, matching the
-// Lovable design: a common header (type badge, title, Show title, Replace, AI,
-// Source, Delete, Done) + a per-type body + a "Suggested components" footer.
+// Lovable design: a common header (type badge, title, Show title, AI,
+// Delete, Done) + a per-type body + a "Suggested components" footer.
 //
 // Media (image/video/audio) use the real DAM picker (AssetPickerModal) via
 // AssetField — "Select an Asset" browses/uploads course assets, "Select an
@@ -21,7 +21,6 @@ import {
   Award,
   RefreshCw,
   Sparkles,
-  Code,
   Trash2,
   Check,
   Plus,
@@ -35,6 +34,7 @@ import { storyboardActions } from '../storyboardActions';
 import type { AssetKind } from '@/api/adaptAuthoring';
 import AssetPickerModal from '@/components/common/AssetPickerModal';
 import { emptyMediaData, toEmbedUrl, type AssetRef, type ImageData, type MediaData } from '../mediaMapping';
+import SamaritanIcon from '../SamaritanIcon';
 
 // YouTube/Vimeo → iframe embed; direct file URLs → <video>. Matches Lovable.
 function VideoView({ src, poster, className }: { src: string; poster?: string; className?: string }) {
@@ -836,7 +836,6 @@ export const componentBlock = createReactBlockSpec(
       // landing in edit mode every time the document loads. A brand-new,
       // still-blank component (just inserted) opens expanded instead.
       const [collapsed, setCollapsed] = useState(() => hasComponentContent(kind, model, block.props.title as string));
-      const [source, setSource] = useState(false);
       const [dismissed, setDismissed] = useState(false);
       const title = block.props.title as string;
 
@@ -894,14 +893,8 @@ export const componentBlock = createReactBlockSpec(
             <HeaderBtn onClick={() => setData({ ...model, showTitle: !model.showTitle })} active={model.showTitle} title="Show the title to learners">
               <Check className="h-3 w-3" /> Show title
             </HeaderBtn>
-            <HeaderBtn onClick={() => {}} title="Change type in the Page Editor">
-              <RefreshCw className="h-3 w-3" /> Replace
-            </HeaderBtn>
             <HeaderBtn onClick={openAi} title="AI Assistance">
-              <Sparkles className="h-3 w-3" /> AI
-            </HeaderBtn>
-            <HeaderBtn onClick={() => setSource((s) => !s)} active={source} title="Toggle source view">
-              <Code className="h-3 w-3" /> Source
+              <SamaritanIcon className="h-3 w-3" /> AI
             </HeaderBtn>
             <HeaderBtn onClick={openComment} title="Comment on this component">
               <MessageSquare className="h-3 w-3" /> Comment
@@ -915,11 +908,7 @@ export const componentBlock = createReactBlockSpec(
           </div>
 
           {/* Body */}
-          {source ? (
-            <textarea value={JSON.stringify(model, null, 2)} readOnly rows={6} className={`${inputCls} font-mono text-xs`} />
-          ) : (
-            <ComponentBody kind={kind} data={model} set={setData} />
-          )}
+          <ComponentBody kind={kind} data={model} set={setData} />
 
           {/* Instruction */}
           <label className="mt-2 block">

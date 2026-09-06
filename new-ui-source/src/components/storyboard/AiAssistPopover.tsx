@@ -12,8 +12,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { HeartHandshake, HelpCircle, X, RefreshCw, Send } from 'lucide-react';
+import { HelpCircle, X, RefreshCw, Send } from 'lucide-react';
 import { samaritanAssist, type SamaritanAction } from '@/api/ai';
+import SamaritanIcon from './SamaritanIcon';
 
 interface QuickAction {
   label: string;
@@ -115,7 +116,7 @@ export default function AiAssistPopover({
       >
         {/* Header */}
         <div className="mb-4 flex items-center gap-2">
-          <HeartHandshake className="h-5 w-5" style={{ color: 'var(--samaritan)' }} />
+          <SamaritanIcon className="h-5 w-5" />
           <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--life-color-text-default)' }}>
             Samaritan Assistance
           </h3>

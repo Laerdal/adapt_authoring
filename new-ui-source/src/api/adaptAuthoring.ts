@@ -4,6 +4,7 @@
 // keep engine-specific endpoint knowledge here, not in the pages.
 
 import { apiClient } from "./client";
+import type { ImportResult } from "../types/storyboardImport";
 import {
   buildGraphicField,
   buildImageAsMedia,
@@ -27,7 +28,7 @@ import {
   storyboardLabel,
 } from "@/components/storyboard/placeholderTitles";
 import { reverseKind, isAssessmentComponentKind } from "./componentMapping";
-import { parseAssessmentData, type AssessmentKind } from "@/types/storyboard";
+import { parseAssessmentData, buildAssessmentFields, type AssessmentKind, type AssessmentData } from "@/types/storyboard";
 export {
   TRACKING_ANALYTICS_EXTENSION_NAME_BY_KEY,
   defaultTrackingAnalyticsSettings,
@@ -139,6 +140,22 @@ export async function getUserById(userId: string): Promise<UserSummary | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Every active user in the instance — the same roster shown in User
+ * Management (GET /api/user, unfiltered). Excludes any user explicitly
+ * flagged inactive (`active === false`, set via the disable-user action);
+ * the field isn't declared on the schema and isn't returned by every
+ * deployment, so users without it are treated as active.
+ */
+export async function getActiveUsers(): Promise<UserSummary[]> {
+  const users = await apiClient.get<Array<UserSummary & { active?: boolean }>>("/api/user");
+  if (!Array.isArray(users)) return [];
+  return users
+    .filter((u) => u.active !== false && !!u.email)
+    .map(({ _id, email, firstName, lastName }) => ({ _id, email, firstName, lastName }))
+    .sort((a, b) => a.email.localeCompare(b.email));
 }
 
 // Instance display name for the header. Reads `domainName` from the client config
@@ -2388,7 +2405,10 @@ export async function getCourseStructure(
 // nodes matched by those ids. Structural create/delete/move is deferred to the
 // Phase 4 generation engine and reported (never silently dropped).
 
-const BODY_SUFFIX = "::body";
+// Exported so storyboardContentUpdate.ts (ADAPT-3760 "update content only"
+// import mode) can build synthetic body-update blocks matching this exact
+// convention, rather than duplicating the literal.
+export const BODY_SUFFIX = "::body";
 
 function stripHtml(html: string): string {
   return (html || "")
@@ -2718,7 +2738,7 @@ export async function saveStoryboardToCourse(
   const label = storyboardLabel;
   const index = new Map<
     string,
-    { level: StructureLevel; title: string; body?: string; component?: string; parentId?: string }
+    { level: StructureLevel; title: string; body?: string; component?: string; parentId?: string; properties?: Record<string, unknown> }
   >();
   contentObjects.forEach((c) =>
     index.set(c._id, { level: c._type === "menu" ? "module" : "topic", title: label(c) })
@@ -2732,6 +2752,11 @@ export async function saveStoryboardToCourse(
       body: c.body || "",
       component: c._component,
       parentId: c._parentId,
+      // Kept so an update can seed `patch.properties` from what's actually on
+      // the live document before merging in the storyboard's own fields —
+      // otherwise mergeProperties builds `properties` from scratch and wipes
+      // every field the storyboard doesn't model (ADAPT-3760 properties-wipe fix).
+      properties: c.properties,
     })
   );
 
@@ -2801,15 +2826,24 @@ export async function saveStoryboardToCourse(
         info.component === "accordion" ||
         info.component === "laerdal-narrative" ||
         info.component === "narrative";
+      // Seed from what's actually live on the document BEFORE merging —
+      // mergeProperties merges onto `patch.properties` if already present, so
+      // this preserves any property the storyboard doesn't model instead of
+      // replacing the whole object with just the new patch (ADAPT-3760).
+      const seedProperties = () => {
+        if (patch.properties === undefined) patch.properties = { ...(info.properties || {}) };
+      };
       if (kind === "image" && (info.component === "graphic" || isLaerdalMedia)) {
         // Image → _graphic (or legacy laerdal-media poster if the existing comp
         // is a laerdal-media from a course generated before this change).
         // Plugin fields nest under `properties` (top-level is dropped by the
         // content model).
+        seedProperties();
         mergeProperties(patch, isLaerdalMedia ? buildImageAsMedia(parsed.image) : buildGraphicField(parsed.image));
         assetLink = parsed.image?.link;
         assetId = parsed.image?.assetId;
       } else if ((kind === "video" || kind === "audio") && (isLaerdalMedia || info.component === "media")) {
+        seedProperties();
         mergeProperties(patch, buildMediaField(kind, parsed.media));
         assetLink = parsed.media?.asset?.link;
         assetId = parsed.media?.asset?.assetId;
@@ -2817,6 +2851,7 @@ export async function saveStoryboardToCourse(
         // Grouped Content → accordion / narrative `properties._items` with
         // `_graphic.src` (matches the installed schemas). Persist any link
         // (course/assets/<file> or external URL).
+        seedProperties();
         const items = Array.isArray(parsed.items) ? parsed.items : [];
         mergeProperties(patch, {
           _items: items.map((it) => {
@@ -2844,6 +2879,42 @@ export async function saveStoryboardToCourse(
         if (assetId && assetLink) {
           const fn = filenameFromLink(assetLink);
           if (fn) tasks.push(linkContentAsset(courseId, "component", id, info.parentId || "", fn, assetId));
+        }
+      }
+      continue;
+    }
+    // Assessment card (mcq/gmcq/matching/reorder/textInput/slider/checklist)
+    // mapped to an existing question component → write its real question
+    // data (options/correct-flags/feedback/etc., not just the title). This
+    // was previously missing entirely — an assessment's title could be
+    // renamed via the generic heading branch, but its actual question data
+    // never persisted through this write-back path (ADAPT-3760).
+    if (raw.type === "sbAssessment" && info.level === "component") {
+      const kind = raw.props?.kind;
+      if (kind && isAssessmentComponentKind(kind)) {
+        let data: AssessmentData = { question: "" };
+        try {
+          data = raw.props?.data ? (JSON.parse(raw.props.data) as AssessmentData) : { question: "" };
+        } catch {
+          data = { question: "" };
+        }
+        const patch: Record<string, unknown> = {};
+        const nextTitle = (raw.props?.title || "").trim();
+        if (nextTitle && nextTitle !== info.title) {
+          patch.title = nextTitle;
+          patch.displayTitle = nextTitle;
+          updatedTitles += 1;
+        }
+        const assessmentFields = buildAssessmentFields(kind as AssessmentKind, data);
+        if (Object.keys(assessmentFields).length) {
+          // Seed from live properties first — same reasoning as the
+          // sbComponent branch above (ADAPT-3760 properties-wipe fix).
+          patch.properties = { ...(info.properties || {}) };
+          mergeProperties(patch, assessmentFields);
+        }
+        if (Object.keys(patch).length) {
+          tasks.push(apiClient.put(`/api/content/component/${id}`, patch));
+          updatedBodies += 1;
         }
       }
     }
@@ -4264,6 +4335,7 @@ export interface StoryboardRecord {
   version: number;
   documentJson: unknown[];
   _generatedContentMap: Record<string, string>;
+  _shareWithUsers?: string[];
   createdBy?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -4286,7 +4358,7 @@ export interface StoryboardAuditEvent {
   _id: string;
   _storyboardId: string;
   _courseId?: string;
-  event: "status_change" | "generated" | "imported";
+  event: "status_change" | "generated" | "imported" | "shared";
   fromStatus?: string;
   toStatus?: string;
   meta?: Record<string, unknown>;
@@ -4327,6 +4399,12 @@ export function updateStoryboard(
 // Changes status and appends a status_change audit event server-side.
 export function setStoryboardStatus(id: string, status: StoryboardStatus): Promise<StoryboardRecord> {
   return apiClient.put<StoryboardRecord>(`${SB_DOCS}/${id}/status`, { status });
+}
+
+// Shares the storyboard with the given instance users (reviewers) — replaces
+// the reviewer list wholesale — and appends a 'shared' audit event server-side.
+export function shareStoryboard(id: string, userIds: string[]): Promise<StoryboardRecord> {
+  return apiClient.put<StoryboardRecord>(`${SB_DOCS}/${id}/share`, { userIds });
 }
 
 export function deleteStoryboard(id: string): Promise<{ success: boolean }> {
@@ -4397,9 +4475,23 @@ export function exportStoryboardPdf(
   return apiClient.get<{ filename: string; mime: string; dataBase64: string }>(`${SB_DOCS}/${id}/export/pdf${q}`);
 }
 
-export function importStoryboardDocument(
+// Real multipart upload (mirrors uploadAsset, above) rather than base64-in-JSON
+// — gets a real file-size limit (the backend's maxFileUploadSize, not the
+// generic JSON body cap) and safe temp-file handling for free (ADAPT-3760).
+export async function importStoryboardDocument(
   format: ImportFormat,
-  dataBase64: string
-): Promise<{ blocks: unknown[] }> {
-  return apiClient.post<{ blocks: unknown[] }>(`/api/storyboard/import/${format}`, { dataBase64 });
+  file: File
+): Promise<ImportResult> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`/api/storyboard/import/${format}`, {
+    method: "POST",
+    body: form,
+    credentials: "same-origin",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null) as { error?: string } | null;
+    throw new Error((body && body.error) || `Import failed — ${res.statusText}`);
+  }
+  return res.json() as Promise<ImportResult>;
 }
