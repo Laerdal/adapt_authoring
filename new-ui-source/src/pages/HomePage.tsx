@@ -4,7 +4,7 @@ import { CourseCard } from '@/components/course'
 import AiAssistant from '@/components/common/AiAssistant'
 import PermissionDeniedModal from '@/components/common/PermissionDeniedModal'
 import { useAuth, isSuperAdmin, canManageCourses } from '@/context/AuthContext'
-import { createCourse, deleteCourse, duplicateCourse, fetchDashboardCourses, getAuthoringMenuOptions, getAuthoringThemeOptions, updateCourse } from '@/api/adaptAuthoring'
+import { createCourse, deleteCourse, duplicateCourse, fetchDashboardCourses, fetchDashboardTags, getAuthoringMenuOptions, getAuthoringThemeOptions, updateCourse, type CourseSort } from '@/api/adaptAuthoring'
 import ImportCourseModal from '@/components/importExport/Import'
 
 
@@ -97,43 +97,109 @@ export default function HomePage() {
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500)
   }, [])
 
+  // Server-side search/sort/paging (parity with the old UI). We fetch one page at
+  // a time and let the server filter+sort the whole set, so a user with 1000s of
+  // courses never pulls them all; subsequent pages stream in on scroll.
+  const PAGE = 50
   const loadGenRef = useRef(0)
+  const skipRef = useRef(0)
+  const loadingMoreRef = useRef(false)
+  const [hasMore, setHasMore] = useState(false)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+
+  // Full tag universe for the filter dropdown (from the autocomplete endpoint,
+  // not the loaded course slice) + a title→id map to filter courses by tag id.
+  const [availableTags, setAvailableTags] = useState<string[]>([])
+  const tagIdByTitleRef = useRef<Record<string, string>>({})
+
+  // Debounce the search box so typing doesn't fire a request per keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(t)
+  }, [search])
+
+  const buildQuery = useCallback(() => ({
+    search: debouncedSearch,
+    sort: sort as CourseSort,
+    tags: selectedTags.map((t) => tagIdByTitleRef.current[t]).filter(Boolean),
+  }), [debouncedSearch, sort, selectedTags])
+
   const loadCourses = useCallback(async () => {
     const gen = ++loadGenRef.current
     const shared = location.pathname === '/shared'
-    const PAGE = 50
     setIsLoadingCourses(true)
+    skipRef.current = 0
     try {
-      // Load progressively: render the first page immediately, then stream the
-      // rest in the background and append. A user with 1000s of courses no longer
-      // waits on one huge request (the server pages via operators.skip/limit);
-      // client-side search/sort/tags keep working over the growing set.
-      let skip = 0
-      for (;;) {
-        const page = await fetchDashboardCourses(shared, skip, PAGE)
-        if (gen !== loadGenRef.current) return // superseded (route change / newer load)
-        setCourses((prev) => {
-          if (skip === 0) return page
-          const seen = new Set(prev.map((c) => c.id)) // guard against any page overlap
-          return [...prev, ...page.filter((c) => !seen.has(c.id))]
-        })
-        if (skip === 0) setIsLoadingCourses(false) // first page is on screen
-        if (page.length < PAGE) break // last page
-        skip += PAGE
-      }
+      const page = await fetchDashboardCourses(shared, 0, PAGE, buildQuery())
+      if (gen !== loadGenRef.current) return // superseded (route change / newer load)
+      setCourses(page)
+      skipRef.current = PAGE
+      setHasMore(page.length === PAGE)
     } catch {
       if (gen === loadGenRef.current) {
         setCourses([])
+        setHasMore(false)
         showToast('Could not load live course data.', 'info')
       }
     } finally {
       if (gen === loadGenRef.current) setIsLoadingCourses(false)
     }
-  }, [location.pathname, showToast])
+  }, [location.pathname, buildQuery, showToast])
 
+  const loadMore = useCallback(async () => {
+    if (!hasMore || loadingMoreRef.current) return
+    const gen = loadGenRef.current
+    const shared = location.pathname === '/shared'
+    loadingMoreRef.current = true
+    setIsLoadingMore(true)
+    try {
+      const page = await fetchDashboardCourses(shared, skipRef.current, PAGE, buildQuery())
+      if (gen !== loadGenRef.current) return // a page-0 reload superseded us
+      setCourses((prev) => {
+        const seen = new Set(prev.map((c) => c.backendId))
+        return [...prev, ...page.filter((c) => c.backendId && !seen.has(c.backendId))]
+      })
+      skipRef.current += PAGE
+      setHasMore(page.length === PAGE)
+    } catch {
+      /* keep what we have; the sentinel retries on the next scroll */
+    } finally {
+      loadingMoreRef.current = false
+      if (gen === loadGenRef.current) setIsLoadingMore(false)
+    }
+  }, [hasMore, location.pathname, buildQuery])
+
+  // (Re)load page 0 whenever the route or any server-side filter/sort changes.
   useEffect(() => {
     void loadCourses()
   }, [loadCourses])
+
+  // Load the tag universe once for the filter dropdown.
+  useEffect(() => {
+    let cancelled = false
+    fetchDashboardTags()
+      .then((rows) => {
+        if (cancelled) return
+        tagIdByTitleRef.current = Object.fromEntries(rows.map((r) => [r.title, r.id]))
+        setAvailableTags(rows.map((r) => r.title))
+      })
+      .catch(() => { if (!cancelled) setAvailableTags([]) })
+    return () => { cancelled = true }
+  }, [])
+
+  // Infinite scroll: pull the next page when the sentinel nears the viewport.
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el) return
+    const io = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) void loadMore() },
+      { rootMargin: '400px' },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [loadMore])
 
   useEffect(() => {
     let cancelled = false;
@@ -321,40 +387,9 @@ export default function HomePage() {
     ))
   }
 
-  function normalizeTagValue(tag: unknown): string {
-    if (typeof tag === 'string') return tag.trim()
-    if (!tag || typeof tag !== 'object') return ''
-
-    const candidate = tag as { title?: unknown; name?: unknown; label?: unknown; id?: unknown }
-    const text = candidate.title ?? candidate.name ?? candidate.label ?? candidate.id
-    return typeof text === 'string' ? text.trim() : ''
-  }
-
-  const availableTags = useMemo(() => {
-    const tags = courses.flatMap((course) => course.tags)
-      .map((tag) => normalizeTagValue(tag))
-      .filter(Boolean)
-
-    return Array.from(new Set(tags)).sort((a, b) => a.localeCompare(b))
-  }, [courses])
-
-  const displayed = useMemo(() => {
-    let list = courses.filter((c) => {
-      const q = search.trim().toLowerCase()
-      const matchSearch = q === '' || c.title.toLowerCase().includes(q)
-      const courseTagLabels = c.tags.map((courseTag) => normalizeTagValue(courseTag)).filter(Boolean)
-      const matchTags = selectedTags.length === 0 || selectedTags.every((selectedTag) => (
-        courseTagLabels.some((courseTag) => courseTag.toLowerCase() === selectedTag.toLowerCase())
-      ))
-      return matchSearch && matchTags
-    })
-    switch (sort) {
-      case 'alpha-asc':  list = [...list].sort((a, b) => a.title.localeCompare(b.title)); break
-      case 'alpha-desc': list = [...list].sort((a, b) => b.title.localeCompare(a.title)); break
-      default:           list = [...list].sort((a, b) => b.savedDateTs - a.savedDateTs);  break // recent
-    }
-    return list
-  }, [courses, search, selectedTags, sort])
+  // Courses arrive already filtered + sorted by the server (see fetchDashboardCourses),
+  // so the list is rendered as-is — no client-side filter/sort pass.
+  const displayed = courses
 
   const activeSort = SORT_OPTIONS.find((o) => o.value === sort)!
   const hasFilters = search.trim() !== '' || selectedTags.length > 0
@@ -667,6 +702,13 @@ export default function HomePage() {
                   onDelete={() => handleDelete(course.id)}
                 />
               ))}
+            </div>
+          )}
+
+          {/* Infinite-scroll sentinel — pulls the next server page as it nears view */}
+          {hasMore && (
+            <div ref={sentinelRef} className="flex justify-center py-8 text-sm text-[#9ca3af]">
+              {isLoadingMore ? 'Loading more…' : ''}
             </div>
           )}
     </div>

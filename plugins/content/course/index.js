@@ -69,7 +69,7 @@ function doQuery(req, res, andOptions, next) {
     if(andList.length || andOptions.length) query.$and = andList.concat(andOptions);
 
     options.fields = DASHBOARD_COURSE_FIELDS.join(' ');
-    options.populate = Object.assign({ 'createdBy': 'email firstName lastName' }, options.populate);
+    options.populate = Object.assign({ 'createdBy': 'email firstName lastName', 'tags': '_id title' }, options.populate);
     options.jsonOnly = true;
     
     // Add a timeout to detect hanging queries
