@@ -25,7 +25,14 @@ export interface UseStoryboardReviewResult {
   removeComment: (commentId: string) => Promise<void>;
 }
 
-export function useStoryboardReview(storyboardId?: string): UseStoryboardReviewResult {
+export function useStoryboardReview(
+  storyboardId?: string,
+  /** Called after any comment add/resolve/delete — storyboard status is now
+   *  fully automatic (comment-driven, computed server-side), so the caller
+   *  uses this to re-fetch the current status (e.g. useStoryboard's
+   *  refreshStatus) rather than each consumer wiring that up separately. */
+  onMutated?: () => void,
+): UseStoryboardReviewResult {
   const [comments, setComments] = useState<StoryboardComment[]>([]);
   const [audit, setAudit] = useState<StoryboardAuditEvent[]>([]);
   const [loading, setLoading] = useState(false);
@@ -65,24 +72,27 @@ export function useStoryboardReview(storyboardId?: string): UseStoryboardReviewR
         _parentCommentId: parentCommentId,
       });
       await refresh();
+      onMutated?.();
     },
-    [storyboardId, refresh]
+    [storyboardId, refresh, onMutated]
   );
 
   const setResolved = useCallback(
     async (commentId: string, resolved: boolean) => {
       await updateStoryboardComment(commentId, { resolved });
       await refresh();
+      onMutated?.();
     },
-    [refresh]
+    [refresh, onMutated]
   );
 
   const removeComment = useCallback(
     async (commentId: string) => {
       await deleteStoryboardComment(commentId);
       await refresh();
+      onMutated?.();
     },
-    [refresh]
+    [refresh, onMutated]
   );
 
   const { openCount, resolvedCount } = useMemo(() => {

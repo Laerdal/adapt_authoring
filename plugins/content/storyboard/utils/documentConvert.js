@@ -20,6 +20,9 @@ const {
 } = require('docx');
 
 const assetResolver = require('./assetResolver');
+const { buildCustomProperties } = require('./normalize/reimportMetadata');
+const { parseDocxToNormalizedDocument } = require('./normalize/docxNormalizer');
+const { normalizedDocumentToBlockNote } = require('./normalize/toBlockNote');
 
 // Kind label shown above a component's content in the exported document
 // (mirrors the Storyboard card badges).
@@ -186,6 +189,27 @@ function stripTags(html) {
 
 // ── Export → .docx ──────────────────────────────────────────────────────────
 
+// Rich cards (sbComponent/sbAssessment) render as human-readable prose for
+// anyone opening the document, but that prose has no reliable way to encode
+// things like "which option is correct" — re-parsing it loses the card's
+// real structure (ADAPT-3760 import round-trip). So each card's rendering is
+// bracketed by a hidden (Word "vanish" — genuinely invisible, never printed,
+// but still present in the underlying XML) marker pair carrying the card's
+// original block verbatim. On import, docxNormalizer.js recognizes the
+// markers and reconstructs the exact original block instead of re-deriving
+// it from the prose. Falls back to the lossy prose reading if the markers
+// are missing/stripped — never a hard failure.
+const CARD_MARKER_BEGIN = 'SB_CARD_BEGIN::';
+const CARD_MARKER_END = 'SB_CARD_END';
+
+function pushCardBeginMarker(children, type, props) {
+  const payload = JSON.stringify({ type, props });
+  children.push(new Paragraph({ children: [new TextRun({ text: `${CARD_MARKER_BEGIN}${payload}`, vanish: true })] }));
+}
+function pushCardEndMarker(children) {
+  children.push(new Paragraph({ children: [new TextRun({ text: CARD_MARKER_END, vanish: true })] }));
+}
+
 // A multi-line description (blank-line-separated paragraphs) becomes one
 // Word paragraph per line, so authored spacing/structure survives export.
 function pushTextParagraphs(children, text, opts) {
@@ -302,6 +326,8 @@ async function sbComponentToDocxParagraphs(children, props, ctx) {
     return;
   }
 
+  pushCardBeginMarker(children, 'sbComponent', props);
+
   // Kind badge + title on the same line (bold). Spaced above so it visually
   // separates from the previous block/heading.
   children.push(
@@ -402,6 +428,8 @@ async function sbComponentToDocxParagraphs(children, props, ctx) {
   }
 
   if (instruction) pushTextParagraphs(children, instruction, { italic: true });
+
+  pushCardEndMarker(children);
 }
 
 // ── sbAssessment → paragraphs (matches the Storyboard Preview) ──────────────
@@ -446,6 +474,8 @@ async function sbAssessmentToDocxParagraphs(children, props, ctx) {
   ) {
     return;
   }
+
+  pushCardBeginMarker(children, 'sbAssessment', props);
 
   // Question Title/Body resolution (PR review — no duplicated text):
   //   • The block-level Title is the primary header; when the author left it
@@ -615,9 +645,11 @@ async function sbAssessmentToDocxParagraphs(children, props, ctx) {
       }),
     );
   }
+
+  pushCardEndMarker(children);
 }
 
-async function blocksToDocx(blocks, title, ctx) {
+async function blocksToDocx(blocks, title, ctx, meta) {
   const children = [];
   // Suppress the top-level TITLE paragraph when the caller only had a
   // placeholder course title on hand — no one wants "New Course Title" as
@@ -692,6 +724,11 @@ async function blocksToDocx(blocks, title, ctx) {
   const doc = new Document({
     creator: 'Adapt Authoring',
     title: title && !isPlaceholderTitle(title) ? title : 'Storyboard',
+    // Hidden marker so a later re-import of this exact file can detect it
+    // came from Storyboard export (ADAPT-3760 re-import, spec §2) — never
+    // visible in Word itself, only readable via the docx's own custom
+    // document properties part.
+    customProperties: buildCustomProperties(meta),
     styles: {
       default: {
         document: { run: { font: 'Calibri', size: 22 } }, // 11pt body
@@ -1076,36 +1113,15 @@ async function blocksToPdf(blocks, title, ctx) {
 
 // ── Import → BlockNote blocks ────────────────────────────────────────────────
 
-// Convert block-level HTML (h1–h6 / p / li) into blocks, preserving headings.
-function htmlToBlocks(html) {
-  const blocks = [];
-  const re = /<(h[1-6]|p|li)[^>]*>([\s\S]*?)<\/\1>/gi;
-  let m;
-  while ((m = re.exec(html)) !== null) {
-    const tag = m[1].toLowerCase();
-    const text = stripTags(m[2]);
-    if (!text) continue;
-    if (tag[0] === 'h') {
-      const level = Math.min(parseInt(tag[1], 10) || 1, 4);
-      blocks.push({ type: 'heading', props: { level }, content: text });
-    } else {
-      blocks.push({ type: 'paragraph', content: text });
-    }
-  }
-  if (!blocks.length) {
-    stripTags(html)
-      .split(/\n+/)
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .forEach((t) => blocks.push({ type: 'paragraph', content: t }));
-  }
-  return blocks;
-}
-
-async function wordToBlocks(buffer) {
-  const mammoth = require('mammoth');
-  const { value: html } = await mammoth.convertToHtml({ buffer });
-  return htmlToBlocks(html);
+// High-fidelity docx import (ADAPT-3760): Mammoth → sanitize → structured
+// NormalizedDocument (headings/paragraphs/lists/tables/images/inline
+// formatting all preserved) → BlockNote blocks. See utils/normalize/ for the
+// actual parsing/conversion — this is a thin delegate so there's a single
+// import code path per spec ("extend the existing Mammoth import").
+async function wordToBlocks(buffer, meta) {
+  const normalizedDocument = await parseDocxToNormalizedDocument(buffer, meta);
+  const blocks = normalizedDocumentToBlockNote(normalizedDocument);
+  return { normalizedDocument, blocks };
 }
 
 // Best-effort PPTX: read slide XML text runs; each slide → an H2 + paragraphs.

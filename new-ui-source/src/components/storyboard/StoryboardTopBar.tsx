@@ -1,8 +1,9 @@
 // Storyboard top bar (spec AC8/AC10/AC11), Figma-aligned.
 //   Back · Draft status · Save · Import · Export ▾ · Share for Review ·
 //   Generate Course →
-// Backend-dependent actions (Import/Export/Share/Generate) are stubbed with a
-// toast + phase note until their respective phases land. Visual language is
+// Backend-dependent actions (Import/Export/Generate) are stubbed with a
+// toast + phase note until their respective phases land; Share for Review is
+// fully wired (opens ShareForReviewDialog). Visual language is
 // the LIFE design system (font-family-primary, --life-color-* tokens, the
 // `.sb-toolbar-btn` and `.sb-status-pill` utilities in index.css) so the port
 // from the Figma "Course Creation Center" prototype is 1:1.
@@ -25,13 +26,14 @@ import {
 import { createPortal } from 'react-dom';
 import type { ReviewStatus } from '@/types/storyboard';
 
-const STATUS_META: Record<
-  ReviewStatus,
-  { label: string; pillClass: string; next: ReviewStatus; nextLabel: string }
-> = {
-  draft:     { label: 'Draft',     pillClass: 'sb-status-pill--draft',    next: 'in_review', nextLabel: 'Send for review' },
-  in_review: { label: 'In Review', pillClass: 'sb-status-pill--review',   next: 'approved',  nextLabel: 'Approve' },
-  approved:  { label: 'Approved',  pillClass: 'sb-status-pill--approved', next: 'draft',     nextLabel: 'Reopen as draft' },
+// Status is fully automatic — driven by comment state (see
+// recomputeStatus in requestHandlers.js): no comments -> Draft, any
+// unresolved comment -> In Review, all resolved -> Approved. The pill is a
+// read-only reflection of that, not a manual control.
+const STATUS_META: Record<ReviewStatus, { label: string; pillClass: string; hint: string }> = {
+  draft: { label: 'Draft', pillClass: 'sb-status-pill--draft', hint: 'No comments yet' },
+  in_review: { label: 'In Review', pillClass: 'sb-status-pill--review', hint: 'Has unresolved comments' },
+  approved: { label: 'Approved', pillClass: 'sb-status-pill--approved', hint: 'All comments resolved' },
 };
 
 // A small portal-hosted dropdown used for Export — mirrors the Figma popover
@@ -123,24 +125,22 @@ function Dropdown({
 
 export default function StoryboardTopBar({
   status,
-  onCycleStatus,
   onBack,
-  onStub,
   onImport,
   onExport,
   onGenerate,
   onSave,
+  onShareForReview,
   dirty,
   saving,
 }: {
   status: ReviewStatus;
-  onCycleStatus: () => void;
   onBack: () => void;
-  onStub: (action: string, phase: string) => void;
   onImport: () => void;
   onExport: (format: string) => void;
   onGenerate: () => void;
   onSave: () => void;
+  onShareForReview: () => void;
   dirty: boolean;
   saving: boolean;
 }) {
@@ -159,14 +159,9 @@ export default function StoryboardTopBar({
         <ArrowLeft className="h-3.5 w-3.5" /> Back
       </button>
 
-      <button
-        type="button"
-        onClick={onCycleStatus}
-        title={`Click to ${meta.nextLabel.toLowerCase()}`}
-        className={`sb-status-pill ${meta.pillClass}`}
-      >
+      <span title={meta.hint} className={`sb-status-pill ${meta.pillClass}`}>
         {meta.label}
-      </button>
+      </span>
 
       {dirty && (
         <span
@@ -211,7 +206,7 @@ export default function StoryboardTopBar({
 
         <button
           type="button"
-          onClick={() => onStub('Share for Review', 'Phase 5')}
+          onClick={onShareForReview}
           className="sb-toolbar-btn"
         >
           <Users className="h-3.5 w-3.5" /> Share for Review

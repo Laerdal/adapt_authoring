@@ -71,10 +71,26 @@ export interface GenerationResult {
 // api/componentMapping.ts) — the single source of truth. No hard-coded key maps
 // live here anymore, and there is NO silent "text" fallback for unmapped kinds.
 
-interface ContentNode {
+export interface ContentNode {
   _id: string;
   _type?: string;
   _parentId?: string;
+  // Additive — already returned by getContentByCourse (EngineContentNode),
+  // just previously typed away. Needed by enforceMaxComponentsPerBlock to
+  // match a previous run's "continuation" Content Group blocks by identity
+  // instead of always creating a fresh one (ADAPT-3760 duplicate-block fix).
+  title?: string;
+  displayTitle?: string;
+  _sortOrder?: number;
+  // Additive — same reasoning as above. Needed so component updates can seed
+  // the PUT body's `properties` from what's ACTUALLY on the live document
+  // before merging in the storyboard's own patch fields, instead of building
+  // `properties` from scratch and wiping everything else the real component
+  // schema has that the storyboard doesn't model (ADAPT-3760 properties-wipe
+  // fix — `MongooseDB#update` merges top-level fields safely, but `properties`
+  // is itself one such field, so a from-scratch object replaces the whole
+  // thing wholesale).
+  properties?: Record<string, unknown>;
 }
 
 interface GenBlock {
@@ -84,7 +100,7 @@ interface GenBlock {
   content?: unknown;
 }
 
-interface GenComponent {
+export interface GenComponent {
   sourceBlockId?: string;
   existingId?: string;
   componentKey: string;
@@ -97,6 +113,11 @@ interface GenComponent {
   assetId?: string;
   // Assessment components: `_items` + `_feedback` + per-kind extras.
   assessmentPatch?: Record<string, unknown>;
+  // The original authored AssessmentData (question/options/feedback/etc.),
+  // retained alongside assessmentPatch so storyboardContentUpdate.ts's
+  // "update content only" mode can re-derive a fresh properties patch for a
+  // DIFFERENT (matched, existing) component without needing the raw block.
+  assessmentData?: AssessmentData;
   // Original storyboard kind + parsed data, retained so we can rebuild the
   // persistence patch once we know which Adapt component-type the generator
   // resolves to (e.g. image can persist to graphic OR laerdal-media OR media).
@@ -108,19 +129,19 @@ interface GenComponent {
    *  after the component is created so publish resolves them. */
   pendingOptionImages?: Array<{ image?: string; imageAssetId?: string }>;
 }
-interface GenGroup {
+export interface GenGroup {
   sourceBlockId?: string;
   existingId?: string;
   title: string;
   components: GenComponent[];
 }
-interface GenSection {
+export interface GenSection {
   sourceBlockId?: string;
   existingId?: string;
   title: string;
   groups: GenGroup[];
 }
-interface GenTopic {
+export interface GenTopic {
   sourceBlockId?: string;
   existingId?: string;
   title: string;
@@ -178,8 +199,12 @@ function buildGroupedItemsPatch(
   };
 }
 
-// Parse the ordered document into the intended course tree.
-function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => string | undefined): GenTopic[] {
+// Parse the ordered document into the intended course tree. Exported so
+// storyboardContentUpdate.ts (ADAPT-3760 "update content only" import mode)
+// can build the SAME kind of tree for both the imported content and the
+// live course (via getCourseStoryboardBlocks + an identity resolver), rather
+// than duplicating this parsing logic.
+export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => string | undefined): GenTopic[] {
   const topics: GenTopic[] = [];
   let topic: GenTopic | null = null;
   let section: GenSection | null = null;
@@ -427,6 +452,7 @@ function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => string 
         title: resolvedTitle,
         body: bodyText,
         assessmentPatch: buildAssessmentFields(kind, data),
+        assessmentData: data,
       };
       // GMCQ: record per-option DAM-asset ids so we can create the courseasset
       // publish links after the component is created.
@@ -461,11 +487,21 @@ function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => string 
 // Adapt blocks hold at most 2 components. If the author put more components
 // under one Content Group (H3), split them across additional blocks — each a
 // Content Group Heading carrying the same title — keeping ≤2 per block. The
-// first chunk keeps the original group (its source/existing id); overflow
-// blocks are synthetic (recreated each generation until re-seeded from course).
+// first chunk keeps the original group (its source/existing id).
+//
+// Overflow chunks used to be UNCONDITIONALLY synthetic (no existingId), which
+// meant every single generation run created a BRAND NEW continuation block
+// for the same overflow, orphaning the previous run's continuation block
+// rather than updating it. `handleSave` always runs with `skipDeletes: true`,
+// so those orphaned blocks were never cleaned up — they just accumulated as
+// stray extra blocks at the end of the page on every Save/Generate cycle
+// (ADAPT-3760 duplicate-block fix). Fixed by matching each overflow chunk
+// against the existing course's OWN continuation blocks (same real parent
+// section id + same title, ordered by _sortOrder) so a later run UPDATES the
+// same block instead of creating a new one.
 const MAX_COMPONENTS_PER_BLOCK = 2;
 
-function enforceMaxComponentsPerBlock(topics: GenTopic[]): void {
+export function enforceMaxComponentsPerBlock(topics: GenTopic[], existingBlocks: ContentNode[] = []): void {
   for (const t of topics) {
     for (const s of t.sections) {
       const out: GenGroup[] = [];
@@ -477,10 +513,24 @@ function enforceMaxComponentsPerBlock(topics: GenTopic[]): void {
         const rest = g.components.slice(MAX_COMPONENTS_PER_BLOCK);
         g.components = g.components.slice(0, MAX_COMPONENTS_PER_BLOCK);
         out.push(g);
+
+        // Candidate previous-run continuation blocks: same real parent
+        // section, same title, not already claimed by `g` itself — ordered
+        // so repeated runs reuse them in the same order every time.
+        const candidates = s.existingId
+          ? existingBlocks
+              .filter((b) => b._parentId === s.existingId && b._id !== g.existingId && (b.title ?? b.displayTitle) === g.title)
+              .sort((a, b) => (a._sortOrder ?? 0) - (b._sortOrder ?? 0))
+          : [];
+        let candidateIndex = 0;
         for (let i = 0; i < rest.length; i += MAX_COMPONENTS_PER_BLOCK) {
+          const reuse = candidates[candidateIndex];
+          candidateIndex += 1;
           out.push({
             // Continuation Content Group Heading — same title so it stays
-            // associated with the same group of components.
+            // associated with the same group of components. Reuses a prior
+            // run's own continuation block when one exists at this position.
+            existingId: reuse?._id,
             title: g.title,
             components: rest.slice(i, i + MAX_COMPONENTS_PER_BLOCK),
           });
@@ -530,7 +580,7 @@ export async function planStoryboardGeneration(
   const index = await fetchCourseIndex(courseId);
   const { resolve } = makeResolver(index as never, generatedContentMap);
   const tree = parseDocToTree(doc, resolve);
-  enforceMaxComponentsPerBlock(tree);
+  enforceMaxComponentsPerBlock(tree, index.blocks);
 
   let sections = 0;
   let groups = 0;
@@ -591,7 +641,11 @@ export async function generateStoryboardCourse(
   const [index, availableTypes] = await Promise.all([fetchCourseIndex(courseId), getAvailableComponents()]);
   const { resolve } = makeResolver(index as never, generatedContentMap);
   const tree = parseDocToTree(doc, resolve);
-  enforceMaxComponentsPerBlock(tree);
+  enforceMaxComponentsPerBlock(tree, index.blocks);
+  // Existing components' CURRENT properties, so an update seeds from what's
+  // actually on the live document instead of building `properties` from
+  // scratch (which would wipe every field the storyboard doesn't model).
+  const existingComponentProps = new Map(index.components.map((c) => [c._id, c.properties || {}]));
 
   const typeByKey = new Map(availableTypes.map((t) => [t.component, t]));
   const installed = new Set(availableTypes.map((t) => t.component));
@@ -717,6 +771,13 @@ export async function generateStoryboardCourse(
             // when the kind resolves to an installed component.
             const upd: Record<string, unknown> = { title: c.title, displayTitle: c.title, _parentId: grpId, _sortOrder: cSort, _layout: layout };
             if (bodyHtml !== undefined) upd.body = bodyHtml;
+            // Seed from what's actually live on the document BEFORE merging —
+            // mergeProperties merges onto `upd.properties` if already present,
+            // so this preserves any property the storyboard doesn't model
+            // instead of replacing the whole object with just the new patch.
+            if (resolvedType && (c.mediaPatch || c.assessmentPatch)) {
+              upd.properties = { ...(existingComponentProps.get(compId) || {}) };
+            }
             // Plugin fields (_graphic/_media/_items/_feedback) nest under
             // `properties` — top-level would be dropped by the content model.
             if (resolvedType && c.mediaPatch) mergeProperties(upd, c.mediaPatch);
