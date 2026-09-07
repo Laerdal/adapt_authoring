@@ -4338,10 +4338,17 @@ export function trashAsset(backendId: string): Promise<unknown> {
   return apiClient.put(`/api/asset/trash/${backendId}`);
 }
 
-// ── Plugins (extension types) ─────────────────────────────────────────────────
-// Read-only for now: the engine enable/disable contract is not yet defined.
+// ── Plugins (all bower-backed plugin types) ───────────────────────────────────
 export type PluginStatus = "Enabled" | "Disabled";
 export type PluginCategory = "extensions" | "components" | "themes" | "menus";
+
+// Each category maps onto its own engine collection/route (extensiontype, …).
+const PLUGIN_CATEGORY_ENDPOINTS: Record<PluginCategory, string> = {
+  extensions: "extensiontype",
+  components: "componenttype",
+  themes: "themetype",
+  menus: "menutype",
+};
 
 export interface DashboardPlugin {
   id: number;
@@ -4366,19 +4373,47 @@ interface EnginePlugin {
   createdAt?: string;
 }
 
-export async function getPlugins(): Promise<DashboardPlugin[]> {
-  const docs = await apiClient.get<EnginePlugin[]>("/api/extensiontype");
-  return (Array.isArray(docs) ? docs : []).map((p, i) => ({
-    id: i + 1,
-    backendId: p._id,
-    name: p.displayName || p.name || "Unknown",
-    description: p.description || "",
-    version: p.version || "",
-    author: p.author || "",
-    category: "extensions",
-    status: p._isAvailableInEditor === false ? "Disabled" : "Enabled",
-    installedDate: fmtDate(p.createdAt),
-  }));
+export async function getPlugins(category?: PluginCategory | null): Promise<DashboardPlugin[]> {
+  const categories: PluginCategory[] = category
+    ? [category]
+    : (Object.keys(PLUGIN_CATEGORY_ENDPOINTS) as PluginCategory[]);
+
+  const results = await Promise.all(
+    categories.map(async (cat) => {
+      try {
+        const docs = await apiClient.get<EnginePlugin[]>(`/api/${PLUGIN_CATEGORY_ENDPOINTS[cat]}`);
+        return { cat, docs: Array.isArray(docs) ? docs : [] };
+      } catch {
+        // One unavailable collection must not blank out the whole list.
+        return { cat, docs: [] as EnginePlugin[] };
+      }
+    })
+  );
+
+  let seq = 0;
+  return results.flatMap(({ cat, docs }) =>
+    docs.map((p) => ({
+      id: ++seq,
+      backendId: p._id,
+      name: p.displayName || p.name || "Unknown",
+      description: p.description || "",
+      version: p.version || "",
+      author: p.author || "",
+      category: cat,
+      status: (p._isAvailableInEditor === false ? "Disabled" : "Enabled") as PluginStatus,
+      installedDate: fmtDate(p.createdAt),
+    }))
+  );
+}
+
+export function setPluginEnabled(
+  category: PluginCategory,
+  backendId: string,
+  enabled: boolean
+): Promise<unknown> {
+  return apiClient.put(`/api/${PLUGIN_CATEGORY_ENDPOINTS[category]}/${backendId}`, {
+    _isAvailableInEditor: enabled,
+  });
 }
 
 // ── Storyboard Authoring (ADAPT-3760 / ADAPT-3779) ──────────────────────────
