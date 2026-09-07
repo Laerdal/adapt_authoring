@@ -126,6 +126,7 @@ export default function ExportMenu({
         disabled={disabled}
         aria-haspopup="menu"
         aria-expanded={isOpen}
+        aria-label="Export"
         className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold bg-transparent text-[var(--life-base-black)] rounded-[8px] hover:bg-[var(--life-primary-050)] hover:text-[var(--life-primary-700)] active:bg-[var(--life-primary-100)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <SidebarMaskIcon file="export-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
