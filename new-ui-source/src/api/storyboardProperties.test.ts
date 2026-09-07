@@ -65,7 +65,7 @@ describe('saveStoryboardToCourse preserves unrelated existing properties', () =>
     await saveStoryboardToCourse('course-1', doc);
 
     expect(mockPut).toHaveBeenCalled();
-    const [, patch] = mockPut.mock.calls.find(([url]) => String(url).includes('/component/comp-1')) as [string, Record<string, unknown>];
+    const [, patch] = mockPut.mock.calls.find(([url]: [string]) => url.includes('/component/comp-1')) as [string, Record<string, unknown>];
     const properties = patch.properties as Record<string, unknown>;
     // The new field made it through...
     expect((properties._graphic as { large?: string }).large).toBe('new.png');

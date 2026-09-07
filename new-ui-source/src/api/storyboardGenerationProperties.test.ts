@@ -71,7 +71,7 @@ describe('generateStoryboardCourse preserves unrelated existing component proper
 
     await generateStoryboardCourse('course-1', doc, {}, { skipDeletes: true });
 
-    const call = mockPut.mock.calls.find(([url]) => String(url).includes('/component/comp-1'));
+    const call = mockPut.mock.calls.find(([url]: [string]) => url.includes('/component/comp-1'));
     expect(call).toBeDefined();
     const [, patch] = call as [string, Record<string, unknown>];
     const properties = patch.properties as Record<string, unknown>;
