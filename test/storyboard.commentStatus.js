@@ -22,24 +22,44 @@ function matches(doc, search) {
   return Object.keys(search).every(function (k) { return String(doc[k]) === String(search[k]); });
 }
 
-db.create = function (type, data) {
-  idCounter += 1;
-  var doc = Object.assign({ _id: 'gen-' + idCounter, createdAt: new Date() }, data);
-  store[type].push(doc);
-  return Promise.resolve(doc);
+// The suite loader require()s every test file into one process, so
+// overwriting these at require-time would leak the in-memory fake into any
+// other file that happens to require the same `db` module instance —
+// captured here and restored in an after() hook, scoped to this describe.
+var originalDb = {
+  create: db.create,
+  retrieve: db.retrieve,
+  update: db.update,
+  destroy: db.destroy,
 };
-db.retrieve = function (type, search) {
-  return Promise.resolve(store[type].filter(function (doc) { return matches(doc, search || {}); }));
-};
-db.update = function (type, search, delta) {
-  var matched = store[type].filter(function (doc) { return matches(doc, search || {}); });
-  matched.forEach(function (doc) { Object.assign(doc, delta); });
-  return Promise.resolve(matched[0]);
-};
-db.destroy = function (type, search) {
-  store[type] = store[type].filter(function (doc) { return !matches(doc, search || {}); });
-  return Promise.resolve();
-};
+
+function installFakeDb() {
+  db.create = function (type, data) {
+    idCounter += 1;
+    var doc = Object.assign({ _id: 'gen-' + idCounter, createdAt: new Date() }, data);
+    store[type].push(doc);
+    return Promise.resolve(doc);
+  };
+  db.retrieve = function (type, search) {
+    return Promise.resolve(store[type].filter(function (doc) { return matches(doc, search || {}); }));
+  };
+  db.update = function (type, search, delta) {
+    var matched = store[type].filter(function (doc) { return matches(doc, search || {}); });
+    matched.forEach(function (doc) { Object.assign(doc, delta); });
+    return Promise.resolve(matched[0]);
+  };
+  db.destroy = function (type, search) {
+    store[type] = store[type].filter(function (doc) { return !matches(doc, search || {}); });
+    return Promise.resolve();
+  };
+}
+
+function restoreRealDb() {
+  db.create = originalDb.create;
+  db.retrieve = originalDb.retrieve;
+  db.update = originalDb.update;
+  db.destroy = originalDb.destroy;
+}
 
 function fakeRes() {
   var res = {};
@@ -56,6 +76,8 @@ function currentStatus() {
 }
 
 describe('comment-driven storyboard status', function () {
+  before(installFakeDb);
+  after(restoreRealDb);
   beforeEach(resetStore);
 
   it('stays Draft when there are no comments', function () {

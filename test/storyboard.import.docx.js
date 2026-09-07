@@ -229,7 +229,7 @@ describe('storyboard docx import', function () {
       }).catch(done);
     });
 
-    it('does not throw on a malformed marker payload', function () {
+    it('does not throw on a malformed marker payload, and does not drop content after it', function () {
       var docxNormalizer = require('../plugins/content/storyboard/utils/normalize/docxNormalizer');
       var html = '<h1>Title</h1><p>SB_CARD_BEGIN::{not valid json</p><p>after</p>';
       var mammoth = require('mammoth');
@@ -239,6 +239,11 @@ describe('storyboard docx import', function () {
         .then(function (normalized) {
           mammoth.convertToHtml = originalConvert;
           should.exist(normalized);
+          // A malformed marker must not start a "swallow" region — the
+          // paragraph right after it is ordinary content, not part of any
+          // card, and must survive rather than being silently discarded.
+          var text = JSON.stringify(normalized);
+          text.indexOf('after').should.be.above(-1);
         })
         .catch(function (e) { mammoth.convertToHtml = originalConvert; throw e; });
     });

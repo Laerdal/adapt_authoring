@@ -178,15 +178,19 @@ function extractItems(dom) {
         continue; // everything between BEGIN/END is this card's own prose rendering — discard it
       }
       if (text.indexOf(CARD_MARKER_BEGIN) === 0) {
+        let parsed;
         try {
-          const parsed = JSON.parse(text.slice(CARD_MARKER_BEGIN.length));
-          if (parsed && parsed.type && parsed.props) {
-            items.push({ kind: 'richCard', blockType: parsed.type, props: parsed.props });
-          }
+          parsed = JSON.parse(text.slice(CARD_MARKER_BEGIN.length));
         } catch (e) {
-          /* malformed marker — fall through to normal parsing of whatever follows */
+          parsed = undefined; // malformed marker — fall through to normal parsing of whatever follows
         }
-        swallowing = true;
+        // Only a successfully-parsed marker starts a swallow region — an
+        // invalid one must not hide subsequent content until a stray END
+        // marker or heading happens to show up.
+        if (parsed && parsed.type && parsed.props) {
+          items.push({ kind: 'richCard', blockType: parsed.type, props: parsed.props });
+          swallowing = true;
+        }
         continue;
       }
     } else if (swallowing) {
