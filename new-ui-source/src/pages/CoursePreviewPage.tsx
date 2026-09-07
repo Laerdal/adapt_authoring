@@ -467,12 +467,14 @@ export default function CoursePreviewPage() {
           ))}
 
           {canUseExport && (
-            <ExportMenu
-              disabled={!id || !user?._tenantId || quickEditEnabled}
-              exportSourceLoading={exportingSource}
-              onExportSource={handleExportSource}
-              onExportPdf={openExportPdfPanel}
-            />
+            <span title={quickEditEnabled ? "Export is disabled during Quick Edit" : undefined}>
+              <ExportMenu
+                disabled={!id || !user?._tenantId || quickEditEnabled}
+                exportSourceLoading={exportingSource}
+                onExportSource={handleExportSource}
+                onExportPdf={openExportPdfPanel}
+              />
+            </span>
           )}
 
           <PublishMenuButton

@@ -2668,7 +2668,7 @@ function CourseCreationCenterContent() {
       ? "storyboarding"
       : initialPanel === "publish"
         ? "publish"
-        : initialPanel === "export-pdf"
+        : initialPanel === "export-pdf" && canExportCourse
           ? "export-pdf"
           : "overview",
   );
