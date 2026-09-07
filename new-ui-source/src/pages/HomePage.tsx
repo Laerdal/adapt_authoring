@@ -112,7 +112,11 @@ export default function HomePage() {
       for (;;) {
         const page = await fetchDashboardCourses(shared, skip, PAGE)
         if (gen !== loadGenRef.current) return // superseded (route change / newer load)
-        setCourses((prev) => (skip === 0 ? page : [...prev, ...page]))
+        setCourses((prev) => {
+          if (skip === 0) return page
+          const seen = new Set(prev.map((c) => c.id)) // guard against any page overlap
+          return [...prev, ...page.filter((c) => !seen.has(c.id))]
+        })
         if (skip === 0) setIsLoadingCourses(false) // first page is on screen
         if (page.length < PAGE) break // last page
         skip += PAGE

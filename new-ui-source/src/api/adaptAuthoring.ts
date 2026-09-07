@@ -330,7 +330,13 @@ export async function fetchDashboardCourses(shared = false, skip = 0, limit = 0)
   // Paginate via the same operators the old UI uses (server applies skip/limit),
   // so a user with 1000s of courses doesn't pull them all in one request. limit=0
   // keeps the old unpaginated behaviour for any caller that wants everything.
-  const qs = limit > 0 ? `?operators%5Bskip%5D=${skip}&operators%5Blimit%5D=${limit}` : "";
+  // A stable, unique sort is REQUIRED for skip/limit to page deterministically —
+  // without it DocDB returns an undefined order that shifts between requests, so
+  // pages overlap/gap (duplicate & missing courses, which broke the filters). _id
+  // is unique + indexed and ObjectId is ~creation-ordered, so -1 is newest-first.
+  const qs = limit > 0
+    ? `?operators%5Bskip%5D=${skip}&operators%5Blimit%5D=${limit}&operators%5Bsort%5D%5B_id%5D=-1`
+    : "";
   const docs = await apiClient.get<EngineCourse[]>(endpoint + qs);
   return Array.isArray(docs) ? docs.map(toDashboardCourse) : [];
 }
