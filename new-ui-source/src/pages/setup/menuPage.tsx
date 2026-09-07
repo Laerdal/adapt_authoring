@@ -816,7 +816,7 @@ function MenuPreview({ cfg, resolveUrl }: { cfg: MenuPageConfig; resolveUrl?: (v
   const hasHeaderImage = !!(cfg.headerImageSrc.xlarge || cfg.headerImageSrc.large || cfg.headerImageSrc.medium || cfg.headerImageSrc.small);
 
   return (
-    <div className="w-[400px] shrink-0 bg-[var(--life-neutral-020)] border-l border-[var(--life-neutral-200)] sticky top-0 h-[calc(100vh-64px)] flex flex-col">
+    <div className="w-[400px] shrink-0 bg-[var(--life-neutral-020)] border-l border-[var(--life-neutral-200)] sticky top-0 h-full flex flex-col">
       <div className="px-5 py-3 bg-white border-b border-[var(--life-neutral-200)] flex items-center justify-between">
         <div className="flex items-center gap-2">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--life-primary-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
@@ -1241,8 +1241,8 @@ export function MenuPage({
 
   return (
     <>
-      <div className="flex flex-row items-start min-h-[calc(100vh-64px)]">
-        <div className="flex-1 min-w-0 bg-[var(--background)] border-r border-[var(--life-neutral-200)] px-8 py-8 overflow-y-auto max-h-[calc(100vh-64px)]">
+      <div className="flex flex-row items-start h-full">
+        <div className="flex-1 min-w-0 bg-[var(--background)] border-r border-[var(--life-neutral-200)] px-8 py-8 pb-16 overflow-y-auto h-full">
           <div className="mb-7">
             <h2 className="text-xl font-bold text-[var(--life-base-black)] m-0">Menu</h2>
             <p className="text-sm text-[var(--life-neutral-300)] mt-1 leading-[1.5]">Configure how learners will navigate your course.</p>

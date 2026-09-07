@@ -319,6 +319,37 @@ html, body {
   unicode-bidi: embed;
 }
 
+/* CKEditor 5 rich-text fields (RichTextEditor.tsx) — fit within whatever
+   container they're placed in (right panel, canvas overlay, etc.) instead of
+   overflowing it, and let the toolbar's own "..." grouping handle overflow
+   (shouldNotGroupWhenFull: false) rather than letting buttons get clipped. */
+.rich-text-editor-field {
+  width: 100%;
+  min-width: 0;
+}
+.rich-text-editor-field .ck.ck-editor {
+  width: 100%;
+}
+.rich-text-editor-field .ck.ck-toolbar {
+  width: 100%;
+  box-sizing: border-box;
+  flex-wrap: wrap;
+  row-gap: 2px;
+}
+.rich-text-editor-field .ck.ck-toolbar__items {
+  flex-wrap: wrap;
+}
+.rich-text-editor-field .ck.ck-content {
+  min-height: 100px;
+  max-height: 320px;
+  overflow-y: auto;
+  word-break: break-word;
+}
+.rich-text-editor-field .ck.ck-button.ck-button_with-text .ck-button__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* ────────────────────────────────────────────────────────────────────
    Storyboard (ADAPT-3842) — shared visual primitives ported from the
    Figma "Course Creation Center" prototype. Everything uses the

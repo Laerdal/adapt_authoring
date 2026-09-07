@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import AddComponentDrawer from "../../components/course/AddComponentDrawer";
 import AddTemplateDrawer from "../../components/course/AddTemplateDrawer";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
+import RichTextEditor from "../../components/common/RichTextEditor";
+import AiAssistPopover from "../../components/storyboard/AiAssistPopover";
+import { loadCKEditor5In } from "../../utils/ckEditor5Loader";
 import TopicAssetField, { toRenderableAssetUrl } from "../../components/common/AssetSelectionField";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import CourseStructureMap from "../../components/course/CourseStructureMap";
@@ -29,6 +32,10 @@ import {
   getExtensionSchemasByLevel,
   getExtensionTypeOptions,
   getNavigationSettings,
+  getThemeSettingsSchemaByLevel,
+  getMenuSettingsSchemaByLevel,
+  findAppliedPluginSchemaFields,
+  type PluginSettingsFieldSchema,
   pasteTemplateIntoCourse,
   publishCoursePackage,
   removeCourseAssetMappings,
@@ -272,6 +279,12 @@ const THEME_COLOUR_PALETTE_ROWS: Record<string, readonly (readonly string[])[]> 
   "Custom Theme":  LIFE_PALETTE_ROWS,
   "Vanilla Theme": VANILLA_PALETTE_ROWS,
 };
+// block-font-color/block-header-color (and the component-level equivalents)
+// declare this exact restricted 2-swatch palette (`extra.palette`) in every
+// installed theme's schema — confirmed via the live themetypes collection.
+const FONT_HEADER_COLOUR_PALETTE_ROWS: readonly (readonly string[])[] = [
+  ["#FFFFFF", "#1F1F1F"],
+];
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -944,30 +957,35 @@ function BehaviourField({
     );
   }
 
-  if (inputTypeStr === "TextArea" || fieldName === "body" || (inputTypeObj?.type === "CodeEditor")) {
-    const textValue =
-      inputTypeObj?.type === "CodeEditor"
-        ? (value && typeof value === "object" ? JSON.stringify(value, null, 2) : asString(value))
-        : asString(value);
+  if (inputTypeObj?.type === "CodeEditor") {
+    const textValue = value && typeof value === "object" ? JSON.stringify(value, null, 2) : asString(value);
     return (
       <div className="flex flex-col gap-1.5">
         <TopicFieldLabel required={isRequired}>{label}</TopicFieldLabel>
         <textarea
           defaultValue={textValue}
           onBlur={(event) => {
-            if (inputTypeObj?.type === "CodeEditor") {
-              try {
-                onChange(path, JSON.parse(event.target.value || "{}"));
-              } catch {
-                // Keep current value on invalid JSON.
-              }
-              return;
+            try {
+              onChange(path, JSON.parse(event.target.value || "{}"));
+            } catch {
+              // Keep current value on invalid JSON.
             }
-            onChange(path, event.target.value);
           }}
-          rows={inputTypeObj?.type === "CodeEditor" ? 6 : 4}
-          className={`w-full px-2.5 py-1.5 text-[13px] rounded-md border border-[#e5e7eb] text-[#111827] bg-white focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors resize-y ${inputTypeObj?.type === "CodeEditor" ? "font-mono" : ""}`}
+          rows={6}
+          className="w-full px-2.5 py-1.5 text-[13px] rounded-md border border-[#e5e7eb] text-[#111827] bg-white focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors resize-y font-mono"
         />
+      </div>
+    );
+  }
+
+  // Matches the old tool's global Backbone Forms override (backboneFormsOverrides.js):
+  // EVERY schema field with inputType "TextArea" renders as a full CKEditor 5
+  // instance there, not a plain textarea — so mirror that here too.
+  if (inputTypeStr === "TextArea" || fieldName === "body") {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <TopicFieldLabel required={isRequired}>{label}</TopicFieldLabel>
+        <RichTextEditor value={asString(value)} onChange={(html) => onChange(path, html)} />
       </div>
     );
   }
@@ -2009,6 +2027,63 @@ function TopicRadioGroup({
   );
 }
 
+// HSV <-> hex conversions for the gradient/hue picker (matches the old tool's
+// spectrum.js colour model), used by TopicColorField's expanded "more" view.
+function hexToRgb(hex: string): [number, number, number] | null {
+  const m = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec((hex || "").trim());
+  if (!m) return null;
+  let h = m[1];
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  const num = parseInt(h, 16);
+  return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const clamp = (n: number) => Math.max(0, Math.min(255, Math.round(n)));
+  return "#" + [r, g, b].map((n) => clamp(n).toString(16).padStart(2, "0")).join("");
+}
+
+function rgbToHsv(r: number, g: number, b: number): { h: number; s: number; v: number } {
+  const rn = r / 255, gn = g / 255, bn = b / 255;
+  const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn);
+  const d = max - min;
+  let h = 0;
+  if (d !== 0) {
+    if (max === rn) h = ((gn - bn) / d) % 6;
+    else if (max === gn) h = (bn - rn) / d + 2;
+    else h = (rn - gn) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  const s = max === 0 ? 0 : d / max;
+  return { h, s: s * 100, v: max * 100 };
+}
+
+function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
+  const sn = s / 100, vn = v / 100;
+  const c = vn * sn;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = vn - c;
+  let [r, g, b] = [0, 0, 0];
+  if (h < 60) [r, g, b] = [c, x, 0];
+  else if (h < 120) [r, g, b] = [x, c, 0];
+  else if (h < 180) [r, g, b] = [0, c, x];
+  else if (h < 240) [r, g, b] = [0, x, c];
+  else if (h < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  return [(r + m) * 255, (g + m) * 255, (b + m) * 255];
+}
+
+function hexToHsv(hex: string): { h: number; s: number; v: number } {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return { h: 0, s: 0, v: 0 };
+  return rgbToHsv(...rgb);
+}
+
+function hsvToHex(h: number, s: number, v: number): string {
+  return rgbToHex(...hsvToRgb(h, s, v));
+}
+
 function TopicColorField({
   label,
   value,
@@ -2022,11 +2097,22 @@ function TopicColorField({
 }) {
   const [open, setOpen] = useState(false);
   const [showMore, setShowMore] = useState(false);
-  const [draft, setDraft] = useState(value || "#000000");
+  const [hsv, setHsv] = useState(() => hexToHsv(value || "#000000"));
+  const [hexDraft, setHexDraft] = useState(value || "");
+  const [popoverPos, setPopoverPos] = useState({ top: 0, left: 0 });
+  const originalValueRef = useRef(value);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const squareRef = useRef<HTMLDivElement>(null);
+  const hueRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef<"square" | "hue" | null>(null);
 
-  useEffect(() => { setDraft(value || "#000000"); }, [value]);
+  useEffect(() => {
+    if (!open) {
+      setHsv(hexToHsv(value || "#000000"));
+      setHexDraft(value || "");
+    }
+  }, [value, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -2038,28 +2124,85 @@ function TopicColorField({
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
 
+  // Live-updates onChange on every drag step (matches the old tool's
+  // move.spectrum event, which pushes colour changes straight to the preview).
+  useEffect(() => {
+    if (!open) return;
+    function updateFromPoint(clientX: number, clientY: number) {
+      if (draggingRef.current === "square" && squareRef.current) {
+        const rect = squareRef.current.getBoundingClientRect();
+        const s = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * 100;
+        const v = 100 - Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)) * 100;
+        setHsv((prev) => {
+          const next = { ...prev, s, v };
+          const hex = hsvToHex(next.h, next.s, next.v);
+          setHexDraft(hex);
+          onChange(hex);
+          return next;
+        });
+      } else if (draggingRef.current === "hue" && hueRef.current) {
+        const rect = hueRef.current.getBoundingClientRect();
+        const h = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)) * 360;
+        setHsv((prev) => {
+          const next = { ...prev, h };
+          const hex = hsvToHex(next.h, next.s, next.v);
+          setHexDraft(hex);
+          onChange(hex);
+          return next;
+        });
+      }
+    }
+    function onMove(e: MouseEvent) { if (draggingRef.current) updateFromPoint(e.clientX, e.clientY); }
+    function onUp() { draggingRef.current = null; }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+  }, [open, onChange]);
+
   function openPicker() {
-    setDraft(value || "#000000");
+    originalValueRef.current = value;
+    setHsv(hexToHsv(value || "#000000"));
+    setHexDraft(value || "");
     setShowMore(false);
     setOpen((o) => !o);
   }
-  function apply() { onChange(draft); setOpen(false); }
-  function clear() { onChange(""); setOpen(false); }
+
+  function cancelSelection() {
+    onChange(originalValueRef.current);
+    setOpen(false);
+  }
+
+  function commitHexDraft(raw: string) {
+    const v = raw.trim();
+    if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v)) {
+      setHsv(hexToHsv(v));
+      onChange(v);
+    }
+  }
 
   const isEmpty = !value;
+  const currentHex = hsvToHex(hsv.h, hsv.s, hsv.v);
   const checkerStyle: React.CSSProperties = {
     backgroundImage: "linear-gradient(45deg,#ccc 25%,transparent 25%),linear-gradient(-45deg,#ccc 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#ccc 75%),linear-gradient(-45deg,transparent 75%,#ccc 75%)",
     backgroundSize: "8px 8px",
     backgroundPosition: "0 0,0 4px,4px -4px,-4px 0",
   };
 
-  const popoverStyle = (() => {
+  // Measures the popover's actual rendered size (varies with paletteRows
+  // width and the "more" gradient/hue picker) and clamps it inside the
+  // viewport — a hardcoded width guess previously chopped wider palettes.
+  useLayoutEffect(() => {
+    if (!open) return;
     const rect = triggerRef.current?.getBoundingClientRect();
-    if (!rect) return { top: 0, left: 0 };
+    const popoverWidth = popoverRef.current?.offsetWidth ?? 0;
+    if (!rect) return;
     const top = rect.bottom + 4;
-    const left = Math.min(rect.left, window.innerWidth - 168);
-    return { top, left };
-  })();
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - popoverWidth - 8));
+    setPopoverPos({ top, left });
+  }, [open, showMore, paletteRows]);
 
   return (
     <div className="flex flex-col gap-1">
@@ -2083,89 +2226,138 @@ function TopicColorField({
         <div
           ref={popoverRef}
           className="fixed z-[100] bg-white border border-[#d1d5db] rounded-lg shadow-xl overflow-hidden"
-          style={{ ...popoverStyle, width: 160 }}
+          style={{ ...popoverPos, maxWidth: "calc(100vw - 16px)" }}
         >
-          {/* Palette grid */}
-          {paletteRows.length > 0 && (
-            <div className="p-1.5">
-              {paletteRows.map((row, ri) => (
-                <div key={ri} className="flex">
-                  {row.map((colour) => (
-                    <button
-                      key={colour}
-                      type="button"
-                      title={colour}
-                      onClick={() => { onChange(colour); setOpen(false); }}
-                      className="w-9 h-9 hover:scale-110 transition-transform focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#2d6fa8] rounded-sm"
-                      style={{ backgroundColor: colour }}
-                      aria-label={colour}
-                    />
-                  ))}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* "more" toggle — expands to full picker */}
-          <div className="border-t border-[#e5e7eb]">
-            {!showMore ? (
-              <button
-                type="button"
-                onClick={() => setShowMore(true)}
-                className="w-full text-right px-2 py-1 text-xs text-[#374151] hover:bg-[#f9fafb] transition-colors"
-              >
-                more
-              </button>
-            ) : (
-              <div className="p-2 flex flex-col gap-2">
-                <div className="flex items-center gap-1.5">
-                  <label
-                    className="w-8 h-8 rounded border border-[#e5e7eb] overflow-hidden cursor-pointer relative shrink-0"
-                    style={{ backgroundColor: draft }}
-                  >
-                    <input
-                      type="color"
-                      value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      aria-label="Custom colour"
-                    />
-                  </label>
-                  <input
-                    type="text"
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    onBlur={(e) => {
-                      const v = e.target.value.trim();
-                      if (!/^#[0-9a-fA-F]{3,6}$/.test(v)) setDraft(value || "#000000");
-                    }}
-                    maxLength={7}
-                    placeholder="#000000"
-                    className="flex-1 border border-[#e5e7eb] rounded px-1.5 py-1 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-[#2d6fa8]"
+          <div className="flex">
+            {showMore && (
+              <div className="p-2 flex gap-1.5">
+                {/* Saturation/value gradient square */}
+                <div
+                  ref={squareRef}
+                  className="relative w-[140px] h-[140px] rounded cursor-crosshair shrink-0"
+                  style={{
+                    backgroundColor: hsvToHex(hsv.h, 100, 100),
+                    backgroundImage:
+                      "linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, rgba(255,255,255,0))",
+                  }}
+                  onMouseDown={(e) => {
+                    draggingRef.current = "square";
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const s = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * 100;
+                    const v = 100 - Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)) * 100;
+                    setHsv((prev) => {
+                      const next = { ...prev, s, v };
+                      const hex = hsvToHex(next.h, next.s, next.v);
+                      setHexDraft(hex);
+                      onChange(hex);
+                      return next;
+                    });
+                  }}
+                >
+                  <div
+                    className="absolute w-3 h-3 rounded-full border-2 border-white shadow -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+                    style={{ left: `${hsv.s}%`, top: `${100 - hsv.v}%`, backgroundColor: currentHex }}
                   />
                 </div>
-                <div className="flex items-center justify-between">
-                  <button type="button" onClick={clear} className="text-[11px] text-[#9ca3af] hover:text-[#ef4444] transition-colors">
-                    Clear
-                  </button>
-                  <div className="flex gap-1">
-                    <button type="button" onClick={() => setShowMore(false)} className="px-2 py-0.5 text-[11px] border border-[#e5e7eb] rounded text-[#374151] hover:bg-[#f9fafb] transition-colors">
-                      Cancel
-                    </button>
-                    <button type="button" onClick={apply} className="px-2 py-0.5 text-[11px] rounded bg-[#2d6fa8] text-white hover:bg-[#245c8f] transition-colors">
-                      Choose
-                    </button>
-                  </div>
+                {/* Hue slider */}
+                <div
+                  ref={hueRef}
+                  className="relative w-[14px] h-[140px] rounded cursor-pointer shrink-0"
+                  style={{ backgroundImage: "linear-gradient(to bottom, red, yellow, lime, cyan, blue, magenta, red)" }}
+                  onMouseDown={(e) => {
+                    draggingRef.current = "hue";
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const h = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)) * 360;
+                    setHsv((prev) => {
+                      const next = { ...prev, h };
+                      const hex = hsvToHex(next.h, next.s, next.v);
+                      setHexDraft(hex);
+                      onChange(hex);
+                      return next;
+                    });
+                  }}
+                >
+                  <div
+                    className="absolute left-0 right-0 h-1 border border-white shadow -translate-y-1/2 pointer-events-none"
+                    style={{ top: `${(hsv.h / 360) * 100}%` }}
+                  />
                 </div>
               </div>
             )}
+
+            {/* Palette grid */}
+            {paletteRows.length > 0 && (
+              <div className="p-1.5">
+                {paletteRows.map((row, ri) => (
+                  <div key={ri} className="flex gap-1 mb-1 last:mb-0">
+                    {row.map((colour) => (
+                      <button
+                        key={colour}
+                        type="button"
+                        title={colour}
+                        onClick={() => { onChange(colour); setOpen(false); }}
+                        className="w-8 h-8 hover:scale-110 transition-transform focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] rounded-full border border-[#e5e7eb]"
+                        style={{ backgroundColor: colour }}
+                        aria-label={colour}
+                      />
+                    ))}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setShowMore((v) => !v)}
+                  className="w-full text-right px-1 pt-1 text-xs text-[#374151] hover:text-[#111827] transition-colors"
+                >
+                  {showMore ? "less" : "more"}
+                </button>
+              </div>
+            )}
           </div>
+
+          {showMore && (
+            <div className="p-2 flex flex-col gap-2 border-t border-[#e5e7eb]">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  title={originalValueRef.current || "none"}
+                  onClick={() => commitHexDraft(originalValueRef.current || "#000000")}
+                  className="w-7 h-7 rounded border border-[#e5e7eb] shrink-0 relative overflow-hidden"
+                  style={originalValueRef.current ? { backgroundColor: originalValueRef.current } : checkerStyle}
+                  aria-label="Revert to previous colour"
+                />
+                <button
+                  type="button"
+                  className="w-7 h-7 rounded border border-[#e5e7eb] shrink-0 relative overflow-hidden"
+                  style={value ? { backgroundColor: value } : checkerStyle}
+                  aria-label="Current colour"
+                />
+                <input
+                  type="text"
+                  value={hexDraft}
+                  onChange={(e) => setHexDraft(e.target.value)}
+                  onBlur={(e) => commitHexDraft(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") commitHexDraft((e.target as HTMLInputElement).value); }}
+                  maxLength={7}
+                  placeholder="#000000"
+                  className="flex-1 border border-[#e5e7eb] rounded px-1.5 py-1 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-[#2d6fa8]"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={cancelSelection}
+                className="w-full px-2 py-1 text-[11px] border border-[#e5e7eb] rounded text-[#374151] hover:bg-[#f9fafb] transition-colors"
+              >
+                Cancel selection
+              </button>
+            </div>
+          )}
         </div>,
         document.body
       )}
     </div>
   );
 }
+
 
 function ExternalAssetModal({
   open,
@@ -2912,6 +3104,11 @@ export default function CourseEditor({
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [titleValidationWarning, setTitleValidationWarning] = useState<string | null>(null);
+  // "Samaritan Assistance" triggered from a canvas body field's CKEditor
+  // toolbar button — the popover itself is this same React app's existing
+  // AiAssistPopover; only the editor instance it applies the result to lives
+  // in the iframe's realm (cross-realm method calls are fine, same-origin).
+  const [canvasSamaritanTarget, setCanvasSamaritanTarget] = useState<{ editor: any; seedText: string } | null>(null);
   // Live text of the title currently being edited in the CANVAS, including
   // transient blank states that are deliberately never committed to real
   // state (see onInput's isBlankTitleValue guard) — the right panel's title
@@ -2963,6 +3160,8 @@ export default function CourseEditor({
   const [openComponentAccordions, setOpenComponentAccordions] = useState<Record<string, boolean>>(DEFAULT_COMPONENT_ACCORDIONS);
   const [componentBehaviourSchemas, setComponentBehaviourSchemas] = useState<Record<string, Record<string, unknown>>>({});
   const [extensionSchemasByLevel, setExtensionSchemasByLevel] = useState<Record<ExtensionSchemaLevel, Record<string, ExtensionFieldSchema>> | null>(null);
+  const [themeSettingsSchemaByLevel, setThemeSettingsSchemaByLevel] = useState<Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>> | null>(null);
+  const [menuSettingsSchemaByLevel, setMenuSettingsSchemaByLevel] = useState<Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>> | null>(null);
   const [componentExtensionSchemas, setComponentExtensionSchemas] = useState<Record<string, Record<string, ExtensionFieldSchema>>>({});
   const [extensionTypeOptions, setExtensionTypeOptions] = useState<ExtensionTypeOption[]>([]);
   const [navFooterCourseButtons, setNavFooterCourseButtons] = useState<Record<NavFooterButtonKey, NavFooterButton> | null>(null);
@@ -3044,6 +3243,12 @@ export default function CourseEditor({
   const rightPanelScrollRef = useRef<HTMLElement | null>(null);
   const cleanupPreviewListenersRef = useRef<(() => void) | null>(null);
   const pendingLeftPanelScrollTargetRef = useRef<PendingPreviewScrollTarget | null>(null);
+  // Canvas "body" fields get a real CKEditor 5 instance (matching the old
+  // tool: every TextArea schema field renders CKEditor, body included) —
+  // keyed by the source element so re-running syncPreviewInlineEditors on
+  // every keystroke (it depends on contentPages) reuses the same instance
+  // instead of recreating it and losing focus/cursor position.
+  const canvasBodyEditorsRef = useRef<Map<HTMLElement, { editor: any; editableEl: HTMLElement; ownerKey: string }>>(new Map());
   const hasUnsavedChanges = useMemo(() => Object.keys(dirtyNodeKeys).length > 0, [dirtyNodeKeys]);
 
   const loadStructureFromDatabase = useCallback(async (selection?: {
@@ -3196,6 +3401,15 @@ export default function CourseEditor({
       })
       .catch((err) => {
         console.warn("Failed to load extension schemas", err);
+      });
+    void Promise.all([getThemeSettingsSchemaByLevel(), getMenuSettingsSchemaByLevel()])
+      .then(([themeByLevel, menuByLevel]) => {
+        if (cancelled) return;
+        setThemeSettingsSchemaByLevel(themeByLevel);
+        setMenuSettingsSchemaByLevel(menuByLevel);
+      })
+      .catch((err) => {
+        console.warn("Failed to load theme/menu settings schemas", err);
       });
     return () => {
       cancelled = true;
@@ -4225,6 +4439,110 @@ export default function CourseEditor({
     const PREVIEW_INLINE_FIELD_CONTAINER_SELECTOR =
       ".page__title, .page__subtitle, .page__body, .page__instruction, .article__title, .article__body, .article__instruction, .block__title, .block__body, .block__instruction, .component__title, .component__body, .component__instruction, .laerdal-text__subtitle";
 
+    const CANVAS_CKEDITOR_TOOLBAR_ITEMS = [
+      "sourceEditing", "showBlocks", "|",
+      "undo", "redo", "|",
+      "bold", "italic", "underline", "strikethrough", "|",
+      "alignment", "|",
+      "numberedList", "bulletedList", "outdent", "indent", "|",
+      "blockQuote", "insertTable", "link", "|",
+      "fontColor", "fontBackgroundColor", "|",
+      "specialCharacters", "uploadImage", "|",
+      "samaritan",
+    ];
+
+    // Mirrors data-preview-* + editable-state attributes from the (possibly
+    // now CKEditor-hidden) source element onto CKEditor's own editable root,
+    // so the existing doc-level input/focusout delegation (keyed purely by
+    // these attributes) keeps working without any new update path.
+    const syncCanvasEditableAttrs = (editableEl: HTMLElement, source: HTMLElement) => {
+      ["data-preview-edit-enabled", "data-preview-edit-field", "data-preview-node-level",
+        "data-preview-page-id", "data-preview-article-id", "data-preview-block-id",
+        "data-preview-component-id", "data-placeholder"].forEach((attr) => {
+        const value = source.getAttribute(attr);
+        if (value !== null) editableEl.setAttribute(attr, value);
+        else editableEl.removeAttribute(attr);
+      });
+      editableEl.classList.add("adapt-authoring-preview-inline-editable");
+      editableEl.classList.toggle("adapt-authoring-preview-inline-empty", source.classList.contains("adapt-authoring-preview-inline-empty"));
+    };
+
+    // Real CKEditor 5 for canvas "body" fields (matches the old tool: every
+    // TextArea schema field gets CKEditor, body included — even when empty,
+    // just an empty editor canvas, no placeholder text). Created ONCE per
+    // source element and reused across every re-run of this effect (it
+    // depends on contentPages, i.e. every keystroke), so typing never
+    // recreates/re-focuses the editor.
+    const ensureCanvasBodyEditor = (element: HTMLElement, options: { value: string; ownerKey: string }) => {
+      // Lazily reclaim editors whose source node was torn down by the
+      // framework SPA's own re-render (e.g. navigated to a different page
+      // inside the same iframe document) — never done on a fixed timer/every
+      // effect run for ALL nodes, just piggybacked here so it can't fire
+      // mid-keystroke for a still-selected node.
+      canvasBodyEditorsRef.current.forEach((entry, sourceEl) => {
+        if (sourceEl !== element && !sourceEl.isConnected) {
+          entry.editor.destroy().catch(() => {});
+          canvasBodyEditorsRef.current.delete(sourceEl);
+        }
+      });
+
+      const existing = canvasBodyEditorsRef.current.get(element);
+      if (existing) {
+        syncCanvasEditableAttrs(existing.editableEl, element);
+        element.style.display = "none";
+        element.classList.remove("adapt-authoring-preview-inline-empty");
+        return;
+      }
+      if (element.dataset.ckeditorCreating === "true") return;
+      const iframeWindow = doc.defaultView;
+      if (!iframeWindow) return;
+      element.dataset.ckeditorCreating = "true";
+      loadCKEditor5In(iframeWindow)
+        .then(() => {
+          const CKEDITOR = (iframeWindow as any).CKEDITOR;
+          if (!CKEDITOR || !element.isConnected || canvasBodyEditorsRef.current.has(element)) return;
+          return CKEDITOR.create(element, {
+            plugins: [...CKEDITOR.pluginsConfig, CKEDITOR.SamaritanPlugin],
+            toolbar: { items: CANVAS_CKEDITOR_TOOLBAR_ITEMS, shouldNotGroupWhenFull: true },
+            htmlSupport: { allow: [{ name: /.*/, attributes: true, classes: true, style: true, styles: true }] },
+            // On destroy() (deselecting this level), CKEditor writes its
+            // current data back into `element` and un-hides it itself —
+            // exactly the "revert to plain rendered content" behaviour
+            // needed when this is no longer the selected level.
+            updateSourceElementOnDestroy: true,
+            initialData: options.value || "",
+            samaritanOnClick: (editor: any) => {
+              const selection = editor.model.document.selection;
+              let selectedText = "";
+              if (!selection.isCollapsed) {
+                const range = selection.getFirstRange();
+                for (const item of range ? range.getItems() : []) {
+                  if ((item as any).is?.("$textProxy")) selectedText += (item as any).data;
+                }
+              }
+              setCanvasSamaritanTarget({
+                editor,
+                seedText: selectedText || editor.getData().replace(/<[^>]+>/g, " ").trim(),
+              });
+            },
+          }).then((editor: any) => {
+            const editableEl = editor.ui.getEditableElement() as HTMLElement;
+            canvasBodyEditorsRef.current.set(element, { editor, editableEl, ownerKey: options.ownerKey });
+            syncCanvasEditableAttrs(editableEl, element);
+            // CKEditor already hides its source element, but force it —
+            // this is also what stops the plain-text empty-placeholder
+            // `::before` (see makeEditable) from ever rendering a second,
+            // duplicate "Add ... body" behind/above the CKEditor box.
+            element.style.display = "none";
+            element.classList.remove("adapt-authoring-preview-inline-empty");
+          });
+        })
+        .catch((err) => console.warn("Canvas CKEditor init failed", err))
+        .finally(() => {
+          delete element.dataset.ckeditorCreating;
+        });
+    };
+
     const makeEditable = (
       element: HTMLElement,
       options: {
@@ -4265,13 +4583,29 @@ export default function CourseEditor({
       const container = element.closest(PREVIEW_INLINE_FIELD_CONTAINER_SELECTOR) as HTMLElement | null;
 
       if (!hasText) {
-        element.classList.add("adapt-authoring-preview-inline-empty");
+        // Body gets its OWN placeholder from CKEditor (native `.ck-placeholder`
+        // rendering) — adding this class too would show the plain-text
+        // `::before` placeholder a SECOND time on the (now CKEditor-hidden)
+        // source element, which is exactly the duplicate "Add page body"
+        // the user reported.
+        if (options.field !== "body") element.classList.add("adapt-authoring-preview-inline-empty");
         container?.setAttribute("data-preview-inline-container-empty", "true");
       } else {
         element.classList.remove("adapt-authoring-preview-inline-empty");
         container?.removeAttribute("data-preview-inline-container-empty");
       }
       element.setAttribute("data-placeholder", options.placeholder);
+
+      if (options.field === "body") {
+        const ownerKey = options.level === "component"
+          ? `component:${options.componentId}`
+          : options.level === "group"
+            ? `block:${options.blockId}`
+            : options.level === "section"
+              ? `article:${options.articleId}`
+              : `topic:${options.pageId}`;
+        ensureCanvasBodyEditor(element, { value: options.value, ownerKey });
+      }
 
       if (options.field === "title") {
         const titleTarget = container ?? element;
@@ -4303,6 +4637,28 @@ export default function CourseEditor({
     const selectedComponent = selectedBlock && selectedComponentId
       ? selectedBlock.components.find((component) => component.id === selectedComponentId)
       : null;
+
+    // Body only ever gets a live CKEditor for the ONE deepest-selected level
+    // (component beats group beats section beats topic — same precedence as
+    // the mutually-exclusive if/return chain below). Every other body the
+    // user has previously visited this session must revert to plain
+    // rendered content — otherwise CKEditor's toolbar/border stays mounted
+    // on every component ever selected, looking "always on" instead of
+    // selection-scoped.
+    const currentBodyOwnerKey = selectedComponent
+      ? `component:${selectedComponent.id}`
+      : selectedBlock
+        ? `block:${selectedBlock.id}`
+        : selectedArticle
+          ? `article:${selectedArticle.id}`
+          : selectedPage
+            ? `topic:${selectedPage.id}`
+            : null;
+    canvasBodyEditorsRef.current.forEach((entry, sourceEl) => {
+      if (entry.ownerKey === currentBodyOwnerKey) return;
+      entry.editor.destroy().catch(() => {});
+      canvasBodyEditorsRef.current.delete(sourceEl);
+    });
 
     if (selectedComponent && selectedBlock && selectedArticle && selectedPage) {
       const componentNode = doc.querySelector(`.component[data-adapt-id="${selectedComponent.id}"]`) as HTMLElement | null;
@@ -6837,6 +7193,30 @@ export default function CourseEditor({
     setDirtyNodeKeys((prev) => ({ ...prev, [`topic:${pageId}`]: true }));
   }
 
+  // Schema-driven check mirroring the old tool's schemas.js `trimDisabledPlugins`:
+  // a Theme/Menu settings field should only render if the CURRENTLY APPLIED
+  // theme/menu's own schema (matched by its bower package `name`, e.g.
+  // "adapt-contrib-vanilla") actually declares that field at this level -
+  // e.g. Vanilla has no `_blockColors`/`_componentColors`, so those settings
+  // groups must not appear when Vanilla is the applied theme. Fails "open"
+  // (renders the field) if the schema hasn't loaded yet or no matching
+  // plugin entry is found, so nothing regresses while data is in flight.
+  function isThemeFieldSupported(level: ExtensionSchemaLevel, fieldKey: string): boolean {
+    const levelSchemas = themeSettingsSchemaByLevel?.[level];
+    if (!levelSchemas) return true;
+    const fields = findAppliedPluginSchemaFields(levelSchemas, courseTheme);
+    if (!fields) return true;
+    return Object.prototype.hasOwnProperty.call(fields, fieldKey);
+  }
+
+  function isMenuFieldSupported(level: ExtensionSchemaLevel, fieldKey: string): boolean {
+    const levelSchemas = menuSettingsSchemaByLevel?.[level];
+    if (!levelSchemas) return true;
+    const fields = findAppliedPluginSchemaFields(levelSchemas, courseMenu);
+    if (!fields) return true;
+    return Object.prototype.hasOwnProperty.call(fields, fieldKey);
+  }
+
   function resolveThemeSettingsKey(settings: Record<string, unknown>) {
     const normalizedThemeName = courseTheme.toLowerCase();
     const preferredKey = normalizedThemeName.includes("custom")
@@ -6909,6 +7289,53 @@ export default function CourseEditor({
 
     const key = resolveMenuSettingsKey(settings);
     return asRecord(settings[key]) as TopicMenuSettings;
+  }
+
+  // Deep-merges plugin schema defaults under stored values: an unset leaf
+  // (undefined/null/"") falls back to the theme/menu's own schema `default`,
+  // matching the old tool's Backbone Forms scaffolding (a field always shows
+  // its schema default until the author explicitly overrides it). Booleans
+  // and non-empty values are never clobbered.
+  function deepMergeSchemaDefaults<T>(defaults: Record<string, unknown>, values: Record<string, unknown>): T {
+    const out: Record<string, unknown> = { ...values };
+    for (const key of Object.keys(defaults)) {
+      const defaultVal = defaults[key];
+      const storedVal = values[key];
+      if (defaultVal && typeof defaultVal === "object" && !Array.isArray(defaultVal)) {
+        const storedObj = storedVal && typeof storedVal === "object" && !Array.isArray(storedVal) ? (storedVal as Record<string, unknown>) : {};
+        out[key] = deepMergeSchemaDefaults(defaultVal as Record<string, unknown>, storedObj);
+      } else if (storedVal === undefined || storedVal === null || storedVal === "") {
+        out[key] = defaultVal;
+      }
+    }
+    return out as T;
+  }
+
+  function getThemeSchemaDefaultsForLevel(level: ExtensionSchemaLevel): Record<string, unknown> {
+    const fields = findAppliedPluginSchemaFields(themeSettingsSchemaByLevel?.[level], courseTheme);
+    return fields ? buildSchemaDefaults(fields) : {};
+  }
+
+  function getMenuSchemaDefaultsForLevel(level: ExtensionSchemaLevel): Record<string, unknown> {
+    const fields = findAppliedPluginSchemaFields(menuSettingsSchemaByLevel?.[level], courseMenu);
+    return fields ? buildSchemaDefaults(fields) : {};
+  }
+
+  // Right-panel display variants: same resolution as getActiveThemeSettings/
+  // getActiveMenuSettings, but with the applied theme/menu's schema defaults
+  // filled in for any unset field, so plugin defaults match the old tool
+  // exactly. Only used for panel reads — live-preview sync keeps reading the
+  // raw stored value so the preview never shows an un-saved implied value.
+  function getActiveThemeSettingsWithDefaults(settingsValue: unknown, level: ExtensionSchemaLevel): TopicThemeSettings {
+    const active = getActiveThemeSettings(settingsValue);
+    const defaults = getThemeSchemaDefaultsForLevel(level);
+    return deepMergeSchemaDefaults<TopicThemeSettings>(defaults, active as Record<string, unknown>);
+  }
+
+  function getActiveMenuSettingsWithDefaults(settingsValue: unknown, level: ExtensionSchemaLevel): TopicMenuSettings {
+    const active = getActiveMenuSettings(settingsValue);
+    const defaults = getMenuSchemaDefaultsForLevel(level);
+    return deepMergeSchemaDefaults<TopicMenuSettings>(defaults, active as Record<string, unknown>);
   }
 
   function updatePageThemeSettings(pageId: string, updater: (current: TopicThemeSettings) => TopicThemeSettings) {
@@ -8431,7 +8858,7 @@ export default function CourseEditor({
                       />
                     </button>
                     {activeLevel === "page" && page && (() => {
-                      const themeSettings = getActiveThemeSettings(page.themeSettings);
+                      const themeSettings = getActiveThemeSettingsWithDefaults(page.themeSettings, "contentobject");
                       const pageBackgroundImage = asRecord(themeSettings._backgroundImage);
                       const pageBackgroundStyles = asRecord(themeSettings._backgroundStyles);
                       const responsiveClasses = asRecord(themeSettings._responsiveClasses);
@@ -8442,7 +8869,7 @@ export default function CourseEditor({
                       const pageHeaderBackgroundStyles = asRecord(pageHeader._backgroundStyles);
                       const pageHeaderMinimumHeights = asRecord(pageHeader._minimumHeights);
 
-                      const menuSettings = getActiveMenuSettings(page.menuSettings);
+                      const menuSettings = getActiveMenuSettingsWithDefaults(page.menuSettings, "contentobject");
                       const menuGraphic = asRecord(menuSettings._graphic);
                       const menuBackgroundImage = asRecord(menuSettings._backgroundImage);
                       const menuBackgroundStyles = asRecord(menuSettings._backgroundStyles);
@@ -8698,57 +9125,77 @@ export default function CourseEditor({
                           </TopicAccordion>
 
                           <TopicAccordion title="Menu Appearance" open={!!openTopicAccordions.menu} onToggle={(triggerEl) => toggleTopicAccordion("menu", triggerEl)}>
-                            <TopicAssetField
-                              resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl}
-                              label="Menu graphic"
-                              compact
-                              value={asString(menuGraphic._src)}
-                              onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuGraphic" })}
-                              onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuGraphic" }, initialValue: asString(menuGraphic._src), title: "Menu graphic" })}
-                              onClear={() => clearTopicAssetSelection(page.id, { scope: "menuGraphic" })}
-                            />
-                            <TopicTextInput label="Alternative text" value={asString(menuGraphic.alt)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _graphic: { ...asRecord(current._graphic), alt: value } }))} />
-                            <TopicCheckbox label="Skip submenu view" checked={asBoolean(menuSettings._skipSubmenuView)} onChange={(checked) => updatePageMenuSettings(page.id, (current) => ({ ...current, _skipSubmenuView: checked }))} />
-                            <TopicTextInput label="Locked notification text" value={asString(menuSettings.lockedNotification)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, lockedNotification: value }))} />
+                            {/* _graphic/_skipSubmenuView/lockedNotification only exist on the
+                                course-level menu schema, never at the page (contentobject) level. */}
+                            {isMenuFieldSupported("contentobject", "_graphic") && (
+                              <>
+                                <TopicAssetField
+                                  resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl}
+                                  label="Menu graphic"
+                                  compact
+                                  value={asString(menuGraphic._src)}
+                                  onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuGraphic" })}
+                                  onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuGraphic" }, initialValue: asString(menuGraphic._src), title: "Menu graphic" })}
+                                  onClear={() => clearTopicAssetSelection(page.id, { scope: "menuGraphic" })}
+                                />
+                                <TopicTextInput label="Alternative text" value={asString(menuGraphic.alt)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _graphic: { ...asRecord(current._graphic), alt: value } }))} />
+                              </>
+                            )}
+                            {isMenuFieldSupported("contentobject", "_skipSubmenuView") && (
+                              <TopicCheckbox label="Skip submenu view" checked={asBoolean(menuSettings._skipSubmenuView)} onChange={(checked) => updatePageMenuSettings(page.id, (current) => ({ ...current, _skipSubmenuView: checked }))} />
+                            )}
+                            {isMenuFieldSupported("contentobject", "lockedNotification") && (
+                              <TopicTextInput label="Locked notification text" value={asString(menuSettings.lockedNotification)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, lockedNotification: value }))} />
+                            )}
 
-                            <div className="flex flex-col gap-1.5">
-                              <div className="text-[13px] font-semibold text-[var(--life-base-black)]">Menu background image</div>
-                              <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(menuBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuBackground", bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuBackground", bp: "_xlarge" }, initialValue: asString(menuBackgroundImage._xlarge), title: "Menu background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuBackground", bp: "_xlarge" })} />
-                              <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(menuBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuBackground", bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuBackground", bp: "_large" }, initialValue: asString(menuBackgroundImage._large), title: "Menu background image (_large)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuBackground", bp: "_large" })} />
-                              <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(menuBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuBackground", bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuBackground", bp: "_medium" }, initialValue: asString(menuBackgroundImage._medium), title: "Menu background image (_medium)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuBackground", bp: "_medium" })} />
-                              <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(menuBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuBackground", bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuBackground", bp: "_small" }, initialValue: asString(menuBackgroundImage._small), title: "Menu background image (_small)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuBackground", bp: "_small" })} />
-                            </div>
-                            <TopicNestedAccordion title="Menu background image styles">
-                              <TopicSelect label={BG_REPEAT_LABEL} value={asString(menuBackgroundStyles._backgroundRepeat)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundRepeat: value } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
-                              <TopicSelect label={BG_SIZE_LABEL} value={asString(menuBackgroundStyles._backgroundSize)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundSize: value } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
-                              <TopicSelect label={BG_POSITION_LABEL} value={asString(menuBackgroundStyles._backgroundPosition)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundPosition: value } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
-                            </TopicNestedAccordion>
+                            {/* _backgroundImage/_backgroundStyles: not declared for Box Menu at page level. */}
+                            {isMenuFieldSupported("contentobject", "_backgroundImage") && (
+                              <div className="flex flex-col gap-1.5">
+                                <div className="text-[13px] font-semibold text-[var(--life-base-black)]">Menu background image</div>
+                                <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(menuBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuBackground", bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuBackground", bp: "_xlarge" }, initialValue: asString(menuBackgroundImage._xlarge), title: "Menu background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuBackground", bp: "_xlarge" })} />
+                                <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(menuBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuBackground", bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuBackground", bp: "_large" }, initialValue: asString(menuBackgroundImage._large), title: "Menu background image (_large)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuBackground", bp: "_large" })} />
+                                <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(menuBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuBackground", bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuBackground", bp: "_medium" }, initialValue: asString(menuBackgroundImage._medium), title: "Menu background image (_medium)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuBackground", bp: "_medium" })} />
+                                <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(menuBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuBackground", bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuBackground", bp: "_small" }, initialValue: asString(menuBackgroundImage._small), title: "Menu background image (_small)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuBackground", bp: "_small" })} />
+                              </div>
+                            )}
+                            {isMenuFieldSupported("contentobject", "_backgroundStyles") && (
+                              <TopicNestedAccordion title="Menu background image styles">
+                                <TopicSelect label={BG_REPEAT_LABEL} value={asString(menuBackgroundStyles._backgroundRepeat)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundRepeat: value } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
+                                <TopicSelect label={BG_SIZE_LABEL} value={asString(menuBackgroundStyles._backgroundSize)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundSize: value } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
+                                <TopicSelect label={BG_POSITION_LABEL} value={asString(menuBackgroundStyles._backgroundPosition)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundPosition: value } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
+                              </TopicNestedAccordion>
+                            )}
 
-                            <TopicCheckbox label="Display image above menu header" checked={asBoolean(menuHeader._displayAboveHeader)} onChange={(checked) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _displayAboveHeader: checked } }))} />
-                            <TopicSelect label="Title alignment" value={asString(menuHeaderTextAlignment._title)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _textAlignment: { ...asRecord(asRecord(current._menuHeader)._textAlignment), _title: value } } }))} options={TEXT_ALIGN_OPTIONS} />
-                            {showMenuSubtitleAlignment ? <TopicSelect label="Subtitle alignment" value={asString(menuHeaderTextAlignment._subtitle)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _textAlignment: { ...asRecord(asRecord(current._menuHeader)._textAlignment), _subtitle: value } } }))} options={TEXT_ALIGN_OPTIONS} /> : null}
-                            <TopicSelect label="Body alignment" value={asString(menuHeaderTextAlignment._body)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _textAlignment: { ...asRecord(asRecord(current._menuHeader)._textAlignment), _body: value } } }))} options={TEXT_ALIGN_OPTIONS} />
-                            <TopicSelect label="Instruction alignment" value={asString(menuHeaderTextAlignment._instruction)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _textAlignment: { ...asRecord(asRecord(current._menuHeader)._textAlignment), _instruction: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                            {/* _menuHeader: not declared for Box Menu at page level. */}
+                            {isMenuFieldSupported("contentobject", "_menuHeader") && (
+                              <>
+                                <TopicCheckbox label="Display image above menu header" checked={asBoolean(menuHeader._displayAboveHeader)} onChange={(checked) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _displayAboveHeader: checked } }))} />
+                                <TopicSelect label="Title alignment" value={asString(menuHeaderTextAlignment._title)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _textAlignment: { ...asRecord(asRecord(current._menuHeader)._textAlignment), _title: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                                {showMenuSubtitleAlignment ? <TopicSelect label="Subtitle alignment" value={asString(menuHeaderTextAlignment._subtitle)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _textAlignment: { ...asRecord(asRecord(current._menuHeader)._textAlignment), _subtitle: value } } }))} options={TEXT_ALIGN_OPTIONS} /> : null}
+                                <TopicSelect label="Body alignment" value={asString(menuHeaderTextAlignment._body)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _textAlignment: { ...asRecord(asRecord(current._menuHeader)._textAlignment), _body: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                                <TopicSelect label="Instruction alignment" value={asString(menuHeaderTextAlignment._instruction)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _textAlignment: { ...asRecord(asRecord(current._menuHeader)._textAlignment), _instruction: value } } }))} options={TEXT_ALIGN_OPTIONS} />
 
-                            <div className="flex flex-col gap-1.5">
-                              <div className="text-[13px] font-semibold text-[var(--life-base-black)]">Menu header background image</div>
-                              <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(menuHeaderBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuHeaderBackground", bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuHeaderBackground", bp: "_xlarge" }, initialValue: asString(menuHeaderBackgroundImage._xlarge), title: "Menu header background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuHeaderBackground", bp: "_xlarge" })} />
-                              <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(menuHeaderBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuHeaderBackground", bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuHeaderBackground", bp: "_large" }, initialValue: asString(menuHeaderBackgroundImage._large), title: "Menu header background image (_large)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuHeaderBackground", bp: "_large" })} />
-                              <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(menuHeaderBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuHeaderBackground", bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuHeaderBackground", bp: "_medium" }, initialValue: asString(menuHeaderBackgroundImage._medium), title: "Menu header background image (_medium)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuHeaderBackground", bp: "_medium" })} />
-                              <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(menuHeaderBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuHeaderBackground", bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuHeaderBackground", bp: "_small" }, initialValue: asString(menuHeaderBackgroundImage._small), title: "Menu header background image (_small)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuHeaderBackground", bp: "_small" })} />
-                            </div>
-                            <TopicNestedAccordion title="Menu header background image styles">
-                              <TopicSelect label={BG_REPEAT_LABEL} value={asString(menuHeaderBackgroundStyles._backgroundRepeat)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _backgroundStyles: { ...asRecord(asRecord(current._menuHeader)._backgroundStyles), _backgroundRepeat: value } } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
-                              <TopicSelect label={BG_SIZE_LABEL} value={asString(menuHeaderBackgroundStyles._backgroundSize)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _backgroundStyles: { ...asRecord(asRecord(current._menuHeader)._backgroundStyles), _backgroundSize: value } } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
-                              <TopicSelect label={BG_POSITION_LABEL} value={asString(menuHeaderBackgroundStyles._backgroundPosition)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _backgroundStyles: { ...asRecord(asRecord(current._menuHeader)._backgroundStyles), _backgroundPosition: value } } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
-                            </TopicNestedAccordion>
+                                <div className="flex flex-col gap-1.5">
+                                  <div className="text-[13px] font-semibold text-[var(--life-base-black)]">Menu header background image</div>
+                                  <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(menuHeaderBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuHeaderBackground", bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuHeaderBackground", bp: "_xlarge" }, initialValue: asString(menuHeaderBackgroundImage._xlarge), title: "Menu header background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuHeaderBackground", bp: "_xlarge" })} />
+                                  <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(menuHeaderBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuHeaderBackground", bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuHeaderBackground", bp: "_large" }, initialValue: asString(menuHeaderBackgroundImage._large), title: "Menu header background image (_large)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuHeaderBackground", bp: "_large" })} />
+                                  <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(menuHeaderBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuHeaderBackground", bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuHeaderBackground", bp: "_medium" }, initialValue: asString(menuHeaderBackgroundImage._medium), title: "Menu header background image (_medium)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuHeaderBackground", bp: "_medium" })} />
+                                  <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(menuHeaderBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuHeaderBackground", bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuHeaderBackground", bp: "_small" }, initialValue: asString(menuHeaderBackgroundImage._small), title: "Menu header background image (_small)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuHeaderBackground", bp: "_small" })} />
+                                </div>
+                                <TopicNestedAccordion title="Menu header background image styles">
+                                  <TopicSelect label={BG_REPEAT_LABEL} value={asString(menuHeaderBackgroundStyles._backgroundRepeat)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _backgroundStyles: { ...asRecord(asRecord(current._menuHeader)._backgroundStyles), _backgroundRepeat: value } } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
+                                  <TopicSelect label={BG_SIZE_LABEL} value={asString(menuHeaderBackgroundStyles._backgroundSize)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _backgroundStyles: { ...asRecord(asRecord(current._menuHeader)._backgroundStyles), _backgroundSize: value } } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
+                                  <TopicSelect label={BG_POSITION_LABEL} value={asString(menuHeaderBackgroundStyles._backgroundPosition)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _backgroundStyles: { ...asRecord(asRecord(current._menuHeader)._backgroundStyles), _backgroundPosition: value } } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
+                                </TopicNestedAccordion>
 
-                            <TopicNestedAccordion title="Menu header minimum height">
-                              <TopicTextInput label="_xlarge" type="number" value={String(asNumberOrEmpty(menuHeaderMinimumHeights._xlarge))} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _minimumHeights: { ...asRecord(asRecord(current._menuHeader)._minimumHeights), _xlarge: parseNumberishInput(value) } } }))} />
-                              <TopicTextInput label="_large" type="number" value={String(asNumberOrEmpty(menuHeaderMinimumHeights._large))} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _minimumHeights: { ...asRecord(asRecord(current._menuHeader)._minimumHeights), _large: parseNumberishInput(value) } } }))} />
-                              <TopicTextInput label="_medium" type="number" value={String(asNumberOrEmpty(menuHeaderMinimumHeights._medium))} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _minimumHeights: { ...asRecord(asRecord(current._menuHeader)._minimumHeights), _medium: parseNumberishInput(value) } } }))} />
-                              <TopicTextInput label="_small" type="number" value={String(asNumberOrEmpty(menuHeaderMinimumHeights._small))} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _minimumHeights: { ...asRecord(asRecord(current._menuHeader)._minimumHeights), _small: parseNumberishInput(value) } } }))} />
-                            </TopicNestedAccordion>
+                                <TopicNestedAccordion title="Menu header minimum height">
+                                  <TopicTextInput label="_xlarge" type="number" value={String(asNumberOrEmpty(menuHeaderMinimumHeights._xlarge))} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _minimumHeights: { ...asRecord(asRecord(current._menuHeader)._minimumHeights), _xlarge: parseNumberishInput(value) } } }))} />
+                                  <TopicTextInput label="_large" type="number" value={String(asNumberOrEmpty(menuHeaderMinimumHeights._large))} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _minimumHeights: { ...asRecord(asRecord(current._menuHeader)._minimumHeights), _large: parseNumberishInput(value) } } }))} />
+                                  <TopicTextInput label="_medium" type="number" value={String(asNumberOrEmpty(menuHeaderMinimumHeights._medium))} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _minimumHeights: { ...asRecord(asRecord(current._menuHeader)._minimumHeights), _medium: parseNumberishInput(value) } } }))} />
+                                  <TopicTextInput label="_small" type="number" value={String(asNumberOrEmpty(menuHeaderMinimumHeights._small))} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _minimumHeights: { ...asRecord(asRecord(current._menuHeader)._minimumHeights), _small: parseNumberishInput(value) } } }))} />
+                                </TopicNestedAccordion>
+                              </>
+                            )}
                           </TopicAccordion>
 
                           <TopicAccordion title="Media" open={!!openTopicAccordions.media} onToggle={(triggerEl) => toggleTopicAccordion("media", triggerEl)}>
@@ -8797,7 +9244,7 @@ export default function CourseEditor({
                     {activeLevel === "article" && article && (
                       <div className="px-4 py-4 border-b border-[#e6ebf0] space-y-2">
                         {(() => {
-                          const articleThemeSettings = getActiveThemeSettings(article.themeSettings);
+                          const articleThemeSettings = getActiveThemeSettingsWithDefaults(article.themeSettings, "article");
                           const articleTextAlignment = asRecord(articleThemeSettings._textAlignment);
                           const articleBackgroundImage = asRecord(articleThemeSettings._backgroundImage);
                           const articleBackgroundStyles = asRecord(articleThemeSettings._backgroundStyles);
@@ -8999,7 +9446,7 @@ export default function CourseEditor({
                     {activeLevel === "block" && block && (
                       <div className="px-4 py-4 border-b border-[#e6ebf0] space-y-2">
                         {(() => {
-                          const blockThemeSettings = getActiveThemeSettings(block.themeSettings);
+                          const blockThemeSettings = getActiveThemeSettingsWithDefaults(block.themeSettings, "block");
                           const blockBackgroundImage = asRecord(blockThemeSettings._backgroundImage);
                           const blockBackgroundStyles = asRecord(blockThemeSettings._backgroundStyles);
                           const blockMinimumHeights = asRecord(blockThemeSettings._minimumHeights);
@@ -9157,11 +9604,15 @@ export default function CourseEditor({
                                   checked={asBoolean(blockThemeSettings._isDividerBlock)}
                                   onChange={(checked) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _isDividerBlock: checked }))}
                                 />
-                                <TopicNestedAccordion title="Block colours">
-                                  <TopicColorField label="Background colour" value={asString(blockColours["block-bg-color"])} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColors: { ...asRecord(current._blockColors), "block-bg-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
-                                  <TopicColorField label="Font colour" value={asString(blockColours["block-font-color"])} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColors: { ...asRecord(current._blockColors), "block-font-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
-                                  <TopicColorField label="Header colour" value={asString(blockColours["block-header-color"])} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColors: { ...asRecord(current._blockColors), "block-header-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
-                                </TopicNestedAccordion>
+                                {/* Only themes whose schema declares _blockColors at block level
+                                    support this (e.g. Vanilla has no block colour overrides). */}
+                                {isThemeFieldSupported("block", "_blockColors") && (
+                                  <TopicNestedAccordion title="Block colours">
+                                    <TopicColorField label="Background colour" value={asString(blockColours["block-bg-color"])} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColors: { ...asRecord(current._blockColors), "block-bg-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
+                                    <TopicColorField label="Font colour" value={asString(blockColours["block-font-color"])} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColors: { ...asRecord(current._blockColors), "block-font-color": value } }))} paletteRows={FONT_HEADER_COLOUR_PALETTE_ROWS} />
+                                    <TopicColorField label="Header colour" value={asString(blockColours["block-header-color"])} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColors: { ...asRecord(current._blockColors), "block-header-color": value } }))} paletteRows={FONT_HEADER_COLOUR_PALETTE_ROWS} />
+                                  </TopicNestedAccordion>
+                                )}
                                 <TopicSelect label="Spacing top" value={asString(blockThemeSettings._paddingTop)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _paddingTop: value }))} options={SPACING_OPTIONS} emptyOptionLabel="Default" />
                                 <TopicSelect label="Spacing bottom" value={asString(blockThemeSettings._paddingBottom)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _paddingBottom: value }))} options={SPACING_OPTIONS} emptyOptionLabel="Default" />
                                 <TopicSelect label="Set the vertical alignment of the child component(s)" value={asString(blockThemeSettings._componentVerticalAlignment)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _componentVerticalAlignment: value }))} options={VERTICAL_ALIGN_OPTIONS} emptyOptionLabel="" />
@@ -9222,7 +9673,7 @@ export default function CourseEditor({
                     {activeLevel === "component" && (
                       <div className="px-4 py-4 border-b border-[#e6ebf0]">
                         {component && page && article && block ? (() => {
-                          const componentThemeSettings = getActiveThemeSettings(component.themeSettings);
+                          const componentThemeSettings = getActiveThemeSettingsWithDefaults(component.themeSettings, "component");
                           const componentTextAlignment = asRecord(componentThemeSettings._textAlignment);
                           const componentColours = asRecord(componentThemeSettings._componentColors);
                           const componentResponsiveClasses = asRecord(componentThemeSettings._responsiveClasses);
@@ -9368,11 +9819,15 @@ export default function CourseEditor({
                                   <TopicSelect label="Body alignment" value={asString(componentTextAlignment._body)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _body: value } }))} options={TEXT_ALIGN_OPTIONS} />
                                   <TopicSelect label="Instruction alignment" value={asString(componentTextAlignment._instruction)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _instruction: value } }))} options={TEXT_ALIGN_OPTIONS} />
                                 </TopicNestedAccordion>
-                                <TopicNestedAccordion title="Component colours">
-                                  <TopicColorField label="Background colour" value={asString(componentColours["component-bg-color"])} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _componentColors: { ...asRecord(current._componentColors), "component-bg-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
-                                  <TopicColorField label="Font colour" value={asString(componentColours["component-font-color"])} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _componentColors: { ...asRecord(current._componentColors), "component-font-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
-                                  <TopicColorField label="Header colour" value={asString(componentColours["component-header-color"])} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _componentColors: { ...asRecord(current._componentColors), "component-header-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
-                                </TopicNestedAccordion>
+                                {/* Only themes whose schema declares _componentColors at component
+                                    level support this (e.g. Vanilla has no component colour overrides). */}
+                                {isThemeFieldSupported("component", "_componentColors") && (
+                                  <TopicNestedAccordion title="Component colours">
+                                    <TopicColorField label="Background colour" value={asString(componentColours["component-bg-color"])} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _componentColors: { ...asRecord(current._componentColors), "component-bg-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
+                                    <TopicColorField label="Font colour" value={asString(componentColours["component-font-color"])} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _componentColors: { ...asRecord(current._componentColors), "component-font-color": value } }))} paletteRows={FONT_HEADER_COLOUR_PALETTE_ROWS} />
+                                    <TopicColorField label="Header colour" value={asString(componentColours["component-header-color"])} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _componentColors: { ...asRecord(current._componentColors), "component-header-color": value } }))} paletteRows={FONT_HEADER_COLOUR_PALETTE_ROWS} />
+                                  </TopicNestedAccordion>
+                                )}
                                 <TopicNestedAccordion title="On-screen classes">
                                   <TopicCheckbox
                                     label="Enabled?"
@@ -9412,6 +9867,7 @@ export default function CourseEditor({
                   </>
                 );
               })()}
+              <div className="h-10 shrink-0" aria-hidden="true" />
               </aside>
             ) : (
               <aside className="hidden md:flex h-full w-[56px] bg-white border-l border-[#d8dee6] shrink-0 flex-col items-center py-3">
@@ -9448,6 +9904,28 @@ export default function CourseEditor({
             }}
           />
         ) : null}
+
+        {canvasSamaritanTarget && (
+          <AiAssistPopover
+            initialText={canvasSamaritanTarget.seedText}
+            courseContext={courseTitle}
+            onInsert={(text) => {
+              const html = /<[a-z][\s\S]*>/i.test(text)
+                ? text
+                : text.split(/\n{2,}/).map((para) => `<p>${para.replace(/\n/g, "<br>")}</p>`).join("");
+              canvasSamaritanTarget.editor.setData(html);
+              setCanvasSamaritanTarget(null);
+            }}
+            onReplace={(text) => {
+              const html = /<[a-z][\s\S]*>/i.test(text)
+                ? text
+                : text.split(/\n{2,}/).map((para) => `<p>${para.replace(/\n/g, "<br>")}</p>`).join("");
+              canvasSamaritanTarget.editor.setData(html);
+              setCanvasSamaritanTarget(null);
+            }}
+            onClose={() => setCanvasSamaritanTarget(null)}
+          />
+        )}
 
         <ExternalAssetModal
           open={!!topicExternalAssetTarget}

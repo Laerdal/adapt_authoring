@@ -707,13 +707,19 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
  * once on a cache miss (matching the course's current theme/menu/plugin fingerprint)
  * and returns instantly when it is already cached. This is what makes a never-previewed
  * course renderable without a full grunt rebuild on every open.
+ *
+ * `force` bypasses the fingerprint cache/marker entirely (`?force=true`, backed by
+ * routes/studio/index.js's existing `force` query support) and rebuilds via grunt —
+ * used only for an explicit user-triggered retry after a failed/stale shell, never
+ * on the normal load path, so the fingerprint-cache performance win is unaffected.
  */
 export async function ensureCoursePreview(
   tenantId: string,
   courseId: string,
+  force = false,
 ): Promise<{ success: boolean; message?: string }> {
   return apiClient.post<{ success: boolean; message?: string }>(
-    `/studio/ensure/${tenantId}/${courseId}`,
+    `/studio/ensure/${tenantId}/${courseId}${force ? "?force=true" : ""}`,
   );
 }
 
@@ -3109,6 +3115,71 @@ export async function getExtensionSchemasByLevel(): Promise<
     extensionSchemasByLevelCache = result;
   }
   return extensionSchemasByLevelCache;
+}
+
+// Theme/menu settings fields available at each content level, sourced from
+// GET /api/content/schema (contentmanager.js processPluginLocations merges
+// every installed themetype's/menutype's `pluginLocations` schema onto the
+// matching level's `themeSettings`/`menuSettings` properties, keyed by that
+// plugin's own `targetAttribute`, e.g. `_vanilla`/`_life`/`_boxMenu`). Each
+// keyed entry additionally carries a `.name` (the owning theme/menu's bower
+// package name, set server-side) so the CURRENTLY APPLIED theme/menu's entry
+// can be looked up by matching against course config `_theme`/`_menu` -
+// mirrors the old tool's schemas.js `trimDisabledPlugins` (which keeps only
+// the schema entry whose `targetAttribute` equals the applied plugin).
+export interface PluginSettingsFieldSchema {
+  name?: string;
+  properties?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+let themeSettingsSchemaByLevelCache: Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>> | null = null;
+let menuSettingsSchemaByLevelCache: Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>> | null = null;
+
+async function getPluginSettingsSchemaByLevel(
+  settingsProperty: "themeSettings" | "menuSettings"
+): Promise<Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>>> {
+  if (!mergedSchemaCache) {
+    mergedSchemaCache = await apiClient.get("/api/content/schema");
+  }
+  const result = {} as Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>>;
+  for (const level of EXTENSION_SCHEMA_LEVELS) {
+    const levelSchema = (mergedSchemaCache as Record<string, unknown> | null)?.[level] as
+      | Record<string, { properties?: Record<string, PluginSettingsFieldSchema> } | undefined>
+      | undefined;
+    result[level] = levelSchema?.[settingsProperty]?.properties ?? {};
+  }
+  return result;
+}
+
+export async function getThemeSettingsSchemaByLevel(): Promise<
+  Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>>
+> {
+  if (!themeSettingsSchemaByLevelCache) {
+    themeSettingsSchemaByLevelCache = await getPluginSettingsSchemaByLevel("themeSettings");
+  }
+  return themeSettingsSchemaByLevelCache;
+}
+
+export async function getMenuSettingsSchemaByLevel(): Promise<
+  Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>>
+> {
+  if (!menuSettingsSchemaByLevelCache) {
+    menuSettingsSchemaByLevelCache = await getPluginSettingsSchemaByLevel("menuSettings");
+  }
+  return menuSettingsSchemaByLevelCache;
+}
+
+// Find the schema entry (and its keyed property-set) belonging to the plugin
+// whose bower package `name` matches the applied theme/menu name for a given
+// level - i.e. the ONLY entry whose fields should actually be rendered.
+export function findAppliedPluginSchemaFields(
+  levelSchemas: Record<string, PluginSettingsFieldSchema> | undefined,
+  appliedPluginName: string
+): Record<string, unknown> | null {
+  if (!levelSchemas) return null;
+  const match = Object.values(levelSchemas).find((entry) => entry?.name === appliedPluginName);
+  return match?.properties ?? null;
 }
 
 // Raw course-level `_extensions` (actual stored values, no schema defaults
