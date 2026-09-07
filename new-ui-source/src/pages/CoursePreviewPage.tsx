@@ -41,7 +41,6 @@ export default function CoursePreviewPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const userRole = getUserRole(user);
-  const canUseQuickEdit = userRole === "Super Admin" || userRole === "Course Creator";
   const canUseExport = userRole === "Super Admin";
 
   const [courseTitle, setCourseTitle] = useState("Untitled Course");
@@ -258,7 +257,7 @@ export default function CoursePreviewPage() {
   }, [previewUrl, quickEditAvailable]);
 
   const startQuickEdit = () => {
-    if (!canUseQuickEdit || !quickEditAvailable) return;
+    if (!quickEditAvailable) return;
     setQuickEditEnabled(true);
     setQuickEditDirty(false);
     sendPreviewEditCommand("adapt-preview-edit:text-only-enable");
@@ -430,7 +429,7 @@ export default function CoursePreviewPage() {
             })}
           </div>
 
-          {canUseQuickEdit && (!quickEditEnabled ? (
+          {!quickEditEnabled ? (
             <button
               type="button"
               onClick={startQuickEdit}
@@ -464,7 +463,7 @@ export default function CoursePreviewPage() {
                  Exit Editing
               </button>
             </>
-          ))}
+          )}
 
           {canUseExport && (
             <span title={quickEditEnabled ? "Export is disabled during Quick Edit" : undefined}>
