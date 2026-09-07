@@ -80,7 +80,7 @@ server.post('/api/courses', function(req, res) {
     // New Studio's Quick Edit is an opt-in text-only mode of this extension.
     // Enable it up front so the first Studio preview shell already contains
     // the plugin; legacy course creation and legacy Preview Edit are unchanged.
-    enableStudioPreviewEdit(course._id, function(enableError) {
+    enableStudioPreviewEdit(course._id.toString(), function(enableError) {
       if (enableError) {
         logger.log('warn', 'Created new Studio course without Preview Edit enabled', enableError);
       }

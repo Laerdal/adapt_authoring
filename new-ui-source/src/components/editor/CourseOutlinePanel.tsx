@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { StructureIcon, STRUCTURE_ICON_COLOR_CLASS } from "@/components/course/StructureIcons";
+import { ConfirmDialog } from "@/components/common";
 import type { ContentPageData } from "@/pages/editor/pageEditorWorkspace";
 
 const ICON_BASE = "/new/assets/icons";
@@ -679,41 +680,17 @@ export default function CourseOutlinePanel({
       </div>
 
       {deleteTarget && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) setDeleteTarget(null);
-          }}
-        >
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm flex flex-col overflow-hidden">
-            <div className="px-6 pt-6 pb-4 flex flex-col items-center text-center">
-              <div className="w-12 h-12 rounded-full bg-[#fee2e2] flex items-center justify-center mb-4">
-                <MaskIcon file="delete-icon.svg" className="block w-[22px] h-[22px] shrink-0 bg-[#dc2626]" />
-              </div>
-              <h2 className="font-semibold text-[#111827] text-base mb-1">Delete {deleteLabel(deleteTarget.level)}</h2>
-              <p className="text-sm text-[#6b7280]">
-                Are you sure you want to delete <span className="font-medium text-[#111827]">"{deleteTarget.name}"</span>? This action cannot be undone.
-              </p>
-            </div>
-
-            <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#e5e7eb]">
-              <button
-                type="button"
-                onClick={() => setDeleteTarget(null)}
-                className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmDelete}
-                className="px-5 py-2 text-sm font-semibold text-white bg-[#dc2626] hover:bg-[#b91c1c] rounded-lg transition-colors"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          open
+          title={`Delete ${deleteLabel(deleteTarget.level)}`}
+          message={
+            <>
+              Are you sure you want to delete <span className="font-medium text-[#111827]">"{deleteTarget.name}"</span>? This action cannot be undone.
+            </>
+          }
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={confirmDelete}
+        />
       )}
     </div>
   );

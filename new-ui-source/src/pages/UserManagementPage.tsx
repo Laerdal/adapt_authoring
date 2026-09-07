@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { getUsers, setUserRole, deleteUser } from "@/api/adaptAuthoring";
+import AiAssistant from "@/components/common/AiAssistant";
 
 type Role = "Super Admin" | "Authenticated User" | "Course Creator";
 
@@ -65,15 +66,6 @@ export default function UserManagementPage() {
   const [pageSize, setPageSize]       = useState(10);
   const [filterOpen, setFilterOpen]   = useState(false);
 
-  // Add user modal state
-  const [addOpen, setAddOpen]         = useState(false);
-  const [addEmail, setAddEmail]       = useState("");
-  const [addRole, setAddRole]         = useState<Role>("Authenticated User");
-  const [addTenant, setAddTenant]     = useState(TENANTS[0]);
-  const [addEmailErr, setAddEmailErr] = useState("");
-  const [addRoleOpen, setAddRoleOpen] = useState(false);
-  const [addTenantOpen, setAddTenantOpen] = useState(false);
-
   // Row-action state
   const [deleteTarget, setDeleteTarget]         = useState<User | null>(null);
   const [roleMenuTarget, setRoleMenuTarget]     = useState<number | null>(null);
@@ -132,56 +124,6 @@ export default function UserManagementPage() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginated  = filtered.slice((page - 1) * pageSize, page * pageSize);
-
-  function openAddModal() {
-    setAddEmail("");
-    setAddRole("Authenticated User");
-    setAddTenant(TENANTS[0]);
-    setAddEmailErr("");
-    setAddRoleOpen(false);
-    setAddTenantOpen(false);
-    setAddOpen(true);
-  }
-
-  function handleAddEmailChange(value: string) {
-    setAddEmail(value);
-    if (value.trim() === "") {
-      setAddEmailErr("");
-    } else if (!isCompleteEmail(value) && value.includes("@")) {
-      setAddEmailErr("Enter a valid email address");
-    } else if (users.some((u) => u.email.toLowerCase() === value.trim().toLowerCase())) {
-      setAddEmailErr("A user with this email already exists");
-    } else {
-      setAddEmailErr("");
-    }
-  }
-
-  function submitAddUser() {
-    const email = addEmail.trim();
-    if (!isCompleteEmail(email)) {
-      setAddEmailErr("Enter a valid email address");
-      return;
-    }
-    if (users.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
-      setAddEmailErr("A user with this email already exists");
-      return;
-    }
-    const today = new Date();
-    const dd = String(today.getDate()).padStart(2, "0");
-    const mm = String(today.getMonth() + 1).padStart(2, "0");
-    const yy = String(today.getFullYear()).slice(2);
-    const newUser: User = {
-      id: Math.max(0, ...users.map((u) => u.id)) + 1,
-      email,
-      tenant: addTenant,
-      role: addRole,
-      failedLogins: 0,
-      lastAccess: `${dd}-${mm}-${yy}`,
-    };
-    setUsers((prev) => [newUser, ...prev]);
-    setPage(1);
-    setAddOpen(false);
-  }
 
   function handleSort(key: SortKey) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -243,16 +185,6 @@ export default function UserManagementPage() {
           <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">User Management</h1>
           <p className="text-sm text-[#6b7280] mt-1">Manage users, roles, and access for this instance.</p>
         </div>
-        <button
-          type="button"
-          onClick={openAddModal}
-          className="flex items-center gap-2 px-4 py-2.5 bg-[#2d6fa8] hover:bg-[#245c8f] text-white text-sm font-semibold rounded-lg transition-colors shrink-0"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          Add User
-        </button>
       </div>
 
       {/* ── Toolbar ── */}
@@ -664,164 +596,7 @@ export default function UserManagementPage() {
         </div>
       </div>
 
-      {/* ── Add User modal ── */}
-      {addOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-          onClick={(e) => { if (e.target === e.currentTarget) setAddOpen(false); }}
-        >
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md flex flex-col overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e5e7eb]">
-              <div>
-                <h2 className="font-semibold text-[#111827] text-base">Add User</h2>
-                <p className="text-xs text-[#6b7280] mt-0.5">Invite a new user to this instance</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setAddOpen(false)}
-                aria-label="Close"
-                className="p-1.5 rounded-lg hover:bg-[#f3f4f6] text-[#6b7280] transition-colors"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="px-6 py-5 flex flex-col gap-5">
-              {/* Email */}
-              <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">
-                  Email Address <span className="text-[#ef4444]">*</span>
-                </label>
-                <input
-                  type="email"
-                  value={addEmail}
-                  onChange={(e) => handleAddEmailChange(e.target.value)}
-                  placeholder="e.g. user@laerdal.com"
-                  autoFocus
-                  aria-invalid={!!addEmailErr}
-                  aria-describedby={addEmailErr ? "add-email-error" : undefined}
-                  className={`w-full px-3 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent text-[#111827] placeholder-[#9ca3af] transition-colors ${
-                    addEmailErr
-                      ? "border-[#ef4444] focus:ring-[#ef4444]"
-                      : "border-[#d1d5db] focus:ring-[#2d6fa8]"
-                  }`}
-                />
-                {addEmailErr && (
-                  <p id="add-email-error" role="alert" className="mt-1.5 text-xs text-[#ef4444] flex items-center gap-1.5">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-                    </svg>
-                    {addEmailErr}
-                  </p>
-                )}
-              </div>
-
-              {/* Role */}
-              <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">Role</label>
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => { setAddRoleOpen((o) => !o); setAddTenantOpen(false); }}
-                    aria-expanded={addRoleOpen}
-                    className="w-full flex items-center justify-between px-3 py-2.5 text-sm border border-[#d1d5db] rounded-lg bg-white hover:border-[#2d6fa8] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] text-[#111827] transition-colors"
-                  >
-                    <span className="flex items-center gap-2">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${ROLE_COLORS[addRole]}`}>{addRole}</span>
-                    </span>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${addRoleOpen ? "rotate-180" : ""}`}>
-                      <path d="M6 9l6 6 6-6" />
-                    </svg>
-                  </button>
-                  {addRoleOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-10 py-1">
-                      {ROLES.map((r) => (
-                        <button
-                          key={r}
-                          type="button"
-                          onClick={() => { setAddRole(r); setAddRoleOpen(false); }}
-                          className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${addRole === r ? "bg-[#dbeeff] text-[#2d6fa8] font-medium" : "text-[#374151] hover:bg-[#f9fafb]"}`}
-                        >
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${ROLE_COLORS[r]}`}>{r}</span>
-                          {addRole === r && (
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Tenant */}
-              <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">Tenant</label>
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => { setAddTenantOpen((o) => !o); setAddRoleOpen(false); }}
-                    aria-expanded={addTenantOpen}
-                    className="w-full flex items-center justify-between px-3 py-2.5 text-sm border border-[#d1d5db] rounded-lg bg-white hover:border-[#2d6fa8] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] text-[#111827] transition-colors"
-                  >
-                    <span>{addTenant}</span>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${addTenantOpen ? "rotate-180" : ""}`}>
-                      <path d="M6 9l6 6 6-6" />
-                    </svg>
-                  </button>
-                  {addTenantOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-10 py-1">
-                      {TENANTS.map((t) => (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => { setAddTenant(t); setAddTenantOpen(false); }}
-                          className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${addTenant === t ? "bg-[#dbeeff] text-[#2d6fa8] font-medium" : "text-[#374151] hover:bg-[#f9fafb]"}`}
-                        >
-                          {t}
-                          {addTenant === t && (
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#e5e7eb]">
-              <button
-                type="button"
-                onClick={() => setAddOpen(false)}
-                className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={submitAddUser}
-                disabled={!addEmail.trim() || !!addEmailErr}
-                className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" />
-                  <line x1="19" y1="8" x2="19" y2="14" /><line x1="22" y1="11" x2="16" y2="11" />
-                </svg>
-                Add User
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AiAssistant context="User Management" />
 
       {/* ── Delete confirmation modal ── */}
       {deleteTarget && (

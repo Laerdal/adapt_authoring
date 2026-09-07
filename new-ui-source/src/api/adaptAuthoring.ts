@@ -252,6 +252,7 @@ export interface DashboardCourse {
   heroAssetId: string | null;
   theme: "LIFE Theme" | "Vanilla Theme" | "Custom Theme";
   tags: string[];
+  authorName?: string | null;
 }
 
 interface EngineCourse {
@@ -262,9 +263,40 @@ interface EngineCourse {
   heroImage?: string | null;
   updatedAt?: string;
   tags?: Array<string | { title?: string }>;
+  createdBy?: string | {
+    _id?: string;
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+    name?: string;
+    displayName?: string;
+    fullName?: string;
+  };
 }
 
 const OBJECT_ID = /^[a-f0-9]{24}$/i;
+
+function courseAuthorName(createdBy: EngineCourse["createdBy"]): string | null {
+  if (!createdBy) return null;
+
+  if (typeof createdBy === "string") {
+    const value = createdBy.trim();
+    if (!value || OBJECT_ID.test(value)) return null;
+    if (value.includes("@")) return value.split("@")[0].replace(/[._-]+/g, " ").trim() || null;
+    return value;
+  }
+
+  const nameCandidates = [
+    createdBy.name,
+    createdBy.displayName,
+    createdBy.fullName,
+    [createdBy.firstName, createdBy.lastName].filter(Boolean).join(" ").trim(),
+    createdBy.email?.split("@")[0]?.replace(/[._-]+/g, " ").trim(),
+  ];
+
+  const matchedName = nameCandidates.find((value): value is string => !!value && value.trim().length > 0);
+  return matchedName?.trim() || null;
+}
 
 function toDashboardCourse(doc: EngineCourse, index: number): DashboardCourse {
   const ts = doc.updatedAt ? new Date(doc.updatedAt).getTime() : 0;
@@ -288,13 +320,18 @@ function toDashboardCourse(doc: EngineCourse, index: number): DashboardCourse {
           .map((t) => (typeof t === "string" ? t : t?.title ?? ""))
           .filter((s): s is string => !!s && !OBJECT_ID.test(s))
       : [],
+    authorName: courseAuthorName(doc.createdBy),
   };
 }
 
 // shared=false → my courses; shared=true → courses shared with me.
-export async function fetchDashboardCourses(shared = false): Promise<DashboardCourse[]> {
+export async function fetchDashboardCourses(shared = false, skip = 0, limit = 0): Promise<DashboardCourse[]> {
   const endpoint = shared ? "/api/shared/course" : "/api/my/course";
-  const docs = await apiClient.get<EngineCourse[]>(endpoint);
+  // Paginate via the same operators the old UI uses (server applies skip/limit),
+  // so a user with 1000s of courses doesn't pull them all in one request. limit=0
+  // keeps the old unpaginated behaviour for any caller that wants everything.
+  const qs = limit > 0 ? `?operators%5Bskip%5D=${skip}&operators%5Blimit%5D=${limit}` : "";
+  const docs = await apiClient.get<EngineCourse[]>(endpoint + qs);
   return Array.isArray(docs) ? docs.map(toDashboardCourse) : [];
 }
 
@@ -3063,6 +3100,24 @@ export async function enableExtensionForCourse(courseId: string, extensionTypeId
   }
 }
 
+// Disables an extension type for a course (POST /api/extension/disable/:courseId).
+// The server cascades this across the WHOLE course in one shot — it $unsets the
+// extension's `_extensions.<targetAttribute>` from every course/contentobject/
+// article/block/component document belonging to this course, and removes its
+// entry from config._enabledExtensions (see plugins/content/extension/index.js
+// toggleExtensions) — i.e. this is the single source of truth for "remove this
+// extension from everywhere", not something the client needs to replicate
+// document-by-document.
+export async function disableExtensionForCourse(courseId: string, extensionTypeId: string): Promise<void> {
+  if (!courseId || !extensionTypeId) return;
+  try {
+    await apiClient.post(`/api/extension/disable/${courseId}`, { extensions: [extensionTypeId] });
+  } catch (err) {
+    console.warn("Failed to disable extension for course", err);
+    throw err;
+  }
+}
+
 const PREVIEW_EDIT_EXTENSION_NAME = "adapt-preview-edit";
 
 // New UI Preview always needs this extension available: Quick Edit invokes its
@@ -4280,7 +4335,7 @@ export function trashAsset(backendId: string): Promise<unknown> {
 // ── Plugins (extension types) ─────────────────────────────────────────────────
 // Read-only for now: the engine enable/disable contract is not yet defined.
 export type PluginStatus = "Enabled" | "Disabled";
-export type PluginCategory = "Content" | "Assessment" | "Media" | "Analytics" | "Accessibility";
+export type PluginCategory = "extensions" | "components" | "themes" | "menus";
 
 export interface DashboardPlugin {
   id: number;
@@ -4314,7 +4369,7 @@ export async function getPlugins(): Promise<DashboardPlugin[]> {
     description: p.description || "",
     version: p.version || "",
     author: p.author || "",
-    category: "Content",
+    category: "extensions",
     status: p._isAvailableInEditor === false ? "Disabled" : "Enabled",
     installedDate: fmtDate(p.createdAt),
   }));

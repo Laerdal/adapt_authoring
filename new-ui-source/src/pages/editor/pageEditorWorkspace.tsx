@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import AddComponentDrawer from "../../components/course/AddComponentDrawer";
 import AddTemplateDrawer from "../../components/course/AddTemplateDrawer";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
 import TopicAssetField, { toRenderableAssetUrl } from "../../components/common/AssetSelectionField";
+import ConfirmDialog from "../../components/common/ConfirmDialog";
 import CourseStructureMap from "../../components/course/CourseStructureMap";
 import { StructureIcon, STRUCTURE_ICON_COLOR_CLASS } from "../../components/course/StructureIcons";
 import { UnsavedChangesModal } from "../setup/unsavedChangesModal";
@@ -19,6 +20,7 @@ import {
   createArticle,
   createComponent,
   deleteStructureNode,
+  disableExtensionForCourse,
   enableExtensionForCourse,
   getComponentBehaviourSchema,
   getComponentExtensionSchema,
@@ -354,7 +356,93 @@ type BehaviourFieldSchema = {
   maxItems?: number;
   required?: boolean;
   validators?: string[];
+  editorAttrs?: Record<string, unknown>;
+  fieldAttrs?: Record<string, unknown>;
 };
+
+// Mirrors the old authoring tool's conditional-field mechanism
+type ConditionalContext = {
+  schemas: Record<string, BehaviourFieldSchema>;
+  values: Record<string, unknown>;
+  parents: Record<string, string>;
+};
+
+// Recursively walks a schema + its current values, collecting every field by
+// its own (bare) key — including fields nested inside object-type
+// properties — into flat schema/value/parent maps for conditional-visibility
+// lookups. Does not descend into arrays: each array item gets its own
+// freshly flattened scope instead (a button item's fields are unrelated to
+// its siblings or the outer array field).
+function flattenBehaviourSchema(
+  schema: Record<string, BehaviourFieldSchema> | undefined,
+  values: unknown,
+  outSchemas: Record<string, BehaviourFieldSchema> = {},
+  outValues: Record<string, unknown> = {},
+  outParents: Record<string, string> = {},
+  parentKey?: string
+): ConditionalContext {
+  if (!schema) return { schemas: outSchemas, values: outValues, parents: outParents };
+  const record = values && typeof values === "object" && !Array.isArray(values) ? (values as Record<string, unknown>) : {};
+  Object.keys(schema).forEach((key) => {
+    const fieldSchema = schema[key];
+    if (!fieldSchema) return;
+    const value = resolveBehaviourFieldValue(fieldSchema, record[key]);
+    outSchemas[key] = fieldSchema;
+    outValues[key] = value;
+    if (parentKey) outParents[key] = parentKey;
+    if (fieldSchema.type === "object" && fieldSchema.properties) {
+      flattenBehaviourSchema(fieldSchema.properties, value, outSchemas, outValues, outParents, key);
+    }
+  });
+  return { schemas: outSchemas, values: outValues, parents: outParents };
+}
+
+function isBehaviourFieldConditionallyVisible(
+  key: string,
+  context: ConditionalContext,
+  seen: Set<string> = new Set()
+): boolean {
+  if (seen.has(key)) return true; // guards against (invalid) circular depends-on chains
+  seen.add(key);
+
+  const fieldSchema = context.schemas[key];
+  if (!fieldSchema) return true;
+
+  const parentKey = context.parents[key];
+  if (parentKey && !isBehaviourFieldConditionallyVisible(parentKey, context, seen)) {
+    return false;
+  }
+
+  const dependsOn = fieldSchema.fieldAttrs?.["data-depends-on"];
+  if (typeof dependsOn !== "string" || !dependsOn) return true;
+  if (!isBehaviourFieldConditionallyVisible(dependsOn, context, seen)) return false;
+
+  const controllingSchema = context.schemas[dependsOn];
+  const controllingValue = context.values[dependsOn];
+
+  if (controllingSchema?.type === "boolean") {
+    return !!controllingValue;
+  }
+
+  const optionMatch = fieldSchema.fieldAttrs?.["data-option-match"];
+  if (optionMatch === undefined || optionMatch === null) return true;
+  return String(controllingValue ?? "") === String(optionMatch);
+}
+
+// Filters a set of field keys down to those that should currently be
+// rendered, per isBehaviourFieldConditionallyVisible.
+function filterVisibleBehaviourFieldKeys(keys: string[], context: ConditionalContext): string[] {
+  return keys.filter((key) => isBehaviourFieldConditionallyVisible(key, context));
+}
+
+// A field with no stored value yet (freshly-added array item, newly-added
+// extension/component, or simply never touched) must still display/act on
+// its schema `default` — otherwise radio/select controllers render blank
+// and any conditional field depending on them (which itself falls back to
+// the controller's default when unset) never gets a value to actually show.
+function resolveBehaviourFieldValue(fieldSchema: BehaviourFieldSchema | undefined, rawValue: unknown): unknown {
+  return rawValue !== undefined ? rawValue : fieldSchema?.default;
+}
 
 function formatBehaviourFieldName(fieldName: string): string {
   const withoutPrefix = fieldName.replace(/^_/, "");
@@ -362,13 +450,25 @@ function formatBehaviourFieldName(fieldName: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
-function behaviourSelectOptions(fieldSchema: BehaviourFieldSchema): string[] {
+type BehaviourOptionPair = { value: string; label: string };
+
+// Same option list as behaviourSelectOptions, but keeping each option's
+// display label alongside its stored value — needed for radio groups, whose
+// labels ("Modal"/"Drawer"/"Link") differ from their stored values
+// ("modal"/"drawer"/"link"), unlike TopicSelect's raw-value convention.
+function behaviourFieldOptionPairs(fieldSchema: BehaviourFieldSchema): BehaviourOptionPair[] {
   if (fieldSchema.inputType && typeof fieldSchema.inputType === "object" && Array.isArray(fieldSchema.inputType.options)) {
-    return fieldSchema.inputType.options.map((option) =>
-      typeof option === "string" ? option : option.val ?? option.label ?? ""
-    );
+    return fieldSchema.inputType.options.map((option) => {
+      if (typeof option === "string") return { value: option, label: option };
+      const value = option.val ?? option.label ?? "";
+      return { value, label: option.label ?? value };
+    });
   }
-  return Array.isArray(fieldSchema.enum) ? fieldSchema.enum.map(String) : [];
+  return Array.isArray(fieldSchema.enum) ? fieldSchema.enum.map((v) => ({ value: String(v), label: String(v) })) : [];
+}
+
+function behaviourSelectOptions(fieldSchema: BehaviourFieldSchema): string[] {
+  return behaviourFieldOptionPairs(fieldSchema).map((option) => option.value);
 }
 
 // Splits a dotted/bracketed path ("_items[0]._graphic.src") into keys/indices.
@@ -573,6 +673,7 @@ function BehaviourField({
   value,
   onChange,
   assetContext,
+  conditionalContext,
 }: {
   path: string;
   fieldName: string;
@@ -580,6 +681,7 @@ function BehaviourField({
   value: unknown;
   onChange: (path: string, value: unknown) => void;
   assetContext?: BehaviourAssetContext;
+  conditionalContext?: ConditionalContext;
 }) {
   const label = fieldSchema.legend || fieldSchema.title || formatBehaviourFieldName(fieldName);
   const isRequired = isBehaviourFieldRequired(fieldSchema);
@@ -595,8 +697,15 @@ function BehaviourField({
     const objectValue = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
     const hasAssetSrc = assetContext && Object.prototype.hasOwnProperty.call(fieldSchema.properties, "src");
     const hasEnabledToggle = fieldSchema.properties._isEnabled?.type === "boolean";
-    const objectFields = Object.keys(fieldSchema.properties).filter((childKey) =>
-      !(hasEnabledToggle && childKey === "_isEnabled") && !(hasAssetSrc && childKey === "src")
+    // Reuse the ambient scope (whole array item / extension / component) if
+    // given, so a dependent nested arbitrarily deep can still find a
+    // controller declared as a flat sibling elsewhere in that same scope.
+    const localContext = conditionalContext ?? flattenBehaviourSchema(fieldSchema.properties, objectValue);
+    const objectFields = filterVisibleBehaviourFieldKeys(
+      Object.keys(fieldSchema.properties).filter((childKey) =>
+        !(hasEnabledToggle && childKey === "_isEnabled") && !(hasAssetSrc && childKey === "src")
+      ),
+      localContext
     );
     const fields = (
       <>
@@ -620,9 +729,10 @@ function BehaviourField({
               path={`${path}.${childKey}`}
               fieldName={childKey}
               fieldSchema={childSchema}
-              value={objectValue[childKey]}
+              value={resolveBehaviourFieldValue(childSchema, objectValue[childKey])}
               onChange={onChange}
               assetContext={assetContext}
+              conditionalContext={localContext}
             />
           );
         })}
@@ -722,24 +832,28 @@ function BehaviourField({
               </div>
               {isOpen && (
                 <div className="px-3 pb-3 pt-2.5 border-t border-[#eef2f6] flex flex-col gap-2.5">
-                  {isObjectItems ? (
-                    Object.keys(itemSchema!.properties!).map((childKey) => {
+                  {isObjectItems ? (() => {
+                    const itemRecord = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+                    // Fresh flattened scope per item: a button's own fields
+                    // (at any nesting depth) are independent of its siblings.
+                    const itemContext = flattenBehaviourSchema(itemSchema!.properties!, itemRecord);
+                    return filterVisibleBehaviourFieldKeys(Object.keys(itemSchema!.properties!), itemContext).map((childKey) => {
                       const childSchema = itemSchema!.properties![childKey];
                       if (!childSchema || childSchema.editorOnly) return null;
-                      const itemRecord = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
                       return (
                         <BehaviourField
                           key={`${path}[${index}].${childKey}`}
                           path={`${path}[${index}].${childKey}`}
                           fieldName={childKey}
                           fieldSchema={childSchema}
-                          value={itemRecord[childKey]}
+                          value={resolveBehaviourFieldValue(childSchema, itemRecord[childKey])}
                           onChange={onChange}
                           assetContext={assetContext}
+                          conditionalContext={itemContext}
                         />
                       );
-                    })
-                  ) : (
+                    });
+                  })() : (
                     <TopicTextInput
                       label="Value"
                       value={typeof item === "string" ? item : item === undefined || item === null ? "" : String(item)}
@@ -790,6 +904,18 @@ function BehaviourField({
         value={asString(value)}
         onChange={(v) => onChange(path, v)}
         paletteRows={fieldSchema.extra?.palette ?? LIFE_PALETTE_ROWS}
+      />
+    );
+  }
+
+  if (inputTypeObj?.type === "Radio" && selectOptions.length) {
+    return (
+      <TopicRadioGroup
+        label={label}
+        required={isRequired}
+        value={value !== undefined && value !== null ? String(value) : ""}
+        onChange={(v) => onChange(path, v)}
+        options={behaviourFieldOptionPairs(fieldSchema)}
       />
     );
   }
@@ -879,7 +1005,8 @@ type ExtensionsAccordionBodyProps = {
   onChange: (next: Record<string, unknown>) => void;
   schemasForLevel: Record<string, ExtensionFieldSchema>;
   extensionTypeOptions: ExtensionTypeOption[];
-  onExtensionAdded?: (extensionName: string | undefined) => void;
+  onExtensionAdded?: (key: string, extensionName: string | undefined) => void;
+  onRequestRemoveExtension: (key: string, displayName: string, extensionName: string | undefined) => void;
   customFieldRenderer?: ExtensionFieldRenderer;
   getInheritanceTag?: (key: string) => ExtensionInheritanceTag;
   assetContext?: BehaviourAssetContext;
@@ -1026,9 +1153,13 @@ function ExtensionListItem({
 }) {
   const [open, setOpen] = useState(false);
   const enableControl = detectExtensionEnableControl(fieldSchema);
-  const settingsFields = fieldSchema?.properties ?? {};
-  const settingsKeys = Object.keys(settingsFields).filter(
-    (k) => !(enableControl.kind !== "none" && k === enableControl.key)
+  const settingsFields = (fieldSchema?.properties ?? {}) as Record<string, BehaviourFieldSchema>;
+  const extensionContext = flattenBehaviourSchema(settingsFields, config);
+  const settingsKeys = filterVisibleBehaviourFieldKeys(
+    Object.keys(settingsFields).filter(
+      (k) => !(enableControl.kind !== "none" && k === enableControl.key)
+    ),
+    extensionContext
   );
 
   return (
@@ -1086,7 +1217,7 @@ function ExtensionListItem({
               extensionName: fieldSchema?.name,
               fieldKey,
               fieldSchema: childSchema,
-              value: config[fieldKey],
+              value: resolveBehaviourFieldValue(childSchema, config[fieldKey]),
               onChange: onFieldChange,
             });
             if (overridden) return <div key={`${itemKey}-${fieldKey}`}>{overridden}</div>;
@@ -1096,7 +1227,7 @@ function ExtensionListItem({
                 path={fieldKey}
                 fieldName={fieldKey}
                 fieldSchema={childSchema}
-                value={config[fieldKey]}
+                value={resolveBehaviourFieldValue(childSchema, config[fieldKey])}
                 onChange={onFieldChange}
                 assetContext={assetContext && {
                   ...assetContext,
@@ -1104,6 +1235,7 @@ function ExtensionListItem({
                   onPickExternal: (path, currentValue) => assetContext.onPickExternal(path, currentValue, itemKey),
                   onClear: (path) => assetContext.onClear(path, itemKey),
                 }}
+                conditionalContext={extensionContext}
               />
             );
           })}
@@ -1120,6 +1252,7 @@ function ExtensionsAccordionBody({
   schemasForLevel,
   extensionTypeOptions,
   onExtensionAdded,
+  onRequestRemoveExtension,
   customFieldRenderer,
   getInheritanceTag,
   assetContext,
@@ -1135,9 +1268,7 @@ function ExtensionsAccordionBody({
     onChange({ ...extensions, [key]: { ...asRecord(extensions[key]), [control.key]: value } });
   };
   const handleRemove = (key: string) => {
-    const next = { ...extensions };
-    delete next[key];
-    onChange(next);
+    onRequestRemoveExtension(key, extensionDisplayName(key, schemasForLevel[key], extensionTypeOptions), schemasForLevel[key]?.name);
   };
   const handleAdd = (key: string) => {
     const fieldSchema = schemasForLevel[key];
@@ -1146,7 +1277,7 @@ function ExtensionsAccordionBody({
     // Newly-added extensions are enabled by default.
     const patch = control.kind === "checkbox" ? { [control.key]: true } : {};
     onChange({ ...extensions, [key]: { ...defaults, ...patch } });
-    onExtensionAdded?.(fieldSchema?.name);
+    onExtensionAdded?.(key, fieldSchema?.name);
   };
   const handleFieldChange = (key: string, path: string, value: unknown) => {
     onChange({ ...extensions, [key]: setBehaviourPath(asRecord(extensions[key]), path, value) });
@@ -1840,6 +1971,41 @@ function TopicCheckbox({
       />
       <span>{label}{required && <span className="text-[#dc2626] ml-0.5">*</span>}</span>
     </label>
+  );
+}
+
+function TopicRadioGroup({
+  label,
+  value,
+  onChange,
+  options,
+  required = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: BehaviourOptionPair[];
+  required?: boolean;
+}) {
+  const groupName = useId();
+  return (
+    <div className="flex flex-col gap-1.5">
+      <TopicFieldLabel required={required}>{label}</TopicFieldLabel>
+      <div className="flex flex-col gap-1.5">
+        {options.map((option) => (
+          <label key={option.value} className="flex items-center gap-1.5 text-[13px] text-[#111827] cursor-pointer">
+            <input
+              type="radio"
+              name={groupName}
+              checked={value === option.value}
+              onChange={() => onChange(option.value)}
+              className="h-3.5 w-3.5 shrink-0 border-[#cbd5e1] text-[#2d6fa8] focus:ring-[#2d6fa8]"
+            />
+            <span>{option.label}</span>
+          </label>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -2933,6 +3099,7 @@ export default function CourseEditor({
       setContentPages(pages);
       setSavedContentPages(cloneContentPages(pages));
       setDirtyNodeKeys({});
+      setPendingExtensionDisableNames(new Set());
       setMenuPageCreated(pages.length > 0);
       setMenuSelected(false);
       setSelectedPageId(page?.id ?? null);
@@ -3060,17 +3227,229 @@ export default function CourseEditor({
     };
   }, [courseId]);
 
+  // Bridges the dirty keys computed inside seedExtensionDefaultsEverywhere's
+  // setContentPages updater over to its follow-up setDirtyNodeKeys call —
+  // see the comment at that call site for why a ref is used instead of a
+  // plain local variable.
+  const seedDirtyUpdatesRef = useRef<Record<string, true>>({});
+
+  // Mirrors what POST /api/extension/enable/:courseId seeds server-side
+  // (schema-default settings onto EVERY course/topic/section/content-group/
+  // component document) into the currently-loaded draft, so a newly-added
+  // extension immediately shows as "Added" at every level it has a schema
+  // for — not just the one level the user clicked Add on — without needing
+  // a reload. Never overwrites a level that already has this key (matches
+  // the server's `_.defaults` merge semantics). Course-level itself isn't
+  // tracked as loaded editor state, so it's left to the enable call alone.
+  const seedExtensionDefaultsEverywhere = useCallback(
+    (extensionKey: string) => {
+      if (!extensionSchemasByLevel) return;
+      const topicProps = extensionSchemasByLevel.contentobject?.[extensionKey]?.properties as Record<string, unknown> | undefined;
+      const articleProps = extensionSchemasByLevel.article?.[extensionKey]?.properties as Record<string, unknown> | undefined;
+      const blockProps = extensionSchemasByLevel.block?.[extensionKey]?.properties as Record<string, unknown> | undefined;
+      const componentProps = extensionSchemasByLevel.component?.[extensionKey]?.properties as Record<string, unknown> | undefined;
+      const hasTopicSchema = !!Object.keys(topicProps ?? {}).length;
+      const hasArticleSchema = !!Object.keys(articleProps ?? {}).length;
+      const hasBlockSchema = !!Object.keys(blockProps ?? {}).length;
+      const hasComponentSchema = !!Object.keys(componentProps ?? {}).length;
+      if (!hasTopicSchema && !hasArticleSchema && !hasBlockSchema && !hasComponentSchema) return;
+
+      const topicDefaults = buildSchemaDefaults(topicProps);
+      const articleDefaults = buildSchemaDefaults(articleProps);
+      const blockDefaults = buildSchemaDefaults(blockProps);
+      const componentDefaults = buildSchemaDefaults(componentProps);
+      // Uses the functional setState form (operating on the freshest
+      // `previousPages`, not the `contentPages` closure) because this runs
+      // in the same event handler as handleAdd's own `onChange` for the
+      // CURRENT level — with a plain value-based setContentPages call here,
+      // this would race that update and silently overwrite it with a stale
+      // snapshot from before it was applied.
+      //
+      // The resulting dirty keys are handed off via a ref rather than read
+      // back from local variables right after calling setContentPages —
+      // React may defer invoking the updater, so those variables aren't
+      // guaranteed to be populated yet at that point. The ref is instead
+      // read from INSIDE the setDirtyNodeKeys updater below, which React
+      // guarantees runs after the setContentPages updater above (state
+      // updates queued in the same tick are processed in call order), so by
+      // the time it reads seedDirtyUpdatesRef.current it's already set.
+      seedDirtyUpdatesRef.current = {};
+
+      setContentPages((previousPages) => {
+        const dirtyUpdates: Record<string, true> = {};
+
+        const nextPages = previousPages.map((page) => {
+        const pageHasKey = Object.prototype.hasOwnProperty.call(asRecord(page.extensions), extensionKey);
+        const seedPage = hasTopicSchema && !pageHasKey;
+        if (seedPage) dirtyUpdates[`topic:${page.id}`] = true;
+
+        const nextArticles = page.articles.map((article) => {
+          const articleHasKey = Object.prototype.hasOwnProperty.call(asRecord(article.extensions), extensionKey);
+          const seedArticle = hasArticleSchema && !articleHasKey;
+          if (seedArticle) dirtyUpdates[`section:${article.id}`] = true;
+
+          const nextBlocks = article.blocks.map((block) => {
+            const blockHasKey = Object.prototype.hasOwnProperty.call(asRecord(block.extensions), extensionKey);
+            const seedBlock = hasBlockSchema && !blockHasKey;
+            if (seedBlock) dirtyUpdates[`contentGroup:${block.id}`] = true;
+
+            const nextComponents = block.components.map((component) => {
+              const componentHasKey = Object.prototype.hasOwnProperty.call(asRecord(component.extensions), extensionKey);
+              if (!hasComponentSchema || componentHasKey) return component;
+              dirtyUpdates[`component:${component.id}`] = true;
+              return { ...component, extensions: { ...asRecord(component.extensions), [extensionKey]: componentDefaults } };
+            });
+
+            if (!seedBlock && nextComponents === block.components) return block;
+            return {
+              ...block,
+              extensions: seedBlock ? { ...asRecord(block.extensions), [extensionKey]: blockDefaults } : block.extensions,
+              components: nextComponents,
+            };
+          });
+
+          if (!seedArticle && nextBlocks === article.blocks) return article;
+          return {
+            ...article,
+            extensions: seedArticle ? { ...asRecord(article.extensions), [extensionKey]: articleDefaults } : article.extensions,
+            blocks: nextBlocks,
+          };
+        });
+
+        if (!seedPage && nextArticles === page.articles) return page;
+        return {
+          ...page,
+          extensions: seedPage ? { ...asRecord(page.extensions), [extensionKey]: topicDefaults } : page.extensions,
+          articles: nextArticles,
+        };
+        });
+
+        if (!Object.keys(dirtyUpdates).length) return previousPages;
+        seedDirtyUpdatesRef.current = dirtyUpdates;
+        return nextPages;
+      });
+
+      setDirtyNodeKeys((prev) => {
+        const updates = seedDirtyUpdatesRef.current;
+        return Object.keys(updates).length ? { ...prev, ...updates } : prev;
+      });
+    },
+    [extensionSchemasByLevel]
+  );
+
+  // Strips `extensionKey` from every level's stored settings across the whole
+  // course draft — the local-state mirror of what POST /api/extension/
+  // disable/:courseId does server-side (see disableExtensionForCourse). Only
+  // touches the in-memory draft; nothing is persisted until Save actually
+  // calls the disable endpoint for any extension removed this way.
+  const removeExtensionEverywhereInDraft = useCallback(
+    (extensionKey: string) => {
+      const dirtyUpdates: Record<string, true> = {};
+
+      const nextPages = contentPages.map((page) => {
+        const pageHasKey = Object.prototype.hasOwnProperty.call(asRecord(page.extensions), extensionKey);
+        if (pageHasKey) dirtyUpdates[`topic:${page.id}`] = true;
+
+        const nextArticles = page.articles.map((article) => {
+          const articleHasKey = Object.prototype.hasOwnProperty.call(asRecord(article.extensions), extensionKey);
+          if (articleHasKey) dirtyUpdates[`section:${article.id}`] = true;
+
+          const nextBlocks = article.blocks.map((block) => {
+            const blockHasKey = Object.prototype.hasOwnProperty.call(asRecord(block.extensions), extensionKey);
+            if (blockHasKey) dirtyUpdates[`contentGroup:${block.id}`] = true;
+
+            const nextComponents = block.components.map((component) => {
+              const componentHasKey = Object.prototype.hasOwnProperty.call(asRecord(component.extensions), extensionKey);
+              if (!componentHasKey) return component;
+              dirtyUpdates[`component:${component.id}`] = true;
+              const nextExtensions = { ...asRecord(component.extensions) };
+              delete nextExtensions[extensionKey];
+              return { ...component, extensions: nextExtensions };
+            });
+
+            if (!blockHasKey && nextComponents === block.components) return block;
+            let nextBlockExtensions = block.extensions;
+            if (blockHasKey) {
+              nextBlockExtensions = { ...asRecord(block.extensions) };
+              delete (nextBlockExtensions as Record<string, unknown>)[extensionKey];
+            }
+            return { ...block, extensions: nextBlockExtensions, components: nextComponents };
+          });
+
+          if (!articleHasKey && nextBlocks === article.blocks) return article;
+          let nextArticleExtensions = article.extensions;
+          if (articleHasKey) {
+            nextArticleExtensions = { ...asRecord(article.extensions) };
+            delete (nextArticleExtensions as Record<string, unknown>)[extensionKey];
+          }
+          return { ...article, extensions: nextArticleExtensions, blocks: nextBlocks };
+        });
+
+        if (!pageHasKey && nextArticles === page.articles) return page;
+        let nextPageExtensions = page.extensions;
+        if (pageHasKey) {
+          nextPageExtensions = { ...asRecord(page.extensions) };
+          delete (nextPageExtensions as Record<string, unknown>)[extensionKey];
+        }
+        return { ...page, extensions: nextPageExtensions, articles: nextArticles };
+      });
+
+      if (!Object.keys(dirtyUpdates).length) return;
+      setContentPages(nextPages);
+      setDirtyNodeKeys((prev) => ({ ...prev, ...dirtyUpdates }));
+    },
+    [contentPages]
+  );
+
+  // Extensions queued for removal-everywhere (keyed by extensiontype bower
+  // name) — the actual disable call only fires on the next successful Save,
+  // per the draft-until-save requirement; the local strip above is what
+  // makes it immediately look removed everywhere in the meantime.
+  const [pendingExtensionDisableNames, setPendingExtensionDisableNames] = useState<Set<string>>(new Set());
+  const [extensionRemovalTarget, setExtensionRemovalTarget] = useState<{
+    key: string;
+    displayName: string;
+    extensionName: string | undefined;
+  } | null>(null);
+
+  const requestRemoveExtension = useCallback(
+    (key: string, displayName: string, extensionName: string | undefined) => {
+      setExtensionRemovalTarget({ key, displayName, extensionName });
+    },
+    []
+  );
+
+  const confirmRemoveExtension = useCallback(() => {
+    if (!extensionRemovalTarget) return;
+    const { key, extensionName } = extensionRemovalTarget;
+    removeExtensionEverywhereInDraft(key);
+    if (extensionName) {
+      setPendingExtensionDisableNames((prev) => {
+        const next = new Set(prev);
+        next.add(extensionName);
+        return next;
+      });
+    }
+    setExtensionRemovalTarget(null);
+  }, [extensionRemovalTarget, removeExtensionEverywhereInDraft]);
+
   // Ensures a newly-added extension is enabled for the course (adds it to
   // config._enabledExtensions) so the framework build actually bundles it —
   // mirrors the enable calls the hardcoded course-level extension helpers
-  // (course menu, topbar logos, ...) already make in adaptAuthoring.ts.
+  // (course menu, topbar logos, ...) already make in adaptAuthoring.ts. Also
+  // seeds this extension's schema defaults into every OTHER currently-loaded
+  // level that has a schema for it (course/topic/section/content-group/
+  // component), so it immediately shows as "Added" everywhere in this
+  // editor session — mirroring what the enable endpoint just did server-side
+  // — instead of only appearing at the one level the user clicked Add on.
   const handleExtensionAdded = useCallback(
-    (extensionName: string | undefined) => {
+    (key: string, extensionName: string | undefined) => {
       if (!extensionName || !courseId) return;
       const typeOption = extensionTypeOptions.find((o) => o.name === extensionName);
       if (typeOption) void enableExtensionForCourse(courseId, typeOption._id);
+      seedExtensionDefaultsEverywhere(key);
     },
-    [courseId, extensionTypeOptions]
+    [courseId, extensionTypeOptions, seedExtensionDefaultsEverywhere]
   );
 
   // How many of the 5 content levels (course/topic/section/content group/
@@ -7139,7 +7518,7 @@ export default function CourseEditor({
   }
 
   async function saveDraftChanges(): Promise<boolean> {
-    if (!hasUnsavedChanges) {
+    if (!hasUnsavedChanges && !pendingExtensionDisableNames.size) {
       return true;
     }
 
@@ -7383,6 +7762,20 @@ export default function CourseEditor({
       setCourseAssetMappings(refreshedMappings);
       setAssetLinkIdMap((prev) => ({ ...prev, ...refreshedAssetLinkMap }));
 
+      // Extensions confirmed for removal this session: actually disable them
+      // for the course now (the single server call that cascades the removal
+      // across every course/topic/section/content-group/component document —
+      // see disableExtensionForCourse) — deferred until now per the
+      // draft-until-save requirement.
+      if (pendingExtensionDisableNames.size) {
+        const typeOptions = await getExtensionTypeOptions();
+        const idsToDisable = typeOptions
+          .filter((option) => pendingExtensionDisableNames.has(option.name))
+          .map((option) => option._id);
+        await Promise.all(idsToDisable.map((id) => disableExtensionForCourse(courseId, id)));
+        setPendingExtensionDisableNames(new Set());
+      }
+
       setSavedContentPages(cloneContentPages(contentPages));
       setDirtyNodeKeys({});
       setPreviewRefreshToken((current) => current + 1);
@@ -7398,6 +7791,7 @@ export default function CourseEditor({
   function discardDraftChanges() {
     setContentPages(cloneContentPages(savedContentPages));
     setDirtyNodeKeys({});
+    setPendingExtensionDisableNames(new Set());
     setPreviewRefreshToken((current) => current + 1);
   }
 
@@ -8151,6 +8545,7 @@ export default function CourseEditor({
                               schemasForLevel={extensionSchemasByLevel?.contentobject ?? {}}
                               extensionTypeOptions={extensionTypeOptions}
                               onExtensionAdded={handleExtensionAdded}
+                              onRequestRemoveExtension={requestRemoveExtension}
                               onChange={(next) => updatePageData(page.id, { extensions: next })}
                               assetContext={createExtensionAssetContext("topic", page.id)}
                               customFieldRenderer={({ extensionName, fieldKey, fieldSchema, value, onChange }) =>
@@ -8486,6 +8881,7 @@ export default function CourseEditor({
                                   schemasForLevel={extensionSchemasByLevel?.article ?? {}}
                                   extensionTypeOptions={extensionTypeOptions}
                                   onExtensionAdded={handleExtensionAdded}
+                                  onRequestRemoveExtension={requestRemoveExtension}
                                   onChange={(next) => updateArticle(page!.id, article.id, { extensions: next })}
                                   assetContext={createExtensionAssetContext("section", page!.id, { articleId: article.id })}
                                   getInheritanceTag={(key) =>
@@ -8688,6 +9084,7 @@ export default function CourseEditor({
                                   schemasForLevel={extensionSchemasByLevel?.block ?? {}}
                                   extensionTypeOptions={extensionTypeOptions}
                                   onExtensionAdded={handleExtensionAdded}
+                                  onRequestRemoveExtension={requestRemoveExtension}
                                   onChange={(next) => updateBlock(page!.id, article!.id, block.id, { extensions: next })}
                                   assetContext={createExtensionAssetContext("contentGroup", page!.id, { articleId: article!.id, blockId: block.id })}
                                   getInheritanceTag={(key) =>
@@ -8886,10 +9283,17 @@ export default function CourseEditor({
                                   if (behaviourSchema === undefined) {
                                     return <p className="text-[13px] text-[var(--life-neutral-300)]">Loading component properties…</p>;
                                   }
-                                  const fieldKeys = Object.keys(behaviourSchema).filter((key) => {
-                                    const fieldSchema = behaviourSchema[key] as BehaviourFieldSchema;
-                                    return fieldSchema && !fieldSchema.editorOnly && !COMPONENT_BEHAVIOUR_EXCLUDED_FIELDS.has(key);
-                                  });
+                                  const componentBehaviourContext = flattenBehaviourSchema(
+                                    behaviourSchema as Record<string, BehaviourFieldSchema>,
+                                    componentProperties
+                                  );
+                                  const fieldKeys = filterVisibleBehaviourFieldKeys(
+                                    Object.keys(behaviourSchema).filter((key) => {
+                                      const fieldSchema = behaviourSchema[key] as BehaviourFieldSchema;
+                                      return fieldSchema && !fieldSchema.editorOnly && !COMPONENT_BEHAVIOUR_EXCLUDED_FIELDS.has(key);
+                                    }),
+                                    componentBehaviourContext
+                                  );
                                   if (!fieldKeys.length) {
                                     return <p className="text-[13px] text-[var(--life-neutral-300)]">This component has no additional behaviour properties.</p>;
                                   }
@@ -8908,9 +9312,9 @@ export default function CourseEditor({
                                   };
                                   return fieldKeys.map((key) => {
                                     const fieldSchema = behaviourSchema[key] as BehaviourFieldSchema;
-                                    const fieldValue = componentProperties[key] !== undefined ? componentProperties[key] : fieldSchema.default;
+                                    const fieldValue = resolveBehaviourFieldValue(fieldSchema, componentProperties[key]);
                                     return (
-                                      <BehaviourField key={key} path={key} fieldName={key} fieldSchema={fieldSchema} value={fieldValue} onChange={handleBehaviourChange} assetContext={behaviourAssetContext} />
+                                      <BehaviourField key={key} path={key} fieldName={key} fieldSchema={fieldSchema} value={fieldValue} onChange={handleBehaviourChange} assetContext={behaviourAssetContext} conditionalContext={componentBehaviourContext} />
                                     );
                                   });
                                 })()}
@@ -8945,6 +9349,7 @@ export default function CourseEditor({
                                   schemasForLevel={componentExtensionSchemas[(component.settings.componentKey || "").toLowerCase()] ?? {}}
                                   extensionTypeOptions={extensionTypeOptions}
                                   onExtensionAdded={handleExtensionAdded}
+                                  onRequestRemoveExtension={requestRemoveExtension}
                                   onChange={(next) => updateComponent(page.id, article.id, block.id, component.id, { extensions: next })}
                                   assetContext={createExtensionAssetContext("component", page.id, { articleId: article.id, blockId: block.id, componentId: component.id })}
                                   getInheritanceTag={(key) =>
@@ -9113,6 +9518,15 @@ export default function CourseEditor({
             runPendingGuardedAction();
           }}
           message="You have unsaved changes. Save before leaving this page?"
+        />
+
+        <ConfirmDialog
+          open={!!extensionRemovalTarget}
+          title={`Remove ${extensionRemovalTarget?.displayName ?? "extension"}`}
+          message="Removing it will remove the extension from this course. Do you still want to proceed?"
+          confirmLabel="Remove"
+          onCancel={() => setExtensionRemovalTarget(null)}
+          onConfirm={confirmRemoveExtension}
         />
 
         {publishDialogPhase && (

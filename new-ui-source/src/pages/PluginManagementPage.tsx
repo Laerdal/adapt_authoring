@@ -1,8 +1,9 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
 import { getPlugins } from "@/api/adaptAuthoring";
+import AiAssistant from "@/components/common/AiAssistant";
 
 type PluginStatus = "Enabled" | "Disabled";
-type PluginCategory = "Content" | "Assessment" | "Media" | "Analytics" | "Accessibility";
+type PluginCategory = "extensions" | "components" | "themes" | "menus";
 
 interface Plugin {
   id: number;
@@ -17,21 +18,21 @@ interface Plugin {
 }
 
 const INITIAL_PLUGINS: Plugin[] = [
-  { id: 1,  name: "Adapt Accordion",        description: "Collapsible accordion component for organising content into expandable sections.",         version: "3.2.1", author: "Adapt Learning",   category: "Content",       status: "Enabled",  installedDate: "12 Jan 2026" },
-  { id: 2,  name: "Adapt Narrative",         description: "Step-by-step narrative component with image and text panels for guided learning paths.",    version: "5.1.0", author: "Adapt Learning",   category: "Content",       status: "Enabled",  installedDate: "12 Jan 2026" },
-  { id: 3,  name: "Adapt MCQ",              description: "Multiple-choice question component with configurable feedback and scoring options.",          version: "7.0.2", author: "Adapt Learning",   category: "Assessment",    status: "Enabled",  installedDate: "12 Jan 2026" },
-  { id: 4,  name: "Adapt Matching",         description: "Drag-and-drop matching question component for pairing related concepts.",                    version: "4.3.0", author: "Adapt Learning",   category: "Assessment",    status: "Enabled",  installedDate: "15 Jan 2026" },
-  { id: 5,  name: "Adapt Media",            description: "Embeds video and audio content with full playback controls and transcript support.",         version: "6.1.1", author: "Adapt Learning",   category: "Media",         status: "Enabled",  installedDate: "20 Jan 2026" },
-  { id: 6,  name: "H5P Integration",        description: "Integrates H5P interactive content types directly into Adapt courses.",                      version: "1.4.0", author: "Laerdal Labs",     category: "Content",       status: "Disabled", installedDate: "05 Feb 2026" },
-  { id: 7,  name: "xAPI Analytics",         description: "Sends detailed xAPI statements to your LRS for advanced learner analytics and reporting.",   version: "2.0.3", author: "Laerdal Labs",     category: "Analytics",     status: "Enabled",  installedDate: "10 Feb 2026" },
-  { id: 8,  name: "SCORM Analytics",        description: "Enhanced SCORM tracking with detailed completion and score reporting.",                       version: "3.5.0", author: "Community",        category: "Analytics",     status: "Disabled", installedDate: "18 Feb 2026" },
-  { id: 9,  name: "Screen Reader Support",  description: "Enhances ARIA labels and keyboard navigation for improved screen reader compatibility.",     version: "1.1.0", author: "Laerdal Labs",     category: "Accessibility", status: "Enabled",  installedDate: "22 Mar 2026" },
-  { id: 10, name: "High Contrast Mode",     description: "Adds high contrast colour scheme toggle for users with low vision.",                         version: "1.0.2", author: "Community",        category: "Accessibility", status: "Disabled", installedDate: "01 Apr 2026" },
-  { id: 11, name: "Adapt Hotgraphic",       description: "Interactive image with clickable hotspots revealing additional information.",               version: "5.2.0", author: "Adapt Learning",   category: "Content",       status: "Enabled",  installedDate: "05 Apr 2026" },
-  { id: 12, name: "360° Image Viewer",      description: "Renders equirectangular images as interactive 360° panoramas within courses.",               version: "0.9.1", author: "Community",        category: "Media",         status: "Disabled", installedDate: "15 May 2026" },
+  { id: 1,  name: "Adapt Accordion",        description: "Collapsible accordion component for organising content into expandable sections.",         version: "3.2.1", author: "Adapt Learning",   category: "components", status: "Enabled",  installedDate: "12 Jan 2026" },
+  { id: 2,  name: "Adapt Narrative",         description: "Step-by-step narrative component with image and text panels for guided learning paths.",    version: "5.1.0", author: "Adapt Learning",   category: "components", status: "Enabled",  installedDate: "12 Jan 2026" },
+  { id: 3,  name: "Adapt MCQ",              description: "Multiple-choice question component with configurable feedback and scoring options.",          version: "7.0.2", author: "Adapt Learning",   category: "components", status: "Enabled",  installedDate: "12 Jan 2026" },
+  { id: 4,  name: "Adapt Matching",         description: "Drag-and-drop matching question component for pairing related concepts.",                    version: "4.3.0", author: "Adapt Learning",   category: "components", status: "Enabled",  installedDate: "15 Jan 2026" },
+  { id: 5,  name: "Adapt Media",            description: "Embeds video and audio content with full playback controls and transcript support.",         version: "6.1.1", author: "Adapt Learning",   category: "extensions", status: "Enabled",  installedDate: "20 Jan 2026" },
+  { id: 6,  name: "H5P Integration",        description: "Integrates H5P interactive content types directly into Adapt courses.",                      version: "1.4.0", author: "Laerdal Labs",     category: "extensions", status: "Disabled", installedDate: "05 Feb 2026" },
+  { id: 7,  name: "xAPI Analytics",         description: "Sends detailed xAPI statements to your LRS for advanced learner analytics and reporting.",   version: "2.0.3", author: "Laerdal Labs",     category: "extensions", status: "Enabled",  installedDate: "10 Feb 2026" },
+  { id: 8,  name: "SCORM Analytics",        description: "Enhanced SCORM tracking with detailed completion and score reporting.",                       version: "3.5.0", author: "Community",        category: "extensions", status: "Disabled", installedDate: "18 Feb 2026" },
+  { id: 9,  name: "Screen Reader Support",  description: "Enhances ARIA labels and keyboard navigation for improved screen reader compatibility.",     version: "1.1.0", author: "Laerdal Labs",     category: "themes", status: "Enabled",  installedDate: "22 Mar 2026" },
+  { id: 10, name: "High Contrast Mode",     description: "Adds high contrast colour scheme toggle for users with low vision.",                         version: "1.0.2", author: "Community",        category: "themes", status: "Disabled", installedDate: "01 Apr 2026" },
+  { id: 11, name: "Adapt Hotgraphic",       description: "Interactive image with clickable hotspots revealing additional information.",               version: "5.2.0", author: "Adapt Learning",   category: "menus", status: "Enabled",  installedDate: "05 Apr 2026" },
+  { id: 12, name: "360° Image Viewer",      description: "Renders equirectangular images as interactive 360° panoramas within courses.",               version: "0.9.1", author: "Community",        category: "menus", status: "Disabled", installedDate: "15 May 2026" },
 ];
 
-const CATEGORIES: PluginCategory[] = ["Content", "Assessment", "Media", "Analytics", "Accessibility"];
+const CATEGORIES: PluginCategory[] = ["extensions", "components", "themes", "menus"];
 
 type Toast = { id: number; message: string; type: "success" | "info" };
 
@@ -41,8 +42,7 @@ export default function PluginManagementPage() {
   // Live list from the engine; graceful fallback to empty if unavailable.
   useEffect(() => { getPlugins().then(setPlugins).catch(() => setPlugins([])); }, []);
   const [search, setSearch] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<PluginCategory | "All">("All");
-  const [statusFilter, setStatusFilter] = useState<PluginStatus | "All">("All");
+  const [categoryFilter, setCategoryFilter] = useState<PluginCategory | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
 
@@ -70,20 +70,25 @@ export default function PluginManagementPage() {
     const q = search.trim().toLowerCase();
     return plugins.filter((p) => {
       const matchSearch = q === "" || p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q) || p.author.toLowerCase().includes(q);
-      const matchCat = categoryFilter === "All" || p.category === categoryFilter;
-      const matchStatus = statusFilter === "All" || p.status === statusFilter;
-      return matchSearch && matchCat && matchStatus;
+      const matchCat = categoryFilter === null || p.category === categoryFilter;
+      return matchSearch && matchCat;
     });
-  }, [plugins, search, categoryFilter, statusFilter]);
+  }, [plugins, search, categoryFilter]);
 
   const enabledCount = plugins.filter((p) => p.status === "Enabled").length;
 
   const CATEGORY_COLOURS: Record<PluginCategory, string> = {
-    Content:       "bg-[#dbeafe] text-[#1e40af]",
-    Assessment:    "bg-[#fef3c7] text-[#92400e]",
-    Media:         "bg-[#f3e8ff] text-[#6b21a8]",
-    Analytics:     "bg-[#dcfce7] text-[#166534]",
-    Accessibility: "bg-[#ffedd5] text-[#9a3412]",
+    extensions: "bg-[#dbeafe] text-[#1e40af]",
+    components: "bg-[#fef3c7] text-[#92400e]",
+    themes: "bg-[#f3e8ff] text-[#6b21a8]",
+    menus: "bg-[#dcfce7] text-[#166534]",
+  };
+
+  const CATEGORY_LABELS: Record<PluginCategory, string> = {
+    extensions: "Extension",
+    components: "Component",
+    themes: "Theme",
+    menus: "Menu",
   };
 
   return (
@@ -123,27 +128,13 @@ export default function PluginManagementPage() {
         </div>
 
         <div className="flex items-center gap-2 ml-auto sm:ml-0" ref={filterRef}>
-          {/* Status filter */}
-          <div className="flex items-center border border-[#e5e7eb] rounded-lg overflow-hidden bg-white text-sm">
-            {(["All", "Enabled", "Disabled"] as const).map((opt) => (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => setStatusFilter(opt)}
-                className={`px-3 py-2 transition-colors ${statusFilter === opt ? "bg-[#2d6fa8] text-white font-medium" : "text-[#374151] hover:bg-[#f9fafb]"} ${opt !== "All" ? "border-l border-[#e5e7eb]" : ""}`}
-              >
-                {opt}
-              </button>
-            ))}
-          </div>
-
           {/* Category filter */}
           <div className="relative">
             <button
               type="button"
               onClick={() => setFilterOpen((o) => !o)}
               className={`flex items-center gap-1.5 px-3 py-2.5 text-sm border rounded-lg transition-colors whitespace-nowrap ${
-                categoryFilter !== "All"
+                categoryFilter
                   ? "border-[#2d6fa8] bg-[#dbeeff] text-[#2d6fa8] font-medium"
                   : "bg-white border-[#e5e7eb] text-[#374151] hover:bg-[#f9fafb]"
               }`}
@@ -151,7 +142,7 @@ export default function PluginManagementPage() {
               <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18M7 8h10M11 12h2" />
               </svg>
-              <span>{categoryFilter === "All" ? "Category" : categoryFilter}</span>
+              <span>{categoryFilter ? CATEGORY_LABELS[categoryFilter] : "Category"}</span>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${filterOpen ? "rotate-180" : ""}`}>
                 <path d="M6 9l6 6 6-6" />
               </svg>
@@ -159,16 +150,16 @@ export default function PluginManagementPage() {
             {filterOpen && (
               <div className="absolute right-0 mt-1 w-48 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-20 py-1">
                 <p className="px-3 py-1.5 text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">Filter by category</p>
-                {(["All", ...CATEGORIES] as const).map((opt) => (
+                {CATEGORIES.map((opt) => (
                   <button
                     key={opt}
                     type="button"
-                    onClick={() => { setCategoryFilter(opt as PluginCategory | "All"); setFilterOpen(false); }}
+                    onClick={() => { setCategoryFilter(opt); setFilterOpen(false); }}
                     className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${
                       categoryFilter === opt ? "bg-[#dbeeff] text-[#2d6fa8] font-medium" : "text-[#374151] hover:bg-[#f9fafb]"
                     }`}
                   >
-                    {opt === "All" ? "All Categories" : opt}
+                    {CATEGORY_LABELS[opt]}
                     {categoryFilter === opt && (
                       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
                         <polyline points="20 6 9 17 4 12" />
@@ -215,7 +206,7 @@ export default function PluginManagementPage() {
                 <div className="flex flex-wrap items-center gap-2 mb-0.5">
                   <span className="font-semibold text-sm text-[#111827]">{plugin.name}</span>
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${CATEGORY_COLOURS[plugin.category]}`}>
-                    {plugin.category}
+                    {CATEGORY_LABELS[plugin.category]}
                   </span>
                   <span className="text-xs text-[#9ca3af]">v{plugin.version}</span>
                 </div>
@@ -251,6 +242,8 @@ export default function PluginManagementPage() {
           ))}
         </div>
       )}
+
+      <AiAssistant context="Plugin Management" />
 
       {/* Toast notifications */}
       <div className="fixed top-4 right-4 z-[60] flex flex-col gap-2 pointer-events-none">

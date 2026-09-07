@@ -904,7 +904,10 @@ function ImportSource(req, done) {
       delete data._id;
       delete data._trackingId;
       delete data._latestTrackingId;
-      data.createdBy = app.usermanager.getCurrentUser()._id;
+      // Use req.user._id (Mongoose ObjectId) so the stored createdBy matches the
+      // ObjectId used by the /api/my/course query filter. getCurrentUser()._id
+      // returns a plain string which MongoDB stores as a different type.
+      data.createdBy = app.usermanager.getCurrentUser()._id;;
       if (type !== 'course') {
         data._courseId = courseId;
       }

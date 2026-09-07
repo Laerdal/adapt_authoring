@@ -32,6 +32,8 @@ class ApiClient {
       });
 
       if (!response.ok) {
+        // Session expired/dropped → bounce to the engine login, like the old UI.
+        if (response.status === 401) window.location.assign("/");
         const error = await response.json().catch(() => ({ message: response.statusText }));
         const err = new Error(error.message || error.statusCode || `HTTP ${response.status}`);
         (err as Error & { status?: number }).status = response.status;

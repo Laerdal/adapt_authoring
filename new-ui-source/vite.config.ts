@@ -21,6 +21,15 @@ export default defineConfig({
         target: 'http://localhost:5000',
         changeOrigin: true,
       },
+      // Framework import endpoints (no /api/ prefix — mounted at server root)
+      '/importsourcecheck': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+      },
+      '/importsource': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+      },
     },
   },
   build: {

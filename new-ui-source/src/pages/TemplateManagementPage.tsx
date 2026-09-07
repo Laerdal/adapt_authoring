@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { getTemplates, deleteTemplate, updateTemplate, type TemplateScope } from '@/api/adaptAuthoring'
+import AiAssistant from '@/components/common/AiAssistant'
 
 type TemplateType = 'Page' | 'Article' | 'Block' | 'Component'
 
@@ -454,6 +455,8 @@ export default function TemplateManagementPage() {
       )}
 
       {/* Delete Confirmation Modal */}
+      <AiAssistant context="Template Management" />
+
       {deleteTarget && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"

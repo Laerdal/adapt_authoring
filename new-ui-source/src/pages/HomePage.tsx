@@ -2,7 +2,10 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { CourseCard } from '@/components/course'
 import AiAssistant from '@/components/common/AiAssistant'
+import PermissionDeniedModal from '@/components/common/PermissionDeniedModal'
+import { useAuth, isSuperAdmin, canManageCourses } from '@/context/AuthContext'
 import { createCourse, deleteCourse, duplicateCourse, fetchDashboardCourses, getAuthoringMenuOptions, getAuthoringThemeOptions, updateCourse } from '@/api/adaptAuthoring'
+import ImportCourseModal from '@/components/importExport/Import'
 
 
 type Theme = string
@@ -64,8 +67,12 @@ function pickPreferredMenu(options: string[]): string {
 export default function HomePage() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { user } = useAuth()
+  const canImportCourses = isSuperAdmin(user)
+  const canCreateOrManageCourses = canManageCourses(user)
   const [courses, setCourses] = useState<Course[]>([])
   const [isLoadingCourses, setIsLoadingCourses] = useState(true)
+  const [permissionDialog, setPermissionDialog] = useState<{ title: string; message: string } | null>(null)
   const READ_ONLY_REASON = 'Import is temporarily disabled until the matching Adapt API endpoint is wired.'
 
   // Search / filter / sort / view
@@ -90,19 +97,33 @@ export default function HomePage() {
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500)
   }, [])
 
+  const loadGenRef = useRef(0)
   const loadCourses = useCallback(async () => {
+    const gen = ++loadGenRef.current
+    const shared = location.pathname === '/shared'
+    const PAGE = 50
+    setIsLoadingCourses(true)
     try {
-      setIsLoadingCourses(true)
-      const shared = location.pathname === '/shared'
-      const apiCourses = await fetchDashboardCourses(shared)
-      // Always reflect the live result — including empty (e.g. no shared courses),
-      // so the UI matches the engine instead of falling back to sample data.
-      setCourses(apiCourses)
+      // Load progressively: render the first page immediately, then stream the
+      // rest in the background and append. A user with 1000s of courses no longer
+      // waits on one huge request (the server pages via operators.skip/limit);
+      // client-side search/sort/tags keep working over the growing set.
+      let skip = 0
+      for (;;) {
+        const page = await fetchDashboardCourses(shared, skip, PAGE)
+        if (gen !== loadGenRef.current) return // superseded (route change / newer load)
+        setCourses((prev) => (skip === 0 ? page : [...prev, ...page]))
+        if (skip === 0) setIsLoadingCourses(false) // first page is on screen
+        if (page.length < PAGE) break // last page
+        skip += PAGE
+      }
     } catch {
-      setCourses([])
-      showToast('Could not load live course data.', 'info')
+      if (gen === loadGenRef.current) {
+        setCourses([])
+        showToast('Could not load live course data.', 'info')
+      }
     } finally {
-      setIsLoadingCourses(false)
+      if (gen === loadGenRef.current) setIsLoadingCourses(false)
     }
   }, [location.pathname, showToast])
 
@@ -260,12 +281,28 @@ export default function HomePage() {
 
   // Import
   const importInputRef = useRef<HTMLInputElement>(null)
+  const [importModalOpen, setImportModalOpen] = useState(false)
 
   function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     e.target.value = ''
     showToast(`${READ_ONLY_REASON} Import is blocked for now.`, 'info')
+  }
+
+  async function handleImportSuccess(deprecatedPlugins?: string[]) {
+    await loadCourses()
+    if (deprecatedPlugins && deprecatedPlugins.length > 0) {
+      showToast(
+        `Course imported with warnings: deprecated plugin(s) found — ${deprecatedPlugins.join(', ')}. We recommend replacing or removing them.`,
+        'info'
+      )
+    } else {
+      showToast('Course imported successfully.')
+    }
+  }
+  function showPermissionDenied(title: string, message: string) {
+    setPermissionDialog({ title, message })
   }
 
   function clearSearch() { setSearch('') }
@@ -331,39 +368,47 @@ export default function HomePage() {
           {/* Page heading */}
           <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">{location.pathname === '/shared' ? 'Shared with Me' : location.pathname === '/my-courses' ? 'My Courses' : 'All Courses'}</h1>
+              <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">{location.pathname === '/shared' ? 'Shared with Me' : 'My Courses'}</h1>
               <p className="text-sm text-[#6b7280] mt-1">Manage and organize your courses</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {/* Import */}
-              <input
-                ref={importInputRef}
-                type="file"
-                accept=".zip,.json"
-                className="hidden"
-                aria-label="Import course file"
-                onChange={handleImport}
-              />
-              <button
-                type="button"
-                onClick={() => importInputRef.current?.click()}
-                title={READ_ONLY_REASON}
-                disabled
-                className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[#d1d5db] hover:bg-[#f9fafb] text-[#374151] text-sm font-semibold rounded-lg transition-colors"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="17 8 12 3 7 8" />
-                  <line x1="12" y1="3" x2="12" y2="15" />
-                </svg>
-                <span className="hidden sm:inline">Import Course</span>
-                <span className="sm:hidden">Import</span>
-              </button>
+              {canImportCourses && (
+              <>  
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept=".zip,.json"
+                  className="hidden"
+                  aria-label="Import course file"
+                  onChange={handleImport}
+                />
+                <button
+                  type="button"
+                  onClick={() => setImportModalOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[#d1d5db] hover:bg-[#f9fafb] text-[#374151] text-sm font-semibold rounded-lg transition-colors"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                  <span className="hidden sm:inline">Import Course</span>
+                  <span className="sm:hidden">Import</span>
+                </button>
+              </>
+              )}
 
               {/* Create New Course */}
               <button
                 type="button"
-                onClick={openCreateModal}
+                onClick={() => {
+                  if (!canCreateOrManageCourses) {
+                    showPermissionDenied('Create Course', 'You do not have permission to create a new course.');
+                    return;
+                  }
+                  openCreateModal();
+                }}
                 className="flex items-center gap-2 px-4 py-2.5 bg-[#2d6fa8] hover:bg-[#245c8f] text-white text-sm font-semibold rounded-lg transition-colors"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -602,6 +647,15 @@ export default function HomePage() {
                 <CourseCard
                   key={course.id}
                   {...course}
+                  showAuthor={location.pathname === '/shared'}
+                  canManageCourses={canCreateOrManageCourses}
+                  onPermissionDenied={(action) => {
+                    if (action === 'edit') {
+                      showPermissionDenied('Edit Course', 'You do not have permission to edit this course.');
+                    } else if (action === 'delete') {
+                      showPermissionDenied('Delete Course', 'You do not have permission to delete this course.');
+                    }
+                  }}
                   viewHref={course.backendId ? `/course/${course.backendId}/preview` : ""}
                   onUpdate={(patch) => handleUpdate(course.id, patch)}
                   onCopy={() => handleCopy(course.id)}
@@ -612,6 +666,13 @@ export default function HomePage() {
             </div>
           )}
     </div>
+
+      <PermissionDeniedModal
+        open={!!permissionDialog}
+        title={permissionDialog?.title ?? 'Permission Denied'}
+        message={permissionDialog?.message ?? 'You do not have permission to perform this action.'}
+        onClose={() => setPermissionDialog(null)}
+      />
 
       {/* Create Course Modal */}
       {createOpen && (
@@ -810,6 +871,12 @@ export default function HomePage() {
           </div>
         ))}
       </div>
+
+      <ImportCourseModal
+        isOpen={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        onSuccess={handleImportSuccess}
+      />
 
       <AiAssistant context="Dashboard" />
     </>
