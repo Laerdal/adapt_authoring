@@ -324,21 +324,78 @@ function toDashboardCourse(doc: EngineCourse, index: number): DashboardCourse {
   };
 }
 
+export type CourseSort = "recent" | "alpha-asc" | "alpha-desc";
+
+export interface CourseQuery {
+  search?: string;      // free text, matched against the course title
+  tags?: string[];      // tag _ids (see fetchDashboardTags) — matched with $all
+  sort?: CourseSort;
+}
+
+// A stable, unique sort is REQUIRED for skip/limit to page deterministically —
+// without a tiebreaker DocDB returns an undefined order that shifts between
+// requests, so pages overlap/gap (duplicate & missing courses). _id is unique +
+// indexed, so it settles ties; ObjectId is ~creation-ordered (newest-first = -1).
+const SORT_OPERATORS: Record<CourseSort, Array<[string, string]>> = {
+  recent:       [["updatedAt", "-1"], ["_id", "-1"]],
+  "alpha-asc":  [["title", "1"],  ["_id", "1"]],
+  "alpha-desc": [["title", "-1"], ["_id", "1"]],
+};
+
+// Escape regex metacharacters so the server's `new RegExp(term, 'i')` treats the
+// search as a literal substring (matches user intent + avoids 500s / ReDoS).
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 // shared=false → my courses; shared=true → courses shared with me.
-export async function fetchDashboardCourses(shared = false, skip = 0, limit = 0): Promise<DashboardCourse[]> {
+// Search / tags / sort are applied server-side via the same query shape the old
+// UI uses; skip/limit page the *filtered* set so a user with 1000s of courses
+// never pulls them all. limit=0 keeps the unpaginated behaviour for other callers.
+export async function fetchDashboardCourses(
+  shared = false,
+  skip = 0,
+  limit = 0,
+  query: CourseQuery = {},
+): Promise<DashboardCourse[]> {
   const endpoint = shared ? "/api/shared/course" : "/api/my/course";
-  // Paginate via the same operators the old UI uses (server applies skip/limit),
-  // so a user with 1000s of courses doesn't pull them all in one request. limit=0
-  // keeps the old unpaginated behaviour for any caller that wants everything.
-  // A stable, unique sort is REQUIRED for skip/limit to page deterministically —
-  // without it DocDB returns an undefined order that shifts between requests, so
-  // pages overlap/gap (duplicate & missing courses, which broke the filters). _id
-  // is unique + indexed and ObjectId is ~creation-ordered, so -1 is newest-first.
-  const qs = limit > 0
-    ? `?operators%5Bskip%5D=${skip}&operators%5Blimit%5D=${limit}&operators%5Bsort%5D%5B_id%5D=-1`
-    : "";
-  const docs = await apiClient.get<EngineCourse[]>(endpoint + qs);
-  return Array.isArray(docs) ? docs.map(toDashboardCourse) : [];
+  const params = new URLSearchParams();
+
+  if (limit > 0) {
+    params.set("operators[skip]", String(skip));
+    params.set("operators[limit]", String(limit));
+    for (const [field, dir] of SORT_OPERATORS[query.sort ?? "recent"]) {
+      params.set(`operators[sort][${field}]`, dir);
+    }
+  }
+  const term = query.search?.trim();
+  if (term) params.set("search[title]", escapeRegExp(term));
+  for (const tagId of query.tags ?? []) {
+    params.append("search[tags][$all][]", tagId);
+  }
+
+  const qs = params.toString();
+  const docs = await apiClient.get<EngineCourse[]>(qs ? `${endpoint}?${qs}` : endpoint);
+  // Page by absolute offset so the client id/React key stays unique across pages.
+  return Array.isArray(docs) ? docs.map((doc, i) => toDashboardCourse(doc, skip + i)) : [];
+}
+
+// The tag universe for the filter dropdown, sourced from the same autocomplete
+// endpoint the old UI uses (not derived from the loaded course page, which is
+// only a slice). Returns { title, id } — id is needed to filter courses by tag.
+export async function fetchDashboardTags(term = ""): Promise<Array<{ title: string; id: string }>> {
+  const qs = term.trim() ? `?term=${encodeURIComponent(term.trim())}` : "";
+  const rows = await apiClient.get<Array<{ title?: string; _id?: string }>>(`/api/autocomplete/tag${qs}`);
+  if (!Array.isArray(rows)) return [];
+  const seen = new Set<string>();
+  const out: Array<{ title: string; id: string }> = [];
+  for (const row of rows) {
+    const title = (row.title ?? "").trim();
+    if (!title || !row._id || seen.has(title.toLowerCase())) continue;
+    seen.add(title.toLowerCase());
+    out.push({ title, id: row._id });
+  }
+  return out.sort((a, b) => a.title.localeCompare(b.title));
 }
 
 // Update course details — resolves tag titles to IDs before sending to the engine.
