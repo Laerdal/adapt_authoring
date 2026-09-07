@@ -4,7 +4,8 @@ import CommonCourseTopBarRow from "../components/course/CommonCourseTopBarRow";
 import { ensureCoursePreview, ensurePreviewEditEnabledForCourse, getCourseBootstrapData, publishCoursePackage, seedMissingCourseDefaults } from "../api/adaptAuthoring";
 import { getUserRole, useAuth } from "../context/AuthContext";
 import { UnsavedChangesModal } from "./setup/unsavedChangesModal";
-import ExportDialog from "../components/common/ExportDialog";
+import ExportMenu, { ExportStatusPopup } from "../components/importExport/Export";
+import { runExportSourceAction } from "../helpers/importExportHelper";
 import PublishMenuButton from "../components/publish/PublishMenuButton";
 import PublishCourseDialog, { type PublishCoursePhase } from "../components/publish/PublishCourseDialog";
 
@@ -65,9 +66,16 @@ export default function CoursePreviewPage() {
   // the possibly-issued PUT to complete before the framework loads course.json.
   const [defaultsReady, setDefaultsReady] = useState(false);
   const [previewState, setPreviewState] = useState<"preparing" | "ready" | "error">("preparing");
-  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [exportingSource, setExportingSource] = useState(false);
+  const [exportPopup, setExportPopup] = useState<{ status: "processing" | "success" | "error"; message: string } | null>(null);
   const [publishDialogPhase, setPublishDialogPhase] = useState<PublishCoursePhase | null>(null);
   const [publishResult, setPublishResult] = useState<{ zipName?: string; downloadUrl?: string; message?: string }>({});
+
+  useEffect(() => {
+    if (!exportPopup || (exportPopup.status !== "success" && exportPopup.status !== "error")) return;
+    const timer = window.setTimeout(() => setExportPopup(null), 3200);
+    return () => window.clearTimeout(timer);
+  }, [exportPopup]);
 
   useEffect(() => {
     if (!id) return;
@@ -321,9 +329,36 @@ export default function CoursePreviewPage() {
     sendPreviewEditCommand("adapt-preview-edit:text-only-disable");
   };
 
-  const openExportDialog = () => {
+  const handleExportSource = () => {
     if (!canUseExport) return;
-    runWithQuickEditGuard(() => setShowExportDialog(true));
+    runWithQuickEditGuard(() => {
+      void runExportSourceAction({
+        exportingSource,
+        tenantId: user?._tenantId,
+        courseId: id ?? "",
+        setExportingSource,
+        onProcessingStart: () => {
+          setExportPopup({ status: "processing", message: "Preparing course source export…" });
+        },
+        onDownloadStarted: () => {
+          setExportPopup({ status: "success", message: "Course source exported successfully" });
+        },
+        onUnavailable: () => {
+          setExportPopup({ status: "error", message: "Course export is not available right now." });
+        },
+        onError: (message) => {
+          setExportPopup({ status: "error", message: `Unable to export source. ${message}` });
+        },
+      });
+    });
+  };
+
+  const openExportPdfPanel = () => {
+    if (!canUseExport) return;
+    runWithQuickEditGuard(() => {
+      setExportPopup(null);
+      navigate(`/course/${id}/setup?panel=export-pdf`);
+    });
   };
 
   function openPublishDialog() {
@@ -432,19 +467,12 @@ export default function CoursePreviewPage() {
           ))}
 
           {canUseExport && (
-            <button
-              type="button"
-              onClick={openExportDialog}
-              disabled={quickEditEnabled}
-              title={quickEditEnabled ? "Export is disabled during Quick Edit" : "Export course"}
-              className="inline-flex items-center gap-1.5 h-9 px-3 text-[13px] font-bold bg-transparent text-[var(--life-base-black)] rounded-[8px] hover:bg-[var(--life-primary-050)] hover:text-[var(--life-primary-700)] active:bg-[var(--life-primary-100)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer disabled:text-[#9ca3af] disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-[#9ca3af]"
-            >
-              <MaskIcon file="export-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-              Export
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </button>
+            <ExportMenu
+              disabled={!id || !user?._tenantId || quickEditEnabled}
+              exportSourceLoading={exportingSource}
+              onExportSource={handleExportSource}
+              onExportPdf={openExportPdfPanel}
+            />
           )}
 
           <PublishMenuButton
@@ -555,7 +583,7 @@ export default function CoursePreviewPage() {
         discardLabel="Discard"
         saveLabel="Save"
       />
-      {showExportDialog && <ExportDialog onClose={() => setShowExportDialog(false)} />}
+      {exportPopup && <ExportStatusPopup status={exportPopup.status} message={exportPopup.message} />}
 
       {publishDialogPhase && (
         <PublishCourseDialog

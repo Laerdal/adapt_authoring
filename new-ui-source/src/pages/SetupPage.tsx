@@ -2664,7 +2664,13 @@ function CourseCreationCenterContent() {
   const [savedPresetId, setSavedPresetId] = useState("");
 
   const [activeNav, setActiveNav] = useState(() =>
-    initialPanel === "storyboarding" ? "storyboarding" : initialPanel === "publish" ? "publish" : "overview",
+    initialPanel === "storyboarding"
+      ? "storyboarding"
+      : initialPanel === "publish"
+        ? "publish"
+        : initialPanel === "export-pdf"
+          ? "export-pdf"
+          : "overview",
   );
   const [collapsed, setCollapsed] = useState(false);
   const [exportingSource, setExportingSource] = useState(false);
@@ -2953,34 +2959,6 @@ function CourseCreationCenterContent() {
               }}
             />
           )}
-          <ExportMenu
-            disabled={!courseId || !user?._tenantId}
-            exportSourceLoading={exportingSource}
-            onExportSource={() => {
-              void runExportSourceAction({
-                exportingSource,
-                tenantId: user?._tenantId,
-                courseId,
-                setExportingSource,
-                onProcessingStart: () => {
-                  setExportPopup({ status: "processing", message: "Preparing course source export…" });
-                },
-                onDownloadStarted: () => {
-                  setExportPopup({ status: "success", message: "Course source exported successfully" });
-                },
-                onUnavailable: () => {
-                  setExportPopup({ status: "error", message: "Course export is not available right now." });
-                },
-                onError: (message) => {
-                  setExportPopup({ status: "error", message: `Unable to export source. ${message}` });
-                },
-              });
-            }}
-            onExportPdf={() => {
-              setExportPopup(null);
-              setActiveNav("export-pdf");
-            }}
-          />
 
             <PublishMenuButton
               active={activeNav === "publish"}
