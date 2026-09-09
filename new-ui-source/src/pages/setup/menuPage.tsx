@@ -1241,7 +1241,7 @@ export function MenuPage({
 
   return (
     <>
-      <div className="flex flex-row items-start min-h-[calc(100vh-96px)] pb-10">
+      <div className="flex flex-row items-start min-h-[calc(100vh-96px)]">
         <div className="flex-1 min-w-0 bg-[var(--background)] border-r border-[var(--life-neutral-200)] px-8 pt-8 pb-16 overflow-y-auto max-h-[calc(100vh-96px)]">
           <div className="mb-7">
             <h2 className="text-xl font-bold text-[var(--life-base-black)] m-0">Menu</h2>
