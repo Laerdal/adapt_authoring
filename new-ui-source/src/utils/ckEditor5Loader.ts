@@ -64,6 +64,10 @@ export function loadCKEditor5In(targetWindow: Window): Promise<void> {
           .ck.ck-toolbar { width: 100% !important; box-sizing: border-box !important; flex-wrap: wrap !important; row-gap: 2px; }
           .ck.ck-toolbar__items { flex-wrap: wrap !important; }
           .ck.ck-content { word-break: break-word; }
+          .ck.ck-editor__editable.ck-focused:not(.ck-editor__nested-editable) {
+            outline: 0 !important;
+            box-shadow: none !important;
+          }
         `;
         targetDocument.head.appendChild(style);
       }

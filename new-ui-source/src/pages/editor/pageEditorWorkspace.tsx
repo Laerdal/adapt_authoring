@@ -980,8 +980,12 @@ function BehaviourField({
 
   // Matches the old tool's global Backbone Forms override (backboneFormsOverrides.js):
   // EVERY schema field with inputType "TextArea" renders as a full CKEditor 5
-  // instance there, not a plain textarea — so mirror that here too.
-  if (inputTypeStr === "TextArea" || fieldName === "body") {
+  // instance there, not a plain textarea — so mirror that here too. Must be
+  // driven ONLY by the schema's own inputType (never by field NAME) — a
+  // field literally called "body" whose schema declares inputType "Text"
+  // (e.g. Laerdal Checklist's per-item body) renders as plain text in the
+  // old tool, and must render identically here.
+  if (inputTypeStr === "TextArea") {
     return (
       <div className="flex flex-col gap-1.5">
         <TopicFieldLabel required={isRequired}>{label}</TopicFieldLabel>
@@ -3128,6 +3132,14 @@ export default function CourseEditor({
   });
 
   const [contentPages, setContentPages] = useState<ContentPageData[]>([]);
+  // Read by applyPreviewSelectionStyles (hover hover-title-preview lookup)
+  // without adding contentPages to its own dependency array — that array
+  // deliberately only reacts to hover/selection id changes, not every
+  // keystroke, so it must read data via ref rather than closure capture.
+  const contentPagesRef = useRef(contentPages);
+  useEffect(() => {
+    contentPagesRef.current = contentPages;
+  }, [contentPages]);
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [selectedSubPageId, setSelectedSubPageId] = useState<string | null>(null);
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
@@ -3167,6 +3179,20 @@ export default function CourseEditor({
   const [navFooterCourseButtons, setNavFooterCourseButtons] = useState<Record<NavFooterButtonKey, NavFooterButton> | null>(null);
   const [courseAssetMappings, setCourseAssetMappings] = useState<Record<string, string>>({});
   const [assetLinkIdMap, setAssetLinkIdMap] = useState<Record<string, string>>({});
+  const liveSelectionRef = useRef({
+    menuSelected,
+    selectedPageId,
+    selectedArticleId,
+    selectedBlockId,
+    selectedComponentId,
+  });
+  liveSelectionRef.current = {
+    menuSelected,
+    selectedPageId,
+    selectedArticleId,
+    selectedBlockId,
+    selectedComponentId,
+  };
   const structureLoadRequestIdRef = useRef(0);
   const isMountedRef = useRef(true);
   const pendingGuardedActionRef = useRef<(() => void) | null>(null);
@@ -3248,7 +3274,7 @@ export default function CourseEditor({
   // keyed by the source element so re-running syncPreviewInlineEditors on
   // every keystroke (it depends on contentPages) reuses the same instance
   // instead of recreating it and losing focus/cursor position.
-  const canvasBodyEditorsRef = useRef<Map<HTMLElement, { editor: any; editableEl: HTMLElement; ownerKey: string }>>(new Map());
+  const canvasBodyEditorsRef = useRef<Map<HTMLElement, { editor: any; editableEl: HTMLElement; ownerKey: string; commit: () => void }>>(new Map());
   const hasUnsavedChanges = useMemo(() => Object.keys(dirtyNodeKeys).length > 0, [dirtyNodeKeys]);
 
   const loadStructureFromDatabase = useCallback(async (selection?: {
@@ -3814,6 +3840,8 @@ export default function CourseEditor({
     return basePath;
   }, [courseId, menuPageCreated, menuSelected, previewBuildVersion, selectedPageId, user]);
 
+  const applyPreviewSelectionStylesRef = useRef<() => void>(() => {});
+
   const applyPreviewSelectionStyles = useCallback(() => {
     const iframe = previewFrameRef.current;
     const doc = iframe?.contentDocument;
@@ -3824,105 +3852,233 @@ export default function CourseEditor({
 
     doc.getElementById("adapt-authoring-preview-bridge-style")?.remove();
 
+    // Gates every "permanent" editing-mode spacing rule below (gutters,
+    // header padding, border reservation, label min-height) — present only
+    // while actively selecting or hovering something, so a fully
+    // deselected, un-hovered canvas renders as a pristine normal preview
+    // with none of that extra space, per explicit user request.
+    doc.documentElement.classList.toggle(
+      "adapt-authoring-editing-active",
+      hasCanvasSelection || !!previewHoverState.level
+    );
+
     const style = doc.createElement("style");
     style.id = "adapt-authoring-preview-bridge-style";
     style.textContent = `
-      .adapt-authoring-preview-hover,
-      .adapt-authoring-preview-hover-header,
-      .adapt-authoring-preview-active,
-      .adapt-authoring-preview-active-header {
+      /* Ported directly from Quick Edit's own CSS
+         (adapt-preview-edit/less/page.less .editable / .page__header-inner.editable /
+         .article__header-inner.editable / .block__header-inner.editable /
+         .component__inner.editable) — a real border+margin+padding box that
+         participates in normal layout flow, not an absolutely positioned
+         outline overlay. This is why it lines up with sibling content
+         automatically instead of needing computed/faked offsets.
+         Border is ALWAYS present (transparent when not hover/active) so
+         its 1px never gets added/removed on hover — box-sizing:border-box
+         means a transparent-to-visible COLOR swap causes zero layout
+         shift, unlike toggling border-width itself would.
+         Scoped under .adapt-authoring-editing-active (toggled on the
+         iframe's <html> based on hasCanvasSelection/hover below) so a
+         fully deselected, un-hovered canvas has ZERO extra reserved space
+         and renders as a pristine, unmodified preview — all of this
+         editing-mode spacing only exists while actively interacting. */
+      .adapt-authoring-editing-active .page__header-inner,
+      .adapt-authoring-editing-active .article__header-inner,
+      .adapt-authoring-editing-active .block__header-inner,
+      .adapt-authoring-editing-active .component__inner {
         position: relative !important;
         box-sizing: border-box !important;
-        overflow: visible !important;
+        border: 1px dashed transparent !important;
+        border-radius: 8px !important;
       }
 
-      .adapt-authoring-preview-hover::after,
-      .adapt-authoring-preview-hover-header::after,
-      .adapt-authoring-preview-active::after,
-      .adapt-authoring-preview-active-header::after {
-        content: "";
-        position: absolute;
-        border-radius: 8px;
-        pointer-events: none;
-        z-index: 8;
+      /* Must be AT LEAST as specific as the .adapt-authoring-editing-active
+         base border rule above (2 classes) — otherwise, since both use
+         !important, the higher-specificity transparent base border always
+         wins over this lower-specificity color override regardless of
+         source order, and the dashed border never becomes visible at all
+         while hovering/selecting (confirmed live: computed border color
+         stayed rgba(0,0,0,0) on an actually-selected node). */
+      .adapt-authoring-editing-active .adapt-authoring-preview-hover,
+      .adapt-authoring-editing-active .adapt-authoring-preview-active {
+        border-color: var(--life-primary-500, #2e7fa1) !important;
       }
 
-      .page.adapt-authoring-preview-hover::after,
-      .page.adapt-authoring-preview-active::after {
-        inset: 2px;
+      /* Padding/margin that gives a headerless-level header its visible
+         size must be PERMANENT, not conditional on the hover/active class.
+         Previously it only appeared once hovered — growing the box from 0
+         to ~94px tall the instant the cursor entered it. That size jump
+         moves whatever was previously under the (now relocated) cursor,
+         which re-fires mouseover/mouseout in a rapid loop — the reported
+         "glitch when moving a little up/down in empty space".
+         Applied to Topic too (not just Article/Block) so hover spacing is
+         visually IDENTICAL across every level — Topic's real theme padding
+         (2rem/1rem) differs from Article/Block's override and made its
+         hover box look inconsistently spaced next to them, per explicit
+         user feedback; overriding it here to match is a deliberate,
+         acceptable trade-off (editing-mode-only spacing, same precedent as
+         the .article/.block/.component gutter margins elsewhere in this
+         file), same as Article/Block already do. */
+      .adapt-authoring-editing-active .page__header-inner {
+        padding: 0.5rem !important;
       }
 
-      .article.adapt-authoring-preview-hover::after,
-      .article.adapt-authoring-preview-active::after {
-        inset: 2px;
+      .adapt-authoring-editing-active .article__header-inner {
+        margin-top: 8px !important;
+        margin-bottom: 8px !important;
+        padding: 0.5rem !important;
       }
 
-      .block.adapt-authoring-preview-hover::after,
-      .block.adapt-authoring-preview-active::after {
-        inset: 2px;
+      .adapt-authoring-editing-active .block__header-inner {
+        margin-left: -0.5rem !important;
+        margin-right: -0.5rem !important;
+        margin-bottom: 10px !important;
+        padding: 10px !important;
       }
 
-      .component.adapt-authoring-preview-hover::after,
-      .component.adapt-authoring-preview-active::after {
-        inset: 2px;
+      .adapt-authoring-preview-hover.menu,
+      .adapt-authoring-preview-active.menu {
+        padding: 0.5rem !important;
       }
 
-      .menu.adapt-authoring-preview-hover::after,
-      .menu.adapt-authoring-preview-active::after {
-        inset: 2px;
+      /* Permanent (not hover/active-conditional) vertical gutter around
+         every real Section/Content Group/Component element while editing.
+         Two problems this solves at once: (1) a hover/selection dashed box
+         can never visually touch/merge with the next sibling's box, since
+         there's always real space between the underlying elements
+         themselves, not just around whichever one currently has a border;
+         (2) when a Section/Content Group has no rendered header at all
+         (title hidden from preview), its child would otherwise sit flush
+         against it with zero surface to point at \u2014 this margin creates
+         that missing surface, so the mouse can resolve to the Section/
+         Content Group level instead of always drilling straight to the
+         Component underneath. Mirrors Quick Edit's own always-on editing
+         spacing (.editable { margin: 20px auto } in page.less). */
+      .adapt-authoring-editing-active .article,
+      .adapt-authoring-editing-active .block,
+      .adapt-authoring-editing-active .component {
+        margin-top: 10px !important;
+        margin-bottom: 10px !important;
       }
 
-      .adapt-authoring-preview-hover::after,
-      .adapt-authoring-preview-hover-header::after {
-        border: 1px dashed var(--life-primary-500, #2e7fa1) !important;
+      /* Without this, a headless Section's own gutter (the margin above
+         "block") collapses straight through Article and merges with
+         Article's own gutter (a real CSS "margin collapsing" side effect
+         of both having zero padding/border) into ONE gap that sits above
+         Article \u2014 confirmed live: article and block landed at the exact
+         same top offset with nothing between them. That single merged gap
+         only ever resolves to the OUTER (Topic) level on hover, so a
+         headless Section's own gutter effectively never existed \u2014 Topic
+         hover worked, Section hover silently never did. display: flow-root
+         establishes a new block formatting context on the PARENT (still
+         renders identically to display: block otherwise), which contains
+         a child's margin within its own border box instead of letting it
+         escape upward, restoring each level's own distinct gutter. */
+      .adapt-authoring-editing-active .page__inner,
+      .adapt-authoring-editing-active .article,
+      .adapt-authoring-editing-active .block {
+        display: flow-root !important;
       }
 
-      .adapt-authoring-preview-active::after,
-      .adapt-authoring-preview-active-header::after {
-        border: 1px solid var(--life-primary-500, #2e7fa1) !important;
+      /* Keep the editor's normal neutral frame when focused. Selection is
+         communicated by the surrounding labelled dashed box, so the
+         CKEditor focus state must not add a competing blue outline. */
+      .ck.ck-editor__editable.ck-focused:not(.ck-editor__nested-editable) {
+        border-color: var(--ck-color-base-border) !important;
+        box-shadow: none !important;
       }
 
       .adapt-authoring-preview-topic-shell-active {
         border: none !important;
       }
 
-      .adapt-authoring-preview-hover-header::before,
-      .adapt-authoring-preview-active-header::before,
-      .adapt-authoring-preview-hover::before,
-      .adapt-authoring-preview-active::before {
+      /* Same permanent-reservation principle as the padding above, applied
+         to the label line: it must always occupy its line of height for a
+         synthetic header, even before data-preview-bridge-label is ever
+         set (color: transparent, not display:none) — otherwise the label
+         appearing/disappearing on hover is itself a smaller second source
+         of the same "size changes on hover -> mouse ends up over a
+         different element -> flicker" bug the padding fix above targets.
+         min-height (not just line-height) because an EMPTY attr() value
+         (before any hover has ever set data-preview-bridge-label) collapses
+         a content-less block box to zero height in some engines — line-
+         height alone isn't a reliable floor without real content present. */
+      .adapt-authoring-editing-active .article__header-inner::before,
+      .adapt-authoring-editing-active .block__header-inner::before {
         content: attr(data-preview-bridge-label);
-        position: absolute;
-        top: 1px;
-        left: 12px;
-        display: inline-block;
-        padding: 0 4px;
-        background: #fff;
+        display: block;
+        min-height: 11px;
+        color: transparent;
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        line-height: 1.2;
+        margin-bottom: 4px;
+        pointer-events: none;
+      }
+
+      /* A plain inline label in normal flow ahead of the level's own content
+         — matches Quick Edit's \`.editable:before { content: 'Block' }\`
+         exactly (a real line of text that pushes content down, not a
+         floating badge straddling the border), so it can never overlap
+         adjacent content again. Must be AT LEAST as specific as the
+         transparent label-reservation rule above (2 classes) for the same
+         reason as the border-color fix above — otherwise the transparent
+         color always wins and the label text never actually becomes
+         visible while hovering/selecting. */
+      .adapt-authoring-editing-active .adapt-authoring-preview-hover::before,
+      .adapt-authoring-editing-active .adapt-authoring-preview-active::before {
+        content: attr(data-preview-bridge-label);
+        display: block;
         color: var(--life-primary-500, #2e7fa1);
         font-size: 9px;
         font-weight: 700;
         text-transform: uppercase;
         line-height: 1.2;
-        z-index: 9;
+        margin-bottom: 4px;
         pointer-events: none;
       }
+
+      /* The hover-only title preview (both freshly injected — Group/Section
+         with no real header — and an existing-but-hidden real title
+         swapped to dimmed — Topic) renders at its real, proper theme size,
+         in normal flow below the label, exactly like the SELECTED
+         treatment already looks (makeEditable's own dimmed title) — no
+         absolute positioning/font-size override. An earlier attempt took
+         it out of flow to stop hover from ever changing the header box's
+         height, but that made it overlap the label/underlying content
+         instead (an absolutely positioned element isn't constrained by its
+         container, and shrinking its font to avoid that looked wrong per
+         explicit user feedback) — reverted; a hover-triggered height
+         change here is the smaller problem of the two. */
 
       .adapt-authoring-preview-clickable {
         cursor: pointer !important;
       }
 
-      .adapt-authoring-preview-inline-editable {
+      .adapt-authoring-preview-inline-editable:not(.ck-editor__editable) {
         outline: none !important;
         border: 0 !important;
         background: transparent !important;
         box-shadow: none !important;
         min-height: 1.2em;
+        /* The real compiled theme CSS has a bare [contenteditable='true']
+           rule (page.less) reserving room for Quick Edit's own floating
+           Save icon button (padding-bottom: 50px; padding-right: 1.25rem).
+           Our canvas has no such button, so this must be zeroed out here
+           or every inline-editable field/item (title, body, instruction,
+           per-item behaviour text) shows that reserved gap as extra
+           spacing once selected. */
+        padding-bottom: 0 !important;
+        padding-right: 0 !important;
       }
 
-      .adapt-authoring-preview-inline-editable:focus {
+      .adapt-authoring-preview-inline-editable:not(.ck-editor__editable):focus {
         outline: none !important;
         border: 0 !important;
         background: transparent !important;
         box-shadow: none !important;
+        padding-bottom: 0 !important;
+        padding-right: 0 !important;
       }
 
       .adapt-authoring-preview-inline-empty::before {
@@ -3947,6 +4103,25 @@ export default function CourseEditor({
          clears this the same run (see applyPreviewSelectionStyles). */
       .adapt-authoring-preview-unfocused-descendant {
         opacity: 0.55 !important;
+      }
+
+      /* Hovering (or selecting) a dimmed descendant must restore its
+         normal, full-opacity look — border color, label, everything —
+         instead of staying faded just because its ancestor is also
+         selected. Two separate cases, since the dimmed class and the
+         hover/active class don't always land on the SAME element:
+         (1) same-element case (2-class specificity beats the single-class
+         dimming rule above). (2) the dimmed node is the OUTER real element
+         (e.g. .article, from the "dim every descendant" sweep) while
+         hover/active applies to its header-inner DESCENDANT (from
+         resolveHighlightTarget) — CSS opacity on an ancestor still visually
+         composites/dims a descendant even if the descendant's OWN opacity
+         is separately reset to 1, so the ancestor's own dimming must be
+         lifted too via :has(), or a hovered header still looked faded. */
+      .adapt-authoring-preview-unfocused-descendant.adapt-authoring-preview-hover,
+      .adapt-authoring-preview-unfocused-descendant.adapt-authoring-preview-active,
+      .adapt-authoring-preview-unfocused-descendant:has(.adapt-authoring-preview-hover, .adapt-authoring-preview-active) {
+        opacity: 1 !important;
       }
 
       .adapt-authoring-preview-inline-structured-header {
@@ -4053,13 +4228,11 @@ export default function CourseEditor({
     head.appendChild(style);
 
     doc
-      .querySelectorAll(".adapt-authoring-preview-hover, .adapt-authoring-preview-active, .adapt-authoring-preview-hover-header, .adapt-authoring-preview-active-header, .adapt-authoring-preview-clickable, .adapt-authoring-preview-topic-shell-active, .adapt-authoring-preview-unfocused-descendant")
+      .querySelectorAll(".adapt-authoring-preview-hover, .adapt-authoring-preview-active, .adapt-authoring-preview-clickable, .adapt-authoring-preview-topic-shell-active, .adapt-authoring-preview-unfocused-descendant")
       .forEach((node) => {
         node.classList.remove(
           "adapt-authoring-preview-hover",
           "adapt-authoring-preview-active",
-          "adapt-authoring-preview-hover-header",
-          "adapt-authoring-preview-active-header",
           "adapt-authoring-preview-clickable",
           "adapt-authoring-preview-topic-shell-active",
           "adapt-authoring-preview-unfocused-descendant"
@@ -4067,11 +4240,71 @@ export default function CourseEditor({
         node.removeAttribute("data-preview-bridge-label");
       });
 
+    // Purely visual hover-only title placeholders (see ensureHoverTitlePreview
+    // below) get torn down every run — they carry no editable state, so a
+    // clean rebuild each time is cheap and avoids ever going stale.
+    doc.querySelectorAll("[data-preview-hover-title-injected='true']").forEach((node) => {
+      if (node.isConnected) node.remove();
+    });
+
+    // A REAL template title node (e.g. Topic always renders one) that was
+    // temporarily shown dimmed for hover (see ensureHoverTitlePreview) goes
+    // back to its normal hidden state every run too — never removed, since
+    // it's part of the real rendered course, not something we created.
+    doc.querySelectorAll("[data-preview-hover-title-shown='true']").forEach((node) => {
+      node.classList.remove("adapt-authoring-preview-title-dimmed");
+      node.classList.add("adapt-authoring-preview-title-hidden");
+      node.removeAttribute("data-preview-hover-title-shown");
+    });
+
     [".page", ".article", ".block", ".component", ".menu"].forEach((selector) => {
       doc.querySelectorAll(selector).forEach((node) => {
         node.classList.add("adapt-authoring-preview-clickable");
       });
     });
+
+    // When a level's title is hidden/empty, the real template renders NO
+    // header markup at all — falling back to the level's whole content
+    // container (.article__inner/.block__inner) as the hover/active target
+    // wraps every child underneath it too (e.g. a Content Group's hover box
+    // engulfing its Component). Quick Edit and syncPreviewInlineEditors'
+    // own selection path (ensureHeaderInnerHost) both avoid this by
+    // creating a small, real, permanent header placeholder to frame
+    // instead — mirrored here so HOVER gets the same small frame, not just
+    // Selection. Idempotent/safe to call from both hover and active
+    // resolution: checks for an existing header first, matches the exact
+    // classnames ensureHeaderInnerHost (syncPreviewInlineEditors) already
+    // uses, so whichever runs first is transparently reused by the other
+    // with no duplicate headers ever created.
+    const ensureLevelHeaderHost = (
+      level: "topic" | "section" | "group",
+      root: Element | null
+    ): HTMLElement | null => {
+      if (!root) return null;
+      const config =
+        level === "topic"
+          ? { headerSelector: ".page__header", headerClassName: "page__header", innerSelector: ".page__header-inner", innerClassName: "page__header-inner" }
+          : level === "section"
+            ? { headerSelector: ".article__header", headerClassName: "article__header", innerSelector: ".article__header-inner", innerClassName: "article__header-inner" }
+            : { headerSelector: ".block__header", headerClassName: "block__header", innerSelector: ".block__header-inner", innerClassName: "block__header-inner" };
+
+      const existingInner = root.querySelector(config.innerSelector) as HTMLElement | null;
+      if (existingInner) return existingInner;
+
+      let container = root.querySelector(config.headerSelector) as HTMLElement | null;
+      if (!container) {
+        container = doc.createElement("div");
+        container.className = config.headerClassName;
+        container.setAttribute("data-preview-injected", "true");
+        root.insertBefore(container, root.firstChild);
+      }
+
+      const inner = doc.createElement("div");
+      inner.className = config.innerClassName;
+      inner.setAttribute("data-preview-injected", "true");
+      container.appendChild(inner);
+      return inner;
+    };
 
     const resolveHighlightTarget = (
       level: "menu" | "topic" | "section" | "group" | "component",
@@ -4086,11 +4319,23 @@ export default function CourseEditor({
       const base = doc.querySelector(`[data-adapt-id="${id}"]`);
       if (!base) return null;
 
+      const root = level === "topic" ? base.closest(".page") ?? base : base;
+      // A hierarchy node's outer element includes every descendant. Framing
+      // it produces one giant block outline plus a second child hover frame.
+      // Quick Edit frames the level's own visible surface instead.
       if (level === "topic") {
-        return base.closest(".page") ?? base;
+        return root.querySelector(".page__header-inner") ?? ensureLevelHeaderHost("topic", root.querySelector(".page__inner") ?? root);
       }
-
-      return base;
+      if (level === "section") {
+        return root.querySelector(".article__header-inner") ?? ensureLevelHeaderHost("section", root.querySelector(".article__inner") ?? root);
+      }
+      if (level === "group") {
+        return root.querySelector(".block__header-inner") ?? ensureLevelHeaderHost("group", root.querySelector(".block__inner") ?? root);
+      }
+      if (level === "component") {
+        return root.querySelector(".component__inner") ?? root;
+      }
+      return root;
     };
 
     const resolveContainerTarget = (
@@ -4119,6 +4364,75 @@ export default function CourseEditor({
       if (level === "group") return "Content Group";
       if (level === "component") return "Component";
       return "Menu";
+    };
+
+    // Same title-container/inner class names + placeholder copy
+    // syncPreviewInlineEditors uses for the SELECTED level's empty-title
+    // dimmed treatment — mirrored here so a hovered (not-yet-selected) empty
+    // level looks identical instead of showing a blank outline.
+    const findHoverTitlePreviewInfo = (
+      level: "menu" | "topic" | "section" | "group" | "component"
+    ): { title: string; placeholder: string; containerSelector: string; containerClassName: string; innerSelector: string; innerClassName: string } | null => {
+      const pages = contentPagesRef.current;
+      const page = pages.find((candidate) => candidate.id === previewHoverState.pageId);
+      if (level === "topic") {
+        if (!page) return null;
+        return { title: page.title || "", placeholder: "TOPIC TITLE", containerSelector: ".page__title", containerClassName: "page__title", innerSelector: ".page__title-inner", innerClassName: "page__title-inner" };
+      }
+      const article = page?.articles.find((candidate) => candidate.id === previewHoverState.articleId);
+      if (level === "section") {
+        if (!article) return null;
+        return { title: article.title || "", placeholder: "Section title", containerSelector: ".article__title", containerClassName: "article__title", innerSelector: ".article__title-inner", innerClassName: "article__title-inner" };
+      }
+      const block = article?.blocks.find((candidate) => candidate.id === previewHoverState.blockId);
+      if (level === "group") {
+        if (!block) return null;
+        return { title: block.title || "", placeholder: "Content Group title", containerSelector: ".block__title", containerClassName: "block__title", innerSelector: ".block__title-inner", innerClassName: "block__title-inner" };
+      }
+      if (level === "component") {
+        const component = block?.components.find((candidate) => candidate.id === previewHoverState.componentId);
+        if (!component) return null;
+        return { title: component.settings.title || "", placeholder: "Component title", containerSelector: ".component__title", containerClassName: "component__title", innerSelector: ".component__title-inner", innerClassName: "component__title-inner" };
+      }
+      return null;
+    };
+
+    const ensureHoverTitlePreview = (host: Element, info: NonNullable<ReturnType<typeof findHoverTitlePreviewInfo>>) => {
+      const existingInner = host.querySelector(info.innerSelector) as HTMLElement | null;
+      if (existingInner) {
+        // The real template always renders a title element for this level
+        // (e.g. Topic — subtitle/body/instruction share its wrapper), but
+        // hides it via adapt-authoring-preview-title-hidden when "Display
+        // title in preview" is off. Left alone, a headless Topic's hover
+        // box would look empty even though a real (just invisible) title
+        // node is sitting right there — show it dimmed on hover too,
+        // exactly mirroring the SAME hidden->dimmed swap makeEditable()
+        // already does once the node is actually selected. This is a REAL
+        // template node, never removed — only the two classes are ever
+        // toggled, reverted by the matching cleanup in
+        // applyPreviewSelectionStyles's top-of-run sweep.
+        const container = (existingInner.closest(info.containerSelector) as HTMLElement | null) ?? existingInner;
+        if (container.classList.contains("adapt-authoring-preview-title-hidden")) {
+          container.classList.remove("adapt-authoring-preview-title-hidden");
+          container.classList.add("adapt-authoring-preview-title-dimmed");
+          container.setAttribute("data-preview-hover-title-shown", "true");
+        }
+        return;
+      }
+
+      let container = host.querySelector(info.containerSelector) as HTMLElement | null;
+      if (!container) {
+        container = doc.createElement("div");
+        container.className = info.containerClassName;
+        container.setAttribute("data-preview-hover-title-injected", "true");
+        host.insertBefore(container, host.firstChild);
+      }
+
+      const inner = doc.createElement("div");
+      inner.className = `${info.innerClassName} adapt-authoring-preview-title-dimmed`;
+      inner.textContent = info.title.trim().length > 0 ? info.title : info.placeholder;
+      inner.setAttribute("data-preview-hover-title-injected", "true");
+      container.appendChild(inner);
     };
 
     const hoverLevel = previewHoverState.level;
@@ -4157,16 +4471,27 @@ export default function CourseEditor({
       }
     }
 
+    const activeNode = activeLevel && (activeTargetId || activeLevel === "menu")
+      ? resolveHighlightTarget(activeLevel, activeTargetId)
+      : null;
+
     if (hoverTargetId && hoverLevel) {
       const hoverNode = resolveHighlightTarget(hoverLevel, hoverTargetId);
-      if (hoverNode) {
+      // An active level owns its descendants while selected. Showing a
+      // second nested hover rectangle inside it creates the misaligned,
+      // competing outline seen for Components inside a selected Group.
+      if (hoverNode && hoverNode !== activeNode && !activeNode?.contains(hoverNode)) {
         hoverNode.classList.add("adapt-authoring-preview-hover");
         (hoverNode as Element).setAttribute("data-preview-bridge-label", toBadgeLabel(hoverLevel));
+
+        const hoverTitleInfo = findHoverTitlePreviewInfo(hoverLevel);
+        if (hoverTitleInfo) {
+          ensureHoverTitlePreview(hoverNode, hoverTitleInfo);
+        }
       }
     }
 
     if (activeLevel && (activeTargetId || activeLevel === "menu")) {
-      const activeNode = resolveHighlightTarget(activeLevel, activeTargetId);
       if (activeNode) {
         activeNode.classList.add("adapt-authoring-preview-active");
         (activeNode as Element).setAttribute("data-preview-bridge-label", toBadgeLabel(activeLevel));
@@ -4175,13 +4500,20 @@ export default function CourseEditor({
         // header stays fully normal, only what's underneath (not what's
         // actually being edited via the right panel right now) is muted.
         // Components have nothing nested under them, so nothing to dim.
+        // Queried from the OUTER container (resolveContainerTarget), never
+        // from activeNode itself — activeNode is now always the level's
+        // own small header (real or synthesized), which never contains
+        // descendants as DOM children (they're siblings under the outer
+        // .article/.block node), so querying activeNode here would always
+        // find nothing.
         const unfocusedDescendantSelector: string | null =
           activeLevel === "topic" ? ".article, .block, .component"
           : activeLevel === "section" ? ".block, .component"
           : activeLevel === "group" ? ".component"
           : null;
         if (unfocusedDescendantSelector) {
-          activeNode.querySelectorAll(unfocusedDescendantSelector).forEach((node) => {
+          const dimContainer = resolveContainerTarget(activeLevel, activeTargetId);
+          dimContainer?.querySelectorAll(unfocusedDescendantSelector).forEach((node) => {
             node.classList.add("adapt-authoring-preview-unfocused-descendant");
           });
         }
@@ -4205,6 +4537,16 @@ export default function CourseEditor({
     selectedComponentId,
     selectedPageId,
   ]);
+
+  // syncPreviewInlineEditors (and any other function whose OWN deps don't
+  // include hover state) closes over whatever applyPreviewSelectionStyles
+  // was current at ITS OWN last reconstruction — calling that stale copy
+  // reapplies STALE hover/active classes, undoing a same-tick hover update
+  // for a sibling component. Keeping a ref in sync lets every such nested
+  // call always run the CURRENT hover-aware version instead.
+  useEffect(() => {
+    applyPreviewSelectionStylesRef.current = applyPreviewSelectionStyles;
+  }, [applyPreviewSelectionStyles]);
 
   const syncPreviewInlineEditors = useCallback(() => {
     const iframe = previewFrameRef.current;
@@ -4262,9 +4604,21 @@ export default function CourseEditor({
       // into while selected is real content the user just added to this
       // component — deselecting must not make it disappear just because
       // the underlying template happened to omit an empty version of it.
+      //
+      // Never remove an element that is (or CONTAINS) the currently
+      // selected node's own active editable field
+      // ([data-preview-edit-enabled='true']), even if it's genuinely
+      // empty text-wise (e.g. a Content Group with a blank body). Doing so
+      // destroyed and recreated that field's real DOM node on literally
+      // every sync pass for any empty field — silently orphaning/
+      // re-initiating its CKEditor instance (see ensureCanvasBodyEditor)
+      // every single time, which under fast repeated selection changes
+      // could leave the async CKEditor5 creation permanently interrupted
+      // before it ever finished, appearing to "randomly" not render.
       doc.querySelectorAll("[data-preview-injected='true']").forEach((node) => {
         const element = node as HTMLElement;
         if ((element.textContent || "").trim().length > 0) return;
+        if (element.matches("[data-preview-edit-enabled='true']") || element.querySelector("[data-preview-edit-enabled='true']")) return;
         const parent = element.parentElement;
         element.remove();
         if (parent?.getAttribute("data-preview-injected") === "true" && !parent.textContent?.trim() && !parent.querySelector("*")) {
@@ -4281,6 +4635,13 @@ export default function CourseEditor({
 
       doc.querySelectorAll("[data-preview-edit-enabled='true']").forEach((node) => {
         const element = node as HTMLElement;
+        // The visible ClassicEditor editable surface carries these metadata
+        // attributes for the shared input/focus delegation. It is not a plain
+        // inline editor: stripping its contenteditable attribute here leaves
+        // its toolbar mounted but makes component bodies impossible to focus
+        // after the next selection sync. Its instance is explicitly destroyed
+        // below when the selected owner changes or selection clears.
+        if (element.classList.contains("ck-editor__editable")) return;
         const isInjected = element.getAttribute("data-preview-injected") === "true";
         const isEmpty = (element.textContent || "").trim().length === 0;
 
@@ -4451,29 +4812,13 @@ export default function CourseEditor({
       "samaritan",
     ];
 
-    // Mirrors data-preview-* + editable-state attributes from the (possibly
-    // now CKEditor-hidden) source element onto CKEditor's own editable root,
-    // so the existing doc-level input/focusout delegation (keyed purely by
-    // these attributes) keeps working without any new update path.
-    const syncCanvasEditableAttrs = (editableEl: HTMLElement, source: HTMLElement) => {
-      ["data-preview-edit-enabled", "data-preview-edit-field", "data-preview-node-level",
-        "data-preview-page-id", "data-preview-article-id", "data-preview-block-id",
-        "data-preview-component-id", "data-placeholder"].forEach((attr) => {
-        const value = source.getAttribute(attr);
-        if (value !== null) editableEl.setAttribute(attr, value);
-        else editableEl.removeAttribute(attr);
-      });
-      editableEl.classList.add("adapt-authoring-preview-inline-editable");
-      editableEl.classList.toggle("adapt-authoring-preview-inline-empty", source.classList.contains("adapt-authoring-preview-inline-empty"));
-    };
-
     // Real CKEditor 5 for canvas "body" fields (matches the old tool: every
     // TextArea schema field gets CKEditor, body included — even when empty,
     // just an empty editor canvas, no placeholder text). Created ONCE per
-    // source element and reused across every re-run of this effect (it
-    // depends on contentPages, i.e. every keystroke), so typing never
-    // recreates/re-focuses the editor.
-    const ensureCanvasBodyEditor = (element: HTMLElement, options: { value: string; ownerKey: string }) => {
+    // source element and reused while typing. Like Quick Edit, it does not
+    // update React state on `change:data`: the existing focus-out handler is
+    // the soft-save boundary, avoiding a selection-effect rerun per key.
+    const ensureCanvasBodyEditor = (element: HTMLElement, options: { value: string; ownerKey: string; onCommit: (html: string) => void }) => {
       // Lazily reclaim editors whose source node was torn down by the
       // framework SPA's own re-render (e.g. navigated to a different page
       // inside the same iframe document) — never done on a fixed timer/every
@@ -4481,6 +4826,7 @@ export default function CourseEditor({
       // mid-keystroke for a still-selected node.
       canvasBodyEditorsRef.current.forEach((entry, sourceEl) => {
         if (sourceEl !== element && !sourceEl.isConnected) {
+          entry.commit();
           entry.editor.destroy().catch(() => {});
           canvasBodyEditorsRef.current.delete(sourceEl);
         }
@@ -4488,7 +4834,14 @@ export default function CourseEditor({
 
       const existing = canvasBodyEditorsRef.current.get(element);
       if (existing) {
-        syncCanvasEditableAttrs(existing.editableEl, element);
+        // Behaviour/right-panel edits update `contentPages`, then this sync
+        // runs with the new `options.value`. ClassicEditor deliberately owns
+        // its own document, so update it explicitly when the change came
+        // from outside the focused editor. While it has focus, its unsaved
+        // document remains authoritative until the blur/teardown commit.
+        if (!existing.editor.ui.focusTracker.isFocused && existing.editor.getData() !== options.value) {
+          existing.editor.setData(options.value || "");
+        }
         element.style.display = "none";
         element.classList.remove("adapt-authoring-preview-inline-empty");
         return;
@@ -4527,8 +4880,20 @@ export default function CourseEditor({
             },
           }).then((editor: any) => {
             const editableEl = editor.ui.getEditableElement() as HTMLElement;
-            canvasBodyEditorsRef.current.set(element, { editor, editableEl, ownerKey: options.ownerKey });
-            syncCanvasEditableAttrs(editableEl, element);
+            let lastCommittedHtml = options.value || "";
+            const commit = () => {
+              const html = editor.getData();
+              if (html === lastCommittedHtml) return;
+              lastCommittedHtml = html;
+              options.onCommit(html);
+            };
+            // CKEditor's focus tracker covers both its editable surface and
+            // toolbar, so this commits only after focus leaves the editor.
+            editor.ui.focusTracker.on("change:isFocused", (_event: unknown, _name: unknown, isFocused: boolean) => {
+              isInlineEditingRef.current = isFocused;
+              if (!isFocused) commit();
+            });
+            canvasBodyEditorsRef.current.set(element, { editor, editableEl, ownerKey: options.ownerKey, commit });
             // CKEditor already hides its source element, but force it —
             // this is also what stops the plain-text empty-placeholder
             // `::before` (see makeEditable) from ever rendering a second,
@@ -4583,11 +4948,7 @@ export default function CourseEditor({
       const container = element.closest(PREVIEW_INLINE_FIELD_CONTAINER_SELECTOR) as HTMLElement | null;
 
       if (!hasText) {
-        // Body gets its OWN placeholder from CKEditor (native `.ck-placeholder`
-        // rendering) — adding this class too would show the plain-text
-        // `::before` placeholder a SECOND time on the (now CKEditor-hidden)
-        // source element, which is exactly the duplicate "Add page body"
-        // the user reported.
+        // Body is an intentionally empty CKEditor canvas, not a text placeholder.
         if (options.field !== "body") element.classList.add("adapt-authoring-preview-inline-empty");
         container?.setAttribute("data-preview-inline-container-empty", "true");
       } else {
@@ -4604,7 +4965,20 @@ export default function CourseEditor({
             : options.level === "section"
               ? `article:${options.articleId}`
               : `topic:${options.pageId}`;
-        ensureCanvasBodyEditor(element, { value: options.value, ownerKey });
+        const onCommit = (html: string) => {
+          if (options.level === "topic") {
+            updatePageData(options.pageId, { body: html, description: html });
+          } else if (options.level === "section" && options.articleId) {
+            updateArticle(options.pageId, options.articleId, { description: html });
+          } else if (options.level === "group" && options.articleId && options.blockId) {
+            updateBlock(options.pageId, options.articleId, options.blockId, { description: html });
+          } else if (options.level === "component" && options.articleId && options.blockId && options.componentId) {
+            updateComponent(options.pageId, options.articleId, options.blockId, options.componentId, {
+              settings: { description: html },
+            });
+          }
+        };
+        ensureCanvasBodyEditor(element, { value: options.value, ownerKey, onCommit });
       }
 
       if (options.field === "title") {
@@ -4621,7 +4995,18 @@ export default function CourseEditor({
 
     clearEditable();
 
+    // Selection styles can run before this synchronizer creates a missing
+    // page/article/block header. Reapply after this synchronous pass so the
+    // frame moves from the broad inner fallback onto that real header wrapper.
+    window.requestAnimationFrame(() => applyPreviewSelectionStylesRef.current());
+
     if (!hasCanvasSelection) {
+      // ClassicEditor owns a sibling toolbar/wrapper that clearEditable cannot remove.
+      canvasBodyEditorsRef.current.forEach((entry, sourceEl) => {
+        entry.commit();
+        entry.editor.destroy().catch(() => {});
+        canvasBodyEditorsRef.current.delete(sourceEl);
+      });
       return;
     }
 
@@ -4656,6 +5041,7 @@ export default function CourseEditor({
             : null;
     canvasBodyEditorsRef.current.forEach((entry, sourceEl) => {
       if (entry.ownerKey === currentBodyOwnerKey) return;
+      entry.commit();
       entry.editor.destroy().catch(() => {});
       canvasBodyEditorsRef.current.delete(sourceEl);
     });
@@ -4770,6 +5156,97 @@ export default function CourseEditor({
         });
       }
 
+      const componentItems = Array.isArray(selectedComponent.settings.properties?._items)
+        ? selectedComponent.settings.properties._items as Array<Record<string, unknown>>
+        : [];
+      const applyItemTextAttrs = (element: HTMLElement, path: string) => {
+        element.setAttribute("data-preview-edit-enabled", "true");
+        element.setAttribute("data-preview-behaviour-path", path);
+        element.setAttribute("data-preview-page-id", selectedPage.id);
+        element.setAttribute("data-preview-article-id", selectedArticle.id);
+        element.setAttribute("data-preview-block-id", selectedBlock.id);
+        element.setAttribute("data-preview-component-id", selectedComponent.id);
+        element.setAttribute("contenteditable", "true");
+        element.setAttribute("spellcheck", "false");
+        element.classList.add("adapt-authoring-preview-inline-editable");
+      };
+
+      if (componentKey === "accordion") {
+        const accordionItems = Array.from(componentHost.querySelectorAll<HTMLElement>(".accordion-item"));
+        componentItems.forEach((item, index) => {
+          const itemBody = typeof item.body === "string" ? item.body : "";
+          const itemRoot = accordionItems[index];
+          if (!itemRoot) return;
+          const bodyHost = itemRoot.querySelector<HTMLElement>(".accordion-item__content-inner");
+          if (!bodyHost) return;
+          let bodyElement = bodyHost.querySelector<HTMLElement>(".accordion-item__body-inner");
+          if (!bodyElement) {
+            const bodyWrapper = doc.createElement("div");
+            bodyWrapper.className = "accordion-item__body";
+            bodyElement = doc.createElement("div");
+            bodyElement.className = "accordion-item__body-inner";
+            bodyWrapper.appendChild(bodyElement);
+            bodyHost.insertBefore(bodyWrapper, bodyHost.firstChild);
+          }
+          applyItemTextAttrs(bodyElement, `_items[${index}].body`);
+          // A collapsed Accordion body is intentionally hidden by the real
+          // component. The MutationObserver below re-runs this after expand,
+          // at which point CKEditor can measure its visible container.
+          if (bodyElement.offsetParent !== null) {
+            ensureCanvasBodyEditor(bodyElement, {
+              value: itemBody,
+              ownerKey: `component:${selectedComponent.id}`,
+              onCommit: (html) => updateComponentBehaviourProperty(
+                selectedPage.id,
+                selectedArticle.id,
+                selectedBlock.id,
+                selectedComponent.id,
+                `_items[${index}].body`,
+                html
+              ),
+            });
+          }
+        });
+      }
+
+      if (componentKey === "mcq" || componentKey === "gmcq") {
+        const textSelector = componentKey === "mcq" ? ".mcq-item__text-inner" : ".gmcq-item__text-inner";
+        const optionTexts = Array.from(componentHost.querySelectorAll<HTMLElement>(textSelector));
+        optionTexts.forEach((optionText, index) => {
+          if (typeof componentItems[index]?.text !== "string") return;
+          applyItemTextAttrs(optionText, `_items[${index}].text`);
+        });
+      }
+
+      // Checklist "Text Items" (`_texts[]`) can legitimately share the exact
+      // same current value across items (e.g. every item defaults its body
+      // to the same placeholder string) — matching by text content alone
+      // (the generic fallback below) can't tell two identical-value items
+      // apart. The real template DOES carry a stable per-item identifier
+      // here (`data-adapt-index`, set to each entry's own `placement.afterItem`),
+      // so use that directly instead of guessing from content.
+      if (componentKey === "laerdal-checklist") {
+        const componentTexts = Array.isArray(selectedComponent.settings.properties?._texts)
+          ? selectedComponent.settings.properties._texts as Array<Record<string, unknown>>
+          : [];
+        componentTexts.forEach((textItem, index) => {
+          const afterItem = (textItem.placement as Record<string, unknown> | undefined)?.afterItem;
+          if (afterItem === undefined || afterItem === null) return;
+          const textItemHost = componentHost.querySelector<HTMLElement>(
+            `.laerdal-checklist__text-item[data-adapt-index="${afterItem}"]`
+          );
+          if (!textItemHost) return;
+          if (typeof textItem.title === "string" && textItem.title.trim()) {
+            const titleEl = textItemHost.querySelector<HTMLElement>(".laerdal-checklist__text-item__title");
+            if (titleEl) applyItemTextAttrs(titleEl, `_texts[${index}].title`);
+          }
+          if (typeof textItem.body === "string" && textItem.body.trim()) {
+            const bodyEl = textItemHost.querySelector<HTMLElement>(".laerdal-checklist__text-item__body");
+            if (bodyEl) applyItemTextAttrs(bodyEl, `_texts[${index}].body`);
+          }
+        });
+      }
+
       // Make every OTHER Behaviour text field (item labels/titles, an MCQ
       // option's text, ...) directly editable in the canvas too — matched
       // by literal text content since, unlike title/body/instruction, these
@@ -4790,7 +5267,21 @@ export default function CourseEditor({
           behaviourSchemaForEditing,
           asRecord(selectedComponent.settings.properties)
         );
+        // Two array items can share the identical current value (e.g. every
+        // Checklist "Text Item" defaults its body to the same placeholder
+        // string) — matching purely by text content would otherwise re-find
+        // and re-tag the SAME first DOM occurrence for every duplicate,
+        // leaving every later item unmatched and silently aliased onto the
+        // first one's element. Track which elements this pass has already
+        // claimed so a duplicate value walks PAST them to the next real
+        // occurrence in document order instead of re-claiming the first.
+        const claimedElements = new Set<HTMLElement>();
         behaviourTextFields.forEach(({ path, value }) => {
+          if ((componentKey === "accordion" && /_items\[\d+\]\.body$/.test(path)) ||
+              ((componentKey === "mcq" || componentKey === "gmcq") && /_items\[\d+\]\.text$/.test(path)) ||
+              (componentKey === "laerdal-checklist" && /_texts\[\d+\]\.(title|body)$/.test(path))) {
+            return;
+          }
           const trimmed = value.trim();
           if (!trimmed) return;
 
@@ -4798,7 +5289,12 @@ export default function CourseEditor({
           let node = walker.nextNode();
           let matchedElement: HTMLElement | null = null;
           while (node) {
-            if (node.textContent && node.textContent.trim() === trimmed && node.parentElement) {
+            if (
+              node.textContent &&
+              node.textContent.trim() === trimmed &&
+              node.parentElement &&
+              !claimedElements.has(node.parentElement)
+            ) {
               matchedElement = node.parentElement;
               break;
             }
@@ -4806,6 +5302,7 @@ export default function CourseEditor({
           }
           // Don't reclaim an element the header pipeline above already owns.
           if (!matchedElement || matchedElement.hasAttribute("data-preview-edit-field")) return;
+          claimedElements.add(matchedElement);
 
           matchedElement.setAttribute("data-preview-edit-enabled", "true");
           matchedElement.setAttribute("data-preview-behaviour-path", path);
@@ -4826,7 +5323,16 @@ export default function CourseEditor({
       // otherwise tell us the newly-visible item needs to become editable
       // too. Debounced via the same retry-frame ref: a transition can fire
       // a burst of mutations, so wait for them to settle before re-syncing.
-      const componentObserver = new MutationObserver(() => {
+      const componentObserver = new MutationObserver((records) => {
+        // CKEditor mutates its own DOM on focus, selection and every typed
+        // character. Those are not framework item-visibility changes. A
+        // prior broad observer treated `ck-focused` as a component change,
+        // reran this synchronizer, and immediately removed CKEditor's focus.
+        const isInsideCkEditor = (node: Node) =>
+          node instanceof Element && !!node.closest(".ck-editor");
+        if (records.length > 0 && records.every((record) => isInsideCkEditor(record.target))) {
+          return;
+        }
         // Never re-sync while the user is actively typing — e.g. a browser
         // inserting/removing a stray <br> as a contenteditable field goes
         // empty is itself a childList mutation, and re-syncing mid-edit
@@ -4845,7 +5351,11 @@ export default function CourseEditor({
         childList: true,
         subtree: true,
         attributes: true,
-        attributeFilter: ["class", "aria-expanded", "aria-selected", "aria-hidden", "hidden"],
+        // Class is too broad: both CKEditor and this selection synchronizer
+        // mutate classes as part of normal focus/rendering. The framework's
+        // actual item visibility/navigation changes expose ARIA/hidden state,
+        // which is enough to resync newly visible Accordion/Tabs/etc. items.
+        attributeFilter: ["aria-expanded", "aria-selected", "aria-hidden", "hidden"],
       });
       componentMutationObserverRef.current = componentObserver;
 
@@ -4874,6 +5384,7 @@ export default function CourseEditor({
       if (!blockHeader) return;
 
       blockHeader.classList.add("adapt-authoring-preview-inline-structured-header");
+      applyPreviewSelectionStylesRef.current();
 
       const blockFields = ensureOrderedInlineFields(blockHeader, [
         {
@@ -4950,6 +5461,7 @@ export default function CourseEditor({
       if (!articleHeader) return;
 
       articleHeader.classList.add("adapt-authoring-preview-inline-structured-header");
+      applyPreviewSelectionStylesRef.current();
 
       const articleFields = ensureOrderedInlineFields(articleHeader, [
         {
@@ -5023,6 +5535,7 @@ export default function CourseEditor({
       if (!pageHeader) return;
 
       pageHeader.classList.add("adapt-authoring-preview-inline-structured-header");
+      applyPreviewSelectionStylesRef.current();
 
       const pageFields = ensureOrderedInlineFields(pageHeader, [
         {
@@ -6129,6 +6642,54 @@ export default function CourseEditor({
       const target = event.target as Element | null;
       if (!target) return;
 
+      // CKEditor owns its toolbar, selection, focus, and editable surface.
+      // Its instance exists only for the currently selected node, so this is
+      // never a selection gesture; cancelling this capture-phase click was
+      // preventing component-body text from accepting a cursor or typing.
+      if (target.closest(".ck-editor")) return;
+
+      // Real MCQ/Checklist/etc. item templates give each option a native
+      // checkbox/radio <input> ABSOLUTELY POSITIONED to cover the entire
+      // clickable row (label + text), so a genuine click's hit-test target
+      // is this <input> directly — the click event never actually bubbles
+      // through the item's own text node at all. Because of that, the
+      // <label>-based fix above (which only fires when an editable overlay
+      // IS the click target) never engages for this — the real click target
+      // is the sibling input, not our contenteditable text. Handle it
+      // separately here: if this input's OWN item row already has an
+      // editable overlay field (i.e. this item's text is already the
+      // currently-selected component's editable field), block the native
+      // checkbox/radio toggle and move focus there ourselves instead.
+      // Bounded ancestor walk (not a single parentElement hop) because some
+      // components nest the input one level deeper than others; stops at
+      // the first match so it can only ever find THIS item's own field,
+      // never a different sibling item's.
+      if (target.matches('input[type="checkbox"], input[type="radio"]')) {
+        let container: Element | null = target.parentElement;
+        let siblingEditableField: HTMLElement | null = null;
+        for (let depth = 0; depth < 4 && container && !siblingEditableField; depth += 1) {
+          siblingEditableField = container.querySelector("[data-preview-edit-enabled='true']");
+          container = container.parentElement;
+        }
+        if (siblingEditableField) {
+          // preventDefault alone stops the BROWSER's native checkbox/radio
+          // toggle, but MCQ (a React-rendered component) still separately
+          // fires its own React onChange from this same click regardless
+          // of defaultPrevented (React uses 'click' purely as a change-
+          // detection heuristic for checkbox/radio inputs, independent of
+          // whether the native default actually ran) — that still flips
+          // the model's _isActive and re-renders the controlled `checked`
+          // prop. stopPropagation during this CAPTURE-phase listener (see
+          // doc.addEventListener(..., true) below) stops the event from
+          // ever reaching React's own root-level listener at all, so its
+          // onChange never fires in the first place.
+          event.preventDefault();
+          event.stopPropagation();
+          siblingEditableField.focus();
+          return;
+        }
+      }
+
       const clickedSelectableRegion = target.closest(
         ".page__header-inner, .page__inner, .article__header-inner, .article__inner, .block__header-inner, .block__inner, .component__inner, .menu[data-adapt-id]"
       );
@@ -6160,28 +6721,134 @@ export default function CourseEditor({
       // framework's narrative/accordion/tabs navigation keeps working while
       // a component is selected, instead of every click being swallowed by
       // selection handling.
-      const isEditableOverlayTarget = !!target.closest("[data-preview-edit-enabled='true']");
+      // A click landing on the empty/padding area of an item's <label>
+      // (icon column, right-hand whitespace, ...) hits the LABEL itself as
+      // target, never the editable text span it wraps — target.closest()
+      // only ever walks UP, so it can't see that DESCENDANT field. Also
+      // check the label's own bounded contents (mirrors the checkbox/radio
+      // branch's ancestor walk below) so the whole label counts as an
+      // editable overlay target, not just the exact text node's own box.
+      const editableOverlayAncestor = target.closest("[data-preview-edit-enabled='true']");
+      const containingLabel = target.closest("label");
+      const editableOverlayInLabel = !editableOverlayAncestor && containingLabel
+        ? containingLabel.querySelector("[data-preview-edit-enabled='true']")
+        : null;
+      const isEditableOverlayTarget = !!(editableOverlayAncestor || editableOverlayInLabel);
       const isInteractiveControl =
         !isEditableOverlayTarget &&
         !!target.closest('button, [role="button"], [role="tab"], [class*="js-"], a[href], input, select, textarea, summary, [aria-expanded]');
 
-      if (!isInteractiveControl) {
+      // An editable overlay field (e.g. an MCQ/Checklist option's text) is
+      // frequently nested inside a <label> the real component template
+      // associates with its own hidden checkbox/radio <input> (the item's
+      // actual selection control) via htmlFor. Clicking anywhere in that
+      // label is native browser behavior that focuses + toggles that
+      // control, firing the framework's own 'change' handler (e.g.
+      // checklistView's onItemSelect) — completely independent of our own
+      // click handling below and NOT something stopPropagation touches.
+      // Left alone, that native focus-steal is why an editable option's
+      // text visibly "enters edit mode" (our contenteditable/cursor
+      // affordance appears for an instant) and then immediately reverts
+      // (real focus actually lands on the sibling input, not our
+      // contenteditable span, so it blurs right back out). Blocking only
+      // the DEFAULT action here (not propagation) stops that native
+      // toggle/focus-steal while leaving caret placement in the
+      // contenteditable span untouched (that's driven by mousedown, not
+      // this click's default action) and leaving every other real
+      // interactive control (accordion/narrative headers, nav buttons —
+      // anything NOT wrapped as one of our own editable overlays) exactly
+      // as before.
+      if (isEditableOverlayTarget && target.closest("label")) {
+        event.preventDefault();
+      }
+
+      // A click that lands in the label's own empty space (padding, icon
+      // column, whitespace past the end of the text — never actually on
+      // the editable field element itself) has no glyph under the pointer
+      // for the browser's own mousedown-time caret placement to resolve
+      // against, so nothing gets focused at all once the native
+      // label-activates-its-input default above is blocked. Explicitly
+      // focus the field and collapse the caret to its end (matching a
+      // real text editor's "clicked past the last character" behavior)
+      // instead of leaving the click with no effect.
+      if (editableOverlayInLabel) {
+        const editableField = editableOverlayInLabel as HTMLElement;
+        const fieldWindow = doc.defaultView;
+        editableField.focus();
+        // Focusing a contenteditable also schedules the browser's OWN
+        // default "collapse to start" caret placement — setting the range
+        // synchronously right after focus() gets silently clobbered by
+        // that default a moment later. Deferring to the next frame lets
+        // our placement win instead.
+        fieldWindow?.requestAnimationFrame(() => {
+          const range = doc.createRange();
+          // Collapse to the END OF THE LAST TEXT NODE specifically (not
+          // just selectNodeContents+collapse(false) on the wrapper
+          // element, which anchors the range's container/offset in
+          // CHILD-NODE units and can render with no visible caret at all
+          // for a single-text-node field) so the caret reliably renders
+          // right after the last real character.
+          const lastTextNode = (() => {
+            const walker = doc.createTreeWalker(editableField, NodeFilter.SHOW_TEXT);
+            let last: Text | null = null;
+            let current = walker.nextNode();
+            while (current) {
+              last = current as Text;
+              current = walker.nextNode();
+            }
+            return last;
+          })();
+          if (lastTextNode) {
+            range.setStart(lastTextNode, lastTextNode.length);
+            range.setEnd(lastTextNode, lastTextNode.length);
+          } else {
+            range.selectNodeContents(editableField);
+            range.collapse(false);
+          }
+          const fieldSelection = fieldWindow.getSelection();
+          fieldSelection?.removeAllRanges();
+          fieldSelection?.addRange(range);
+        });
+      }
+
+      // Plain inline fields and CKEditor must keep the browser's default
+      // click/focus behavior. Previously this also matched our own editable
+      // targets and called preventDefault in capture phase, which blocked
+      // caret placement most visibly inside component headers/items.
+      if (!isInteractiveControl && !isEditableOverlayTarget) {
         event.preventDefault();
         event.stopPropagation();
       }
 
-      // Clicking a header field (title/subtitle/body/instruction) to edit
-      // it should always reveal the General accordion it lives in — but
-      // merged in, never replacing whatever else the user already has
-      // open. Clicking anywhere else in an already-selected node must leave
-      // accordion state completely untouched (see the selection handlers'
-      // isSameSelection guards below).
-      if (target.closest("[data-preview-edit-field]")) {
+      // Preserve the right-panel accordion exactly as-is when an editable
+      // field is clicked inside the node already selected. The editor is
+      // often opened specifically to compare its live canvas value against
+      // an expanded Theme/Behaviour/etc. accordion; forcing General open
+      // here used to discard that context. A genuinely different deepest
+      // selection retains the existing fresh-selection behaviour below.
+      const currentSelection = liveSelectionRef.current;
+      const isSameCanvasSelection = componentId && blockId && articleId && pageId
+        ? currentSelection.selectedComponentId === componentId && currentSelection.selectedBlockId === blockId && currentSelection.selectedArticleId === articleId && currentSelection.selectedPageId === pageId
+        : blockId && articleId && pageId
+          ? currentSelection.selectedBlockId === blockId && currentSelection.selectedArticleId === articleId && currentSelection.selectedPageId === pageId && !currentSelection.selectedComponentId
+          : articleId && pageId
+            ? currentSelection.selectedArticleId === articleId && currentSelection.selectedPageId === pageId && !currentSelection.selectedBlockId && !currentSelection.selectedComponentId
+            : pageId
+              ? currentSelection.selectedPageId === pageId && !currentSelection.selectedArticleId && !currentSelection.selectedBlockId && !currentSelection.selectedComponentId && !currentSelection.menuSelected
+              : false;
+      if (target.closest("[data-preview-edit-field]") && !isSameCanvasSelection) {
         if (componentId) setOpenComponentAccordions((prev) => ({ ...prev, general: true }));
         else if (blockId) setOpenBlockAccordions((prev) => ({ ...prev, general: true }));
         else if (articleId) setOpenSectionAccordions((prev) => ({ ...prev, general: true }));
         else if (pageId) setOpenTopicAccordions((prev) => ({ ...prev, general: true }));
       }
+
+      // The iframe listener is installed at iframe load and its selection
+      // handler closures can be older than current React state. For an
+      // already selected node, there is no selection work to do at all;
+      // returning here keeps right-panel accordions stable and lets the
+      // target's own native editing behavior proceed unmodified.
+      if (isSameCanvasSelection) return;
 
       if (componentId && blockId && articleId && pageId) {
         handleSelectComponent(pageId, articleId, blockId, componentId, "preview");
@@ -6276,7 +6943,8 @@ export default function CourseEditor({
         const blockId = target.getAttribute("data-preview-block-id");
         const componentId = target.getAttribute("data-preview-component-id");
         if (pageId && articleId && blockId && componentId) {
-          updateComponentBehaviourProperty(pageId, articleId, blockId, componentId, behaviourPath, target.textContent || "");
+          const value = behaviourPath.endsWith(".body") ? target.innerHTML : target.textContent || "";
+          updateComponentBehaviourProperty(pageId, articleId, blockId, componentId, behaviourPath, value);
         }
         return;
       }
