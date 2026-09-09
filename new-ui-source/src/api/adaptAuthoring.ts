@@ -878,7 +878,7 @@ export interface NavigationSettings {
 // Schema defaults for the six footer buttons (adapt-navigation-footer/properties.schema).
 function defaultFooterButtons(): Record<NavFooterButtonKey, NavFooterButton> {
   return {
-    _home: { _isEnabled: true, btnText: "Home", _classes: "" },
+    _home: { _isEnabled: true, btnText: "", _classes: "" },
     _up: { _isEnabled: true, btnText: "Up", _classes: "btn-secondary" },
     _previous: { _isEnabled: true, btnText: "Previous", _classes: "btn-secondary" },
     _next: { _isEnabled: true, btnText: "Next", _classes: "" },
