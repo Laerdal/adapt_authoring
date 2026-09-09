@@ -86,6 +86,15 @@ export function loadCKEditor5In(targetWindow: Window): Promise<void> {
 
       const moduleScript = targetDocument.createElement("script");
       moduleScript.type = "module";
+      moduleScript.addEventListener(
+        "error",
+        () => {
+          if (isTop) loadPromise = null;
+          else iframeLoadPromises.delete(targetWindow);
+          reject(new Error("Failed to load CKEditor 5 module script"));
+        },
+        { once: true }
+      );
       moduleScript.textContent = `
         import {
           ClassicEditor, Alignment, AutoLink, BlockQuote, Bold, Code, Essentials,
