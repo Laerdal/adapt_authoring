@@ -191,6 +191,7 @@ const FOOTER_BUTTONS_DISPLAY: { key: NavFooterButtonKey; label: string; icon: Re
   { key: "_previous", label: "Previous", icon: ICON.previous },
   { key: "_next",     label: "Next",     icon: ICON.next },
   { key: "_up",       label: "Up",       icon: ICON.up },
+  { key: "_close",    label: "Close",    icon: ICON.home },
   { key: "_custom",   label: "Custom",   icon: ICON.custom },
 ];
 
@@ -211,7 +212,7 @@ function FooterButtonRow({
   onTextChange: (v: string) => void;
 }) {
   return (
-    <div className="w-full flex items-center gap-3 rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5 transition-colors group focus-within:border-[var(--life-primary-500)] focus-within:ring-2 focus-within:ring-[var(--life-primary-050)]">
+    <div className="w-full flex items-center gap-3 rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5 transition-colors group">
       <button
         type="button"
         onClick={() => onChange(!checked)}
@@ -237,7 +238,7 @@ function FooterButtonRow({
         aria-label={`${label} button text`}
         placeholder={label}
         onChange={(e) => onTextChange(e.target.value)}
-        className="flex-1 min-w-0 px-2 py-1.5 text-sm rounded-md border border-transparent bg-transparent text-[#374151] focus:outline-none focus:border-[#d1d5db] focus:bg-white focus:ring-2 focus:ring-[var(--life-primary-050)] transition-colors"
+        className="flex-1 min-w-0 px-2 py-1.5 text-sm rounded-md border border-transparent bg-transparent text-[#374151] transition-colors"
       />
     </div>
   );
