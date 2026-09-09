@@ -184,6 +184,12 @@ const ICON = {
       <rect x="4" y="4" width="16" height="16" rx="2" /><line x1="9" y1="4" x2="9" y2="20" />
     </svg>
   ),
+  close: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  ),
 } as const;
 
 const FOOTER_BUTTONS_DISPLAY: { key: NavFooterButtonKey; label: string; icon: React.ReactNode }[] = [
@@ -191,7 +197,7 @@ const FOOTER_BUTTONS_DISPLAY: { key: NavFooterButtonKey; label: string; icon: Re
   { key: "_previous", label: "Previous", icon: ICON.previous },
   { key: "_next",     label: "Next",     icon: ICON.next },
   { key: "_up",       label: "Up",       icon: ICON.up },
-  { key: "_close",    label: "Close",    icon: ICON.home },
+  { key: "_close",    label: "Close",    icon: ICON.close },
   { key: "_custom",   label: "Custom",   icon: ICON.custom },
 ];
 
