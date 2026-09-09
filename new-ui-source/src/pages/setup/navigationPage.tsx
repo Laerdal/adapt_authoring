@@ -194,38 +194,52 @@ const FOOTER_BUTTONS_DISPLAY: { key: NavFooterButtonKey; label: string; icon: Re
   { key: "_custom",   label: "Custom",   icon: ICON.custom },
 ];
 
-// A single footer-button toggle row: [checkbox] [icon] [label] in a bordered box.
+// A single footer-button row with a checkbox + icon + editable text field.
 function FooterButtonRow({
   checked,
   onChange,
   icon,
   label,
+  value,
+  onTextChange,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   icon: React.ReactNode;
   label: string;
+  value: string;
+  onTextChange: (v: string) => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={() => onChange(!checked)}
-      className="w-full flex items-center gap-3 rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5 text-left hover:bg-[#f9fafb] transition-colors group"
-    >
-      <span
-        className={`w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors ${
-          checked ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]" : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
-        }`}
+    <div className="w-full flex items-center gap-3 rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5 transition-colors group focus-within:border-[var(--life-primary-500)] focus-within:ring-2 focus-within:ring-[var(--life-primary-050)]">
+      <button
+        type="button"
+        onClick={() => onChange(!checked)}
+        aria-label={`${label} enabled`}
+        className="shrink-0"
       >
-        {checked && (
-          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-        )}
-      </span>
+        <span
+          className={`w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors ${
+            checked ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]" : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
+          }`}
+        >
+          {checked && (
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          )}
+        </span>
+      </button>
       <span className={`shrink-0 ${checked ? "text-[var(--life-primary-500)]" : "text-[#9ca3af]"}`}>{icon}</span>
-      <span className="text-sm text-[#374151]">{label}</span>
-    </button>
+      <input
+        type="text"
+        value={value}
+        aria-label={`${label} button text`}
+        placeholder={label}
+        onChange={(e) => onTextChange(e.target.value)}
+        className="flex-1 min-w-0 px-2 py-1.5 text-sm rounded-md border border-transparent bg-transparent text-[#374151] focus:outline-none focus:border-[#d1d5db] focus:bg-white focus:ring-2 focus:ring-[var(--life-primary-050)] transition-colors"
+      />
+    </div>
   );
 }
 
@@ -639,6 +653,8 @@ export function NavigationPage({
                           onChange={(v) => setFooterButton(key, { _isEnabled: v })}
                           icon={icon}
                           label={label}
+                          value={s.navFooter.buttons[key].btnText}
+                          onTextChange={(v) => setFooterButton(key, { btnText: v })}
                         />
                       ))}
                     </div>
