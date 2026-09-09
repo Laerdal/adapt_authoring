@@ -653,8 +653,8 @@ export function NavigationPage({
                           onChange={(v) => setFooterButton(key, { _isEnabled: v })}
                           icon={icon}
                           label={label}
-                          value={s.navFooter.buttons[key].btnText || label}
-                          onTextChange={(v) => setFooterButton(key, { btnText: v || label })}
+                          value={s.navFooter.buttons[key].btnText}
+                          onTextChange={(v) => setFooterButton(key, { btnText: v })}
                         />
                       ))}
                     </div>
