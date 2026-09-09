@@ -159,13 +159,11 @@ function AccordionCard({
 function PluginRadio({
   id,
   label,
-  description,
   selected,
   onSelect,
 }: {
   id: string;
   label: string;
-  description: string;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -185,7 +183,6 @@ function PluginRadio({
       </span>
       <span>
         <span className="block text-sm font-semibold text-[#111827]">{label}</span>
-        <span className="block text-xs text-[#6b7280]">{description}</span>
       </span>
     </button>
   );
@@ -1170,11 +1167,10 @@ export function TrackingAnalyticsPage({
           onToggle={() => setTrackingOpen((open) => !open)}
           icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></svg>}
         >
-          <p className="text-xs text-[#6b7280] mb-3">Select one tracking plugin and edit its existing settings.</p>
           <div role="radiogroup" aria-label="Tracking plugin" className="flex flex-col gap-1.5">
-            <PluginRadio id="scorm" label="SCORM" description="adapt-contrib-spoor" selected={trackingPlugin === "scorm"} onSelect={() => handleTrackingPluginChange("scorm")} />
-            <PluginRadio id="xapi" label="xAPI" description="adapt-contrib-xapi" selected={trackingPlugin === "xapi"} onSelect={() => handleTrackingPluginChange("xapi")} />
-            <PluginRadio id="hyperbridge" label="HyperBridge" description="adapt-hyper-bridge" selected={trackingPlugin === "hyperbridge"} onSelect={() => handleTrackingPluginChange("hyperbridge")} />
+            <PluginRadio id="scorm" label="SCORM" selected={trackingPlugin === "scorm"} onSelect={() => handleTrackingPluginChange("scorm")} />
+            <PluginRadio id="xapi" label="xAPI" selected={trackingPlugin === "xapi"} onSelect={() => handleTrackingPluginChange("xapi")} />
+            <PluginRadio id="hyperbridge" label="HyperBridge" selected={trackingPlugin === "hyperbridge"} onSelect={() => handleTrackingPluginChange("hyperbridge")} />
           </div>
 
           {trackingPlugin === "scorm" && (
@@ -1432,11 +1428,10 @@ export function TrackingAnalyticsPage({
           onToggle={() => setAnalyticsOpen((open) => !open)}
           icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>}
         >
-          <p className="text-xs text-[#6b7280] mb-3">Select one analytics plugin and edit its existing settings. Select none to disable all analytics.</p>
           <div className="flex flex-col gap-1.5">
-            <PluginRadio id="ues" label="Unified Event System Analytics" description="adapt-ues-analytics" selected={analyticsPlugin === "ues"} onSelect={() => analyticsPlugin === "ues" ? (setAnalyticsPlugin(null), setUes(p => ({ ...p, isEnabled: false }))) : handleAnalyticsPluginChange("ues")} />
-            <PluginRadio id="google" label="Google Analytics" description="adapt-googleAnalytics" selected={analyticsPlugin === "google"} onSelect={() => analyticsPlugin === "google" ? (setAnalyticsPlugin(null), setGoogle(p => ({ ...p, isEnabled: false }))) : handleAnalyticsPluginChange("google")} />
-            <PluginRadio id="hotjar" label="Hotjar Analytics" description="adapt-hotjarAnalytics" selected={analyticsPlugin === "hotjar"} onSelect={() => analyticsPlugin === "hotjar" ? (setAnalyticsPlugin(null), setHotjar(p => ({ ...p, isEnabled: false }))) : handleAnalyticsPluginChange("hotjar")} />
+            <PluginRadio id="ues" label="Unified Event System Analytics" selected={analyticsPlugin === "ues"} onSelect={() => analyticsPlugin === "ues" ? (setAnalyticsPlugin(null), setUes(p => ({ ...p, isEnabled: false }))) : handleAnalyticsPluginChange("ues")} />
+            <PluginRadio id="google" label="Google Analytics" selected={analyticsPlugin === "google"} onSelect={() => analyticsPlugin === "google" ? (setAnalyticsPlugin(null), setGoogle(p => ({ ...p, isEnabled: false }))) : handleAnalyticsPluginChange("google")} />
+            <PluginRadio id="hotjar" label="Hotjar Analytics" selected={analyticsPlugin === "hotjar"} onSelect={() => analyticsPlugin === "hotjar" ? (setAnalyticsPlugin(null), setHotjar(p => ({ ...p, isEnabled: false }))) : handleAnalyticsPluginChange("hotjar")} />
           </div>
 
           {analyticsPlugin === "ues" && (

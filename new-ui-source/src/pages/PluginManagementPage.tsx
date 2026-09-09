@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
-import { getPlugins } from "@/api/adaptAuthoring";
+import { getPlugins, setPluginEnabled } from "@/api/adaptAuthoring";
 import AiAssistant from "@/components/common/AiAssistant";
 
 type PluginStatus = "Enabled" | "Disabled";
@@ -39,7 +39,7 @@ type Toast = { id: number; message: string; type: "success" | "info" };
 export default function PluginManagementPage() {
   const [plugins, setPlugins] = useState<Plugin[]>([]);
 
-  // Live list from the engine; graceful fallback to empty if unavailable.
+  // Live list from the engine (all plugin types); fallback to empty if unavailable.
   useEffect(() => { getPlugins().then(setPlugins).catch(() => setPlugins([])); }, []);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<PluginCategory | null>(null);
@@ -55,21 +55,25 @@ export default function PluginManagementPage() {
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500);
   }, []);
 
-  function togglePlugin(id: number) {
-    setPlugins((prev) =>
-      prev.map((p) => {
-        if (p.id !== id) return p;
-        const next = p.status === "Enabled" ? "Disabled" : "Enabled";
-        showToast(`"${p.name}" ${next.toLowerCase()}`, next === "Enabled" ? "success" : "info");
-        return { ...p, status: next };
-      })
-    );
+  async function togglePlugin(id: number) {
+    const plugin = plugins.find((p) => p.id === id);
+    if (!plugin || !plugin.backendId) return;
+    const next: PluginStatus = plugin.status === "Enabled" ? "Disabled" : "Enabled";
+
+    setPlugins((prev) => prev.map((p) => (p.id === id ? { ...p, status: next } : p)));
+    try {
+      await setPluginEnabled(plugin.category, plugin.backendId, next === "Enabled");
+      showToast(`"${plugin.name}" ${next.toLowerCase()}`, next === "Enabled" ? "success" : "info");
+    } catch {
+      setPlugins((prev) => prev.map((p) => (p.id === id ? { ...p, status: plugin.status } : p)));
+      showToast(`Could not update "${plugin.name}"`, "info");
+    }
   }
 
   const displayed = useMemo(() => {
     const q = search.trim().toLowerCase();
     return plugins.filter((p) => {
-      const matchSearch = q === "" || p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q) || p.author.toLowerCase().includes(q);
+      const matchSearch = q === "" || p.name.toLowerCase().includes(q);
       const matchCat = categoryFilter === null || p.category === categoryFilter;
       return matchSearch && matchCat;
     });
@@ -154,7 +158,7 @@ export default function PluginManagementPage() {
                   <button
                     key={opt}
                     type="button"
-                    onClick={() => { setCategoryFilter(opt); setFilterOpen(false); }}
+                    onClick={() => { setCategoryFilter((cur) => (cur === opt ? null : opt)); setFilterOpen(false); }}
                     className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${
                       categoryFilter === opt ? "bg-[#dbeeff] text-[#2d6fa8] font-medium" : "text-[#374151] hover:bg-[#f9fafb]"
                     }`}

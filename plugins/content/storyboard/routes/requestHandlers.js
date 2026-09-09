@@ -4,13 +4,18 @@
 // in Mongo (robust round-trip of arbitrary BlockNote JSON, independent of the
 // custom schema importer) and exposed as parsed objects over the API.
 
+const fs = require('fs');
+const path = require('path');
+const formidable = require('formidable');
+const bytes = require('bytes');
 const app = require('../../../../')();
+const configuration = require('../../../../lib/configuration');
 const db = require('../utils/database');
 const ai = require('../utils/aiClient');
 const convert = require('../utils/documentConvert');
 
 const STATUSES = ['draft', 'in_review', 'approved'];
-const AUDIT_EVENTS = ['status_change', 'generated', 'imported'];
+const AUDIT_EVENTS = ['status_change', 'generated', 'imported', 'shared'];
 const AI_ACTIONS = ['improve', 'rewrite', 'summarize', 'suggest', 'shorten', 'lengthen', 'spelling', 'custom'];
 
 // Resolve the current user + tenant. Prefer passport's req.user, fall back to
@@ -159,6 +164,75 @@ async function setStoryboardStatus(req, res) {
   }
 }
 
+// Comment-driven status workflow: Draft (no comments) -> In Review (at least
+// one unresolved top-level comment) -> Approved (one or more comments, all
+// top-level ones resolved). Replies (_parentCommentId set) don't count,
+// matching the existing openCount/resolvedCount convention already used by
+// the Review Center panel. Called after every comment add/resolve/delete —
+// the manual status-cycle endpoint (setStoryboardStatus) and UI control have
+// been removed in favour of this being fully automatic.
+async function recomputeStatus(storyboardId, ctx) {
+  try {
+    const comments = (await db.retrieve('storyboardcomment', { _storyboardId: storyboardId })) || [];
+    const topLevel = comments.map(toPlain).filter((c) => !c._parentCommentId);
+    const hasOpen = topLevel.some((c) => !c.resolved);
+    const nextStatus = topLevel.length === 0 ? 'draft' : hasOpen ? 'in_review' : 'approved';
+
+    const existing = await db.retrieve('storyboard', { _id: storyboardId });
+    if (!Array.isArray(existing) || !existing.length) return;
+    const current = toPlain(existing[0]);
+    if (current.status === nextStatus) return;
+
+    await db.update('storyboard', { _id: storyboardId }, { status: nextStatus, updatedBy: ctx.userId });
+    await db.create('storyboardaudit', {
+      _storyboardId: storyboardId,
+      _courseId: current._courseId,
+      _tenantId: ctx.tenantId,
+      createdBy: ctx.userId,
+      event: 'status_change',
+      fromStatus: current.status,
+      toStatus: nextStatus,
+      meta: '{}',
+    });
+  } catch (error) {
+    // Non-fatal — the comment action itself already succeeded; a failed
+    // status recompute shouldn't surface as a comment-save error.
+    console.error('[storyboard] failed to recompute status:', error && error.message);
+  }
+}
+
+// Share the storyboard with reviewers (users of this instance) and append a
+// 'shared' audit event. Replaces the reviewer list wholesale — the client
+// always sends the full desired set, same convention as course _shareWithUsers.
+async function shareStoryboard(req, res) {
+  try {
+    const { userId, tenantId } = userCtx(req);
+    const body = req.body || {};
+    const userIds = Array.isArray(body.userIds) ? body.userIds : [];
+
+    const existing = await db.retrieve('storyboard', { _id: req.params.id });
+    if (!Array.isArray(existing) || !existing.length) {
+      return res.status(404).json({ error: 'Storyboard not found' });
+    }
+    const current = toPlain(existing[0]);
+
+    await db.update('storyboard', { _id: req.params.id }, { _shareWithUsers: userIds, updatedBy: userId });
+    await db.create('storyboardaudit', {
+      _storyboardId: req.params.id,
+      _courseId: current._courseId,
+      _tenantId: tenantId,
+      createdBy: userId,
+      event: 'shared',
+      meta: JSON.stringify({ userIds }),
+    });
+
+    const updated = await db.retrieve('storyboard', { _id: req.params.id });
+    return res.status(200).json(serializeStoryboard(updated[0]));
+  } catch (error) {
+    return fail(res, error, 'Failed to share storyboard');
+  }
+}
+
 async function deleteStoryboard(req, res) {
   try {
     await db.destroy('storyboard', { _id: req.params.id });
@@ -201,6 +275,7 @@ async function addComment(req, res) {
     if (body._parentCommentId) data._parentCommentId = body._parentCommentId;
 
     const created = await db.create('storyboardcomment', data);
+    await recomputeStatus(req.params.id, { userId, tenantId });
     return res.status(201).json(toPlain(created));
   } catch (error) {
     return fail(res, error, 'Failed to add comment');
@@ -209,7 +284,7 @@ async function addComment(req, res) {
 
 async function updateComment(req, res) {
   try {
-    const { userId } = userCtx(req);
+    const { userId, tenantId } = userCtx(req);
     const body = req.body || {};
     const delta = { updatedBy: userId };
     if (typeof body.body === 'string') delta.body = body.body;
@@ -220,7 +295,9 @@ async function updateComment(req, res) {
     if (!Array.isArray(results) || !results.length) {
       return res.status(404).json({ error: 'Comment not found' });
     }
-    return res.status(200).json(toPlain(results[0]));
+    const updated = toPlain(results[0]);
+    if (updated._storyboardId) await recomputeStatus(updated._storyboardId, { userId, tenantId });
+    return res.status(200).json(updated);
   } catch (error) {
     return fail(res, error, 'Failed to update comment');
   }
@@ -228,7 +305,13 @@ async function updateComment(req, res) {
 
 async function deleteComment(req, res) {
   try {
+    const { userId, tenantId } = userCtx(req);
+    // Capture which storyboard this comment belonged to BEFORE deleting it —
+    // recomputeStatus needs it, and it's gone once the record is destroyed.
+    const existing = await db.retrieve('storyboardcomment', { _id: req.params.commentId });
+    const storyboardId = Array.isArray(existing) && existing.length ? toPlain(existing[0])._storyboardId : undefined;
     await db.destroy('storyboardcomment', { _id: req.params.commentId });
+    if (storyboardId) await recomputeStatus(storyboardId, { userId, tenantId });
     return res.status(200).json({ success: true });
   } catch (error) {
     return fail(res, error, 'Failed to delete comment');
@@ -300,8 +383,11 @@ async function handleAi(req, res) {
 }
 
 // ── Import / Export (AC10) ───────────────────────────────────────────────────
-// Binary is exchanged as base64 in JSON so it flows through the standard JSON
-// client (no multipart/multer wiring needed).
+// Export still exchanges binary as base64 in JSON (small payloads, no file on
+// disk to manage). Import (ADAPT-3760) uses real multipart upload instead —
+// the same formidable pattern as lib/assetmanager.js's asset upload route —
+// so it gets a real file-size limit (`maxFileUploadSize`, not the generic 5MB
+// JSON body cap) and safe temp-file handling for free.
 
 async function exportWord(req, res) {
   try {
@@ -319,8 +405,12 @@ async function exportWord(req, res) {
     // embedding fix).
     const { userId, tenantId } = userCtx(req);
     const ctx = { user: req.user, userId, tenantId };
-    const buffer = await convert.blocksToDocx(blocks, docTitle, ctx);
-    const safeName = String(docTitle).replace(/[^\w.-]+/g, '_') || 'storyboard';
+    // Stamp the course + storyboard id into the exported file so a later
+    // import can map it back to this course (ADAPT-3760 import enhancements
+    // — Course-ID-based mapping) — see utils/normalize/reimportMetadata.
+    const buffer = await convert.blocksToDocx(blocks, docTitle, ctx, { courseId: rec._courseId, storyboardId: rec._id });
+    // Filename is keyed on Course ID, not the course title (ADAPT-3760).
+    const safeName = String(rec._courseId || docTitle).replace(/[^\w.-]+/g, '_') || 'storyboard';
     return res.status(200).json({
       filename: `${safeName}.docx`,
       mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -343,7 +433,8 @@ async function exportPdf(req, res) {
     const { userId, tenantId } = userCtx(req);
     const ctx = { user: req.user, userId, tenantId };
     const buffer = await convert.blocksToPdf(blocks, docTitle, ctx);
-    const safeName = String(docTitle).replace(/[^\w.-]+/g, '_') || 'storyboard';
+    // Filename is keyed on Course ID, not the course title (ADAPT-3760).
+    const safeName = String(rec._courseId || docTitle).replace(/[^\w.-]+/g, '_') || 'storyboard';
     return res.status(200).json({
       filename: `${safeName}.pdf`,
       mime: 'application/pdf',
@@ -354,24 +445,88 @@ async function exportPdf(req, res) {
   }
 }
 
+// Extension is the source of truth for which parser runs — never trust the
+// client-supplied `:format` route param alone (spec: "validate the file
+// extension" / "do not trust metadata from uploaded documents").
+const EXT_TO_FORMAT = { '.docx': 'word', '.pdf': 'pdf', '.pptx': 'pptx' };
+const FORMAT_MIME_TYPES = {
+  word: new Set([
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/octet-stream', // some browsers/OSes report this generically
+    'application/zip',
+  ]),
+  pdf: new Set(['application/pdf']),
+  pptx: new Set([
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'application/octet-stream',
+    'application/zip',
+  ]),
+};
+
+function parseMultipart(req) {
+  return new Promise((resolve, reject) => {
+    const form = new formidable.IncomingForm();
+    form.maxFileSize = configuration.getConfig('maxFileUploadSize');
+    form.parse(req, (error, fields, files) => {
+      if (error) return reject(error);
+      resolve({ fields, files });
+    });
+  });
+}
+
 async function importDocument(req, res) {
+  let tempPath;
   try {
-    const format = req.params.format;
-    const b64 = (req.body || {}).dataBase64;
-    if (!b64) return res.status(400).json({ error: 'dataBase64 is required' });
-    const buffer = Buffer.from(b64, 'base64');
+    const { files } = await parseMultipart(req);
+    const file = files && files.file;
+    if (!file) return res.status(400).json({ error: 'A file is required.' });
+    tempPath = file.path;
 
-    let blocks;
-    if (format === 'word') blocks = await convert.wordToBlocks(buffer);
-    else if (format === 'pptx') blocks = convert.pptxToBlocks(buffer);
-    else if (format === 'pdf') blocks = await convert.pdfToBlocks(buffer);
-    else return res.status(400).json({ error: `Unsupported import format: ${format}` });
+    const ext = path.extname(file.name || '').toLowerCase();
+    const format = EXT_TO_FORMAT[ext];
+    if (!format) {
+      return res.status(400).json({
+        error: `Unsupported file format "${ext || '(none)'}" — only .docx, .pdf and .pptx are supported.`,
+      });
+    }
+    const allowedMimes = FORMAT_MIME_TYPES[format];
+    if (file.type && allowedMimes && !allowedMimes.has(file.type)) {
+      return res.status(400).json({ error: `The file's content type ("${file.type}") does not match a ${ext} file.` });
+    }
+    if (!fs.statSync(tempPath).size) {
+      return res.status(400).json({ error: 'The uploaded file is empty.' });
+    }
+    const buffer = fs.readFileSync(tempPath);
 
-    return res.status(200).json({ blocks });
+    let result;
+    try {
+      if (format === 'word') result = await convert.wordToBlocks(buffer, { sourceFileName: file.name });
+      else if (format === 'pptx') result = { normalizedDocument: null, blocks: convert.pptxToBlocks(buffer) };
+      else if (format === 'pdf') result = { normalizedDocument: null, blocks: await convert.pdfToBlocks(buffer) };
+    } catch (parseError) {
+      if (parseError && parseError.statusCode) throw parseError; // e.g. pdf-parse-not-installed 501
+      const err = new Error(
+        `The file could not be read — it may be corrupted, password-protected, or not a valid ${ext} file. (${parseError.message})`,
+      );
+      err.statusCode = 400;
+      throw err;
+    }
+
+    return res.status(200).json(result);
   } catch (error) {
+    if (error && /maxFileSize exceeded/i.test(error.message || '')) {
+      const max = configuration.getConfig('maxFileUploadSize');
+      return res.status(400).json({ error: `File exceeds the maximum upload size (${bytes.format(max)}).` });
+    }
     const code = error && error.statusCode ? error.statusCode : 500;
     console.error('[storyboard] import failed:', error && error.message);
     return res.status(code).json({ error: (error && error.message) || 'Import failed' });
+  } finally {
+    // Formidable's own temp file — clean up regardless of outcome (spec:
+    // "clean up temporary files using the existing application pattern";
+    // the existing assetmanager route doesn't explicitly unlink its own temp
+    // file, but doing so here is a safe, contained improvement).
+    if (tempPath) fs.unlink(tempPath, () => {});
   }
 }
 
@@ -381,6 +536,7 @@ module.exports = {
   getStoryboard,
   updateStoryboard,
   setStoryboardStatus,
+  shareStoryboard,
   deleteStoryboard,
   listComments,
   addComment,

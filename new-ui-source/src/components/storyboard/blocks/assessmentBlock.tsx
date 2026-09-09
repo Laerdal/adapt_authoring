@@ -1,16 +1,17 @@
 // Assessment authoring card (spec AC5) — matches the Lovable question block:
-// a common header (badge, title, Show title, Replace, AI, Source, Delete, Done),
+// a common header (badge, title, Show title, AI, Delete, Done),
 // a "Regenerate with AI" bar, a Body field, per-kind options (with per-option
 // answer-specific feedback), a whole-question Feedback group, and a footer hint.
 // The structured model is stored as JSON in the `data` prop and is generation-
 // ready — options + feedback are written into the Adapt component on Save.
 
 import { useState } from 'react';
-import { RefreshCw, Sparkles, Code, Trash2, Check, Plus, AlertTriangle, MessageSquare, FolderOpen, Image as ImageIcon } from 'lucide-react';
+import { RefreshCw, Trash2, Check, Plus, AlertTriangle, MessageSquare, FolderOpen, Image as ImageIcon } from 'lucide-react';
 import { storyboardActions } from '../storyboardActions';
 import { createReactBlockSpec } from '@blocknote/react';
 import { storyboardAi } from '@/api/ai';
 import AssetPickerModal from '@/components/common/AssetPickerModal';
+import SamaritanIcon from '../SamaritanIcon';
 import {
   defaultAssessmentData,
   emptyFeedback,
@@ -367,7 +368,6 @@ export const assessmentBlock = createReactBlockSpec(
       // questions — a blank question still shows an empty preview until the
       // author explicitly hits Edit.
       const [collapsed, setCollapsed] = useState(true);
-      const [source, setSource] = useState(false);
       const title = block.props.title as string;
       const fb = model.feedback ?? emptyFeedback();
 
@@ -551,14 +551,8 @@ export const assessmentBlock = createReactBlockSpec(
             <HeaderBtn onClick={() => update({ ...model, showTitle: !model.showTitle })} active={model.showTitle} title="Show the title to learners">
               <Check className="h-3 w-3" /> Show title
             </HeaderBtn>
-            <HeaderBtn onClick={() => {}} title="Change type in the Page Editor">
-              <RefreshCw className="h-3 w-3" /> Replace
-            </HeaderBtn>
             <HeaderBtn onClick={regenerate} title="Draft with AI">
-              <Sparkles className="h-3 w-3" /> AI
-            </HeaderBtn>
-            <HeaderBtn onClick={() => setSource((s) => !s)} active={source} title="Toggle source view">
-              <Code className="h-3 w-3" /> Source
+              <SamaritanIcon className="h-3 w-3" /> AI
             </HeaderBtn>
             <HeaderBtn
               onClick={() => storyboardActions.openComment({ blockId: block.id, label: `ASSESSMENT · ${LABELS[kind].toUpperCase()}` })}
@@ -582,25 +576,19 @@ export const assessmentBlock = createReactBlockSpec(
             style={{ borderColor: 'color-mix(in oklab, var(--samaritan) 40%, transparent)', background: 'color-mix(in oklab, var(--samaritan) 6%, transparent)' }}
           >
             <span className="inline-flex items-center gap-1 font-medium" style={{ color: 'var(--samaritan)' }}>
-              <Sparkles className="h-3.5 w-3.5" /> Regenerate with AI
+              <SamaritanIcon className="h-3.5 w-3.5" /> Regenerate with AI
             </span>
             <span className="text-muted-foreground">Drafts the question, items and feedback from the course content and learning objectives.</span>
           </button>
 
-          {source ? (
-            <textarea value={JSON.stringify(model, null, 2)} readOnly rows={8} className={`${inputCls} font-mono text-xs`} />
-          ) : (
-            <>
-              {/* Body */}
-              <label className="block">
-                <span className={labelCls}>Body</span>
-                <textarea value={model.question} placeholder="Type the question here" onKeyDown={stop} rows={2} onChange={(e) => update({ ...model, question: e.target.value })} className={`${inputCls} resize-y`} />
-              </label>
+          {/* Body */}
+          <label className="block">
+            <span className={labelCls}>Body</span>
+            <textarea value={model.question} placeholder="Type the question here" onKeyDown={stop} rows={2} onChange={(e) => update({ ...model, question: e.target.value })} className={`${inputCls} resize-y`} />
+          </label>
 
-              <Body kind={kind} data={model} update={update} />
-              <FeedbackGroup fb={fb} set={(f) => update({ ...model, feedback: f })} />
-            </>
-          )}
+          <Body kind={kind} data={model} update={update} />
+          <FeedbackGroup fb={fb} set={(f) => update({ ...model, feedback: f })} />
 
           {/* Footer + readiness */}
           <div className="mt-2 flex items-center justify-between">

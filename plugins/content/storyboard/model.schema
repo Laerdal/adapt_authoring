@@ -41,6 +41,15 @@
     "_generatedContentMap": {
       "type": "string",
       "default": "{}"
+    },
+    "_shareWithUsers": {
+      "type": "array",
+      "items": {
+        "type": "objectid",
+        "required": false,
+        "ref": "user"
+      },
+      "default": []
     }
   }
 }

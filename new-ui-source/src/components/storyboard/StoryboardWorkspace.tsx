@@ -34,6 +34,9 @@ import {
   type ImportFormat,
   type StoryboardStatus,
 } from '@/api/adaptAuthoring';
+import type { ImportMode, NormalizedDocument } from '@/types/storyboardImport';
+import { applyContentOnlyImport } from '@/api/storyboardContentUpdate';
+import ImportPreviewDialog from './ImportPreviewDialog';
 import { isDefaultSchemaTitle, stripPlaceholderHeadings } from './placeholderTitles';
 import {
   planStoryboardGeneration,
@@ -49,6 +52,7 @@ import ReviewCenter from './ReviewCenter';
 import GenerateDialog from './GenerateDialog';
 import AiAssistPopover from './AiAssistPopover';
 import CommentPopover from './CommentPopover';
+import ShareForReviewDialog from './ShareForReviewDialog';
 import { storyboardActions, type AiAssistRequest, type CommentRequest } from './storyboardActions';
 
 const EMPTY_SUMMARY: StoryboardSummary = {
@@ -59,12 +63,6 @@ const EMPTY_SUMMARY: StoryboardSummary = {
   textBlocks: 0,
   hasVisual: false,
   hasAssessment: false,
-};
-
-const NEXT_STATUS: Record<StoryboardStatus, StoryboardStatus> = {
-  draft: 'in_review',
-  in_review: 'approved',
-  approved: 'draft',
 };
 
 function triggerDownload(blob: Blob, filename: string) {
@@ -83,13 +81,17 @@ function base64ToBlob(b64: string, mime: string): Blob {
   return new Blob([arr], { type: mime });
 }
 
-function readFileBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result).split(',')[1] ?? '');
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+// Soft client-side pre-check only — the server enforces the real limit
+// (configured maxFileUploadSize) and returns a friendly error if exceeded.
+// This just avoids an obviously-doomed upload round-trip.
+const MAX_CLIENT_IMPORT_FILE_MB = 100;
+const IMPORT_EXTENSIONS: Record<string, ImportFormat> = { docx: 'word', pdf: 'pdf', pptx: 'pptx' };
+
+interface PendingImport {
+  fileName: string;
+  fileType: 'docx' | 'pdf' | 'pptx';
+  normalizedDocument: NormalizedDocument | null;
+  blocks: unknown[];
 }
 
 // Starter content for a brand-new storyboard. Deliberately EMPTY of any
@@ -118,7 +120,7 @@ export default function StoryboardWorkspace({
   // own concern — callers pass the raw course title through unchanged.
   const resolvedCourseTitle = isDefaultSchemaTitle(courseTitle) ? '' : courseTitle;
   const sb = useStoryboard(courseId);
-  const review = useStoryboardReview(sb.storyboardId);
+  const review = useStoryboardReview(sb.storyboardId, sb.refreshStatus);
   const editorRef = useRef<StoryboardEditorHandle>(null);
 
   const [headings, setHeadings] = useState<StoryboardHeading[]>([]);
@@ -132,6 +134,8 @@ export default function StoryboardWorkspace({
   // header actions via the storyboardActions channel — NOT from Add Content.
   const [aiConfig, setAiConfig] = useState<AiAssistRequest | null>(null);
   const [commentConfig, setCommentConfig] = useState<CommentRequest | null>(null);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [importPreview, setImportPreview] = useState<PendingImport | null>(null);
 
   // Register the card→workspace action channel (cards render inside BlockNote).
   useEffect(
@@ -233,16 +237,12 @@ export default function StoryboardWorkspace({
   const insert = (kind: StoryboardInsertKind) => editorRef.current?.insert(kind);
   const insertHeading = (level: number) => editorRef.current?.insert('heading', { level });
 
-  // Pull the latest backend course structure into the storyboard on demand
+  // Pull the latest backend course structure into the storyboard silently
   // (spec §1 — keep the storyboard synchronized with the AT). Guarded so it
-  // never discards unsaved edits.
+  // never discards unsaved edits. Runs automatically (see effect below) on
+  // revisiting the page — there is no manual "Refresh" control.
   const refreshFromCourse = async () => {
-    if (!courseId) return;
-    if (sb.dirty) {
-      flash('Save your changes first — then refresh from the course.');
-      return;
-    }
-    flash('Refreshing from course…');
+    if (!courseId || !booted || sb.dirty) return;
     try {
       const fresh = stripPlaceholderHeadings(await getCourseStoryboardBlocks(courseId));
       if (fresh.length) {
@@ -251,18 +251,28 @@ export default function StoryboardWorkspace({
         sb.markSaved(fresh);
         setHeadings(editorRef.current?.getHeadings() ?? []);
         setSummary(editorRef.current?.getSummary() ?? EMPTY_SUMMARY);
-        flash('Storyboard updated from the latest course content.');
-      } else {
-        flash('No course content to load yet.');
       }
-    } catch (e) {
-      flash(`Refresh failed — ${e instanceof Error ? e.message : 'unknown error'}`);
+    } catch {
+      /* silent — the current document stays as-is until the next successful sync */
     }
   };
 
-  const stub = (action: string, phase: string) => flash(`${action} — arrives in ${phase}.`);
+  // Re-sync with the course whenever the user comes back to this tab/page,
+  // so the storyboard never goes stale without requiring a manual refresh.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refreshFromCourse();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId, booted, sb.dirty]);
 
-  // Document-level "Enrich with AI" (toolbar): open the SAME Samaritan popup,
+  // Document-level "Ask Samaritan" (toolbar): open the SAME Samaritan popup,
   // seeded from the cursor block. Insert → new Text component at the cursor;
   // Replace → rewrite the cursor block. (Card-level AI supplies its own
   // handlers via the storyboardActions channel.)
@@ -320,20 +330,9 @@ export default function StoryboardWorkspace({
     }
   };
 
-  const cycleStatus = async () => {
-    if (!sb.storyboardId) return;
-    const next = NEXT_STATUS[sb.status];
-    try {
-      // Snapshot-on-approval (AC8): persist the current document before approving.
-      if (next === 'approved') await sb.save();
-      await sb.changeStatus(next);
-      await review.refresh(); // reflect the new status_change audit event
-    } catch {
-      flash('Could not change status.');
-    }
-  };
-
-  // Import a Word/PDF/PPTX file → blocks, then load them into the editor (AC10).
+  // Import a Word/PDF/PPTX file → parse + normalize server-side → preview →
+  // confirm → apply to the editor per the chosen mode (AC10, ADAPT-3760).
+  // Nothing touches the live storyboard until the user confirms the preview.
   const handleImport = () => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -342,23 +341,133 @@ export default function StoryboardWorkspace({
       const file = input.files?.[0];
       if (!file) return;
       const ext = (file.name.split('.').pop() || '').toLowerCase();
-      const format: ImportFormat = ext === 'pdf' ? 'pdf' : ext === 'pptx' ? 'pptx' : 'word';
+      const format = IMPORT_EXTENSIONS[ext];
+      if (!format) {
+        flash(`Unsupported file format ".${ext}" — only .docx, .pdf and .pptx are supported.`);
+        return;
+      }
+      if (!file.size) {
+        flash('That file is empty.');
+        return;
+      }
+      if (file.size > MAX_CLIENT_IMPORT_FILE_MB * 1024 * 1024) {
+        flash(`That file is larger than ${MAX_CLIENT_IMPORT_FILE_MB}MB.`);
+        return;
+      }
       flash('Importing…');
       try {
-        const b64 = await readFileBase64(file);
-        const { blocks } = await importStoryboardDocument(format, b64);
-        if (Array.isArray(blocks) && blocks.length) {
-          editorRef.current?.setDocument(blocks);
-          sb.setDocument(blocks);
-          flash(`Imported ${blocks.length} block(s) — review, then Save.`);
-        } else {
+        const { normalizedDocument, blocks } = await importStoryboardDocument(format, file);
+        if (!Array.isArray(blocks) || !blocks.length) {
           flash('Nothing importable found in that file.');
+          return;
         }
+        setImportPreview({
+          fileName: file.name,
+          fileType: format === 'word' ? 'docx' : format,
+          normalizedDocument,
+          blocks,
+        });
       } catch (e) {
         flash(`Import failed — ${e instanceof Error ? e.message : 'unknown error'}`);
       }
     };
     input.click();
+  };
+
+  // Apply the confirmed import per the chosen mode. 'new'/'replace' both mean
+  // "the imported blocks become the whole document" — the only difference is
+  // which one is offered/labelled given whether there's existing content.
+  // 'reimport' ("Update content only") is different in kind from the other
+  // three: it doesn't stage anything into the editor draft — it patches the
+  // LIVE course directly (matched by position, never touching structure —
+  // see storyboardContentUpdate.ts) and then re-seeds the editor from the
+  // freshly-patched course, the same pattern already used by handleSave/
+  // confirmGenerate.
+  const handleConfirmImport = async (mode: ImportMode) => {
+    if (!importPreview) return;
+    const { blocks, fileName } = importPreview;
+    setImportPreview(null);
+
+    if (mode === 'reimport') {
+      if (!courseId) return;
+      flash('Updating content…');
+      try {
+        const result = await applyContentOnlyImport(courseId, blocks);
+        const fresh = stripPlaceholderHeadings(await getCourseStoryboardBlocks(courseId));
+        if (fresh.length) {
+          editorRef.current?.setDocument(fresh);
+          sb.setDocument(fresh);
+          sb.markSaved(fresh);
+          setHeadings(editorRef.current?.getHeadings() ?? []);
+          setSummary(editorRef.current?.getSummary() ?? EMPTY_SUMMARY);
+        }
+        const skipped =
+          result.unmatchedCounts.topics + result.unmatchedCounts.sections +
+          result.unmatchedCounts.groups + result.unmatchedCounts.components;
+        let msg = `Updated ${result.updatedTitles} title(s), ${result.updatedBodies} content field(s).`;
+        if (skipped > 0) {
+          msg += ` ${skipped} item(s) in the file had no matching existing content and were not added — use Append if you want them included.`;
+        }
+        flash(msg);
+      } catch (e) {
+        flash(`Content update failed — ${e instanceof Error ? e.message : 'unknown error'}`);
+      }
+      return;
+    }
+
+    if (mode === 'replace') {
+      // 'Replace' means the imported file becomes the ENTIRE course — every
+      // block in it is fresh (no relationship to the existing course's content
+      // ids). Staging it into the draft and leaving persistence to whichever
+      // button the user clicks next is unsafe: Save's saveStoryboardToCourse
+      // matches by existing id, finds nothing, and falls back to an
+      // additive-only generateStoryboardCourse (skipDeletes: true) — which
+      // creates a full parallel copy of the new content and never removes the
+      // old, producing duplicate content and a broken course structure. So
+      // Replace persists immediately via the same full reconcile (create +
+      // update + delete) that "Generate Course" already uses safely.
+      if (!courseId) return;
+      flash('Replacing storyboard content…');
+      try {
+        const result = await generateStoryboardCourse(courseId, blocks, {});
+        generatedMap.current = result.blockToContent;
+        if (sb.storyboardId) {
+          await updateStoryboard(sb.storyboardId, { _generatedContentMap: result.blockToContent });
+          await addStoryboardAudit(sb.storyboardId, {
+            event: 'generated',
+            _courseId: courseId,
+            meta: { created: result.created, updated: result.updated, deleted: result.deleted, source: 'replace-import', fileName },
+          });
+        }
+        const fresh = stripPlaceholderHeadings(await getCourseStoryboardBlocks(courseId));
+        if (fresh.length) {
+          editorRef.current?.setDocument(fresh);
+          sb.setDocument(fresh);
+          sb.markSaved(fresh);
+          setHeadings(editorRef.current?.getHeadings() ?? []);
+          setSummary(editorRef.current?.getSummary() ?? EMPTY_SUMMARY);
+        }
+        await review.refresh();
+        let msg = `Replaced with "${fileName}" — ${result.created} created, ${result.updated} updated, ${result.deleted} removed.`;
+        if (result.missingTypes.length) {
+          msg += ` ⚠ Not generated (no installed plugin): ${result.missingTypes.join(', ')}.`;
+        }
+        flash(msg);
+      } catch (e) {
+        flash(`Replace failed — ${e instanceof Error ? e.message : 'unknown error'}`);
+      }
+      return;
+    }
+
+    const nextDoc =
+      mode === 'append'
+        ? [...((editorRef.current?.getDocument() as unknown[] | undefined) ?? []), ...blocks]
+        : blocks;
+    editorRef.current?.setDocument(nextDoc);
+    sb.setDocument(nextDoc);
+    setHeadings(editorRef.current?.getHeadings() ?? []);
+    setSummary(editorRef.current?.getSummary() ?? EMPTY_SUMMARY);
+    flash(`Imported "${fileName}" (${blocks.length} block(s)) — review, then Save.`);
   };
 
   // Export the storyboard to Word or PDF — both server-built (AC10).
@@ -386,10 +495,11 @@ export default function StoryboardWorkspace({
       const { filename, mime, dataBase64 } = isPdf
         ? await exportStoryboardPdf(sb.storyboardId, titleForExport)
         : await exportStoryboardWord(sb.storyboardId, titleForExport);
-      // Name the download after the course title (fall back to the server name).
+      // Filename is keyed on Course ID, not the course title (ADAPT-3760
+      // import enhancements — Course-ID-based mapping), so a later import can
+      // reliably identify which course a file belongs to.
       const ext = isPdf ? 'pdf' : 'docx';
-      const safeCourse = titleForExport.trim().replace(/[\\/:*?"<>|]+/g, '_');
-      const downloadName = safeCourse ? `${safeCourse}.${ext}` : filename;
+      const downloadName = courseId ? `${courseId}.${ext}` : filename;
       triggerDownload(base64ToBlob(dataBase64, mime), downloadName);
     } catch (e) {
       flash(`Export failed — ${e instanceof Error ? e.message : 'unknown error'}`);
@@ -460,13 +570,12 @@ export default function StoryboardWorkspace({
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
       <StoryboardTopBar
         status={sb.status}
-        onCycleStatus={cycleStatus}
         onBack={() => onBack?.()}
-        onStub={stub}
         onImport={handleImport}
         onExport={handleExport}
         onGenerate={generate}
         onSave={handleSave}
+        onShareForReview={() => setShareOpen(true)}
         dirty={sb.dirty}
         saving={sb.saving}
       />
@@ -506,7 +615,6 @@ export default function StoryboardWorkspace({
             onInsert={insert}
             onInsertHeading={insertHeading}
             onEnrichAI={openEnrichAi}
-            onRefresh={courseId ? refreshFromCourse : undefined}
           />
           <div className="flex-1 overflow-y-auto">
             {/* Authoring canvas ~60% of the viewport (Lovable proportions),
@@ -592,6 +700,38 @@ export default function StoryboardWorkspace({
             flash('AI content applied.');
           }}
           onClose={() => setAiConfig(null)}
+        />
+      )}
+
+      {shareOpen && (
+        <ShareForReviewDialog
+          sharedWith={sb.shareWithUsers}
+          onShare={async (userIds) => {
+            await sb.share(userIds);
+            flash(`Shared with ${userIds.length} reviewer(s).`);
+          }}
+          onClose={() => setShareOpen(false)}
+        />
+      )}
+
+      {importPreview && (
+        <ImportPreviewDialog
+          fileName={importPreview.fileName}
+          fileType={importPreview.fileType}
+          normalizedDocument={importPreview.normalizedDocument}
+          blocks={importPreview.blocks}
+          courseId={courseId}
+          hasExistingContent={headings.length > 0 || summary.contentItems > 0 || summary.textBlocks > 0}
+          // "Update content only" is only offered when the file's embedded
+          // Course ID marker confirms it came from THIS course — position-
+          // matching an unrelated document risks patching the wrong content.
+          canUpdateContentOnly={!!courseId && importPreview.normalizedDocument?.metadata.courseId === courseId}
+          courseIdMismatch={
+            !!importPreview.normalizedDocument?.metadata.courseId &&
+            importPreview.normalizedDocument.metadata.courseId !== courseId
+          }
+          onConfirm={handleConfirmImport}
+          onClose={() => setImportPreview(null)}
         />
       )}
 

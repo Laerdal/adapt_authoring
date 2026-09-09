@@ -4,6 +4,7 @@
 // keep engine-specific endpoint knowledge here, not in the pages.
 
 import { apiClient } from "./client";
+import type { ImportResult } from "../types/storyboardImport";
 import {
   buildGraphicField,
   buildImageAsMedia,
@@ -27,7 +28,7 @@ import {
   storyboardLabel,
 } from "@/components/storyboard/placeholderTitles";
 import { reverseKind, isAssessmentComponentKind } from "./componentMapping";
-import { parseAssessmentData, type AssessmentKind } from "@/types/storyboard";
+import { parseAssessmentData, buildAssessmentFields, type AssessmentKind, type AssessmentData } from "@/types/storyboard";
 export {
   TRACKING_ANALYTICS_EXTENSION_NAME_BY_KEY,
   defaultTrackingAnalyticsSettings,
@@ -139,6 +140,22 @@ export async function getUserById(userId: string): Promise<UserSummary | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Every active user in the instance — the same roster shown in User
+ * Management (GET /api/user, unfiltered). Excludes any user explicitly
+ * flagged inactive (`active === false`, set via the disable-user action);
+ * the field isn't declared on the schema and isn't returned by every
+ * deployment, so users without it are treated as active.
+ */
+export async function getActiveUsers(): Promise<UserSummary[]> {
+  const users = await apiClient.get<Array<UserSummary & { active?: boolean }>>("/api/user");
+  if (!Array.isArray(users)) return [];
+  return users
+    .filter((u) => u.active !== false && !!u.email)
+    .map(({ _id, email, firstName, lastName }) => ({ _id, email, firstName, lastName }))
+    .sort((a, b) => a.email.localeCompare(b.email));
 }
 
 // Instance display name for the header. Reads `domainName` from the client config
@@ -307,15 +324,78 @@ function toDashboardCourse(doc: EngineCourse, index: number): DashboardCourse {
   };
 }
 
+export type CourseSort = "recent" | "alpha-asc" | "alpha-desc";
+
+export interface CourseQuery {
+  search?: string;      // free text, matched against the course title
+  tags?: string[];      // tag _ids (see fetchDashboardTags) — matched with $all
+  sort?: CourseSort;
+}
+
+// A stable, unique sort is REQUIRED for skip/limit to page deterministically —
+// without a tiebreaker DocDB returns an undefined order that shifts between
+// requests, so pages overlap/gap (duplicate & missing courses). _id is unique +
+// indexed, so it settles ties; ObjectId is ~creation-ordered (newest-first = -1).
+const SORT_OPERATORS: Record<CourseSort, Array<[string, string]>> = {
+  recent:       [["updatedAt", "-1"], ["_id", "-1"]],
+  "alpha-asc":  [["title", "1"],  ["_id", "1"]],
+  "alpha-desc": [["title", "-1"], ["_id", "1"]],
+};
+
+// Escape regex metacharacters so the server's `new RegExp(term, 'i')` treats the
+// search as a literal substring (matches user intent + avoids 500s / ReDoS).
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 // shared=false → my courses; shared=true → courses shared with me.
-export async function fetchDashboardCourses(shared = false, skip = 0, limit = 0): Promise<DashboardCourse[]> {
+// Search / tags / sort are applied server-side via the same query shape the old
+// UI uses; skip/limit page the *filtered* set so a user with 1000s of courses
+// never pulls them all. limit=0 keeps the unpaginated behaviour for other callers.
+export async function fetchDashboardCourses(
+  shared = false,
+  skip = 0,
+  limit = 0,
+  query: CourseQuery = {},
+): Promise<DashboardCourse[]> {
   const endpoint = shared ? "/api/shared/course" : "/api/my/course";
-  // Paginate via the same operators the old UI uses (server applies skip/limit),
-  // so a user with 1000s of courses doesn't pull them all in one request. limit=0
-  // keeps the old unpaginated behaviour for any caller that wants everything.
-  const qs = limit > 0 ? `?operators%5Bskip%5D=${skip}&operators%5Blimit%5D=${limit}` : "";
-  const docs = await apiClient.get<EngineCourse[]>(endpoint + qs);
-  return Array.isArray(docs) ? docs.map(toDashboardCourse) : [];
+  const params = new URLSearchParams();
+
+  if (limit > 0) {
+    params.set("operators[skip]", String(skip));
+    params.set("operators[limit]", String(limit));
+    for (const [field, dir] of SORT_OPERATORS[query.sort ?? "recent"]) {
+      params.set(`operators[sort][${field}]`, dir);
+    }
+  }
+  const term = query.search?.trim();
+  if (term) params.set("search[title]", escapeRegExp(term));
+  for (const tagId of query.tags ?? []) {
+    params.append("search[tags][$all][]", tagId);
+  }
+
+  const qs = params.toString();
+  const docs = await apiClient.get<EngineCourse[]>(qs ? `${endpoint}?${qs}` : endpoint);
+  // Page by absolute offset so the client id/React key stays unique across pages.
+  return Array.isArray(docs) ? docs.map((doc, i) => toDashboardCourse(doc, skip + i)) : [];
+}
+
+// The tag universe for the filter dropdown, sourced from the same autocomplete
+// endpoint the old UI uses (not derived from the loaded course page, which is
+// only a slice). Returns { title, id } — id is needed to filter courses by tag.
+export async function fetchDashboardTags(term = ""): Promise<Array<{ title: string; id: string }>> {
+  const qs = term.trim() ? `?term=${encodeURIComponent(term.trim())}` : "";
+  const rows = await apiClient.get<Array<{ title?: string; _id?: string }>>(`/api/autocomplete/tag${qs}`);
+  if (!Array.isArray(rows)) return [];
+  const seen = new Set<string>();
+  const out: Array<{ title: string; id: string }> = [];
+  for (const row of rows) {
+    const title = (row.title ?? "").trim();
+    if (!title || !row._id || seen.has(title.toLowerCase())) continue;
+    seen.add(title.toLowerCase());
+    out.push({ title, id: row._id });
+  }
+  return out.sort((a, b) => a.title.localeCompare(b.title));
 }
 
 // Update course details — resolves tag titles to IDs before sending to the engine.
@@ -2431,7 +2511,10 @@ export async function getCourseStructure(
 // nodes matched by those ids. Structural create/delete/move is deferred to the
 // Phase 4 generation engine and reported (never silently dropped).
 
-const BODY_SUFFIX = "::body";
+// Exported so storyboardContentUpdate.ts (ADAPT-3760 "update content only"
+// import mode) can build synthetic body-update blocks matching this exact
+// convention, rather than duplicating the literal.
+export const BODY_SUFFIX = "::body";
 
 function stripHtml(html: string): string {
   return (html || "")
@@ -2761,7 +2844,7 @@ export async function saveStoryboardToCourse(
   const label = storyboardLabel;
   const index = new Map<
     string,
-    { level: StructureLevel; title: string; body?: string; component?: string; parentId?: string }
+    { level: StructureLevel; title: string; body?: string; component?: string; parentId?: string; properties?: Record<string, unknown> }
   >();
   contentObjects.forEach((c) =>
     index.set(c._id, { level: c._type === "menu" ? "module" : "topic", title: label(c) })
@@ -2775,6 +2858,11 @@ export async function saveStoryboardToCourse(
       body: c.body || "",
       component: c._component,
       parentId: c._parentId,
+      // Kept so an update can seed `patch.properties` from what's actually on
+      // the live document before merging in the storyboard's own fields —
+      // otherwise mergeProperties builds `properties` from scratch and wipes
+      // every field the storyboard doesn't model (ADAPT-3760 properties-wipe fix).
+      properties: c.properties,
     })
   );
 
@@ -2844,15 +2932,24 @@ export async function saveStoryboardToCourse(
         info.component === "accordion" ||
         info.component === "laerdal-narrative" ||
         info.component === "narrative";
+      // Seed from what's actually live on the document BEFORE merging —
+      // mergeProperties merges onto `patch.properties` if already present, so
+      // this preserves any property the storyboard doesn't model instead of
+      // replacing the whole object with just the new patch (ADAPT-3760).
+      const seedProperties = () => {
+        if (patch.properties === undefined) patch.properties = { ...(info.properties || {}) };
+      };
       if (kind === "image" && (info.component === "graphic" || isLaerdalMedia)) {
         // Image → _graphic (or legacy laerdal-media poster if the existing comp
         // is a laerdal-media from a course generated before this change).
         // Plugin fields nest under `properties` (top-level is dropped by the
         // content model).
+        seedProperties();
         mergeProperties(patch, isLaerdalMedia ? buildImageAsMedia(parsed.image) : buildGraphicField(parsed.image));
         assetLink = parsed.image?.link;
         assetId = parsed.image?.assetId;
       } else if ((kind === "video" || kind === "audio") && (isLaerdalMedia || info.component === "media")) {
+        seedProperties();
         mergeProperties(patch, buildMediaField(kind, parsed.media));
         assetLink = parsed.media?.asset?.link;
         assetId = parsed.media?.asset?.assetId;
@@ -2860,6 +2957,7 @@ export async function saveStoryboardToCourse(
         // Grouped Content → accordion / narrative `properties._items` with
         // `_graphic.src` (matches the installed schemas). Persist any link
         // (course/assets/<file> or external URL).
+        seedProperties();
         const items = Array.isArray(parsed.items) ? parsed.items : [];
         mergeProperties(patch, {
           _items: items.map((it) => {
@@ -2887,6 +2985,42 @@ export async function saveStoryboardToCourse(
         if (assetId && assetLink) {
           const fn = filenameFromLink(assetLink);
           if (fn) tasks.push(linkContentAsset(courseId, "component", id, info.parentId || "", fn, assetId));
+        }
+      }
+      continue;
+    }
+    // Assessment card (mcq/gmcq/matching/reorder/textInput/slider/checklist)
+    // mapped to an existing question component → write its real question
+    // data (options/correct-flags/feedback/etc., not just the title). This
+    // was previously missing entirely — an assessment's title could be
+    // renamed via the generic heading branch, but its actual question data
+    // never persisted through this write-back path (ADAPT-3760).
+    if (raw.type === "sbAssessment" && info.level === "component") {
+      const kind = raw.props?.kind;
+      if (kind && isAssessmentComponentKind(kind)) {
+        let data: AssessmentData = { question: "" };
+        try {
+          data = raw.props?.data ? (JSON.parse(raw.props.data) as AssessmentData) : { question: "" };
+        } catch {
+          data = { question: "" };
+        }
+        const patch: Record<string, unknown> = {};
+        const nextTitle = (raw.props?.title || "").trim();
+        if (nextTitle && nextTitle !== info.title) {
+          patch.title = nextTitle;
+          patch.displayTitle = nextTitle;
+          updatedTitles += 1;
+        }
+        const assessmentFields = buildAssessmentFields(kind as AssessmentKind, data);
+        if (Object.keys(assessmentFields).length) {
+          // Seed from live properties first — same reasoning as the
+          // sbComponent branch above (ADAPT-3760 properties-wipe fix).
+          patch.properties = { ...(info.properties || {}) };
+          mergeProperties(patch, assessmentFields);
+        }
+        if (Object.keys(patch).length) {
+          tasks.push(apiClient.put(`/api/content/component/${id}`, patch));
+          updatedBodies += 1;
         }
       }
     }
@@ -4332,10 +4466,17 @@ export function trashAsset(backendId: string): Promise<unknown> {
   return apiClient.put(`/api/asset/trash/${backendId}`);
 }
 
-// ── Plugins (extension types) ─────────────────────────────────────────────────
-// Read-only for now: the engine enable/disable contract is not yet defined.
+// ── Plugins (all bower-backed plugin types) ───────────────────────────────────
 export type PluginStatus = "Enabled" | "Disabled";
 export type PluginCategory = "extensions" | "components" | "themes" | "menus";
+
+// Each category maps onto its own engine collection/route (extensiontype, …).
+const PLUGIN_CATEGORY_ENDPOINTS: Record<PluginCategory, string> = {
+  extensions: "extensiontype",
+  components: "componenttype",
+  themes: "themetype",
+  menus: "menutype",
+};
 
 export interface DashboardPlugin {
   id: number;
@@ -4360,19 +4501,47 @@ interface EnginePlugin {
   createdAt?: string;
 }
 
-export async function getPlugins(): Promise<DashboardPlugin[]> {
-  const docs = await apiClient.get<EnginePlugin[]>("/api/extensiontype");
-  return (Array.isArray(docs) ? docs : []).map((p, i) => ({
-    id: i + 1,
-    backendId: p._id,
-    name: p.displayName || p.name || "Unknown",
-    description: p.description || "",
-    version: p.version || "",
-    author: p.author || "",
-    category: "extensions",
-    status: p._isAvailableInEditor === false ? "Disabled" : "Enabled",
-    installedDate: fmtDate(p.createdAt),
-  }));
+export async function getPlugins(category?: PluginCategory | null): Promise<DashboardPlugin[]> {
+  const categories: PluginCategory[] = category
+    ? [category]
+    : (Object.keys(PLUGIN_CATEGORY_ENDPOINTS) as PluginCategory[]);
+
+  const results = await Promise.all(
+    categories.map(async (cat) => {
+      try {
+        const docs = await apiClient.get<EnginePlugin[]>(`/api/${PLUGIN_CATEGORY_ENDPOINTS[cat]}`);
+        return { cat, docs: Array.isArray(docs) ? docs : [] };
+      } catch {
+        // One unavailable collection must not blank out the whole list.
+        return { cat, docs: [] as EnginePlugin[] };
+      }
+    })
+  );
+
+  let seq = 0;
+  return results.flatMap(({ cat, docs }) =>
+    docs.map((p) => ({
+      id: ++seq,
+      backendId: p._id,
+      name: p.displayName || p.name || "Unknown",
+      description: p.description || "",
+      version: p.version || "",
+      author: p.author || "",
+      category: cat,
+      status: (p._isAvailableInEditor === false ? "Disabled" : "Enabled") as PluginStatus,
+      installedDate: fmtDate(p.createdAt),
+    }))
+  );
+}
+
+export function setPluginEnabled(
+  category: PluginCategory,
+  backendId: string,
+  enabled: boolean
+): Promise<unknown> {
+  return apiClient.put(`/api/${PLUGIN_CATEGORY_ENDPOINTS[category]}/${backendId}`, {
+    _isAvailableInEditor: enabled,
+  });
 }
 
 // ── Storyboard Authoring (ADAPT-3760 / ADAPT-3779) ──────────────────────────
@@ -4390,6 +4559,7 @@ export interface StoryboardRecord {
   version: number;
   documentJson: unknown[];
   _generatedContentMap: Record<string, string>;
+  _shareWithUsers?: string[];
   createdBy?: string;
   createdAt?: string;
   updatedAt?: string;
@@ -4412,7 +4582,7 @@ export interface StoryboardAuditEvent {
   _id: string;
   _storyboardId: string;
   _courseId?: string;
-  event: "status_change" | "generated" | "imported";
+  event: "status_change" | "generated" | "imported" | "shared";
   fromStatus?: string;
   toStatus?: string;
   meta?: Record<string, unknown>;
@@ -4453,6 +4623,12 @@ export function updateStoryboard(
 // Changes status and appends a status_change audit event server-side.
 export function setStoryboardStatus(id: string, status: StoryboardStatus): Promise<StoryboardRecord> {
   return apiClient.put<StoryboardRecord>(`${SB_DOCS}/${id}/status`, { status });
+}
+
+// Shares the storyboard with the given instance users (reviewers) — replaces
+// the reviewer list wholesale — and appends a 'shared' audit event server-side.
+export function shareStoryboard(id: string, userIds: string[]): Promise<StoryboardRecord> {
+  return apiClient.put<StoryboardRecord>(`${SB_DOCS}/${id}/share`, { userIds });
 }
 
 export function deleteStoryboard(id: string): Promise<{ success: boolean }> {
@@ -4523,9 +4699,23 @@ export function exportStoryboardPdf(
   return apiClient.get<{ filename: string; mime: string; dataBase64: string }>(`${SB_DOCS}/${id}/export/pdf${q}`);
 }
 
-export function importStoryboardDocument(
+// Real multipart upload (mirrors uploadAsset, above) rather than base64-in-JSON
+// — gets a real file-size limit (the backend's maxFileUploadSize, not the
+// generic JSON body cap) and safe temp-file handling for free (ADAPT-3760).
+export async function importStoryboardDocument(
   format: ImportFormat,
-  dataBase64: string
-): Promise<{ blocks: unknown[] }> {
-  return apiClient.post<{ blocks: unknown[] }>(`/api/storyboard/import/${format}`, { dataBase64 });
+  file: File
+): Promise<ImportResult> {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`/api/storyboard/import/${format}`, {
+    method: "POST",
+    body: form,
+    credentials: "same-origin",
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null) as { error?: string } | null;
+    throw new Error((body && body.error) || `Import failed — ${res.statusText}`);
+  }
+  return res.json() as Promise<ImportResult>;
 }

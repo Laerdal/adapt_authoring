@@ -7,9 +7,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getStoryboardByCourse,
+  getStoryboard,
   createStoryboard,
   updateStoryboard,
-  setStoryboardStatus,
+  shareStoryboard,
   type StoryboardRecord,
   type StoryboardStatus,
 } from "../api/adaptAuthoring";
@@ -19,6 +20,8 @@ export interface UseStoryboardResult {
   document: unknown[];
   status: StoryboardStatus;
   version: number;
+  /** User ids the storyboard is currently shared with for review. */
+  shareWithUsers: string[];
   loading: boolean;
   saving: boolean;
   dirty: boolean;
@@ -38,8 +41,14 @@ export interface UseStoryboardResult {
   save: (doc?: unknown[]) => Promise<void>;
   /** Revert the draft to the last-saved document. */
   discard: () => void;
-  /** Change review status (persists + records an audit event server-side). */
-  changeStatus: (next: StoryboardStatus) => Promise<void>;
+  /** Re-fetch `status` from the server — status is now fully automatic
+   *  (comment-driven, computed server-side), so callers that just added/
+   *  resolved/removed a comment call this to pick up the new value without
+   *  waiting for a full reload. Only refreshes `status`, never the document
+   *  (never discards in-progress edits). */
+  refreshStatus: () => Promise<void>;
+  /** Share the storyboard with the given reviewers (persists + audits server-side). */
+  share: (userIds: string[]) => Promise<void>;
 }
 
 export function useStoryboard(courseId?: string): UseStoryboardResult {
@@ -115,12 +124,21 @@ export function useStoryboard(courseId?: string): UseStoryboardResult {
     setDraftDoc(record?.documentJson ?? []);
   }, [record]);
 
-  const changeStatus = useCallback(
-    async (next: StoryboardStatus) => {
+  const refreshStatus = useCallback(async () => {
+    if (!record) return;
+    try {
+      const fresh = await getStoryboard(record._id);
+      setStatus(fresh.status);
+    } catch {
+      /* best-effort — a stale pill self-corrects on next reload */
+    }
+  }, [record]);
+
+  const share = useCallback(
+    async (userIds: string[]) => {
       if (!record) return;
-      const updated = await setStoryboardStatus(record._id, next);
+      const updated = await shareStoryboard(record._id, userIds);
       setRecord(updated);
-      setStatus(updated.status);
     },
     [record]
   );
@@ -130,6 +148,7 @@ export function useStoryboard(courseId?: string): UseStoryboardResult {
     document: draftDoc,
     status,
     version: record?.version ?? 1,
+    shareWithUsers: record?._shareWithUsers ?? [],
     loading,
     saving,
     dirty,
@@ -138,6 +157,7 @@ export function useStoryboard(courseId?: string): UseStoryboardResult {
     markSaved,
     save,
     discard,
-    changeStatus,
+    refreshStatus,
+    share,
   };
 }
