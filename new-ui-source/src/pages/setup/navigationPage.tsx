@@ -222,7 +222,8 @@ function FooterButtonRow({
       <button
         type="button"
         onClick={() => onChange(!checked)}
-        aria-label={`${label} enabled`}
+        aria-label={`Toggle ${label} button`}
+        aria-pressed={checked}
         className="shrink-0"
       >
         <span
