@@ -1001,10 +1001,9 @@ export async function getNavigationSettings(courseId: string): Promise<Navigatio
   const mergedButtons = defaultFooterButtons();
   (Object.keys(mergedButtons) as NavFooterButtonKey[]).forEach((k) => {
     const b = obj(buttons[k]);
-    const effectiveText = str(b.btnText, mergedButtons[k].btnText) || mergedButtons[k].btnText;
     mergedButtons[k] = {
       _isEnabled: bool(b._isEnabled, mergedButtons[k]._isEnabled),
-      btnText: effectiveText,
+      btnText: str(b.btnText, mergedButtons[k].btnText),
       _classes: str(b._classes, mergedButtons[k]._classes),
     };
   });
