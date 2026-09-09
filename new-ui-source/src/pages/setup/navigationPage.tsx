@@ -212,7 +212,7 @@ function FooterButtonRow({
   onTextChange: (v: string) => void;
 }) {
   return (
-    <div className="w-full flex items-center gap-3 rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5 transition-colors group">
+    <div className="w-full flex items-center gap-3 px-3 py-2.5 group">
       <button
         type="button"
         onClick={() => onChange(!checked)}
@@ -238,7 +238,7 @@ function FooterButtonRow({
         aria-label={`${label} button text`}
         placeholder={label}
         onChange={(e) => onTextChange(e.target.value)}
-        className="flex-1 min-w-0 px-2 py-1.5 text-sm rounded-md border border-transparent bg-transparent text-[#374151] transition-colors"
+        className="flex-1 min-w-0 px-0 py-1 text-sm bg-transparent text-[#374151] border-0 outline-none shadow-none"
       />
     </div>
   );
