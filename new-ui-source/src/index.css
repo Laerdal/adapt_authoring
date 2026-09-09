@@ -321,8 +321,9 @@ html, body {
 
 /* CKEditor 5 rich-text fields (RichTextEditor.tsx) — fit within whatever
    container they're placed in (right panel, canvas overlay, etc.) instead of
-   overflowing it, and let the toolbar's own "..." grouping handle overflow
-   (shouldNotGroupWhenFull: false) rather than letting buttons get clipped. */
+   overflowing it.
+   Toolbar overflow handling is configured in RichTextEditor.tsx (currently
+   shouldNotGroupWhenFull: true, so buttons wrap rather than grouping into "…"). */
 .rich-text-editor-field {
   width: 100%;
   min-width: 0;
