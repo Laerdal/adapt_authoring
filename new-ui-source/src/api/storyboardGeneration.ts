@@ -160,6 +160,43 @@ function escapeHtml(s: string): string {
   return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// A BlockNote block's inline content → safe HTML, preserving bold/italic/
+// underline/strike run styling as real tags — mirrors inlineToRuns' docx-
+// export equivalent (documentConvert.js) so a Text component's formatting is
+// preserved consistently in the actual Adapt component body, not just in the
+// Word export. inlineToText (plain concatenation, no styling) stays in use
+// wherever only plain text is needed (title derivation, dirty-checks, etc.).
+function inlineToHtml(content: unknown): string {
+  if (typeof content === "string") return escapeHtml(content);
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((n) => {
+      if (!n || typeof (n as { text?: unknown }).text !== "string") return "";
+      const styles = (n as { styles?: Record<string, boolean> }).styles || {};
+      const wrap = (s: string) => {
+        let html = escapeHtml(s);
+        if (styles.bold) html = `<b>${html}</b>`;
+        if (styles.italic) html = `<i>${html}</i>`;
+        if (styles.underline) html = `<u>${html}</u>`;
+        if (styles.strike) html = `<s>${html}</s>`;
+        if (styles.subscript) html = `<sub>${html}</sub>`;
+        if (styles.superscript) html = `<sup>${html}</sup>`;
+        return html;
+      };
+      // A single run can itself contain '\n' — typing Shift+Enter directly in
+      // the editor (not just docx import) encodes a line break this way, since
+      // BlockNote has no distinct "soft break" node. Encode as <br/> rather
+      // than closing/reopening a <p> — this same output also gets embedded
+      // inside <li>/<td> wrappers elsewhere in this file (list/table folding),
+      // where splitting into a new <p> would produce invalid, sanitizer-
+      // unfriendly markup like <li>...</p><p>...</li>. <br/> is valid in any
+      // of those containers and still renders as a real line break instead of
+      // the literal '\n' a browser would otherwise collapse to whitespace.
+      return (n as { text: string }).text.split("\n").map(wrap).join("<br/>");
+    })
+    .join("");
+}
+
 function safeParseJson<T>(value: unknown, fallback: T): T {
   if (typeof value !== "string") return (value as T) ?? fallback;
   try {
@@ -210,7 +247,18 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
   let section: GenSection | null = null;
   let group: GenGroup | null = null;
   let pending: GenComponent | null = null;
+  // Consecutive bulletListItem/numberedListItem blocks (native BlockNote list
+  // types — previously had NO case here at all and were silently dropped
+  // during Generate) accumulate here until a non-list block ends the run,
+  // then flush as one real <ul>/<ol> into the current (or a new) text
+  // component's body — same "accumulate, then flush" shape as paragraphs.
+  let listBuffer: { kind: "ul" | "ol"; items: string[]; sourceBlockId?: string } | null = null;
 
+  // Titles carry an explicit "Untitled ..." marker rather than a bare
+  // "Untitled ..." — this tree is a fallback for content that arrives without
+  // its required intermediate parent (e.g. a paragraph directly under an H1),
+  // and an unlabeled placeholder reads as data loss ("where did my Section
+  // go?") rather than what it actually is: a level the author never wrote.
   const ensureTopic = () => {
     if (!topic) {
       topic = { title: "Untitled Topic", sections: [] };
@@ -232,10 +280,27 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
   const ensureGroup = () => {
     ensureSection();
     if (!group) {
-      group = { title: "Untitled Content Group", components: [] };
+      group = { title: "Untitled Content", components: [] };
       section!.groups.push(group);
     }
     return group;
+  };
+  const flushList = () => {
+    if (!listBuffer || !listBuffer.items.length) {
+      listBuffer = null;
+      return;
+    }
+    const { kind, items, sourceBlockId } = listBuffer;
+    const html = `<${kind}>${items.map((li) => `<li>${li}</li>`).join("")}</${kind}>`;
+    if (pending && pending.componentKey === "text") {
+      pending.body = (pending.body || "") + html;
+    } else {
+      ensureGroup();
+      const comp: GenComponent = { sourceBlockId, componentKey: "text", title: "List", body: html };
+      group!.components.push(comp);
+      pending = comp;
+    }
+    listBuffer = null;
   };
 
   for (const raw of doc as GenBlock[]) {
@@ -244,6 +309,7 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
     const existingId = id ? resolveExisting(id) : undefined;
 
     if (type === "heading") {
+      flushList();
       const level = (raw.props && raw.props.level) || 1;
       const title = inlineToText(raw.content).trim() || "Untitled";
       if (level <= 1) {
@@ -279,8 +345,17 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
       // component is created ONLY from a paragraph the author actually typed
       // into, or the H4-heading body below.
       if (!text.trim()) continue;
+      flushList();
+      // Each source paragraph becomes its own <p>, with bold/italic/etc. runs
+      // as real HTML tags. Consecutive paragraphs under one heading (this
+      // component's `pending` state) accumulate as sibling <p> elements
+      // instead of being squashed together — bodyHtmlOf used to join them
+      // with a bare '\n' and re-derive plain HTML from THAT, which a browser
+      // renders as one run-together paragraph (formatting and line breaks
+      // both lost).
+      const html = `<p>${inlineToHtml(raw.content)}</p>`;
       if (pending && pending.componentKey === "text") {
-        pending.body = (pending.body ? `${pending.body}\n` : "") + text;
+        pending.body = (pending.body || "") + html;
         if (id && !id.endsWith("::body") && !pending.sourceBlockId) pending.sourceBlockId = id;
         continue;
       }
@@ -290,14 +365,65 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
         existingId,
         componentKey: "text",
         title: text.slice(0, 40) || "Text",
-        body: text,
+        body: html,
       };
       group!.components.push(comp);
       pending = comp;
       continue;
     }
 
+    if (type === "bulletListItem" || type === "numberedListItem") {
+      const kind: "ul" | "ol" = type === "bulletListItem" ? "ul" : "ol";
+      const itemHtml = inlineToHtml(raw.content);
+      if (!itemHtml.trim()) continue; // blank item — nothing to keep
+      if (listBuffer && listBuffer.kind !== kind) flushList(); // ul <-> ol switch ends the run
+      if (!listBuffer) listBuffer = { kind, items: [], sourceBlockId: id };
+      listBuffer.items.push(itemHtml);
+      continue;
+    }
+
+    if (type === "table") {
+      // A native BlockNote table (see toBlockNote.js) — Adapt has no table
+      // component, so it folds into the enclosing Text component as a real
+      // <table> (per-cell styling preserved via inlineToHtml), same
+      // "accumulate into whichever Text component is open" shape as lists.
+      flushList();
+      const tableContent = raw.content as { rows?: Array<{ cells?: unknown[] }> } | undefined;
+      const rows = Array.isArray(tableContent?.rows) ? tableContent!.rows! : [];
+      // A cell is either a bare inline-content array (how toBlockNote.js's
+      // import constructs it) or `{ type: "tableCell", content: [...] }` —
+      // BlockNote's own editor.document ALWAYS serializes cells the second
+      // way (confirmed in nodeToBlock.ts), regardless of how they were
+      // constructed on the way in. Reading `cell` directly as if it were
+      // always the bare-array form silently produced an empty <td> for every
+      // real (editor-authored) cell — inlineToHtml's `!Array.isArray` guard
+      // just returned "" for the wrapper object.
+      const cellRuns = (cell: unknown): unknown =>
+        Array.isArray(cell) ? cell : (cell as { content?: unknown } | null)?.content ?? [];
+      const rowsHtml = rows
+        .map((row) => {
+          const cells = Array.isArray(row?.cells) ? row.cells! : [];
+          const cellsHtml = cells.map((cell) => `<td>${inlineToHtml(cellRuns(cell))}</td>`).join("");
+          return cellsHtml ? `<tr>${cellsHtml}</tr>` : "";
+        })
+        .filter(Boolean)
+        .join("");
+      if (!rowsHtml) continue;
+      const html = `<table>${rowsHtml}</table>`;
+      if (pending && pending.componentKey === "text") {
+        pending.body = (pending.body || "") + html;
+        if (id && !pending.sourceBlockId) pending.sourceBlockId = id;
+        continue;
+      }
+      ensureGroup();
+      const tableComp: GenComponent = { sourceBlockId: id, existingId, componentKey: "text", title: "Table", body: html };
+      group!.components.push(tableComp);
+      pending = tableComp;
+      continue;
+    }
+
     // Non-text content → its own component.
+    flushList();
     ensureGroup();
     let comp: GenComponent | null = null;
     if (type === "sbComponent") {
@@ -428,23 +554,21 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
     } else if (type === "sbAssessment") {
       const kind = ((raw.props && raw.props.kind) || "mcq") as AssessmentKind;
       const data = safeParseJson<AssessmentData>(raw.props && raw.props.data, { question: "" });
-      // Learner-facing Title/Body mapping (PR review — Title is primary):
-      //   • The block-level Title input is the primary question header — it
-      //     becomes the component's `title` + `displayTitle` in the Adapt
-      //     content model.
-      //   • When the Title is empty, the question body stands in as the title.
-      //   • Final fallback "Question" only when both are empty (schema needs
-      //     a non-empty title for the component to save).
-      //
-      // Body-vs-Title de-duplication:
-      //   The question body is written into `body` only when it differs from
-      //   the resolved title, so authors who provide a distinct Title and Body
-      //   get both, while a body that already became the title is never
-      //   rendered twice (once as title, once as description).
+      // Learner-facing Title/Body mapping: `title`/`displayTitle` is a
+      // generic heading label, NOT the question — the installed component's
+      // own schema defaults
+      // (conf/componentPropertyDefaults.json) prove this for mcq/gmcq:
+      // title/displayTitle default to "Check your understanding" while body
+      // defaults to "Enter your question here"/"Add your question here". The
+      // question always goes in body; title is the author's block-level
+      // Title if given, else that same generic default — never the question
+      // text itself, so it's never shown twice (once as a heading, once as
+      // the question body).
       const blockTitle = ((raw.props && (raw.props.title as string)) || "").trim();
       const questionText = (data.question || "").trim();
-      const resolvedTitle = blockTitle || questionText || "Question";
-      const bodyText = questionText && questionText !== resolvedTitle ? questionText : "";
+      const isMcqShaped = kind === "mcq" || kind === "gmcq";
+      const resolvedTitle = blockTitle || (isMcqShaped ? "Check your understanding" : questionText || "Question");
+      const bodyText = isMcqShaped ? questionText : questionText && questionText !== resolvedTitle ? questionText : "";
       comp = {
         sourceBlockId: id,
         existingId,
@@ -480,14 +604,18 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
       pending = null;
     }
   }
+  flushList(); // a trailing list at the very end of the document
 
   return topics;
 }
 
-// Adapt blocks hold at most 2 components. If the author put more components
-// under one Content Group (H3), split them across additional blocks — each a
-// Content Group Heading carrying the same title — keeping ≤2 per block. The
-// first chunk keeps the original group (its source/existing id).
+// Each Adapt block holds exactly one component (this used to pack up to 2
+// components into one Content Group block, which also forced the
+// "left"/"right" half-width layout below — a component should get the block's
+// full width). If the author put more components under one Content Group
+// (H3), split them across additional blocks — each a Content Group Heading
+// carrying the same title — one per block. The first chunk keeps the
+// original group (its source/existing id).
 //
 // Overflow chunks used to be UNCONDITIONALLY synthetic (no existingId), which
 // meant every single generation run created a BRAND NEW continuation block
@@ -499,7 +627,7 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
 // against the existing course's OWN continuation blocks (same real parent
 // section id + same title, ordered by _sortOrder) so a later run UPDATES the
 // same block instead of creating a new one.
-const MAX_COMPONENTS_PER_BLOCK = 2;
+const MAX_COMPONENTS_PER_BLOCK = 1;
 
 export function enforceMaxComponentsPerBlock(topics: GenTopic[], existingBlocks: ContentNode[] = []): void {
   for (const t of topics) {
@@ -706,7 +834,15 @@ export async function generateStoryboardCourse(
 
   const put = (type: string, id: string, body: Record<string, unknown>) =>
     apiClient.put(`/api/content/${type}/${id}`, body);
-  const bodyHtmlOf = (c: GenComponent) => (c.body && c.body.trim() ? `<p>${escapeHtml(c.body.trim())}</p>` : undefined);
+  // Text-component bodies (built above from native paragraph blocks) already
+  // ARE valid multi-paragraph HTML with real <b>/<i>/etc. tags — pass
+  // through as-is. Other sources (e.g. the assessment branch's plain
+  // question text) are just plain text needing the usual escape + wrap.
+  const bodyHtmlOf = (c: GenComponent) => {
+    const trimmed = (c.body || "").trim();
+    if (!trimmed) return undefined;
+    return trimmed.startsWith("<") ? trimmed : `<p>${escapeHtml(trimmed)}</p>`;
+  };
 
   let tSort = 1;
   for (const t of tree) {
@@ -754,12 +890,10 @@ export async function generateStoryboardCourse(
         for (let ci = 0; ci < g.components.length; ci += 1) {
           const c = g.components[ci];
           const bodyHtml = bodyHtmlOf(c);
-          // A Content Group (block) holding a single component should fill
-          // the full width (matches the Course Preview / real Adapt layout —
-          // there's nothing to sit beside it). Two components split left/right,
-          // as before. `enforceMaxComponentsPerBlock` guarantees ≤2 per group.
-          const layout: "full" | "left" | "right" =
-            g.components.length <= 1 ? "full" : ci === 0 ? "left" : "right";
+          // Every Content Group (block) holds exactly one component
+          // (`enforceMaxComponentsPerBlock` guarantees it) — always the
+          // block's full width, since there's nothing to sit beside it.
+          const layout: "full" | "left" | "right" = "full";
           // Resolve the storyboard kind → installed Adapt component (source of
           // truth). null = unsupported (NO text fallback).
           const resolvedType = getType(c.componentKey);

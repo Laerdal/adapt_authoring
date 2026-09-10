@@ -2821,6 +2821,7 @@ function CourseCreationCenterContent() {
           courseId={courseId}
           courseTitle={title}
           onBack={() => setActiveNav("overview")}
+          onTitleChange={setTitle}
         />
       );
     return <ComingSoonPanel label={activeItem?.label ?? ""} />;
