@@ -816,7 +816,7 @@ function MenuPreview({ cfg, resolveUrl }: { cfg: MenuPageConfig; resolveUrl?: (v
   const hasHeaderImage = !!(cfg.headerImageSrc.xlarge || cfg.headerImageSrc.large || cfg.headerImageSrc.medium || cfg.headerImageSrc.small);
 
   return (
-    <div className="w-[400px] shrink-0 bg-[var(--life-neutral-020)] border-l border-[var(--life-neutral-200)] sticky top-0 h-[calc(100vh-96px)] flex flex-col pb-8">
+    <div className="w-[400px] shrink-0 bg-[var(--life-neutral-020)] border-l border-[var(--life-neutral-200)] sticky top-0 h-full flex flex-col">
       <div className="px-5 py-3 bg-white border-b border-[var(--life-neutral-200)] flex items-center justify-between">
         <div className="flex items-center gap-2">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--life-primary-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>

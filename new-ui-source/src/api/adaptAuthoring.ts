@@ -787,13 +787,19 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
  * once on a cache miss (matching the course's current theme/menu/plugin fingerprint)
  * and returns instantly when it is already cached. This is what makes a never-previewed
  * course renderable without a full grunt rebuild on every open.
+ *
+ * `force` bypasses the fingerprint cache/marker entirely (`?force=true`, backed by
+ * routes/studio/index.js's existing `force` query support) and rebuilds via grunt —
+ * used only for an explicit user-triggered retry after a failed/stale shell, never
+ * on the normal load path, so the fingerprint-cache performance win is unaffected.
  */
 export async function ensureCoursePreview(
   tenantId: string,
   courseId: string,
+  force = false,
 ): Promise<{ success: boolean; message?: string }> {
   return apiClient.post<{ success: boolean; message?: string }>(
-    `/studio/ensure/${tenantId}/${courseId}`,
+    `/studio/ensure/${tenantId}/${courseId}${force ? "?force=true" : ""}`,
   );
 }
 
@@ -2231,6 +2237,7 @@ interface EngineContentNode {
   _lockedBy?: string[];
   _classes?: string;
   _htmlClasses?: string;
+  _colorLabel?: string;
   requirecompletionof?: string | number;
   requireCompletionOf?: string | number;
   _requireCompletionOf?: string | number;
@@ -2381,6 +2388,7 @@ export async function getCourseStructure(
           instruction: article.instruction || "",
           themeSettings: objectValue(article.themeSettings),
           classes: article._classes || "",
+          colorLabel: article._colorLabel || "",
           requireCompletionOf: scalarString(
             article.requirecompletionof ?? article.requireCompletionOf ?? article._requireCompletionOf ?? "-1"
           ),
@@ -2408,6 +2416,7 @@ export async function getCourseStructure(
               instruction: block.instruction || "",
               themeSettings: objectValue(block.themeSettings),
               classes: block._classes || "",
+              colorLabel: block._colorLabel || "",
               requireCompletionOf: scalarString(
                 block.requirecompletionof ?? block.requireCompletionOf ?? block._requireCompletionOf ?? "-1"
               ),
@@ -2451,6 +2460,7 @@ export async function getCourseStructure(
                     properties: componentProperties,
                     url: comp.url || "",
                     classes: comp._classes || "",
+                    colorLabel: comp._colorLabel || "",
                     isOptional: !!comp._isOptional,
                     isAvailable: comp._isAvailable !== false,
                     isHidden: !!comp._isHidden,
@@ -3432,6 +3442,71 @@ export async function getExtensionSchemasByLevel(): Promise<
   return extensionSchemasByLevelCache;
 }
 
+// Theme/menu settings fields available at each content level, sourced from
+// GET /api/content/schema (contentmanager.js processPluginLocations merges
+// every installed themetype's/menutype's `pluginLocations` schema onto the
+// matching level's `themeSettings`/`menuSettings` properties, keyed by that
+// plugin's own `targetAttribute`, e.g. `_vanilla`/`_life`/`_boxMenu`). Each
+// keyed entry additionally carries a `.name` (the owning theme/menu's bower
+// package name, set server-side) so the CURRENTLY APPLIED theme/menu's entry
+// can be looked up by matching against course config `_theme`/`_menu` -
+// mirrors the old tool's schemas.js `trimDisabledPlugins` (which keeps only
+// the schema entry whose `targetAttribute` equals the applied plugin).
+export interface PluginSettingsFieldSchema {
+  name?: string;
+  properties?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+let themeSettingsSchemaByLevelCache: Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>> | null = null;
+let menuSettingsSchemaByLevelCache: Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>> | null = null;
+
+async function getPluginSettingsSchemaByLevel(
+  settingsProperty: "themeSettings" | "menuSettings"
+): Promise<Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>>> {
+  if (!mergedSchemaCache) {
+    mergedSchemaCache = await apiClient.get("/api/content/schema");
+  }
+  const result = {} as Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>>;
+  for (const level of EXTENSION_SCHEMA_LEVELS) {
+    const levelSchema = (mergedSchemaCache as Record<string, unknown> | null)?.[level] as
+      | Record<string, { properties?: Record<string, PluginSettingsFieldSchema> } | undefined>
+      | undefined;
+    result[level] = levelSchema?.[settingsProperty]?.properties ?? {};
+  }
+  return result;
+}
+
+export async function getThemeSettingsSchemaByLevel(): Promise<
+  Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>>
+> {
+  if (!themeSettingsSchemaByLevelCache) {
+    themeSettingsSchemaByLevelCache = await getPluginSettingsSchemaByLevel("themeSettings");
+  }
+  return themeSettingsSchemaByLevelCache;
+}
+
+export async function getMenuSettingsSchemaByLevel(): Promise<
+  Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>>
+> {
+  if (!menuSettingsSchemaByLevelCache) {
+    menuSettingsSchemaByLevelCache = await getPluginSettingsSchemaByLevel("menuSettings");
+  }
+  return menuSettingsSchemaByLevelCache;
+}
+
+// Find the schema entry (and its keyed property-set) belonging to the plugin
+// whose bower package `name` matches the applied theme/menu name for a given
+// level - i.e. the ONLY entry whose fields should actually be rendered.
+export function findAppliedPluginSchemaFields(
+  levelSchemas: Record<string, PluginSettingsFieldSchema> | undefined,
+  appliedPluginName: string
+): Record<string, unknown> | null {
+  if (!levelSchemas) return null;
+  const match = Object.values(levelSchemas).find((entry) => entry?.name === appliedPluginName);
+  return match?.properties ?? null;
+}
+
 // Raw course-level `_extensions` (actual stored values, no schema defaults
 // merged in) — the ultimate ancestor when computing whether a Topic/Section/
 // Content Group/Component extension setting is Inherited from or Overridden
@@ -3938,6 +4013,58 @@ export function updateComponentLayout(
   layout: "full" | "left" | "right"
 ): Promise<unknown> {
   return apiClient.put(`/api/content/component/${id}`, { _layout: layout });
+}
+
+// Old-tool parity (editorView.js addToClipboard/pasteFromClipboard): a real
+// server-side clipboard copy+paste, not a client-side clone — this is what
+// actually deep-copies a node's descendants (Section > Blocks > Components,
+// etc).
+export async function copyStructureNodeToClipboard(
+  level: StructureLevel,
+  objectId: string,
+  courseId: string
+): Promise<string> {
+  const referenceType = LEVEL_TO_CONTENT_TYPE[level];
+  const copyResult = await apiClient.post<{ success: boolean; message?: string; clipboardId?: string }>(
+    "/api/content/clipboard/copy",
+    { objectId, courseId, referenceType }
+  );
+  if (!copyResult?.success || !copyResult.clipboardId) {
+    throw new Error(copyResult?.message || "Failed to copy content");
+  }
+  return copyResult.clipboardId;
+}
+
+export async function pasteStructureNodeFromClipboard(
+  clipboardId: string,
+  courseId: string,
+  parentId: string,
+  sortOrder: number,
+  layout?: "full" | "left" | "right"
+): Promise<string> {
+  const pasteResult = await apiClient.post<{ message?: string; _id?: string }>(
+    "/api/content/clipboard/paste",
+    { id: clipboardId, parentId, layout, sortOrder, courseId }
+  );
+  if (!pasteResult?._id) {
+    throw new Error(pasteResult?.message || "Failed to paste copied content");
+  }
+  return pasteResult._id;
+}
+
+// Pastes immediately back into the SAME parent right after the original
+// (sortOrder + 1) — a single-click "Copy" action (used for Topic), rather
+// than old tool's separate copy-then-click-a-paste-zone flow.
+export async function copyStructureNodeViaClipboard(
+  level: StructureLevel,
+  objectId: string,
+  courseId: string,
+  parentId: string,
+  sortOrder: number,
+  layout?: "full" | "left" | "right"
+): Promise<string> {
+  const clipboardId = await copyStructureNodeToClipboard(level, objectId, courseId);
+  return pasteStructureNodeFromClipboard(clipboardId, courseId, parentId, sortOrder, layout);
 }
 
 // Fresh-course default: one top-level topic with a starter text component.

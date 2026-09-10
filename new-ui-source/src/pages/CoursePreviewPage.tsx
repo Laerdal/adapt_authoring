@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import CommonCourseTopBarRow from "../components/course/CommonCourseTopBarRow";
 import { ensureCoursePreview, ensurePreviewEditEnabledForCourse, getCourseBootstrapData, publishCoursePackage, seedMissingCourseDefaults } from "../api/adaptAuthoring";
@@ -119,25 +119,45 @@ export default function CoursePreviewPage() {
   // Ensure a render shell exists before loading the preview. On a never-built course
   // this builds the shell once (matching its current fingerprint); otherwise it is an
   // instant cache hit. Prevents the blank/"unavailable" state on first preview.
+  // `retryToken` lets the "Try again" button re-run this with force=true without
+  // touching the fingerprint-cache fast path used on every normal load.
+  const [retryToken, setRetryToken] = useState(0);
+  const [retrying, setRetrying] = useState(false);
+  const [previewErrorMessage, setPreviewErrorMessage] = useState("");
+
   useEffect(() => {
     const tenantId = user?._tenantId;
     if (!id || !tenantId || !defaultsReady) return;
     let cancelled = false;
+    const force = retryToken > 0;
     setPreviewState("preparing");
+    setPreviewErrorMessage("");
     (async () => {
       try {
         await ensurePreviewEditEnabledForCourse(id);
         if (cancelled) return;
-        const result = await ensureCoursePreview(tenantId, id);
-        if (!cancelled) setPreviewState(result?.success ? "ready" : "error");
-      } catch {
-        if (!cancelled) setPreviewState("error");
+        const result = await ensureCoursePreview(tenantId, id, force);
+        if (cancelled) return;
+        setPreviewState(result?.success ? "ready" : "error");
+        if (!result?.success) setPreviewErrorMessage(result?.message || "");
+      } catch (err) {
+        if (cancelled) return;
+        setPreviewState("error");
+        setPreviewErrorMessage(err instanceof Error ? err.message : "");
+      } finally {
+        if (!cancelled) setRetrying(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [defaultsReady, id, user?._tenantId]);
+  }, [defaultsReady, id, user?._tenantId, retryToken]);
+
+  const retryPreview = useCallback(() => {
+    setRetrying(true);
+    setRetryToken((n) => n + 1);
+  }, []);
+
 
   const pageId = (params.get("pageId") || "").trim();
 
@@ -496,10 +516,25 @@ export default function CoursePreviewPage() {
           //      mis-communicate a transient state.
           //   3. (implicit)     — once both flip ready, `previewUrl` is built and the
           //      iframe branch below renders instead.
-          <div className="h-full flex items-center justify-center text-sm text-[#6b7280]">
-            {(!id || !user?._tenantId || previewState === "error")
-              ? "Preview is unavailable for this course."
-              : "Preparing preview…"}
+          <div className="h-full flex flex-col items-center justify-center gap-3 text-sm text-[#6b7280]">
+            <span>
+              {(!id || !user?._tenantId || previewState === "error")
+                ? "Preview is unavailable for this course."
+                : "Preparing preview…"}
+            </span>
+            {previewState === "error" && previewErrorMessage && (
+              <span className="text-xs text-[#9ca3af] max-w-md text-center">{previewErrorMessage}</span>
+            )}
+            {previewState === "error" && id && user?._tenantId && (
+              <button
+                type="button"
+                onClick={retryPreview}
+                disabled={retrying}
+                className="h-9 px-4 rounded-[8px] bg-[var(--life-primary-500)] text-white text-[13px] font-bold hover:bg-[var(--life-primary-700)] transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                {retrying ? "Generating preview…" : "Try again"}
+              </button>
+            )}
           </div>
         ) : (
           <div className="relative h-full w-full flex justify-center">
