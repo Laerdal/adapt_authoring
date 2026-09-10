@@ -7,6 +7,7 @@ import {
 } from "../../api/adaptAuthoring";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
+import { CheckboxIndicator } from "../../components/common/Checkbox";
 
 function CheckboxRow({
   checked,
@@ -23,8 +24,10 @@ function CheckboxRow({
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 h-4 w-4 shrink-0 rounded border-2 border-[#d1d5db] accent-[var(--life-primary-500)] cursor-pointer"
+        aria-label={label}
+        className="sr-only peer"
       />
+      <CheckboxIndicator checked={checked} className="mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
       <span className="text-sm text-[#374151] leading-snug">{label}</span>
     </label>
   );

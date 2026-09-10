@@ -9,6 +9,7 @@ import {
 } from "../../api/adaptAuthoring";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
+import { CheckboxIndicator } from "../../components/common/Checkbox";
 
 const LOG_LEVEL_OPTIONS = ["debug", "info", "warn", "error", "fatal"];
 
@@ -130,8 +131,10 @@ function TsCheckbox({ id, label, description, checked, onChange }: { id: string;
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 h-4 w-4 shrink-0 rounded border-2 border-[#d1d5db] accent-[#2d6fa8] cursor-pointer"
+        aria-label={label}
+        className="sr-only peer"
       />
+      <CheckboxIndicator checked={checked} className="mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
       <div className="flex flex-col gap-0.5">
         <span className="text-sm font-semibold text-[#374151]">{label}</span>
         {description && <span className="text-[13px] text-[var(--life-neutral-300)]">{description}</span>}
