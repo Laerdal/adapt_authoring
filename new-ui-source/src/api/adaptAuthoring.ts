@@ -2624,7 +2624,7 @@ function extractCellRuns(el: Element): Run[] {
 // type — instead of the flattened, tag-stripped, always-"paragraph" string
 // `stripHtml` used to produce (which erased bold/italic/underline/strike,
 // collapsed every paragraph boundary to a bare '\n' inside one block, and
-// turned <ul>/<ol> lists into plain text) on reload (ADAPT-3842).
+// turned <ul>/<ol> lists into plain text) on reload.
 function htmlBodyToBlocks(html: string): HtmlBlockRuns[] {
   const container = document.createElement("div");
   container.innerHTML = html;
@@ -2800,11 +2800,11 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
     }
     // Assessment question components → assessment card (options + feedback).
     if (sbKind && isAssessmentComponentKind(sbKind)) {
-      // ADAPT-3842 correction of ADAPT-3785 §2/§3: `title`/`displayTitle` is a
-      // generic heading label, NOT the question — the installed component's
-      // OWN schema defaults (conf/componentPropertyDefaults.json) prove this
-      // for mcq/gmcq: title/displayTitle default to "Check your
-      // understanding" while body defaults to the question placeholder text.
+      // `title`/`displayTitle` is a generic heading label, NOT the question —
+      // the installed component's own schema defaults
+      // (conf/componentPropertyDefaults.json) prove this for mcq/gmcq:
+      // title/displayTitle default to "Check your understanding" while body
+      // defaults to the question placeholder text.
       // So for those kinds, `body` is the question source; title/displayTitle
       // only surface as the separate block-level Title input when they carry
       // something OTHER than that generic default (an author-set label).

@@ -554,9 +554,9 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
     } else if (type === "sbAssessment") {
       const kind = ((raw.props && raw.props.kind) || "mcq") as AssessmentKind;
       const data = safeParseJson<AssessmentData>(raw.props && raw.props.data, { question: "" });
-      // Learner-facing Title/Body mapping (ADAPT-3842 correction): `title`/
-      // `displayTitle` is a generic heading label, NOT the question — the
-      // installed component's OWN schema defaults
+      // Learner-facing Title/Body mapping: `title`/`displayTitle` is a
+      // generic heading label, NOT the question — the installed component's
+      // own schema defaults
       // (conf/componentPropertyDefaults.json) prove this for mcq/gmcq:
       // title/displayTitle default to "Check your understanding" while body
       // defaults to "Enter your question here"/"Add your question here". The
@@ -609,8 +609,8 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
   return topics;
 }
 
-// Each Adapt block holds exactly one component (ADAPT-3842: importing used to
-// pack up to 2 components into one Content Group block, which also forced the
+// Each Adapt block holds exactly one component (this used to pack up to 2
+// components into one Content Group block, which also forced the
 // "left"/"right" half-width layout below — a component should get the block's
 // full width). If the author put more components under one Content Group
 // (H3), split them across additional blocks — each a Content Group Heading

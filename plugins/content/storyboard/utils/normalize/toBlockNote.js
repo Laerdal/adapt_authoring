@@ -9,7 +9,7 @@
 // all become native BlockNote blocks (a real visual table for `table` — see
 // its case below) — all of them are understood by storyboardGeneration.ts's
 // parseDocToTree, which folds a list/table into whichever Text component
-// encloses it (ADAPT-3842: these used to become a separate
+// encloses it (these used to become a separate
 // `sbComponent(kind:'groupedContent')` card, i.e. an Accordion, which is not
 // what a plain Word bullet list or table is).
 // Everything else (images, a paragraph that's just a link to an external

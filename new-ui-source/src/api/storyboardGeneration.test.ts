@@ -37,7 +37,7 @@ describe('enforceMaxComponentsPerBlock', () => {
     const tree = makeTreeWithOverflow(5);
     enforceMaxComponentsPerBlock(tree, []);
     const groups = tree[0].sections[0].groups;
-    expect(groups.length).toBe(5); // one component per block (ADAPT-3842)
+    expect(groups.length).toBe(5); // one component per block
     expect(groups[0].existingId).toBe('group-1');
     expect(groups[1].existingId).toBeUndefined();
     expect(groups[2].existingId).toBeUndefined();
@@ -59,7 +59,7 @@ describe('enforceMaxComponentsPerBlock', () => {
   });
 
   it('only reuses as many continuations as exist, creating fresh ones for any additional overflow', () => {
-    const tree = makeTreeWithOverflow(7); // needs 7 groups total, one component each (ADAPT-3842)
+    const tree = makeTreeWithOverflow(7); // needs 7 groups total, one component each
     const existingBlocks: ContentNode[] = [
       { _id: 'group-1', _parentId: 'section-1', title: 'Group', _sortOrder: 1 },
       { _id: 'continuation-A', _parentId: 'section-1', title: 'Group', _sortOrder: 2 },
