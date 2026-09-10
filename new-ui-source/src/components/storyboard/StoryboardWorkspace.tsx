@@ -31,6 +31,7 @@ import {
   importStoryboardDocument,
   updateStoryboard,
   addStoryboardAudit,
+  updateCourse,
   type ImportFormat,
   type StoryboardStatus,
 } from '@/api/adaptAuthoring';
@@ -108,17 +109,46 @@ export default function StoryboardWorkspace({
   courseTitle = '',
   initialDocument,
   onBack,
+  onTitleChange,
 }: {
   courseId?: string;
   courseTitle?: string;
   initialDocument?: StoryboardDocument;
   onBack?: () => void;
+  /** Called with the new title after a successful edit here, so callers whose
+   *  own state feeds `courseTitle` (StoryboardPage, SetupPage's embedded
+   *  panel) stay in sync without needing a full refetch. */
+  onTitleChange?: (title: string) => void;
 }) {
   // Filter out the backend's schema-default course title ("New Course Title"
   // and friends) so the placeholder never leaks onto the storyboard header,
   // into the export filename or into the docx title. This is the storyboard's
   // own concern — callers pass the raw course title through unchanged.
   const resolvedCourseTitle = isDefaultSchemaTitle(courseTitle) ? '' : courseTitle;
+  const [titleDraft, setTitleDraft] = useState(resolvedCourseTitle);
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [savingTitle, setSavingTitle] = useState(false);
+  useEffect(() => {
+    if (!editingTitle) setTitleDraft(resolvedCourseTitle);
+  }, [resolvedCourseTitle, editingTitle]);
+
+  const commitTitle = async () => {
+    setEditingTitle(false);
+    const next = titleDraft.trim();
+    if (!courseId || !next || next === resolvedCourseTitle) {
+      setTitleDraft(resolvedCourseTitle);
+      return;
+    }
+    setSavingTitle(true);
+    try {
+      await updateCourse(courseId, { title: next, displayTitle: next });
+      onTitleChange?.(next);
+    } catch {
+      setTitleDraft(resolvedCourseTitle); // revert on failure
+    } finally {
+      setSavingTitle(false);
+    }
+  };
   const sb = useStoryboard(courseId);
   const review = useStoryboardReview(sb.storyboardId, sb.refreshStatus);
   const editorRef = useRef<StoryboardEditorHandle>(null);
@@ -127,6 +157,9 @@ export default function StoryboardWorkspace({
   const [summary, setSummary] = useState<StoryboardSummary>(EMPTY_SUMMARY);
   const [activeId, setActiveId] = useState<string>();
   const [activeBlock, setActiveBlock] = useState<ActiveBlockInfo | null>(null);
+  // The Page/Article heading a NEW comment will anchor to (resolved from the
+  // cursor's position — comments never attach to a Block/Component).
+  const [commentAnchor, setCommentAnchor] = useState<ActiveBlockInfo | null>(null);
   const [showContents, setShowContents] = useState(true);
   const [showReview, setShowReview] = useState(true);
   const [toast, setToast] = useState<string>();
@@ -620,28 +653,47 @@ export default function StoryboardWorkspace({
             {/* Authoring canvas ~60% of the viewport (Lovable proportions),
                 capped to the center column when the side panels squeeze it. */}
             <article className="mx-auto w-[60vw] max-w-full px-8 py-10">
-              {/* Show a course header ONLY when the backend has a real title.
-                  When the course is unnamed (or still carrying the schema
-                  default like "New Course Title") we suppress the entire
-                  Course/H1 block — forbids rendering placeholder
-                  title text on the storyboard, in Preview, or in the export. */}
-              {resolvedCourseTitle ? (
-                <div className="mb-8 border-b pb-5">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.2em]" style={{ color: 'var(--samaritan)' }}>
-                    Course
-                  </div>
-                  <h1 className="mt-1 text-[2.6rem] font-bold leading-tight tracking-tight text-foreground">
-                    {resolvedCourseTitle}
-                  </h1>
+              {/* Editable course title. Always rendered (even with no title
+                  yet) so an unnamed course can be named from here — but the
+                  underlying value only ever becomes the schema default
+                  ("New Course Title" and friends) through an explicit edit,
+                  never silently: an empty title shows the placeholder
+                  attribute only, which never leaks into Preview/export
+                  (those read the confirmed `resolvedCourseTitle`/saved state,
+                  not the input's placeholder). */}
+              <div className="mb-8 border-b pb-5">
+                <div className="text-[10px] font-semibold uppercase tracking-[0.2em]" style={{ color: 'var(--samaritan)' }}>
+                  Course
                 </div>
-              ) : null}
+                <input
+                  value={titleDraft}
+                  placeholder="Untitled Course"
+                  onFocus={() => setEditingTitle(true)}
+                  onChange={(e) => setTitleDraft(e.target.value)}
+                  onBlur={() => void commitTitle()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.currentTarget.blur();
+                    if (e.key === 'Escape') {
+                      setTitleDraft(resolvedCourseTitle);
+                      setEditingTitle(false);
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  disabled={savingTitle}
+                  aria-label="Course title"
+                  className="mt-1 w-full border-0 border-b border-transparent bg-transparent text-[2.6rem] font-bold leading-tight tracking-tight text-foreground outline-none focus:border-border disabled:opacity-60"
+                />
+              </div>
               {booted ? (
                 <BlockNoteStoryboardEditor
                   key={sb.storyboardId ?? 'sb'}
                   ref={editorRef}
                   initialDocument={initialContent.current}
                   onChange={handleChange}
-                  onActiveBlock={setActiveBlock}
+                  onActiveBlock={(block) => {
+                    setActiveBlock(block);
+                    setCommentAnchor(editorRef.current?.getCommentAnchor() ?? null);
+                  }}
                 />
               ) : (
                 <div className="flex items-center gap-2 py-16 text-sm text-muted-foreground">
@@ -659,7 +711,7 @@ export default function StoryboardWorkspace({
               summary={summary}
               review={review}
               status={sb.status}
-              activeBlock={activeBlock ? { id: activeBlock.id, label: labelFor(activeBlock.id) } : undefined}
+              activeBlock={commentAnchor ? { id: commentAnchor.id, label: labelFor(commentAnchor.id) } : undefined}
               courseId={courseId}
               labelFor={labelFor}
               onCollapse={() => setShowReview(false)}

@@ -69,7 +69,10 @@ describe('applyContentOnlyImport', () => {
     expect(byId('section-1')).toMatchObject({ type: 'heading', content: 'New Section' });
     expect(byId('group-1')).toMatchObject({ type: 'heading', content: 'New Group' });
     expect(byId('comp-text-1')).toMatchObject({ type: 'heading', content: 'New Text Title' });
-    expect(byId('comp-text-1::body')).toMatchObject({ type: 'paragraph', content: 'New body text' });
+    // Text component bodies are real multi-paragraph HTML now (ADAPT-3842 —
+    // each source paragraph keeps its own <p>, formatting preserved), not a
+    // bare string — see storyboardGeneration.ts's parseDocToTree.
+    expect(byId('comp-text-1::body')).toMatchObject({ type: 'paragraph', content: '<p>New body text</p>' });
 
     const groupedPatch = byId('comp-grouped-1') as unknown as { props: { kind: string; data: string } };
     expect(groupedPatch.props.kind).toBe('groupedContent');

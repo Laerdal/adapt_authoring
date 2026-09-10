@@ -27,8 +27,8 @@ function makeTreeWithOverflow(componentCount: number, sectionExistingId = 'secti
 }
 
 describe('enforceMaxComponentsPerBlock', () => {
-  it('leaves a group with <=2 components untouched', () => {
-    const tree = makeTreeWithOverflow(2);
+  it('leaves a group with <=1 component untouched', () => {
+    const tree = makeTreeWithOverflow(1);
     enforceMaxComponentsPerBlock(tree);
     expect(tree[0].sections[0].groups.length).toBe(1);
   });
@@ -37,7 +37,7 @@ describe('enforceMaxComponentsPerBlock', () => {
     const tree = makeTreeWithOverflow(5);
     enforceMaxComponentsPerBlock(tree, []);
     const groups = tree[0].sections[0].groups;
-    expect(groups.length).toBe(3); // 2 + 2 + 1
+    expect(groups.length).toBe(5); // one component per block (ADAPT-3842)
     expect(groups[0].existingId).toBe('group-1');
     expect(groups[1].existingId).toBeUndefined();
     expect(groups[2].existingId).toBeUndefined();
@@ -52,21 +52,21 @@ describe('enforceMaxComponentsPerBlock', () => {
     ];
     enforceMaxComponentsPerBlock(tree, existingBlocks);
     const groups = tree[0].sections[0].groups;
-    expect(groups.length).toBe(3);
+    expect(groups.length).toBe(5);
     expect(groups[0].existingId).toBe('group-1');
     expect(groups[1].existingId).toBe('continuation-A');
     expect(groups[2].existingId).toBe('continuation-B');
   });
 
   it('only reuses as many continuations as exist, creating fresh ones for any additional overflow', () => {
-    const tree = makeTreeWithOverflow(7); // needs 4 groups total (2+2+2+1)
+    const tree = makeTreeWithOverflow(7); // needs 7 groups total, one component each (ADAPT-3842)
     const existingBlocks: ContentNode[] = [
       { _id: 'group-1', _parentId: 'section-1', title: 'Group', _sortOrder: 1 },
       { _id: 'continuation-A', _parentId: 'section-1', title: 'Group', _sortOrder: 2 },
     ];
     enforceMaxComponentsPerBlock(tree, existingBlocks);
     const groups = tree[0].sections[0].groups;
-    expect(groups.length).toBe(4);
+    expect(groups.length).toBe(7);
     expect(groups[1].existingId).toBe('continuation-A');
     expect(groups[2].existingId).toBeUndefined(); // no 3rd candidate available — fresh create
     expect(groups[3].existingId).toBeUndefined();

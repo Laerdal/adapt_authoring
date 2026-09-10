@@ -2538,6 +2538,143 @@ function inlineToText(content: unknown): string {
     .join("");
 }
 
+// Same as inlineToText but keeps bold/italic/underline/strike run styling as
+// real HTML tags — mirrors storyboardGeneration.ts's equivalent so a
+// component's body formatting survives both the initial generate AND this
+// "update content only" re-sync, not just the former.
+function inlineToHtml(content: unknown): string {
+  if (typeof content === "string") return escapeHtml(content);
+  if (!Array.isArray(content)) return "";
+  return content
+    .map((n) => {
+      if (!n || typeof (n as { text?: unknown }).text !== "string") return "";
+      const styles = (n as { styles?: Record<string, boolean> }).styles || {};
+      const wrap = (s: string) => {
+        let html = escapeHtml(s);
+        if (styles.bold) html = `<b>${html}</b>`;
+        if (styles.italic) html = `<i>${html}</i>`;
+        if (styles.underline) html = `<u>${html}</u>`;
+        if (styles.strike) html = `<s>${html}</s>`;
+        if (styles.subscript) html = `<sub>${html}</sub>`;
+        if (styles.superscript) html = `<sup>${html}</sup>`;
+        return html;
+      };
+      // A single run can itself contain '\n' (Shift+Enter typed directly in
+      // the editor, not just docx import) — split so each line closes/reopens
+      // the <p> the caller wraps this in, instead of a literal newline that a
+      // browser collapses into plain whitespace (the break vanishes).
+      return (n as { text: string }).text.split("\n").map(wrap).join("</p><p>");
+    })
+    .join("");
+}
+
+const INLINE_MARK_TAGS: Record<string, "bold" | "italic" | "underline" | "strike" | "subscript" | "superscript"> = {
+  STRONG: "bold",
+  B: "bold",
+  EM: "italic",
+  I: "italic",
+  U: "underline",
+  S: "strike",
+  STRIKE: "strike",
+  SUB: "subscript",
+  SUP: "superscript",
+};
+const HTML_PARAGRAPH_BOUNDARY_TAGS = new Set(["P", "DIV", "H1", "H2", "H3", "H4", "H5", "H6"]);
+
+type Run = { text: string; styles: Record<string, boolean> };
+type HtmlBlockKind = "paragraph" | "bulletListItem" | "numberedListItem" | "table";
+interface HtmlBlockRuns {
+  kind: HtmlBlockKind;
+  runs: Run[];
+  /** Only set when kind === "table": rows -> cells -> styled runs. */
+  tableRows?: Run[][][];
+}
+
+// Extracts a table cell's inline content (text + bold/italic/etc marks) —
+// a smaller, standalone version of htmlBodyToBlocks' own walk, since a cell
+// is just "some inline HTML", never itself a paragraph/list/table boundary.
+function extractCellRuns(el: Element): Run[] {
+  const runs: Run[] = [];
+  const walk = (node: ChildNode, styles: Record<string, boolean>) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent || "";
+      if (text) runs.push({ text, styles });
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const tag = (node as Element).tagName;
+    if (tag === "BR") {
+      runs.push({ text: "\n", styles });
+      return;
+    }
+    const mark = INLINE_MARK_TAGS[tag];
+    const nextStyles = mark ? { ...styles, [mark]: true } : styles;
+    for (const child of Array.from((node as Element).childNodes)) walk(child, nextStyles);
+  };
+  for (const child of Array.from(el.childNodes)) walk(child, {});
+  return runs;
+}
+
+// The reverse of inlineToHtml: a component's stored body HTML (e.g.
+// `<p>A <b>bold</b> word</p><ul><li>one</li><li>two</li></ul>`, or a legacy
+// plain-text body with no tags at all) → one block PER paragraph/list item,
+// each run carrying real styles and each block tagged with its real BlockNote
+// type — instead of the flattened, tag-stripped, always-"paragraph" string
+// `stripHtml` used to produce (which erased bold/italic/underline/strike,
+// collapsed every paragraph boundary to a bare '\n' inside one block, and
+// turned <ul>/<ol> lists into plain text) on reload (ADAPT-3842).
+function htmlBodyToBlocks(html: string): HtmlBlockRuns[] {
+  const container = document.createElement("div");
+  container.innerHTML = html;
+  const blocks: HtmlBlockRuns[] = [{ kind: "paragraph", runs: [] }];
+  const current = () => blocks[blocks.length - 1];
+  const startNew = (kind: HtmlBlockKind) => blocks.push({ kind, runs: [] });
+  const walk = (node: ChildNode, styles: Record<string, boolean>, listKind: "ul" | "ol" | null) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = node.textContent || "";
+      if (text) current().runs.push({ text, styles });
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    const el = node as Element;
+    const tag = el.tagName;
+    if (tag === "BR") {
+      startNew(current().kind); // same kind — a break inside a list item stays a list item
+      return;
+    }
+    if (tag === "UL" || tag === "OL") {
+      for (const child of Array.from(el.childNodes)) walk(child, styles, tag === "UL" ? "ul" : "ol");
+      startNew("paragraph"); // whatever follows the list is plain content again
+      return;
+    }
+    if (tag === "LI") {
+      startNew(listKind === "ol" ? "numberedListItem" : "bulletListItem");
+      for (const child of Array.from(el.childNodes)) walk(child, styles, listKind);
+      return;
+    }
+    if (tag === "TABLE") {
+      // A real <table> (generated per storyboardGeneration.ts's table
+      // handling) reconstructs as a native BlockNote table block, not plain
+      // paragraphs — same "don't lose the structure on reload" reasoning as
+      // lists.
+      const tableRows = Array.from(el.querySelectorAll("tr")).map((tr) =>
+        Array.from(tr.querySelectorAll(":scope > td, :scope > th")).map((cell) => extractCellRuns(cell))
+      );
+      if (tableRows.some((row) => row.some((cell) => cell.some((r) => r.text.trim())))) {
+        blocks.push({ kind: "table", runs: [], tableRows });
+      }
+      startNew("paragraph"); // whatever follows the table is plain content again
+      return;
+    }
+    const mark = INLINE_MARK_TAGS[tag];
+    const nextStyles = mark ? { ...styles, [mark]: true } : styles;
+    for (const child of Array.from(el.childNodes)) walk(child, nextStyles, listKind);
+    if (HTML_PARAGRAPH_BOUNDARY_TAGS.has(tag)) startNew("paragraph");
+  };
+  for (const child of Array.from(container.childNodes)) walk(child, {}, null);
+  return blocks.filter((b) => b.kind === "table" ? !!b.tableRows?.length : b.runs.some((r) => r.text.trim()));
+}
+
 interface StoryboardBlock {
   id?: string;
   type?: string;
@@ -2661,21 +2798,27 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
     }
     // Assessment question components → assessment card (options + feedback).
     if (sbKind && isAssessmentComponentKind(sbKind)) {
-      // ADAPT-3785 §2/§3 — Question Title source of truth + de-duplication:
-      //   • The question title lives on the backend component's `displayTitle`
-      //     (with `title` as a mirror). This IS the question shown to the
-      //     learner. `body` may hold legacy text on older records.
-      //   • The Storyboard round-trips it through `data.question` (the Body
-      //     textarea in the assessment card) — the block-level Title input
-      //     stays empty when displayTitle is the only source, so the same
-      //     text never appears in two edit fields at once.
-      //   • Only when `title` and `displayTitle` genuinely differ (an unusual
-      //     hand-edit) do we surface the block-level title separately.
+      // ADAPT-3842 correction of ADAPT-3785 §2/§3: `title`/`displayTitle` is a
+      // generic heading label, NOT the question — the installed component's
+      // OWN schema defaults (conf/componentPropertyDefaults.json) prove this
+      // for mcq/gmcq: title/displayTitle default to "Check your
+      // understanding" while body defaults to the question placeholder text.
+      // So for those kinds, `body` is the question source; title/displayTitle
+      // only surface as the separate block-level Title input when they carry
+      // something OTHER than that generic default (an author-set label).
+      // Other assessment kinds (matching/slider/etc — not verified against
+      // this issue) keep the original displayTitle-first priority.
+      const isMcqShaped = sbKind === "mcq" || sbKind === "gmcq";
+      const ASSESSMENT_GENERIC_TITLES = new Set(["Check your understanding"]);
+      const isGenericOrDefaultTitle = (t: string) => isDefaultSchemaTitle(t) || (isMcqShaped && ASSESSMENT_GENERIC_TITLES.has(t));
       const displayTitle = ((comp.displayTitle as string) || "").trim();
       const rawTitle = ((comp.title as string) || "").trim();
-      const cleanDisplayTitle = isDefaultSchemaTitle(displayTitle) ? "" : displayTitle;
-      const cleanTitle = isDefaultSchemaTitle(rawTitle) ? "" : rawTitle;
-      const questionSeed = cleanDisplayTitle || cleanTitle || stripHtml(comp.body || "");
+      const cleanDisplayTitle = isGenericOrDefaultTitle(displayTitle) ? "" : displayTitle;
+      const cleanTitle = isGenericOrDefaultTitle(rawTitle) ? "" : rawTitle;
+      const bodyText = stripHtml(comp.body || "");
+      const questionSeed = isMcqShaped
+        ? bodyText || cleanDisplayTitle || cleanTitle
+        : cleanDisplayTitle || cleanTitle || bodyText;
       // Block-title input stays empty unless the AT stored a distinct `title`
       // (independent of displayTitle) — avoids duplicating displayTitle into
       // the block-title input on reload.
@@ -2779,8 +2922,38 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
     // the body paragraph, which reads as an "empty title" placeholder.
     const compTitle = label(comp);
     if (compTitle) out.push({ id: comp._id, type: "heading", props: { level: 4 }, content: compTitle });
-    const bodyText = stripHtml(comp.body || "");
-    if (bodyText) out.push({ id: `${comp._id}${BODY_SUFFIX}`, type: "paragraph", content: bodyText });
+    // One native block PER paragraph/list-item in the stored body — each its
+    // real BlockNote type (paragraph/bulletListItem/numberedListItem) with
+    // its own bold/italic/underline/strike — not stripHtml's old flat,
+    // unstyled, single '\n'-joined string that also turned <ul>/<ol> lists
+    // into plain text. Only the FIRST keeps the special ::body id (the
+    // "update content only" sync's 1-block-per-component contract can only
+    // track one); the rest surface as new blocks there (pre-existing
+    // "structural create is Phase 4" limit) but round-trip correctly through
+    // a full Generate, which re-merges any number of consecutive blocks back
+    // into this one component.
+    const htmlBlocks = htmlBodyToBlocks(comp.body || "");
+    htmlBlocks.forEach((b, i) => {
+      const id = i === 0 ? `${comp._id}${BODY_SUFFIX}` : `${comp._id}-body-${i}`;
+      if (b.kind === "table") {
+        out.push({
+          id,
+          type: "table",
+          content: {
+            type: "tableContent",
+            rows: (b.tableRows || []).map((cells) => ({
+              cells: cells.map((cellRuns) => cellRuns.map((r) => ({ type: "text", text: r.text, styles: r.styles }))),
+            })),
+          },
+        });
+        return;
+      }
+      out.push({
+        id,
+        type: b.kind,
+        content: b.runs.map((r) => ({ type: "text", text: r.text, styles: r.styles })),
+      });
+    });
   };
   const emitTopic = (page: EngineContentNode) => {
     // A page/article/block with no authored title (schema default like
@@ -2876,9 +3049,21 @@ export async function saveStoryboardToCourse(
         unmapped += 1;
         continue;
       }
-      const nextText = inlineToText(raw.content);
-      if (nextText !== stripHtml(info.body || "")) {
-        tasks.push(apiClient.put(`/api/content/component/${compId}`, { body: `<p>${escapeHtml(nextText)}</p>` }));
+      // `raw.content` is either real BlockNote inline content (an array of
+      // styled runs, from a live editor Save) or a pre-built HTML string (a
+      // synthetic patch block from storyboardContentUpdate.ts's "Update
+      // content only" import mode — see flattenComponentToText, which passes
+      // a Text component's `body` through as-is, and that body is already
+      // multi-paragraph styled HTML per storyboardGeneration.ts). Running an
+      // already-HTML string through inlineToHtml's plain-text escaping would
+      // double-encode it — the literal <p>/<b> tags show up on the page
+      // instead of rendering, exactly the "seeing HTML tags" bug this fixes.
+      const rawContent = raw.content;
+      const alreadyHtml = typeof rawContent === "string" && rawContent.trim().startsWith("<");
+      const nextBodyHtml = alreadyHtml ? rawContent : `<p>${inlineToHtml(rawContent)}</p>`;
+      const nextPlainText = alreadyHtml ? stripHtml(rawContent) : inlineToText(rawContent);
+      if (nextPlainText !== stripHtml(info.body || "")) {
+        tasks.push(apiClient.put(`/api/content/component/${compId}`, { body: nextBodyHtml }));
         updatedBodies += 1;
       }
       continue;
