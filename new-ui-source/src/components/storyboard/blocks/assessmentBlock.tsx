@@ -8,8 +8,9 @@
 import { useState } from 'react';
 import { RefreshCw, Trash2, Check, Plus, AlertTriangle, MessageSquare, FolderOpen, Image as ImageIcon } from 'lucide-react';
 import { storyboardActions } from '../storyboardActions';
+import { resolveCommentAnchor } from '../commentAnchor';
+import { safePreviewSrc } from '../mediaMapping';
 import { createReactBlockSpec } from '@blocknote/react';
-import { storyboardAi } from '@/api/ai';
 import AssetPickerModal from '@/components/common/AssetPickerModal';
 import SamaritanIcon from '../SamaritanIcon';
 import {
@@ -377,14 +378,18 @@ export const assessmentBlock = createReactBlockSpec(
       };
       const setTitle = (t: string) => editor.updateBlock(block, { props: { title: t } });
 
-      const regenerate = async () => {
-        try {
-          const seed = model.question || title || LABELS[kind];
-          const r = (await storyboardAi('suggest', seed)).trim();
-          if (r) update({ ...model, question: r });
-        } catch {
-          /* surfaced elsewhere */
-        }
+      // AI is an ACTION that opens the Samaritan popup for the author to
+      // review/apply — it must NEVER call the AI and apply the result
+      // directly the moment the button is clicked (that silently overwrote
+      // the question with no confirmation, indistinguishable from "clicking
+      // the component generates unintended text"). Matches componentBlock.tsx's
+      // AI wiring: Replace overwrites the question, Insert appends to it.
+      const openAi = () => {
+        storyboardActions.openAi({
+          initialText: model.question || title || LABELS[kind],
+          onReplace: (text) => update({ ...model, question: text }),
+          onInsert: (text) => update({ ...model, question: model.question ? `${model.question}\n\n${text}` : text }),
+        });
       };
 
       const issues = validateAssessment(kind, model, title);
@@ -448,9 +453,9 @@ export const assessmentBlock = createReactBlockSpec(
                         {o.text}
                       </span>
                     </div>
-                    {kind === 'gmcq' && (o.imageUrl || o.image) && (
+                    {kind === 'gmcq' && safePreviewSrc(o.imageUrl, o.image) && (
                       <img
-                        src={o.imageUrl || o.image}
+                        src={safePreviewSrc(o.imageUrl, o.image)}
                         alt={o.text}
                         className="ml-5 mt-1 h-20 w-32 rounded object-cover"
                       />
@@ -551,11 +556,18 @@ export const assessmentBlock = createReactBlockSpec(
             <HeaderBtn onClick={() => update({ ...model, showTitle: !model.showTitle })} active={model.showTitle} title="Show the title to learners">
               <Check className="h-3 w-3" /> Show title
             </HeaderBtn>
-            <HeaderBtn onClick={regenerate} title="Draft with AI">
+            <HeaderBtn onClick={openAi} title="Draft with AI">
               <SamaritanIcon className="h-3 w-3" /> AI
             </HeaderBtn>
             <HeaderBtn
-              onClick={() => storyboardActions.openComment({ blockId: block.id, label: `ASSESSMENT · ${LABELS[kind].toUpperCase()}` })}
+              onClick={() => {
+                // Comments only ever live at Page/Article level (never
+                // Block/Component) — resolve to the enclosing heading rather
+                // than this question's own block id.
+                const anchor = resolveCommentAnchor(editor.document, block.id);
+                if (!anchor) return;
+                storyboardActions.openComment({ blockId: anchor.id, label: `${anchor.text || 'Untitled'} · ${LABELS[kind].toUpperCase()}` });
+              }}
               title="Comment on this question"
             >
               <MessageSquare className="h-3 w-3" /> Comment
@@ -571,14 +583,14 @@ export const assessmentBlock = createReactBlockSpec(
           {/* Regenerate with AI bar */}
           <button
             type="button"
-            onClick={regenerate}
+            onClick={openAi}
             className="mb-2 flex w-full items-center gap-2 rounded-md border border-dashed px-2 py-1.5 text-left text-xs hover:opacity-90"
             style={{ borderColor: 'color-mix(in oklab, var(--samaritan) 40%, transparent)', background: 'color-mix(in oklab, var(--samaritan) 6%, transparent)' }}
           >
             <span className="inline-flex items-center gap-1 font-medium" style={{ color: 'var(--samaritan)' }}>
               <SamaritanIcon className="h-3.5 w-3.5" /> Regenerate with AI
             </span>
-            <span className="text-muted-foreground">Drafts the question, items and feedback from the course content and learning objectives.</span>
+            <span className="text-muted-foreground">Opens Samaritan Assistance to draft or improve this question — review before applying.</span>
           </button>
 
           {/* Body */}

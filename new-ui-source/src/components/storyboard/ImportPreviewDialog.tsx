@@ -32,6 +32,11 @@ function HierarchyTree({ sections, depth = 0 }: { sections: NormalizedSection[];
   );
 }
 
+// Joins every paragraph/heading with a REAL paragraph break, not a run-on
+// ' — '-separated sentence — this preview was previously the one place in the
+// whole import flow that looked like formatting had been lost (everything
+// visually ran together), even though the actual imported document (see
+// toBlockNote.js) already keeps each source paragraph as its own block.
 function contentPreviewSnippet(sections: NormalizedSection[], limit = 400): string {
   const parts: string[] = [];
   const walk = (list: NormalizedSection[]) => {
@@ -46,7 +51,7 @@ function contentPreviewSnippet(sections: NormalizedSection[], limit = 400): stri
     }
   };
   walk(sections);
-  const text = parts.join(' — ');
+  const text = parts.join('\n\n');
   return text.length > limit ? `${text.slice(0, limit)}…` : text;
 }
 
@@ -201,7 +206,12 @@ export default function ImportPreviewDialog({
                 <div className="mb-1" style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--life-color-text-subtle)' }}>
                   Content preview
                 </div>
-                <p className="line-clamp-4" style={{ fontSize: 13, color: 'var(--life-color-text-subtle)' }}>{snippet}</p>
+                <div
+                  className="line-clamp-4"
+                  style={{ fontSize: 13, color: 'var(--life-color-text-subtle)', whiteSpace: 'pre-wrap' }}
+                >
+                  {snippet}
+                </div>
               </div>
             )}
           </>

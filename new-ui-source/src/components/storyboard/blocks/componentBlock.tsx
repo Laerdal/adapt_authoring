@@ -31,9 +31,10 @@ import {
 } from 'lucide-react';
 import { createReactBlockSpec } from '@blocknote/react';
 import { storyboardActions } from '../storyboardActions';
+import { resolveCommentAnchor } from '../commentAnchor';
 import type { AssetKind } from '@/api/adaptAuthoring';
 import AssetPickerModal from '@/components/common/AssetPickerModal';
-import { emptyMediaData, toEmbedUrl, type AssetRef, type ImageData, type MediaData } from '../mediaMapping';
+import { emptyMediaData, safePreviewSrc, toEmbedUrl, type AssetRef, type ImageData, type MediaData } from '../mediaMapping';
 import SamaritanIcon from '../SamaritanIcon';
 
 // YouTube/Vimeo → iframe embed; direct file URLs → <video>. Matches Lovable.
@@ -240,7 +241,7 @@ function HeaderBtn({ onClick, active, children, title }: { onClick: () => void; 
 // Preview a chosen asset by kind. Prefers the resolvable preview `url`, falling
 // back to the persisted `link` (e.g. an external URL).
 function AssetPreview({ assetType, value }: { assetType: AssetKind; value: AssetRef }) {
-  const src = value.url || value.link || '';
+  const src = safePreviewSrc(value.url, value.link);
   if (!src) return null;
   if (assetType === 'image') return <img src={src} alt="" className="max-h-48 w-full rounded object-contain" />;
   if (assetType === 'audio') return <audio src={src} controls className="w-full" />;
@@ -684,7 +685,7 @@ function ComponentPreview({ kind, title, data }: { kind: ComponentKind; title: s
                 <div className="font-semibold text-foreground">{it.title || `Item ${i + 1}`}</div>
                 {it.body && <div className="mt-0.5 whitespace-pre-wrap text-sm text-foreground">{it.body}</div>}
               </div>
-              {(it.imageUrl || it.image) && <img src={it.imageUrl || it.image} alt="" className="h-20 w-32 shrink-0 rounded-md object-cover" />}
+              {safePreviewSrc(it.imageUrl, it.image) && <img src={safePreviewSrc(it.imageUrl, it.image)} alt="" className="h-20 w-32 shrink-0 rounded-md object-cover" />}
             </div>
           ))}
         </div>
@@ -695,7 +696,7 @@ function ComponentPreview({ kind, title, data }: { kind: ComponentKind; title: s
 
   if (kind === 'image') {
     const img = data.image;
-    const src = img?.url || img?.link || '';
+    const src = safePreviewSrc(img?.url, img?.link);
     return (
       <div className="space-y-3">
         {heading}
@@ -706,8 +707,8 @@ function ComponentPreview({ kind, title, data }: { kind: ComponentKind; title: s
   }
 
   if (kind === 'video') {
-    const src = data.media?.asset?.url || data.media?.asset?.link || '';
-    const poster = data.media?.poster?.url || data.media?.poster?.link || undefined;
+    const src = safePreviewSrc(data.media?.asset?.url, data.media?.asset?.link);
+    const poster = safePreviewSrc(data.media?.poster?.url, data.media?.poster?.link) || undefined;
     return (
       <div>
         {heading}
@@ -722,7 +723,7 @@ function ComponentPreview({ kind, title, data }: { kind: ComponentKind; title: s
   }
 
   if (kind === 'audio') {
-    const src = data.media?.asset?.url || data.media?.asset?.link || '';
+    const src = safePreviewSrc(data.media?.asset?.url, data.media?.asset?.link);
     return (
       <div>
         {heading}
@@ -857,10 +858,13 @@ export const componentBlock = createReactBlockSpec(
         });
       };
 
-      // Comment is an ACTION attached to this component's block id (uses the
-      // storyboardcomment backend; does NOT touch the course structure).
+      // Comment is an ACTION, but comments only ever live at Page/Article
+      // level (never Block/Component) — resolve to the Topic/Section heading
+      // this card sits under rather than the card's own block id.
       const openComment = () => {
-        storyboardActions.openComment({ blockId: block.id, label: `CONTENT · ${meta.badge.toUpperCase()}` });
+        const anchor = resolveCommentAnchor(editor.document, block.id);
+        if (!anchor) return;
+        storyboardActions.openComment({ blockId: anchor.id, label: `${anchor.text || 'Untitled'} · ${meta.badge.toUpperCase()}` });
       };
 
       const insertSuggestion = (k: ComponentKind) => {

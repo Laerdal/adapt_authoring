@@ -357,6 +357,36 @@ function scaleToMaxWidth(width, height, maxWidth) {
   return { width: maxWidth, height: Math.round(height * scale) };
 }
 
+// Decode pixel dimensions from a buffer, scaled to MAX_WIDTH_PX — shared by
+// both the DAM-asset path and the data-URI path below.
+function sizeFromBuffer(buffer) {
+  if (!sizeOf) return { width: FALLBACK_WIDTH, height: FALLBACK_HEIGHT };
+  try {
+    const dim = sizeOf(buffer);
+    if (dim && dim.width && dim.height) return scaleToMaxWidth(dim.width, dim.height, MAX_WIDTH_PX);
+  } catch (e) {
+    /* fall back to FALLBACK_* below */
+  }
+  return { width: FALLBACK_WIDTH, height: FALLBACK_HEIGHT };
+}
+
+// A freshly-imported image (picked in the Storyboard editor but not yet
+// Saved/Generated into the course, so it has no DAM asset record yet) is a
+// self-contained `data:image/<type>;base64,<data>` URI — decode it directly.
+// Without this, the DAM lookup below always misses for such an image and the
+// caller (docx/PDF export) fell back to printing the raw base64 string as
+// visible text in the exported document.
+const DATA_URI_PATTERN = /^data:image\/([a-zA-Z0-9.+-]+);base64,(.+)$/;
+function resolveDataUri(link, alt) {
+  const m = link.match(DATA_URI_PATTERN);
+  if (!m) return null;
+  const buffer = Buffer.from(m[2], 'base64');
+  if (!buffer.length) return null;
+  const { width, height } = sizeFromBuffer(buffer);
+  const type = m[1].toLowerCase() === 'jpeg' ? 'jpg' : m[1].toLowerCase();
+  return { buffer, type, width, height, alt: String(alt || '') };
+}
+
 // Given a stored media/image ref, resolve to `{ buffer, type, width, height,
 // alt }` or `null` if the asset isn't reachable (external URL, deleted, no
 // permission). Preserves aspect ratio, capped at MAX_WIDTH_PX.
@@ -364,6 +394,9 @@ async function resolveImageRef(ref, ctx) {
   if (!ref || typeof ref !== 'object') return null;
   const link = String(ref.link || '');
   const assetId = ref.assetId || ref._assetId || '';
+
+  const dataUri = resolveDataUri(link, ref.alt);
+  if (dataUri) return dataUri;
 
   let assetRec = null;
   if (assetId) assetRec = await retrieveAsset({ _id: assetId }, ctx);
@@ -376,20 +409,7 @@ async function resolveImageRef(ref, ctx) {
   const buffer = await readAssetBuffer(assetRec, ctx);
   if (!buffer || !buffer.length) return null;
 
-  let width = FALLBACK_WIDTH;
-  let height = FALLBACK_HEIGHT;
-  if (sizeOf) {
-    try {
-      const dim = sizeOf(buffer);
-      if (dim && dim.width && dim.height) {
-        const sized = scaleToMaxWidth(dim.width, dim.height, MAX_WIDTH_PX);
-        width = sized.width;
-        height = sized.height;
-      }
-    } catch (e) {
-      /* fall back to FALLBACK_* */
-    }
-  }
+  const { width, height } = sizeFromBuffer(buffer);
 
   return {
     buffer,

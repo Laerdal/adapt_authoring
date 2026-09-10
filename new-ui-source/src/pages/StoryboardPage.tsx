@@ -38,6 +38,7 @@ export default function StoryboardPage() {
         courseId={id}
         courseTitle={courseTitle}
         onBack={() => navigate(`/course/${id ?? ''}`)}
+        onTitleChange={setCourseTitle}
       />
     </div>
   );
