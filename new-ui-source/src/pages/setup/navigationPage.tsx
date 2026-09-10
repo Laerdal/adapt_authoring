@@ -43,6 +43,41 @@ function CheckboxRow({
   );
 }
 
+function ToggleSwitch({
+  checked,
+  onChange,
+  label,
+  disabled = false,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  disabled?: boolean;
+}) {
+  return (
+    <div className={`flex items-center justify-between gap-3 py-2 ${disabled ? "opacity-40" : ""}`}>
+      <span className="text-sm text-[#374151] leading-snug">{label}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-label={label}
+        aria-checked={checked}
+        disabled={disabled}
+        onClick={() => !disabled && onChange(!checked)}
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:ring-offset-1 ${
+          checked ? "bg-[var(--life-primary-500)]" : "bg-[#d1d5db]"
+        } ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
+      >
+        <span
+          className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
+            checked ? "translate-x-5" : "translate-x-1"
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
+
 /* ── Navigation Panel ── */
 
 // Collapsible card matching the Figma "Navigation Settings" accordion sections.
@@ -494,7 +529,7 @@ export function NavigationPage({
 
               {/* ── Course menu ── */}
               <NavAccordion {...acc("courseMenu")} title="Course menu" subtitle="Controls whether the top bar exposes the course menu.">
-                <CheckboxRow checked={s.courseMenu.enabled} onChange={(v) => setCourseMenu({ enabled: v })} label="Enable Course Menu" />
+                <ToggleSwitch checked={s.courseMenu.enabled} onChange={(v) => setCourseMenu({ enabled: v })} label="Enable Course Menu" />
                 <div className="ml-7">
                   <CheckboxRow
                     checked={s.courseMenu.includeSubmenuInNavigation}
@@ -507,7 +542,7 @@ export function NavigationPage({
 
               {/* ── Header logo ── */}
               <NavAccordion {...acc("headerLogo")} title="Header logo" subtitle="Show a logo in the top navigation bar.">
-                <CheckboxRow checked={s.headerLogo.enabled} onChange={(v) => setHeaderLogo({ enabled: v })} label="Enable Header Logo" />
+                <ToggleSwitch checked={s.headerLogo.enabled} onChange={(v) => setHeaderLogo({ enabled: v })} label="Enable Header Logo" />
 
                 {s.headerLogo.enabled && (
                   <div className="flex flex-col gap-3">
@@ -644,7 +679,7 @@ export function NavigationPage({
                 title="Navigation Footer"
                 subtitle="Configure the footer navigation buttons shown on each page."
               >
-                <CheckboxRow checked={s.navFooter.enabled} onChange={(v) => setNavFooter({ enabled: v })} label="Enable Navigation Footer" />
+                <ToggleSwitch checked={s.navFooter.enabled} onChange={(v) => setNavFooter({ enabled: v })} label="Enable Navigation Footer" />
 
                 {s.navFooter.enabled && (
                   <div className="flex flex-col gap-3">
