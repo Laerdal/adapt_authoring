@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import colorLabelIconSvgRaw from "../../../public/assets/icons/color-label-icon.svg?raw";
 import AddComponentDrawer from "../../components/course/AddComponentDrawer";
 import AddTemplateDrawer from "../../components/course/AddTemplateDrawer";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
@@ -8,6 +9,7 @@ import AiAssistPopover from "../../components/storyboard/AiAssistPopover";
 import { loadCKEditor5In } from "../../utils/ckEditor5Loader";
 import TopicAssetField, { toRenderableAssetUrl } from "../../components/common/AssetSelectionField";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
+import { CheckboxIndicator } from "../../components/common/Checkbox";
 import CourseStructureMap from "../../components/course/CourseStructureMap";
 import { StructureIcon, STRUCTURE_ICON_COLOR_CLASS } from "../../components/course/StructureIcons";
 import { UnsavedChangesModal } from "../setup/unsavedChangesModal";
@@ -1361,53 +1363,32 @@ function ExtensionsAccordionBody({
 }
 
 // Icons for the Navigation Footer's per-button rows (Topic-level Extensions
-// accordion) — kept minimal/inline, matching the stroke style used elsewhere
-// in this panel (currentColor, strokeWidth 2).
+// accordion) — real assets (public/assets/icons), matching every other icon
+// in this panel (MaskIcon + bg-current so hover/color changes work exactly
+// like the inline-SVG currentColor approach these replace).
 const NAV_FOOTER_BUTTON_ICONS: Record<string, React.ReactNode> = {
-  _home: (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-      <polyline points="9 22 9 12 15 12 15 22" />
-    </svg>
-  ),
-  _up: (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <line x1="12" y1="19" x2="12" y2="5" />
-      <polyline points="5 12 12 5 19 12" />
-    </svg>
-  ),
+  _home: <MaskIcon file="home-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />,
+  _up: <MaskIcon file="up-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />,
   _previous: <MaskIcon file="back-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />,
-  _next: (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <line x1="5" y1="12" x2="19" y2="12" />
-      <polyline points="12 5 19 12 12 19" />
-    </svg>
-  ),
-  _close: (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  ),
-  _custom: (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="4" y="4" width="16" height="16" rx="2" />
-    </svg>
-  ),
+  _next: <MaskIcon file="next-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />,
+  _close: <MaskIcon file="close-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />,
+  _custom: <MaskIcon file="custom-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />,
 };
 
 const NAV_FOOTER_BUTTON_ORDER = ["_home", "_up", "_previous", "_next", "_close", "_custom"];
 
-// Canvas-injected level action icons (Copy/Color Label) — raw SVG markup,
-// not React, since these are created directly inside the iframe's own
-// document by applyPreviewSelectionStyles. Copy icon matches the "Copy
-// topic id" icon already used in the right panel's General accordion;
-// color-label icon is the new-ui asset at public/assets/icons/color-label-icon.svg
-// (stroke swapped to currentColor so CSS can drive its color like the copy icon).
+// Canvas-injected level action icons (Copy/Color Label) — raw markup, not
+// React, since these are created directly inside the iframe's own document
+// by applyPreviewSelectionStyles. Copy icon matches the "Copy topic id"
+// icon already used in the right panel's General accordion (itself inline
+// SVG, no dedicated asset file); color-label icon is the REAL new-ui asset
+// (public/assets/icons/color-label-icon.svg, imported via Vite's `?raw` so
+// it can never drift from the actual file) with its hardcoded stroke color
+// swapped to currentColor so CSS can drive its color/fill like everywhere
+// else in this panel.
 const LEVEL_ACTION_COPY_ICON_SVG =
   '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
-const LEVEL_ACTION_COLOR_LABEL_ICON_SVG =
-  '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12.0102 7.82185L7.82768 12.0043C7.71933 12.1128 7.59066 12.1989 7.44903 12.2576C7.3074 12.3163 7.15558 12.3465 7.00227 12.3465C6.84895 12.3465 6.69713 12.3163 6.5555 12.2576C6.41387 12.1989 6.2852 12.1128 6.17685 12.0043L1.16602 6.99935V1.16602H6.99935L12.0102 6.17685C12.2275 6.39544 12.3494 6.69113 12.3494 6.99935C12.3494 7.30757 12.2275 7.60326 12.0102 7.82185Z" stroke="currentColor" stroke-width="1.16667" stroke-linecap="round" stroke-linejoin="round"></path><path d="M4.08398 4.08398H4.08982" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
+const LEVEL_ACTION_COLOR_LABEL_ICON_SVG = colorLabelIconSvgRaw.replace(/stroke="#[0-9a-fA-F]{3,6}"/g, 'stroke="currentColor"');
 
 // Old tool's real palette (frontend/src/core/less/colourLabels.less) —
 // _colorLabel schema field stores one of these literal "colorlabel-N"
@@ -1485,14 +1466,17 @@ function NavigationFooterButtonsField({
 
         return (
           <div key={buttonKey} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[8px] border border-[#d8dee6] bg-white">
-            <input
-              type="checkbox"
-              checked={checked}
-              onChange={(event) => onChange(`_buttons.${buttonKey}._enableOverride`, event.target.checked ? "enable" : "disable")}
-              aria-label={`${label} button enabled`}
-              className="h-3.5 w-3.5 shrink-0 rounded-[6px] border-[#cbd5e1] text-[#2d6fa8] focus:ring-[#2d6fa8]"
-            />
-            <span className="shrink-0 text-[#6b7280]">{NAV_FOOTER_BUTTON_ICONS[buttonKey]}</span>
+            <label className="shrink-0 inline-flex items-center cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={(event) => onChange(`_buttons.${buttonKey}._enableOverride`, event.target.checked ? "enable" : "disable")}
+                aria-label={`${label} button enabled`}
+                className="sr-only peer"
+              />
+              <CheckboxIndicator checked={checked} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
+            </label>
+            <span className={`shrink-0 ${checked ? "text-[var(--life-primary-500)]" : "text-[#9ca3af]"}`}>{NAV_FOOTER_BUTTON_ICONS[buttonKey]}</span>
             <input
               type="text"
               value={displayText}
@@ -2019,13 +2003,15 @@ function TopicCheckbox({
   required?: boolean;
 }) {
   return (
-    <label className="flex items-start gap-1.5 text-[13px] text-[#111827] cursor-pointer">
+    <label className="flex items-start gap-2 text-[13px] text-[#111827] cursor-pointer group">
       <input
         type="checkbox"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
-        className="mt-[2px] h-3.5 w-3.5 shrink-0 rounded-[6px] border-[#cbd5e1] text-[#2d6fa8] focus:ring-[#2d6fa8]"
+        aria-label={label}
+        className="sr-only peer"
       />
+      <CheckboxIndicator checked={checked} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
       <span>{label}{required && <span className="text-[#dc2626] ml-0.5">*</span>}</span>
     </label>
   );
@@ -2547,13 +2533,15 @@ function SaveAsTemplateModal({
               className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
             />
           </div>
-          <label className="flex items-center gap-2 cursor-pointer select-none">
+          <label className="flex items-center gap-2 cursor-pointer select-none group">
             <input
               type="checkbox"
               checked={isShared}
               onChange={(event) => setIsShared(event.target.checked)}
-              className="h-3.5 w-3.5 rounded-[6px] border-[#cbd5e1] text-[#2d6fa8] focus:ring-[#2d6fa8]"
+              aria-label="Share with all users"
+              className="sr-only peer"
             />
+            <CheckboxIndicator checked={isShared} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
             <span className="text-sm font-semibold text-[#374151]">Share with all users</span>
           </label>
           <p className="text-[12px] text-[var(--life-neutral-300)] -mt-1">

@@ -12,6 +12,7 @@ import { resolveCommentAnchor } from '../commentAnchor';
 import { safePreviewSrc } from '../mediaMapping';
 import { createReactBlockSpec } from '@blocknote/react';
 import AssetPickerModal from '@/components/common/AssetPickerModal';
+import { CheckboxIndicator } from '@/components/common/Checkbox';
 import SamaritanIcon from '../SamaritanIcon';
 import {
   defaultAssessmentData,
@@ -180,8 +181,9 @@ function OptionsForm({ data, graphic, update }: { data: AssessmentData; graphic:
       {options.map((opt, i) => (
         <div key={i} className="mb-2 rounded border border-border p-2">
           <div className="mb-1 flex items-center justify-between gap-2">
-            <label className="flex items-center gap-1.5 text-xs font-medium text-foreground">
-              <input type="checkbox" checked={opt.correct} onChange={(e) => patch(i, { correct: e.target.checked })} className="h-4 w-4 accent-[color:var(--primary)]" />
+            <label className="flex items-center gap-1.5 text-xs font-medium text-foreground cursor-pointer group">
+              <input type="checkbox" checked={opt.correct} onChange={(e) => patch(i, { correct: e.target.checked })} aria-label="Correct" className="sr-only peer" />
+              <CheckboxIndicator checked={opt.correct} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
               Correct
               <span className="ml-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Option {i + 1}/{options.length}
@@ -286,8 +288,9 @@ function ChecklistForm({ data, update }: { data: AssessmentData; update: (n: Ass
       {options.map((opt, i) => (
         <div key={i} className="mb-2 rounded border border-border p-2">
           <div className="mb-1 flex items-center justify-between gap-2">
-            <label className="flex items-center gap-1.5 text-xs font-medium text-foreground">
-              <input type="checkbox" checked={opt.correct} onChange={(e) => patch(i, { correct: e.target.checked })} className="h-4 w-4 accent-[color:var(--primary)]" />
+            <label className="flex items-center gap-1.5 text-xs font-medium text-foreground cursor-pointer group">
+              <input type="checkbox" checked={opt.correct} onChange={(e) => patch(i, { correct: e.target.checked })} aria-label="Correct" className="sr-only peer" />
+              <CheckboxIndicator checked={opt.correct} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
               Correct
               <span className="ml-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Item {i + 1}/{options.length}
