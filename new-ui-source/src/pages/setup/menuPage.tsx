@@ -12,6 +12,7 @@ import {
 } from "../../api/adaptAuthoring";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
 import AssetSelectionField, { toRenderableAssetUrl } from "../../components/common/AssetSelectionField";
+import { CheckboxIndicator } from "../../components/common/Checkbox";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
@@ -522,8 +523,10 @@ function MenuCheckbox({
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 h-4 w-4 shrink-0 rounded border-2 border-[#d1d5db] accent-[#2d6fa8] cursor-pointer"
+        aria-label={label}
+        className="sr-only peer"
       />
+      <CheckboxIndicator checked={checked} className="mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
       <div className="flex flex-col gap-0.5">
         <span className="text-sm font-semibold text-[#374151]">{label}</span>
         {description ? <span className="text-[13px] text-[var(--life-neutral-300)]">{description}</span> : null}
@@ -816,7 +819,7 @@ function MenuPreview({ cfg, resolveUrl }: { cfg: MenuPageConfig; resolveUrl?: (v
   const hasHeaderImage = !!(cfg.headerImageSrc.xlarge || cfg.headerImageSrc.large || cfg.headerImageSrc.medium || cfg.headerImageSrc.small);
 
   return (
-    <div className="w-[400px] shrink-0 bg-[var(--life-neutral-020)] border-l border-[var(--life-neutral-200)] sticky top-0 h-[calc(100vh-96px)] flex flex-col pb-8">
+    <div className="w-[400px] shrink-0 bg-[var(--life-neutral-020)] border-l border-[var(--life-neutral-200)] sticky top-0 h-full flex flex-col">
       <div className="px-5 py-3 bg-white border-b border-[var(--life-neutral-200)] flex items-center justify-between">
         <div className="flex items-center gap-2">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--life-primary-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>

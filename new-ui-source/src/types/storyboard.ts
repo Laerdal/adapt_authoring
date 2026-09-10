@@ -438,6 +438,11 @@ export interface StoryboardEditorHandle {
   insertAfterActive(text: string): void;
   /** Scroll to / select a block by id (TOC navigation, AC1). */
   focusBlock(blockId: string): void;
+  /** Nearest enclosing Page (H1) or Article (H2) heading for the cursor's
+   *  block — comments only ever anchor at that level, never at a Block/
+   *  Component (H3/H4, paragraph, component card). Null if the cursor sits
+   *  before any such heading. */
+  getCommentAnchor(): ActiveBlockInfo | null;
 }
 
 /** The block the cursor is currently in (drives block-anchored comments, AC9). */

@@ -50,6 +50,21 @@ export function isCourseAssetLink(link?: string): boolean {
   return !!link && link.startsWith(COURSE_ASSETS_PREFIX);
 }
 
+// A `course/assets/<filename>` reference is never directly loadable by the
+// browser — it must first be resolved (via resolveAssetUrl) to something like
+// `/api/asset/serve/<id>`. If that resolution didn't happen or missed (e.g.
+// the id map hadn't caught up with a just-linked asset), `url` can end up
+// holding the raw, unresolved reference — using it as an <img>/<video> src
+// then resolves as a broken relative URL against the current page instead of
+// erroring loudly. Prefer `url`, fall back to `link` ONLY when neither one is
+// an unresolved course-asset reference (i.e. it's a genuine absolute/external
+// URL); otherwise there's nothing safe to render.
+export function safePreviewSrc(url?: string, link?: string): string {
+  if (url && !isCourseAssetLink(url)) return url;
+  if (link && !isCourseAssetLink(link)) return link;
+  return "";
+}
+
 // The DAM filename (hash.ext) from a `course/assets/<filename>` link — this is
 // the `_fieldName` used by the courseasset join collection.
 export function filenameFromLink(link?: string): string {
@@ -59,12 +74,16 @@ export function filenameFromLink(link?: string): string {
 
 // Turn a stored link into a loadable preview URL. Course assets are resolved to
 // `/api/asset/serve/<id>` via the filename→assetId map; external URLs pass
-// through unchanged.
+// through unchanged. A miss (id map hasn't caught up with a just-linked
+// asset) returns "" rather than the raw `course/assets/<filename>` — that
+// string is never itself a loadable URL, and returning it here previously let
+// it flow through as if it were one (browser resolves it as a broken relative
+// path against the current page).
 export function resolveAssetUrl(link: string | undefined, idByFilename: Record<string, string>): string {
   if (!link) return "";
   if (!isCourseAssetLink(link)) return link; // external URL
   const id = idByFilename[filenameFromLink(link)];
-  return id ? `/api/asset/serve/${id}` : link;
+  return id ? `/api/asset/serve/${id}` : "";
 }
 
 // Detect an external streaming provider for `_media.type`.

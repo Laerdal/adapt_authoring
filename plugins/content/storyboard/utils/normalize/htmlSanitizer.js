@@ -9,7 +9,7 @@ const sanitizeHtml = require('sanitize-html');
 const ALLOWED_TAGS = [
   'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
   'p', 'br',
-  'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'a',
+  'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'sub', 'sup', 'a',
   'ul', 'ol', 'li',
   'table', 'thead', 'tbody', 'tr', 'th', 'td',
   'img',

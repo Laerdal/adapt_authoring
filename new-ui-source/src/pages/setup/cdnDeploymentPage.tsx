@@ -16,6 +16,7 @@ import {
 } from "../../api/adaptAuthoring";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
+import { CheckboxIndicator } from "../../components/common/Checkbox";
 
 /* ── Shared bits (mirrors NavigationPage's conventions) ─────────────────── */
 
@@ -629,8 +630,10 @@ export function CdnDeploymentPage({
                     type="checkbox"
                     checked={includeExport}
                     onChange={(e) => setIncludeExport(e.target.checked)}
-                    className="mt-0.5 w-4 h-4 accent-[var(--life-primary-500)]"
+                    aria-label="Include the source code as part of the CDN deployment"
+                    className="sr-only peer"
                   />
+                  <CheckboxIndicator checked={includeExport} className="mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
                   <span className="text-sm text-[#374151]">
                     Include the <strong>source code*</strong> as part of the CDN deployment.
                     <span className="block mt-1 text-xs text-[#9ca3af]">

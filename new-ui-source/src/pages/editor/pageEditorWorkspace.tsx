@@ -1,10 +1,15 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import colorLabelIconSvgRaw from "../../../public/assets/icons/color-label-icon.svg?raw";
 import AddComponentDrawer from "../../components/course/AddComponentDrawer";
 import AddTemplateDrawer from "../../components/course/AddTemplateDrawer";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
+import RichTextEditor from "../../components/common/RichTextEditor";
+import AiAssistPopover from "../../components/storyboard/AiAssistPopover";
+import { loadCKEditor5In } from "../../utils/ckEditor5Loader";
 import TopicAssetField, { toRenderableAssetUrl } from "../../components/common/AssetSelectionField";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
+import { CheckboxIndicator } from "../../components/common/Checkbox";
 import CourseStructureMap from "../../components/course/CourseStructureMap";
 import { StructureIcon, STRUCTURE_ICON_COLOR_CLASS } from "../../components/course/StructureIcons";
 import { UnsavedChangesModal } from "../setup/unsavedChangesModal";
@@ -29,6 +34,10 @@ import {
   getExtensionSchemasByLevel,
   getExtensionTypeOptions,
   getNavigationSettings,
+  getThemeSettingsSchemaByLevel,
+  getMenuSettingsSchemaByLevel,
+  findAppliedPluginSchemaFields,
+  type PluginSettingsFieldSchema,
   pasteTemplateIntoCourse,
   publishCoursePackage,
   removeCourseAssetMappings,
@@ -47,6 +56,9 @@ import {
   type UserSummary,
   updateComponentLayout,
   updateStructureNode,
+  copyStructureNodeViaClipboard,
+  copyStructureNodeToClipboard,
+  pasteStructureNodeFromClipboard,
 } from "../../api/adaptAuthoring";
 import type { MenuPageData } from "../../components/editor/MenuPageCanvas";
 import type { Course } from "../../types/course";
@@ -272,6 +284,12 @@ const THEME_COLOUR_PALETTE_ROWS: Record<string, readonly (readonly string[])[]> 
   "Custom Theme":  LIFE_PALETTE_ROWS,
   "Vanilla Theme": VANILLA_PALETTE_ROWS,
 };
+// block-font-color/block-header-color (and the component-level equivalents)
+// declare this exact restricted 2-swatch palette (`extra.palette`) in every
+// installed theme's schema — confirmed via the live themetypes collection.
+const FONT_HEADER_COLOUR_PALETTE_ROWS: readonly (readonly string[])[] = [
+  ["#FFFFFF", "#1F1F1F"],
+];
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -944,30 +962,39 @@ function BehaviourField({
     );
   }
 
-  if (inputTypeStr === "TextArea" || fieldName === "body" || (inputTypeObj?.type === "CodeEditor")) {
-    const textValue =
-      inputTypeObj?.type === "CodeEditor"
-        ? (value && typeof value === "object" ? JSON.stringify(value, null, 2) : asString(value))
-        : asString(value);
+  if (inputTypeObj?.type === "CodeEditor") {
+    const textValue = value && typeof value === "object" ? JSON.stringify(value, null, 2) : asString(value);
     return (
       <div className="flex flex-col gap-1.5">
         <TopicFieldLabel required={isRequired}>{label}</TopicFieldLabel>
         <textarea
           defaultValue={textValue}
           onBlur={(event) => {
-            if (inputTypeObj?.type === "CodeEditor") {
-              try {
-                onChange(path, JSON.parse(event.target.value || "{}"));
-              } catch {
-                // Keep current value on invalid JSON.
-              }
-              return;
+            try {
+              onChange(path, JSON.parse(event.target.value || "{}"));
+            } catch {
+              // Keep current value on invalid JSON.
             }
-            onChange(path, event.target.value);
           }}
-          rows={inputTypeObj?.type === "CodeEditor" ? 6 : 4}
-          className={`w-full px-2.5 py-1.5 text-[13px] rounded-md border border-[#e5e7eb] text-[#111827] bg-white focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors resize-y ${inputTypeObj?.type === "CodeEditor" ? "font-mono" : ""}`}
+          rows={6}
+          className="w-full px-2.5 py-1.5 text-[13px] rounded-md border border-[#e5e7eb] text-[#111827] bg-white focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors resize-y font-mono"
         />
+      </div>
+    );
+  }
+
+  // Matches the old tool's global Backbone Forms override (backboneFormsOverrides.js):
+  // EVERY schema field with inputType "TextArea" renders as a full CKEditor 5
+  // instance there, not a plain textarea — so mirror that here too. Must be
+  // driven ONLY by the schema's own inputType (never by field NAME) — a
+  // field literally called "body" whose schema declares inputType "Text"
+  // (e.g. Laerdal Checklist's per-item body) renders as plain text in the
+  // old tool, and must render identically here.
+  if (inputTypeStr === "TextArea") {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <TopicFieldLabel required={isRequired}>{label}</TopicFieldLabel>
+        <RichTextEditor value={asString(value)} onChange={(html) => onChange(path, html)} />
       </div>
     );
   }
@@ -1336,42 +1363,53 @@ function ExtensionsAccordionBody({
 }
 
 // Icons for the Navigation Footer's per-button rows (Topic-level Extensions
-// accordion) — kept minimal/inline, matching the stroke style used elsewhere
-// in this panel (currentColor, strokeWidth 2).
+// accordion) — real assets (public/assets/icons), matching every other icon
+// in this panel (MaskIcon + bg-current so hover/color changes work exactly
+// like the inline-SVG currentColor approach these replace).
 const NAV_FOOTER_BUTTON_ICONS: Record<string, React.ReactNode> = {
-  _home: (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-      <polyline points="9 22 9 12 15 12 15 22" />
-    </svg>
-  ),
-  _up: (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <line x1="12" y1="19" x2="12" y2="5" />
-      <polyline points="5 12 12 5 19 12" />
-    </svg>
-  ),
+  _home: <MaskIcon file="home-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />,
+  _up: <MaskIcon file="up-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />,
   _previous: <MaskIcon file="back-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />,
-  _next: (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <line x1="5" y1="12" x2="19" y2="12" />
-      <polyline points="12 5 19 12 12 19" />
-    </svg>
-  ),
-  _close: (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <line x1="18" y1="6" x2="6" y2="18" />
-      <line x1="6" y1="6" x2="18" y2="18" />
-    </svg>
-  ),
-  _custom: (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="4" y="4" width="16" height="16" rx="2" />
-    </svg>
-  ),
+  _next: <MaskIcon file="next-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />,
+  _close: <MaskIcon file="close-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />,
+  _custom: <MaskIcon file="custom-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />,
 };
 
 const NAV_FOOTER_BUTTON_ORDER = ["_home", "_up", "_previous", "_next", "_close", "_custom"];
+
+// Canvas-injected level action icons (Copy/Color Label) — raw markup, not
+// React, since these are created directly inside the iframe's own document
+// by applyPreviewSelectionStyles. Copy icon matches the "Copy topic id"
+// icon already used in the right panel's General accordion (itself inline
+// SVG, no dedicated asset file); color-label icon is the REAL new-ui asset
+// (public/assets/icons/color-label-icon.svg, imported via Vite's `?raw` so
+// it can never drift from the actual file) with its hardcoded stroke color
+// swapped to currentColor so CSS can drive its color/fill like everywhere
+// else in this panel.
+const LEVEL_ACTION_COPY_ICON_SVG =
+  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+const LEVEL_ACTION_COLOR_LABEL_ICON_SVG = colorLabelIconSvgRaw.replace(/stroke="#[0-9a-fA-F]{3,6}"/g, 'stroke="currentColor"');
+
+// Old tool's real palette (frontend/src/core/less/colourLabels.less) —
+// _colorLabel schema field stores one of these literal "colorlabel-N"
+// strings (or "" for none).
+const COLOR_LABEL_VALUES = Array.from({ length: 14 }, (_, i) => `colorlabel-${i + 1}`);
+const COLOR_LABEL_HEX: Record<string, string> = {
+  "colorlabel-1": "#616161",
+  "colorlabel-2": "#BDBDBD",
+  "colorlabel-3": "#D32F2F",
+  "colorlabel-4": "#EF9A9A",
+  "colorlabel-5": "#7B1FA2",
+  "colorlabel-6": "#CE93D8",
+  "colorlabel-7": "#1976D2",
+  "colorlabel-8": "#90CAF9",
+  "colorlabel-9": "#388E3C",
+  "colorlabel-10": "#A5D6A7",
+  "colorlabel-11": "#F57C00",
+  "colorlabel-12": "#FFCC80",
+  "colorlabel-13": "#5D4037",
+  "colorlabel-14": "#BCAAA4",
+};
 
 // Mirrors NavigationFooterView.js's `getOverrideValue`/`updateOverrideValues`
 // (adapt-navigation-footer) exactly — an empty `_enableOverride` inherits the
@@ -1428,14 +1466,17 @@ function NavigationFooterButtonsField({
 
         return (
           <div key={buttonKey} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[8px] border border-[#d8dee6] bg-white">
-            <input
-              type="checkbox"
-              checked={checked}
-              onChange={(event) => onChange(`_buttons.${buttonKey}._enableOverride`, event.target.checked ? "enable" : "disable")}
-              aria-label={`${label} button enabled`}
-              className="h-3.5 w-3.5 shrink-0 rounded-[6px] border-[#cbd5e1] text-[#2d6fa8] focus:ring-[#2d6fa8]"
-            />
-            <span className="shrink-0 text-[#6b7280]">{NAV_FOOTER_BUTTON_ICONS[buttonKey]}</span>
+            <label className="shrink-0 inline-flex items-center cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={(event) => onChange(`_buttons.${buttonKey}._enableOverride`, event.target.checked ? "enable" : "disable")}
+                aria-label={`${label} button enabled`}
+                className="sr-only peer"
+              />
+              <CheckboxIndicator checked={checked} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
+            </label>
+            <span className={`shrink-0 ${checked ? "text-[var(--life-primary-500)]" : "text-[#9ca3af]"}`}>{NAV_FOOTER_BUTTON_ICONS[buttonKey]}</span>
             <input
               type="text"
               value={displayText}
@@ -1962,13 +2003,15 @@ function TopicCheckbox({
   required?: boolean;
 }) {
   return (
-    <label className="flex items-start gap-1.5 text-[13px] text-[#111827] cursor-pointer">
+    <label className="flex items-start gap-2 text-[13px] text-[#111827] cursor-pointer group">
       <input
         type="checkbox"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
-        className="mt-[2px] h-3.5 w-3.5 shrink-0 rounded-[6px] border-[#cbd5e1] text-[#2d6fa8] focus:ring-[#2d6fa8]"
+        aria-label={label}
+        className="sr-only peer"
       />
+      <CheckboxIndicator checked={checked} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
       <span>{label}{required && <span className="text-[#dc2626] ml-0.5">*</span>}</span>
     </label>
   );
@@ -2009,6 +2052,63 @@ function TopicRadioGroup({
   );
 }
 
+// HSV <-> hex conversions for the gradient/hue picker (matches the old tool's
+// spectrum.js colour model), used by TopicColorField's expanded "more" view.
+function hexToRgb(hex: string): [number, number, number] | null {
+  const m = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec((hex || "").trim());
+  if (!m) return null;
+  let h = m[1];
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  const num = parseInt(h, 16);
+  return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const clamp = (n: number) => Math.max(0, Math.min(255, Math.round(n)));
+  return "#" + [r, g, b].map((n) => clamp(n).toString(16).padStart(2, "0")).join("");
+}
+
+function rgbToHsv(r: number, g: number, b: number): { h: number; s: number; v: number } {
+  const rn = r / 255, gn = g / 255, bn = b / 255;
+  const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn);
+  const d = max - min;
+  let h = 0;
+  if (d !== 0) {
+    if (max === rn) h = ((gn - bn) / d) % 6;
+    else if (max === gn) h = (bn - rn) / d + 2;
+    else h = (rn - gn) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  const s = max === 0 ? 0 : d / max;
+  return { h, s: s * 100, v: max * 100 };
+}
+
+function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
+  const sn = s / 100, vn = v / 100;
+  const c = vn * sn;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = vn - c;
+  let [r, g, b] = [0, 0, 0];
+  if (h < 60) [r, g, b] = [c, x, 0];
+  else if (h < 120) [r, g, b] = [x, c, 0];
+  else if (h < 180) [r, g, b] = [0, c, x];
+  else if (h < 240) [r, g, b] = [0, x, c];
+  else if (h < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  return [(r + m) * 255, (g + m) * 255, (b + m) * 255];
+}
+
+function hexToHsv(hex: string): { h: number; s: number; v: number } {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return { h: 0, s: 0, v: 0 };
+  return rgbToHsv(...rgb);
+}
+
+function hsvToHex(h: number, s: number, v: number): string {
+  return rgbToHex(...hsvToRgb(h, s, v));
+}
+
 function TopicColorField({
   label,
   value,
@@ -2022,11 +2122,22 @@ function TopicColorField({
 }) {
   const [open, setOpen] = useState(false);
   const [showMore, setShowMore] = useState(false);
-  const [draft, setDraft] = useState(value || "#000000");
+  const [hsv, setHsv] = useState(() => hexToHsv(value || "#000000"));
+  const [hexDraft, setHexDraft] = useState(value || "");
+  const [popoverPos, setPopoverPos] = useState({ top: 0, left: 0 });
+  const originalValueRef = useRef(value);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
+  const squareRef = useRef<HTMLDivElement>(null);
+  const hueRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef<"square" | "hue" | null>(null);
 
-  useEffect(() => { setDraft(value || "#000000"); }, [value]);
+  useEffect(() => {
+    if (!open) {
+      setHsv(hexToHsv(value || "#000000"));
+      setHexDraft(value || "");
+    }
+  }, [value, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -2038,28 +2149,85 @@ function TopicColorField({
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
 
+  // Live-updates onChange on every drag step (matches the old tool's
+  // move.spectrum event, which pushes colour changes straight to the preview).
+  useEffect(() => {
+    if (!open) return;
+    function updateFromPoint(clientX: number, clientY: number) {
+      if (draggingRef.current === "square" && squareRef.current) {
+        const rect = squareRef.current.getBoundingClientRect();
+        const s = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * 100;
+        const v = 100 - Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)) * 100;
+        setHsv((prev) => {
+          const next = { ...prev, s, v };
+          const hex = hsvToHex(next.h, next.s, next.v);
+          setHexDraft(hex);
+          onChange(hex);
+          return next;
+        });
+      } else if (draggingRef.current === "hue" && hueRef.current) {
+        const rect = hueRef.current.getBoundingClientRect();
+        const h = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)) * 360;
+        setHsv((prev) => {
+          const next = { ...prev, h };
+          const hex = hsvToHex(next.h, next.s, next.v);
+          setHexDraft(hex);
+          onChange(hex);
+          return next;
+        });
+      }
+    }
+    function onMove(e: MouseEvent) { if (draggingRef.current) updateFromPoint(e.clientX, e.clientY); }
+    function onUp() { draggingRef.current = null; }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+  }, [open, onChange]);
+
   function openPicker() {
-    setDraft(value || "#000000");
+    originalValueRef.current = value;
+    setHsv(hexToHsv(value || "#000000"));
+    setHexDraft(value || "");
     setShowMore(false);
     setOpen((o) => !o);
   }
-  function apply() { onChange(draft); setOpen(false); }
-  function clear() { onChange(""); setOpen(false); }
+
+  function cancelSelection() {
+    onChange(originalValueRef.current);
+    setOpen(false);
+  }
+
+  function commitHexDraft(raw: string) {
+    const v = raw.trim();
+    if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v)) {
+      setHsv(hexToHsv(v));
+      onChange(v);
+    }
+  }
 
   const isEmpty = !value;
+  const currentHex = hsvToHex(hsv.h, hsv.s, hsv.v);
   const checkerStyle: React.CSSProperties = {
     backgroundImage: "linear-gradient(45deg,#ccc 25%,transparent 25%),linear-gradient(-45deg,#ccc 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#ccc 75%),linear-gradient(-45deg,transparent 75%,#ccc 75%)",
     backgroundSize: "8px 8px",
     backgroundPosition: "0 0,0 4px,4px -4px,-4px 0",
   };
 
-  const popoverStyle = (() => {
+  // Measures the popover's actual rendered size (varies with paletteRows
+  // width and the "more" gradient/hue picker) and clamps it inside the
+  // viewport — a hardcoded width guess previously chopped wider palettes.
+  useLayoutEffect(() => {
+    if (!open) return;
     const rect = triggerRef.current?.getBoundingClientRect();
-    if (!rect) return { top: 0, left: 0 };
+    const popoverWidth = popoverRef.current?.offsetWidth ?? 0;
+    if (!rect) return;
     const top = rect.bottom + 4;
-    const left = Math.min(rect.left, window.innerWidth - 168);
-    return { top, left };
-  })();
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - popoverWidth - 8));
+    setPopoverPos({ top, left });
+  }, [open, showMore, paletteRows]);
 
   return (
     <div className="flex flex-col gap-1">
@@ -2083,89 +2251,138 @@ function TopicColorField({
         <div
           ref={popoverRef}
           className="fixed z-[100] bg-white border border-[#d1d5db] rounded-lg shadow-xl overflow-hidden"
-          style={{ ...popoverStyle, width: 160 }}
+          style={{ ...popoverPos, maxWidth: "calc(100vw - 16px)" }}
         >
-          {/* Palette grid */}
-          {paletteRows.length > 0 && (
-            <div className="p-1.5">
-              {paletteRows.map((row, ri) => (
-                <div key={ri} className="flex">
-                  {row.map((colour) => (
-                    <button
-                      key={colour}
-                      type="button"
-                      title={colour}
-                      onClick={() => { onChange(colour); setOpen(false); }}
-                      className="w-9 h-9 hover:scale-110 transition-transform focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#2d6fa8] rounded-sm"
-                      style={{ backgroundColor: colour }}
-                      aria-label={colour}
-                    />
-                  ))}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* "more" toggle — expands to full picker */}
-          <div className="border-t border-[#e5e7eb]">
-            {!showMore ? (
-              <button
-                type="button"
-                onClick={() => setShowMore(true)}
-                className="w-full text-right px-2 py-1 text-xs text-[#374151] hover:bg-[#f9fafb] transition-colors"
-              >
-                more
-              </button>
-            ) : (
-              <div className="p-2 flex flex-col gap-2">
-                <div className="flex items-center gap-1.5">
-                  <label
-                    className="w-8 h-8 rounded border border-[#e5e7eb] overflow-hidden cursor-pointer relative shrink-0"
-                    style={{ backgroundColor: draft }}
-                  >
-                    <input
-                      type="color"
-                      value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                      aria-label="Custom colour"
-                    />
-                  </label>
-                  <input
-                    type="text"
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    onBlur={(e) => {
-                      const v = e.target.value.trim();
-                      if (!/^#[0-9a-fA-F]{3,6}$/.test(v)) setDraft(value || "#000000");
-                    }}
-                    maxLength={7}
-                    placeholder="#000000"
-                    className="flex-1 border border-[#e5e7eb] rounded px-1.5 py-1 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-[#2d6fa8]"
+          <div className="flex">
+            {showMore && (
+              <div className="p-2 flex gap-1.5">
+                {/* Saturation/value gradient square */}
+                <div
+                  ref={squareRef}
+                  className="relative w-[140px] h-[140px] rounded cursor-crosshair shrink-0"
+                  style={{
+                    backgroundColor: hsvToHex(hsv.h, 100, 100),
+                    backgroundImage:
+                      "linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, rgba(255,255,255,0))",
+                  }}
+                  onMouseDown={(e) => {
+                    draggingRef.current = "square";
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const s = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * 100;
+                    const v = 100 - Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)) * 100;
+                    setHsv((prev) => {
+                      const next = { ...prev, s, v };
+                      const hex = hsvToHex(next.h, next.s, next.v);
+                      setHexDraft(hex);
+                      onChange(hex);
+                      return next;
+                    });
+                  }}
+                >
+                  <div
+                    className="absolute w-3 h-3 rounded-full border-2 border-white shadow -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+                    style={{ left: `${hsv.s}%`, top: `${100 - hsv.v}%`, backgroundColor: currentHex }}
                   />
                 </div>
-                <div className="flex items-center justify-between">
-                  <button type="button" onClick={clear} className="text-[11px] text-[#9ca3af] hover:text-[#ef4444] transition-colors">
-                    Clear
-                  </button>
-                  <div className="flex gap-1">
-                    <button type="button" onClick={() => setShowMore(false)} className="px-2 py-0.5 text-[11px] border border-[#e5e7eb] rounded text-[#374151] hover:bg-[#f9fafb] transition-colors">
-                      Cancel
-                    </button>
-                    <button type="button" onClick={apply} className="px-2 py-0.5 text-[11px] rounded bg-[#2d6fa8] text-white hover:bg-[#245c8f] transition-colors">
-                      Choose
-                    </button>
-                  </div>
+                {/* Hue slider */}
+                <div
+                  ref={hueRef}
+                  className="relative w-[14px] h-[140px] rounded cursor-pointer shrink-0"
+                  style={{ backgroundImage: "linear-gradient(to bottom, red, yellow, lime, cyan, blue, magenta, red)" }}
+                  onMouseDown={(e) => {
+                    draggingRef.current = "hue";
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const h = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)) * 360;
+                    setHsv((prev) => {
+                      const next = { ...prev, h };
+                      const hex = hsvToHex(next.h, next.s, next.v);
+                      setHexDraft(hex);
+                      onChange(hex);
+                      return next;
+                    });
+                  }}
+                >
+                  <div
+                    className="absolute left-0 right-0 h-1 border border-white shadow -translate-y-1/2 pointer-events-none"
+                    style={{ top: `${(hsv.h / 360) * 100}%` }}
+                  />
                 </div>
               </div>
             )}
+
+            {/* Palette grid */}
+            {paletteRows.length > 0 && (
+              <div className="p-1.5">
+                {paletteRows.map((row, ri) => (
+                  <div key={ri} className="flex gap-1 mb-1 last:mb-0">
+                    {row.map((colour) => (
+                      <button
+                        key={colour}
+                        type="button"
+                        title={colour}
+                        onClick={() => { onChange(colour); setOpen(false); }}
+                        className="w-8 h-8 hover:scale-110 transition-transform focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] rounded-full border border-[#e5e7eb]"
+                        style={{ backgroundColor: colour }}
+                        aria-label={colour}
+                      />
+                    ))}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setShowMore((v) => !v)}
+                  className="w-full text-right px-1 pt-1 text-xs text-[#374151] hover:text-[#111827] transition-colors"
+                >
+                  {showMore ? "less" : "more"}
+                </button>
+              </div>
+            )}
           </div>
+
+          {showMore && (
+            <div className="p-2 flex flex-col gap-2 border-t border-[#e5e7eb]">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  title={originalValueRef.current || "none"}
+                  onClick={() => commitHexDraft(originalValueRef.current || "#000000")}
+                  className="w-7 h-7 rounded border border-[#e5e7eb] shrink-0 relative overflow-hidden"
+                  style={originalValueRef.current ? { backgroundColor: originalValueRef.current } : checkerStyle}
+                  aria-label="Revert to previous colour"
+                />
+                <button
+                  type="button"
+                  className="w-7 h-7 rounded border border-[#e5e7eb] shrink-0 relative overflow-hidden"
+                  style={value ? { backgroundColor: value } : checkerStyle}
+                  aria-label="Current colour"
+                />
+                <input
+                  type="text"
+                  value={hexDraft}
+                  onChange={(e) => setHexDraft(e.target.value)}
+                  onBlur={(e) => commitHexDraft(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") commitHexDraft((e.target as HTMLInputElement).value); }}
+                  maxLength={7}
+                  placeholder="#000000"
+                  className="flex-1 border border-[#e5e7eb] rounded px-1.5 py-1 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-[#2d6fa8]"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={cancelSelection}
+                className="w-full px-2 py-1 text-[11px] border border-[#e5e7eb] rounded text-[#374151] hover:bg-[#f9fafb] transition-colors"
+              >
+                Cancel selection
+              </button>
+            </div>
+          )}
         </div>,
         document.body
       )}
     </div>
   );
 }
+
 
 function ExternalAssetModal({
   open,
@@ -2316,13 +2533,15 @@ function SaveAsTemplateModal({
               className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
             />
           </div>
-          <label className="flex items-center gap-2 cursor-pointer select-none">
+          <label className="flex items-center gap-2 cursor-pointer select-none group">
             <input
               type="checkbox"
               checked={isShared}
               onChange={(event) => setIsShared(event.target.checked)}
-              className="h-3.5 w-3.5 rounded-[6px] border-[#cbd5e1] text-[#2d6fa8] focus:ring-[#2d6fa8]"
+              aria-label="Share with all users"
+              className="sr-only peer"
             />
+            <CheckboxIndicator checked={isShared} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
             <span className="text-sm font-semibold text-[#374151]">Share with all users</span>
           </label>
           <p className="text-[12px] text-[var(--life-neutral-300)] -mt-1">
@@ -2458,6 +2677,7 @@ function mapStructureToPages(
       instruction?: string;
       themeSettings?: Record<string, unknown>;
       classes?: string;
+      colorLabel?: string;
       requireCompletionOf?: string;
       isOptional?: boolean;
       isAvailable?: boolean;
@@ -2479,6 +2699,7 @@ function mapStructureToPages(
         instruction?: string;
         themeSettings?: Record<string, unknown>;
         classes?: string;
+        colorLabel?: string;
         requireCompletionOf?: string;
         isOptional?: boolean;
         isAvailable?: boolean;
@@ -2504,6 +2725,7 @@ function mapStructureToPages(
             properties?: Record<string, unknown>;
             url?: string;
             classes?: string;
+            colorLabel?: string;
             isOptional?: boolean;
             isAvailable?: boolean;
             isHidden?: boolean;
@@ -2588,6 +2810,7 @@ function mapStructureToPages(
         isVisible: section.isVisible !== false,
         requireCompletionOf: section.requireCompletionOf ?? "-1",
         classes: section.classes || "",
+        colorLabel: section.colorLabel || "",
         onScreen: {
           _isEnabled: !!section.onScreen?._isEnabled,
           _classes: section.onScreen?._classes || "",
@@ -2618,6 +2841,7 @@ function mapStructureToPages(
           isVisible: group.isVisible !== false,
           requireCompletionOf: group.requireCompletionOf ?? "-1",
           classes: group.classes || "",
+          colorLabel: group.colorLabel || "",
           onScreen: {
             _isEnabled: !!group.onScreen?._isEnabled,
             _classes: group.onScreen?._classes || "",
@@ -2662,6 +2886,7 @@ function mapStructureToPages(
                 ? component.themeSettings as TopicThemeSettings
                 : {},
             classes: component.classes || "",
+            colorLabel: component.colorLabel || "",
             isOptional: !!component.isOptional,
             isAvailable: component.isAvailable !== false,
             isHidden: !!component.isHidden,
@@ -2718,6 +2943,7 @@ export interface ComponentData {
     [key: string]: any;
   };
   classes: string;
+  colorLabel: string;
   isOptional: boolean;
   isAvailable: boolean;
   isHidden: boolean;
@@ -2743,6 +2969,7 @@ export interface BlockData {
   isVisible: boolean;
   requireCompletionOf: string;
   classes: string;
+  colorLabel: string;
   onScreen: TopicOnScreenSettings;
   ariaLevel: string;
   isA11yCompletionDescriptionEnabled: boolean;
@@ -2763,6 +2990,7 @@ export interface ArticleData {
   isVisible: boolean;
   requireCompletionOf: string;
   classes: string;
+  colorLabel: string;
   onScreen: TopicOnScreenSettings;
   ariaLevel: string;
   isA11yCompletionDescriptionEnabled: boolean;
@@ -2912,6 +3140,11 @@ export default function CourseEditor({
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [titleValidationWarning, setTitleValidationWarning] = useState<string | null>(null);
+  // "Samaritan Assistance" triggered from a canvas body field's CKEditor
+  // toolbar button — the popover itself is this same React app's existing
+  // AiAssistPopover; only the editor instance it applies the result to lives
+  // in the iframe's realm (cross-realm method calls are fine, same-origin).
+  const [canvasSamaritanTarget, setCanvasSamaritanTarget] = useState<{ editor: any; seedText: string } | null>(null);
   // Live text of the title currently being edited in the CANVAS, including
   // transient blank states that are deliberately never committed to real
   // state (see onInput's isBlankTitleValue guard) — the right panel's title
@@ -2931,6 +3164,14 @@ export default function CourseEditor({
   });
 
   const [contentPages, setContentPages] = useState<ContentPageData[]>([]);
+  // Read by applyPreviewSelectionStyles (hover hover-title-preview lookup)
+  // without adding contentPages to its own dependency array — that array
+  // deliberately only reacts to hover/selection id changes, not every
+  // keystroke, so it must read data via ref rather than closure capture.
+  const contentPagesRef = useRef(contentPages);
+  useEffect(() => {
+    contentPagesRef.current = contentPages;
+  }, [contentPages]);
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [selectedSubPageId, setSelectedSubPageId] = useState<string | null>(null);
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
@@ -2941,6 +3182,24 @@ export default function CourseEditor({
   const [dirtyNodeKeys, setDirtyNodeKeys] = useState<Record<string, true>>({});
   const [isSavingSelection, setIsSavingSelection] = useState(false);
   const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
+  // Canvas Copy (Section/Content Group) — old-tool parity (editorView.js
+  // addToClipboard): a server-side clipboard-copy has been made, and the
+  // canvas is showing "Paste" zones at EVERY sibling gap (before the first,
+  // between each, after the last) in the copied node's own parent, until
+  // the user picks a slot or cancels.
+  const [clipboardEntry, setClipboardEntry] = useState<{
+    clipboardId: string;
+    structureLevel: "section" | "contentGroup";
+    pageId: string;
+    articleId: string | null;
+  } | null>(null);
+  // handlePreviewFrameLoad's onClick closure is only re-created when the
+  // iframe itself reloads, so it never sees fresh clipboardEntry state from
+  // a later render — read the latest value via this ref instead.
+  const clipboardEntryRef = useRef(clipboardEntry);
+  useEffect(() => {
+    clipboardEntryRef.current = clipboardEntry;
+  }, [clipboardEntry]);
   const [publishDialogPhase, setPublishDialogPhase] = useState<PublishCoursePhase | null>(null);
   const [publishResult, setPublishResult] = useState<{ zipName?: string; downloadUrl?: string; message?: string }>({});
   const [componentSubtitleSchemaSupport, setComponentSubtitleSchemaSupport] = useState<Record<string, boolean>>({});
@@ -2963,11 +3222,27 @@ export default function CourseEditor({
   const [openComponentAccordions, setOpenComponentAccordions] = useState<Record<string, boolean>>(DEFAULT_COMPONENT_ACCORDIONS);
   const [componentBehaviourSchemas, setComponentBehaviourSchemas] = useState<Record<string, Record<string, unknown>>>({});
   const [extensionSchemasByLevel, setExtensionSchemasByLevel] = useState<Record<ExtensionSchemaLevel, Record<string, ExtensionFieldSchema>> | null>(null);
+  const [themeSettingsSchemaByLevel, setThemeSettingsSchemaByLevel] = useState<Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>> | null>(null);
+  const [menuSettingsSchemaByLevel, setMenuSettingsSchemaByLevel] = useState<Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>> | null>(null);
   const [componentExtensionSchemas, setComponentExtensionSchemas] = useState<Record<string, Record<string, ExtensionFieldSchema>>>({});
   const [extensionTypeOptions, setExtensionTypeOptions] = useState<ExtensionTypeOption[]>([]);
   const [navFooterCourseButtons, setNavFooterCourseButtons] = useState<Record<NavFooterButtonKey, NavFooterButton> | null>(null);
   const [courseAssetMappings, setCourseAssetMappings] = useState<Record<string, string>>({});
   const [assetLinkIdMap, setAssetLinkIdMap] = useState<Record<string, string>>({});
+  const liveSelectionRef = useRef({
+    menuSelected,
+    selectedPageId,
+    selectedArticleId,
+    selectedBlockId,
+    selectedComponentId,
+  });
+  liveSelectionRef.current = {
+    menuSelected,
+    selectedPageId,
+    selectedArticleId,
+    selectedBlockId,
+    selectedComponentId,
+  };
   const structureLoadRequestIdRef = useRef(0);
   const isMountedRef = useRef(true);
   const pendingGuardedActionRef = useRef<(() => void) | null>(null);
@@ -3044,6 +3319,12 @@ export default function CourseEditor({
   const rightPanelScrollRef = useRef<HTMLElement | null>(null);
   const cleanupPreviewListenersRef = useRef<(() => void) | null>(null);
   const pendingLeftPanelScrollTargetRef = useRef<PendingPreviewScrollTarget | null>(null);
+  // Canvas "body" fields get a real CKEditor 5 instance (matching the old
+  // tool: every TextArea schema field renders CKEditor, body included) —
+  // keyed by the source element so re-running syncPreviewInlineEditors on
+  // every keystroke (it depends on contentPages) reuses the same instance
+  // instead of recreating it and losing focus/cursor position.
+  const canvasBodyEditorsRef = useRef<Map<HTMLElement, { editor: any; editableEl: HTMLElement; ownerKey: string; commit: () => void }>>(new Map());
   const hasUnsavedChanges = useMemo(() => Object.keys(dirtyNodeKeys).length > 0, [dirtyNodeKeys]);
 
   const loadStructureFromDatabase = useCallback(async (selection?: {
@@ -3196,6 +3477,15 @@ export default function CourseEditor({
       })
       .catch((err) => {
         console.warn("Failed to load extension schemas", err);
+      });
+    void Promise.all([getThemeSettingsSchemaByLevel(), getMenuSettingsSchemaByLevel()])
+      .then(([themeByLevel, menuByLevel]) => {
+        if (cancelled) return;
+        setThemeSettingsSchemaByLevel(themeByLevel);
+        setMenuSettingsSchemaByLevel(menuByLevel);
+      })
+      .catch((err) => {
+        console.warn("Failed to load theme/menu settings schemas", err);
       });
     return () => {
       cancelled = true;
@@ -3600,6 +3890,8 @@ export default function CourseEditor({
     return basePath;
   }, [courseId, menuPageCreated, menuSelected, previewBuildVersion, selectedPageId, user]);
 
+  const applyPreviewSelectionStylesRef = useRef<() => void>(() => {});
+
   const applyPreviewSelectionStyles = useCallback(() => {
     const iframe = previewFrameRef.current;
     const doc = iframe?.contentDocument;
@@ -3610,105 +3902,244 @@ export default function CourseEditor({
 
     doc.getElementById("adapt-authoring-preview-bridge-style")?.remove();
 
+    // Gates every "permanent" editing-mode spacing rule below (gutters,
+    // header padding, border reservation, label min-height) — present only
+    // while actively selecting or hovering something, so a fully
+    // deselected, un-hovered canvas renders as a pristine normal preview
+    // with none of that extra space, per explicit user request.
+    doc.documentElement.classList.toggle(
+      "adapt-authoring-editing-active",
+      hasCanvasSelection || !!previewHoverState.level
+    );
+
     const style = doc.createElement("style");
     style.id = "adapt-authoring-preview-bridge-style";
     style.textContent = `
-      .adapt-authoring-preview-hover,
-      .adapt-authoring-preview-hover-header,
-      .adapt-authoring-preview-active,
-      .adapt-authoring-preview-active-header {
+      /* Ported directly from Quick Edit's own CSS
+         (adapt-preview-edit/less/page.less .editable / .page__header-inner.editable /
+         .article__header-inner.editable / .block__header-inner.editable /
+         .component__inner.editable) — a real border+margin+padding box that
+         participates in normal layout flow, not an absolutely positioned
+         outline overlay. This is why it lines up with sibling content
+         automatically instead of needing computed/faked offsets.
+         Border is ALWAYS present (transparent when not hover/active) so
+         its 1px never gets added/removed on hover — box-sizing:border-box
+         means a transparent-to-visible COLOR swap causes zero layout
+         shift, unlike toggling border-width itself would.
+         Scoped under .adapt-authoring-editing-active (toggled on the
+         iframe's <html> based on hasCanvasSelection/hover below) so a
+         fully deselected, un-hovered canvas has ZERO extra reserved space
+         and renders as a pristine, unmodified preview — all of this
+         editing-mode spacing only exists while actively interacting. */
+      .adapt-authoring-editing-active .page__header-inner,
+      .adapt-authoring-editing-active .article__header-inner,
+      .adapt-authoring-editing-active .block__header-inner,
+      .adapt-authoring-editing-active .component__inner {
         position: relative !important;
         box-sizing: border-box !important;
-        overflow: visible !important;
+        border: 1px dashed transparent !important;
+        border-radius: 8px !important;
       }
 
-      .adapt-authoring-preview-hover::after,
-      .adapt-authoring-preview-hover-header::after,
-      .adapt-authoring-preview-active::after,
-      .adapt-authoring-preview-active-header::after {
-        content: "";
-        position: absolute;
-        border-radius: 8px;
-        pointer-events: none;
-        z-index: 8;
+      /* Must be AT LEAST as specific as the .adapt-authoring-editing-active
+         base border rule above (2 classes) — otherwise, since both use
+         !important, the higher-specificity transparent base border always
+         wins over this lower-specificity color override regardless of
+         source order, and the dashed border never becomes visible at all
+         while hovering/selecting (confirmed live: computed border color
+         stayed rgba(0,0,0,0) on an actually-selected node). */
+      .adapt-authoring-editing-active .adapt-authoring-preview-hover,
+      .adapt-authoring-editing-active .adapt-authoring-preview-active {
+        border-color: var(--life-primary-500, #2e7fa1) !important;
       }
 
-      .page.adapt-authoring-preview-hover::after,
-      .page.adapt-authoring-preview-active::after {
-        inset: 2px;
+      /* Padding/margin that gives a headerless-level header its visible
+         size must be PERMANENT, not conditional on the hover/active class.
+         Previously it only appeared once hovered — growing the box from 0
+         to ~94px tall the instant the cursor entered it. That size jump
+         moves whatever was previously under the (now relocated) cursor,
+         which re-fires mouseover/mouseout in a rapid loop — the reported
+         "glitch when moving a little up/down in empty space".
+         Applied to Topic too (not just Article/Block) so hover spacing is
+         visually IDENTICAL across every level — Topic's real theme padding
+         (2rem/1rem) differs from Article/Block's override and made its
+         hover box look inconsistently spaced next to them, per explicit
+         user feedback; overriding it here to match is a deliberate,
+         acceptable trade-off (editing-mode-only spacing, same precedent as
+         the .article/.block/.component gutter margins elsewhere in this
+         file), same as Article/Block already do. */
+      .adapt-authoring-editing-active .page__header-inner {
+        padding: 0.5rem !important;
       }
 
-      .article.adapt-authoring-preview-hover::after,
-      .article.adapt-authoring-preview-active::after {
-        inset: 2px;
+      .adapt-authoring-editing-active .article__header-inner {
+        margin-top: 8px !important;
+        margin-bottom: 8px !important;
+        padding: 0.5rem !important;
       }
 
-      .block.adapt-authoring-preview-hover::after,
-      .block.adapt-authoring-preview-active::after {
-        inset: 2px;
+      .adapt-authoring-editing-active .block__header-inner {
+        margin-left: -0.5rem !important;
+        margin-right: -0.5rem !important;
+        margin-bottom: 10px !important;
+        padding: 10px !important;
       }
 
-      .component.adapt-authoring-preview-hover::after,
-      .component.adapt-authoring-preview-active::after {
-        inset: 2px;
+      .adapt-authoring-preview-hover.menu,
+      .adapt-authoring-preview-active.menu {
+        padding: 0.5rem !important;
       }
 
-      .menu.adapt-authoring-preview-hover::after,
-      .menu.adapt-authoring-preview-active::after {
-        inset: 2px;
+      /* Permanent (not hover/active-conditional) vertical gutter around
+         every real Section/Content Group/Component element while editing.
+         Two problems this solves at once: (1) a hover/selection dashed box
+         can never visually touch/merge with the next sibling's box, since
+         there's always real space between the underlying elements
+         themselves, not just around whichever one currently has a border;
+         (2) when a Section/Content Group has no rendered header at all
+         (title hidden from preview), its child would otherwise sit flush
+         against it with zero surface to point at \u2014 this margin creates
+         that missing surface, so the mouse can resolve to the Section/
+         Content Group level instead of always drilling straight to the
+         Component underneath. Mirrors Quick Edit's own always-on editing
+         spacing (.editable { margin: 20px auto } in page.less). */
+      .adapt-authoring-editing-active .article,
+      .adapt-authoring-editing-active .block,
+      .adapt-authoring-editing-active .component {
+        margin-top: 10px !important;
+        margin-bottom: 10px !important;
       }
 
-      .adapt-authoring-preview-hover::after,
-      .adapt-authoring-preview-hover-header::after {
-        border: 1px dashed var(--life-primary-500, #2e7fa1) !important;
+      /* Two half-width (left/right) components in the same Content Group
+         otherwise sit with their borders touching/flush against each
+         other, since .component__container is already a real CSS flex
+         row (see core/less/core/component.less) with no gap of its own
+         between items \u2014 a plain flex gap is all that's needed here, no
+         margin math on either side that could overflow past 100% width. */
+      .adapt-authoring-editing-active .component__container {
+        gap: 16px !important;
       }
 
-      .adapt-authoring-preview-active::after,
-      .adapt-authoring-preview-active-header::after {
-        border: 1px solid var(--life-primary-500, #2e7fa1) !important;
+      /* Without this, a headless Section's own gutter (the margin above
+         "block") collapses straight through Article and merges with
+         Article's own gutter (a real CSS "margin collapsing" side effect
+         of both having zero padding/border) into ONE gap that sits above
+         Article \u2014 confirmed live: article and block landed at the exact
+         same top offset with nothing between them. That single merged gap
+         only ever resolves to the OUTER (Topic) level on hover, so a
+         headless Section's own gutter effectively never existed \u2014 Topic
+         hover worked, Section hover silently never did. display: flow-root
+         establishes a new block formatting context on the PARENT (still
+         renders identically to display: block otherwise), which contains
+         a child's margin within its own border box instead of letting it
+         escape upward, restoring each level's own distinct gutter. */
+      .adapt-authoring-editing-active .page__inner,
+      .adapt-authoring-editing-active .article,
+      .adapt-authoring-editing-active .block {
+        display: flow-root !important;
+      }
+
+      /* Keep the editor's normal neutral frame when focused. Selection is
+         communicated by the surrounding labelled dashed box, so the
+         CKEditor focus state must not add a competing blue outline. */
+      .ck.ck-editor__editable.ck-focused:not(.ck-editor__nested-editable) {
+        border-color: var(--ck-color-base-border) !important;
+        box-shadow: none !important;
       }
 
       .adapt-authoring-preview-topic-shell-active {
         border: none !important;
       }
 
-      .adapt-authoring-preview-hover-header::before,
-      .adapt-authoring-preview-active-header::before,
-      .adapt-authoring-preview-hover::before,
-      .adapt-authoring-preview-active::before {
+      /* Same permanent-reservation principle as the padding above, applied
+         to the label line: it must always occupy its line of height for a
+         synthetic header, even before data-preview-bridge-label is ever
+         set (color: transparent, not display:none) — otherwise the label
+         appearing/disappearing on hover is itself a smaller second source
+         of the same "size changes on hover -> mouse ends up over a
+         different element -> flicker" bug the padding fix above targets.
+         min-height (not just line-height) because an EMPTY attr() value
+         (before any hover has ever set data-preview-bridge-label) collapses
+         a content-less block box to zero height in some engines — line-
+         height alone isn't a reliable floor without real content present. */
+      .adapt-authoring-editing-active .article__header-inner::before,
+      .adapt-authoring-editing-active .block__header-inner::before {
         content: attr(data-preview-bridge-label);
-        position: absolute;
-        top: 1px;
-        left: 12px;
-        display: inline-block;
-        padding: 0 4px;
-        background: #fff;
+        display: block;
+        min-height: 11px;
+        color: transparent;
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        line-height: 1.2;
+        margin-bottom: 4px;
+        pointer-events: none;
+      }
+
+      /* A plain inline label in normal flow ahead of the level's own content
+         — matches Quick Edit's \`.editable:before { content: 'Block' }\`
+         exactly (a real line of text that pushes content down, not a
+         floating badge straddling the border), so it can never overlap
+         adjacent content again. Must be AT LEAST as specific as the
+         transparent label-reservation rule above (2 classes) for the same
+         reason as the border-color fix above — otherwise the transparent
+         color always wins and the label text never actually becomes
+         visible while hovering/selecting. */
+      .adapt-authoring-editing-active .adapt-authoring-preview-hover::before,
+      .adapt-authoring-editing-active .adapt-authoring-preview-active::before,
+      .adapt-authoring-editing-active .adapt-authoring-swap-hover-highlight::before {
+        content: attr(data-preview-bridge-label);
+        display: block;
         color: var(--life-primary-500, #2e7fa1);
         font-size: 9px;
         font-weight: 700;
         text-transform: uppercase;
         line-height: 1.2;
-        z-index: 9;
+        margin-bottom: 4px;
         pointer-events: none;
       }
+
+      /* The hover-only title preview (both freshly injected — Group/Section
+         with no real header — and an existing-but-hidden real title
+         swapped to dimmed — Topic) renders at its real, proper theme size,
+         in normal flow below the label, exactly like the SELECTED
+         treatment already looks (makeEditable's own dimmed title) — no
+         absolute positioning/font-size override. An earlier attempt took
+         it out of flow to stop hover from ever changing the header box's
+         height, but that made it overlap the label/underlying content
+         instead (an absolutely positioned element isn't constrained by its
+         container, and shrinking its font to avoid that looked wrong per
+         explicit user feedback) — reverted; a hover-triggered height
+         change here is the smaller problem of the two. */
 
       .adapt-authoring-preview-clickable {
         cursor: pointer !important;
       }
 
-      .adapt-authoring-preview-inline-editable {
+      .adapt-authoring-preview-inline-editable:not(.ck-editor__editable) {
         outline: none !important;
         border: 0 !important;
         background: transparent !important;
         box-shadow: none !important;
         min-height: 1.2em;
+        /* The real compiled theme CSS has a bare [contenteditable='true']
+           rule (page.less) reserving room for Quick Edit's own floating
+           Save icon button (padding-bottom: 50px; padding-right: 1.25rem).
+           Our canvas has no such button, so this must be zeroed out here
+           or every inline-editable field/item (title, body, instruction,
+           per-item behaviour text) shows that reserved gap as extra
+           spacing once selected. */
+        padding-bottom: 0 !important;
+        padding-right: 0 !important;
       }
 
-      .adapt-authoring-preview-inline-editable:focus {
+      .adapt-authoring-preview-inline-editable:not(.ck-editor__editable):focus {
         outline: none !important;
         border: 0 !important;
         background: transparent !important;
         box-shadow: none !important;
+        padding-bottom: 0 !important;
+        padding-right: 0 !important;
       }
 
       .adapt-authoring-preview-inline-empty::before {
@@ -3733,6 +4164,25 @@ export default function CourseEditor({
          clears this the same run (see applyPreviewSelectionStyles). */
       .adapt-authoring-preview-unfocused-descendant {
         opacity: 0.55 !important;
+      }
+
+      /* Hovering (or selecting) a dimmed descendant must restore its
+         normal, full-opacity look — border color, label, everything —
+         instead of staying faded just because its ancestor is also
+         selected. Two separate cases, since the dimmed class and the
+         hover/active class don't always land on the SAME element:
+         (1) same-element case (2-class specificity beats the single-class
+         dimming rule above). (2) the dimmed node is the OUTER real element
+         (e.g. .article, from the "dim every descendant" sweep) while
+         hover/active applies to its header-inner DESCENDANT (from
+         resolveHighlightTarget) — CSS opacity on an ancestor still visually
+         composites/dims a descendant even if the descendant's OWN opacity
+         is separately reset to 1, so the ancestor's own dimming must be
+         lifted too via :has(), or a hovered header still looked faded. */
+      .adapt-authoring-preview-unfocused-descendant.adapt-authoring-preview-hover,
+      .adapt-authoring-preview-unfocused-descendant.adapt-authoring-preview-active,
+      .adapt-authoring-preview-unfocused-descendant:has(.adapt-authoring-preview-hover, .adapt-authoring-preview-active, .adapt-authoring-swap-hover-highlight) {
+        opacity: 1 !important;
       }
 
       .adapt-authoring-preview-inline-structured-header {
@@ -3835,17 +4285,252 @@ export default function CourseEditor({
         pointer-events: none !important;
         cursor: default !important;
       }
+
+      /* Merged swap-positions control (syncSwapPositionsControls) — a single
+         always-visible plain-text affordance (no button chrome) replacing
+         the old tool's per-component move-left/move-right arrows. Anchored
+         to the right-hand component's own box (position:relative set
+         inline by syncSwapPositionsControls), sitting just above that
+         component's own top border, aligned to its right edge. */
+      .adapt-authoring-swap-positions-btn {
+        position: absolute;
+        top: -20px;
+        right: 20px;
+        z-index: 5;
+        margin: 0;
+        padding: 0;
+        border: none;
+        background: transparent;
+        outline: none;
+        font-family: inherit;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.4;
+        white-space: nowrap;
+        color: #9ca3af;
+        cursor: pointer;
+      }
+
+      .adapt-authoring-swap-positions-btn:hover,
+      .adapt-authoring-swap-positions-btn:focus-visible {
+        color: #111827;
+      }
+
+      /* Hovering the swap control itself highlights BOTH components it
+         would swap (not just the one it's anchored to), so it's clear
+         which pair is affected. Same 2-class specificity as the existing
+         hover/active border-color override above, for the same reason. */
+      .adapt-authoring-editing-active .adapt-authoring-swap-hover-highlight {
+        border-color: var(--life-primary-500, #2e7fa1) !important;
+      }
+
+      /* Copy/Color Label icon overlay (ensureLevelActionIcons) — top-right
+         corner of the hovered/selected outline, on the same line as the
+         level's own label (attr(data-preview-bridge-label) ::before above),
+         spaced from the border. */
+      .adapt-authoring-level-actions {
+        position: absolute;
+        top: 0.5rem;
+        right: 8px;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        height: 15px;
+        z-index: 6;
+      }
+
+      /* Content Group header has its own larger 10px padding (see the
+         permanent .block__header-inner padding rule above) — match it so
+         the icons still land level with the label text, not the border. */
+      .adapt-authoring-editing-active .block__header-inner .adapt-authoring-level-actions {
+        top: 10px;
+      }
+
+      .adapt-authoring-level-action-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        padding: 0;
+        border: none;
+        border-radius: 3px;
+        background: transparent;
+        color: #9ca3af;
+        cursor: pointer;
+      }
+
+      .adapt-authoring-level-action-btn:hover {
+        background: var(--life-primary-100, #dbeafe);
+        color: #111827;
+      }
+
+      /* Hover-only preview (level not actually SELECTED yet) — icons show
+         but stay inert: no hover feedback, no click, per explicit user
+         instruction, consistent at every level. */
+      .adapt-authoring-level-actions[data-preview-actions-selected="false"] .adapt-authoring-level-action-btn {
+        pointer-events: none;
+      }
+
+      /* A color label is set: fill the tag icon solid instead of just
+         tinting its outline. */
+      .adapt-authoring-level-action-btn[data-preview-color-label-current]:not([data-preview-color-label-current=""]) svg path {
+        fill: currentColor;
+      }
+
+      /* Colour Label popover \u2014 matches the shared design (title +
+         disclaimer copy + 6-column swatch grid + Reset/Cancel/Apply). */
+      .adapt-authoring-color-label-popover {
+        position: absolute;
+        width: 320px;
+        padding: 20px;
+        background: #fff;
+        border: 1px solid #e6ebf0;
+        border-radius: 12px;
+        box-shadow: 0 10px 32px rgba(0, 0, 0, 0.16);
+        z-index: 20;
+      }
+
+      .adapt-authoring-color-label-popover-title {
+        font-size: 17px;
+        font-weight: 700;
+        color: #111827;
+        margin-bottom: 8px;
+      }
+
+      .adapt-authoring-color-label-popover-desc {
+        font-size: 13px;
+        line-height: 1.4;
+        color: #6b7280;
+        margin: 0 0 16px;
+      }
+
+      .adapt-authoring-color-label-popover-grid {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 8px;
+        margin-bottom: 20px;
+      }
+
+      .adapt-authoring-color-label-swatch {
+        width: 100%;
+        aspect-ratio: 1;
+        border-radius: 6px;
+        border: 2px solid transparent;
+        padding: 0;
+        cursor: pointer;
+      }
+
+      .adapt-authoring-color-label-swatch:hover {
+        outline: 2px solid var(--life-primary-500, #2e7fa1);
+        outline-offset: 1px;
+      }
+
+      .adapt-authoring-color-label-swatch--selected {
+        border-color: var(--life-primary-500, #2e7fa1);
+        box-shadow: 0 0 0 2px #fff inset;
+      }
+
+      .adapt-authoring-color-label-popover-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      .adapt-authoring-btn-secondary,
+      .adapt-authoring-btn-primary {
+        padding: 8px 16px;
+        font-size: 14px;
+        font-weight: 500;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background-color 0.15s ease;
+      }
+
+      .adapt-authoring-btn-secondary {
+        color: #374151;
+        background: #fff;
+        border: 1px solid #d1d5db;
+      }
+
+      .adapt-authoring-btn-secondary:hover {
+        background: #f9fafb;
+      }
+
+      .adapt-authoring-btn-primary {
+        color: #fff;
+        background: #2d6fa8;
+        border: 1px solid transparent;
+      }
+
+      .adapt-authoring-btn-primary:hover {
+        background: #245c8f;
+      }
+
+      /* Paste-zone bars (canvas Copy on Section/Content Group) \u2014 old-tool
+         parity (editorPasteZoneView.js), shown around the just-copied node
+         until the user picks a slot or dismisses via the X. */
+      .adapt-authoring-paste-zone {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 2px 0;
+        color: var(--life-primary-500, #2e7fa1);
+        opacity: 0.5;
+        transition: opacity 0.15s ease;
+      }
+
+      .adapt-authoring-paste-zone:hover {
+        opacity: 1;
+      }
+
+      .adapt-authoring-paste-zone::before,
+      .adapt-authoring-paste-zone::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: var(--life-primary-300, #90caf9);
+      }
+
+      .adapt-authoring-paste-zone-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        border: none;
+        border-radius: 999px;
+        background: var(--life-primary-500, #2e7fa1);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .adapt-authoring-paste-zone-cancel {
+        border: none;
+        background: transparent;
+        color: #9ca3af;
+        cursor: pointer;
+        font-size: 16px;
+        line-height: 1;
+        padding: 0 4px;
+      }
+
+      .adapt-authoring-paste-zone-cancel:hover {
+        color: #111827;
+      }
     `;
     head.appendChild(style);
 
     doc
-      .querySelectorAll(".adapt-authoring-preview-hover, .adapt-authoring-preview-active, .adapt-authoring-preview-hover-header, .adapt-authoring-preview-active-header, .adapt-authoring-preview-clickable, .adapt-authoring-preview-topic-shell-active, .adapt-authoring-preview-unfocused-descendant")
+      .querySelectorAll(".adapt-authoring-preview-hover, .adapt-authoring-preview-active, .adapt-authoring-preview-clickable, .adapt-authoring-preview-topic-shell-active, .adapt-authoring-preview-unfocused-descendant")
       .forEach((node) => {
         node.classList.remove(
           "adapt-authoring-preview-hover",
           "adapt-authoring-preview-active",
-          "adapt-authoring-preview-hover-header",
-          "adapt-authoring-preview-active-header",
           "adapt-authoring-preview-clickable",
           "adapt-authoring-preview-topic-shell-active",
           "adapt-authoring-preview-unfocused-descendant"
@@ -3853,11 +4538,71 @@ export default function CourseEditor({
         node.removeAttribute("data-preview-bridge-label");
       });
 
+    // Purely visual hover-only title placeholders (see ensureHoverTitlePreview
+    // below) get torn down every run — they carry no editable state, so a
+    // clean rebuild each time is cheap and avoids ever going stale.
+    doc.querySelectorAll("[data-preview-hover-title-injected='true']").forEach((node) => {
+      if (node.isConnected) node.remove();
+    });
+
+    // A REAL template title node (e.g. Topic always renders one) that was
+    // temporarily shown dimmed for hover (see ensureHoverTitlePreview) goes
+    // back to its normal hidden state every run too — never removed, since
+    // it's part of the real rendered course, not something we created.
+    doc.querySelectorAll("[data-preview-hover-title-shown='true']").forEach((node) => {
+      node.classList.remove("adapt-authoring-preview-title-dimmed");
+      node.classList.add("adapt-authoring-preview-title-hidden");
+      node.removeAttribute("data-preview-hover-title-shown");
+    });
+
     [".page", ".article", ".block", ".component", ".menu"].forEach((selector) => {
       doc.querySelectorAll(selector).forEach((node) => {
         node.classList.add("adapt-authoring-preview-clickable");
       });
     });
+
+    // When a level's title is hidden/empty, the real template renders NO
+    // header markup at all — falling back to the level's whole content
+    // container (.article__inner/.block__inner) as the hover/active target
+    // wraps every child underneath it too (e.g. a Content Group's hover box
+    // engulfing its Component). Quick Edit and syncPreviewInlineEditors'
+    // own selection path (ensureHeaderInnerHost) both avoid this by
+    // creating a small, real, permanent header placeholder to frame
+    // instead — mirrored here so HOVER gets the same small frame, not just
+    // Selection. Idempotent/safe to call from both hover and active
+    // resolution: checks for an existing header first, matches the exact
+    // classnames ensureHeaderInnerHost (syncPreviewInlineEditors) already
+    // uses, so whichever runs first is transparently reused by the other
+    // with no duplicate headers ever created.
+    const ensureLevelHeaderHost = (
+      level: "topic" | "section" | "group",
+      root: Element | null
+    ): HTMLElement | null => {
+      if (!root) return null;
+      const config =
+        level === "topic"
+          ? { headerSelector: ".page__header", headerClassName: "page__header", innerSelector: ".page__header-inner", innerClassName: "page__header-inner" }
+          : level === "section"
+            ? { headerSelector: ".article__header", headerClassName: "article__header", innerSelector: ".article__header-inner", innerClassName: "article__header-inner" }
+            : { headerSelector: ".block__header", headerClassName: "block__header", innerSelector: ".block__header-inner", innerClassName: "block__header-inner" };
+
+      const existingInner = root.querySelector(config.innerSelector) as HTMLElement | null;
+      if (existingInner) return existingInner;
+
+      let container = root.querySelector(config.headerSelector) as HTMLElement | null;
+      if (!container) {
+        container = doc.createElement("div");
+        container.className = config.headerClassName;
+        container.setAttribute("data-preview-injected", "true");
+        root.insertBefore(container, root.firstChild);
+      }
+
+      const inner = doc.createElement("div");
+      inner.className = config.innerClassName;
+      inner.setAttribute("data-preview-injected", "true");
+      container.appendChild(inner);
+      return inner;
+    };
 
     const resolveHighlightTarget = (
       level: "menu" | "topic" | "section" | "group" | "component",
@@ -3872,11 +4617,23 @@ export default function CourseEditor({
       const base = doc.querySelector(`[data-adapt-id="${id}"]`);
       if (!base) return null;
 
+      const root = level === "topic" ? base.closest(".page") ?? base : base;
+      // A hierarchy node's outer element includes every descendant. Framing
+      // it produces one giant block outline plus a second child hover frame.
+      // Quick Edit frames the level's own visible surface instead.
       if (level === "topic") {
-        return base.closest(".page") ?? base;
+        return root.querySelector(".page__header-inner") ?? ensureLevelHeaderHost("topic", root.querySelector(".page__inner") ?? root);
       }
-
-      return base;
+      if (level === "section") {
+        return root.querySelector(".article__header-inner") ?? ensureLevelHeaderHost("section", root.querySelector(".article__inner") ?? root);
+      }
+      if (level === "group") {
+        return root.querySelector(".block__header-inner") ?? ensureLevelHeaderHost("group", root.querySelector(".block__inner") ?? root);
+      }
+      if (level === "component") {
+        return root.querySelector(".component__inner") ?? root;
+      }
+      return root;
     };
 
     const resolveContainerTarget = (
@@ -3905,6 +4662,163 @@ export default function CourseEditor({
       if (level === "group") return "Content Group";
       if (level === "component") return "Component";
       return "Menu";
+    };
+
+    type LevelActionIds = { pageId: string; articleId: string | null; blockId: string | null; componentId: string | null };
+
+    const getColorLabelForLevel = (
+      level: "topic" | "section" | "group" | "component",
+      ids: LevelActionIds
+    ): string => {
+      if (level === "topic") return "";
+      const pages = contentPagesRef.current;
+      const page = pages.find((candidate) => candidate.id === ids.pageId);
+      const article = page && ids.articleId ? page.articles.find((candidate) => candidate.id === ids.articleId) : null;
+      if (level === "section") return article?.colorLabel || "";
+      const block = article && ids.blockId ? article.blocks.find((candidate) => candidate.id === ids.blockId) : null;
+      if (level === "group") return block?.colorLabel || "";
+      const component = block && ids.componentId ? block.components.find((candidate) => candidate.id === ids.componentId) : null;
+      return component?.colorLabel || "";
+    };
+
+    // Copy (topic/section/group — Component deferred, see memory) + Color
+    // Label (section/group/component — never Topic) icon overlay, bottom-
+    // right corner of the hovered/selected outline. Old-tool parity per
+    // explicit user instruction; copy icon reused from the right panel's
+    // "Copy topic id" style, color-label icon from the new-ui asset.
+    const ensureLevelActionIcons = (
+      node: Element,
+      level: "topic" | "section" | "group" | "component",
+      ids: LevelActionIds,
+      isSelected: boolean
+    ): Element | null => {
+      const showCopy = level !== "component";
+      const showColorLabel = level !== "topic";
+      if (!showCopy && !showColorLabel) return null;
+
+      let actions = node.querySelector<HTMLElement>(":scope > [data-preview-level-actions]");
+      if (!actions) {
+        actions = doc.createElement("div");
+        actions.setAttribute("data-preview-level-actions", "true");
+        actions.className = "adapt-authoring-level-actions";
+        node.appendChild(actions);
+      }
+      // Hover alone only ever PREVIEWS the icons (grey, inert) — real
+      // hover/click affordance is reserved for the level actually SELECTED,
+      // per explicit user instruction, consistent at every level.
+      actions.setAttribute("data-preview-actions-selected", isSelected ? "true" : "false");
+      actions.setAttribute("data-preview-action-level", level);
+      actions.setAttribute("data-preview-action-page-id", ids.pageId);
+      if (ids.articleId) actions.setAttribute("data-preview-action-article-id", ids.articleId);
+      else actions.removeAttribute("data-preview-action-article-id");
+      if (ids.blockId) actions.setAttribute("data-preview-action-block-id", ids.blockId);
+      else actions.removeAttribute("data-preview-action-block-id");
+      if (ids.componentId) actions.setAttribute("data-preview-action-component-id", ids.componentId);
+      else actions.removeAttribute("data-preview-action-component-id");
+
+      let colorBtn = actions.querySelector<HTMLButtonElement>("[data-preview-color-label-btn]");
+      if (showColorLabel) {
+        if (!colorBtn) {
+          colorBtn = doc.createElement("button");
+          colorBtn.type = "button";
+          colorBtn.setAttribute("data-preview-color-label-btn", "true");
+          colorBtn.className = "adapt-authoring-level-action-btn";
+          colorBtn.innerHTML = LEVEL_ACTION_COLOR_LABEL_ICON_SVG;
+          actions.insertBefore(colorBtn, actions.firstChild);
+        }
+        colorBtn.title = "Set Color Label";
+        const colorLabelValue = getColorLabelForLevel(level, ids);
+        colorBtn.setAttribute("data-preview-color-label-current", colorLabelValue);
+        colorBtn.style.color = colorLabelValue ? (COLOR_LABEL_HEX[colorLabelValue] || "") : "";
+      } else if (colorBtn) {
+        colorBtn.remove();
+      }
+
+      let copyBtn = actions.querySelector<HTMLButtonElement>("[data-preview-copy-node-btn]");
+      if (showCopy) {
+        if (!copyBtn) {
+          copyBtn = doc.createElement("button");
+          copyBtn.type = "button";
+          copyBtn.setAttribute("data-preview-copy-node-btn", "true");
+          copyBtn.className = "adapt-authoring-level-action-btn";
+          copyBtn.innerHTML = LEVEL_ACTION_COPY_ICON_SVG;
+          actions.appendChild(copyBtn);
+        }
+        copyBtn.title = `Copy ${toBadgeLabel(level)}`;
+      } else if (copyBtn) {
+        copyBtn.remove();
+      }
+
+      return actions;
+    };
+
+    // Same title-container/inner class names + placeholder copy
+    // syncPreviewInlineEditors uses for the SELECTED level's empty-title
+    // dimmed treatment — mirrored here so a hovered (not-yet-selected) empty
+    // level looks identical instead of showing a blank outline.
+    const findHoverTitlePreviewInfo = (
+      level: "menu" | "topic" | "section" | "group" | "component"
+    ): { title: string; placeholder: string; containerSelector: string; containerClassName: string; innerSelector: string; innerClassName: string } | null => {
+      const pages = contentPagesRef.current;
+      const page = pages.find((candidate) => candidate.id === previewHoverState.pageId);
+      if (level === "topic") {
+        if (!page) return null;
+        return { title: page.title || "", placeholder: "TOPIC TITLE", containerSelector: ".page__title", containerClassName: "page__title", innerSelector: ".page__title-inner", innerClassName: "page__title-inner" };
+      }
+      const article = page?.articles.find((candidate) => candidate.id === previewHoverState.articleId);
+      if (level === "section") {
+        if (!article) return null;
+        return { title: article.title || "", placeholder: "Section title", containerSelector: ".article__title", containerClassName: "article__title", innerSelector: ".article__title-inner", innerClassName: "article__title-inner" };
+      }
+      const block = article?.blocks.find((candidate) => candidate.id === previewHoverState.blockId);
+      if (level === "group") {
+        if (!block) return null;
+        return { title: block.title || "", placeholder: "Content Group title", containerSelector: ".block__title", containerClassName: "block__title", innerSelector: ".block__title-inner", innerClassName: "block__title-inner" };
+      }
+      if (level === "component") {
+        const component = block?.components.find((candidate) => candidate.id === previewHoverState.componentId);
+        if (!component) return null;
+        return { title: component.settings.title || "", placeholder: "Component title", containerSelector: ".component__title", containerClassName: "component__title", innerSelector: ".component__title-inner", innerClassName: "component__title-inner" };
+      }
+      return null;
+    };
+
+    const ensureHoverTitlePreview = (host: Element, info: NonNullable<ReturnType<typeof findHoverTitlePreviewInfo>>) => {
+      const existingInner = host.querySelector(info.innerSelector) as HTMLElement | null;
+      if (existingInner) {
+        // The real template always renders a title element for this level
+        // (e.g. Topic — subtitle/body/instruction share its wrapper), but
+        // hides it via adapt-authoring-preview-title-hidden when "Display
+        // title in preview" is off. Left alone, a headless Topic's hover
+        // box would look empty even though a real (just invisible) title
+        // node is sitting right there — show it dimmed on hover too,
+        // exactly mirroring the SAME hidden->dimmed swap makeEditable()
+        // already does once the node is actually selected. This is a REAL
+        // template node, never removed — only the two classes are ever
+        // toggled, reverted by the matching cleanup in
+        // applyPreviewSelectionStyles's top-of-run sweep.
+        const container = (existingInner.closest(info.containerSelector) as HTMLElement | null) ?? existingInner;
+        if (container.classList.contains("adapt-authoring-preview-title-hidden")) {
+          container.classList.remove("adapt-authoring-preview-title-hidden");
+          container.classList.add("adapt-authoring-preview-title-dimmed");
+          container.setAttribute("data-preview-hover-title-shown", "true");
+        }
+        return;
+      }
+
+      let container = host.querySelector(info.containerSelector) as HTMLElement | null;
+      if (!container) {
+        container = doc.createElement("div");
+        container.className = info.containerClassName;
+        container.setAttribute("data-preview-hover-title-injected", "true");
+        host.insertBefore(container, host.firstChild);
+      }
+
+      const inner = doc.createElement("div");
+      inner.className = `${info.innerClassName} adapt-authoring-preview-title-dimmed`;
+      inner.textContent = info.title.trim().length > 0 ? info.title : info.placeholder;
+      inner.setAttribute("data-preview-hover-title-injected", "true");
+      container.appendChild(inner);
     };
 
     const hoverLevel = previewHoverState.level;
@@ -3943,31 +4857,70 @@ export default function CourseEditor({
       }
     }
 
+    const activeNode = activeLevel && (activeTargetId || activeLevel === "menu")
+      ? resolveHighlightTarget(activeLevel, activeTargetId)
+      : null;
+
+    let activeActionsHost: Element | null = null;
+    let hoverActionsHost: Element | null = null;
+
     if (hoverTargetId && hoverLevel) {
       const hoverNode = resolveHighlightTarget(hoverLevel, hoverTargetId);
-      if (hoverNode) {
+      // An active level owns its descendants while selected. Showing a
+      // second nested hover rectangle inside it creates the misaligned,
+      // competing outline seen for Components inside a selected Group.
+      if (hoverNode && hoverNode !== activeNode && !activeNode?.contains(hoverNode)) {
         hoverNode.classList.add("adapt-authoring-preview-hover");
         (hoverNode as Element).setAttribute("data-preview-bridge-label", toBadgeLabel(hoverLevel));
+
+        const hoverTitleInfo = findHoverTitlePreviewInfo(hoverLevel);
+        if (hoverTitleInfo) {
+          ensureHoverTitlePreview(hoverNode, hoverTitleInfo);
+        }
+
+        if (hoverLevel !== "menu" && previewHoverState.pageId) {
+          hoverActionsHost = ensureLevelActionIcons(hoverNode, hoverLevel, {
+            pageId: previewHoverState.pageId,
+            articleId: previewHoverState.articleId,
+            blockId: previewHoverState.blockId,
+            componentId: previewHoverState.componentId,
+          }, false);
+        }
       }
     }
 
     if (activeLevel && (activeTargetId || activeLevel === "menu")) {
-      const activeNode = resolveHighlightTarget(activeLevel, activeTargetId);
       if (activeNode) {
         activeNode.classList.add("adapt-authoring-preview-active");
         (activeNode as Element).setAttribute("data-preview-bridge-label", toBadgeLabel(activeLevel));
+
+        if (activeLevel !== "menu" && selectedPageId) {
+          activeActionsHost = ensureLevelActionIcons(activeNode, activeLevel, {
+            pageId: selectedPageId,
+            articleId: selectedArticleId,
+            blockId: selectedBlockId,
+            componentId: selectedComponentId,
+          }, true);
+        }
 
         // Dim everything nested inside the selected level — its own
         // header stays fully normal, only what's underneath (not what's
         // actually being edited via the right panel right now) is muted.
         // Components have nothing nested under them, so nothing to dim.
+        // Queried from the OUTER container (resolveContainerTarget), never
+        // from activeNode itself — activeNode is now always the level's
+        // own small header (real or synthesized), which never contains
+        // descendants as DOM children (they're siblings under the outer
+        // .article/.block node), so querying activeNode here would always
+        // find nothing.
         const unfocusedDescendantSelector: string | null =
           activeLevel === "topic" ? ".article, .block, .component"
           : activeLevel === "section" ? ".block, .component"
           : activeLevel === "group" ? ".component"
           : null;
         if (unfocusedDescendantSelector) {
-          activeNode.querySelectorAll(unfocusedDescendantSelector).forEach((node) => {
+          const dimContainer = resolveContainerTarget(activeLevel, activeTargetId);
+          dimContainer?.querySelectorAll(unfocusedDescendantSelector).forEach((node) => {
             node.classList.add("adapt-authoring-preview-unfocused-descendant");
           });
         }
@@ -3978,6 +4931,17 @@ export default function CourseEditor({
         topicContainer?.classList.add("adapt-authoring-preview-topic-shell-active");
       }
     }
+
+    // Idempotent by construction — only removes a level-actions container
+    // whose host is NEITHER of this run's two qualifying nodes, so a run
+    // where nothing actually changed performs zero DOM mutations (avoids
+    // the same self-triggering MutationObserver churn documented on the
+    // swap-positions control above).
+    doc.querySelectorAll("[data-preview-level-actions]").forEach((node) => {
+      if (node !== activeActionsHost && node !== hoverActionsHost) {
+        node.remove();
+      }
+    });
   }, [
     hasCanvasSelection,
     menuSelected,
@@ -3991,6 +4955,16 @@ export default function CourseEditor({
     selectedComponentId,
     selectedPageId,
   ]);
+
+  // syncPreviewInlineEditors (and any other function whose OWN deps don't
+  // include hover state) closes over whatever applyPreviewSelectionStyles
+  // was current at ITS OWN last reconstruction — calling that stale copy
+  // reapplies STALE hover/active classes, undoing a same-tick hover update
+  // for a sibling component. Keeping a ref in sync lets every such nested
+  // call always run the CURRENT hover-aware version instead.
+  useEffect(() => {
+    applyPreviewSelectionStylesRef.current = applyPreviewSelectionStyles;
+  }, [applyPreviewSelectionStyles]);
 
   const syncPreviewInlineEditors = useCallback(() => {
     const iframe = previewFrameRef.current;
@@ -4048,9 +5022,21 @@ export default function CourseEditor({
       // into while selected is real content the user just added to this
       // component — deselecting must not make it disappear just because
       // the underlying template happened to omit an empty version of it.
+      //
+      // Never remove an element that is (or CONTAINS) the currently
+      // selected node's own active editable field
+      // ([data-preview-edit-enabled='true']), even if it's genuinely
+      // empty text-wise (e.g. a Content Group with a blank body). Doing so
+      // destroyed and recreated that field's real DOM node on literally
+      // every sync pass for any empty field — silently orphaning/
+      // re-initiating its CKEditor instance (see ensureCanvasBodyEditor)
+      // every single time, which under fast repeated selection changes
+      // could leave the async CKEditor5 creation permanently interrupted
+      // before it ever finished, appearing to "randomly" not render.
       doc.querySelectorAll("[data-preview-injected='true']").forEach((node) => {
         const element = node as HTMLElement;
         if ((element.textContent || "").trim().length > 0) return;
+        if (element.matches("[data-preview-edit-enabled='true']") || element.querySelector("[data-preview-edit-enabled='true']")) return;
         const parent = element.parentElement;
         element.remove();
         if (parent?.getAttribute("data-preview-injected") === "true" && !parent.textContent?.trim() && !parent.querySelector("*")) {
@@ -4067,6 +5053,13 @@ export default function CourseEditor({
 
       doc.querySelectorAll("[data-preview-edit-enabled='true']").forEach((node) => {
         const element = node as HTMLElement;
+        // The visible ClassicEditor editable surface carries these metadata
+        // attributes for the shared input/focus delegation. It is not a plain
+        // inline editor: stripping its contenteditable attribute here leaves
+        // its toolbar mounted but makes component bodies impossible to focus
+        // after the next selection sync. Its instance is explicitly destroyed
+        // below when the selected owner changes or selection clears.
+        if (element.classList.contains("ck-editor__editable")) return;
         const isInjected = element.getAttribute("data-preview-injected") === "true";
         const isEmpty = (element.textContent || "").trim().length === 0;
 
@@ -4225,6 +5218,114 @@ export default function CourseEditor({
     const PREVIEW_INLINE_FIELD_CONTAINER_SELECTOR =
       ".page__title, .page__subtitle, .page__body, .page__instruction, .article__title, .article__body, .article__instruction, .block__title, .block__body, .block__instruction, .component__title, .component__body, .component__instruction, .laerdal-text__subtitle";
 
+    const CANVAS_CKEDITOR_TOOLBAR_ITEMS = [
+      "sourceEditing", "showBlocks", "|",
+      "undo", "redo", "|",
+      "bold", "italic", "underline", "strikethrough", "|",
+      "alignment", "|",
+      "numberedList", "bulletedList", "outdent", "indent", "|",
+      "blockQuote", "insertTable", "link", "|",
+      "fontColor", "fontBackgroundColor", "|",
+      "specialCharacters", "uploadImage", "|",
+      "samaritan",
+    ];
+
+    // Real CKEditor 5 for canvas "body" fields (matches the old tool: every
+    // TextArea schema field gets CKEditor, body included — even when empty,
+    // just an empty editor canvas, no placeholder text). Created ONCE per
+    // source element and reused while typing. Like Quick Edit, it does not
+    // update React state on `change:data`: the existing focus-out handler is
+    // the soft-save boundary, avoiding a selection-effect rerun per key.
+    const ensureCanvasBodyEditor = (element: HTMLElement, options: { value: string; ownerKey: string; onCommit: (html: string) => void }) => {
+      // Lazily reclaim editors whose source node was torn down by the
+      // framework SPA's own re-render (e.g. navigated to a different page
+      // inside the same iframe document) — never done on a fixed timer/every
+      // effect run for ALL nodes, just piggybacked here so it can't fire
+      // mid-keystroke for a still-selected node.
+      canvasBodyEditorsRef.current.forEach((entry, sourceEl) => {
+        if (sourceEl !== element && !sourceEl.isConnected) {
+          entry.commit();
+          entry.editor.destroy().catch(() => {});
+          canvasBodyEditorsRef.current.delete(sourceEl);
+        }
+      });
+
+      const existing = canvasBodyEditorsRef.current.get(element);
+      if (existing) {
+        // Behaviour/right-panel edits update `contentPages`, then this sync
+        // runs with the new `options.value`. ClassicEditor deliberately owns
+        // its own document, so update it explicitly when the change came
+        // from outside the focused editor. While it has focus, its unsaved
+        // document remains authoritative until the blur/teardown commit.
+        if (!existing.editor.ui.focusTracker.isFocused && existing.editor.getData() !== options.value) {
+          existing.editor.setData(options.value || "");
+        }
+        element.style.display = "none";
+        element.classList.remove("adapt-authoring-preview-inline-empty");
+        return;
+      }
+      if (element.dataset.ckeditorCreating === "true") return;
+      const iframeWindow = doc.defaultView;
+      if (!iframeWindow) return;
+      element.dataset.ckeditorCreating = "true";
+      loadCKEditor5In(iframeWindow)
+        .then(() => {
+          const CKEDITOR = (iframeWindow as any).CKEDITOR;
+          if (!CKEDITOR || !element.isConnected || canvasBodyEditorsRef.current.has(element)) return;
+          return CKEDITOR.create(element, {
+            plugins: [...CKEDITOR.pluginsConfig, CKEDITOR.SamaritanPlugin],
+            toolbar: { items: CANVAS_CKEDITOR_TOOLBAR_ITEMS, shouldNotGroupWhenFull: true },
+            htmlSupport: { allow: [{ name: /.*/, attributes: true, classes: true, style: true, styles: true }] },
+            // On destroy() (deselecting this level), CKEditor writes its
+            // current data back into `element` and un-hides it itself —
+            // exactly the "revert to plain rendered content" behaviour
+            // needed when this is no longer the selected level.
+            updateSourceElementOnDestroy: true,
+            initialData: options.value || "",
+            samaritanOnClick: (editor: any) => {
+              const selection = editor.model.document.selection;
+              let selectedText = "";
+              if (!selection.isCollapsed) {
+                const range = selection.getFirstRange();
+                for (const item of range ? range.getItems() : []) {
+                  if ((item as any).is?.("$textProxy")) selectedText += (item as any).data;
+                }
+              }
+              setCanvasSamaritanTarget({
+                editor,
+                seedText: selectedText || editor.getData().replace(/<[^>]+>/g, " ").trim(),
+              });
+            },
+          }).then((editor: any) => {
+            const editableEl = editor.ui.getEditableElement() as HTMLElement;
+            let lastCommittedHtml = options.value || "";
+            const commit = () => {
+              const html = editor.getData();
+              if (html === lastCommittedHtml) return;
+              lastCommittedHtml = html;
+              options.onCommit(html);
+            };
+            // CKEditor's focus tracker covers both its editable surface and
+            // toolbar, so this commits only after focus leaves the editor.
+            editor.ui.focusTracker.on("change:isFocused", (_event: unknown, _name: unknown, isFocused: boolean) => {
+              isInlineEditingRef.current = isFocused;
+              if (!isFocused) commit();
+            });
+            canvasBodyEditorsRef.current.set(element, { editor, editableEl, ownerKey: options.ownerKey, commit });
+            // CKEditor already hides its source element, but force it —
+            // this is also what stops the plain-text empty-placeholder
+            // `::before` (see makeEditable) from ever rendering a second,
+            // duplicate "Add ... body" behind/above the CKEditor box.
+            element.style.display = "none";
+            element.classList.remove("adapt-authoring-preview-inline-empty");
+          });
+        })
+        .catch((err) => console.warn("Canvas CKEditor init failed", err))
+        .finally(() => {
+          delete element.dataset.ckeditorCreating;
+        });
+    };
+
     const makeEditable = (
       element: HTMLElement,
       options: {
@@ -4265,13 +5366,38 @@ export default function CourseEditor({
       const container = element.closest(PREVIEW_INLINE_FIELD_CONTAINER_SELECTOR) as HTMLElement | null;
 
       if (!hasText) {
-        element.classList.add("adapt-authoring-preview-inline-empty");
+        // Body is an intentionally empty CKEditor canvas, not a text placeholder.
+        if (options.field !== "body") element.classList.add("adapt-authoring-preview-inline-empty");
         container?.setAttribute("data-preview-inline-container-empty", "true");
       } else {
         element.classList.remove("adapt-authoring-preview-inline-empty");
         container?.removeAttribute("data-preview-inline-container-empty");
       }
       element.setAttribute("data-placeholder", options.placeholder);
+
+      if (options.field === "body") {
+        const ownerKey = options.level === "component"
+          ? `component:${options.componentId}`
+          : options.level === "group"
+            ? `block:${options.blockId}`
+            : options.level === "section"
+              ? `article:${options.articleId}`
+              : `topic:${options.pageId}`;
+        const onCommit = (html: string) => {
+          if (options.level === "topic") {
+            updatePageData(options.pageId, { body: html, description: html });
+          } else if (options.level === "section" && options.articleId) {
+            updateArticle(options.pageId, options.articleId, { description: html });
+          } else if (options.level === "group" && options.articleId && options.blockId) {
+            updateBlock(options.pageId, options.articleId, options.blockId, { description: html });
+          } else if (options.level === "component" && options.articleId && options.blockId && options.componentId) {
+            updateComponent(options.pageId, options.articleId, options.blockId, options.componentId, {
+              settings: { description: html },
+            });
+          }
+        };
+        ensureCanvasBodyEditor(element, { value: options.value, ownerKey, onCommit });
+      }
 
       if (options.field === "title") {
         const titleTarget = container ?? element;
@@ -4287,7 +5413,18 @@ export default function CourseEditor({
 
     clearEditable();
 
+    // Selection styles can run before this synchronizer creates a missing
+    // page/article/block header. Reapply after this synchronous pass so the
+    // frame moves from the broad inner fallback onto that real header wrapper.
+    window.requestAnimationFrame(() => applyPreviewSelectionStylesRef.current());
+
     if (!hasCanvasSelection) {
+      // ClassicEditor owns a sibling toolbar/wrapper that clearEditable cannot remove.
+      canvasBodyEditorsRef.current.forEach((entry, sourceEl) => {
+        entry.commit();
+        entry.editor.destroy().catch(() => {});
+        canvasBodyEditorsRef.current.delete(sourceEl);
+      });
       return;
     }
 
@@ -4303,6 +5440,29 @@ export default function CourseEditor({
     const selectedComponent = selectedBlock && selectedComponentId
       ? selectedBlock.components.find((component) => component.id === selectedComponentId)
       : null;
+
+    // Body only ever gets a live CKEditor for the ONE deepest-selected level
+    // (component beats group beats section beats topic — same precedence as
+    // the mutually-exclusive if/return chain below). Every other body the
+    // user has previously visited this session must revert to plain
+    // rendered content — otherwise CKEditor's toolbar/border stays mounted
+    // on every component ever selected, looking "always on" instead of
+    // selection-scoped.
+    const currentBodyOwnerKey = selectedComponent
+      ? `component:${selectedComponent.id}`
+      : selectedBlock
+        ? `block:${selectedBlock.id}`
+        : selectedArticle
+          ? `article:${selectedArticle.id}`
+          : selectedPage
+            ? `topic:${selectedPage.id}`
+            : null;
+    canvasBodyEditorsRef.current.forEach((entry, sourceEl) => {
+      if (entry.ownerKey === currentBodyOwnerKey) return;
+      entry.commit();
+      entry.editor.destroy().catch(() => {});
+      canvasBodyEditorsRef.current.delete(sourceEl);
+    });
 
     if (selectedComponent && selectedBlock && selectedArticle && selectedPage) {
       const componentNode = doc.querySelector(`.component[data-adapt-id="${selectedComponent.id}"]`) as HTMLElement | null;
@@ -4414,6 +5574,97 @@ export default function CourseEditor({
         });
       }
 
+      const componentItems = Array.isArray(selectedComponent.settings.properties?._items)
+        ? selectedComponent.settings.properties._items as Array<Record<string, unknown>>
+        : [];
+      const applyItemTextAttrs = (element: HTMLElement, path: string) => {
+        element.setAttribute("data-preview-edit-enabled", "true");
+        element.setAttribute("data-preview-behaviour-path", path);
+        element.setAttribute("data-preview-page-id", selectedPage.id);
+        element.setAttribute("data-preview-article-id", selectedArticle.id);
+        element.setAttribute("data-preview-block-id", selectedBlock.id);
+        element.setAttribute("data-preview-component-id", selectedComponent.id);
+        element.setAttribute("contenteditable", "true");
+        element.setAttribute("spellcheck", "false");
+        element.classList.add("adapt-authoring-preview-inline-editable");
+      };
+
+      if (componentKey === "accordion") {
+        const accordionItems = Array.from(componentHost.querySelectorAll<HTMLElement>(".accordion-item"));
+        componentItems.forEach((item, index) => {
+          const itemBody = typeof item.body === "string" ? item.body : "";
+          const itemRoot = accordionItems[index];
+          if (!itemRoot) return;
+          const bodyHost = itemRoot.querySelector<HTMLElement>(".accordion-item__content-inner");
+          if (!bodyHost) return;
+          let bodyElement = bodyHost.querySelector<HTMLElement>(".accordion-item__body-inner");
+          if (!bodyElement) {
+            const bodyWrapper = doc.createElement("div");
+            bodyWrapper.className = "accordion-item__body";
+            bodyElement = doc.createElement("div");
+            bodyElement.className = "accordion-item__body-inner";
+            bodyWrapper.appendChild(bodyElement);
+            bodyHost.insertBefore(bodyWrapper, bodyHost.firstChild);
+          }
+          applyItemTextAttrs(bodyElement, `_items[${index}].body`);
+          // A collapsed Accordion body is intentionally hidden by the real
+          // component. The MutationObserver below re-runs this after expand,
+          // at which point CKEditor can measure its visible container.
+          if (bodyElement.offsetParent !== null) {
+            ensureCanvasBodyEditor(bodyElement, {
+              value: itemBody,
+              ownerKey: `component:${selectedComponent.id}`,
+              onCommit: (html) => updateComponentBehaviourProperty(
+                selectedPage.id,
+                selectedArticle.id,
+                selectedBlock.id,
+                selectedComponent.id,
+                `_items[${index}].body`,
+                html
+              ),
+            });
+          }
+        });
+      }
+
+      if (componentKey === "mcq" || componentKey === "gmcq") {
+        const textSelector = componentKey === "mcq" ? ".mcq-item__text-inner" : ".gmcq-item__text-inner";
+        const optionTexts = Array.from(componentHost.querySelectorAll<HTMLElement>(textSelector));
+        optionTexts.forEach((optionText, index) => {
+          if (typeof componentItems[index]?.text !== "string") return;
+          applyItemTextAttrs(optionText, `_items[${index}].text`);
+        });
+      }
+
+      // Checklist "Text Items" (`_texts[]`) can legitimately share the exact
+      // same current value across items (e.g. every item defaults its body
+      // to the same placeholder string) — matching by text content alone
+      // (the generic fallback below) can't tell two identical-value items
+      // apart. The real template DOES carry a stable per-item identifier
+      // here (`data-adapt-index`, set to each entry's own `placement.afterItem`),
+      // so use that directly instead of guessing from content.
+      if (componentKey === "laerdal-checklist") {
+        const componentTexts = Array.isArray(selectedComponent.settings.properties?._texts)
+          ? selectedComponent.settings.properties._texts as Array<Record<string, unknown>>
+          : [];
+        componentTexts.forEach((textItem, index) => {
+          const afterItem = (textItem.placement as Record<string, unknown> | undefined)?.afterItem;
+          if (afterItem === undefined || afterItem === null) return;
+          const textItemHost = componentHost.querySelector<HTMLElement>(
+            `.laerdal-checklist__text-item[data-adapt-index="${afterItem}"]`
+          );
+          if (!textItemHost) return;
+          if (typeof textItem.title === "string" && textItem.title.trim()) {
+            const titleEl = textItemHost.querySelector<HTMLElement>(".laerdal-checklist__text-item__title");
+            if (titleEl) applyItemTextAttrs(titleEl, `_texts[${index}].title`);
+          }
+          if (typeof textItem.body === "string" && textItem.body.trim()) {
+            const bodyEl = textItemHost.querySelector<HTMLElement>(".laerdal-checklist__text-item__body");
+            if (bodyEl) applyItemTextAttrs(bodyEl, `_texts[${index}].body`);
+          }
+        });
+      }
+
       // Make every OTHER Behaviour text field (item labels/titles, an MCQ
       // option's text, ...) directly editable in the canvas too — matched
       // by literal text content since, unlike title/body/instruction, these
@@ -4434,7 +5685,21 @@ export default function CourseEditor({
           behaviourSchemaForEditing,
           asRecord(selectedComponent.settings.properties)
         );
+        // Two array items can share the identical current value (e.g. every
+        // Checklist "Text Item" defaults its body to the same placeholder
+        // string) — matching purely by text content would otherwise re-find
+        // and re-tag the SAME first DOM occurrence for every duplicate,
+        // leaving every later item unmatched and silently aliased onto the
+        // first one's element. Track which elements this pass has already
+        // claimed so a duplicate value walks PAST them to the next real
+        // occurrence in document order instead of re-claiming the first.
+        const claimedElements = new Set<HTMLElement>();
         behaviourTextFields.forEach(({ path, value }) => {
+          if ((componentKey === "accordion" && /_items\[\d+\]\.body$/.test(path)) ||
+              ((componentKey === "mcq" || componentKey === "gmcq") && /_items\[\d+\]\.text$/.test(path)) ||
+              (componentKey === "laerdal-checklist" && /_texts\[\d+\]\.(title|body)$/.test(path))) {
+            return;
+          }
           const trimmed = value.trim();
           if (!trimmed) return;
 
@@ -4442,7 +5707,12 @@ export default function CourseEditor({
           let node = walker.nextNode();
           let matchedElement: HTMLElement | null = null;
           while (node) {
-            if (node.textContent && node.textContent.trim() === trimmed && node.parentElement) {
+            if (
+              node.textContent &&
+              node.textContent.trim() === trimmed &&
+              node.parentElement &&
+              !claimedElements.has(node.parentElement)
+            ) {
               matchedElement = node.parentElement;
               break;
             }
@@ -4450,6 +5720,7 @@ export default function CourseEditor({
           }
           // Don't reclaim an element the header pipeline above already owns.
           if (!matchedElement || matchedElement.hasAttribute("data-preview-edit-field")) return;
+          claimedElements.add(matchedElement);
 
           matchedElement.setAttribute("data-preview-edit-enabled", "true");
           matchedElement.setAttribute("data-preview-behaviour-path", path);
@@ -4470,7 +5741,16 @@ export default function CourseEditor({
       // otherwise tell us the newly-visible item needs to become editable
       // too. Debounced via the same retry-frame ref: a transition can fire
       // a burst of mutations, so wait for them to settle before re-syncing.
-      const componentObserver = new MutationObserver(() => {
+      const componentObserver = new MutationObserver((records) => {
+        // CKEditor mutates its own DOM on focus, selection and every typed
+        // character. Those are not framework item-visibility changes. A
+        // prior broad observer treated `ck-focused` as a component change,
+        // reran this synchronizer, and immediately removed CKEditor's focus.
+        const isInsideCkEditor = (node: Node) =>
+          node instanceof Element && !!node.closest(".ck-editor");
+        if (records.length > 0 && records.every((record) => isInsideCkEditor(record.target))) {
+          return;
+        }
         // Never re-sync while the user is actively typing — e.g. a browser
         // inserting/removing a stray <br> as a contenteditable field goes
         // empty is itself a childList mutation, and re-syncing mid-edit
@@ -4489,7 +5769,11 @@ export default function CourseEditor({
         childList: true,
         subtree: true,
         attributes: true,
-        attributeFilter: ["class", "aria-expanded", "aria-selected", "aria-hidden", "hidden"],
+        // Class is too broad: both CKEditor and this selection synchronizer
+        // mutate classes as part of normal focus/rendering. The framework's
+        // actual item visibility/navigation changes expose ARIA/hidden state,
+        // which is enough to resync newly visible Accordion/Tabs/etc. items.
+        attributeFilter: ["aria-expanded", "aria-selected", "aria-hidden", "hidden"],
       });
       componentMutationObserverRef.current = componentObserver;
 
@@ -4518,6 +5802,7 @@ export default function CourseEditor({
       if (!blockHeader) return;
 
       blockHeader.classList.add("adapt-authoring-preview-inline-structured-header");
+      applyPreviewSelectionStylesRef.current();
 
       const blockFields = ensureOrderedInlineFields(blockHeader, [
         {
@@ -4594,6 +5879,7 @@ export default function CourseEditor({
       if (!articleHeader) return;
 
       articleHeader.classList.add("adapt-authoring-preview-inline-structured-header");
+      applyPreviewSelectionStylesRef.current();
 
       const articleFields = ensureOrderedInlineFields(articleHeader, [
         {
@@ -4667,6 +5953,7 @@ export default function CourseEditor({
       if (!pageHeader) return;
 
       pageHeader.classList.add("adapt-authoring-preview-inline-structured-header");
+      applyPreviewSelectionStylesRef.current();
 
       const pageFields = ensureOrderedInlineFields(pageHeader, [
         {
@@ -5415,6 +6702,151 @@ export default function CourseEditor({
     });
   }, [contentPages, navFooterCourseButtons, selectedPageId]);
 
+  // Old-tool parity (editorPageComponentView.js evaluateMove): a Content
+  // Group with exactly one left + one right (half-width) component can swap
+  // which side each one renders on. The old tool exposes this as a move
+  // arrow on EACH component's own sidebar; here it's merged into a single
+  // "Swap positions" control injected once per qualifying block, permanently
+  // visible (not hover/selection-gated) — matches old tool's move arrows,
+  // which are equally always-on while editing. Anchored to the RIGHT
+  // component's own box (absolutely positioned, see the injected stylesheet)
+  // so it always sits just above that component's own top border, aligned
+  // to its right edge — never the block header.
+  const syncSwapPositionsControls = useCallback(() => {
+    const iframe = previewFrameRef.current;
+    const doc = iframe?.contentDocument;
+    if (!doc || !selectedPageId) return;
+
+    const page = contentPages.find((candidate) => candidate.id === selectedPageId);
+    if (!page) return;
+
+    const qualifyingBlockIds = new Set<string>();
+
+    page.articles.forEach((article) => {
+      article.blocks.forEach((block) => {
+        const leftComponent = block.components.find((component) => component.layout === "left");
+        const rightComponent = block.components.find((component) => component.layout === "right");
+        if (block.components.length !== 2 || !leftComponent || !rightComponent) return;
+
+        qualifyingBlockIds.add(block.id);
+
+        const rightComponentNode = doc.querySelector(`.component[data-adapt-id="${rightComponent.id}"]`) as HTMLElement | null;
+        const rightComponentHost = (rightComponentNode?.querySelector(".component__inner") as HTMLElement | null) ?? rightComponentNode;
+        if (!rightComponentHost) return;
+
+        if (rightComponentHost.style.position !== "relative") {
+          rightComponentHost.style.position = "relative";
+        }
+
+        // Looked up by block id (not scoped to the current host) so a button
+        // created for the PREVIOUS right-hand component gets MOVED here
+        // instead of leaving a stale duplicate behind after a swap.
+        let btn = doc.querySelector<HTMLButtonElement>(
+          `[data-preview-swap-positions-btn][data-preview-swap-block-id="${block.id}"]`
+        );
+        if (!btn) {
+          btn = doc.createElement("button");
+          btn.type = "button";
+          btn.setAttribute("data-preview-swap-positions-btn", "true");
+          btn.className = "adapt-authoring-swap-positions-btn";
+          btn.textContent = "\u21c4 Swap positions";
+        }
+        // Only actually move it when it isn't already correctly placed —
+        // an unconditional insertBefore is a real DOM mutation even when
+        // it's a same-position no-op, which the MutationObserver-driven
+        // retry (below) would then react to, re-running this on every
+        // frame forever and continually resetting the browser's own
+        // :hover tracking on the button (so it could never sustain a
+        // hover, and clicks landed unreliably mid-churn).
+        if (rightComponentHost.firstChild !== btn) {
+          rightComponentHost.insertBefore(btn, rightComponentHost.firstChild);
+        }
+        btn.setAttribute("data-preview-swap-page-id", page.id);
+        btn.setAttribute("data-preview-swap-article-id", article.id);
+        btn.setAttribute("data-preview-swap-block-id", block.id);
+        btn.setAttribute("data-preview-swap-left-id", leftComponent.id);
+        btn.setAttribute("data-preview-swap-right-id", rightComponent.id);
+      });
+    });
+
+    doc.querySelectorAll("[data-preview-swap-positions-btn]").forEach((node) => {
+      const blockId = node.getAttribute("data-preview-swap-block-id");
+      if (!blockId || !qualifyingBlockIds.has(blockId)) node.remove();
+    });
+  }, [contentPages, selectedPageId]);
+
+
+  // Some component templates (e.g. assessment results) render their real
+  // DOM asynchronously well after the iframe's own load/contentPages sync —
+  // a block missing at the time this runs never gets a button, since
+  // nothing else re-triggers this sync once contentPages settles. Keeping
+  // the latest version in a ref lets a MutationObserver (installed once in
+  // handlePreviewFrameLoad, below) retry as soon as the real DOM changes,
+  // instead of only ever running once at load.
+  const syncSwapPositionsControlsRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    syncSwapPositionsControlsRef.current = syncSwapPositionsControls;
+  }, [syncSwapPositionsControls]);
+
+  // Old-tool parity (editorPasteZoneView.js showPasteZones), extended per
+  // explicit user instruction: a "Paste" bar at EVERY sibling gap in the
+  // copied node's own parent (before the first, between each, after the
+  // last) — not just immediately around the copied node — cleared entirely
+  // once clipboardEntry is null (pasted or cancelled).
+  const syncPasteZones = useCallback(() => {
+    const iframe = previewFrameRef.current;
+    const doc = iframe?.contentDocument;
+    if (!doc) return;
+
+    doc.querySelectorAll("[data-preview-paste-zone]").forEach((node) => node.remove());
+    if (!clipboardEntry) return;
+
+    const isSection = clipboardEntry.structureLevel === "section";
+    const label = isSection ? "Section" : "Content Group";
+    const parentId = isSection ? clipboardEntry.pageId : clipboardEntry.articleId;
+    if (!parentId) return;
+
+    const containerNode = isSection
+      ? doc.querySelector(`.page[data-adapt-id="${clipboardEntry.pageId}"]`)
+      : doc.querySelector(`.article[data-adapt-id="${clipboardEntry.articleId}"]`);
+    const siblingNodes = containerNode
+      ? Array.from(containerNode.querySelectorAll<Element>(isSection ? ".article" : ".block"))
+      : [];
+    if (!siblingNodes.length) return;
+
+    const makeZone = (sortOrder: number) => {
+      const zone = doc.createElement("div");
+      zone.setAttribute("data-preview-paste-zone", "true");
+      zone.className = "adapt-authoring-paste-zone";
+
+      const btn = doc.createElement("button");
+      btn.type = "button";
+      btn.setAttribute("data-preview-paste-zone-btn", "true");
+      btn.setAttribute("data-preview-paste-parent-id", parentId);
+      btn.setAttribute("data-preview-paste-sort-order", String(sortOrder));
+      btn.className = "adapt-authoring-paste-zone-btn";
+      btn.innerHTML = `${LEVEL_ACTION_COPY_ICON_SVG}<span>Paste ${label}</span>`;
+
+      const cancel = doc.createElement("button");
+      cancel.type = "button";
+      cancel.setAttribute("data-preview-paste-zone-cancel", "true");
+      cancel.className = "adapt-authoring-paste-zone-cancel";
+      cancel.textContent = "\u00d7";
+      cancel.title = "Cancel";
+
+      zone.appendChild(btn);
+      zone.appendChild(cancel);
+      return zone;
+    };
+
+    siblingNodes.forEach((node, index) => {
+      node.parentElement?.insertBefore(makeZone(index + 1), node);
+    });
+    const lastNode = siblingNodes[siblingNodes.length - 1];
+    lastNode.parentElement?.insertBefore(makeZone(siblingNodes.length + 1), lastNode.nextSibling);
+  }, [clipboardEntry]);
+
+
   const syncPreviewScrollFromLeftPanel = useCallback(() => {
     const iframe = previewFrameRef.current;
     const doc = iframe?.contentDocument;
@@ -5758,12 +7190,49 @@ export default function CourseEditor({
       hoverRafId = window.requestAnimationFrame(applyHoverState);
     };
 
+    const setSwapHoverHighlight = (swapBtn: HTMLElement, active: boolean) => {
+      const leftId = swapBtn.getAttribute("data-preview-swap-left-id");
+      const rightId = swapBtn.getAttribute("data-preview-swap-right-id");
+      [leftId, rightId].forEach((id) => {
+        if (!id) return;
+        const inner = doc.querySelector(`.component[data-adapt-id="${id}"] .component__inner`);
+        if (!inner) return;
+        inner.classList.toggle("adapt-authoring-swap-hover-highlight", active);
+        if (active) {
+          // Harmless if the real hover/active mechanism already owns this
+          // (same value); needed so the OTHER component — not the one the
+          // button itself lives inside — also shows the "Component" label.
+          inner.setAttribute("data-preview-bridge-label", "Component");
+        } else if (
+          !inner.classList.contains("adapt-authoring-preview-hover") &&
+          !inner.classList.contains("adapt-authoring-preview-active")
+        ) {
+          // Only clear it here if nothing else still needs it — the
+          // anchor component may genuinely be hover/active-managed already.
+          inner.removeAttribute("data-preview-bridge-label");
+        }
+      });
+    };
+
     const onMouseOver = (event: Event) => {
-      const state = resolvePreviewIds(event.target as Element | null);
+      const target = event.target as Element | null;
+      const swapBtn = target?.closest("[data-preview-swap-positions-btn]") as HTMLElement | null;
+      if (swapBtn) {
+        setSwapHoverHighlight(swapBtn, true);
+      }
+      const state = resolvePreviewIds(target);
       queueHoverState(state);
     };
 
     const onMouseOut = (event: MouseEvent) => {
+      const target = event.target as Element | null;
+      const swapBtn = target?.closest("[data-preview-swap-positions-btn]") as HTMLElement | null;
+      if (swapBtn) {
+        const relatedTarget = event.relatedTarget as Node | null;
+        if (!relatedTarget || !swapBtn.contains(relatedTarget)) {
+          setSwapHoverHighlight(swapBtn, false);
+        }
+      }
       const relatedTarget = event.relatedTarget as Node | null;
       if (relatedTarget && doc.contains(relatedTarget)) return;
       queueHoverState({ pageId: null, articleId: null, blockId: null, componentId: null, level: null });
@@ -5772,6 +7241,267 @@ export default function CourseEditor({
     const onClick = (event: Event) => {
       const target = event.target as Element | null;
       if (!target) return;
+
+      const swapBtn = target.closest("[data-preview-swap-positions-btn]") as HTMLElement | null;
+      if (swapBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const pageId = swapBtn.getAttribute("data-preview-swap-page-id");
+        const articleId = swapBtn.getAttribute("data-preview-swap-article-id");
+        const blockId = swapBtn.getAttribute("data-preview-swap-block-id");
+        const leftId = swapBtn.getAttribute("data-preview-swap-left-id");
+        const rightId = swapBtn.getAttribute("data-preview-swap-right-id");
+        if (pageId && articleId && blockId && leftId && rightId) {
+          // Instant, glitch-free swap: reorder/reclass the REAL DOM nodes
+          // synchronously right here (no reload, no waiting on a React
+          // re-render) — persistence to the database only happens later,
+          // on Save (see saveDraftChanges' component _layout patch).
+          const leftNode = doc.querySelector(`.component[data-adapt-id="${leftId}"]`) as HTMLElement | null;
+          const rightNode = doc.querySelector(`.component[data-adapt-id="${rightId}"]`) as HTMLElement | null;
+          if (leftNode && rightNode && leftNode.parentElement === rightNode.parentElement) {
+            leftNode.classList.remove("is-left");
+            leftNode.classList.add("is-right");
+            rightNode.classList.remove("is-right");
+            rightNode.classList.add("is-left");
+            leftNode.parentElement!.insertBefore(rightNode, leftNode);
+
+            // leftNode is now the visually-right component — move the swap
+            // control there in the same synchronous pass so it never shows
+            // pinned to the old side for even one frame.
+            const newRightHost = (leftNode.querySelector(".component__inner") as HTMLElement | null) ?? leftNode;
+            newRightHost.style.position = "relative";
+            newRightHost.insertBefore(swapBtn, newRightHost.firstChild);
+            swapBtn.setAttribute("data-preview-swap-left-id", rightId);
+            swapBtn.setAttribute("data-preview-swap-right-id", leftId);
+          }
+          handleSwapComponentPositions(pageId, articleId, blockId, leftId, rightId);
+        }
+        return;
+      }
+
+      // Copy icon (topic/section/group — see ensureLevelActionIcons).
+      const copyBtn = target.closest("[data-preview-copy-node-btn]") as HTMLElement | null;
+      if (copyBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const actionsEl = copyBtn.closest("[data-preview-level-actions]") as HTMLElement | null;
+        if (actionsEl?.getAttribute("data-preview-actions-selected") !== "true") return;
+        const level = actionsEl?.getAttribute("data-preview-action-level");
+        const pageId = actionsEl?.getAttribute("data-preview-action-page-id");
+        const articleId = actionsEl?.getAttribute("data-preview-action-article-id") ?? null;
+        const blockId = actionsEl?.getAttribute("data-preview-action-block-id") ?? null;
+        if (level === "topic" && pageId) {
+          void handleCopyTopicNode(pageId);
+        } else if ((level === "section" || level === "group") && pageId) {
+          void handleStartClipboardCopy(level, pageId, articleId, blockId);
+        }
+        return;
+      }
+
+      // Color Label icon (section/group/component) — opens the Colour Label
+      // popover anchored to the button; a swatch just marks the pending
+      // selection (see the popover-swatch branch below) — Reset/Cancel/Apply
+      // (further below) are what actually commit or dismiss it.
+      const colorLabelBtn = target.closest("[data-preview-color-label-btn]") as HTMLElement | null;
+      if (colorLabelBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        doc.querySelectorAll("[data-preview-color-label-popover]").forEach((node) => node.remove());
+        const actionsEl = colorLabelBtn.closest("[data-preview-level-actions]") as HTMLElement | null;
+        if (actionsEl?.getAttribute("data-preview-actions-selected") !== "true") return;
+        const level = actionsEl?.getAttribute("data-preview-action-level");
+        const pageId = actionsEl?.getAttribute("data-preview-action-page-id");
+        if (!level || !pageId) return;
+        const articleId = actionsEl?.getAttribute("data-preview-action-article-id") ?? null;
+        const blockId = actionsEl?.getAttribute("data-preview-action-block-id") ?? null;
+        const componentId = actionsEl?.getAttribute("data-preview-action-component-id") ?? null;
+        const currentValue = colorLabelBtn.getAttribute("data-preview-color-label-current") ?? "";
+
+        const popover = doc.createElement("div");
+        popover.setAttribute("data-preview-color-label-popover", "true");
+        popover.setAttribute("data-preview-color-label-pending", currentValue);
+        popover.className = "adapt-authoring-color-label-popover";
+
+        const title = doc.createElement("div");
+        title.className = "adapt-authoring-color-label-popover-title";
+        title.textContent = "Colour Label";
+        popover.appendChild(title);
+
+        const desc = doc.createElement("p");
+        desc.className = "adapt-authoring-color-label-popover-desc";
+        desc.innerHTML = "The colours are <strong>only</strong> applied in the authoring tool and will <strong>not</strong> affect the generated course.";
+        popover.appendChild(desc);
+
+        const grid = doc.createElement("div");
+        grid.className = "adapt-authoring-color-label-popover-grid";
+        COLOR_LABEL_VALUES.forEach((value) => {
+          const swatch = doc.createElement("button");
+          swatch.type = "button";
+          swatch.className = "adapt-authoring-color-label-swatch";
+          if (value === currentValue) swatch.classList.add("adapt-authoring-color-label-swatch--selected");
+          swatch.style.background = COLOR_LABEL_HEX[value] ?? "";
+          swatch.setAttribute("data-preview-color-label-value", value);
+          grid.appendChild(swatch);
+        });
+        popover.appendChild(grid);
+
+        const actions = doc.createElement("div");
+        actions.className = "adapt-authoring-color-label-popover-actions";
+
+        const resetBtn = doc.createElement("button");
+        resetBtn.type = "button";
+        resetBtn.setAttribute("data-preview-color-label-reset", "true");
+        resetBtn.className = "adapt-authoring-btn-secondary";
+        resetBtn.textContent = "Reset";
+        actions.appendChild(resetBtn);
+
+        const cancelBtn = doc.createElement("button");
+        cancelBtn.type = "button";
+        cancelBtn.setAttribute("data-preview-color-label-cancel", "true");
+        cancelBtn.className = "adapt-authoring-btn-secondary";
+        cancelBtn.textContent = "Cancel";
+        actions.appendChild(cancelBtn);
+
+        const applyBtn = doc.createElement("button");
+        applyBtn.type = "button";
+        applyBtn.setAttribute("data-preview-color-label-apply", "true");
+        applyBtn.className = "adapt-authoring-btn-primary";
+        applyBtn.textContent = "Apply";
+        actions.appendChild(applyBtn);
+
+        popover.appendChild(actions);
+
+        popover.setAttribute("data-preview-action-level", level);
+        popover.setAttribute("data-preview-action-page-id", pageId);
+        if (articleId) popover.setAttribute("data-preview-action-article-id", articleId);
+        if (blockId) popover.setAttribute("data-preview-action-block-id", blockId);
+        if (componentId) popover.setAttribute("data-preview-action-component-id", componentId);
+
+        doc.body.appendChild(popover);
+        const btnRect = colorLabelBtn.getBoundingClientRect();
+        const popoverRect = popover.getBoundingClientRect();
+        popover.style.top = `${btnRect.bottom + doc.defaultView!.scrollY + 4}px`;
+        popover.style.left = `${btnRect.right + doc.defaultView!.scrollX - popoverRect.width}px`;
+        return;
+      }
+
+      // A swatch inside the color-label popover — marks the pending
+      // selection only; Apply (below) is what actually commits it.
+      const swatchBtn = target.closest("[data-preview-color-label-value]") as HTMLElement | null;
+      if (swatchBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const popover = swatchBtn.closest("[data-preview-color-label-popover]") as HTMLElement | null;
+        if (!popover) return;
+        const value = swatchBtn.getAttribute("data-preview-color-label-value") ?? "";
+        popover.setAttribute("data-preview-color-label-pending", value);
+        popover.querySelectorAll("[data-preview-color-label-value]").forEach((node) => {
+          node.classList.toggle("adapt-authoring-color-label-swatch--selected", node === swatchBtn);
+        });
+        return;
+      }
+
+      const applyColorLabelBtn = target.closest("[data-preview-color-label-apply]") as HTMLElement | null;
+      const resetColorLabelBtn = target.closest("[data-preview-color-label-reset]") as HTMLElement | null;
+      const cancelColorLabelBtn = target.closest("[data-preview-color-label-cancel]") as HTMLElement | null;
+      if (applyColorLabelBtn || resetColorLabelBtn || cancelColorLabelBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const popover = target.closest("[data-preview-color-label-popover]") as HTMLElement | null;
+        const level = popover?.getAttribute("data-preview-action-level");
+        const pageId = popover?.getAttribute("data-preview-action-page-id");
+        const articleId = popover?.getAttribute("data-preview-action-article-id") ?? null;
+        const blockId = popover?.getAttribute("data-preview-action-block-id") ?? null;
+        const componentId = popover?.getAttribute("data-preview-action-component-id") ?? null;
+        const value = resetColorLabelBtn ? "" : (popover?.getAttribute("data-preview-color-label-pending") ?? "");
+        popover?.remove();
+        if (!cancelColorLabelBtn && (level === "section" || level === "group" || level === "component") && pageId) {
+          handleSetColorLabel(level, pageId, articleId, blockId, componentId, value);
+        }
+        return;
+      }
+
+      // Paste zone buttons (Section/Content Group Copy — one at every
+      // sibling gap, see syncPasteZones).
+      const pasteBtn = target.closest("[data-preview-paste-zone-btn]") as HTMLElement | null;
+      if (pasteBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const parentId = pasteBtn.getAttribute("data-preview-paste-parent-id");
+        const sortOrder = Number(pasteBtn.getAttribute("data-preview-paste-sort-order"));
+        if (parentId && Number.isFinite(sortOrder)) {
+          void handlePasteFromClipboard(parentId, sortOrder);
+        }
+        return;
+      }
+      const pasteCancelBtn = target.closest("[data-preview-paste-zone-cancel]") as HTMLElement | null;
+      if (pasteCancelBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        handleCancelClipboardCopy();
+        return;
+      }
+
+      // Any other click closes an open color-label popover (outside click).
+      if (!target.closest("[data-preview-color-label-popover]")) {
+        doc.querySelectorAll("[data-preview-color-label-popover]").forEach((node) => node.remove());
+      }
+
+      // Any other click cancels a pending clipboard copy (paste zones stay
+      // up only until the user picks a slot, hits X, or clicks elsewhere) —
+      // the click itself still continues normally (e.g. selecting a
+      // different node), only the pending copy/paste is dropped.
+      if (clipboardEntryRef.current) {
+        setClipboardEntry(null);
+      }
+
+      // CKEditor owns its toolbar, selection, focus, and editable surface.
+      // Its instance exists only for the currently selected node, so this is
+      // never a selection gesture; cancelling this capture-phase click was
+      // preventing component-body text from accepting a cursor or typing.
+      if (target.closest(".ck-editor")) return;
+
+      // Real MCQ/Checklist/etc. item templates give each option a native
+      // checkbox/radio <input> ABSOLUTELY POSITIONED to cover the entire
+      // clickable row (label + text), so a genuine click's hit-test target
+      // is this <input> directly — the click event never actually bubbles
+      // through the item's own text node at all. Because of that, the
+      // <label>-based fix above (which only fires when an editable overlay
+      // IS the click target) never engages for this — the real click target
+      // is the sibling input, not our contenteditable text. Handle it
+      // separately here: if this input's OWN item row already has an
+      // editable overlay field (i.e. this item's text is already the
+      // currently-selected component's editable field), block the native
+      // checkbox/radio toggle and move focus there ourselves instead.
+      // Bounded ancestor walk (not a single parentElement hop) because some
+      // components nest the input one level deeper than others; stops at
+      // the first match so it can only ever find THIS item's own field,
+      // never a different sibling item's.
+      if (target.matches('input[type="checkbox"], input[type="radio"]')) {
+        let container: Element | null = target.parentElement;
+        let siblingEditableField: HTMLElement | null = null;
+        for (let depth = 0; depth < 4 && container && !siblingEditableField; depth += 1) {
+          siblingEditableField = container.querySelector("[data-preview-edit-enabled='true']");
+          container = container.parentElement;
+        }
+        if (siblingEditableField) {
+          // preventDefault alone stops the BROWSER's native checkbox/radio
+          // toggle, but MCQ (a React-rendered component) still separately
+          // fires its own React onChange from this same click regardless
+          // of defaultPrevented (React uses 'click' purely as a change-
+          // detection heuristic for checkbox/radio inputs, independent of
+          // whether the native default actually ran) — that still flips
+          // the model's _isActive and re-renders the controlled `checked`
+          // prop. stopPropagation during this CAPTURE-phase listener (see
+          // doc.addEventListener(..., true) below) stops the event from
+          // ever reaching React's own root-level listener at all, so its
+          // onChange never fires in the first place.
+          event.preventDefault();
+          event.stopPropagation();
+          siblingEditableField.focus();
+          return;
+        }
+      }
 
       const clickedSelectableRegion = target.closest(
         ".page__header-inner, .page__inner, .article__header-inner, .article__inner, .block__header-inner, .block__inner, .component__inner, .menu[data-adapt-id]"
@@ -5804,28 +7534,134 @@ export default function CourseEditor({
       // framework's narrative/accordion/tabs navigation keeps working while
       // a component is selected, instead of every click being swallowed by
       // selection handling.
-      const isEditableOverlayTarget = !!target.closest("[data-preview-edit-enabled='true']");
+      // A click landing on the empty/padding area of an item's <label>
+      // (icon column, right-hand whitespace, ...) hits the LABEL itself as
+      // target, never the editable text span it wraps — target.closest()
+      // only ever walks UP, so it can't see that DESCENDANT field. Also
+      // check the label's own bounded contents (mirrors the checkbox/radio
+      // branch's ancestor walk below) so the whole label counts as an
+      // editable overlay target, not just the exact text node's own box.
+      const editableOverlayAncestor = target.closest("[data-preview-edit-enabled='true']");
+      const containingLabel = target.closest("label");
+      const editableOverlayInLabel = !editableOverlayAncestor && containingLabel
+        ? containingLabel.querySelector("[data-preview-edit-enabled='true']")
+        : null;
+      const isEditableOverlayTarget = !!(editableOverlayAncestor || editableOverlayInLabel);
       const isInteractiveControl =
         !isEditableOverlayTarget &&
         !!target.closest('button, [role="button"], [role="tab"], [class*="js-"], a[href], input, select, textarea, summary, [aria-expanded]');
 
-      if (!isInteractiveControl) {
+      // An editable overlay field (e.g. an MCQ/Checklist option's text) is
+      // frequently nested inside a <label> the real component template
+      // associates with its own hidden checkbox/radio <input> (the item's
+      // actual selection control) via htmlFor. Clicking anywhere in that
+      // label is native browser behavior that focuses + toggles that
+      // control, firing the framework's own 'change' handler (e.g.
+      // checklistView's onItemSelect) — completely independent of our own
+      // click handling below and NOT something stopPropagation touches.
+      // Left alone, that native focus-steal is why an editable option's
+      // text visibly "enters edit mode" (our contenteditable/cursor
+      // affordance appears for an instant) and then immediately reverts
+      // (real focus actually lands on the sibling input, not our
+      // contenteditable span, so it blurs right back out). Blocking only
+      // the DEFAULT action here (not propagation) stops that native
+      // toggle/focus-steal while leaving caret placement in the
+      // contenteditable span untouched (that's driven by mousedown, not
+      // this click's default action) and leaving every other real
+      // interactive control (accordion/narrative headers, nav buttons —
+      // anything NOT wrapped as one of our own editable overlays) exactly
+      // as before.
+      if (isEditableOverlayTarget && target.closest("label")) {
+        event.preventDefault();
+      }
+
+      // A click that lands in the label's own empty space (padding, icon
+      // column, whitespace past the end of the text — never actually on
+      // the editable field element itself) has no glyph under the pointer
+      // for the browser's own mousedown-time caret placement to resolve
+      // against, so nothing gets focused at all once the native
+      // label-activates-its-input default above is blocked. Explicitly
+      // focus the field and collapse the caret to its end (matching a
+      // real text editor's "clicked past the last character" behavior)
+      // instead of leaving the click with no effect.
+      if (editableOverlayInLabel) {
+        const editableField = editableOverlayInLabel as HTMLElement;
+        const fieldWindow = doc.defaultView;
+        editableField.focus();
+        // Focusing a contenteditable also schedules the browser's OWN
+        // default "collapse to start" caret placement — setting the range
+        // synchronously right after focus() gets silently clobbered by
+        // that default a moment later. Deferring to the next frame lets
+        // our placement win instead.
+        fieldWindow?.requestAnimationFrame(() => {
+          const range = doc.createRange();
+          // Collapse to the END OF THE LAST TEXT NODE specifically (not
+          // just selectNodeContents+collapse(false) on the wrapper
+          // element, which anchors the range's container/offset in
+          // CHILD-NODE units and can render with no visible caret at all
+          // for a single-text-node field) so the caret reliably renders
+          // right after the last real character.
+          const lastTextNode = (() => {
+            const walker = doc.createTreeWalker(editableField, NodeFilter.SHOW_TEXT);
+            let last: Text | null = null;
+            let current = walker.nextNode();
+            while (current) {
+              last = current as Text;
+              current = walker.nextNode();
+            }
+            return last;
+          })();
+          if (lastTextNode) {
+            range.setStart(lastTextNode, lastTextNode.length);
+            range.setEnd(lastTextNode, lastTextNode.length);
+          } else {
+            range.selectNodeContents(editableField);
+            range.collapse(false);
+          }
+          const fieldSelection = fieldWindow.getSelection();
+          fieldSelection?.removeAllRanges();
+          fieldSelection?.addRange(range);
+        });
+      }
+
+      // Plain inline fields and CKEditor must keep the browser's default
+      // click/focus behavior. Previously this also matched our own editable
+      // targets and called preventDefault in capture phase, which blocked
+      // caret placement most visibly inside component headers/items.
+      if (!isInteractiveControl && !isEditableOverlayTarget) {
         event.preventDefault();
         event.stopPropagation();
       }
 
-      // Clicking a header field (title/subtitle/body/instruction) to edit
-      // it should always reveal the General accordion it lives in — but
-      // merged in, never replacing whatever else the user already has
-      // open. Clicking anywhere else in an already-selected node must leave
-      // accordion state completely untouched (see the selection handlers'
-      // isSameSelection guards below).
-      if (target.closest("[data-preview-edit-field]")) {
+      // Preserve the right-panel accordion exactly as-is when an editable
+      // field is clicked inside the node already selected. The editor is
+      // often opened specifically to compare its live canvas value against
+      // an expanded Theme/Behaviour/etc. accordion; forcing General open
+      // here used to discard that context. A genuinely different deepest
+      // selection retains the existing fresh-selection behaviour below.
+      const currentSelection = liveSelectionRef.current;
+      const isSameCanvasSelection = componentId && blockId && articleId && pageId
+        ? currentSelection.selectedComponentId === componentId && currentSelection.selectedBlockId === blockId && currentSelection.selectedArticleId === articleId && currentSelection.selectedPageId === pageId
+        : blockId && articleId && pageId
+          ? currentSelection.selectedBlockId === blockId && currentSelection.selectedArticleId === articleId && currentSelection.selectedPageId === pageId && !currentSelection.selectedComponentId
+          : articleId && pageId
+            ? currentSelection.selectedArticleId === articleId && currentSelection.selectedPageId === pageId && !currentSelection.selectedBlockId && !currentSelection.selectedComponentId
+            : pageId
+              ? currentSelection.selectedPageId === pageId && !currentSelection.selectedArticleId && !currentSelection.selectedBlockId && !currentSelection.selectedComponentId && !currentSelection.menuSelected
+              : false;
+      if (target.closest("[data-preview-edit-field]") && !isSameCanvasSelection) {
         if (componentId) setOpenComponentAccordions((prev) => ({ ...prev, general: true }));
         else if (blockId) setOpenBlockAccordions((prev) => ({ ...prev, general: true }));
         else if (articleId) setOpenSectionAccordions((prev) => ({ ...prev, general: true }));
         else if (pageId) setOpenTopicAccordions((prev) => ({ ...prev, general: true }));
       }
+
+      // The iframe listener is installed at iframe load and its selection
+      // handler closures can be older than current React state. For an
+      // already selected node, there is no selection work to do at all;
+      // returning here keeps right-panel accordions stable and lets the
+      // target's own native editing behavior proceed unmodified.
+      if (isSameCanvasSelection) return;
 
       if (componentId && blockId && articleId && pageId) {
         handleSelectComponent(pageId, articleId, blockId, componentId, "preview");
@@ -5920,7 +7756,8 @@ export default function CourseEditor({
         const blockId = target.getAttribute("data-preview-block-id");
         const componentId = target.getAttribute("data-preview-component-id");
         if (pageId && articleId && blockId && componentId) {
-          updateComponentBehaviourProperty(pageId, articleId, blockId, componentId, behaviourPath, target.textContent || "");
+          const value = behaviourPath.endsWith(".body") ? target.innerHTML : target.textContent || "";
+          updateComponentBehaviourProperty(pageId, articleId, blockId, componentId, behaviourPath, value);
         }
         return;
       }
@@ -6220,12 +8057,33 @@ export default function CourseEditor({
     syncPreviewInlineEditors();
     syncPreviewTopicSettings();
     syncNavigationFooterPreview();
+    syncSwapPositionsControls();
+    syncPasteZones();
     syncPreviewScrollFromLeftPanel();
+
+    // Retries syncSwapPositionsControls whenever the real framework DOM
+    // changes on its own (e.g. an assessment-results component finishing an
+    // async render well after this effect's own initial pass) — the qualifying
+    // block's own contentPages data never changes in that case, so nothing
+    // else would otherwise prompt a second attempt.
+    let swapObserverRafId: number | null = null;
+    const swapPositionsObserver = new MutationObserver(() => {
+      if (swapObserverRafId !== null) return;
+      swapObserverRafId = window.requestAnimationFrame(() => {
+        swapObserverRafId = null;
+        syncSwapPositionsControlsRef.current();
+      });
+    });
+    swapPositionsObserver.observe(doc.body, { childList: true, subtree: true });
 
     cleanupPreviewListenersRef.current = () => {
       if (hoverRafId !== null) {
         window.cancelAnimationFrame(hoverRafId);
       }
+      if (swapObserverRafId !== null) {
+        window.cancelAnimationFrame(swapObserverRafId);
+      }
+      swapPositionsObserver.disconnect();
       cancelTitleAutoRevert();
       doc.removeEventListener("mouseover", onMouseOver);
       doc.removeEventListener("mouseout", onMouseOut);
@@ -6245,9 +8103,17 @@ export default function CourseEditor({
     handleMenuSelect,
     handlePageSelect,
     handleSelectComponent,
+    handleSwapComponentPositions,
+    handleCopyTopicNode,
+    handleStartClipboardCopy,
+    handleCancelClipboardCopy,
+    handlePasteFromClipboard,
+    handleSetColorLabel,
     syncPreviewInlineEditors,
     syncPreviewTopicSettings,
     syncNavigationFooterPreview,
+    syncSwapPositionsControls,
+    syncPasteZones,
     syncPreviewScrollFromLeftPanel,
     contentPages,
   ]);
@@ -6255,6 +8121,14 @@ export default function CourseEditor({
   useEffect(() => {
     applyPreviewSelectionStyles();
   }, [applyPreviewSelectionStyles]);
+
+  useEffect(() => {
+    syncSwapPositionsControls();
+  }, [syncSwapPositionsControls]);
+
+  useEffect(() => {
+    syncPasteZones();
+  }, [syncPasteZones]);
 
   // Defensive reset: canvasTitleLiveOverride is a single shared value (only
   // one node's title can ever be live-edited at once), cleared on blur —
@@ -6837,6 +8711,30 @@ export default function CourseEditor({
     setDirtyNodeKeys((prev) => ({ ...prev, [`topic:${pageId}`]: true }));
   }
 
+  // Schema-driven check mirroring the old tool's schemas.js `trimDisabledPlugins`:
+  // a Theme/Menu settings field should only render if the CURRENTLY APPLIED
+  // theme/menu's own schema (matched by its bower package `name`, e.g.
+  // "adapt-contrib-vanilla") actually declares that field at this level -
+  // e.g. Vanilla has no `_blockColors`/`_componentColors`, so those settings
+  // groups must not appear when Vanilla is the applied theme. Fails "open"
+  // (renders the field) if the schema hasn't loaded yet or no matching
+  // plugin entry is found, so nothing regresses while data is in flight.
+  function isThemeFieldSupported(level: ExtensionSchemaLevel, fieldKey: string): boolean {
+    const levelSchemas = themeSettingsSchemaByLevel?.[level];
+    if (!levelSchemas) return true;
+    const fields = findAppliedPluginSchemaFields(levelSchemas, courseTheme);
+    if (!fields) return true;
+    return Object.prototype.hasOwnProperty.call(fields, fieldKey);
+  }
+
+  function isMenuFieldSupported(level: ExtensionSchemaLevel, fieldKey: string): boolean {
+    const levelSchemas = menuSettingsSchemaByLevel?.[level];
+    if (!levelSchemas) return true;
+    const fields = findAppliedPluginSchemaFields(levelSchemas, courseMenu);
+    if (!fields) return true;
+    return Object.prototype.hasOwnProperty.call(fields, fieldKey);
+  }
+
   function resolveThemeSettingsKey(settings: Record<string, unknown>) {
     const normalizedThemeName = courseTheme.toLowerCase();
     const preferredKey = normalizedThemeName.includes("custom")
@@ -6909,6 +8807,53 @@ export default function CourseEditor({
 
     const key = resolveMenuSettingsKey(settings);
     return asRecord(settings[key]) as TopicMenuSettings;
+  }
+
+  // Deep-merges plugin schema defaults under stored values: an unset leaf
+  // (undefined/null/"") falls back to the theme/menu's own schema `default`,
+  // matching the old tool's Backbone Forms scaffolding (a field always shows
+  // its schema default until the author explicitly overrides it). Booleans
+  // and non-empty values are never clobbered.
+  function deepMergeSchemaDefaults<T>(defaults: Record<string, unknown>, values: Record<string, unknown>): T {
+    const out: Record<string, unknown> = { ...values };
+    for (const key of Object.keys(defaults)) {
+      const defaultVal = defaults[key];
+      const storedVal = values[key];
+      if (defaultVal && typeof defaultVal === "object" && !Array.isArray(defaultVal)) {
+        const storedObj = storedVal && typeof storedVal === "object" && !Array.isArray(storedVal) ? (storedVal as Record<string, unknown>) : {};
+        out[key] = deepMergeSchemaDefaults(defaultVal as Record<string, unknown>, storedObj);
+      } else if (storedVal === undefined || storedVal === null || storedVal === "") {
+        out[key] = defaultVal;
+      }
+    }
+    return out as T;
+  }
+
+  function getThemeSchemaDefaultsForLevel(level: ExtensionSchemaLevel): Record<string, unknown> {
+    const fields = findAppliedPluginSchemaFields(themeSettingsSchemaByLevel?.[level], courseTheme);
+    return fields ? buildSchemaDefaults(fields) : {};
+  }
+
+  function getMenuSchemaDefaultsForLevel(level: ExtensionSchemaLevel): Record<string, unknown> {
+    const fields = findAppliedPluginSchemaFields(menuSettingsSchemaByLevel?.[level], courseMenu);
+    return fields ? buildSchemaDefaults(fields) : {};
+  }
+
+  // Right-panel display variants: same resolution as getActiveThemeSettings/
+  // getActiveMenuSettings, but with the applied theme/menu's schema defaults
+  // filled in for any unset field, so plugin defaults match the old tool
+  // exactly. Only used for panel reads — live-preview sync keeps reading the
+  // raw stored value so the preview never shows an un-saved implied value.
+  function getActiveThemeSettingsWithDefaults(settingsValue: unknown, level: ExtensionSchemaLevel): TopicThemeSettings {
+    const active = getActiveThemeSettings(settingsValue);
+    const defaults = getThemeSchemaDefaultsForLevel(level);
+    return deepMergeSchemaDefaults<TopicThemeSettings>(defaults, active as Record<string, unknown>);
+  }
+
+  function getActiveMenuSettingsWithDefaults(settingsValue: unknown, level: ExtensionSchemaLevel): TopicMenuSettings {
+    const active = getActiveMenuSettings(settingsValue);
+    const defaults = getMenuSchemaDefaultsForLevel(level);
+    return deepMergeSchemaDefaults<TopicMenuSettings>(defaults, active as Record<string, unknown>);
   }
 
   function updatePageThemeSettings(pageId: string, updater: (current: TopicThemeSettings) => TopicThemeSettings) {
@@ -7408,6 +9353,143 @@ export default function CourseEditor({
     }
   }
 
+  // Old-tool parity (editorPageComponentView.js evaluateMove): swap which
+  // side each of a Content Group's two half-width components renders on.
+  // The real canvas DOM is already swapped instantly by the click handler
+  // above. Old tool persists a move immediately (no separate Save step) —
+  // matched here via a background PUT for each component, WITHOUT any
+  // structure reload (loadStructureFromDatabase would re-fetch and re-mount
+  // the whole iframe, causing the exact refresh/flash this is meant to avoid).
+  function handleSwapComponentPositions(
+    pageId: string,
+    articleId: string,
+    blockId: string,
+    leftComponentId: string,
+    rightComponentId: string
+  ) {
+    setContentPages((previousPages) =>
+      previousPages.map((p) =>
+        p.id === pageId
+          ? {
+              ...p,
+              articles: p.articles.map((a) =>
+                a.id === articleId
+                  ? {
+                      ...a,
+                      blocks: a.blocks.map((b) =>
+                        b.id === blockId
+                          ? {
+                              ...b,
+                              components: b.components.map((c) => {
+                                if (c.id === leftComponentId) return { ...c, layout: "right" as const };
+                                if (c.id === rightComponentId) return { ...c, layout: "left" as const };
+                                return c;
+                              }),
+                            }
+                          : b
+                      ),
+                    }
+                  : a
+              ),
+            }
+          : p
+      )
+    );
+    void Promise.all([
+      updateComponentLayout(leftComponentId, "right"),
+      updateComponentLayout(rightComponentId, "left"),
+    ]).catch((error) => {
+      console.error("Failed to save swapped component positions", error);
+    });
+  }
+
+  // Old-tool parity (editorOriginView.js onCopy -> editorView.js
+  // addToClipboard): Topic pastes immediately at the end of the page list
+  // (no separate paste-zone step, per explicit user instruction).
+  async function handleCopyTopicNode(pageId: string) {
+    try {
+      const newId = await copyStructureNodeViaClipboard("topic", pageId, courseId, courseId, contentPagesRef.current.length + 1);
+      await loadStructureFromDatabase({ pageId: newId });
+    } catch (error) {
+      console.error("Failed to copy topic", error);
+    }
+  }
+
+  // Section/Content Group: only the clipboard-COPY step happens here —
+  // pasting is deferred until the user picks a "Paste" zone (syncPasteZones,
+  // one at every sibling gap within the copied node's own parent) or
+  // cancels via an X / clicking elsewhere.
+  async function handleStartClipboardCopy(
+    level: "section" | "group",
+    pageId: string,
+    articleId: string | null,
+    blockId: string | null
+  ) {
+    try {
+      if (level === "section") {
+        if (!articleId) return;
+        const clipboardId = await copyStructureNodeToClipboard("section", articleId, courseId);
+        setClipboardEntry({ clipboardId, structureLevel: "section", pageId, articleId: null });
+      } else {
+        if (!articleId || !blockId) return;
+        const clipboardId = await copyStructureNodeToClipboard("contentGroup", blockId, courseId);
+        setClipboardEntry({ clipboardId, structureLevel: "contentGroup", pageId, articleId });
+      }
+    } catch (error) {
+      console.error("Failed to copy", error);
+    }
+  }
+
+  function handleCancelClipboardCopy() {
+    setClipboardEntry(null);
+  }
+
+  async function handlePasteFromClipboard(parentId: string, sortOrder: number) {
+    const entry = clipboardEntryRef.current;
+    if (!entry) return;
+    setClipboardEntry(null);
+    try {
+      const newId = await pasteStructureNodeFromClipboard(entry.clipboardId, courseId, parentId, sortOrder);
+      if (entry.structureLevel === "section") {
+        await loadStructureFromDatabase({ pageId: entry.pageId, articleId: newId });
+      } else {
+        await loadStructureFromDatabase({ pageId: entry.pageId, articleId: entry.articleId, blockId: newId });
+      }
+    } catch (error) {
+      console.error("Failed to paste", error);
+    }
+  }
+
+  // Old-tool parity (colorLabelPopupView.js addItem/onReset): immediate
+  // persist, matching every other canvas-driven edit in this file.
+  function handleSetColorLabel(
+    level: "section" | "group" | "component",
+    pageId: string,
+    articleId: string | null,
+    blockId: string | null,
+    componentId: string | null,
+    value: string
+  ) {
+    if (level === "section" && articleId) {
+      updateArticle(pageId, articleId, { colorLabel: value });
+      void updateStructureNode("section", articleId, { _colorLabel: value }).catch((error) => {
+        console.error("Failed to save color label", error);
+      });
+    } else if (level === "group" && articleId && blockId) {
+      updateBlock(pageId, articleId, blockId, { colorLabel: value });
+      void updateStructureNode("contentGroup", blockId, { _colorLabel: value }).catch((error) => {
+        console.error("Failed to save color label", error);
+      });
+    } else if (level === "component" && articleId && blockId && componentId) {
+      updateComponent(pageId, articleId, blockId, componentId, { colorLabel: value });
+      void updateStructureNode("component", componentId, { _colorLabel: value }).catch((error) => {
+        console.error("Failed to save color label", error);
+      });
+    }
+    window.requestAnimationFrame(() => applyPreviewSelectionStylesRef.current());
+  }
+
+
   function updateComponent(pageId: string, articleId: string, blockId: string, componentId: string, patch: Partial<ComponentData>) {
     setContentPages((previousPages) =>
       previousPages.map((p) =>
@@ -7652,6 +9734,7 @@ export default function CourseEditor({
             _isVisible: article.isVisible,
             _requireCompletionOf: isNaN(Number(article.requireCompletionOf)) ? -1 : Number(article.requireCompletionOf),
             _classes: article.classes,
+            _colorLabel: article.colorLabel,
             _onScreen: {
               _isEnabled: !!article.onScreen?._isEnabled,
               _classes: article.onScreen?._classes || "",
@@ -7684,6 +9767,7 @@ export default function CourseEditor({
             _isVisible: block.isVisible,
             _requireCompletionOf: isNaN(Number(block.requireCompletionOf)) ? -1 : Number(block.requireCompletionOf),
             _classes: block.classes,
+            _colorLabel: block.colorLabel,
             _onScreen: {
               _isEnabled: !!block.onScreen?._isEnabled,
               _classes: block.onScreen?._classes || "",
@@ -7727,12 +9811,17 @@ export default function CourseEditor({
             description: settings.description ?? "",
             instruction: instructionValue,
             themeSettings: component.themeSettings ?? {},
+            // Persists a Swap positions click (handleSwapComponentPositions
+            // only updates local draft state; this is what writes it to
+            // the database, same as every other canvas edit).
+            ...(component.layout ? { _layout: component.layout } : {}),
             properties: {
               ...existingProperties,
               instruction: instructionValue,
               ...(subtitleValue !== undefined ? { subtitle: subtitleValue } : {}),
             },
             _classes: component.classes,
+            _colorLabel: component.colorLabel,
             _isOptional: component.isOptional,
             _isAvailable: component.isAvailable,
             _isHidden: component.isHidden,
@@ -8431,7 +10520,7 @@ export default function CourseEditor({
                       />
                     </button>
                     {activeLevel === "page" && page && (() => {
-                      const themeSettings = getActiveThemeSettings(page.themeSettings);
+                      const themeSettings = getActiveThemeSettingsWithDefaults(page.themeSettings, "contentobject");
                       const pageBackgroundImage = asRecord(themeSettings._backgroundImage);
                       const pageBackgroundStyles = asRecord(themeSettings._backgroundStyles);
                       const responsiveClasses = asRecord(themeSettings._responsiveClasses);
@@ -8442,7 +10531,7 @@ export default function CourseEditor({
                       const pageHeaderBackgroundStyles = asRecord(pageHeader._backgroundStyles);
                       const pageHeaderMinimumHeights = asRecord(pageHeader._minimumHeights);
 
-                      const menuSettings = getActiveMenuSettings(page.menuSettings);
+                      const menuSettings = getActiveMenuSettingsWithDefaults(page.menuSettings, "contentobject");
                       const menuGraphic = asRecord(menuSettings._graphic);
                       const menuBackgroundImage = asRecord(menuSettings._backgroundImage);
                       const menuBackgroundStyles = asRecord(menuSettings._backgroundStyles);
@@ -8698,57 +10787,77 @@ export default function CourseEditor({
                           </TopicAccordion>
 
                           <TopicAccordion title="Menu Appearance" open={!!openTopicAccordions.menu} onToggle={(triggerEl) => toggleTopicAccordion("menu", triggerEl)}>
-                            <TopicAssetField
-                              resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl}
-                              label="Menu graphic"
-                              compact
-                              value={asString(menuGraphic._src)}
-                              onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuGraphic" })}
-                              onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuGraphic" }, initialValue: asString(menuGraphic._src), title: "Menu graphic" })}
-                              onClear={() => clearTopicAssetSelection(page.id, { scope: "menuGraphic" })}
-                            />
-                            <TopicTextInput label="Alternative text" value={asString(menuGraphic.alt)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _graphic: { ...asRecord(current._graphic), alt: value } }))} />
-                            <TopicCheckbox label="Skip submenu view" checked={asBoolean(menuSettings._skipSubmenuView)} onChange={(checked) => updatePageMenuSettings(page.id, (current) => ({ ...current, _skipSubmenuView: checked }))} />
-                            <TopicTextInput label="Locked notification text" value={asString(menuSettings.lockedNotification)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, lockedNotification: value }))} />
+                            {/* _graphic/_skipSubmenuView/lockedNotification only exist on the
+                                course-level menu schema, never at the page (contentobject) level. */}
+                            {isMenuFieldSupported("contentobject", "_graphic") && (
+                              <>
+                                <TopicAssetField
+                                  resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl}
+                                  label="Menu graphic"
+                                  compact
+                                  value={asString(menuGraphic._src)}
+                                  onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuGraphic" })}
+                                  onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuGraphic" }, initialValue: asString(menuGraphic._src), title: "Menu graphic" })}
+                                  onClear={() => clearTopicAssetSelection(page.id, { scope: "menuGraphic" })}
+                                />
+                                <TopicTextInput label="Alternative text" value={asString(menuGraphic.alt)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _graphic: { ...asRecord(current._graphic), alt: value } }))} />
+                              </>
+                            )}
+                            {isMenuFieldSupported("contentobject", "_skipSubmenuView") && (
+                              <TopicCheckbox label="Skip submenu view" checked={asBoolean(menuSettings._skipSubmenuView)} onChange={(checked) => updatePageMenuSettings(page.id, (current) => ({ ...current, _skipSubmenuView: checked }))} />
+                            )}
+                            {isMenuFieldSupported("contentobject", "lockedNotification") && (
+                              <TopicTextInput label="Locked notification text" value={asString(menuSettings.lockedNotification)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, lockedNotification: value }))} />
+                            )}
 
-                            <div className="flex flex-col gap-1.5">
-                              <div className="text-[13px] font-semibold text-[var(--life-base-black)]">Menu background image</div>
-                              <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(menuBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuBackground", bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuBackground", bp: "_xlarge" }, initialValue: asString(menuBackgroundImage._xlarge), title: "Menu background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuBackground", bp: "_xlarge" })} />
-                              <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(menuBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuBackground", bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuBackground", bp: "_large" }, initialValue: asString(menuBackgroundImage._large), title: "Menu background image (_large)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuBackground", bp: "_large" })} />
-                              <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(menuBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuBackground", bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuBackground", bp: "_medium" }, initialValue: asString(menuBackgroundImage._medium), title: "Menu background image (_medium)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuBackground", bp: "_medium" })} />
-                              <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(menuBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuBackground", bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuBackground", bp: "_small" }, initialValue: asString(menuBackgroundImage._small), title: "Menu background image (_small)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuBackground", bp: "_small" })} />
-                            </div>
-                            <TopicNestedAccordion title="Menu background image styles">
-                              <TopicSelect label={BG_REPEAT_LABEL} value={asString(menuBackgroundStyles._backgroundRepeat)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundRepeat: value } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
-                              <TopicSelect label={BG_SIZE_LABEL} value={asString(menuBackgroundStyles._backgroundSize)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundSize: value } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
-                              <TopicSelect label={BG_POSITION_LABEL} value={asString(menuBackgroundStyles._backgroundPosition)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundPosition: value } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
-                            </TopicNestedAccordion>
+                            {/* _backgroundImage/_backgroundStyles: not declared for Box Menu at page level. */}
+                            {isMenuFieldSupported("contentobject", "_backgroundImage") && (
+                              <div className="flex flex-col gap-1.5">
+                                <div className="text-[13px] font-semibold text-[var(--life-base-black)]">Menu background image</div>
+                                <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(menuBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuBackground", bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuBackground", bp: "_xlarge" }, initialValue: asString(menuBackgroundImage._xlarge), title: "Menu background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuBackground", bp: "_xlarge" })} />
+                                <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(menuBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuBackground", bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuBackground", bp: "_large" }, initialValue: asString(menuBackgroundImage._large), title: "Menu background image (_large)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuBackground", bp: "_large" })} />
+                                <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(menuBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuBackground", bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuBackground", bp: "_medium" }, initialValue: asString(menuBackgroundImage._medium), title: "Menu background image (_medium)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuBackground", bp: "_medium" })} />
+                                <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(menuBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuBackground", bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuBackground", bp: "_small" }, initialValue: asString(menuBackgroundImage._small), title: "Menu background image (_small)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuBackground", bp: "_small" })} />
+                              </div>
+                            )}
+                            {isMenuFieldSupported("contentobject", "_backgroundStyles") && (
+                              <TopicNestedAccordion title="Menu background image styles">
+                                <TopicSelect label={BG_REPEAT_LABEL} value={asString(menuBackgroundStyles._backgroundRepeat)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundRepeat: value } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
+                                <TopicSelect label={BG_SIZE_LABEL} value={asString(menuBackgroundStyles._backgroundSize)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundSize: value } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
+                                <TopicSelect label={BG_POSITION_LABEL} value={asString(menuBackgroundStyles._backgroundPosition)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundPosition: value } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
+                              </TopicNestedAccordion>
+                            )}
 
-                            <TopicCheckbox label="Display image above menu header" checked={asBoolean(menuHeader._displayAboveHeader)} onChange={(checked) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _displayAboveHeader: checked } }))} />
-                            <TopicSelect label="Title alignment" value={asString(menuHeaderTextAlignment._title)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _textAlignment: { ...asRecord(asRecord(current._menuHeader)._textAlignment), _title: value } } }))} options={TEXT_ALIGN_OPTIONS} />
-                            {showMenuSubtitleAlignment ? <TopicSelect label="Subtitle alignment" value={asString(menuHeaderTextAlignment._subtitle)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _textAlignment: { ...asRecord(asRecord(current._menuHeader)._textAlignment), _subtitle: value } } }))} options={TEXT_ALIGN_OPTIONS} /> : null}
-                            <TopicSelect label="Body alignment" value={asString(menuHeaderTextAlignment._body)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _textAlignment: { ...asRecord(asRecord(current._menuHeader)._textAlignment), _body: value } } }))} options={TEXT_ALIGN_OPTIONS} />
-                            <TopicSelect label="Instruction alignment" value={asString(menuHeaderTextAlignment._instruction)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _textAlignment: { ...asRecord(asRecord(current._menuHeader)._textAlignment), _instruction: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                            {/* _menuHeader: not declared for Box Menu at page level. */}
+                            {isMenuFieldSupported("contentobject", "_menuHeader") && (
+                              <>
+                                <TopicCheckbox label="Display image above menu header" checked={asBoolean(menuHeader._displayAboveHeader)} onChange={(checked) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _displayAboveHeader: checked } }))} />
+                                <TopicSelect label="Title alignment" value={asString(menuHeaderTextAlignment._title)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _textAlignment: { ...asRecord(asRecord(current._menuHeader)._textAlignment), _title: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                                {showMenuSubtitleAlignment ? <TopicSelect label="Subtitle alignment" value={asString(menuHeaderTextAlignment._subtitle)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _textAlignment: { ...asRecord(asRecord(current._menuHeader)._textAlignment), _subtitle: value } } }))} options={TEXT_ALIGN_OPTIONS} /> : null}
+                                <TopicSelect label="Body alignment" value={asString(menuHeaderTextAlignment._body)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _textAlignment: { ...asRecord(asRecord(current._menuHeader)._textAlignment), _body: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                                <TopicSelect label="Instruction alignment" value={asString(menuHeaderTextAlignment._instruction)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _textAlignment: { ...asRecord(asRecord(current._menuHeader)._textAlignment), _instruction: value } } }))} options={TEXT_ALIGN_OPTIONS} />
 
-                            <div className="flex flex-col gap-1.5">
-                              <div className="text-[13px] font-semibold text-[var(--life-base-black)]">Menu header background image</div>
-                              <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(menuHeaderBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuHeaderBackground", bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuHeaderBackground", bp: "_xlarge" }, initialValue: asString(menuHeaderBackgroundImage._xlarge), title: "Menu header background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuHeaderBackground", bp: "_xlarge" })} />
-                              <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(menuHeaderBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuHeaderBackground", bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuHeaderBackground", bp: "_large" }, initialValue: asString(menuHeaderBackgroundImage._large), title: "Menu header background image (_large)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuHeaderBackground", bp: "_large" })} />
-                              <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(menuHeaderBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuHeaderBackground", bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuHeaderBackground", bp: "_medium" }, initialValue: asString(menuHeaderBackgroundImage._medium), title: "Menu header background image (_medium)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuHeaderBackground", bp: "_medium" })} />
-                              <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(menuHeaderBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuHeaderBackground", bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuHeaderBackground", bp: "_small" }, initialValue: asString(menuHeaderBackgroundImage._small), title: "Menu header background image (_small)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuHeaderBackground", bp: "_small" })} />
-                            </div>
-                            <TopicNestedAccordion title="Menu header background image styles">
-                              <TopicSelect label={BG_REPEAT_LABEL} value={asString(menuHeaderBackgroundStyles._backgroundRepeat)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _backgroundStyles: { ...asRecord(asRecord(current._menuHeader)._backgroundStyles), _backgroundRepeat: value } } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
-                              <TopicSelect label={BG_SIZE_LABEL} value={asString(menuHeaderBackgroundStyles._backgroundSize)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _backgroundStyles: { ...asRecord(asRecord(current._menuHeader)._backgroundStyles), _backgroundSize: value } } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
-                              <TopicSelect label={BG_POSITION_LABEL} value={asString(menuHeaderBackgroundStyles._backgroundPosition)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _backgroundStyles: { ...asRecord(asRecord(current._menuHeader)._backgroundStyles), _backgroundPosition: value } } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
-                            </TopicNestedAccordion>
+                                <div className="flex flex-col gap-1.5">
+                                  <div className="text-[13px] font-semibold text-[var(--life-base-black)]">Menu header background image</div>
+                                  <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(menuHeaderBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuHeaderBackground", bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuHeaderBackground", bp: "_xlarge" }, initialValue: asString(menuHeaderBackgroundImage._xlarge), title: "Menu header background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuHeaderBackground", bp: "_xlarge" })} />
+                                  <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(menuHeaderBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuHeaderBackground", bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuHeaderBackground", bp: "_large" }, initialValue: asString(menuHeaderBackgroundImage._large), title: "Menu header background image (_large)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuHeaderBackground", bp: "_large" })} />
+                                  <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(menuHeaderBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuHeaderBackground", bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuHeaderBackground", bp: "_medium" }, initialValue: asString(menuHeaderBackgroundImage._medium), title: "Menu header background image (_medium)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuHeaderBackground", bp: "_medium" })} />
+                                  <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(menuHeaderBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuHeaderBackground", bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuHeaderBackground", bp: "_small" }, initialValue: asString(menuHeaderBackgroundImage._small), title: "Menu header background image (_small)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuHeaderBackground", bp: "_small" })} />
+                                </div>
+                                <TopicNestedAccordion title="Menu header background image styles">
+                                  <TopicSelect label={BG_REPEAT_LABEL} value={asString(menuHeaderBackgroundStyles._backgroundRepeat)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _backgroundStyles: { ...asRecord(asRecord(current._menuHeader)._backgroundStyles), _backgroundRepeat: value } } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
+                                  <TopicSelect label={BG_SIZE_LABEL} value={asString(menuHeaderBackgroundStyles._backgroundSize)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _backgroundStyles: { ...asRecord(asRecord(current._menuHeader)._backgroundStyles), _backgroundSize: value } } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
+                                  <TopicSelect label={BG_POSITION_LABEL} value={asString(menuHeaderBackgroundStyles._backgroundPosition)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _backgroundStyles: { ...asRecord(asRecord(current._menuHeader)._backgroundStyles), _backgroundPosition: value } } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
+                                </TopicNestedAccordion>
 
-                            <TopicNestedAccordion title="Menu header minimum height">
-                              <TopicTextInput label="_xlarge" type="number" value={String(asNumberOrEmpty(menuHeaderMinimumHeights._xlarge))} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _minimumHeights: { ...asRecord(asRecord(current._menuHeader)._minimumHeights), _xlarge: parseNumberishInput(value) } } }))} />
-                              <TopicTextInput label="_large" type="number" value={String(asNumberOrEmpty(menuHeaderMinimumHeights._large))} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _minimumHeights: { ...asRecord(asRecord(current._menuHeader)._minimumHeights), _large: parseNumberishInput(value) } } }))} />
-                              <TopicTextInput label="_medium" type="number" value={String(asNumberOrEmpty(menuHeaderMinimumHeights._medium))} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _minimumHeights: { ...asRecord(asRecord(current._menuHeader)._minimumHeights), _medium: parseNumberishInput(value) } } }))} />
-                              <TopicTextInput label="_small" type="number" value={String(asNumberOrEmpty(menuHeaderMinimumHeights._small))} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _minimumHeights: { ...asRecord(asRecord(current._menuHeader)._minimumHeights), _small: parseNumberishInput(value) } } }))} />
-                            </TopicNestedAccordion>
+                                <TopicNestedAccordion title="Menu header minimum height">
+                                  <TopicTextInput label="_xlarge" type="number" value={String(asNumberOrEmpty(menuHeaderMinimumHeights._xlarge))} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _minimumHeights: { ...asRecord(asRecord(current._menuHeader)._minimumHeights), _xlarge: parseNumberishInput(value) } } }))} />
+                                  <TopicTextInput label="_large" type="number" value={String(asNumberOrEmpty(menuHeaderMinimumHeights._large))} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _minimumHeights: { ...asRecord(asRecord(current._menuHeader)._minimumHeights), _large: parseNumberishInput(value) } } }))} />
+                                  <TopicTextInput label="_medium" type="number" value={String(asNumberOrEmpty(menuHeaderMinimumHeights._medium))} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _minimumHeights: { ...asRecord(asRecord(current._menuHeader)._minimumHeights), _medium: parseNumberishInput(value) } } }))} />
+                                  <TopicTextInput label="_small" type="number" value={String(asNumberOrEmpty(menuHeaderMinimumHeights._small))} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _minimumHeights: { ...asRecord(asRecord(current._menuHeader)._minimumHeights), _small: parseNumberishInput(value) } } }))} />
+                                </TopicNestedAccordion>
+                              </>
+                            )}
                           </TopicAccordion>
 
                           <TopicAccordion title="Media" open={!!openTopicAccordions.media} onToggle={(triggerEl) => toggleTopicAccordion("media", triggerEl)}>
@@ -8797,7 +10906,7 @@ export default function CourseEditor({
                     {activeLevel === "article" && article && (
                       <div className="px-4 py-4 border-b border-[#e6ebf0] space-y-2">
                         {(() => {
-                          const articleThemeSettings = getActiveThemeSettings(article.themeSettings);
+                          const articleThemeSettings = getActiveThemeSettingsWithDefaults(article.themeSettings, "article");
                           const articleTextAlignment = asRecord(articleThemeSettings._textAlignment);
                           const articleBackgroundImage = asRecord(articleThemeSettings._backgroundImage);
                           const articleBackgroundStyles = asRecord(articleThemeSettings._backgroundStyles);
@@ -8999,7 +11108,7 @@ export default function CourseEditor({
                     {activeLevel === "block" && block && (
                       <div className="px-4 py-4 border-b border-[#e6ebf0] space-y-2">
                         {(() => {
-                          const blockThemeSettings = getActiveThemeSettings(block.themeSettings);
+                          const blockThemeSettings = getActiveThemeSettingsWithDefaults(block.themeSettings, "block");
                           const blockBackgroundImage = asRecord(blockThemeSettings._backgroundImage);
                           const blockBackgroundStyles = asRecord(blockThemeSettings._backgroundStyles);
                           const blockMinimumHeights = asRecord(blockThemeSettings._minimumHeights);
@@ -9157,11 +11266,15 @@ export default function CourseEditor({
                                   checked={asBoolean(blockThemeSettings._isDividerBlock)}
                                   onChange={(checked) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _isDividerBlock: checked }))}
                                 />
-                                <TopicNestedAccordion title="Block colours">
-                                  <TopicColorField label="Background colour" value={asString(blockColours["block-bg-color"])} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColors: { ...asRecord(current._blockColors), "block-bg-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
-                                  <TopicColorField label="Font colour" value={asString(blockColours["block-font-color"])} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColors: { ...asRecord(current._blockColors), "block-font-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
-                                  <TopicColorField label="Header colour" value={asString(blockColours["block-header-color"])} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColors: { ...asRecord(current._blockColors), "block-header-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
-                                </TopicNestedAccordion>
+                                {/* Only themes whose schema declares _blockColors at block level
+                                    support this (e.g. Vanilla has no block colour overrides). */}
+                                {isThemeFieldSupported("block", "_blockColors") && (
+                                  <TopicNestedAccordion title="Block colours">
+                                    <TopicColorField label="Background colour" value={asString(blockColours["block-bg-color"])} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColors: { ...asRecord(current._blockColors), "block-bg-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
+                                    <TopicColorField label="Font colour" value={asString(blockColours["block-font-color"])} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColors: { ...asRecord(current._blockColors), "block-font-color": value } }))} paletteRows={FONT_HEADER_COLOUR_PALETTE_ROWS} />
+                                    <TopicColorField label="Header colour" value={asString(blockColours["block-header-color"])} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColors: { ...asRecord(current._blockColors), "block-header-color": value } }))} paletteRows={FONT_HEADER_COLOUR_PALETTE_ROWS} />
+                                  </TopicNestedAccordion>
+                                )}
                                 <TopicSelect label="Spacing top" value={asString(blockThemeSettings._paddingTop)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _paddingTop: value }))} options={SPACING_OPTIONS} emptyOptionLabel="Default" />
                                 <TopicSelect label="Spacing bottom" value={asString(blockThemeSettings._paddingBottom)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _paddingBottom: value }))} options={SPACING_OPTIONS} emptyOptionLabel="Default" />
                                 <TopicSelect label="Set the vertical alignment of the child component(s)" value={asString(blockThemeSettings._componentVerticalAlignment)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _componentVerticalAlignment: value }))} options={VERTICAL_ALIGN_OPTIONS} emptyOptionLabel="" />
@@ -9222,7 +11335,7 @@ export default function CourseEditor({
                     {activeLevel === "component" && (
                       <div className="px-4 py-4 border-b border-[#e6ebf0]">
                         {component && page && article && block ? (() => {
-                          const componentThemeSettings = getActiveThemeSettings(component.themeSettings);
+                          const componentThemeSettings = getActiveThemeSettingsWithDefaults(component.themeSettings, "component");
                           const componentTextAlignment = asRecord(componentThemeSettings._textAlignment);
                           const componentColours = asRecord(componentThemeSettings._componentColors);
                           const componentResponsiveClasses = asRecord(componentThemeSettings._responsiveClasses);
@@ -9368,11 +11481,15 @@ export default function CourseEditor({
                                   <TopicSelect label="Body alignment" value={asString(componentTextAlignment._body)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _body: value } }))} options={TEXT_ALIGN_OPTIONS} />
                                   <TopicSelect label="Instruction alignment" value={asString(componentTextAlignment._instruction)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _instruction: value } }))} options={TEXT_ALIGN_OPTIONS} />
                                 </TopicNestedAccordion>
-                                <TopicNestedAccordion title="Component colours">
-                                  <TopicColorField label="Background colour" value={asString(componentColours["component-bg-color"])} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _componentColors: { ...asRecord(current._componentColors), "component-bg-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
-                                  <TopicColorField label="Font colour" value={asString(componentColours["component-font-color"])} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _componentColors: { ...asRecord(current._componentColors), "component-font-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
-                                  <TopicColorField label="Header colour" value={asString(componentColours["component-header-color"])} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _componentColors: { ...asRecord(current._componentColors), "component-header-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
-                                </TopicNestedAccordion>
+                                {/* Only themes whose schema declares _componentColors at component
+                                    level support this (e.g. Vanilla has no component colour overrides). */}
+                                {isThemeFieldSupported("component", "_componentColors") && (
+                                  <TopicNestedAccordion title="Component colours">
+                                    <TopicColorField label="Background colour" value={asString(componentColours["component-bg-color"])} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _componentColors: { ...asRecord(current._componentColors), "component-bg-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
+                                    <TopicColorField label="Font colour" value={asString(componentColours["component-font-color"])} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _componentColors: { ...asRecord(current._componentColors), "component-font-color": value } }))} paletteRows={FONT_HEADER_COLOUR_PALETTE_ROWS} />
+                                    <TopicColorField label="Header colour" value={asString(componentColours["component-header-color"])} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _componentColors: { ...asRecord(current._componentColors), "component-header-color": value } }))} paletteRows={FONT_HEADER_COLOUR_PALETTE_ROWS} />
+                                  </TopicNestedAccordion>
+                                )}
                                 <TopicNestedAccordion title="On-screen classes">
                                   <TopicCheckbox
                                     label="Enabled?"
@@ -9412,6 +11529,7 @@ export default function CourseEditor({
                   </>
                 );
               })()}
+              <div className="h-10 shrink-0" aria-hidden="true" />
               </aside>
             ) : (
               <aside className="hidden md:flex h-full w-[56px] bg-white border-l border-[#d8dee6] shrink-0 flex-col items-center py-3">
@@ -9448,6 +11566,28 @@ export default function CourseEditor({
             }}
           />
         ) : null}
+
+        {canvasSamaritanTarget && (
+          <AiAssistPopover
+            initialText={canvasSamaritanTarget.seedText}
+            courseContext={courseTitle}
+            onInsert={(text) => {
+              const html = /<[a-z][\s\S]*>/i.test(text)
+                ? text
+                : text.split(/\n{2,}/).map((para) => `<p>${para.replace(/\n/g, "<br>")}</p>`).join("");
+              canvasSamaritanTarget.editor.setData(html);
+              setCanvasSamaritanTarget(null);
+            }}
+            onReplace={(text) => {
+              const html = /<[a-z][\s\S]*>/i.test(text)
+                ? text
+                : text.split(/\n{2,}/).map((para) => `<p>${para.replace(/\n/g, "<br>")}</p>`).join("");
+              canvasSamaritanTarget.editor.setData(html);
+              setCanvasSamaritanTarget(null);
+            }}
+            onClose={() => setCanvasSamaritanTarget(null)}
+          />
+        )}
 
         <ExternalAssetModal
           open={!!topicExternalAssetTarget}
