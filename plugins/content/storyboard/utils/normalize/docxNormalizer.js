@@ -18,7 +18,13 @@ const { sanitizeMammothHtml } = require('./htmlSanitizer');
 const { readDocxMetadata } = require('./reimportMetadata');
 
 const HEADING_TAGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']);
-const INLINE_MARK_TAGS = { strong: 'bold', b: 'bold', em: 'italic', i: 'italic', u: 'underline', s: 'strike', strike: 'strike' };
+const INLINE_MARK_TAGS = {
+  strong: 'bold', b: 'bold', em: 'italic', i: 'italic', u: 'underline', s: 'strike', strike: 'strike',
+  // Mammoth emits <sub>/<sup> natively (no style map needed) for Word's real
+  // subscript/superscript run formatting — see document-to-html.js's
+  // verticalAlignment handling.
+  sub: 'subscript', sup: 'superscript',
+};
 
 // Hidden per-card markers written by documentConvert.js's blocksToDocx (see
 // CARD_MARKER_BEGIN/END there) — bracket a rich card's human-readable prose
@@ -319,10 +325,10 @@ async function parseDocxToNormalizedDocument(buffer, meta) {
   const { items, docTitleFromStyle } = extractItems(dom);
   const sections = groupIntoSections(items);
 
-  const firstHeading = items.find((i) => i.kind === 'heading');
-  const detectedTitle =
-    docTitleFromStyle ||
-    (firstHeading ? firstHeading.inline.map((r) => r.text).join('') : sourceFileName.replace(/\.[^.]+$/, ''));
+  // Fall back to the source filename, never to the first heading — a heading
+  // is a Topic (H1) title per HEADING_LEVEL_TO_ADAPT, not the course title,
+  // so using it here previously mislabeled the course after the first Topic.
+  const detectedTitle = docTitleFromStyle || sourceFileName.replace(/\.[^.]+$/, '');
 
   const reimport = readDocxMetadata(buffer);
 

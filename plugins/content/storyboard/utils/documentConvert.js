@@ -5,8 +5,9 @@
 //         and renders MCQ / checklist / matching / reorder assessments with a
 //         proper option list + per-option feedback + whole-question feedback
 //         + submit instruction, matching the Storyboard's own Preview.
-// Import: .docx (mammoth) / .pptx (adm-zip, best-effort) / .pdf (pdf-parse if
-//         installed) → BlockNote blocks, preserving heading hierarchy.
+// Import: .docx (mammoth) / .pptx (adm-zip, best-effort) / .pdf (pdfjs-dist,
+//         layout-inferred structure) → BlockNote blocks, preserving heading
+//         hierarchy.
 
 const {
   Document,
@@ -17,11 +18,16 @@ const {
   ImageRun,
   ExternalHyperlink,
   AlignmentType,
+  Table,
+  TableRow,
+  TableCell,
+  WidthType,
 } = require('docx');
 
 const assetResolver = require('./assetResolver');
 const { buildCustomProperties } = require('./normalize/reimportMetadata');
 const { parseDocxToNormalizedDocument } = require('./normalize/docxNormalizer');
+const { parsePdfToNormalizedDocument } = require('./normalize/pdfNormalizer');
 const { normalizedDocumentToBlockNote } = require('./normalize/toBlockNote');
 
 // Kind label shown above a component's content in the exported document
@@ -154,6 +160,8 @@ function inlineToRuns(content) {
         italics: !!styles.italic,
         underline: styles.underline ? {} : undefined,
         strike: !!styles.strike,
+        subScript: !!styles.subscript,
+        superScript: !!styles.superscript,
       }),
     );
   }
@@ -164,6 +172,38 @@ function inlineToText(content) {
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return '';
   return content.map((n) => (n && typeof n.text === 'string' ? n.text : '')).join('');
+}
+
+/** A table cell's content may be a bare inline-run array (partial/imported input) or the wrapped `{type:'tableCell', content}` shape BlockNote's own editor.document always produces — normalize both to a run array. */
+function tableCellRuns(cell) {
+  if (Array.isArray(cell)) return cell;
+  if (cell && Array.isArray(cell.content)) return cell.content;
+  return [];
+}
+
+// Build a docx Table from a native BlockNote `table` block's
+// `{type:'tableContent', rows:[{cells:[...]}]}` content, one column-width
+// percentage split evenly across the widest row.
+function tableContentToDocxTable(content) {
+  const rows = content && Array.isArray(content.rows) ? content.rows : [];
+  if (!rows.length) return null;
+  const colCount = Math.max(1, ...rows.map((r) => (Array.isArray(r.cells) ? r.cells.length : 0)));
+  const colWidthPct = Math.floor(100 / colCount);
+  const tableRows = rows.map((row) => {
+    const cells = Array.isArray(row.cells) ? row.cells : [];
+    const rowCells = [];
+    for (let c = 0; c < colCount; c++) {
+      const runs = inlineToRuns(tableCellRuns(cells[c]));
+      rowCells.push(
+        new TableCell({
+          width: { size: colWidthPct, type: WidthType.PERCENTAGE },
+          children: [new Paragraph({ children: runs.length ? runs : [new TextRun('')] })],
+        }),
+      );
+    }
+    return new TableRow({ children: rowCells });
+  });
+  return new Table({ rows: tableRows, width: { size: 100, type: WidthType.PERCENTAGE } });
 }
 
 function safeParse(value, fallback) {
@@ -697,6 +737,9 @@ async function blocksToDocx(blocks, title, ctx, meta) {
           ],
         }),
       );
+    } else if (b.type === 'table') {
+      const table = tableContentToDocxTable(b.content);
+      if (table) children.push(table, new Paragraph({ text: '' }));
     } else if (b.type === 'bulletListItem' || b.type === 'numberedListItem') {
       const runs = inlineToRuns(b.content);
       if (!runs.length) continue;
@@ -1041,6 +1084,51 @@ async function pdfWriteAssessment(doc, props, ctx) {
   doc.moveDown(0.8);
 }
 
+// Draw a bordered grid for a native BlockNote `table` block's
+// `{type:'tableContent', rows:[{cells:[...]}]}` content — pdfkit has no table
+// widget, so rows/columns/borders are drawn manually, page-break aware.
+function pdfWriteTable(doc, content) {
+  const rows = content && Array.isArray(content.rows) ? content.rows : [];
+  if (!rows.length) return;
+  const marginL = doc.page.margins.left;
+  const marginR = doc.page.margins.right;
+  const contentWidth = Math.max(72, doc.page.width - marginL - marginR);
+  const colCount = Math.max(1, ...rows.map((r) => (Array.isArray(r.cells) ? r.cells.length : 0)));
+  const colWidth = contentWidth / colCount;
+  const padding = 4;
+  const fontSize = 10;
+
+  pdfResetText(doc);
+  doc.moveDown(0.3);
+  for (const row of rows) {
+    const cells = Array.isArray(row.cells) ? row.cells : [];
+    const texts = [];
+    for (let c = 0; c < colCount; c++) texts.push(inlineToText(tableCellRuns(cells[c])));
+
+    doc.font('Helvetica').fontSize(fontSize);
+    const cellHeights = texts.map((t) => doc.heightOfString(t || ' ', { width: colWidth - padding * 2 }));
+    const rowHeight = Math.max(fontSize + padding * 2, ...cellHeights.map((h) => h + padding * 2));
+
+    const pageBottom = doc.page.height - doc.page.margins.bottom;
+    if (doc.y + rowHeight > pageBottom) doc.addPage();
+
+    const rowY = doc.y;
+    let x = marginL;
+    for (let c = 0; c < colCount; c++) {
+      doc.rect(x, rowY, colWidth, rowHeight).stroke('#999');
+      doc
+        .fillColor('#111')
+        .font('Helvetica')
+        .fontSize(fontSize)
+        .text(texts[c] || '', x + padding, rowY + padding, { width: colWidth - padding * 2, height: rowHeight - padding * 2 });
+      x += colWidth;
+    }
+    doc.x = marginL;
+    doc.y = rowY + rowHeight;
+  }
+  doc.moveDown(0.4);
+}
+
 async function blocksToPdf(blocks, title, ctx) {
   const PDFDocument = require('pdfkit');
   // `bufferPages: true` lets pdfkit compute layout on a per-page basis so
@@ -1093,6 +1181,8 @@ async function blocksToPdf(blocks, title, ctx) {
       pdfResetText(doc);
       doc.font('Helvetica-Bold').fontSize(11).text(`[${props.label || 'Placeholder'}] ${props.title || ''}`);
       doc.moveDown(0.3);
+    } else if (b.type === 'table') {
+      pdfWriteTable(doc, b.content);
     } else if (b.type === 'bulletListItem' || b.type === 'numberedListItem') {
       const text = inlineToText(b.content);
       if (text) {
@@ -1146,22 +1236,14 @@ function pptxToBlocks(buffer) {
   return blocks;
 }
 
-// PDF is best-effort and requires the optional pdf-parse package.
-async function pdfToBlocks(buffer) {
-  let pdfParse;
-  try {
-    pdfParse = require('pdf-parse');
-  } catch (e) {
-    const err = new Error('PDF import requires the optional "pdf-parse" package (not installed).');
-    err.statusCode = 501;
-    throw err;
-  }
-  const data = await pdfParse(buffer);
-  return String(data.text || '')
-    .split(/\n{2,}/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((t) => ({ type: 'paragraph', content: t }));
+// PDF has no real structure (no headings/lists/tables in the format itself)
+// — pdfNormalizer.js reconstructs it from layout (font size, bullet/number
+// prefixes, image position). See utils/normalize/ for the actual parsing —
+// this is a thin delegate, same shape as wordToBlocks.
+async function pdfToBlocks(buffer, meta) {
+  const normalizedDocument = await parsePdfToNormalizedDocument(buffer, meta);
+  const blocks = normalizedDocumentToBlockNote(normalizedDocument);
+  return { normalizedDocument, blocks };
 }
 
 module.exports = { blocksToDocx, blocksToPdf, wordToBlocks, pptxToBlocks, pdfToBlocks };

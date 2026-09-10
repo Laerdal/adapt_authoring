@@ -256,12 +256,47 @@ async function listComments(req, res) {
   }
 }
 
+// Comments are Page/Article-level only (never Block/Component) — see
+// HEADING_LEVEL_TO_ADAPT in new-ui-source: heading level 1 = Topic/Page,
+// level 2 = Section/Article. The client already resolves the cursor to the
+// nearest enclosing level-1/2 heading before sending blockId; this re-checks
+// it server-side so the rule holds regardless of caller.
+//
+// documentJson is only persisted on explicit Save/Generate/Export, not on
+// every keystroke, so a heading the author just typed may not exist in it
+// yet — fail OPEN when the block can't be found (don't block an in-progress
+// comment on unsaved content) and only reject a CONFIRMED Block/Component
+// target (found, and it's a level-3+ heading or a non-heading block).
+async function findCommentableHeading(storyboardId, blockId) {
+  const existing = await db.retrieve('storyboard', { _id: storyboardId });
+  if (!Array.isArray(existing) || !existing.length) return { error: 'Storyboard not found', status: 404 };
+
+  let blocks = [];
+  try {
+    blocks = JSON.parse(toPlain(existing[0]).documentJson || '[]');
+  } catch {
+    blocks = [];
+  }
+  const target = Array.isArray(blocks) ? blocks.find((b) => b && b.id === blockId) : null;
+  if (!target) return {};
+  const level = target.type === 'heading' ? Number((target.props && target.props.level) ?? 1) : null;
+  if (level === null || level > 2) {
+    return { error: 'Comments can only be attached to a Page (Topic) or Article (Section) heading.', status: 400 };
+  }
+  return {};
+}
+
 async function addComment(req, res) {
   try {
     const { userId, tenantId } = userCtx(req);
     const body = req.body || {};
     if (!body.blockId) return res.status(400).json({ error: 'blockId is required' });
     if (!body.body) return res.status(400).json({ error: 'body is required' });
+
+    if (!body._parentCommentId) {
+      const check = await findCommentableHeading(req.params.id, body.blockId);
+      if (check.error) return res.status(check.status).json({ error: check.error });
+    }
 
     const data = {
       _storyboardId: req.params.id,
@@ -502,9 +537,9 @@ async function importDocument(req, res) {
     try {
       if (format === 'word') result = await convert.wordToBlocks(buffer, { sourceFileName: file.name });
       else if (format === 'pptx') result = { normalizedDocument: null, blocks: convert.pptxToBlocks(buffer) };
-      else if (format === 'pdf') result = { normalizedDocument: null, blocks: await convert.pdfToBlocks(buffer) };
+      else if (format === 'pdf') result = await convert.pdfToBlocks(buffer, { sourceFileName: file.name });
     } catch (parseError) {
-      if (parseError && parseError.statusCode) throw parseError; // e.g. pdf-parse-not-installed 501
+      if (parseError && parseError.statusCode) throw parseError;
       const err = new Error(
         `The file could not be read — it may be corrupted, password-protected, or not a valid ${ext} file. (${parseError.message})`,
       );

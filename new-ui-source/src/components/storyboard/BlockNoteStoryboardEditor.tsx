@@ -12,10 +12,15 @@ import {
   FormattingToolbar,
   FormattingToolbarController,
   getDefaultReactSlashMenuItems,
+  getFormattingToolbarItems,
   SuggestionMenuController,
+  useBlockNoteEditor,
+  useComponentsContext,
   useCreateBlockNote,
+  useEditorState,
   type DefaultReactSuggestionItem,
 } from '@blocknote/react';
+import { Subscript as SubscriptIcon, Superscript as SuperscriptIcon } from 'lucide-react';
 
 import '@blocknote/core/fonts/inter.css';
 import '@blocknote/mantine/style.css';
@@ -25,6 +30,7 @@ import {
   defaultAssessmentData,
   INSERT_META,
   isAssessmentKind,
+  type ActiveBlockInfo,
   type PlaceholderCategory,
   type StoryboardDocument,
   type StoryboardEditorHandle,
@@ -35,6 +41,51 @@ import {
 } from '@/types/storyboard';
 import { storyboardSchema } from './schema';
 import { makeComponentBlock, isComponentKind, type ComponentKind } from './blocks/componentBlock';
+import { inlineText, resolveCommentAnchor } from './commentAnchor';
+
+// Toggle button for the subscript/superscript styles added to storyboardSchema
+// (schema.ts) — BlockNote's own BasicTextStyleButton can't be reused here: its
+// icon map and tooltip lookup are hardcoded to bold/italic/underline/strike/
+// code, so passing "subscript"/"superscript" through it throws (no dictionary
+// entry). Same toggle/active-state logic, our own icon + label instead.
+function ScriptStyleButton({
+  styleKey,
+  label,
+  Icon,
+}: {
+  styleKey: 'subscript' | 'superscript';
+  label: string;
+  Icon: typeof SubscriptIcon;
+}) {
+  const Components = useComponentsContext()!;
+  const editor = useBlockNoteEditor();
+  const state = useEditorState({
+    editor,
+    selector: ({ editor }) => {
+      if (!editor.isEditable) return undefined;
+      if (!(styleKey in editor.schema.styleSchema)) return undefined;
+      const hasInlineContent = (
+        editor.getSelection()?.blocks || [editor.getTextCursorPosition().block]
+      ).some((block) => block.content !== undefined);
+      if (!hasInlineContent) return undefined;
+      return { active: styleKey in editor.getActiveStyles() };
+    },
+  });
+  if (!state) return null;
+  return (
+    <Components.FormattingToolbar.Button
+      className="bn-button"
+      onClick={() => {
+        editor.focus();
+        editor.toggleStyles({ [styleKey]: true } as never);
+      }}
+      isSelected={state.active}
+      label={label}
+      mainTooltip={label}
+      icon={<Icon size={16} />}
+    />
+  );
+}
 
 // "Add Content" kinds that map to the rich component card (sbComponent).
 const COMPONENT_CARD_KINDS = new Set<StoryboardInsertKind>([
@@ -55,17 +106,6 @@ const DEFAULT_CONTENT: PartialBlock[] = [
 ];
 
 const ASSET_TYPES = new Set(['image', 'video', 'audio']);
-
-function inlineText(content: unknown): string {
-  if (!Array.isArray(content)) return '';
-  return content
-    .map((node) =>
-      node && typeof node === 'object' && typeof (node as { text?: unknown }).text === 'string'
-        ? (node as { text: string }).text
-        : ''
-    )
-    .join('');
-}
 
 // Neutral insert kind → a concrete BlockNote block. Returns a loose shape; the
 // call site casts to the editor's block type.
@@ -213,6 +253,17 @@ function BlockNoteStoryboardEditorImpl(
     [editor]
   );
 
+  // Comments anchor to the Page (H1)/Article (H2) enclosing the cursor, never
+  // to a Block/Component — see resolveCommentAnchor.
+  const getCommentAnchor = useCallback((): ActiveBlockInfo | null => {
+    try {
+      const cursorBlockId = editor.getTextCursorPosition().block.id;
+      return resolveCommentAnchor(editor.document, cursorBlockId);
+    } catch {
+      return null;
+    }
+  }, [editor]);
+
   useImperativeHandle(
     ref,
     (): StoryboardEditorHandle => ({
@@ -251,8 +302,9 @@ function BlockNoteStoryboardEditorImpl(
         }
       },
       focusBlock,
+      getCommentAnchor,
     }),
-    [editor, getHeadings, getSummary, insert, insertComponent, focusBlock]
+    [editor, getHeadings, getSummary, insert, insertComponent, focusBlock, getCommentAnchor]
   );
 
   useEffect(() => {
@@ -320,10 +372,25 @@ function BlockNoteStoryboardEditorImpl(
     ] as typeof defaults;
   };
 
+  // Insert the subscript/superscript toggles into BlockNote's own default
+  // toolbar item list (right after Strike, alongside the other basic text
+  // styles) rather than replacing it — keeps every other default button
+  // (block type, table, file, color, link, comment, etc.) exactly as-is.
+  const getToolbarItems = () => {
+    const items = getFormattingToolbarItems(formattingBlockTypes());
+    const strikeIndex = items.findIndex((el) => el.key === 'strikeStyleButton');
+    const scriptButtons = [
+      <ScriptStyleButton key="subscriptStyleButton" styleKey="subscript" label="Subscript" Icon={SubscriptIcon} />,
+      <ScriptStyleButton key="superscriptStyleButton" styleKey="superscript" label="Superscript" Icon={SuperscriptIcon} />,
+    ];
+    if (strikeIndex === -1) return [...items, ...scriptButtons];
+    return [...items.slice(0, strikeIndex + 1), ...scriptButtons, ...items.slice(strikeIndex + 1)];
+  };
+
   return (
     <BlockNoteView editor={editor} editable={editable} theme="light" slashMenu={false} formattingToolbar={false}>
       <FormattingToolbarController
-        formattingToolbar={() => <FormattingToolbar blockTypeSelectItems={formattingBlockTypes()} />}
+        formattingToolbar={() => <FormattingToolbar>{getToolbarItems()}</FormattingToolbar>}
       />
       <SuggestionMenuController
         triggerCharacter="/"
