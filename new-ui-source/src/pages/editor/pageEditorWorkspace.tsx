@@ -54,6 +54,9 @@ import {
   type UserSummary,
   updateComponentLayout,
   updateStructureNode,
+  copyStructureNodeViaClipboard,
+  copyStructureNodeToClipboard,
+  pasteStructureNodeFromClipboard,
 } from "../../api/adaptAuthoring";
 import type { MenuPageData } from "../../components/editor/MenuPageCanvas";
 import type { Course } from "../../types/course";
@@ -1395,6 +1398,38 @@ const NAV_FOOTER_BUTTON_ICONS: Record<string, React.ReactNode> = {
 
 const NAV_FOOTER_BUTTON_ORDER = ["_home", "_up", "_previous", "_next", "_close", "_custom"];
 
+// Canvas-injected level action icons (Copy/Color Label) — raw SVG markup,
+// not React, since these are created directly inside the iframe's own
+// document by applyPreviewSelectionStyles. Copy icon matches the "Copy
+// topic id" icon already used in the right panel's General accordion;
+// color-label icon is the new-ui asset at public/assets/icons/color-label-icon.svg
+// (stroke swapped to currentColor so CSS can drive its color like the copy icon).
+const LEVEL_ACTION_COPY_ICON_SVG =
+  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+const LEVEL_ACTION_COLOR_LABEL_ICON_SVG =
+  '<svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12.0102 7.82185L7.82768 12.0043C7.71933 12.1128 7.59066 12.1989 7.44903 12.2576C7.3074 12.3163 7.15558 12.3465 7.00227 12.3465C6.84895 12.3465 6.69713 12.3163 6.5555 12.2576C6.41387 12.1989 6.2852 12.1128 6.17685 12.0043L1.16602 6.99935V1.16602H6.99935L12.0102 6.17685C12.2275 6.39544 12.3494 6.69113 12.3494 6.99935C12.3494 7.30757 12.2275 7.60326 12.0102 7.82185Z" stroke="currentColor" stroke-width="1.16667" stroke-linecap="round" stroke-linejoin="round"></path><path d="M4.08398 4.08398H4.08982" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"></path></svg>';
+
+// Old tool's real palette (frontend/src/core/less/colourLabels.less) —
+// _colorLabel schema field stores one of these literal "colorlabel-N"
+// strings (or "" for none).
+const COLOR_LABEL_VALUES = Array.from({ length: 14 }, (_, i) => `colorlabel-${i + 1}`);
+const COLOR_LABEL_HEX: Record<string, string> = {
+  "colorlabel-1": "#616161",
+  "colorlabel-2": "#BDBDBD",
+  "colorlabel-3": "#D32F2F",
+  "colorlabel-4": "#EF9A9A",
+  "colorlabel-5": "#7B1FA2",
+  "colorlabel-6": "#CE93D8",
+  "colorlabel-7": "#1976D2",
+  "colorlabel-8": "#90CAF9",
+  "colorlabel-9": "#388E3C",
+  "colorlabel-10": "#A5D6A7",
+  "colorlabel-11": "#F57C00",
+  "colorlabel-12": "#FFCC80",
+  "colorlabel-13": "#5D4037",
+  "colorlabel-14": "#BCAAA4",
+};
+
 // Mirrors NavigationFooterView.js's `getOverrideValue`/`updateOverrideValues`
 // (adapt-navigation-footer) exactly — an empty `_enableOverride` inherits the
 // course-level `_isEnabled`, and an empty `btnText` inherits the course-level
@@ -2654,6 +2689,7 @@ function mapStructureToPages(
       instruction?: string;
       themeSettings?: Record<string, unknown>;
       classes?: string;
+      colorLabel?: string;
       requireCompletionOf?: string;
       isOptional?: boolean;
       isAvailable?: boolean;
@@ -2675,6 +2711,7 @@ function mapStructureToPages(
         instruction?: string;
         themeSettings?: Record<string, unknown>;
         classes?: string;
+        colorLabel?: string;
         requireCompletionOf?: string;
         isOptional?: boolean;
         isAvailable?: boolean;
@@ -2700,6 +2737,7 @@ function mapStructureToPages(
             properties?: Record<string, unknown>;
             url?: string;
             classes?: string;
+            colorLabel?: string;
             isOptional?: boolean;
             isAvailable?: boolean;
             isHidden?: boolean;
@@ -2784,6 +2822,7 @@ function mapStructureToPages(
         isVisible: section.isVisible !== false,
         requireCompletionOf: section.requireCompletionOf ?? "-1",
         classes: section.classes || "",
+        colorLabel: section.colorLabel || "",
         onScreen: {
           _isEnabled: !!section.onScreen?._isEnabled,
           _classes: section.onScreen?._classes || "",
@@ -2814,6 +2853,7 @@ function mapStructureToPages(
           isVisible: group.isVisible !== false,
           requireCompletionOf: group.requireCompletionOf ?? "-1",
           classes: group.classes || "",
+          colorLabel: group.colorLabel || "",
           onScreen: {
             _isEnabled: !!group.onScreen?._isEnabled,
             _classes: group.onScreen?._classes || "",
@@ -2858,6 +2898,7 @@ function mapStructureToPages(
                 ? component.themeSettings as TopicThemeSettings
                 : {},
             classes: component.classes || "",
+            colorLabel: component.colorLabel || "",
             isOptional: !!component.isOptional,
             isAvailable: component.isAvailable !== false,
             isHidden: !!component.isHidden,
@@ -2914,6 +2955,7 @@ export interface ComponentData {
     [key: string]: any;
   };
   classes: string;
+  colorLabel: string;
   isOptional: boolean;
   isAvailable: boolean;
   isHidden: boolean;
@@ -2939,6 +2981,7 @@ export interface BlockData {
   isVisible: boolean;
   requireCompletionOf: string;
   classes: string;
+  colorLabel: string;
   onScreen: TopicOnScreenSettings;
   ariaLevel: string;
   isA11yCompletionDescriptionEnabled: boolean;
@@ -2959,6 +3002,7 @@ export interface ArticleData {
   isVisible: boolean;
   requireCompletionOf: string;
   classes: string;
+  colorLabel: string;
   onScreen: TopicOnScreenSettings;
   ariaLevel: string;
   isA11yCompletionDescriptionEnabled: boolean;
@@ -3150,6 +3194,24 @@ export default function CourseEditor({
   const [dirtyNodeKeys, setDirtyNodeKeys] = useState<Record<string, true>>({});
   const [isSavingSelection, setIsSavingSelection] = useState(false);
   const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
+  // Canvas Copy (Section/Content Group) — old-tool parity (editorView.js
+  // addToClipboard): a server-side clipboard-copy has been made, and the
+  // canvas is showing "Paste" zones at EVERY sibling gap (before the first,
+  // between each, after the last) in the copied node's own parent, until
+  // the user picks a slot or cancels.
+  const [clipboardEntry, setClipboardEntry] = useState<{
+    clipboardId: string;
+    structureLevel: "section" | "contentGroup";
+    pageId: string;
+    articleId: string | null;
+  } | null>(null);
+  // handlePreviewFrameLoad's onClick closure is only re-created when the
+  // iframe itself reloads, so it never sees fresh clipboardEntry state from
+  // a later render — read the latest value via this ref instead.
+  const clipboardEntryRef = useRef(clipboardEntry);
+  useEffect(() => {
+    clipboardEntryRef.current = clipboardEntry;
+  }, [clipboardEntry]);
   const [publishDialogPhase, setPublishDialogPhase] = useState<PublishCoursePhase | null>(null);
   const [publishResult, setPublishResult] = useState<{ zipName?: string; downloadUrl?: string; message?: string }>({});
   const [componentSubtitleSchemaSupport, setComponentSubtitleSchemaSupport] = useState<Record<string, boolean>>({});
@@ -3960,6 +4022,16 @@ export default function CourseEditor({
         margin-bottom: 10px !important;
       }
 
+      /* Two half-width (left/right) components in the same Content Group
+         otherwise sit with their borders touching/flush against each
+         other, since .component__container is already a real CSS flex
+         row (see core/less/core/component.less) with no gap of its own
+         between items \u2014 a plain flex gap is all that's needed here, no
+         margin math on either side that could overflow past 100% width. */
+      .adapt-authoring-editing-active .component__container {
+        gap: 16px !important;
+      }
+
       /* Without this, a headless Section's own gutter (the margin above
          "block") collapses straight through Article and merges with
          Article's own gutter (a real CSS "margin collapsing" side effect
@@ -4026,7 +4098,8 @@ export default function CourseEditor({
          color always wins and the label text never actually becomes
          visible while hovering/selecting. */
       .adapt-authoring-editing-active .adapt-authoring-preview-hover::before,
-      .adapt-authoring-editing-active .adapt-authoring-preview-active::before {
+      .adapt-authoring-editing-active .adapt-authoring-preview-active::before,
+      .adapt-authoring-editing-active .adapt-authoring-swap-hover-highlight::before {
         content: attr(data-preview-bridge-label);
         display: block;
         color: var(--life-primary-500, #2e7fa1);
@@ -4120,7 +4193,7 @@ export default function CourseEditor({
          lifted too via :has(), or a hovered header still looked faded. */
       .adapt-authoring-preview-unfocused-descendant.adapt-authoring-preview-hover,
       .adapt-authoring-preview-unfocused-descendant.adapt-authoring-preview-active,
-      .adapt-authoring-preview-unfocused-descendant:has(.adapt-authoring-preview-hover, .adapt-authoring-preview-active) {
+      .adapt-authoring-preview-unfocused-descendant:has(.adapt-authoring-preview-hover, .adapt-authoring-preview-active, .adapt-authoring-swap-hover-highlight) {
         opacity: 1 !important;
       }
 
@@ -4223,6 +4296,243 @@ export default function CourseEditor({
       .navigation * {
         pointer-events: none !important;
         cursor: default !important;
+      }
+
+      /* Merged swap-positions control (syncSwapPositionsControls) — a single
+         always-visible plain-text affordance (no button chrome) replacing
+         the old tool's per-component move-left/move-right arrows. Anchored
+         to the right-hand component's own box (position:relative set
+         inline by syncSwapPositionsControls), sitting just above that
+         component's own top border, aligned to its right edge. */
+      .adapt-authoring-swap-positions-btn {
+        position: absolute;
+        top: -20px;
+        right: 20px;
+        z-index: 5;
+        margin: 0;
+        padding: 0;
+        border: none;
+        background: transparent;
+        outline: none;
+        font-family: inherit;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.4;
+        white-space: nowrap;
+        color: #9ca3af;
+        cursor: pointer;
+      }
+
+      .adapt-authoring-swap-positions-btn:hover,
+      .adapt-authoring-swap-positions-btn:focus-visible {
+        color: #111827;
+      }
+
+      /* Hovering the swap control itself highlights BOTH components it
+         would swap (not just the one it's anchored to), so it's clear
+         which pair is affected. Same 2-class specificity as the existing
+         hover/active border-color override above, for the same reason. */
+      .adapt-authoring-editing-active .adapt-authoring-swap-hover-highlight {
+        border-color: var(--life-primary-500, #2e7fa1) !important;
+      }
+
+      /* Copy/Color Label icon overlay (ensureLevelActionIcons) — top-right
+         corner of the hovered/selected outline, on the same line as the
+         level's own label (attr(data-preview-bridge-label) ::before above),
+         spaced from the border. */
+      .adapt-authoring-level-actions {
+        position: absolute;
+        top: 0.5rem;
+        right: 8px;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        height: 15px;
+        z-index: 6;
+      }
+
+      /* Content Group header has its own larger 10px padding (see the
+         permanent .block__header-inner padding rule above) — match it so
+         the icons still land level with the label text, not the border. */
+      .adapt-authoring-editing-active .block__header-inner .adapt-authoring-level-actions {
+        top: 10px;
+      }
+
+      .adapt-authoring-level-action-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        padding: 0;
+        border: none;
+        border-radius: 3px;
+        background: transparent;
+        color: #9ca3af;
+        cursor: pointer;
+      }
+
+      .adapt-authoring-level-action-btn:hover {
+        background: var(--life-primary-100, #dbeafe);
+        color: #111827;
+      }
+
+      /* Hover-only preview (level not actually SELECTED yet) — icons show
+         but stay inert: no hover feedback, no click, per explicit user
+         instruction, consistent at every level. */
+      .adapt-authoring-level-actions[data-preview-actions-selected="false"] .adapt-authoring-level-action-btn {
+        pointer-events: none;
+      }
+
+      /* A color label is set: fill the tag icon solid instead of just
+         tinting its outline. */
+      .adapt-authoring-level-action-btn[data-preview-color-label-current]:not([data-preview-color-label-current=""]) svg path {
+        fill: currentColor;
+      }
+
+      /* Colour Label popover \u2014 matches the shared design (title +
+         disclaimer copy + 6-column swatch grid + Reset/Cancel/Apply). */
+      .adapt-authoring-color-label-popover {
+        position: absolute;
+        width: 320px;
+        padding: 20px;
+        background: #fff;
+        border: 1px solid #e6ebf0;
+        border-radius: 12px;
+        box-shadow: 0 10px 32px rgba(0, 0, 0, 0.16);
+        z-index: 20;
+      }
+
+      .adapt-authoring-color-label-popover-title {
+        font-size: 17px;
+        font-weight: 700;
+        color: #111827;
+        margin-bottom: 8px;
+      }
+
+      .adapt-authoring-color-label-popover-desc {
+        font-size: 13px;
+        line-height: 1.4;
+        color: #6b7280;
+        margin: 0 0 16px;
+      }
+
+      .adapt-authoring-color-label-popover-grid {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 8px;
+        margin-bottom: 20px;
+      }
+
+      .adapt-authoring-color-label-swatch {
+        width: 100%;
+        aspect-ratio: 1;
+        border-radius: 6px;
+        border: 2px solid transparent;
+        padding: 0;
+        cursor: pointer;
+      }
+
+      .adapt-authoring-color-label-swatch:hover {
+        outline: 2px solid var(--life-primary-500, #2e7fa1);
+        outline-offset: 1px;
+      }
+
+      .adapt-authoring-color-label-swatch--selected {
+        border-color: var(--life-primary-500, #2e7fa1);
+        box-shadow: 0 0 0 2px #fff inset;
+      }
+
+      .adapt-authoring-color-label-popover-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      .adapt-authoring-btn-secondary,
+      .adapt-authoring-btn-primary {
+        padding: 8px 16px;
+        font-size: 14px;
+        font-weight: 500;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background-color 0.15s ease;
+      }
+
+      .adapt-authoring-btn-secondary {
+        color: #374151;
+        background: #fff;
+        border: 1px solid #d1d5db;
+      }
+
+      .adapt-authoring-btn-secondary:hover {
+        background: #f9fafb;
+      }
+
+      .adapt-authoring-btn-primary {
+        color: #fff;
+        background: #2d6fa8;
+        border: 1px solid transparent;
+      }
+
+      .adapt-authoring-btn-primary:hover {
+        background: #245c8f;
+      }
+
+      /* Paste-zone bars (canvas Copy on Section/Content Group) \u2014 old-tool
+         parity (editorPasteZoneView.js), shown around the just-copied node
+         until the user picks a slot or dismisses via the X. */
+      .adapt-authoring-paste-zone {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 2px 0;
+        color: var(--life-primary-500, #2e7fa1);
+        opacity: 0.5;
+        transition: opacity 0.15s ease;
+      }
+
+      .adapt-authoring-paste-zone:hover {
+        opacity: 1;
+      }
+
+      .adapt-authoring-paste-zone::before,
+      .adapt-authoring-paste-zone::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: var(--life-primary-300, #90caf9);
+      }
+
+      .adapt-authoring-paste-zone-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        border: none;
+        border-radius: 999px;
+        background: var(--life-primary-500, #2e7fa1);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .adapt-authoring-paste-zone-cancel {
+        border: none;
+        background: transparent;
+        color: #9ca3af;
+        cursor: pointer;
+        font-size: 16px;
+        line-height: 1;
+        padding: 0 4px;
+      }
+
+      .adapt-authoring-paste-zone-cancel:hover {
+        color: #111827;
       }
     `;
     head.appendChild(style);
@@ -4366,6 +4676,94 @@ export default function CourseEditor({
       return "Menu";
     };
 
+    type LevelActionIds = { pageId: string; articleId: string | null; blockId: string | null; componentId: string | null };
+
+    const getColorLabelForLevel = (
+      level: "topic" | "section" | "group" | "component",
+      ids: LevelActionIds
+    ): string => {
+      if (level === "topic") return "";
+      const pages = contentPagesRef.current;
+      const page = pages.find((candidate) => candidate.id === ids.pageId);
+      const article = page && ids.articleId ? page.articles.find((candidate) => candidate.id === ids.articleId) : null;
+      if (level === "section") return article?.colorLabel || "";
+      const block = article && ids.blockId ? article.blocks.find((candidate) => candidate.id === ids.blockId) : null;
+      if (level === "group") return block?.colorLabel || "";
+      const component = block && ids.componentId ? block.components.find((candidate) => candidate.id === ids.componentId) : null;
+      return component?.colorLabel || "";
+    };
+
+    // Copy (topic/section/group — Component deferred, see memory) + Color
+    // Label (section/group/component — never Topic) icon overlay, bottom-
+    // right corner of the hovered/selected outline. Old-tool parity per
+    // explicit user instruction; copy icon reused from the right panel's
+    // "Copy topic id" style, color-label icon from the new-ui asset.
+    const ensureLevelActionIcons = (
+      node: Element,
+      level: "topic" | "section" | "group" | "component",
+      ids: LevelActionIds,
+      isSelected: boolean
+    ): Element | null => {
+      const showCopy = level !== "component";
+      const showColorLabel = level !== "topic";
+      if (!showCopy && !showColorLabel) return null;
+
+      let actions = node.querySelector<HTMLElement>(":scope > [data-preview-level-actions]");
+      if (!actions) {
+        actions = doc.createElement("div");
+        actions.setAttribute("data-preview-level-actions", "true");
+        actions.className = "adapt-authoring-level-actions";
+        node.appendChild(actions);
+      }
+      // Hover alone only ever PREVIEWS the icons (grey, inert) — real
+      // hover/click affordance is reserved for the level actually SELECTED,
+      // per explicit user instruction, consistent at every level.
+      actions.setAttribute("data-preview-actions-selected", isSelected ? "true" : "false");
+      actions.setAttribute("data-preview-action-level", level);
+      actions.setAttribute("data-preview-action-page-id", ids.pageId);
+      if (ids.articleId) actions.setAttribute("data-preview-action-article-id", ids.articleId);
+      else actions.removeAttribute("data-preview-action-article-id");
+      if (ids.blockId) actions.setAttribute("data-preview-action-block-id", ids.blockId);
+      else actions.removeAttribute("data-preview-action-block-id");
+      if (ids.componentId) actions.setAttribute("data-preview-action-component-id", ids.componentId);
+      else actions.removeAttribute("data-preview-action-component-id");
+
+      let colorBtn = actions.querySelector<HTMLButtonElement>("[data-preview-color-label-btn]");
+      if (showColorLabel) {
+        if (!colorBtn) {
+          colorBtn = doc.createElement("button");
+          colorBtn.type = "button";
+          colorBtn.setAttribute("data-preview-color-label-btn", "true");
+          colorBtn.className = "adapt-authoring-level-action-btn";
+          colorBtn.innerHTML = LEVEL_ACTION_COLOR_LABEL_ICON_SVG;
+          actions.insertBefore(colorBtn, actions.firstChild);
+        }
+        colorBtn.title = "Set Color Label";
+        const colorLabelValue = getColorLabelForLevel(level, ids);
+        colorBtn.setAttribute("data-preview-color-label-current", colorLabelValue);
+        colorBtn.style.color = colorLabelValue ? (COLOR_LABEL_HEX[colorLabelValue] || "") : "";
+      } else if (colorBtn) {
+        colorBtn.remove();
+      }
+
+      let copyBtn = actions.querySelector<HTMLButtonElement>("[data-preview-copy-node-btn]");
+      if (showCopy) {
+        if (!copyBtn) {
+          copyBtn = doc.createElement("button");
+          copyBtn.type = "button";
+          copyBtn.setAttribute("data-preview-copy-node-btn", "true");
+          copyBtn.className = "adapt-authoring-level-action-btn";
+          copyBtn.innerHTML = LEVEL_ACTION_COPY_ICON_SVG;
+          actions.appendChild(copyBtn);
+        }
+        copyBtn.title = `Copy ${toBadgeLabel(level)}`;
+      } else if (copyBtn) {
+        copyBtn.remove();
+      }
+
+      return actions;
+    };
+
     // Same title-container/inner class names + placeholder copy
     // syncPreviewInlineEditors uses for the SELECTED level's empty-title
     // dimmed treatment — mirrored here so a hovered (not-yet-selected) empty
@@ -4475,6 +4873,9 @@ export default function CourseEditor({
       ? resolveHighlightTarget(activeLevel, activeTargetId)
       : null;
 
+    let activeActionsHost: Element | null = null;
+    let hoverActionsHost: Element | null = null;
+
     if (hoverTargetId && hoverLevel) {
       const hoverNode = resolveHighlightTarget(hoverLevel, hoverTargetId);
       // An active level owns its descendants while selected. Showing a
@@ -4488,6 +4889,15 @@ export default function CourseEditor({
         if (hoverTitleInfo) {
           ensureHoverTitlePreview(hoverNode, hoverTitleInfo);
         }
+
+        if (hoverLevel !== "menu" && previewHoverState.pageId) {
+          hoverActionsHost = ensureLevelActionIcons(hoverNode, hoverLevel, {
+            pageId: previewHoverState.pageId,
+            articleId: previewHoverState.articleId,
+            blockId: previewHoverState.blockId,
+            componentId: previewHoverState.componentId,
+          }, false);
+        }
       }
     }
 
@@ -4495,6 +4905,15 @@ export default function CourseEditor({
       if (activeNode) {
         activeNode.classList.add("adapt-authoring-preview-active");
         (activeNode as Element).setAttribute("data-preview-bridge-label", toBadgeLabel(activeLevel));
+
+        if (activeLevel !== "menu" && selectedPageId) {
+          activeActionsHost = ensureLevelActionIcons(activeNode, activeLevel, {
+            pageId: selectedPageId,
+            articleId: selectedArticleId,
+            blockId: selectedBlockId,
+            componentId: selectedComponentId,
+          }, true);
+        }
 
         // Dim everything nested inside the selected level — its own
         // header stays fully normal, only what's underneath (not what's
@@ -4524,6 +4943,17 @@ export default function CourseEditor({
         topicContainer?.classList.add("adapt-authoring-preview-topic-shell-active");
       }
     }
+
+    // Idempotent by construction — only removes a level-actions container
+    // whose host is NEITHER of this run's two qualifying nodes, so a run
+    // where nothing actually changed performs zero DOM mutations (avoids
+    // the same self-triggering MutationObserver churn documented on the
+    // swap-positions control above).
+    doc.querySelectorAll("[data-preview-level-actions]").forEach((node) => {
+      if (node !== activeActionsHost && node !== hoverActionsHost) {
+        node.remove();
+      }
+    });
   }, [
     hasCanvasSelection,
     menuSelected,
@@ -6284,6 +6714,151 @@ export default function CourseEditor({
     });
   }, [contentPages, navFooterCourseButtons, selectedPageId]);
 
+  // Old-tool parity (editorPageComponentView.js evaluateMove): a Content
+  // Group with exactly one left + one right (half-width) component can swap
+  // which side each one renders on. The old tool exposes this as a move
+  // arrow on EACH component's own sidebar; here it's merged into a single
+  // "Swap positions" control injected once per qualifying block, permanently
+  // visible (not hover/selection-gated) — matches old tool's move arrows,
+  // which are equally always-on while editing. Anchored to the RIGHT
+  // component's own box (absolutely positioned, see the injected stylesheet)
+  // so it always sits just above that component's own top border, aligned
+  // to its right edge — never the block header.
+  const syncSwapPositionsControls = useCallback(() => {
+    const iframe = previewFrameRef.current;
+    const doc = iframe?.contentDocument;
+    if (!doc || !selectedPageId) return;
+
+    const page = contentPages.find((candidate) => candidate.id === selectedPageId);
+    if (!page) return;
+
+    const qualifyingBlockIds = new Set<string>();
+
+    page.articles.forEach((article) => {
+      article.blocks.forEach((block) => {
+        const leftComponent = block.components.find((component) => component.layout === "left");
+        const rightComponent = block.components.find((component) => component.layout === "right");
+        if (block.components.length !== 2 || !leftComponent || !rightComponent) return;
+
+        qualifyingBlockIds.add(block.id);
+
+        const rightComponentNode = doc.querySelector(`.component[data-adapt-id="${rightComponent.id}"]`) as HTMLElement | null;
+        const rightComponentHost = (rightComponentNode?.querySelector(".component__inner") as HTMLElement | null) ?? rightComponentNode;
+        if (!rightComponentHost) return;
+
+        if (rightComponentHost.style.position !== "relative") {
+          rightComponentHost.style.position = "relative";
+        }
+
+        // Looked up by block id (not scoped to the current host) so a button
+        // created for the PREVIOUS right-hand component gets MOVED here
+        // instead of leaving a stale duplicate behind after a swap.
+        let btn = doc.querySelector<HTMLButtonElement>(
+          `[data-preview-swap-positions-btn][data-preview-swap-block-id="${block.id}"]`
+        );
+        if (!btn) {
+          btn = doc.createElement("button");
+          btn.type = "button";
+          btn.setAttribute("data-preview-swap-positions-btn", "true");
+          btn.className = "adapt-authoring-swap-positions-btn";
+          btn.textContent = "\u21c4 Swap positions";
+        }
+        // Only actually move it when it isn't already correctly placed —
+        // an unconditional insertBefore is a real DOM mutation even when
+        // it's a same-position no-op, which the MutationObserver-driven
+        // retry (below) would then react to, re-running this on every
+        // frame forever and continually resetting the browser's own
+        // :hover tracking on the button (so it could never sustain a
+        // hover, and clicks landed unreliably mid-churn).
+        if (rightComponentHost.firstChild !== btn) {
+          rightComponentHost.insertBefore(btn, rightComponentHost.firstChild);
+        }
+        btn.setAttribute("data-preview-swap-page-id", page.id);
+        btn.setAttribute("data-preview-swap-article-id", article.id);
+        btn.setAttribute("data-preview-swap-block-id", block.id);
+        btn.setAttribute("data-preview-swap-left-id", leftComponent.id);
+        btn.setAttribute("data-preview-swap-right-id", rightComponent.id);
+      });
+    });
+
+    doc.querySelectorAll("[data-preview-swap-positions-btn]").forEach((node) => {
+      const blockId = node.getAttribute("data-preview-swap-block-id");
+      if (!blockId || !qualifyingBlockIds.has(blockId)) node.remove();
+    });
+  }, [contentPages, selectedPageId]);
+
+
+  // Some component templates (e.g. assessment results) render their real
+  // DOM asynchronously well after the iframe's own load/contentPages sync —
+  // a block missing at the time this runs never gets a button, since
+  // nothing else re-triggers this sync once contentPages settles. Keeping
+  // the latest version in a ref lets a MutationObserver (installed once in
+  // handlePreviewFrameLoad, below) retry as soon as the real DOM changes,
+  // instead of only ever running once at load.
+  const syncSwapPositionsControlsRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    syncSwapPositionsControlsRef.current = syncSwapPositionsControls;
+  }, [syncSwapPositionsControls]);
+
+  // Old-tool parity (editorPasteZoneView.js showPasteZones), extended per
+  // explicit user instruction: a "Paste" bar at EVERY sibling gap in the
+  // copied node's own parent (before the first, between each, after the
+  // last) — not just immediately around the copied node — cleared entirely
+  // once clipboardEntry is null (pasted or cancelled).
+  const syncPasteZones = useCallback(() => {
+    const iframe = previewFrameRef.current;
+    const doc = iframe?.contentDocument;
+    if (!doc) return;
+
+    doc.querySelectorAll("[data-preview-paste-zone]").forEach((node) => node.remove());
+    if (!clipboardEntry) return;
+
+    const isSection = clipboardEntry.structureLevel === "section";
+    const label = isSection ? "Section" : "Content Group";
+    const parentId = isSection ? clipboardEntry.pageId : clipboardEntry.articleId;
+    if (!parentId) return;
+
+    const containerNode = isSection
+      ? doc.querySelector(`.page[data-adapt-id="${clipboardEntry.pageId}"]`)
+      : doc.querySelector(`.article[data-adapt-id="${clipboardEntry.articleId}"]`);
+    const siblingNodes = containerNode
+      ? Array.from(containerNode.querySelectorAll<Element>(isSection ? ".article" : ".block"))
+      : [];
+    if (!siblingNodes.length) return;
+
+    const makeZone = (sortOrder: number) => {
+      const zone = doc.createElement("div");
+      zone.setAttribute("data-preview-paste-zone", "true");
+      zone.className = "adapt-authoring-paste-zone";
+
+      const btn = doc.createElement("button");
+      btn.type = "button";
+      btn.setAttribute("data-preview-paste-zone-btn", "true");
+      btn.setAttribute("data-preview-paste-parent-id", parentId);
+      btn.setAttribute("data-preview-paste-sort-order", String(sortOrder));
+      btn.className = "adapt-authoring-paste-zone-btn";
+      btn.innerHTML = `${LEVEL_ACTION_COPY_ICON_SVG}<span>Paste ${label}</span>`;
+
+      const cancel = doc.createElement("button");
+      cancel.type = "button";
+      cancel.setAttribute("data-preview-paste-zone-cancel", "true");
+      cancel.className = "adapt-authoring-paste-zone-cancel";
+      cancel.textContent = "\u00d7";
+      cancel.title = "Cancel";
+
+      zone.appendChild(btn);
+      zone.appendChild(cancel);
+      return zone;
+    };
+
+    siblingNodes.forEach((node, index) => {
+      node.parentElement?.insertBefore(makeZone(index + 1), node);
+    });
+    const lastNode = siblingNodes[siblingNodes.length - 1];
+    lastNode.parentElement?.insertBefore(makeZone(siblingNodes.length + 1), lastNode.nextSibling);
+  }, [clipboardEntry]);
+
+
   const syncPreviewScrollFromLeftPanel = useCallback(() => {
     const iframe = previewFrameRef.current;
     const doc = iframe?.contentDocument;
@@ -6627,12 +7202,49 @@ export default function CourseEditor({
       hoverRafId = window.requestAnimationFrame(applyHoverState);
     };
 
+    const setSwapHoverHighlight = (swapBtn: HTMLElement, active: boolean) => {
+      const leftId = swapBtn.getAttribute("data-preview-swap-left-id");
+      const rightId = swapBtn.getAttribute("data-preview-swap-right-id");
+      [leftId, rightId].forEach((id) => {
+        if (!id) return;
+        const inner = doc.querySelector(`.component[data-adapt-id="${id}"] .component__inner`);
+        if (!inner) return;
+        inner.classList.toggle("adapt-authoring-swap-hover-highlight", active);
+        if (active) {
+          // Harmless if the real hover/active mechanism already owns this
+          // (same value); needed so the OTHER component — not the one the
+          // button itself lives inside — also shows the "Component" label.
+          inner.setAttribute("data-preview-bridge-label", "Component");
+        } else if (
+          !inner.classList.contains("adapt-authoring-preview-hover") &&
+          !inner.classList.contains("adapt-authoring-preview-active")
+        ) {
+          // Only clear it here if nothing else still needs it — the
+          // anchor component may genuinely be hover/active-managed already.
+          inner.removeAttribute("data-preview-bridge-label");
+        }
+      });
+    };
+
     const onMouseOver = (event: Event) => {
-      const state = resolvePreviewIds(event.target as Element | null);
+      const target = event.target as Element | null;
+      const swapBtn = target?.closest("[data-preview-swap-positions-btn]") as HTMLElement | null;
+      if (swapBtn) {
+        setSwapHoverHighlight(swapBtn, true);
+      }
+      const state = resolvePreviewIds(target);
       queueHoverState(state);
     };
 
     const onMouseOut = (event: MouseEvent) => {
+      const target = event.target as Element | null;
+      const swapBtn = target?.closest("[data-preview-swap-positions-btn]") as HTMLElement | null;
+      if (swapBtn) {
+        const relatedTarget = event.relatedTarget as Node | null;
+        if (!relatedTarget || !swapBtn.contains(relatedTarget)) {
+          setSwapHoverHighlight(swapBtn, false);
+        }
+      }
       const relatedTarget = event.relatedTarget as Node | null;
       if (relatedTarget && doc.contains(relatedTarget)) return;
       queueHoverState({ pageId: null, articleId: null, blockId: null, componentId: null, level: null });
@@ -6641,6 +7253,219 @@ export default function CourseEditor({
     const onClick = (event: Event) => {
       const target = event.target as Element | null;
       if (!target) return;
+
+      const swapBtn = target.closest("[data-preview-swap-positions-btn]") as HTMLElement | null;
+      if (swapBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const pageId = swapBtn.getAttribute("data-preview-swap-page-id");
+        const articleId = swapBtn.getAttribute("data-preview-swap-article-id");
+        const blockId = swapBtn.getAttribute("data-preview-swap-block-id");
+        const leftId = swapBtn.getAttribute("data-preview-swap-left-id");
+        const rightId = swapBtn.getAttribute("data-preview-swap-right-id");
+        if (pageId && articleId && blockId && leftId && rightId) {
+          // Instant, glitch-free swap: reorder/reclass the REAL DOM nodes
+          // synchronously right here (no reload, no waiting on a React
+          // re-render) — persistence to the database only happens later,
+          // on Save (see saveDraftChanges' component _layout patch).
+          const leftNode = doc.querySelector(`.component[data-adapt-id="${leftId}"]`) as HTMLElement | null;
+          const rightNode = doc.querySelector(`.component[data-adapt-id="${rightId}"]`) as HTMLElement | null;
+          if (leftNode && rightNode && leftNode.parentElement === rightNode.parentElement) {
+            leftNode.classList.remove("is-left");
+            leftNode.classList.add("is-right");
+            rightNode.classList.remove("is-right");
+            rightNode.classList.add("is-left");
+            leftNode.parentElement!.insertBefore(rightNode, leftNode);
+
+            // leftNode is now the visually-right component — move the swap
+            // control there in the same synchronous pass so it never shows
+            // pinned to the old side for even one frame.
+            const newRightHost = (leftNode.querySelector(".component__inner") as HTMLElement | null) ?? leftNode;
+            newRightHost.style.position = "relative";
+            newRightHost.insertBefore(swapBtn, newRightHost.firstChild);
+            swapBtn.setAttribute("data-preview-swap-left-id", rightId);
+            swapBtn.setAttribute("data-preview-swap-right-id", leftId);
+          }
+          handleSwapComponentPositions(pageId, articleId, blockId, leftId, rightId);
+        }
+        return;
+      }
+
+      // Copy icon (topic/section/group — see ensureLevelActionIcons).
+      const copyBtn = target.closest("[data-preview-copy-node-btn]") as HTMLElement | null;
+      if (copyBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const actionsEl = copyBtn.closest("[data-preview-level-actions]") as HTMLElement | null;
+        if (actionsEl?.getAttribute("data-preview-actions-selected") !== "true") return;
+        const level = actionsEl?.getAttribute("data-preview-action-level");
+        const pageId = actionsEl?.getAttribute("data-preview-action-page-id");
+        const articleId = actionsEl?.getAttribute("data-preview-action-article-id") ?? null;
+        const blockId = actionsEl?.getAttribute("data-preview-action-block-id") ?? null;
+        if (level === "topic" && pageId) {
+          void handleCopyTopicNode(pageId);
+        } else if ((level === "section" || level === "group") && pageId) {
+          void handleStartClipboardCopy(level, pageId, articleId, blockId);
+        }
+        return;
+      }
+
+      // Color Label icon (section/group/component) — opens the Colour Label
+      // popover anchored to the button; a swatch just marks the pending
+      // selection (see the popover-swatch branch below) — Reset/Cancel/Apply
+      // (further below) are what actually commit or dismiss it.
+      const colorLabelBtn = target.closest("[data-preview-color-label-btn]") as HTMLElement | null;
+      if (colorLabelBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        doc.querySelectorAll("[data-preview-color-label-popover]").forEach((node) => node.remove());
+        const actionsEl = colorLabelBtn.closest("[data-preview-level-actions]") as HTMLElement | null;
+        if (actionsEl?.getAttribute("data-preview-actions-selected") !== "true") return;
+        const level = actionsEl?.getAttribute("data-preview-action-level");
+        const pageId = actionsEl?.getAttribute("data-preview-action-page-id");
+        if (!level || !pageId) return;
+        const articleId = actionsEl?.getAttribute("data-preview-action-article-id") ?? null;
+        const blockId = actionsEl?.getAttribute("data-preview-action-block-id") ?? null;
+        const componentId = actionsEl?.getAttribute("data-preview-action-component-id") ?? null;
+        const currentValue = colorLabelBtn.getAttribute("data-preview-color-label-current") ?? "";
+
+        const popover = doc.createElement("div");
+        popover.setAttribute("data-preview-color-label-popover", "true");
+        popover.setAttribute("data-preview-color-label-pending", currentValue);
+        popover.className = "adapt-authoring-color-label-popover";
+
+        const title = doc.createElement("div");
+        title.className = "adapt-authoring-color-label-popover-title";
+        title.textContent = "Colour Label";
+        popover.appendChild(title);
+
+        const desc = doc.createElement("p");
+        desc.className = "adapt-authoring-color-label-popover-desc";
+        desc.innerHTML = "The colours are <strong>only</strong> applied in the authoring tool and will <strong>not</strong> affect the generated course.";
+        popover.appendChild(desc);
+
+        const grid = doc.createElement("div");
+        grid.className = "adapt-authoring-color-label-popover-grid";
+        COLOR_LABEL_VALUES.forEach((value) => {
+          const swatch = doc.createElement("button");
+          swatch.type = "button";
+          swatch.className = "adapt-authoring-color-label-swatch";
+          if (value === currentValue) swatch.classList.add("adapt-authoring-color-label-swatch--selected");
+          swatch.style.background = COLOR_LABEL_HEX[value] ?? "";
+          swatch.setAttribute("data-preview-color-label-value", value);
+          grid.appendChild(swatch);
+        });
+        popover.appendChild(grid);
+
+        const actions = doc.createElement("div");
+        actions.className = "adapt-authoring-color-label-popover-actions";
+
+        const resetBtn = doc.createElement("button");
+        resetBtn.type = "button";
+        resetBtn.setAttribute("data-preview-color-label-reset", "true");
+        resetBtn.className = "adapt-authoring-btn-secondary";
+        resetBtn.textContent = "Reset";
+        actions.appendChild(resetBtn);
+
+        const cancelBtn = doc.createElement("button");
+        cancelBtn.type = "button";
+        cancelBtn.setAttribute("data-preview-color-label-cancel", "true");
+        cancelBtn.className = "adapt-authoring-btn-secondary";
+        cancelBtn.textContent = "Cancel";
+        actions.appendChild(cancelBtn);
+
+        const applyBtn = doc.createElement("button");
+        applyBtn.type = "button";
+        applyBtn.setAttribute("data-preview-color-label-apply", "true");
+        applyBtn.className = "adapt-authoring-btn-primary";
+        applyBtn.textContent = "Apply";
+        actions.appendChild(applyBtn);
+
+        popover.appendChild(actions);
+
+        popover.setAttribute("data-preview-action-level", level);
+        popover.setAttribute("data-preview-action-page-id", pageId);
+        if (articleId) popover.setAttribute("data-preview-action-article-id", articleId);
+        if (blockId) popover.setAttribute("data-preview-action-block-id", blockId);
+        if (componentId) popover.setAttribute("data-preview-action-component-id", componentId);
+
+        doc.body.appendChild(popover);
+        const btnRect = colorLabelBtn.getBoundingClientRect();
+        const popoverRect = popover.getBoundingClientRect();
+        popover.style.top = `${btnRect.bottom + doc.defaultView!.scrollY + 4}px`;
+        popover.style.left = `${btnRect.right + doc.defaultView!.scrollX - popoverRect.width}px`;
+        return;
+      }
+
+      // A swatch inside the color-label popover — marks the pending
+      // selection only; Apply (below) is what actually commits it.
+      const swatchBtn = target.closest("[data-preview-color-label-value]") as HTMLElement | null;
+      if (swatchBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const popover = swatchBtn.closest("[data-preview-color-label-popover]") as HTMLElement | null;
+        if (!popover) return;
+        const value = swatchBtn.getAttribute("data-preview-color-label-value") ?? "";
+        popover.setAttribute("data-preview-color-label-pending", value);
+        popover.querySelectorAll("[data-preview-color-label-value]").forEach((node) => {
+          node.classList.toggle("adapt-authoring-color-label-swatch--selected", node === swatchBtn);
+        });
+        return;
+      }
+
+      const applyColorLabelBtn = target.closest("[data-preview-color-label-apply]") as HTMLElement | null;
+      const resetColorLabelBtn = target.closest("[data-preview-color-label-reset]") as HTMLElement | null;
+      const cancelColorLabelBtn = target.closest("[data-preview-color-label-cancel]") as HTMLElement | null;
+      if (applyColorLabelBtn || resetColorLabelBtn || cancelColorLabelBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const popover = target.closest("[data-preview-color-label-popover]") as HTMLElement | null;
+        const level = popover?.getAttribute("data-preview-action-level");
+        const pageId = popover?.getAttribute("data-preview-action-page-id");
+        const articleId = popover?.getAttribute("data-preview-action-article-id") ?? null;
+        const blockId = popover?.getAttribute("data-preview-action-block-id") ?? null;
+        const componentId = popover?.getAttribute("data-preview-action-component-id") ?? null;
+        const value = resetColorLabelBtn ? "" : (popover?.getAttribute("data-preview-color-label-pending") ?? "");
+        popover?.remove();
+        if (!cancelColorLabelBtn && (level === "section" || level === "group" || level === "component") && pageId) {
+          handleSetColorLabel(level, pageId, articleId, blockId, componentId, value);
+        }
+        return;
+      }
+
+      // Paste zone buttons (Section/Content Group Copy — one at every
+      // sibling gap, see syncPasteZones).
+      const pasteBtn = target.closest("[data-preview-paste-zone-btn]") as HTMLElement | null;
+      if (pasteBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const parentId = pasteBtn.getAttribute("data-preview-paste-parent-id");
+        const sortOrder = Number(pasteBtn.getAttribute("data-preview-paste-sort-order"));
+        if (parentId && Number.isFinite(sortOrder)) {
+          void handlePasteFromClipboard(parentId, sortOrder);
+        }
+        return;
+      }
+      const pasteCancelBtn = target.closest("[data-preview-paste-zone-cancel]") as HTMLElement | null;
+      if (pasteCancelBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        handleCancelClipboardCopy();
+        return;
+      }
+
+      // Any other click closes an open color-label popover (outside click).
+      if (!target.closest("[data-preview-color-label-popover]")) {
+        doc.querySelectorAll("[data-preview-color-label-popover]").forEach((node) => node.remove());
+      }
+
+      // Any other click cancels a pending clipboard copy (paste zones stay
+      // up only until the user picks a slot, hits X, or clicks elsewhere) —
+      // the click itself still continues normally (e.g. selecting a
+      // different node), only the pending copy/paste is dropped.
+      if (clipboardEntryRef.current) {
+        setClipboardEntry(null);
+      }
 
       // CKEditor owns its toolbar, selection, focus, and editable surface.
       // Its instance exists only for the currently selected node, so this is
@@ -7244,12 +8069,33 @@ export default function CourseEditor({
     syncPreviewInlineEditors();
     syncPreviewTopicSettings();
     syncNavigationFooterPreview();
+    syncSwapPositionsControls();
+    syncPasteZones();
     syncPreviewScrollFromLeftPanel();
+
+    // Retries syncSwapPositionsControls whenever the real framework DOM
+    // changes on its own (e.g. an assessment-results component finishing an
+    // async render well after this effect's own initial pass) — the qualifying
+    // block's own contentPages data never changes in that case, so nothing
+    // else would otherwise prompt a second attempt.
+    let swapObserverRafId: number | null = null;
+    const swapPositionsObserver = new MutationObserver(() => {
+      if (swapObserverRafId !== null) return;
+      swapObserverRafId = window.requestAnimationFrame(() => {
+        swapObserverRafId = null;
+        syncSwapPositionsControlsRef.current();
+      });
+    });
+    swapPositionsObserver.observe(doc.body, { childList: true, subtree: true });
 
     cleanupPreviewListenersRef.current = () => {
       if (hoverRafId !== null) {
         window.cancelAnimationFrame(hoverRafId);
       }
+      if (swapObserverRafId !== null) {
+        window.cancelAnimationFrame(swapObserverRafId);
+      }
+      swapPositionsObserver.disconnect();
       cancelTitleAutoRevert();
       doc.removeEventListener("mouseover", onMouseOver);
       doc.removeEventListener("mouseout", onMouseOut);
@@ -7269,9 +8115,17 @@ export default function CourseEditor({
     handleMenuSelect,
     handlePageSelect,
     handleSelectComponent,
+    handleSwapComponentPositions,
+    handleCopyTopicNode,
+    handleStartClipboardCopy,
+    handleCancelClipboardCopy,
+    handlePasteFromClipboard,
+    handleSetColorLabel,
     syncPreviewInlineEditors,
     syncPreviewTopicSettings,
     syncNavigationFooterPreview,
+    syncSwapPositionsControls,
+    syncPasteZones,
     syncPreviewScrollFromLeftPanel,
     contentPages,
   ]);
@@ -7279,6 +8133,14 @@ export default function CourseEditor({
   useEffect(() => {
     applyPreviewSelectionStyles();
   }, [applyPreviewSelectionStyles]);
+
+  useEffect(() => {
+    syncSwapPositionsControls();
+  }, [syncSwapPositionsControls]);
+
+  useEffect(() => {
+    syncPasteZones();
+  }, [syncPasteZones]);
 
   // Defensive reset: canvasTitleLiveOverride is a single shared value (only
   // one node's title can ever be live-edited at once), cleared on blur —
@@ -8503,6 +9365,143 @@ export default function CourseEditor({
     }
   }
 
+  // Old-tool parity (editorPageComponentView.js evaluateMove): swap which
+  // side each of a Content Group's two half-width components renders on.
+  // The real canvas DOM is already swapped instantly by the click handler
+  // above. Old tool persists a move immediately (no separate Save step) —
+  // matched here via a background PUT for each component, WITHOUT any
+  // structure reload (loadStructureFromDatabase would re-fetch and re-mount
+  // the whole iframe, causing the exact refresh/flash this is meant to avoid).
+  function handleSwapComponentPositions(
+    pageId: string,
+    articleId: string,
+    blockId: string,
+    leftComponentId: string,
+    rightComponentId: string
+  ) {
+    setContentPages((previousPages) =>
+      previousPages.map((p) =>
+        p.id === pageId
+          ? {
+              ...p,
+              articles: p.articles.map((a) =>
+                a.id === articleId
+                  ? {
+                      ...a,
+                      blocks: a.blocks.map((b) =>
+                        b.id === blockId
+                          ? {
+                              ...b,
+                              components: b.components.map((c) => {
+                                if (c.id === leftComponentId) return { ...c, layout: "right" as const };
+                                if (c.id === rightComponentId) return { ...c, layout: "left" as const };
+                                return c;
+                              }),
+                            }
+                          : b
+                      ),
+                    }
+                  : a
+              ),
+            }
+          : p
+      )
+    );
+    void Promise.all([
+      updateComponentLayout(leftComponentId, "right"),
+      updateComponentLayout(rightComponentId, "left"),
+    ]).catch((error) => {
+      console.error("Failed to save swapped component positions", error);
+    });
+  }
+
+  // Old-tool parity (editorOriginView.js onCopy -> editorView.js
+  // addToClipboard): Topic pastes immediately at the end of the page list
+  // (no separate paste-zone step, per explicit user instruction).
+  async function handleCopyTopicNode(pageId: string) {
+    try {
+      const newId = await copyStructureNodeViaClipboard("topic", pageId, courseId, courseId, contentPagesRef.current.length + 1);
+      await loadStructureFromDatabase({ pageId: newId });
+    } catch (error) {
+      console.error("Failed to copy topic", error);
+    }
+  }
+
+  // Section/Content Group: only the clipboard-COPY step happens here —
+  // pasting is deferred until the user picks a "Paste" zone (syncPasteZones,
+  // one at every sibling gap within the copied node's own parent) or
+  // cancels via an X / clicking elsewhere.
+  async function handleStartClipboardCopy(
+    level: "section" | "group",
+    pageId: string,
+    articleId: string | null,
+    blockId: string | null
+  ) {
+    try {
+      if (level === "section") {
+        if (!articleId) return;
+        const clipboardId = await copyStructureNodeToClipboard("section", articleId, courseId);
+        setClipboardEntry({ clipboardId, structureLevel: "section", pageId, articleId: null });
+      } else {
+        if (!articleId || !blockId) return;
+        const clipboardId = await copyStructureNodeToClipboard("contentGroup", blockId, courseId);
+        setClipboardEntry({ clipboardId, structureLevel: "contentGroup", pageId, articleId });
+      }
+    } catch (error) {
+      console.error("Failed to copy", error);
+    }
+  }
+
+  function handleCancelClipboardCopy() {
+    setClipboardEntry(null);
+  }
+
+  async function handlePasteFromClipboard(parentId: string, sortOrder: number) {
+    const entry = clipboardEntryRef.current;
+    if (!entry) return;
+    setClipboardEntry(null);
+    try {
+      const newId = await pasteStructureNodeFromClipboard(entry.clipboardId, courseId, parentId, sortOrder);
+      if (entry.structureLevel === "section") {
+        await loadStructureFromDatabase({ pageId: entry.pageId, articleId: newId });
+      } else {
+        await loadStructureFromDatabase({ pageId: entry.pageId, articleId: entry.articleId, blockId: newId });
+      }
+    } catch (error) {
+      console.error("Failed to paste", error);
+    }
+  }
+
+  // Old-tool parity (colorLabelPopupView.js addItem/onReset): immediate
+  // persist, matching every other canvas-driven edit in this file.
+  function handleSetColorLabel(
+    level: "section" | "group" | "component",
+    pageId: string,
+    articleId: string | null,
+    blockId: string | null,
+    componentId: string | null,
+    value: string
+  ) {
+    if (level === "section" && articleId) {
+      updateArticle(pageId, articleId, { colorLabel: value });
+      void updateStructureNode("section", articleId, { _colorLabel: value }).catch((error) => {
+        console.error("Failed to save color label", error);
+      });
+    } else if (level === "group" && articleId && blockId) {
+      updateBlock(pageId, articleId, blockId, { colorLabel: value });
+      void updateStructureNode("contentGroup", blockId, { _colorLabel: value }).catch((error) => {
+        console.error("Failed to save color label", error);
+      });
+    } else if (level === "component" && articleId && blockId && componentId) {
+      updateComponent(pageId, articleId, blockId, componentId, { colorLabel: value });
+      void updateStructureNode("component", componentId, { _colorLabel: value }).catch((error) => {
+        console.error("Failed to save color label", error);
+      });
+    }
+    window.requestAnimationFrame(() => applyPreviewSelectionStylesRef.current());
+  }
+
+
   function updateComponent(pageId: string, articleId: string, blockId: string, componentId: string, patch: Partial<ComponentData>) {
     setContentPages((previousPages) =>
       previousPages.map((p) =>
@@ -8747,6 +9746,7 @@ export default function CourseEditor({
             _isVisible: article.isVisible,
             _requireCompletionOf: isNaN(Number(article.requireCompletionOf)) ? -1 : Number(article.requireCompletionOf),
             _classes: article.classes,
+            _colorLabel: article.colorLabel,
             _onScreen: {
               _isEnabled: !!article.onScreen?._isEnabled,
               _classes: article.onScreen?._classes || "",
@@ -8779,6 +9779,7 @@ export default function CourseEditor({
             _isVisible: block.isVisible,
             _requireCompletionOf: isNaN(Number(block.requireCompletionOf)) ? -1 : Number(block.requireCompletionOf),
             _classes: block.classes,
+            _colorLabel: block.colorLabel,
             _onScreen: {
               _isEnabled: !!block.onScreen?._isEnabled,
               _classes: block.onScreen?._classes || "",
@@ -8822,12 +9823,17 @@ export default function CourseEditor({
             description: settings.description ?? "",
             instruction: instructionValue,
             themeSettings: component.themeSettings ?? {},
+            // Persists a Swap positions click (handleSwapComponentPositions
+            // only updates local draft state; this is what writes it to
+            // the database, same as every other canvas edit).
+            ...(component.layout ? { _layout: component.layout } : {}),
             properties: {
               ...existingProperties,
               instruction: instructionValue,
               ...(subtitleValue !== undefined ? { subtitle: subtitleValue } : {}),
             },
             _classes: component.classes,
+            _colorLabel: component.colorLabel,
             _isOptional: component.isOptional,
             _isAvailable: component.isAvailable,
             _isHidden: component.isHidden,

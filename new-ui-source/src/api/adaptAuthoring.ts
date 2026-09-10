@@ -2237,6 +2237,7 @@ interface EngineContentNode {
   _lockedBy?: string[];
   _classes?: string;
   _htmlClasses?: string;
+  _colorLabel?: string;
   requirecompletionof?: string | number;
   requireCompletionOf?: string | number;
   _requireCompletionOf?: string | number;
@@ -2387,6 +2388,7 @@ export async function getCourseStructure(
           instruction: article.instruction || "",
           themeSettings: objectValue(article.themeSettings),
           classes: article._classes || "",
+          colorLabel: article._colorLabel || "",
           requireCompletionOf: scalarString(
             article.requirecompletionof ?? article.requireCompletionOf ?? article._requireCompletionOf ?? "-1"
           ),
@@ -2414,6 +2416,7 @@ export async function getCourseStructure(
               instruction: block.instruction || "",
               themeSettings: objectValue(block.themeSettings),
               classes: block._classes || "",
+              colorLabel: block._colorLabel || "",
               requireCompletionOf: scalarString(
                 block.requirecompletionof ?? block.requireCompletionOf ?? block._requireCompletionOf ?? "-1"
               ),
@@ -2457,6 +2460,7 @@ export async function getCourseStructure(
                     properties: componentProperties,
                     url: comp.url || "",
                     classes: comp._classes || "",
+                    colorLabel: comp._colorLabel || "",
                     isOptional: !!comp._isOptional,
                     isAvailable: comp._isAvailable !== false,
                     isHidden: !!comp._isHidden,
@@ -3822,6 +3826,58 @@ export function updateComponentLayout(
   layout: "full" | "left" | "right"
 ): Promise<unknown> {
   return apiClient.put(`/api/content/component/${id}`, { _layout: layout });
+}
+
+// Old-tool parity (editorView.js addToClipboard/pasteFromClipboard): a real
+// server-side clipboard copy+paste, not a client-side clone — this is what
+// actually deep-copies a node's descendants (Section > Blocks > Components,
+// etc).
+export async function copyStructureNodeToClipboard(
+  level: StructureLevel,
+  objectId: string,
+  courseId: string
+): Promise<string> {
+  const referenceType = LEVEL_TO_CONTENT_TYPE[level];
+  const copyResult = await apiClient.post<{ success: boolean; message?: string; clipboardId?: string }>(
+    "/api/content/clipboard/copy",
+    { objectId, courseId, referenceType }
+  );
+  if (!copyResult?.success || !copyResult.clipboardId) {
+    throw new Error(copyResult?.message || "Failed to copy content");
+  }
+  return copyResult.clipboardId;
+}
+
+export async function pasteStructureNodeFromClipboard(
+  clipboardId: string,
+  courseId: string,
+  parentId: string,
+  sortOrder: number,
+  layout?: "full" | "left" | "right"
+): Promise<string> {
+  const pasteResult = await apiClient.post<{ message?: string; _id?: string }>(
+    "/api/content/clipboard/paste",
+    { id: clipboardId, parentId, layout, sortOrder, courseId }
+  );
+  if (!pasteResult?._id) {
+    throw new Error(pasteResult?.message || "Failed to paste copied content");
+  }
+  return pasteResult._id;
+}
+
+// Pastes immediately back into the SAME parent right after the original
+// (sortOrder + 1) — a single-click "Copy" action (used for Topic), rather
+// than old tool's separate copy-then-click-a-paste-zone flow.
+export async function copyStructureNodeViaClipboard(
+  level: StructureLevel,
+  objectId: string,
+  courseId: string,
+  parentId: string,
+  sortOrder: number,
+  layout?: "full" | "left" | "right"
+): Promise<string> {
+  const clipboardId = await copyStructureNodeToClipboard(level, objectId, courseId);
+  return pasteStructureNodeFromClipboard(clipboardId, courseId, parentId, sortOrder, layout);
 }
 
 // Fresh-course default: one top-level topic with a starter text component.
