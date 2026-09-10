@@ -1,4 +1,4 @@
-// PDF -> NormalizedDocument (ADAPT-3842 storyboard PDF import).
+// PDF -> NormalizedDocument (storyboard PDF import).
 //
 // PDFs carry no structural markup at all (no real headings/lists/tables in
 // the format itself) — this reconstructs approximate structure purely from
