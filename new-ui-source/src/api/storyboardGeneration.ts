@@ -185,11 +185,14 @@ function inlineToHtml(content: unknown): string {
       };
       // A single run can itself contain '\n' — typing Shift+Enter directly in
       // the editor (not just docx import) encodes a line break this way, since
-      // BlockNote has no distinct "soft break" node. Split so each line closes
-      // and reopens the <p> the caller wraps this in, instead of emitting a
-      // literal newline a browser just collapses to whitespace (the break
-      // vanishes and both lines visually run together in one paragraph).
-      return (n as { text: string }).text.split("\n").map(wrap).join("</p><p>");
+      // BlockNote has no distinct "soft break" node. Encode as <br/> rather
+      // than closing/reopening a <p> — this same output also gets embedded
+      // inside <li>/<td> wrappers elsewhere in this file (list/table folding),
+      // where splitting into a new <p> would produce invalid, sanitizer-
+      // unfriendly markup like <li>...</p><p>...</li>. <br/> is valid in any
+      // of those containers and still renders as a real line break instead of
+      // the literal '\n' a browser would otherwise collapse to whitespace.
+      return (n as { text: string }).text.split("\n").map(wrap).join("<br/>");
     })
     .join("");
 }

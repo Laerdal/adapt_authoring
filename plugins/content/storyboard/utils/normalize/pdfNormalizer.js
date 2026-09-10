@@ -1,17 +1,22 @@
 // PDF -> NormalizedDocument (ADAPT-3842 storyboard PDF import).
 //
-// PDFs carry no structural markup (no real headings/lists/tables) — this
-// reconstructs approximate structure from layout: font-size-relative-to-body
-// for heading levels, leading bullet/number characters for lists, and
-// paintImageXObject + its accumulated CTM for image placement. Bold/italic
-// come from pdf.js's own font descriptor (page.commonObjs), not string
-// guessing. Reuses docxNormalizer's groupIntoSections so PDF items only need
-// to match its NormalizedItem shape ({kind, inline, ...}) — see that file for
-// the shape reference.
+// PDFs carry no structural markup at all (no real headings/lists/tables in
+// the format itself) — this reconstructs approximate structure purely from
+// layout: font-size-relative-to-body for heading levels, leading bullet/
+// number characters for lists, paintImageXObject/paintInlineImageXObject +
+// the accumulated CTM for image placement, and column-position clustering
+// (detectTables/tableRegionToRows) for best-effort inference of borderless
+// ("stream") tables — rows/columns are guessed from text alignment, not read
+// from any real table structure, since PDF has none. Bold/italic come from
+// pdf.js's own font descriptor (page.commonObjs), not string guessing.
+// Reuses docxNormalizer's groupIntoSections so PDF items only need to match
+// its NormalizedItem shape ({kind, inline, ...}) — see that file for the
+// shape reference.
 //
 // Fidelity is inherently lower than DOCX (see metadata.fidelity below): no
-// tables, no reimport round-trip metadata, approximate paragraph/list
-// reconstruction from Y-gaps between lines.
+// reimport round-trip metadata, and headings/paragraphs/lists/tables are all
+// approximate reconstructions from position/font-size heuristics rather than
+// real markup.
 
 const { groupIntoSections } = require('./docxNormalizer');
 

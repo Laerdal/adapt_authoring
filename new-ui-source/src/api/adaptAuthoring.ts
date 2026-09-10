@@ -2560,10 +2560,12 @@ function inlineToHtml(content: unknown): string {
         return html;
       };
       // A single run can itself contain '\n' (Shift+Enter typed directly in
-      // the editor, not just docx import) — split so each line closes/reopens
-      // the <p> the caller wraps this in, instead of a literal newline that a
-      // browser collapses into plain whitespace (the break vanishes).
-      return (n as { text: string }).text.split("\n").map(wrap).join("</p><p>");
+      // the editor, not just docx import) — encode as <br/> rather than
+      // closing/reopening a <p>, since this mirrors storyboardGeneration.ts's
+      // equivalent (used there inside <li>/<td> wrappers, where a <p> split
+      // would produce invalid markup) and a literal '\n' would otherwise just
+      // collapse into plain whitespace in the browser (the break vanishes).
+      return (n as { text: string }).text.split("\n").map(wrap).join("<br/>");
     })
     .join("");
 }
