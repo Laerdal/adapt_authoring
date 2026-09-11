@@ -589,9 +589,9 @@ export default function ExportPdfPage({
         <section className="flex flex-col gap-3.5">
           <SectionTitle>Table of Contents</SectionTitle>
           <div className="flex flex-col gap-1.5">
-            <CheckboxRow label="Include Page Titles in TOC" checked={cfg.tocPageTitles} onChange={(value) => setField("tocPageTitles", value)} />
-            <CheckboxRow label="Include Article Titles in TOC" checked={cfg.tocArticleTitles} onChange={(value) => setField("tocArticleTitles", value)} />
-            <CheckboxRow label="Include Block Titles in TOC" checked={cfg.tocBlockTitles} onChange={(value) => setField("tocBlockTitles", value)} />
+            <CheckboxRow label="Include Topic Titles in TOC" checked={cfg.tocPageTitles} onChange={(value) => setField("tocPageTitles", value)} />
+            <CheckboxRow label="Include Section Titles in TOC" checked={cfg.tocArticleTitles} onChange={(value) => setField("tocArticleTitles", value)} />
+            <CheckboxRow label="Include Content Group Titles in TOC" checked={cfg.tocBlockTitles} onChange={(value) => setField("tocBlockTitles", value)} />
             <CheckboxRow label="Include Component Titles in TOC" checked={cfg.tocComponentTitles} onChange={(value) => setField("tocComponentTitles", value)} />
           </div>
         </section>
@@ -687,8 +687,8 @@ export default function ExportPdfPage({
             <div className="pt-1" />
             <CheckboxRow label="Disable Printing" checked={cfg.disablePrinting} onChange={(value) => setField("disablePrinting", value)} />
             <CheckboxRow label="Disable Copying" checked={cfg.disableCopying} onChange={(value) => setField("disableCopying", value)} />
-            <CheckboxRow label="Disable Annotation" checked={cfg.disableAnnotation} onChange={(value) => setField("disableAnnotation", value)} />
-            <CheckboxRow label="Allow watermarking" checked={cfg.allowWatermarking} onChange={(value) => setField("allowWatermarking", value)} />
+            <CheckboxRow label="Disable Annotations" checked={cfg.disableAnnotation} onChange={(value) => setField("disableAnnotation", value)} />
+            <CheckboxRow label="Allow watermark" checked={cfg.allowWatermarking} onChange={(value) => setField("allowWatermarking", value)} />
             <div className="pt-1" />
             <TextAreaField
               label="Watermark Text"
