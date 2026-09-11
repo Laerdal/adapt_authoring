@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
+import EditorMaskIcon from "../../components/editor/EditorMaskIcon";
 import {
   getNavigationSettings,
   saveNavigationSettings,
@@ -157,33 +158,15 @@ const MENU_LOCK_OPTIONS: { value: NavigationSettings["lockType"]; label: string 
 ];
 
 // Footer buttons surfaced as an icon toggle list. "Close" is not shown here but
-// its stored value is preserved on save (see saveNavigationSettings).
+// its stored value is preserved on save (see saveNavigationSettings). Icons are
+// the real new-ui assets (public/assets/icons), matching the same set wired up
+// in the Page Editor's own Navigation Footer settings (pageEditorWorkspace.tsx).
 const ICON = {
-  home: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
-    </svg>
-  ),
-  previous: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="19" y1="12" x2="5" y2="12" /><polyline points="12 19 5 12 12 5" />
-    </svg>
-  ),
-  next: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
-    </svg>
-  ),
-  up: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" />
-    </svg>
-  ),
-  custom: (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="4" y="4" width="16" height="16" rx="2" /><line x1="9" y1="4" x2="9" y2="20" />
-    </svg>
-  ),
+  home: <EditorMaskIcon file="home-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current" />,
+  previous: <EditorMaskIcon file="back-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current" />,
+  next: <EditorMaskIcon file="next-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current" />,
+  up: <EditorMaskIcon file="up-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current" />,
+  custom: <EditorMaskIcon file="custom-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current" />,
 } as const;
 
 const FOOTER_BUTTONS_DISPLAY: { key: NavFooterButtonKey; label: string; icon: React.ReactNode }[] = [

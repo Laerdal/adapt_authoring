@@ -12,6 +12,7 @@ import {
 } from "../../api/adaptAuthoring";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
 import AssetSelectionField, { toRenderableAssetUrl } from "../../components/common/AssetSelectionField";
+import { CheckboxIndicator } from "../../components/common/Checkbox";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
@@ -522,8 +523,10 @@ function MenuCheckbox({
         type="checkbox"
         checked={checked}
         onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 h-4 w-4 shrink-0 rounded border-2 border-[#d1d5db] accent-[#2d6fa8] cursor-pointer"
+        aria-label={label}
+        className="sr-only peer"
       />
+      <CheckboxIndicator checked={checked} className="mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
       <div className="flex flex-col gap-0.5">
         <span className="text-sm font-semibold text-[#374151]">{label}</span>
         {description ? <span className="text-[13px] text-[var(--life-neutral-300)]">{description}</span> : null}
@@ -816,7 +819,7 @@ function MenuPreview({ cfg, resolveUrl }: { cfg: MenuPageConfig; resolveUrl?: (v
   const hasHeaderImage = !!(cfg.headerImageSrc.xlarge || cfg.headerImageSrc.large || cfg.headerImageSrc.medium || cfg.headerImageSrc.small);
 
   return (
-    <div className="w-[400px] shrink-0 bg-[var(--life-neutral-020)] border-l border-[var(--life-neutral-200)] sticky top-0 h-[calc(100vh-64px)] flex flex-col">
+    <div className="w-[400px] shrink-0 bg-[var(--life-neutral-020)] border-l border-[var(--life-neutral-200)] sticky top-0 h-full flex flex-col">
       <div className="px-5 py-3 bg-white border-b border-[var(--life-neutral-200)] flex items-center justify-between">
         <div className="flex items-center gap-2">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--life-primary-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
@@ -1241,8 +1244,8 @@ export function MenuPage({
 
   return (
     <>
-      <div className="flex flex-row items-start min-h-[calc(100vh-64px)]">
-        <div className="flex-1 min-w-0 bg-[var(--background)] border-r border-[var(--life-neutral-200)] px-8 py-8 overflow-y-auto max-h-[calc(100vh-64px)]">
+      <div className="flex flex-row items-start min-h-[calc(100vh-96px)]">
+        <div className="flex-1 min-w-0 bg-[var(--background)] border-r border-[var(--life-neutral-200)] px-8 pt-8 pb-16 overflow-y-auto max-h-[calc(100vh-96px)]">
           <div className="mb-7">
             <h2 className="text-xl font-bold text-[var(--life-base-black)] m-0">Menu</h2>
             <p className="text-sm text-[var(--life-neutral-300)] mt-1 leading-[1.5]">Configure how learners will navigate your course.</p>
@@ -1403,6 +1406,40 @@ export function MenuPage({
         onSave={handleSave}
         onClose={clearPendingNavigation}
       />
+
+      {hasChanges && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-3 rounded-xl bg-white border border-[var(--life-warning-100)] shadow-lg animate-fade-in-down">
+          <span className="flex items-center gap-2 text-sm text-[#374151]">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-warning-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            Unsaved changes
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleDiscard}
+              disabled={isSaving}
+              className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] disabled:opacity-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={isSaving || !courseId}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:opacity-50 rounded-lg transition-colors"
+            >
+              {isSaving && (
+                <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                </svg>
+              )}
+              {isSaving ? "Saving…" : "Save Changes"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {assetPickerTarget ? (
         <AssetPickerModal

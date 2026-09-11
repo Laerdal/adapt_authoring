@@ -4,6 +4,7 @@ import { useUnsavedChangesNavigationGuard } from "../../pages/setup/useUnsavedCh
 import { ensureCoursePreview } from "../../api/adaptAuthoring";
 import { useAuth } from "../../context/AuthContext";
 import AssetPickerModal from "../common/AssetPickerModal";
+import { CheckboxIndicator } from "../common/Checkbox";
 import {
   DEFAULT_VALIDATOR_ENABLER_PDF_SETTINGS,
   getValidatorEnablerPdfSettings,
@@ -34,8 +35,10 @@ function CheckboxRow({
         type="checkbox"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
-        className="mt-0.5 h-4 w-4 shrink-0 rounded border-2 border-[#d1d5db] accent-[#2d6fa8] cursor-pointer"
+        aria-label={label}
+        className="sr-only peer"
       />
+      <CheckboxIndicator checked={checked} className="mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
       <span className="text-sm text-[#374151] leading-snug group-hover:text-[#111827] transition-colors">{label}</span>
     </label>
   );

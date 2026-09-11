@@ -29,6 +29,7 @@ export interface SComponent {
   properties?: Record<string, unknown>;
   url?: string;
   classes?: string;
+  colorLabel?: string;
   isOptional?: boolean;
   isAvailable?: boolean;
   isHidden?: boolean;
@@ -53,6 +54,7 @@ export interface SContentGroup {
   instruction?: string;
   themeSettings?: Record<string, unknown>;
   classes?: string;
+  colorLabel?: string;
   requireCompletionOf?: string;
   isOptional?: boolean;
   isAvailable?: boolean;
@@ -77,6 +79,7 @@ export interface SSection {
   instruction?: string;
   themeSettings?: Record<string, unknown>;
   classes?: string;
+  colorLabel?: string;
   requireCompletionOf?: string;
   isOptional?: boolean;
   isAvailable?: boolean;

@@ -34,6 +34,7 @@ import { storyboardActions } from '../storyboardActions';
 import { resolveCommentAnchor } from '../commentAnchor';
 import type { AssetKind } from '@/api/adaptAuthoring';
 import AssetPickerModal from '@/components/common/AssetPickerModal';
+import { CheckboxIndicator } from '@/components/common/Checkbox';
 import { emptyMediaData, safePreviewSrc, toEmbedUrl, type AssetRef, type ImageData, type MediaData } from '../mediaMapping';
 import SamaritanIcon from '../SamaritanIcon';
 
@@ -510,8 +511,9 @@ function ComponentBody({ kind, data, set }: { kind: ComponentKind; data: Compone
               <span className={labelCls}>Placeholder</span>
               <input value={f.placeholder} onKeyDown={stop} onChange={(e) => setFields(fields.map((x, j) => (j === i ? { ...x, placeholder: e.target.value } : x)))} className={inputCls} />
             </label>
-            <label className="mt-1 flex items-center gap-1.5 text-sm text-foreground">
-              <input type="checkbox" checked={f.mandatory} onChange={(e) => setFields(fields.map((x, j) => (j === i ? { ...x, mandatory: e.target.checked } : x)))} className="h-4 w-4 accent-[color:var(--primary)]" />
+            <label className="mt-1 flex items-center gap-1.5 text-sm text-foreground cursor-pointer group">
+              <input type="checkbox" checked={f.mandatory} onChange={(e) => setFields(fields.map((x, j) => (j === i ? { ...x, mandatory: e.target.checked } : x)))} aria-label="Is mandatory" className="sr-only peer" />
+              <CheckboxIndicator checked={f.mandatory} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
               Is mandatory
             </label>
           </div>
@@ -585,13 +587,15 @@ function ComponentBody({ kind, data, set }: { kind: ComponentKind; data: Compone
                   onChange={(e) => setBands(bands.map((x, j) => (j === i ? { ...x, feedback: e.target.value } : x)))}
                   className={`${inputCls} resize-y`}
                 />
-                <label className="mt-1 flex items-center gap-1.5 text-xs text-foreground">
+                <label className="mt-1 flex items-center gap-1.5 text-xs text-foreground cursor-pointer group">
                   <input
                     type="checkbox"
                     checked={b.allowRetry}
                     onChange={(e) => setBands(bands.map((x, j) => (j === i ? { ...x, allowRetry: e.target.checked } : x)))}
-                    className="h-4 w-4 accent-[color:var(--primary)]"
+                    aria-label="Allow retry"
+                    className="sr-only peer"
                   />
+                  <CheckboxIndicator checked={b.allowRetry} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
                   Allow retry
                 </label>
               </label>
@@ -763,7 +767,7 @@ function ComponentPreview({ kind, title, data }: { kind: ComponentKind; title: s
                 </select>
               ) : f.control === 'Checkbox' ? (
                 <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
-                  <input type="checkbox" disabled className="h-4 w-4" /> {f.placeholder}
+                  <CheckboxIndicator checked={false} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center border-[#d1d5db] bg-white" /> {f.placeholder}
                 </span>
               ) : (
                 <input disabled type={f.control === 'Number' ? 'number' : 'text'} placeholder={f.placeholder} className={`${inputCls} bg-muted/40`} />

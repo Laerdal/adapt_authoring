@@ -2247,7 +2247,7 @@ function CpCheckboxMulti({
               <div
                 onClick={() => toggle(opt.value)}
                 className={`mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
-                  checked ? "bg-[#2d6fa8] border-[#2d6fa8]" : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
+                  checked ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]" : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
                 }`}
               >
                 {checked && (
