@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { enforceMaxComponentsPerBlock, type GenTopic, type GenComponent, type ContentNode } from './storyboardGeneration';
+import { enforceMaxComponentsPerBlock, pruneEmptyContainers, type GenTopic, type GenComponent, type ContentNode } from './storyboardGeneration';
 
 function makeComponent(n: number): GenComponent {
   return { componentKey: 'text', title: `Comp ${n}`, body: '' };
@@ -81,5 +81,38 @@ describe('enforceMaxComponentsPerBlock', () => {
     enforceMaxComponentsPerBlock(tree, existingBlocks);
     const groups = tree[0].sections[0].groups;
     expect(groups[1].existingId).toBeUndefined();
+  });
+});
+
+describe('pruneEmptyContainers', () => {
+  it('removes a Topic whose only Section has an empty Content Group (heading-only doc, no real content)', () => {
+    const tree: GenTopic[] = [
+      { title: 'Topic', sections: [{ title: 'Section', groups: [{ title: 'Group', components: [] }] }] },
+    ];
+    pruneEmptyContainers(tree);
+    expect(tree.length).toBe(0);
+  });
+
+  it('removes only the empty Section, keeping a sibling Section with real content', () => {
+    const tree: GenTopic[] = [
+      {
+        title: 'Topic',
+        sections: [
+          { title: 'Empty Section', groups: [{ title: 'Group', components: [] }] },
+          { title: 'Real Section', groups: [{ title: 'Group', components: [makeComponent(1)] }] },
+        ],
+      },
+    ];
+    pruneEmptyContainers(tree);
+    expect(tree.length).toBe(1);
+    expect(tree[0].sections.length).toBe(1);
+    expect(tree[0].sections[0].title).toBe('Real Section');
+  });
+
+  it('leaves a fully-populated tree untouched', () => {
+    const tree = makeTreeWithOverflow(1);
+    pruneEmptyContainers(tree);
+    expect(tree.length).toBe(1);
+    expect(tree[0].sections[0].groups[0].components.length).toBe(1);
   });
 });
