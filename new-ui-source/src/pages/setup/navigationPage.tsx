@@ -437,7 +437,7 @@ export function NavigationPage({
             <>
               {/* ── Start settings ── */}
               <NavAccordion {...acc("start")} title="Start settings" subtitle="Choose which page(s) learners land on when they open the course.">
-                <CheckboxRow checked={s.start._isEnabled} onChange={(v) => setStart({ _isEnabled: v })} label="Enabled?" />
+                <ToggleSwitch checked={s.start._isEnabled} onChange={(v) => setStart({ _isEnabled: v })} label="Enable start settings" />
 
                 {s.start._isEnabled && (
                   <div className="flex flex-col gap-3">
@@ -488,11 +488,11 @@ export function NavigationPage({
                         <p className="text-[11px] text-[var(--life-neutral-300)] mt-1.5">Add a page to the course before choosing a start page.</p>
                       )}
                     </div>
+
+                    <CheckboxRow checked={s.start._force} onChange={(v) => setStart({ _force: v })} label="Force routing" />
+                    <CheckboxRow checked={s.start._isMenuDisabled} onChange={(v) => setStart({ _isMenuDisabled: v })} label="Disable menu" />
                   </div>
                 )}
-
-                <CheckboxRow checked={s.start._force} onChange={(v) => setStart({ _force: v })} label="Force routing" />
-                <CheckboxRow checked={s.start._isMenuDisabled} onChange={(v) => setStart({ _isMenuDisabled: v })} label="Disable menu" />
               </NavAccordion>
 
               {/* ── Menu Lock Settings ── */}
