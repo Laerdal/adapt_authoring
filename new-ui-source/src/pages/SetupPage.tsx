@@ -345,36 +345,6 @@ function CourseStructurePanel({
         </p>
       </div>
 
-      {/* Unsaved-changes bar — edits persist only on Save Changes */}
-      {dirty && (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-[#e5e7eb] bg-white shadow-sm px-4 py-2.5">
-          <div className="flex items-center gap-2">
-            <svg className="shrink-0 text-[#f59e0b]" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" />
-            </svg>
-            <span className="text-sm text-[#4b5563]">Unsaved changes</span>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={discard}
-              disabled={saving}
-              className="px-3 py-1.5 text-sm rounded-lg text-[#374151] bg-white border border-[#e5e7eb] hover:bg-[#f9fafb] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => void save()}
-              disabled={saving}
-              className="px-3.5 py-1.5 text-sm font-semibold rounded-lg text-white bg-[#2d6fa8] hover:bg-[#235694] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {saving ? "Saving…" : "Save Changes"}
-            </button>
-          </div>
-        </div>
-      )}
-
       {error && (
         <div className="mb-4 rounded-lg border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b]">
           {error.message}
@@ -461,6 +431,63 @@ function CourseStructurePanel({
                 </svg>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {!loading && dirty && (
+        <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-4 rounded-xl border border-[var(--life-warning-100)] bg-white px-4 py-3 shadow-lg animate-fade-in-down">
+          <span className="flex items-center gap-2 text-sm text-[#374151]">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--life-warning-500)"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="shrink-0"
+            >
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            Unsaved changes
+          </span>
+          {error && <span className="max-w-[180px] truncate text-xs text-[#ef4444]">{error.message}</span>}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={discard}
+              disabled={saving}
+              className="rounded-lg border border-[#d1d5db] bg-white px-4 py-2 text-sm font-medium text-[#374151] transition-colors hover:bg-[#f9fafb] disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void save()}
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-lg bg-[var(--life-primary-500)] px-4 py-2 text-sm font-semibold text-[var(--life-base-white)] transition-colors hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:opacity-50"
+            >
+              {saving && (
+                <svg
+                  className="animate-spin"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                </svg>
+              )}
+              {saving ? "Saving…" : "Save Changes"}
+            </button>
           </div>
         </div>
       )}
