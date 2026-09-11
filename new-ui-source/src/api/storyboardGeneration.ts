@@ -254,14 +254,14 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
   // component's body — same "accumulate, then flush" shape as paragraphs.
   let listBuffer: { kind: "ul" | "ol"; items: string[]; sourceBlockId?: string } | null = null;
 
-  // Titles carry an explicit "Untitled ..." marker rather than a bare
-  // "Untitled ..." — this tree is a fallback for content that arrives without
+  // Titles carry an explicit "New ..." marker rather than a bare, unlabeled
+  // placeholder — this tree is a fallback for content that arrives without
   // its required intermediate parent (e.g. a paragraph directly under an H1),
   // and an unlabeled placeholder reads as data loss ("where did my Section
   // go?") rather than what it actually is: a level the author never wrote.
   const ensureTopic = () => {
     if (!topic) {
-      topic = { title: "Untitled Topic", sections: [] };
+      topic = { title: "New Topic", sections: [] };
       topics.push(topic);
       section = null;
       group = null;
@@ -271,7 +271,7 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
   const ensureSection = () => {
     ensureTopic();
     if (!section) {
-      section = { title: "Untitled Section", groups: [] };
+      section = { title: "New Section", groups: [] };
       topic!.sections.push(section);
       group = null;
     }
@@ -280,7 +280,7 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
   const ensureGroup = () => {
     ensureSection();
     if (!group) {
-      group = { title: "Untitled Content", components: [] };
+      group = { title: "New Content", components: [] };
       section!.groups.push(group);
     }
     return group;
@@ -720,6 +720,10 @@ export async function planStoryboardGeneration(
       sections += 1;
       if (s.existingId) referenced.add(s.existingId);
       for (const g of s.groups) {
+        // Mirrors generateStoryboardCourse's skip of empty groups — an empty
+        // Content Group is never actually persisted as a Block, so it
+        // shouldn't inflate the counts shown in the pre-generate summary.
+        if (!g.components.length) continue;
         groups += 1;
         if (g.existingId) referenced.add(g.existingId);
         for (const c of g.components) {
@@ -874,6 +878,14 @@ export async function generateStoryboardCourse(
 
       let gSort = 1;
       for (const g of s.groups) {
+        // Never create/update a Block with zero components — the Adapt build
+        // rejects an empty block ("does not contain any components"). An
+        // existing block that's been emptied out (every component removed in
+        // the Storyboard) is simply left unresolved here instead, so a full
+        // Generate cleans it up via the normal delete-reconciliation pass
+        // below (Save's skipDeletes leaves it untouched, which is fine — it's
+        // stale but harmless until the next full Generate).
+        if (!g.components.length) continue;
         let grpId = g.existingId;
         if (grpId) {
           await put("block", grpId, { title: g.title, displayTitle: g.title, _parentId: secId, _sortOrder: gSort });

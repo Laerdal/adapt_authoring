@@ -390,16 +390,16 @@ function collectBlockNoteSequence(blocks, warnings) {
 
 // Adapt's course structure requires exactly 4 contiguous levels (Topic >
 // Section > Content Group > component) — see storyboardGeneration.ts's
-// parseDocToTree. That code silently synthesizes an invisible "Untitled
-// Section"/"Untitled Content Group" node whenever content shows up without
-// its required intermediate parent (e.g. a paragraph directly under an H1,
-// or an H3 with no preceding H2) — which is exactly what most real-world
-// documents look like (they rarely author a full 4-level heading hierarchy).
-// Left alone, that produces mystery text the user never typed and can't see
-// or rename until AFTER generating the course, and — worse — a heading with
-// truly nothing under it still gets emitted, producing an empty Topic/
-// Section that breaks the Adapt course build downstream ("does not contain
-// any articles").
+// parseDocToTree. That code silently synthesizes an invisible "New Section"/
+// "New Content" node whenever content shows up without its required
+// intermediate parent (e.g. a paragraph directly under an H1, or an H3 with
+// no preceding H2) — which is exactly what most real-world documents look
+// like (they rarely author a full 4-level heading hierarchy). Left alone,
+// that produces mystery text the user never typed and can't see or rename
+// until AFTER generating the course, and — worse — a heading with truly
+// nothing under it still gets emitted, producing an empty Topic/Section that
+// breaks the Adapt course build downstream ("does not contain any
+// articles").
 //
 // So this layer does the gap-filling itself, *visibly*: every section is
 // numbered by its actual nesting depth (not its literal source heading
@@ -408,14 +408,13 @@ function collectBlockNoteSequence(blocks, warnings) {
 // and any section with no real content anywhere in its subtree is dropped
 // entirely rather than emitted as an empty container.
 const MIN_CONTENT_DEPTH = 3; // paragraphs/lists/tables/images need an open "Content Group"
-// "(Auto-generated)" marks these as synthesized rather than a bare "Untitled
-// ..." — matches parseDocToTree's fallback titles (storyboardGeneration.ts)
-// so the same content reads consistently whether viewed in the Storyboard
-// editor or, if left unrenamed, in the generated course.
+// Matches parseDocToTree's fallback titles (storyboardGeneration.ts) so the
+// same content reads consistently whether viewed in the Storyboard editor
+// or, if left unrenamed, in the generated course.
 const DEPTH_PLACEHOLDER_TITLE = {
-  1: 'Untitled Topic',
-  2: 'Untitled Section',
-  3: 'Untitled Content',
+  1: 'New Topic',
+  2: 'New Section',
+  3: 'New Content',
 };
 
 function blockHasContent(block) {
@@ -443,7 +442,7 @@ function pushFillerHeadings(out, fromDepth, toDepth, warnings) {
       id: nextId('h'),
       type: 'heading',
       props: { level: Math.min(d, MAX_HEADING_LEVEL) },
-      content: inlineToBlockNote([{ text: DEPTH_PLACEHOLDER_TITLE[d] || 'Untitled' }]),
+      content: inlineToBlockNote([{ text: DEPTH_PLACEHOLDER_TITLE[d] || 'New Content' }]),
       children: [],
     });
   }

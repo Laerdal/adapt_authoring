@@ -4824,7 +4824,7 @@ export async function importStoryboardDocument(
 ): Promise<ImportResult> {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`/api/storyboard/import/${format}`, {
+  const res = await fetch(`${SB_DOCS}/import/${format}`, {
     method: "POST",
     body: form,
     credentials: "same-origin",

@@ -37,7 +37,13 @@ class Routes {
     // ── Import / Export (AC10) ────────────────────────────────────────────
     rest.get('/storyboard/documents/:id/export/word', h.exportWord);
     rest.get('/storyboard/documents/:id/export/pdf', h.exportPdf);
-    rest.post('/storyboard/import/:format', h.importDocument);
+    // Under /documents, NOT bare /storyboard/import/:format — the legacy
+    // plugins/output/storyboard plugin also registers `/storyboard/import/
+    // :courseid`, an identical Express route shape (both are just a single
+    // param segment), so whichever plugin's route happened to register first
+    // silently swallowed every import request meant for this handler (see
+    // the collision note in ../index.js).
+    rest.post('/storyboard/documents/import/:format', h.importDocument);
   }
 }
 
