@@ -2805,6 +2805,14 @@ function CourseCreationCenterContent() {
       return;
     }
 
+    // Export source is a side-effect action, not a page transition; do not
+    // interrupt it with unsaved-changes modal.
+    if (nextPanel === SPECIAL_NAV.exportSource) {
+      setPendingNavigation(null);
+      performNavigation(nextPanel);
+      return;
+    }
+
     if (GUARDED_NAV_IDS.has(activeNav)) {
       // Signal to the active guarded setup page that navigation is requested.
       // The page decides whether to show a confirmation modal or allow navigation.
