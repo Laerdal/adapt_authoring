@@ -193,6 +193,7 @@ function AssetPicker({
   url,
   onUrlChange,
   onChooseLibrary,
+  onRemoveImage,
 }: {
   label: string;
   source: "library" | "url";
@@ -200,6 +201,7 @@ function AssetPicker({
   url: string;
   onUrlChange: (value: string) => void;
   onChooseLibrary: () => void;
+  onRemoveImage: () => void;
 }) {
   const libraryId = useId();
   const urlId = useId();
@@ -240,30 +242,62 @@ function AssetPicker({
 
       {source === "library" ? (
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-3 rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5">
-            <span className="text-[#9ca3af] shrink-0">
-              <ImageIcon />
-            </span>
-            <span className={`flex-1 text-[13px] ${url ? "text-[#374151]" : "text-[#9ca3af]"}`}>
-              {url ? "Asset selected" : "No asset selected"}
-            </span>
-            <button
-              id={libraryId}
-              type="button"
+          {url ? (
+            <div
+              className="group relative h-36 w-full cursor-pointer overflow-hidden rounded-lg"
               onClick={onChooseLibrary}
-              className="rounded-md border border-[#d1d5db] bg-white px-3.5 py-1.5 text-[13px] font-semibold text-[#374151] transition-colors hover:bg-[#f3f4f6]"
+              onKeyDown={(event) => {
+                if (event.target !== event.currentTarget) return;
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onChooseLibrary();
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              aria-label={`Replace ${label.toLowerCase()}`}
             >
-              {url ? "Change" : "Browse"}
-            </button>
-          </div>
-          {url && (
-            <div className="overflow-hidden rounded-lg border border-[#e5e7eb] bg-[#f8fafc]">
               <img
                 src={url}
                 alt={`${label} preview`}
-                className="h-36 w-full object-contain bg-white"
+                className="h-36 w-full rounded-lg object-cover"
               />
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRemoveImage();
+                }}
+                aria-label="Remove image"
+                className="absolute right-2 top-2 z-[2] flex h-6 w-6 items-center justify-center rounded-full border-0 bg-white/95 p-0 text-[var(--life-neutral-500)] transition-colors hover:bg-white hover:text-[var(--life-critical-500)]"
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                  <path d="M9 3L3 9M3 3l6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </button>
+              <div
+                className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-lg bg-black/45 opacity-0 transition-opacity group-hover:opacity-100"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8l2 3h6a2 2 0 0 1 2 2z" />
+                </svg>
+                <span className="text-[13px] font-bold text-white">Replace Image</span>
+              </div>
             </div>
+          ) : (
+            <button
+              id={libraryId}
+              type="button"
+              className="h-36 w-full cursor-pointer relative flex flex-col items-center justify-center gap-2 overflow-hidden rounded-lg border-2 border-dashed border-[var(--life-neutral-300)] bg-[var(--life-neutral-050)] transition-colors hover:border-[var(--life-primary-500)]"
+              onClick={onChooseLibrary}
+              aria-label={`Select ${label.toLowerCase()} from asset library`}
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--life-neutral-400)]" aria-hidden="true">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8l2 3h6a2 2 0 0 1 2 2z" />
+              </svg>
+              <span className="text-[13px] text-[var(--life-neutral-400)]">Choose a cover image</span>
+              <span className="text-[11px] text-[var(--life-neutral-400)]">JPG, PNG or WebP · 16:9 aspect ratio recommended</span>
+            </button>
           )}
         </div>
       ) : (
@@ -281,11 +315,11 @@ function AssetPicker({
             className="w-full rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5 text-sm text-[#111827] placeholder:text-[#9ca3af] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors"
           />
           {url.trim() && !urlPreviewFailed && (
-            <div className="overflow-hidden rounded-lg border border-[#e5e7eb] bg-[#f8fafc]">
+            <div className="relative h-36 w-full overflow-hidden rounded-lg">
               <img
                 src={url.trim()}
                 alt={`${label} URL preview`}
-                className="h-36 w-full object-contain bg-white"
+                className="h-36 w-full rounded-lg object-cover"
                 onError={() => setUrlPreviewFailed(true)}
               />
             </div>
@@ -547,6 +581,7 @@ export default function ExportPdfPage({
             url={cfg.coverPageUrl}
             onUrlChange={(value) => setField("coverPageUrl", value)}
             onChooseLibrary={() => setAssetPickerTarget("cover")}
+            onRemoveImage={() => setField("coverPageUrl", "")}
           />
         </section>
 
@@ -555,9 +590,9 @@ export default function ExportPdfPage({
         <section className="flex flex-col gap-3.5">
           <SectionTitle>Table of Contents</SectionTitle>
           <div className="flex flex-col gap-1.5">
-            <CheckboxRow label="Include Page Titles in TOC" checked={cfg.tocPageTitles} onChange={(value) => setField("tocPageTitles", value)} />
-            <CheckboxRow label="Include Article Titles in TOC" checked={cfg.tocArticleTitles} onChange={(value) => setField("tocArticleTitles", value)} />
-            <CheckboxRow label="Include Block Titles in TOC" checked={cfg.tocBlockTitles} onChange={(value) => setField("tocBlockTitles", value)} />
+            <CheckboxRow label="Include Topic Titles in TOC" checked={cfg.tocPageTitles} onChange={(value) => setField("tocPageTitles", value)} />
+            <CheckboxRow label="Include Section Titles in TOC" checked={cfg.tocArticleTitles} onChange={(value) => setField("tocArticleTitles", value)} />
+            <CheckboxRow label="Include Content Group Titles in TOC" checked={cfg.tocBlockTitles} onChange={(value) => setField("tocBlockTitles", value)} />
             <CheckboxRow label="Include Component Titles in TOC" checked={cfg.tocComponentTitles} onChange={(value) => setField("tocComponentTitles", value)} />
           </div>
         </section>
@@ -605,6 +640,7 @@ export default function ExportPdfPage({
             url={cfg.footerLogoUrl}
             onUrlChange={(value) => setField("footerLogoUrl", value)}
             onChooseLibrary={() => setAssetPickerTarget("footer")}
+            onRemoveImage={() => setField("footerLogoUrl", "")}
           />
         </section>
 
@@ -652,8 +688,8 @@ export default function ExportPdfPage({
             <div className="pt-1" />
             <CheckboxRow label="Disable Printing" checked={cfg.disablePrinting} onChange={(value) => setField("disablePrinting", value)} />
             <CheckboxRow label="Disable Copying" checked={cfg.disableCopying} onChange={(value) => setField("disableCopying", value)} />
-            <CheckboxRow label="Disable Annotation" checked={cfg.disableAnnotation} onChange={(value) => setField("disableAnnotation", value)} />
-            <CheckboxRow label="Allow watermarking" checked={cfg.allowWatermarking} onChange={(value) => setField("allowWatermarking", value)} />
+            <CheckboxRow label="Disable Annotations" checked={cfg.disableAnnotation} onChange={(value) => setField("disableAnnotation", value)} />
+            <CheckboxRow label="Allow Watermark" checked={cfg.allowWatermarking} onChange={(value) => setField("allowWatermarking", value)} />
             <div className="pt-1" />
             <TextAreaField
               label="Watermark Text"
