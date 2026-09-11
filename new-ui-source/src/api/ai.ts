@@ -58,3 +58,57 @@ export async function sendMessage(opts: {
   const text = await storyboardAi("suggest", lastUser?.content ?? "", context);
   return { text };
 }
+
+// ─── AI Tutor (Samaritan) — full feature parity with the legacy plugin ───
+// The new UI targets the same server routes the legacy frontend plugin uses
+// (see `frontend/src/plugins/ai-tutor` + `plugins/services/ai-tutor/routes`),
+// so both authoring surfaces share one Samaritan brain: same prompts, same
+// retrieval, same citation badges, same "new chat" history reset.
+
+export interface CitationBadge {
+  label: string;
+  href?: string;
+}
+
+// The route/context object the server expects. `route` is used server-side to
+// bias grounding (e.g. dashboard queries hit live course data — see
+// `isDashboardContext` in requestHandlers.js). All fields are optional.
+export interface AiTutorContext {
+  route?: string;
+  courseName?: string;
+  courseId?: string;
+  pageId?: string;
+  articleId?: string;
+  blockId?: string;
+  componentId?: string;
+  [key: string]: unknown;
+}
+
+export interface AiTutorChatResponse {
+  reply: string;
+  citationBadges: CitationBadge[];
+}
+
+// POST /api/ai-tutor/chat — { message, context } → { data: { reply, citationBadges } }
+export async function aiTutorChat(
+  message: string,
+  context?: AiTutorContext
+): Promise<AiTutorChatResponse> {
+  const res = await apiClient.post<{
+    data?: { reply?: string; citationBadges?: CitationBadge[] };
+  }>("/api/ai-tutor/chat", { message, context: context || {} });
+  return {
+    reply: res.data?.reply ?? "",
+    citationBadges: res.data?.citationBadges ?? [],
+  };
+}
+
+// POST /api/ai-tutor/history/clear — reset the server-side conversation memory
+// for the current session. Matches the legacy widget's "New chat" button.
+export async function aiTutorClearHistory(): Promise<void> {
+  try {
+    await apiClient.post<unknown>("/api/ai-tutor/history/clear", {});
+  } catch {
+    // History clear is best-effort; ignore transient failures so the UI still resets.
+  }
+}
