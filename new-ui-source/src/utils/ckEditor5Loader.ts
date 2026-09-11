@@ -117,11 +117,15 @@ export function loadCKEditor5In(targetWindow: Window): Promise<void> {
             const editor = this.editor;
             editor.ui.componentFactory.add('samaritan', (locale) => {
               const button = new ButtonView(locale);
-              // Icon-only, matching every other toolbar button (a sparkle,
-              // consistent with the app's existing Samaritan AI branding).
+              // Icon-only. Uses the branded Samaritan puzzle-heart mark
+              // (see /public/assets/icons/Samaritan-icon-light-mode.svg) so
+              // the AI action reads consistently everywhere it appears —
+              // storyboard toolbar, RTE toolbar, and the global assistant.
+              // Rendered monochrome via currentColor so CKEditor's toolbar
+              // icon theming (hover/active states) works normally.
               button.set({
                 label: 'Samaritan Assistance',
-                icon: '<svg viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path d="M10 1.5l1.9 5.7 5.7 1.9-5.7 1.9L10 16.7l-1.9-5.7-5.7-1.9 5.7-1.9L10 1.5z" fill="currentColor"/></svg>',
+                icon: '<svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" clip-rule="evenodd" d="M24 11.8244L26.1215 9.70303C30.4172 5.40726 37.3821 5.40726 41.6778 9.70303C45.9736 13.9988 45.9736 20.9636 41.6778 25.2594L36.8384 30.0988L36.7354 30.2015C36.7329 30.2041 36.7303 30.2066 36.7278 30.2092L26.421 40.516C25.0839 41.8531 22.9159 41.8531 21.5788 40.516L6.32223 25.2594C2.02646 20.9636 2.02646 13.9988 6.32223 9.70303C10.618 5.40726 17.5828 5.40726 21.8786 9.70303L24 11.8244ZM25.0068 39.1018C24.4507 39.6578 23.5491 39.6578 22.993 39.1018L7.73644 23.8452C4.22172 20.3304 4.22172 14.632 7.73644 11.1172C11.2512 7.60252 16.9496 7.60252 20.4644 11.1172L22.5857 13.2386L19.7572 16.0669C17.414 18.4101 17.414 22.209 19.7572 24.5522C22.1003 26.8953 25.8993 26.8953 28.2424 24.5522L29.6567 23.1381C31.2188 21.576 33.7515 21.576 35.3136 23.1381C36.8743 24.6988 36.8757 27.2283 35.3178 28.7907C35.3164 28.7921 35.315 28.7935 35.3136 28.7949L25.0068 39.1018ZM40.2636 23.8452L38.4759 25.6328C38.3972 24.2103 37.8145 22.8105 36.7278 21.7239C34.3847 19.3807 30.5856 19.3806 28.2425 21.7238L26.8282 23.138C25.2661 24.7001 22.7335 24.7001 21.1714 23.138C19.6093 21.5759 19.6093 19.0432 21.1714 17.4811L27.5357 11.1172C31.0504 7.60252 36.7489 7.60252 40.2636 11.1172C43.7783 14.632 43.7783 20.3304 40.2636 23.8452Z" fill="currentColor"/></svg>',
                 tooltip: true,
               });
               button.on('execute', () => {

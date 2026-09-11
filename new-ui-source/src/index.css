@@ -555,3 +555,56 @@ html, body {
   background: var(--life-color-bg-surface-samaritan-subtle);
 }
 
+
+/* --------------------------------------------------------------------
+   AI Assistant (Samaritan) — global chat widget on Home / Setup /
+   Management pages (components/common/AiAssistant.tsx).
+   -------------------------------------------------------------------- */
+
+/* Typing indicator dots — mirrors the legacy .ai-tutor-typing bubble. */
+.ai-tutor-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin: 0 2px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.6;
+  animation: ai-tutor-blink 1s infinite ease-in-out;
+}
+@keyframes ai-tutor-blink {
+  0%, 80%, 100% { transform: scale(0.8); opacity: 0.4; }
+  40%           { transform: scale(1);   opacity: 1;   }
+}
+
+/* Bubble content: inline media + links produced by the markdown-lite
+   formatter. Keep them contained within the chat bubble. */
+.ai-tutor-bubble-content .ai-tutor-media {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 6px 0;
+  border-radius: 8px;
+}
+.ai-tutor-bubble-content .ai-tutor-video-wrap {
+  position: relative;
+  width: 100%;
+  padding-bottom: 56.25%;
+  margin: 6px 0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.ai-tutor-bubble-content .ai-tutor-video-wrap iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.ai-tutor-bubble-content .ai-tutor-link {
+  color: #4b3a7c;
+  text-decoration: underline;
+}
+.ai-tutor-bubble-content .ai-tutor-link:hover {
+  color: #6b4fa8;
+}
