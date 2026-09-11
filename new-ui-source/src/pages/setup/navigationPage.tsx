@@ -202,6 +202,7 @@ const ICON = {
   next: <EditorMaskIcon file="next-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current" />,
   up: <EditorMaskIcon file="up-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current" />,
   custom: <EditorMaskIcon file="custom-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current" />,
+  close: <EditorMaskIcon file="close-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current" />,
 } as const;
 
 const FOOTER_BUTTONS_DISPLAY: { key: NavFooterButtonKey; label: string; icon: React.ReactNode }[] = [
