@@ -254,14 +254,14 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
   // component's body — same "accumulate, then flush" shape as paragraphs.
   let listBuffer: { kind: "ul" | "ol"; items: string[]; sourceBlockId?: string } | null = null;
 
-  // Titles carry an explicit "Untitled ..." marker rather than a bare
-  // "Untitled ..." — this tree is a fallback for content that arrives without
+  // Titles carry an explicit "New ..." marker rather than a bare, unlabeled
+  // placeholder — this tree is a fallback for content that arrives without
   // its required intermediate parent (e.g. a paragraph directly under an H1),
   // and an unlabeled placeholder reads as data loss ("where did my Section
   // go?") rather than what it actually is: a level the author never wrote.
   const ensureTopic = () => {
     if (!topic) {
-      topic = { title: "Untitled Topic", sections: [] };
+      topic = { title: "New Topic", sections: [] };
       topics.push(topic);
       section = null;
       group = null;
@@ -271,7 +271,7 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
   const ensureSection = () => {
     ensureTopic();
     if (!section) {
-      section = { title: "Untitled Section", groups: [] };
+      section = { title: "New Section", groups: [] };
       topic!.sections.push(section);
       group = null;
     }
@@ -280,7 +280,7 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
   const ensureGroup = () => {
     ensureSection();
     if (!group) {
-      group = { title: "Untitled Content", components: [] };
+      group = { title: "New Content", components: [] };
       section!.groups.push(group);
     }
     return group;
@@ -669,6 +669,29 @@ export function enforceMaxComponentsPerBlock(topics: GenTopic[], existingBlocks:
   }
 }
 
+// Remove empty containers bottom-up: a Content Group with no components, a
+// Section with no (non-empty) groups, or a Topic with no (non-empty)
+// sections would otherwise still get created/updated as an empty Block/
+// Article/Topic — which the Adapt build rejects ("does not contain any
+// components"/"does not contain any articles"). A document with only H1/H2/
+// H3 headings and no real content anywhere underneath is exactly this case:
+// the tree isn't empty (there's a Topic), so a check that only looks at
+// "is the tree empty" misses it — every level has to be pruned, not just the
+// leaf Content Group. Mutates `topics` in place (splices out emptied
+// sections/topics) so both the pre-generate plan and the actual generation
+// see the same, fully-pruned tree.
+export function pruneEmptyContainers(topics: GenTopic[]): void {
+  for (let ti = topics.length - 1; ti >= 0; ti -= 1) {
+    const t = topics[ti];
+    for (let si = t.sections.length - 1; si >= 0; si -= 1) {
+      const s = t.sections[si];
+      s.groups = s.groups.filter((g) => g.components.length > 0);
+      if (!s.groups.length) t.sections.splice(si, 1);
+    }
+    if (!t.sections.length) topics.splice(ti, 1);
+  }
+}
+
 async function fetchCourseIndex(courseId: string) {
   const [contentObjects, articles, blocks, components] = await Promise.all([
     getContentByCourse("contentobject", courseId),
@@ -709,6 +732,8 @@ export async function planStoryboardGeneration(
   const { resolve } = makeResolver(index as never, generatedContentMap);
   const tree = parseDocToTree(doc, resolve);
   enforceMaxComponentsPerBlock(tree, index.blocks);
+  const hadTopicsBeforePruning = tree.length > 0;
+  pruneEmptyContainers(tree);
 
   let sections = 0;
   let groups = 0;
@@ -739,7 +764,13 @@ export async function planStoryboardGeneration(
 
   const issues: string[] = [];
   const warnings: string[] = [];
-  if (tree.length === 0) issues.push("Add at least one H1 heading (a Topic) before generating.");
+  if (tree.length === 0) {
+    issues.push(
+      hadTopicsBeforePruning
+        ? "Every Topic is empty — add at least one component under a Content Group before generating."
+        : "Add at least one H1 heading (a Topic) before generating."
+    );
+  }
 
   for (const raw of doc as GenBlock[]) {
     if (raw.type === "sbAssessment") {
@@ -770,6 +801,7 @@ export async function generateStoryboardCourse(
   const { resolve } = makeResolver(index as never, generatedContentMap);
   const tree = parseDocToTree(doc, resolve);
   enforceMaxComponentsPerBlock(tree, index.blocks);
+  pruneEmptyContainers(tree);
   // Existing components' CURRENT properties, so an update seeds from what's
   // actually on the live document instead of building `properties` from
   // scratch (which would wipe every field the storyboard doesn't model).
@@ -874,6 +906,13 @@ export async function generateStoryboardCourse(
 
       let gSort = 1;
       for (const g of s.groups) {
+        // pruneEmptyContainers already removed any empty group/section/topic
+        // above, so every group/section/topic reaching this point has real
+        // content — an existing block/article/topic that's been emptied out
+        // in the Storyboard is simply left unresolved (not created/updated)
+        // here, so a full Generate cleans it up via the normal delete-
+        // reconciliation pass below (Save's skipDeletes leaves it untouched,
+        // which is fine — stale but harmless until the next full Generate).
         let grpId = g.existingId;
         if (grpId) {
           await put("block", grpId, { title: g.title, displayTitle: g.title, _parentId: secId, _sortOrder: gSort });

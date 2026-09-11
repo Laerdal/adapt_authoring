@@ -35,6 +35,11 @@ export const placeholderBlock = createReactBlockSpec(
     content: 'none',
   },
   {
+    // Non-selectable — see the identical note in componentBlock.tsx: without
+    // this, ProseMirror can hold a NodeSelection on this block while the
+    // browser's actual focus/cursor is inside its native title <input>, and
+    // its own keydown handling then swallows keystrokes meant for that field.
+    meta: { selectable: false },
     render: ({ block, editor }) => {
       const category = block.props.category as PlaceholderCategory;
       const style = CATEGORY_STYLE[category] ?? CATEGORY_STYLE.group;

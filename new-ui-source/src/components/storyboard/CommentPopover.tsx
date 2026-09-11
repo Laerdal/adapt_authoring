@@ -67,6 +67,7 @@ export default function CommentPopover({
     try {
       await onAdd(blockId, body, courseId);
       setBody('');
+      onClose();
     } finally {
       setBusy(false);
     }
