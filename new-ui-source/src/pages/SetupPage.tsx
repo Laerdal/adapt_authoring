@@ -214,6 +214,15 @@ const GUARDED_NAV_IDS = new Set([
   "export-pdf",
 ]);
 
+const SPECIAL_NAV = {
+  back: "__nav_back__",
+  home: "__nav_home__",
+  editor: "__nav_editor__",
+  previewStart: "__nav_preview_start__",
+  previewCurrent: "__nav_preview_current__",
+  exportSource: "__nav_export_source__",
+} as const;
+
 /* -- Course Structure panel -- */
 function CourseStructurePanel({
   courseId,
@@ -2792,7 +2801,7 @@ function CourseCreationCenterContent() {
   // Smart navigation handler - used by sidebar items
   // When on a guarded setup panel, the page intercepts via pendingNavigation state.
   function handleNavigation(nextPanel: string) {
-    if (nextPanel === activeNav) {
+    if (!nextPanel.startsWith("__nav_") && nextPanel === activeNav) {
       return;
     }
 
@@ -2802,33 +2811,103 @@ function CourseCreationCenterContent() {
       setPendingNavigation(nextPanel);
     } else {
       setPendingNavigation(null);
-      setActiveNav(nextPanel);
+      performNavigation(nextPanel);
     }
   }
 
+  function triggerExportSource() {
+    void runExportSourceAction({
+      exportingSource,
+      tenantId: user?._tenantId,
+      courseId,
+      setExportingSource,
+      onProcessingStart: () => {
+        setExportPopup({ status: "processing", message: "Preparing course source export…" });
+      },
+      onDownloadStarted: () => {
+        setExportPopup({ status: "success", message: "Course source exported successfully" });
+      },
+      onUnavailable: () => {
+        setExportPopup({ status: "error", message: "Course export is not available right now." });
+      },
+      onError: (message) => {
+        setExportPopup({ status: "error", message: `Unable to export source. ${message}` });
+      },
+    });
+  }
+
+  function performNavigation(target: string) {
+    if (target === SPECIAL_NAV.back) {
+      if (window.history.length > 1) navigate(-1);
+      else navigate("/");
+      return;
+    }
+
+    if (target === SPECIAL_NAV.home) {
+      navigate("/");
+      return;
+    }
+
+    if (target === SPECIAL_NAV.editor || target.startsWith(`${SPECIAL_NAV.editor}:`)) {
+      const pageId = target.startsWith(`${SPECIAL_NAV.editor}:`)
+        ? decodeURIComponent(target.slice(`${SPECIAL_NAV.editor}:`.length))
+        : undefined;
+      openEditor(pageId);
+      return;
+    }
+
+    if (target === SPECIAL_NAV.previewStart) {
+      openPreview(false);
+      return;
+    }
+
+    if (target === SPECIAL_NAV.previewCurrent) {
+      openPreview(true);
+      return;
+    }
+
+    if (target === SPECIAL_NAV.exportSource) {
+      triggerExportSource();
+      return;
+    }
+
+    if (target === "export-pdf") {
+      setExportPopup(null);
+    }
+
+    setActiveNav(target);
+  }
+
+  function buildEditorNavigationTarget(pageId?: string) {
+    const trimmedPageId = (pageId || "").trim();
+    return trimmedPageId
+      ? `${SPECIAL_NAV.editor}:${encodeURIComponent(trimmedPageId)}`
+      : SPECIAL_NAV.editor;
+  }
+
   function renderPanel() {
-    if (activeNav === "overview") return <CourseOverviewPage courseId={courseId} title={title} description={description} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+    if (activeNav === "overview") return <CourseOverviewPage courseId={courseId} title={title} description={description} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "structure")
       return (
         <CourseStructurePanel
           courseId={courseId}
           courseTitle={title}
-          onOpenEditor={(pageId) => openEditor(pageId)}
-          onOpenStoryboard={() => setActiveNav("storyboarding")}
-          onNavigationRequest={setActiveNav}
+          onOpenEditor={(pageId) => handleNavigation(buildEditorNavigationTarget(pageId))}
+          onOpenStoryboard={() => handleNavigation("storyboarding")}
+          onNavigationRequest={performNavigation}
           pendingNavigation={pendingNavigation}
           onPendingNavigationHandled={() => setPendingNavigation(null)}
         />
       );
-    if (activeNav === "theme") return <SelectThemePage initialThemeName={savedThemeName} initialThemeVariables={savedThemeVariables} initialPresetId={savedPresetId} courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} onThemeSaved={({ themeName, themeVariables, themePresetId }) => { setSavedThemeName(themeName); setSavedThemeVariables(themeVariables); setSavedPresetId(themePresetId); }} />;
-    if (activeNav === "menu") return <MenuPage courseId={courseId} initialMenuName={savedMenuName} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "navigation") return <NavigationPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "accessibility") return <AccessibilityPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "tracking") return <TrackingAnalyticsPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "learner-experience") return <LearnerExperiencePanel courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "completion") return <CompletionProgressPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "technical-settings") return <TechnicalSettingPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "cdn-deployment") return <CdnDeploymentPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+    if (activeNav === "theme") return <SelectThemePage initialThemeName={savedThemeName} initialThemeVariables={savedThemeVariables} initialPresetId={savedPresetId} courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} onThemeSaved={({ themeName, themeVariables, themePresetId }) => { setSavedThemeName(themeName); setSavedThemeVariables(themeVariables); setSavedPresetId(themePresetId); }} />;
+    if (activeNav === "menu") return <MenuPage courseId={courseId} initialMenuName={savedMenuName} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+    if (activeNav === "navigation") return <NavigationPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+    if (activeNav === "accessibility") return <AccessibilityPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+    if (activeNav === "tracking") return <TrackingAnalyticsPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+    if (activeNav === "learner-experience") return <LearnerExperiencePanel courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+    if (activeNav === "completion") return <CompletionProgressPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+    if (activeNav === "technical-settings") return <TechnicalSettingPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+    if (activeNav === "cdn-deployment") return <CdnDeploymentPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "translation") return <LegacyTranslationPanel courseId={courseId} />;
     if (activeNav === "publish") return <PreflightValidatorPage courseId={courseId} onNavigationRequest={setActiveNav} />;
     if (activeNav === "export-pdf" && canExportCourse) {
@@ -2836,7 +2915,7 @@ function CourseCreationCenterContent() {
         <ExportPdfPage
           courseId={courseId}
           courseTitle={title}
-          onNavigationRequest={setActiveNav}
+          onNavigationRequest={performNavigation}
           pendingNavigation={pendingNavigation}
           onPendingNavigationHandled={() => setPendingNavigation(null)}
         />
@@ -2942,15 +3021,12 @@ function CourseCreationCenterContent() {
         courseTitle={title}
         loginName={loginName}
         activeNav={primaryTopNav}
-        onBack={() => window.history.length > 1 ? navigate(-1) : navigate("/")}
-        onHome={() => navigate("/")}
-        onOpenCourseSettings={() => {
-          navigate(`/course/${courseId}/setup`);
-          setActiveNav("overview");
-        }}
+        onBack={() => handleNavigation(SPECIAL_NAV.back)}
+        onHome={() => handleNavigation(SPECIAL_NAV.home)}
+        onOpenCourseSettings={() => handleNavigation("overview")}
         onOpenStoryboard={() => handleNavigation("storyboarding")}
-        onOpenEditor={() => openEditor()}
-        onOpenPreview={(startFromCurrentPage) => openPreview(startFromCurrentPage)}
+        onOpenEditor={() => handleNavigation(buildEditorNavigationTarget())}
+        onOpenPreview={(startFromCurrentPage) => handleNavigation(startFromCurrentPage ? SPECIAL_NAV.previewCurrent : SPECIAL_NAV.previewStart)}
         previewDisabled={!courseId}
         editorDisabled={!courseId}
       />
@@ -2971,30 +3047,8 @@ function CourseCreationCenterContent() {
             <ExportMenu
               disabled={!courseId || !user?._tenantId}
               exportSourceLoading={exportingSource}
-              onExportSource={() => {
-                void runExportSourceAction({
-                  exportingSource,
-                  tenantId: user?._tenantId,
-                  courseId,
-                  setExportingSource,
-                  onProcessingStart: () => {
-                    setExportPopup({ status: "processing", message: "Preparing course source export…" });
-                  },
-                  onDownloadStarted: () => {
-                    setExportPopup({ status: "success", message: "Course source exported successfully" });
-                  },
-                  onUnavailable: () => {
-                    setExportPopup({ status: "error", message: "Course export is not available right now." });
-                  },
-                  onError: (message) => {
-                    setExportPopup({ status: "error", message: `Unable to export source. ${message}` });
-                  },
-                });
-              }}
-              onExportPdf={() => {
-                setExportPopup(null);
-                setActiveNav("export-pdf");
-              }}
+              onExportSource={() => handleNavigation(SPECIAL_NAV.exportSource)}
+              onExportPdf={() => handleNavigation("export-pdf")}
             />
           )}
 
