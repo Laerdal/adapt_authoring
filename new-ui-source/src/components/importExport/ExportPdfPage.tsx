@@ -247,6 +247,7 @@ function AssetPicker({
               className="group relative h-36 w-full cursor-pointer overflow-hidden rounded-lg"
               onClick={onChooseLibrary}
               onKeyDown={(event) => {
+                if (event.target !== event.currentTarget) return;
                 if (event.key === "Enter" || event.key === " ") {
                   event.preventDefault();
                   onChooseLibrary();
