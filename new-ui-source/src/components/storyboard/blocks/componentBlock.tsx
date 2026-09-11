@@ -828,6 +828,16 @@ export const componentBlock = createReactBlockSpec(
     content: 'none',
   },
   {
+    // Non-selectable: without this, clicking/typing into this card's native
+    // <input>/<textarea> fields (Title, Description, Instruction) can leave
+    // BlockNote/ProseMirror holding a NodeSelection on this block — its own
+    // keydown handling then intercepts keystrokes meant for the nested native
+    // control (browser focus/cursor is on the input, but ProseMirror's own
+    // selection model isn't), so typed characters never make it into the
+    // field even though pasting (a different code path) works fine. Buttons
+    // are unaffected since clicks already bypass this via BlockNote's own
+    // mousedown stopEvent handling.
+    meta: { selectable: false },
     render: ({ block, editor }) => {
       const kind = (COMPONENT_KINDS.includes(block.props.kind as ComponentKind) ? block.props.kind : 'text') as ComponentKind;
       const meta = META[kind];
