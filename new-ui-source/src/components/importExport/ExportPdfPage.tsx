@@ -688,7 +688,7 @@ export default function ExportPdfPage({
             <CheckboxRow label="Disable Printing" checked={cfg.disablePrinting} onChange={(value) => setField("disablePrinting", value)} />
             <CheckboxRow label="Disable Copying" checked={cfg.disableCopying} onChange={(value) => setField("disableCopying", value)} />
             <CheckboxRow label="Disable Annotations" checked={cfg.disableAnnotation} onChange={(value) => setField("disableAnnotation", value)} />
-            <CheckboxRow label="Allow watermark" checked={cfg.allowWatermarking} onChange={(value) => setField("allowWatermarking", value)} />
+            <CheckboxRow label="Allow Watermark" checked={cfg.allowWatermarking} onChange={(value) => setField("allowWatermarking", value)} />
             <div className="pt-1" />
             <TextAreaField
               label="Watermark Text"
