@@ -44,6 +44,41 @@ function CheckboxRow({
   );
 }
 
+function ToggleSwitch({
+  checked,
+  onChange,
+  label,
+  disabled = false,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  disabled?: boolean;
+}) {
+  return (
+    <div className={`flex items-center justify-between gap-3 py-2 ${disabled ? "opacity-40" : ""}`}>
+      <span className="text-sm text-[#374151] leading-snug">{label}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-label={label}
+        aria-checked={checked}
+        disabled={disabled}
+        onClick={() => !disabled && onChange(!checked)}
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:ring-offset-1 ${
+          checked ? "bg-[var(--life-primary-500)]" : "bg-[#d1d5db]"
+        } ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
+      >
+        <span
+          className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${
+            checked ? "translate-x-5" : "translate-x-1"
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
+
 /* ── Navigation Panel ── */
 
 // Collapsible card matching the Figma "Navigation Settings" accordion sections.
@@ -167,6 +202,7 @@ const ICON = {
   next: <EditorMaskIcon file="next-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current" />,
   up: <EditorMaskIcon file="up-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current" />,
   custom: <EditorMaskIcon file="custom-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current" />,
+  close: <EditorMaskIcon file="close-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current" />,
 } as const;
 
 const FOOTER_BUTTONS_DISPLAY: { key: NavFooterButtonKey; label: string; icon: React.ReactNode }[] = [
@@ -174,41 +210,57 @@ const FOOTER_BUTTONS_DISPLAY: { key: NavFooterButtonKey; label: string; icon: Re
   { key: "_previous", label: "Previous", icon: ICON.previous },
   { key: "_next",     label: "Next",     icon: ICON.next },
   { key: "_up",       label: "Up",       icon: ICON.up },
+  { key: "_close",    label: "Close",    icon: ICON.close },
   { key: "_custom",   label: "Custom",   icon: ICON.custom },
 ];
 
-// A single footer-button toggle row: [checkbox] [icon] [label] in a bordered box.
+// A single footer-button row with a checkbox + icon + editable text field.
 function FooterButtonRow({
   checked,
   onChange,
   icon,
   label,
+  value,
+  onTextChange,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   icon: React.ReactNode;
   label: string;
+  value: string;
+  onTextChange: (v: string) => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={() => onChange(!checked)}
-      className="w-full flex items-center gap-3 rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5 text-left hover:bg-[#f9fafb] transition-colors group"
-    >
-      <span
-        className={`w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors ${
-          checked ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]" : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
-        }`}
+    <div className="w-full flex items-center gap-3 px-3 py-2.5 group">
+      <button
+        type="button"
+        onClick={() => onChange(!checked)}
+        aria-label={`Toggle ${label} button`}
+        aria-pressed={checked}
+        className="shrink-0"
       >
-        {checked && (
-          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-        )}
-      </span>
+        <span
+          className={`w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors ${
+            checked ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]" : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
+          }`}
+        >
+          {checked && (
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          )}
+        </span>
+      </button>
       <span className={`shrink-0 ${checked ? "text-[var(--life-primary-500)]" : "text-[#9ca3af]"}`}>{icon}</span>
-      <span className="text-sm text-[#374151]">{label}</span>
-    </button>
+      <input
+        type="text"
+        value={value}
+        aria-label={`${label} button text`}
+        placeholder={label}
+        onChange={(e) => onTextChange(e.target.value)}
+        className="flex-1 min-w-0 px-0 py-1 text-sm bg-transparent text-[#374151] border-0 outline-none shadow-none"
+      />
+    </div>
   );
 }
 
@@ -385,7 +437,7 @@ export function NavigationPage({
             <>
               {/* ── Start settings ── */}
               <NavAccordion {...acc("start")} title="Start settings" subtitle="Choose which page(s) learners land on when they open the course.">
-                <CheckboxRow checked={s.start._isEnabled} onChange={(v) => setStart({ _isEnabled: v })} label="Enabled?" />
+                <ToggleSwitch checked={s.start._isEnabled} onChange={(v) => setStart({ _isEnabled: v })} label="Enable start settings" />
 
                 {s.start._isEnabled && (
                   <div className="flex flex-col gap-3">
@@ -436,11 +488,11 @@ export function NavigationPage({
                         <p className="text-[11px] text-[var(--life-neutral-300)] mt-1.5">Add a page to the course before choosing a start page.</p>
                       )}
                     </div>
+
+                    <CheckboxRow checked={s.start._force} onChange={(v) => setStart({ _force: v })} label="Force routing" />
+                    <CheckboxRow checked={s.start._isMenuDisabled} onChange={(v) => setStart({ _isMenuDisabled: v })} label="Disable menu" />
                   </div>
                 )}
-
-                <CheckboxRow checked={s.start._force} onChange={(v) => setStart({ _force: v })} label="Force routing" />
-                <CheckboxRow checked={s.start._isMenuDisabled} onChange={(v) => setStart({ _isMenuDisabled: v })} label="Disable menu" />
               </NavAccordion>
 
               {/* ── Menu Lock Settings ── */}
@@ -455,7 +507,7 @@ export function NavigationPage({
 
               {/* ── Course menu ── */}
               <NavAccordion {...acc("courseMenu")} title="Course menu" subtitle="Controls whether the top bar exposes the course menu.">
-                <CheckboxRow checked={s.courseMenu.enabled} onChange={(v) => setCourseMenu({ enabled: v })} label="Enable Course Menu" />
+                <ToggleSwitch checked={s.courseMenu.enabled} onChange={(v) => setCourseMenu({ enabled: v })} label="Enable Course Menu" />
                 <div className="ml-7">
                   <CheckboxRow
                     checked={s.courseMenu.includeSubmenuInNavigation}
@@ -468,7 +520,7 @@ export function NavigationPage({
 
               {/* ── Header logo ── */}
               <NavAccordion {...acc("headerLogo")} title="Header logo" subtitle="Show a logo in the top navigation bar.">
-                <CheckboxRow checked={s.headerLogo.enabled} onChange={(v) => setHeaderLogo({ enabled: v })} label="Enable Header Logo" />
+                <ToggleSwitch checked={s.headerLogo.enabled} onChange={(v) => setHeaderLogo({ enabled: v })} label="Enable Header Logo" />
 
                 {s.headerLogo.enabled && (
                   <div className="flex flex-col gap-3">
@@ -605,7 +657,7 @@ export function NavigationPage({
                 title="Navigation Footer"
                 subtitle="Configure the footer navigation buttons shown on each page."
               >
-                <CheckboxRow checked={s.navFooter.enabled} onChange={(v) => setNavFooter({ enabled: v })} label="Enable Navigation Footer" />
+                <ToggleSwitch checked={s.navFooter.enabled} onChange={(v) => setNavFooter({ enabled: v })} label="Enable Navigation Footer" />
 
                 {s.navFooter.enabled && (
                   <div className="flex flex-col gap-3">
@@ -622,6 +674,8 @@ export function NavigationPage({
                           onChange={(v) => setFooterButton(key, { _isEnabled: v })}
                           icon={icon}
                           label={label}
+                          value={s.navFooter.buttons[key].btnText}
+                          onTextChange={(v) => setFooterButton(key, { btnText: v })}
                         />
                       ))}
                     </div>
