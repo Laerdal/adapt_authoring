@@ -314,11 +314,11 @@ function AssetPicker({
             className="w-full rounded-lg border border-[#e5e7eb] bg-white px-3 py-2.5 text-sm text-[#111827] placeholder:text-[#9ca3af] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors"
           />
           {url.trim() && !urlPreviewFailed && (
-            <div className="overflow-hidden rounded-lg border border-[#e5e7eb] bg-[#f8fafc]">
+            <div className="relative h-36 w-full overflow-hidden rounded-lg">
               <img
                 src={url.trim()}
                 alt={`${label} URL preview`}
-                className="h-36 w-full object-contain bg-white"
+                className="h-36 w-full rounded-lg object-cover"
                 onError={() => setUrlPreviewFailed(true)}
               />
             </div>
