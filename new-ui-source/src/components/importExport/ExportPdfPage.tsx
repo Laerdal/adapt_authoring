@@ -30,13 +30,13 @@ function CheckboxRow({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className="flex items-start gap-3 py-1 cursor-pointer select-none group">
+    <label className="relative flex items-start gap-3 py-1 cursor-pointer select-none group">
       <input
         type="checkbox"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
         aria-label={label}
-        className="sr-only peer"
+        className="peer absolute left-0 top-1 h-4 w-4 opacity-0"
       />
       <CheckboxIndicator checked={checked} className="mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
       <span className="text-sm text-[#374151] leading-snug group-hover:text-[#111827] transition-colors">{label}</span>
