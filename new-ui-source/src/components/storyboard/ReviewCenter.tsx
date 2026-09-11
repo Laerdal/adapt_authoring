@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import { PanelRightClose, MessageSquarePlus, Check, RotateCcw, Trash2, CornerDownRight } from 'lucide-react';
-import type { StoryboardSummary } from '@/types/storyboard';
+import { REVIEW_STATUS_LABEL, type ReviewStatus, type StoryboardSummary } from '@/types/storyboard';
 import type { StoryboardComment, StoryboardAuditEvent } from '@/api/adaptAuthoring';
 import type { UseStoryboardReviewResult } from '@/hooks/useStoryboardReview';
 
@@ -241,7 +241,7 @@ export default function ReviewCenter({
         <SummaryRow label="Assets" value={summary.assets} />
         <SummaryRow label="Open Comments" value={review.openCount} />
         <SummaryRow label="Resolved" value={review.resolvedCount} />
-        <SummaryRow label="Status" value={status.replace('_', ' ')} />
+        <SummaryRow label="Status" value={REVIEW_STATUS_LABEL[status as ReviewStatus] ?? status} />
       </div>
 
       <div

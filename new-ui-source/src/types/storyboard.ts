@@ -40,6 +40,15 @@ export interface StoryboardHeading {
 /** Review workflow status (spec AC8). */
 export type ReviewStatus = 'draft' | 'in_review' | 'approved';
 
+// Title-Case display label for each status — the single source of truth so
+// every surface (top bar pill, Review Center summary, etc.) shows the same
+// text instead of each formatting the raw snake_case value independently.
+export const REVIEW_STATUS_LABEL: Record<ReviewStatus, string> = {
+  draft: 'Draft',
+  in_review: 'In Review',
+  approved: 'Approved',
+};
+
 /**
  * Content that can be inserted from the "Add Content" menu (spec AC3/AC5/AC6).
  * Neutral kinds; the editor maps each to its concrete block(s).

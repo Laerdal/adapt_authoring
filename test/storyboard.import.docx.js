@@ -91,9 +91,9 @@ describe('storyboard docx import', function () {
           headings[0].props.level.should.equal(1);
           headings[0].content[0].text.should.equal('Module One');
           headings[1].props.level.should.equal(2);
-          headings[1].content[0].text.should.equal('Untitled Section');
+          headings[1].content[0].text.should.equal('New Section');
           headings[2].props.level.should.equal(3);
-          headings[2].content[0].text.should.equal('Untitled Content Group');
+          headings[2].content[0].text.should.equal('New Content');
           var para = findBlocks(blocks, 'paragraph')[0];
           para.content[0].text.should.equal('Body text directly under the topic, with no Section or Content Group heading.');
           normalized.metadata.warnings.some(function (w) { return w.code === 'synthesized-heading'; }).should.equal(true);
@@ -120,7 +120,7 @@ describe('storyboard docx import', function () {
   });
 
   describe('export/re-import round trip', function () {
-    it('does not treat the exported course title as stray body content (regression: bogus Introduction/Untitled Section/Untitled Content Group)', function (done) {
+    it('does not treat the exported course title as stray body content (regression: bogus Introduction/New Section/New Content)', function (done) {
       var convert = require('../plugins/content/storyboard/utils/documentConvert');
       var blocks = [
         { type: 'heading', props: { level: 1 }, content: 'Head-tilt and chin-lift' },
@@ -142,8 +142,8 @@ describe('storyboard docx import', function () {
             });
           })(normalized.sections);
           titles.should.not.containEql('Introduction');
-          titles.should.not.containEql('Untitled Section');
-          titles.should.not.containEql('Untitled Content Group');
+          titles.should.not.containEql('New Section');
+          titles.should.not.containEql('New Content');
           done();
         }).catch(done);
       }).catch(done);

@@ -24,16 +24,16 @@ import {
   Loader2,
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
-import type { ReviewStatus } from '@/types/storyboard';
+import { REVIEW_STATUS_LABEL, type ReviewStatus } from '@/types/storyboard';
 
 // Status is fully automatic — driven by comment state (see
 // recomputeStatus in requestHandlers.js): no comments -> Draft, any
 // unresolved comment -> In Review, all resolved -> Approved. The pill is a
 // read-only reflection of that, not a manual control.
 const STATUS_META: Record<ReviewStatus, { label: string; pillClass: string; hint: string }> = {
-  draft: { label: 'Draft', pillClass: 'sb-status-pill--draft', hint: 'No comments yet' },
-  in_review: { label: 'In Review', pillClass: 'sb-status-pill--review', hint: 'Has unresolved comments' },
-  approved: { label: 'Approved', pillClass: 'sb-status-pill--approved', hint: 'All comments resolved' },
+  draft: { label: REVIEW_STATUS_LABEL.draft, pillClass: 'sb-status-pill--draft', hint: 'No comments yet' },
+  in_review: { label: REVIEW_STATUS_LABEL.in_review, pillClass: 'sb-status-pill--review', hint: 'Has unresolved comments' },
+  approved: { label: REVIEW_STATUS_LABEL.approved, pillClass: 'sb-status-pill--approved', hint: 'All comments resolved' },
 };
 
 // A small portal-hosted dropdown used for Export — mirrors the Figma popover

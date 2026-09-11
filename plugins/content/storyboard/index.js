@@ -7,8 +7,14 @@
 //
 // NB: the legacy `plugins/output/storyboard` plugin also owns /api/storyboard/*
 // (word/zip/import). Our routes are namespaced under distinct sub-paths
-// (documents / comments / audit) so they never collide. permissions.ignoreRoute
-// is idempotent, so registering it here is safe even when that plugin is off.
+// (documents / comments / audit) so they never collide — importantly this
+// INCLUDES the import route (`/storyboard/documents/import/:format`), which
+// used to sit at the bare `/storyboard/import/:format` and collided with
+// that plugin's own `/storyboard/import/:courseid` (both match a single
+// param segment identically; whichever plugin's route registered first won,
+// silently hijacking every import request meant for this handler — see
+// routes/index.js). permissions.ignoreRoute is idempotent, so registering it
+// here is safe even when that plugin is off.
 
 const contentmanager = require('../../../lib/contentmanager');
 const ContentPlugin = contentmanager.ContentPlugin;
