@@ -45,7 +45,7 @@ const CP1252_TO_BYTE: Record<number, number> = {
 // genuinely accented content is never mangled.
 export function repairMojibake(text: string): string {
   const value = String(text ?? "");
-  if (!value || !/[ÃÂÐÑ×Ø]/.test(value)) return value;
+  if (!value || !/[ÃÂÐÑ×Øâ]/.test(value)) return value;
   try {
     const bytes = new Uint8Array(value.length);
     for (let i = 0; i < value.length; i++) {

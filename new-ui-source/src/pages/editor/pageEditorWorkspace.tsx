@@ -8214,6 +8214,11 @@ export default function CourseEditor({
     };
 
     cleanupPreviewListenersRef.current?.();
+    canvasBodyEditorsRef.current.forEach((entry, sourceEl) => {
+      entry.commit();
+      sourceEl.style.display = "";
+      entry.editor.destroy().catch(() => {});
+    });
     canvasBodyEditorsRef.current.clear();
 
     doc.addEventListener("mouseover", onMouseOver);
