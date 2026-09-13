@@ -11514,12 +11514,16 @@ export default function CourseEditor({
 
                               <TopicAccordion title="Advanced Settings" open={!!openComponentAccordions.advanced} onToggle={(triggerEl) => toggleComponentAccordion("advanced", triggerEl)}>
                                 <TopicTextInput label="Component class" value={component.classes} onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { classes: value })} />
-                                <TopicNestedAccordion title="Responsive classes">
-                                  <TopicTextInput label="_xlarge" value={asString(componentResponsiveClasses._xlarge)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _xlarge: value } }))} />
-                                  <TopicTextInput label="_large" value={asString(componentResponsiveClasses._large)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _large: value } }))} />
-                                  <TopicTextInput label="_medium" value={asString(componentResponsiveClasses._medium)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _medium: value } }))} />
-                                  <TopicTextInput label="_small" value={asString(componentResponsiveClasses._small)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _small: value } }))} />
-                                </TopicNestedAccordion>
+                                {/* No installed theme declares _responsiveClasses at component
+                                    level (unlike topic/section/content group, which all do). */}
+                                {isThemeFieldSupported("component", "_responsiveClasses") && (
+                                  <TopicNestedAccordion title="Responsive classes">
+                                    <TopicTextInput label="_xlarge" value={asString(componentResponsiveClasses._xlarge)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _xlarge: value } }))} />
+                                    <TopicTextInput label="_large" value={asString(componentResponsiveClasses._large)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _large: value } }))} />
+                                    <TopicTextInput label="_medium" value={asString(componentResponsiveClasses._medium)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _medium: value } }))} />
+                                    <TopicTextInput label="_small" value={asString(componentResponsiveClasses._small)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _small: value } }))} />
+                                  </TopicNestedAccordion>
+                                )}
                               </TopicAccordion>
                             </div>
                           );
