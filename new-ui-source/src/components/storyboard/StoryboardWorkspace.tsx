@@ -12,6 +12,7 @@
 // the storyboard has loaded (and starter content seeded), keyed on the id.
 
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Loader2, PanelLeftOpen, PanelRightOpen } from 'lucide-react';
 import type {
   ActiveBlockInfo,
@@ -152,6 +153,7 @@ export default function StoryboardWorkspace({
   const sb = useStoryboard(courseId);
   const review = useStoryboardReview(sb.storyboardId, sb.refreshStatus);
   const editorRef = useRef<StoryboardEditorHandle>(null);
+  const navigate = useNavigate();
 
   const [headings, setHeadings] = useState<StoryboardHeading[]>([]);
   const [summary, setSummary] = useState<StoryboardSummary>(EMPTY_SUMMARY);
@@ -217,10 +219,14 @@ export default function StoryboardWorkspace({
     bootstrapped.current = true;
     (async () => {
       let doc: unknown[] | null = null;
+      let fromCourse = false;
       if (courseId) {
         try {
           const courseBlocks = await getCourseStoryboardBlocks(courseId);
-          if (courseBlocks.length) doc = courseBlocks;
+          if (courseBlocks.length) {
+            doc = courseBlocks;
+            fromCourse = true;
+          }
         } catch {
           /* fall back to the saved snapshot / starter below */
         }
@@ -233,12 +239,15 @@ export default function StoryboardWorkspace({
               ? (initialDocument as unknown[])
               : STARTER_DOCUMENT;
       }
-      // Regardless of source, strip any placeholder heading text.
-      // The course projector already skips defaults, but a persisted DB
-      // snapshot from before that filter — or a snapshot captured from a
-      // course that was later edited to remove real titles — can still carry
-      // "New Article Title", "New Block Title" etc. as heading content.
-      doc = stripPlaceholderHeadings(doc);
+      // Only strip placeholder heading text from a LEGACY fallback snapshot
+      // (a persisted DB record from before the projector always emitted real
+      // structure headings, or one captured from a course later edited to
+      // remove real titles) — never from the live course projection itself,
+      // which now intentionally shows structure headings (Topic/Section/
+      // Content Group), including still-default ones, so the Storyboard
+      // document/TOC mirrors Editor Mode's Structure panel instead of looking
+      // empty for a freshly created structure.
+      if (!fromCourse) doc = stripPlaceholderHeadings(doc);
       if (!doc.length) doc = STARTER_DOCUMENT;
       initialContent.current = doc;
       sb.setDocument(doc);
@@ -267,8 +276,14 @@ export default function StoryboardWorkspace({
     editorRef.current?.focusBlock(blockId);
   };
 
-  const insert = (kind: StoryboardInsertKind) => editorRef.current?.insert(kind);
-  const insertHeading = (level: number) => editorRef.current?.insert('heading', { level });
+  // Anchor Add Content/Heading insertions to the last block the author was
+  // actually working in (tracked via onActiveBlock/selection-change), not the
+  // editor's live text-cursor position — clicking the toolbar's dropdown
+  // moves focus out of the editor, and BlockNote can then no longer resolve
+  // "where the cursor is" reliably, which previously caused new content to
+  // land in the wrong place instead of right after the last active component.
+  const insert = (kind: StoryboardInsertKind) => editorRef.current?.insert(kind, { afterId: activeBlock?.id });
+  const insertHeading = (level: number) => editorRef.current?.insert('heading', { level, afterId: activeBlock?.id });
 
   // Pull the latest backend course structure into the storyboard silently
   // (spec §1 — keep the storyboard synchronized with the AT). Guarded so it
@@ -277,7 +292,7 @@ export default function StoryboardWorkspace({
   const refreshFromCourse = async () => {
     if (!courseId || !booted || sb.dirty) return;
     try {
-      const fresh = stripPlaceholderHeadings(await getCourseStoryboardBlocks(courseId));
+      const fresh = await getCourseStoryboardBlocks(courseId);
       if (fresh.length) {
         editorRef.current?.setDocument(fresh);
         sb.setDocument(fresh);
@@ -343,7 +358,7 @@ export default function StoryboardWorkspace({
           }
           // 3. Re-seed from the backend so the storyboard mirrors the saved
           //    course (new content ids + canonical media) — no manual refresh.
-          const fresh = stripPlaceholderHeadings(await getCourseStoryboardBlocks(courseId));
+          const fresh = await getCourseStoryboardBlocks(courseId);
           if (fresh.length) {
             editorRef.current?.setDocument(fresh);
             sb.setDocument(fresh);
@@ -426,7 +441,7 @@ export default function StoryboardWorkspace({
       flash('Updating content…');
       try {
         const result = await applyContentOnlyImport(courseId, blocks);
-        const fresh = stripPlaceholderHeadings(await getCourseStoryboardBlocks(courseId));
+        const fresh = await getCourseStoryboardBlocks(courseId);
         if (fresh.length) {
           editorRef.current?.setDocument(fresh);
           sb.setDocument(fresh);
@@ -472,7 +487,7 @@ export default function StoryboardWorkspace({
             meta: { created: result.created, updated: result.updated, deleted: result.deleted, source: 'replace-import', fileName },
           });
         }
-        const fresh = stripPlaceholderHeadings(await getCourseStoryboardBlocks(courseId));
+        const fresh = await getCourseStoryboardBlocks(courseId);
         if (fresh.length) {
           editorRef.current?.setDocument(fresh);
           sb.setDocument(fresh);
@@ -583,7 +598,7 @@ export default function StoryboardWorkspace({
       }
       // Re-seed from the freshly-generated course so every block carries a
       // content id — the next generation is then a no-op.
-      const fresh = stripPlaceholderHeadings(await getCourseStoryboardBlocks(courseId));
+      const fresh = await getCourseStoryboardBlocks(courseId);
       if (fresh.length) {
         editorRef.current?.setDocument(fresh);
         sb.setDocument(fresh);
@@ -597,6 +612,15 @@ export default function StoryboardWorkspace({
     } finally {
       setGenRunning(false);
     }
+  };
+
+  // Dismiss the post-generation success dialog and jump straight to Course
+  // Preview so the author immediately sees the generated course, rather than
+  // landing back on the storyboard with no visible confirmation the content
+  // now exists in the AT.
+  const handleGenerateDone = () => {
+    setGenOpen(false);
+    if (courseId) navigate(`/course/${courseId}/preview`);
   };
 
   return (
@@ -736,6 +760,7 @@ export default function StoryboardWorkspace({
           result={genResult}
           onConfirm={confirmGenerate}
           onClose={() => setGenOpen(false)}
+          onDone={handleGenerateDone}
         />
       )}
 
