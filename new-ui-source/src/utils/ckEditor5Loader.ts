@@ -27,15 +27,17 @@ const iframeLoadPromises = new WeakMap<Window, Promise<void>>();
 export function loadCKEditor5In(targetWindow: Window): Promise<void> {
   const isTop = targetWindow === window;
   if (isTop) {
-    if (window.CKEDITOR_LOADED && window.CKEDITOR) return Promise.resolve();
+    if (window.CKEDITOR_LOADED && window.CKEDITOR && Array.isArray((window as any).CKEDITOR.pluginsConfig)) return Promise.resolve();
     if (loadPromise) return loadPromise;
   } else {
-    if ((targetWindow as any).CKEDITOR_LOADED && (targetWindow as any).CKEDITOR) return Promise.resolve();
+    if ((targetWindow as any).CKEDITOR_LOADED && (targetWindow as any).CKEDITOR && Array.isArray((targetWindow as any).CKEDITOR.pluginsConfig)) return Promise.resolve();
     const existing = iframeLoadPromises.get(targetWindow);
-    if (existing) return existing;
+    // If the window has changed or document is fresh, don't return a stale promise
+    if (existing && (targetWindow as any).CKEDITOR_LOADED && Array.isArray((targetWindow as any).CKEDITOR?.pluginsConfig)) return existing;
   }
 
   const targetDocument = targetWindow.document;
+  if (!targetDocument) return Promise.reject(new Error("No target document available"));
   const promise = new Promise<void>((resolve, reject) => {
     try {
       if (!targetDocument.querySelector('link[href*="ckeditor5.css"]')) {
@@ -105,7 +107,7 @@ export function loadCKEditor5In(targetWindow: Window): Promise<void> {
           SpecialCharactersEssentials, Strikethrough, Subscript, Superscript,
           Table, TableCaption, TableCellProperties, TableProperties, TableToolbar,
           Underline, Undo, Plugin, ButtonView
-        } from 'ckeditor5';
+        } from 'https://cdn.ckeditor.com/ckeditor5/${CKEDITOR_VERSION}/ckeditor5.js';
 
         // "Samaritan Assistance" toolbar button — matches the old tool's
         // AiAgentPlugin in spirit (a single toolbar entry point), but the
@@ -151,10 +153,26 @@ export function loadCKEditor5In(targetWindow: Window): Promise<void> {
       `;
       targetDocument.head.appendChild(moduleScript);
 
-      if ((targetWindow as any).CKEDITOR_LOADED) {
-        resolve();
-      } else {
+      const checkLoaded = () => {
+        if (
+          (targetWindow as any).CKEDITOR_LOADED &&
+          (targetWindow as any).CKEDITOR &&
+          Array.isArray((targetWindow as any).CKEDITOR.pluginsConfig)
+        ) {
+          resolve();
+          return true;
+        }
+        return false;
+      };
+
+      if (!checkLoaded()) {
         targetWindow.addEventListener("ckeditor5-loaded", () => resolve(), { once: true });
+        const interval = setInterval(() => {
+          if (checkLoaded()) {
+            clearInterval(interval);
+          }
+        }, 30);
+        setTimeout(() => clearInterval(interval), 4000);
       }
     } catch (err) {
       if (isTop) loadPromise = null;

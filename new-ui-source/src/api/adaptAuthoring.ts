@@ -2222,6 +2222,7 @@ interface EngineContentNode {
   subtitle?: string;
   _subtitle?: string;
   body?: string;
+  pageBody?: string;
   description?: string;
   instruction?: string;
   _sortOrder?: number;
@@ -2348,8 +2349,10 @@ export async function getCourseStructure(
       sortOrder: page._sortOrder ?? 0,
       subtitle: page.subtitle || page._subtitle || "",
       body: page.body || "",
+      pageBody: page.pageBody || "",
       instruction: page.instruction || "",
       description: page.description || "",
+      colorLabel: page._colorLabel || "",
       graphic: {
         src: typeof pageGraphic?.src === "string" ? pageGraphic.src : "",
         alt: typeof pageGraphic?.alt === "string" ? pageGraphic.alt : "",
