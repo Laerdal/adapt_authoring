@@ -2803,7 +2803,7 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       emitCard(comp, "groupedContent", {
         showTitle: true,
         description: stripHtml(comp.body || ""),
-        instruction: comp.instruction || "",
+        instruction: comp.instruction || (typeof props.instruction === "string" ? props.instruction : ""),
         items,
       });
       return;
@@ -2944,7 +2944,7 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       emitCard(comp, "text", {
         showTitle: !!compTitle,
         description: stripHtml(comp.body || ""),
-        instruction: comp.instruction || "",
+        instruction: comp.instruction || (typeof props.instruction === "string" ? props.instruction : ""),
       });
       return;
     }
@@ -3202,12 +3202,12 @@ export async function saveStoryboardToCourse(
         // and the instruction field, so the sbComponent "text" card (used for
         // every text component, including the default one — ADAPT-3902)
         // round-trips exactly like the legacy heading+paragraph contract did.
+        // The description here is always plain user/AI-authored text (never an
+        // imported-HTML payload), so it must be escaped unconditionally —
+        // trusting a leading "<" as "already HTML" would let raw markup typed
+        // or pasted by a user/AI flow straight into the course body.
         const rawDescription = (parsed.description || "").trim();
-        const nextBodyHtml = rawDescription
-          ? rawDescription.startsWith("<")
-            ? rawDescription
-            : `<p>${escapeHtml(rawDescription)}</p>`
-          : "";
+        const nextBodyHtml = rawDescription ? `<p>${escapeHtml(rawDescription)}</p>` : "";
         if (stripHtml(nextBodyHtml) !== stripHtml(info.body || "")) {
           patch.body = nextBodyHtml;
         }

@@ -328,7 +328,10 @@ export default function StoryboardWorkspace({
     setAiConfig({
       initialText: activeBlock?.text || editorRef.current?.getActiveText() || '',
       onInsert: (text) => {
-        editorRef.current?.insertComponent('text', { data: { description: text, showTitle: false } });
+        editorRef.current?.insertComponent('text', {
+          data: { description: text, showTitle: false },
+          afterId: activeBlock?.id,
+        });
         setHeadings(editorRef.current?.getHeadings() ?? []);
         setSummary(editorRef.current?.getSummary() ?? EMPTY_SUMMARY);
       },
