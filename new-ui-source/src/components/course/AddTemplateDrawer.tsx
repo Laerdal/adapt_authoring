@@ -10,9 +10,9 @@ import { StructureIcon, STRUCTURE_ICON_COLOR_CLASS } from "./StructureIcons";
 type TemplateLevel = "topic" | "section" | "group" | "component";
 
 const LEVEL_TO_TEMPLATE_TYPE: Record<TemplateLevel, TemplateType> = {
-  topic: "Page",
-  section: "Article",
-  group: "Block",
+  topic: "Topic",
+  section: "Section",
+  group: "Content Group",
   component: "Component",
 };
 

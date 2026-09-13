@@ -143,9 +143,9 @@ function PdfExportForm() {
       {/* Table of Contents */}
       <ExportSection title="Table of Contents">
         <div className="flex flex-col gap-3">
-          <ExportCheckbox checked={tocPageTitles}      onChange={setTocPageTitles}      label="Include Page Titles in TOC" />
-          <ExportCheckbox checked={tocArticleTitles}   onChange={setTocArticleTitles}   label="Include Article Titles in TOC" />
-          <ExportCheckbox checked={tocBlockTitles}     onChange={setTocBlockTitles}     label="Include Block Titles in TOC" />
+          <ExportCheckbox checked={tocPageTitles}      onChange={setTocPageTitles}      label="Include Topic Titles in TOC" />
+          <ExportCheckbox checked={tocArticleTitles}   onChange={setTocArticleTitles}   label="Include Section Titles in TOC" />
+          <ExportCheckbox checked={tocBlockTitles}     onChange={setTocBlockTitles}     label="Include Content Group Titles in TOC" />
           <ExportCheckbox checked={tocComponentTitles} onChange={setTocComponentTitles} label="Include Component Titles in TOC" />
         </div>
       </ExportSection>

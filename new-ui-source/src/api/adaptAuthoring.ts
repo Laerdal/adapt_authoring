@@ -929,7 +929,7 @@ export async function getCoursePages(courseId: string): Promise<CoursePageOption
   return (Array.isArray(rows) ? rows : [])
     .filter((r) => r._type === "page")
     .sort(bySortOrder)
-    .map((r) => ({ id: r._id, title: r.displayTitle || r.title || "Untitled Page" }));
+    .map((r) => ({ id: r._id, title: r.displayTitle || r.title || "Untitled Topic" }));
 }
 
 type AnyRecord = Record<string, unknown>;
@@ -4527,22 +4527,22 @@ export function deleteUser(userBackendId: string): Promise<unknown> {
 }
 
 // ── Templates ─────────────────────────────────────────────────────────────────
-export type TemplateType = "Page" | "Article" | "Block" | "Component";
+export type TemplateType = "Topic" | "Section" | "Content Group" | "Component";
 // The engine stores the template's content kind in `referenceType`
-// (contentobject/article/block/component). A "contentobject" template is a Page.
+// (contentobject/article/block/component). A "contentobject" template is a Topic.
 const coerceTemplateType = (v?: string): TemplateType => {
   switch ((v ?? "").toLowerCase()) {
     case "contentobject":
     case "page":
-      return "Page";
+      return "Topic";
     case "article":
-      return "Article";
+      return "Section";
     case "block":
-      return "Block";
+      return "Content Group";
     case "component":
       return "Component";
     default:
-      return "Page";
+      return "Topic";
   }
 };
 
