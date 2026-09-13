@@ -172,7 +172,14 @@ export function loadCKEditor5In(targetWindow: Window): Promise<void> {
             clearInterval(interval);
           }
         }, 30);
-        setTimeout(() => clearInterval(interval), 4000);
+        setTimeout(() => {
+          clearInterval(interval);
+          if (!checkLoaded()) {
+            if (isTop) loadPromise = null;
+            else iframeLoadPromises.delete(targetWindow);
+            reject(new Error("Timed out loading CKEditor 5"));
+          }
+        }, 4000);
       }
     } catch (err) {
       if (isTop) loadPromise = null;
