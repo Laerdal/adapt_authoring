@@ -2932,9 +2932,7 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
     // "text" card — the SAME clickable card (Show title / Description /
     // Instruction / AI / Delete) the "Add Content" flow already creates for a
     // brand-new Text component. This must match that shape exactly so every
-    // text component in the course — including the empty default one seeded
-    // when a new Topic/Section/Content Group is created (ADAPT-3902) — is
-    // clickable and editable. Previously text fell through to the generic
+    // text component in the course — including the empty default one seeded   // clickable and editable. Previously text fell through to the generic
     // "Unknown" fallback below, which emits a bare H4 heading + body
     // paragraph; with an empty body (the default component's starting state)
     // htmlBodyToBlocks() returns zero blocks, so nothing at all was rendered
