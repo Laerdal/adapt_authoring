@@ -3968,6 +3968,19 @@ function getTextComponentType(): Promise<ComponentTypeOption | null> {
   return textComponentPromise;
 }
 
+// Seed a Module → Topic → Section → Content Group → text Component under `parentId`
+// (the course, or a parent module). Returns the new module and topic ids.
+export async function seedDefaultModule(
+  courseId: string,
+  parentId: string,
+  moduleTitle = "New Module",
+  sortOrder = 1
+): Promise<{ moduleId: string; topicId: string }> {
+  const moduleId = await createModule(courseId, parentId, moduleTitle, sortOrder);
+  const topicId = await seedDefaultTopic(courseId, moduleId, NEW_TOPIC_TITLE, 1);
+  return { moduleId, topicId };
+}
+
 // Seed a Topic → Section → Content Group → text Component under `parentId`
 // (the course, or a module). Returns the new topic id.
 export async function seedDefaultTopic(

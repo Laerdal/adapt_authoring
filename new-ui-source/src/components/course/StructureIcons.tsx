@@ -8,7 +8,8 @@ import type { StructureLevel } from "../../types/structure";
 
 const ICON_BASE = "/new/assets/icons";
 
-export const STRUCTURE_ICON_COLOR_CLASS: Record<Exclude<StructureLevel, "module">, string> = {
+export const STRUCTURE_ICON_COLOR_CLASS: Record<StructureLevel, string> = {
+  module: "text-[var(--life-accent1-400)]",
   topic: "text-[var(--life-primary-500)]",
   section: "text-[var(--life-accent3-500)]",
   contentGroup: "text-[var(--life-accent4-500)]",
@@ -67,11 +68,7 @@ export function StructureIcon({
   };
   switch (level) {
     case "module":
-      return (
-        <svg {...common}>
-          <path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.5l-2-2H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2Z" />
-        </svg>
-      );
+      return <MaskIcon file="module-icon.svg" size={size} className={className} />;
     case "topic":
       return <MaskIcon file="topic-icon.svg" size={size} className={className} />;
     case "section":

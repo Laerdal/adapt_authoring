@@ -50,6 +50,7 @@ import {
   saveContentAsTemplate,
   searchUsersByEmailQuery,
   seedDefaultContentGroup,
+  seedDefaultModule,
   seedDefaultSection,
   seedDefaultTopic,
   type ComponentTypeOption,
@@ -68,6 +69,7 @@ import {
 } from "../../api/adaptAuthoring";
 import type { MenuPageData } from "../../components/editor/MenuPageCanvas";
 import type { Course } from "../../types/course";
+import type { CourseStructure, SModule } from "../../types/structure";
 import {
   NEW_CONTENT_GROUP_TITLE,
   NEW_SECTION_TITLE,
@@ -3152,6 +3154,7 @@ export default function CourseEditor({
   const [rightPanelType, setRightPanelType] = useState<"menu" | "page" | "subpage" | "article" | "block" | "component" | "addComponent" | "structure">("menu");
   const [showStructureMap, setShowStructureMap] = useState(false);
   const [menuData, setMenuData] = useState<MenuPageData>(defaultMenuPage);
+  const [courseStructure, setCourseStructure] = useState<CourseStructure | null>(null);
   const [isLoadingStructure, setIsLoadingStructure] = useState(true);
   const [structureLoadError, setStructureLoadError] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
@@ -3395,6 +3398,7 @@ export default function CourseEditor({
       setCourseAssetMappings(courseAssets || {});
       setAssetLinkIdMap(nextAssetLinkMap);
 
+      setCourseStructure(structure);
       const pages = mapStructureToPages(structure);
       const fallbackPage = pages[0] ?? null;
       const page = pages.find((item) => item.id === selection?.pageId) ?? fallbackPage;
@@ -8676,6 +8680,40 @@ export default function CourseEditor({
     }
   }
 
+  async function handleAddModule(parentModuleId?: string) {
+    try {
+      const parentId = parentModuleId || courseId;
+      const childCount = parentModuleId
+        ? (() => {
+            const findMod = (mods: SModule[]): SModule | null => {
+              for (const m of mods) {
+                if (m.id === parentModuleId) return m;
+                const found = findMod(m.modules);
+                if (found) return found;
+              }
+              return null;
+            };
+            const targetMod = courseStructure ? findMod(courseStructure.modules) : null;
+            return (targetMod?.modules.length ?? 0) + (targetMod?.topics.length ?? 0);
+          })()
+        : (courseStructure?.modules.length ?? 0) + (courseStructure?.topics.length ?? 0);
+
+      const { topicId } = await seedDefaultModule(courseId, parentId, "New Module", childCount + 1);
+      await loadStructureFromDatabase({ pageId: topicId });
+    } catch (error) {
+      console.error("Failed to add module", error);
+    }
+  }
+
+  async function handleDeleteModule(moduleId: string) {
+    try {
+      await deleteStructureNode("module", moduleId);
+      await loadStructureFromDatabase();
+    } catch (error) {
+      console.error("Failed to delete module", error);
+    }
+  }
+
   async function handleAddPage() {
     try {
       const newPageId = await seedDefaultTopic(courseId, courseId, NEW_TOPIC_TITLE, contentPages.length + 1);
@@ -10484,6 +10522,7 @@ export default function CourseEditor({
           }}
           menuPageCreated={menuPageCreated}
           menuSelected={menuSelected}
+          courseStructure={courseStructure}
           contentPages={contentPages}
           selectedPageId={selectedPageId}
           selectedSubPageId={selectedSubPageId}
@@ -10496,6 +10535,15 @@ export default function CourseEditor({
           onArticleSelect={(pageId, articleId) => handleArticleSelect(pageId, articleId, "leftPanel")}
           onBlockSelect={(pageId, articleId, blockId) => handleBlockSelect(pageId, articleId, blockId, "leftPanel")}
           onComponentSelect={(pageId, articleId, blockId, componentId) => handleSelectComponent(pageId, articleId, blockId, componentId, "leftPanel")}
+          onAddModule={() => {
+            void handleAddModule();
+          }}
+          onAddSubModule={(modId) => {
+            void handleAddModule(modId);
+          }}
+          onDeleteModule={(modId) => {
+            void handleDeleteModule(modId);
+          }}
           onAddPage={() => {
             void handleAddPage();
           }}
