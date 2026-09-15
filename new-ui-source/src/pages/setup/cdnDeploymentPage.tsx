@@ -347,14 +347,10 @@ export function CdnDeploymentPage({
     (async () => {
       setLoading(true);
       try {
-        const [settings, version] = await Promise.all([
-          getCdnDeploymentSettings(courseId),
-          getCdnVersion().catch(() => ""),
-        ]);
+        const settings = await getCdnDeploymentSettings(courseId);
         if (cancelled) return;
         setCfg(settings);
         setSavedSnapshot(settings);
-        setCdnCliVersion(version);
       } catch {
         // Without this, a failed fetch left `cfg` null forever and the page
         // was stuck on the loading spinner indefinitely — fall back to the
@@ -371,6 +367,23 @@ export function CdnDeploymentPage({
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId]);
+
+  // The CLI version string is a display-only footnote ("NPM cdndeploy
+  // version: …") backed by a `cdndeploy -version` subprocess spawn, which can
+  // be noticeably slower than the settings fetch above (process startup +
+  // module load vs. a single DB read). It was previously awaited in the same
+  // Promise.all as the settings load, so the whole page sat behind the
+  // loading spinner until that subprocess finished, even though the version
+  // string has no bearing on the form being usable. Fetch it independently,
+  // off the critical path, so a slow/hanging CLI can never delay the page
+  // becoming interactive.
+  useEffect(() => {
+    let cancelled = false;
+    getCdnVersion()
+      .then((v) => { if (!cancelled) setCdnCliVersion(v); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -441,6 +454,19 @@ export function CdnDeploymentPage({
 
   function handleTriggerBuild() {
     if (!cfg || building) return;
+    // Guard even though the trigger button is already disabled in this state
+    // (defense in depth against any other call path). Deploying while Project/
+    // Course Id are still the literal schema-default placeholders would publish
+    // this course's build to the same shared CDN path every other
+    // as-yet-unconfigured course would also deploy to, silently overwriting
+    // whatever is already there.
+    if (identityMatchesDefault) {
+      setToast({
+        type: "error",
+        message: "Update Project and Course Id from their default placeholder values before deploying.",
+      });
+      return;
+    }
     setBuilding(true);
     setLogEntries([]);
     // Clear any previously-fetched previous-links table — after a build, only
@@ -547,7 +573,18 @@ export function CdnDeploymentPage({
     }
   }
 
-  const canTrigger = !!cfg?.isEnabled && !!cfg.cdnid && !!cfg.groupid && !!cfg.courseid && !!cfg.version && !building;
+  // Project/Course Id together (with cdnid) form the CDN destination path
+  // (see destination.js: `${groupid}/courses/${courseid}/${version}`) — while
+  // both still match the schema defaults ADAPT-3842's shared "default-project"/
+  // "default-course" placeholders, deploying would target the same generic
+  // path every unconfigured course shares, overwriting each other's content.
+  const identityMatchesDefault =
+    !!cfg &&
+    cfg.groupid === DEFAULT_CDN_DEPLOYMENT_SETTINGS.groupid &&
+    cfg.courseid === DEFAULT_CDN_DEPLOYMENT_SETTINGS.courseid;
+
+  const canTrigger =
+    !!cfg?.isEnabled && !!cfg.cdnid && !!cfg.groupid && !!cfg.courseid && !!cfg.version && !building && !identityMatchesDefault;
 
   return (
     <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
@@ -612,6 +649,24 @@ export function CdnDeploymentPage({
                       value={cfg.buildTriggerComment}
                       onChange={(v) => set({ buildTriggerComment: v })}
                     />
+
+                    {identityMatchesDefault ? (
+                      <p className="text-xs text-[var(--life-warning-500)] bg-[var(--life-warning-050)] border border-[var(--life-warning-100)] rounded-lg px-3 py-2">
+                        Project and Course Id are still set to their default placeholder values ("default-project" /
+                        "default-course"). Update them to match this course before you can trigger a CDN build —
+                        deploying with the shared defaults would overwrite another course's deployment at the same path.
+                      </p>
+                    ) : dirty ? (
+                      // Only shown while the edits are unsaved (`dirty`) — this is a heads-up about the
+                      // *pending* change, so it should go away once the user saves (at which point
+                      // `savedSnapshot` catches up to `cfg` and these are simply the current settings,
+                      // not a change still waiting to be applied).
+                      <p className="text-xs text-[var(--life-primary-600)] bg-[var(--life-primary-050)] border border-[var(--life-primary-100)] rounded-lg px-3 py-2">
+                        You've changed the default CDN settings. If this course was previously deployed under
+                        different Project / Course Id / Version values, save and trigger a new build to overwrite the
+                        existing deployment with these settings.
+                      </p>
+                    ) : null}
                   </div>
                 )}
               </Section>
