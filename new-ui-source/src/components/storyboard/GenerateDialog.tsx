@@ -35,12 +35,18 @@ export default function GenerateDialog({
   result,
   onConfirm,
   onClose,
+  onDone,
 }: {
   plan: GenerationPlan | null;
   running: boolean;
   result: GenerationResult | null;
   onConfirm: () => void;
   onClose: () => void;
+  /** Called when the user dismisses the dialog AFTER a successful generation
+   *  (the "Done" button) — distinct from onClose (Cancel/X) so the caller can
+   *  react to a completed generation, e.g. by opening Preview. Falls back to
+   *  onClose if not provided. */
+  onDone?: () => void;
 }) {
   const blocked = !!plan && plan.issues.length > 0;
 
@@ -168,7 +174,7 @@ export default function GenerateDialog({
           style={{ borderTop: '1px solid var(--life-color-border-subtle)' }}
         >
           {result ? (
-            <button type="button" onClick={onClose} className="sb-toolbar-btn sb-toolbar-btn-primary">
+            <button type="button" onClick={onDone ?? onClose} className="sb-toolbar-btn sb-toolbar-btn-primary">
               Done
             </button>
           ) : (
