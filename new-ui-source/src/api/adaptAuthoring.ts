@@ -4777,6 +4777,23 @@ export function trashAsset(backendId: string): Promise<unknown> {
   return apiClient.put(`/api/asset/trash/${backendId}`);
 }
 
+export async function updateAsset(
+  backendId: string,
+  patch: {
+    title?: string;
+    description?: string;
+    tags?: string[];
+  }
+): Promise<unknown> {
+  const updateData: Record<string, unknown> = { _id: backendId };
+  if (patch.title !== undefined) updateData.title = patch.title;
+  if (patch.description !== undefined) updateData.description = patch.description;
+  if (patch.tags !== undefined) {
+    updateData.tags = (await resolveOrCreateTagIds(patch.tags)).map((id) => ({ _id: id }));
+  }
+  return apiClient.put(`/api/asset/${backendId}`, updateData);
+}
+
 // ── Plugins (all bower-backed plugin types) ───────────────────────────────────
 export type PluginStatus = "Enabled" | "Disabled";
 export type PluginCategory = "extensions" | "components" | "themes" | "menus";

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback, useDeferredValue, memo } from "react";
-import { getAssets, trashAsset } from "@/api/adaptAuthoring";
+import { getAssets, trashAsset, updateAsset } from "@/api/adaptAuthoring";
 import type { AssetFormat, DashboardAsset } from "@/api/adaptAuthoring";
 import AiAssistant from "@/components/common/AiAssistant";
 import type { AssetPickerResult, AssetPickerType } from "@/types/assetPicker";
@@ -576,15 +576,26 @@ export function AssetManagementWorkspace({
   }
 
   // ── Edit ────────────────────────────────────────────────────────────────
-  function saveEdit() {
+  async function saveEdit() {
     if (!editState?.asset || !editState.title.trim() || !editState.description.trim()) return;
+
+    const nextTitle = editState.title.trim();
+    const nextDescription = editState.description.trim();
+    const nextTags = editState.tags.split(",").map((t) => t.trim()).filter(Boolean);
+
+    await updateAsset(editState.asset.backendId, {
+      title: nextTitle,
+      description: nextDescription,
+      tags: nextTags,
+    });
+
     setAssets((prev) => prev.map((a) =>
       a.id === editState.asset!.id
         ? {
             ...a,
-            title: editState.title.trim(),
-            description: editState.description.trim(),
-            tags: editState.tags.split(",").map((t) => t.trim()).filter(Boolean),
+            title: nextTitle,
+            description: nextDescription,
+            tags: nextTags,
           }
         : a
     ));
