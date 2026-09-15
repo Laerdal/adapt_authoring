@@ -557,11 +557,11 @@ html, body {
 
 
 /* --------------------------------------------------------------------
-   AI Assistant (Samaritan) — global chat widget on Home / Setup /
+   AI Assistant (Samaritan) ï¿½ global chat widget on Home / Setup /
    Management pages (components/common/AiAssistant.tsx).
    -------------------------------------------------------------------- */
 
-/* Typing indicator dots — mirrors the legacy .ai-tutor-typing bubble. */
+/* Typing indicator dots ï¿½ mirrors the legacy .ai-tutor-typing bubble. */
 .ai-tutor-dot {
   display: inline-block;
   width: 6px;
@@ -602,9 +602,13 @@ html, body {
   border: 0;
 }
 .ai-tutor-bubble-content .ai-tutor-link {
-  color: #4b3a7c;
+  /* Inherit the bubble's own text color (dark on the light AI bubble, white
+     on the purple user bubble) instead of a fixed dark purple, which had
+     poor contrast â€” and matched its own hover color â€” on the user bubble. */
+  color: inherit;
   text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .ai-tutor-bubble-content .ai-tutor-link:hover {
-  color: #6b4fa8;
+  opacity: 0.75;
 }

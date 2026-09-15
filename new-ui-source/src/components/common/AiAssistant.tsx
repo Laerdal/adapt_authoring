@@ -123,7 +123,7 @@ function formatMessage(text: string): string {
     segs,
     /https?:\/\/(?:(?:www\.)?youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{5,15})/g,
     (_m, id) =>
-      `<div class="ai-tutor-video-wrap"><iframe src="https://www.youtube-nocookie.com/embed/${esc(id)}" frameborder="0" allowfullscreen></iframe></div>`
+      `<div class="ai-tutor-video-wrap"><iframe src="https://www.youtube-nocookie.com/embed/${esc(id)}" title="Embedded YouTube video" frameborder="0" allowfullscreen></iframe></div>`
   )
 
   // Inline video links: [label](url.mp4)
@@ -247,9 +247,10 @@ export default function AiAssistant({
   }
 
   async function newChat() {
-    await aiTutorClearHistory()
+    if (busy) return
     setMessages([{ role: 'ai', text: CLEARED_GREETING }])
     setInput('')
+    await aiTutorClearHistory()
   }
 
   return (
@@ -276,9 +277,10 @@ export default function AiAssistant({
               </svg>
             </button>
 
-            {/* New chat */}
-            <button type="button" onClick={newChat} title="New conversation" aria-label="New chat"
-              className="p-1.5 rounded-lg text-[#666] hover:text-[#1a1a1a] hover:bg-[#f3f0fa] transition-colors">
+            {/* New chat — disabled while a reply is in flight so it can't race
+                with `send`'s pending response landing in a just-cleared chat. */}
+            <button type="button" onClick={newChat} disabled={busy} title="New conversation" aria-label="New chat"
+              className="p-1.5 rounded-lg text-[#666] hover:text-[#1a1a1a] hover:bg-[#f3f0fa] transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
               </svg>

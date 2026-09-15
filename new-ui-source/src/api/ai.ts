@@ -86,29 +86,32 @@ export interface AiTutorContext {
 
 export interface AiTutorChatResponse {
   reply: string;
+  // Always empty here — the storyboard AI proxy (see below) doesn't supply
+  // citations. Kept on the response shape so the widget's rendering code
+  // doesn't need to change if a citation-capable backend is added later.
   citationBadges: CitationBadge[];
 }
 
-// POST /api/ai-tutor/chat — { message, context } → { data: { reply, citationBadges } }
+// NOTE: the full-parity "AI Tutor" server (routes under /api/ai-tutor/*,
+// `plugins/services/ai-tutor` + the legacy `frontend/src/plugins/ai-tutor`)
+// is not part of this deployment — it isn't registered by any plugin in this
+// repo/branch, so every call against it 404s. The only AI route actually
+// registered here is the storyboard proxy this file already talks to
+// (`plugins/content/storyboard/routes/index.js`, POST /api/storyboard/ai
+// → handleAi). Route the widget through that instead of a service that isn't
+// deployed.
 export async function aiTutorChat(
   message: string,
   context?: AiTutorContext
 ): Promise<AiTutorChatResponse> {
-  const res = await apiClient.post<{
-    data?: { reply?: string; citationBadges?: CitationBadge[] };
-  }>("/api/ai-tutor/chat", { message, context: context || {} });
-  return {
-    reply: res.data?.reply ?? "",
-    citationBadges: res.data?.citationBadges ?? [],
-  };
+  const reply = await storyboardAi("suggest", message, context ? JSON.stringify(context) : undefined);
+  return { reply, citationBadges: [] };
 }
 
-// POST /api/ai-tutor/history/clear — reset the server-side conversation memory
-// for the current session. Matches the legacy widget's "New chat" button.
-export async function aiTutorClearHistory(): Promise<void> {
-  try {
-    await apiClient.post<unknown>("/api/ai-tutor/history/clear", {});
-  } catch {
-    // History clear is best-effort; ignore transient failures so the UI still resets.
-  }
-}
+// The storyboard AI proxy is stateless — it has no server-side conversation
+// memory to clear, so there is nothing to fail here (previously this called
+// a non-existent /api/ai-tutor/history/clear and swallowed the resulting
+// 404, which let the widget claim "Conversation cleared" while the
+// (nonexistent) server session was untouched). "New chat" is purely a
+// client-side reset; kept async for call-site compatibility.
+export async function aiTutorClearHistory(): Promise<void> {}
