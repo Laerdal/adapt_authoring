@@ -4731,11 +4731,16 @@ export interface DashboardAsset {
   tags: string[];
   uploadedAt: string;
   thumbnail?: string;
+  filename?: string;
+  path?: string;
+  mimeType?: string;
 }
 
 interface EngineAsset {
   _id: string;
   title?: string;
+  filename?: string;
+  path?: string;
   description?: string;
   size?: number;
   mimeType?: string;
@@ -4761,6 +4766,9 @@ export async function getAssets(): Promise<DashboardAsset[]> {
         : [],
       uploadedAt: fmtDate(a.createdAt),
       thumbnail: format === "image" ? `/api/asset/serve/${a._id}` : undefined,
+      filename: a.filename,
+      path: a.path,
+      mimeType: a.mimeType,
     };
   });
 }

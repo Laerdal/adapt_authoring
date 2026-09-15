@@ -1,19 +1,19 @@
 import { useState, useMemo, useEffect, useRef, useCallback, useDeferredValue, memo } from "react";
 import { getAssets, trashAsset } from "@/api/adaptAuthoring";
+import type { AssetFormat, DashboardAsset } from "@/api/adaptAuthoring";
 import AiAssistant from "@/components/common/AiAssistant";
+import type { AssetPickerResult, AssetPickerType } from "@/types/assetPicker";
 
-type AssetFormat = "image" | "audio" | "video" | "other";
+type Asset = DashboardAsset;
 
-interface Asset {
-  id: number;
-  backendId?: string;   // engine _id — used for delete/trash
-  title: string;
-  description: string;
-  size: string;
-  format: AssetFormat;
-  tags: string[];
-  uploadedAt: string;
-  thumbnail?: string;
+interface AssetManagementWorkspaceProps {
+  pickerMode?: boolean;
+  pickerAssetType?: AssetPickerType;
+  pickerTitle?: string;
+  pickerDescription?: string;
+  onPickAsset?: (asset: AssetPickerResult) => void;
+  onCancelPick?: () => void;
+  hideAssistant?: boolean;
 }
 
 const FORMAT_COLORS: Record<AssetFormat, string> = {
@@ -52,19 +52,6 @@ const THUMBNAIL_COLORS: Record<AssetFormat, string> = {
   video: "bg-gradient-to-br from-[#fef3c7] to-[#fcd34d]",
   other: "bg-gradient-to-br from-[#f3f4f6] to-[#d1d5db]",
 };
-
-const INITIAL_ASSETS: Asset[] = [
-  { id: 1,  title: "CPR Training Video",        description: "Step-by-step CPR demonstration for adult patients in emergency scenarios.", size: "48.2 MB", format: "video", tags: ["cpr", "training", "emergency"],      uploadedAt: "24-06-26" },
-  { id: 2,  title: "Heart Anatomy Diagram",      description: "Detailed anatomical illustration of the human heart with labeled regions.", size: "2.4 MB",  format: "image", tags: ["anatomy", "heart", "diagram"],       uploadedAt: "23-06-26" },
-  { id: 3,  title: "Defibrillator Audio Guide",  description: "Voice-guided instructions for using an AED device in public settings.", size: "8.1 MB",  format: "audio", tags: ["aed", "audio", "guide"],             uploadedAt: "22-06-26" },
-  { id: 4,  title: "Airway Management Slides",   description: "Presentation slides covering airway assessment and intubation basics.", size: "5.7 MB",  format: "other", tags: ["airway", "slides", "presentation"],   uploadedAt: "21-06-26" },
-  { id: 5,  title: "Patient Assessment Checklist", description: "Printable checklist for systematic patient assessment in clinical settings.", size: "320 KB", format: "other", tags: ["checklist", "assessment"],         uploadedAt: "20-06-26" },
-  { id: 6,  title: "Medication Dosage Chart",    description: "Quick-reference chart for common emergency medication dosages by weight.", size: "1.1 MB",  format: "image", tags: ["medication", "dosage", "reference"], uploadedAt: "19-06-26" },
-  { id: 7,  title: "Simulation Scenario Audio",  description: "Background audio track for realistic hospital simulation environment.", size: "22.5 MB", format: "audio", tags: ["simulation", "audio", "scenario"],    uploadedAt: "18-06-26" },
-  { id: 8,  title: "IV Insertion Technique",     description: "Close-up footage demonstrating correct peripheral IV catheter insertion.", size: "91.3 MB", format: "video", tags: ["iv", "technique", "clinical"],       uploadedAt: "17-06-26" },
-  { id: 9,  title: "ECG Pattern Reference",      description: "Visual guide to common ECG arrhythmia patterns for quick identification.", size: "3.8 MB",  format: "image", tags: ["ecg", "cardiac", "reference"],      uploadedAt: "16-06-26" },
-  { id: 10, title: "Module Completion Sound",    description: "Short celebratory audio cue played on module completion.", size: "180 KB", format: "audio", tags: ["audio", "ui", "feedback"],             uploadedAt: "15-06-26" },
-];
 
 type ViewMode = "grid" | "list";
 
@@ -175,7 +162,7 @@ const EMPTY_EDIT = (a: Asset): EditModalState => ({
   replaceFile: null,
 });
 
-let nextId = INITIAL_ASSETS.length + 1;
+let nextId = 1;
 
 function formatBytes(raw: string) { return raw; }
 
@@ -186,13 +173,27 @@ function formatBytes(raw: string) { return raw; }
 // skips re-rendering a card whose asset/handlers are unchanged.
 interface AssetItemProps {
   asset: Asset;
-  onEdit: (asset: Asset) => void;
-  onDelete: (asset: Asset) => void;
+  onEdit?: (asset: Asset) => void;
+  onDelete?: (asset: Asset) => void;
+  selectable?: boolean;
+  onSelect?: (asset: Asset) => void;
+  hideActions?: boolean;
 }
 
-const AssetCardItem = memo(function AssetCardItem({ asset, onEdit, onDelete }: AssetItemProps) {
+const AssetCardItem = memo(function AssetCardItem({ asset, onEdit, onDelete, selectable = false, onSelect, hideActions = false }: AssetItemProps) {
   return (
-    <div className="bg-white border border-[#e5e7eb] rounded-xl overflow-hidden hover:shadow-md transition-shadow flex flex-col group">
+    <div
+      role={selectable ? "button" : undefined}
+      tabIndex={selectable ? 0 : undefined}
+      onClick={selectable ? () => onSelect?.(asset) : undefined}
+      onKeyDown={selectable ? (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect?.(asset);
+        }
+      } : undefined}
+      className={`bg-white border border-[#e5e7eb] rounded-xl overflow-hidden transition-shadow flex flex-col group ${selectable ? "cursor-pointer hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:ring-offset-2" : "hover:shadow-md"}`}
+    >
       {/* Thumbnail */}
       <div className={`h-32 ${THUMBNAIL_COLORS[asset.format]} flex items-center justify-center`}>
         <span className={`${FORMAT_COLORS[asset.format].split(" ")[1]} opacity-60`}>
@@ -237,6 +238,7 @@ const AssetCardItem = memo(function AssetCardItem({ asset, onEdit, onDelete }: A
       </div>
 
       {/* Actions */}
+      {!hideActions && onEdit && onDelete ? (
       <div className="px-4 py-3 border-t border-[#f3f4f6] flex items-center gap-2">
         <button
           type="button"
@@ -262,13 +264,25 @@ const AssetCardItem = memo(function AssetCardItem({ asset, onEdit, onDelete }: A
           Delete
         </button>
       </div>
+      ) : null}
     </div>
   );
 });
 
-const AssetListItem = memo(function AssetListItem({ asset, onEdit, onDelete }: AssetItemProps) {
+const AssetListItem = memo(function AssetListItem({ asset, onEdit, onDelete, selectable = false, onSelect, hideActions = false }: AssetItemProps) {
   return (
-    <tr className="border-b border-[#f3f4f6] hover:bg-[#fafafa] transition-colors group/row">
+    <tr
+      role={selectable ? "button" : undefined}
+      tabIndex={selectable ? 0 : undefined}
+      onClick={selectable ? () => onSelect?.(asset) : undefined}
+      onKeyDown={selectable ? (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect?.(asset);
+        }
+      } : undefined}
+      className={`border-b border-[#f3f4f6] transition-colors group/row ${selectable ? "cursor-pointer hover:bg-[#eff6ff] focus:outline-none focus:bg-[#eff6ff]" : "hover:bg-[#fafafa]"}`}
+    >
       {/* Icon + Title */}
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
@@ -306,6 +320,7 @@ const AssetListItem = memo(function AssetListItem({ asset, onEdit, onDelete }: A
       </td>
 
       {/* Actions */}
+      {!hideActions && onEdit && onDelete ? (
       <td className="px-4 py-3">
         <div className="flex items-center justify-end gap-1">
           <button
@@ -333,17 +348,27 @@ const AssetListItem = memo(function AssetListItem({ asset, onEdit, onDelete }: A
           </button>
         </div>
       </td>
+      ) : null}
     </tr>
   );
 });
 
-export default function AssetManagementPage() {
+export function AssetManagementWorkspace({
+  pickerMode = false,
+  pickerAssetType,
+  pickerTitle,
+  pickerDescription,
+  onPickAsset,
+  onCancelPick,
+  hideAssistant = false,
+}: AssetManagementWorkspaceProps) {
   const [assets, setAssets]             = useState<Asset[]>([]);
+  const fixedPickerFormat = pickerMode && pickerAssetType ? pickerAssetType : null;
 
   const loadAssets = () => { getAssets().then(setAssets).catch(() => setAssets([])); };
   useEffect(() => { loadAssets(); }, []);
   const [search, setSearch]             = useState("");
-  const [formatFilter, setFormatFilter] = useState<AssetFormat | "All">("All");
+  const [formatFilter, setFormatFilter] = useState<AssetFormat | "All">(fixedPickerFormat ?? "All");
   const [view, setView]                 = useState<ViewMode>("grid");
   const [filterOpen, setFilterOpen]     = useState(false);
 
@@ -394,6 +419,7 @@ export default function AssetManagementPage() {
   }, []);
 
   const deferredSearch = useDeferredValue(search);
+  const effectiveFormatFilter: AssetFormat | "All" = fixedPickerFormat ?? formatFilter;
   const filtered = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
     return assets.filter((a) => {
@@ -401,10 +427,35 @@ export default function AssetManagementPage() {
         q === "" ||
         a.title.toLowerCase().includes(q) ||
         a.tags.some((t) => t.toLowerCase().includes(q));
-      const matchFormat = formatFilter === "All" || a.format === formatFilter;
+      const matchFormat = effectiveFormatFilter === "All" || a.format === effectiveFormatFilter;
       return matchSearch && matchFormat;
     });
-  }, [assets, deferredSearch, formatFilter]);
+  }, [assets, deferredSearch, effectiveFormatFilter]);
+
+  useEffect(() => {
+    if (!fixedPickerFormat) return;
+    setFormatFilter(fixedPickerFormat);
+  }, [fixedPickerFormat]);
+
+  function toPickerResult(asset: Asset): AssetPickerResult | null {
+    if (!asset.backendId) return null;
+    const id = asset.backendId;
+    const url = asset.thumbnail || `/api/asset/serve/${id}`;
+    const normalizedPath = (asset.path || "").trim().replace(/^\/+/, "");
+    let assetLink = url;
+    if (normalizedPath.startsWith("course/assets/")) {
+      assetLink = normalizedPath;
+    } else if (asset.filename) {
+      assetLink = `course/assets/${asset.filename}`;
+    }
+    return { id, url, assetLink };
+  }
+
+  const handlePickSelection = useCallback((asset: Asset) => {
+    const result = toPickerResult(asset);
+    if (!result) return;
+    onPickAsset?.(result);
+  }, [onPickAsset]);
 
   // ── Upload: step "pick" ───────────────────────────────────────────────────
   const handleUploadFile = useCallback((f: File | null) => {
@@ -437,8 +488,10 @@ export default function AssetManagementPage() {
     if (!upload.file) return;
 
     const fmt = detectFormat(upload.file);
+    const localId = nextId++;
     const newAsset: Asset = {
-      id: nextId++,
+      id: localId,
+      backendId: `local-${localId}`,
       title: upload.title.trim(),
       description: upload.description.trim(),
       size: formatFileSize(upload.file.size),
@@ -526,6 +579,7 @@ export default function AssetManagementPage() {
   // Stable handlers so the memoized list items don't re-render on every keystroke.
   const handleEditAsset   = useCallback((asset: Asset) => setEditState(EMPTY_EDIT(asset)), []);
   const handleDeleteAsset = useCallback((asset: Asset) => setDeleteTarget(asset), []);
+  const hideActions = pickerMode;
 
   return (
     <div className="flex flex-col h-full">
@@ -533,14 +587,23 @@ export default function AssetManagementPage() {
       {/* ── Page header ── */}
       <div className="px-6 md:px-8 pt-6 pb-4 flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">Asset Management</h1>
-          <p className="text-sm text-[#6b7280] mt-1">Upload, organize, and manage your course assets.</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">{pickerMode ? (pickerTitle || "Select Asset") : "Asset Management"}</h1>
+          <p className="text-sm text-[#6b7280] mt-1">{pickerMode ? (pickerDescription || "Choose an asset to continue.") : "Upload, organize, and manage your course assets."}</p>
         </div>
-        <button
-          type="button"
-          onClick={() => { setUpload(EMPTY_UPLOAD); setUploadOpen(true); }}
-          className="shrink-0 flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors shadow-sm"
-        >
+        {pickerMode ? (
+          <button
+            type="button"
+            onClick={onCancelPick}
+            className="shrink-0 flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[#374151] bg-white border border-[#d1d5db] hover:bg-[#f9fafb] rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => { setUpload(EMPTY_UPLOAD); setUploadOpen(true); }}
+            className="shrink-0 flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors shadow-sm"
+          >
           <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
             <polyline points="17 8 12 3 7 8" />
@@ -548,7 +611,8 @@ export default function AssetManagementPage() {
           </svg>
           <span className="hidden sm:inline">Upload Asset</span>
           <span className="sm:hidden">Upload</span>
-        </button>
+          </button>
+        )}
       </div>
 
       {/* ── Toolbar ── */}
@@ -576,6 +640,7 @@ export default function AssetManagementPage() {
         </div>
 
         {/* Format filter */}
+        {!fixedPickerFormat ? (
         <div ref={filterRef} className="relative">
           <button
             type="button"
@@ -618,9 +683,14 @@ export default function AssetManagementPage() {
             </div>
           )}
         </div>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#dbeeff] text-xs text-[#2d6fa8] font-medium">
+            {FORMAT_LABELS[fixedPickerFormat]}
+          </span>
+        )}
 
         {/* Active filter chips */}
-        {(search || formatFilter !== "All") && (
+        {(search || effectiveFormatFilter !== "All") && (
           <div className="flex items-center gap-2 flex-wrap">
             {search && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#f3f4f6] text-xs text-[#374151] font-medium">
@@ -632,9 +702,9 @@ export default function AssetManagementPage() {
                 </button>
               </span>
             )}
-            {formatFilter !== "All" && (
+            {effectiveFormatFilter !== "All" && !fixedPickerFormat && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#dbeeff] text-xs text-[#2d6fa8] font-medium">
-                {FORMAT_LABELS[formatFilter]}
+                {FORMAT_LABELS[effectiveFormatFilter]}
                 <button type="button" onClick={() => setFormatFilter("All")} className="text-[#2d6fa8] hover:text-[#1e4d73]">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -688,7 +758,7 @@ export default function AssetManagementPage() {
           </div>
         ) : view === "grid" ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filtered.map((a) => <AssetCardItem key={a.id} asset={a} onEdit={handleEditAsset} onDelete={handleDeleteAsset} />)}
+            {filtered.map((a) => <AssetCardItem key={a.id} asset={a} onEdit={handleEditAsset} onDelete={handleDeleteAsset} selectable={pickerMode} onSelect={handlePickSelection} hideActions={hideActions} />)}
           </div>
         ) : (
           <div className="rounded-xl border border-[#e5e7eb] overflow-hidden bg-white">
@@ -700,23 +770,25 @@ export default function AssetManagementPage() {
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[#374151] uppercase tracking-wide whitespace-nowrap">Size</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[#374151] uppercase tracking-wide">Format</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-[#374151] uppercase tracking-wide">Tags</th>
+                  {!hideActions ? (
                   <th className="px-4 py-3 text-right text-xs font-semibold text-[#374151] uppercase tracking-wide">Actions</th>
+                  ) : null}
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((a) => <AssetListItem key={a.id} asset={a} onEdit={handleEditAsset} onDelete={handleDeleteAsset} />)}
+                {filtered.map((a) => <AssetListItem key={a.id} asset={a} onEdit={handleEditAsset} onDelete={handleDeleteAsset} selectable={pickerMode} onSelect={handlePickSelection} hideActions={hideActions} />)}
               </tbody>
             </table>
           </div>
         )}
       </div>
 
-      <AiAssistant context="Asset Management" />
+      {!hideAssistant ? <AiAssistant context="Asset Management" /> : null}
 
       {/* ════════════════════════════════════════════════════════════════
           Upload Modal — multi-step: pick → details → uploading → done
       ════════════════════════════════════════════════════════════════ */}
-      {uploadOpen && (
+      {!pickerMode && uploadOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
           onClick={(e) => { if (e.target === e.currentTarget && upload.step !== "uploading") closeUpload(); }}
@@ -985,7 +1057,7 @@ export default function AssetManagementPage() {
       {/* ════════════════════════════════════════════════════════════════
           Edit Modal
       ════════════════════════════════════════════════════════════════ */}
-      {editState && (
+      {!pickerMode && editState && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
           onClick={(e) => { if (e.target === e.currentTarget) setEditState(null); }}
@@ -1104,7 +1176,7 @@ export default function AssetManagementPage() {
       {/* ════════════════════════════════════════════════════════════════
           Delete Confirmation Modal
       ════════════════════════════════════════════════════════════════ */}
-      {deleteTarget && (
+      {!pickerMode && deleteTarget && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
           onClick={(e) => { if (e.target === e.currentTarget) setDeleteTarget(null); }}
@@ -1156,4 +1228,8 @@ export default function AssetManagementPage() {
       )}
     </div>
   );
+}
+
+export default function AssetManagementPage() {
+  return <AssetManagementWorkspace />;
 }
