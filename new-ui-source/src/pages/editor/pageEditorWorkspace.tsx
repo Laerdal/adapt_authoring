@@ -7,6 +7,12 @@ import AssetPickerModal from "../../components/common/AssetPickerModal";
 import RichTextEditor from "../../components/common/RichTextEditor";
 import AiAssistPopover from "../../components/storyboard/AiAssistPopover";
 import { loadCKEditor5In } from "../../utils/ckEditor5Loader";
+import {
+  CKEDITOR_LINK_CONFIG,
+  getSamaritanSeedText,
+  insertAiResultIntoEditor,
+  replaceAiResultInEditor,
+} from "../../utils/ckEditorSamaritan";
 import TopicAssetField, { toRenderableAssetUrl } from "../../components/common/AssetSelectionField";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import { CheckboxIndicator } from "../../components/common/Checkbox";
@@ -44,6 +50,7 @@ import {
   saveContentAsTemplate,
   searchUsersByEmailQuery,
   seedDefaultContentGroup,
+  seedDefaultModule,
   seedDefaultSection,
   seedDefaultTopic,
   type ComponentTypeOption,
@@ -62,6 +69,7 @@ import {
 } from "../../api/adaptAuthoring";
 import type { MenuPageData } from "../../components/editor/MenuPageCanvas";
 import type { Course } from "../../types/course";
+import type { CourseStructure, SModule } from "../../types/structure";
 import {
   NEW_CONTENT_GROUP_TITLE,
   NEW_SECTION_TITLE,
@@ -2646,7 +2654,9 @@ function mapStructureToPages(
     description?: string;
     subtitle?: string;
     body?: string;
+    pageBody?: string;
     instruction?: string;
+    colorLabel?: string;
     graphic?: {
       src?: string;
       alt?: string;
@@ -2745,16 +2755,22 @@ function mapStructureToPages(
     }>;
   }) => {
     const topicSubtitle = topic.subtitle || "";
-    const topicBody = topic.body || topic.description || "";
+    // The page template renders `pageBody` INSTEAD of `body` when it is set
+    // (contentobject schema), so the editor must show — and later write back
+    // to — whichever one the page actually displays.
+    const usesPageBodyOverride = !!(topic.pageBody && topic.pageBody.trim());
+    const topicBody = usesPageBodyOverride ? topic.pageBody || "" : topic.body || "";
     const topicInstruction = topic.instruction || "";
 
     pages.push({
       id: topic.id,
-      title: topic.title || "Untitled Page",
+      title: topic.title || "Untitled Topic",
       description: topic.description || "",
       subtitle: topicSubtitle,
       body: topicBody,
+      usesPageBodyOverride,
       instruction: topicInstruction,
+      colorLabel: topic.colorLabel || "",
       graphic: {
         src: topic.graphic?.src || "",
         alt: topic.graphic?.alt || "",
@@ -2797,7 +2813,7 @@ function mapStructureToPages(
       subPages: [],
       articles: topic.sections.map((section) => ({
         id: section.id,
-        title: section.title || "Untitled Article",
+        title: section.title || "Untitled Section",
         description: section.description || "",
         instruction: section.instruction || "",
         themeSettings:
@@ -2828,7 +2844,7 @@ function mapStructureToPages(
             : false,
         blocks: section.contentGroups.map((group) => ({
           id: group.id,
-          title: group.title || "Untitled Block",
+          title: group.title || "Untitled Content Group",
           description: group.description || "",
           instruction: group.instruction || "",
           themeSettings:
@@ -3010,7 +3026,10 @@ export interface ContentPageData {
   description: string;
   subtitle: string;
   body: string;
+  // True when `body` above is really the page's `pageBody` override.
+  usesPageBodyOverride: boolean;
   instruction: string;
+  colorLabel: string;
   graphic: TopicGraphicSettings;
   themeSettings: TopicThemeSettings;
   menuSettings: TopicMenuSettings;
@@ -3135,6 +3154,7 @@ export default function CourseEditor({
   const [rightPanelType, setRightPanelType] = useState<"menu" | "page" | "subpage" | "article" | "block" | "component" | "addComponent" | "structure">("menu");
   const [showStructureMap, setShowStructureMap] = useState(false);
   const [menuData, setMenuData] = useState<MenuPageData>(defaultMenuPage);
+  const [courseStructure, setCourseStructure] = useState<CourseStructure | null>(null);
   const [isLoadingStructure, setIsLoadingStructure] = useState(true);
   const [structureLoadError, setStructureLoadError] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
@@ -3325,6 +3345,20 @@ export default function CourseEditor({
   // every keystroke (it depends on contentPages) reuses the same instance
   // instead of recreating it and losing focus/cursor position.
   const canvasBodyEditorsRef = useRef<Map<HTMLElement, { editor: any; editableEl: HTMLElement; ownerKey: string; commit: () => void }>>(new Map());
+
+  // Apply a Samaritan result to a canvas body editor. The popover lives in
+  // the parent document, so focus never returns to the editor on its own —
+  // commit explicitly, otherwise the change would never reach `contentPages`
+  // (the editor only commits on focus-out) and would be silently lost.
+  const applyCanvasSamaritanResult = useCallback((editor: any, text: string, mode: "insert" | "replace") => {
+    if (!editor) return;
+    if (mode === "insert") insertAiResultIntoEditor(editor, text);
+    else replaceAiResultInEditor(editor, text);
+    canvasBodyEditorsRef.current.forEach((entry) => {
+      if (entry.editor === editor) entry.commit();
+    });
+  }, []);
+
   const hasUnsavedChanges = useMemo(() => Object.keys(dirtyNodeKeys).length > 0, [dirtyNodeKeys]);
 
   const loadStructureFromDatabase = useCallback(async (selection?: {
@@ -3364,6 +3398,7 @@ export default function CourseEditor({
       setCourseAssetMappings(courseAssets || {});
       setAssetLinkIdMap(nextAssetLinkMap);
 
+      setCourseStructure(structure);
       const pages = mapStructureToPages(structure);
       const fallbackPage = pages[0] ?? null;
       const page = pages.find((item) => item.id === selection?.pageId) ?? fallbackPage;
@@ -3937,8 +3972,10 @@ export default function CourseEditor({
       .adapt-authoring-editing-active .component__inner {
         position: relative !important;
         box-sizing: border-box !important;
-        border: 1px dashed transparent !important;
         border-radius: 8px !important;
+        outline: 1px dashed transparent;
+        outline-offset: 2px;
+        transition: outline-color 0.15s, border-left-color 0.15s;
       }
 
       /* Must be AT LEAST as specific as the .adapt-authoring-editing-active
@@ -3950,7 +3987,7 @@ export default function CourseEditor({
          stayed rgba(0,0,0,0) on an actually-selected node). */
       .adapt-authoring-editing-active .adapt-authoring-preview-hover,
       .adapt-authoring-editing-active .adapt-authoring-preview-active {
-        border-color: var(--life-primary-500, #2e7fa1) !important;
+        outline-color: var(--life-primary-500, #2e7fa1) !important;
       }
 
       /* Padding/margin that gives a headerless-level header its visible
@@ -3968,13 +4005,25 @@ export default function CourseEditor({
          acceptable trade-off (editing-mode-only spacing, same precedent as
          the .article/.block/.component gutter margins elsewhere in this
          file), same as Article/Block already do. */
+      /* Topic/Section headers render edge-to-edge (measured: left 0 to
+         right 545 on a 545px-wide document, no horizontal scroll), so the
+         hover/selection outline — drawn 1px wide, 2px OUTSIDE the box — lands
+         at -3px/+3px and gets clipped away on both sides. Inset them to 8px,
+         which is exactly where Content Group and Component already sit
+         (block__inner's 16px padding minus the -8px pull-back on
+         .block__header-inner and .component__container), so all four levels
+         share one left/right alignment and every outline has room. */
       .adapt-authoring-editing-active .page__header-inner {
+        margin-left: 8px !important;
+        margin-right: 8px !important;
         padding: 0.5rem !important;
       }
 
       .adapt-authoring-editing-active .article__header-inner {
         margin-top: 8px !important;
         margin-bottom: 8px !important;
+        margin-left: 8px !important;
+        margin-right: 8px !important;
         padding: 0.5rem !important;
       }
 
@@ -4321,7 +4370,7 @@ export default function CourseEditor({
          which pair is affected. Same 2-class specificity as the existing
          hover/active border-color override above, for the same reason. */
       .adapt-authoring-editing-active .adapt-authoring-swap-hover-highlight {
-        border-color: var(--life-primary-500, #2e7fa1) !important;
+        outline-color: var(--life-primary-500, #2e7fa1) !important;
       }
 
       /* Copy/Color Label icon overlay (ensureLevelActionIcons) — top-right
@@ -4377,6 +4426,30 @@ export default function CourseEditor({
          tinting its outline. */
       .adapt-authoring-level-action-btn[data-preview-color-label-current]:not([data-preview-color-label-current=""]) svg path {
         fill: currentColor;
+      }
+
+      /* Colour label (syncColorLabelIndicators): a real 4px solid left
+         border on the level's own box, matching the old tool's
+         box-shadow: -4px 0 0 colorlabel. Deliberately NOT scoped under
+         .adapt-authoring-editing-active — an applied label stays visible in
+         the resting canvas, in the same place, just without the dashed
+         hover/selection ring (which is an OUTLINE, drawn 2px outside the
+         box, so the two never collide). */
+      .adapt-authoring-color-label-host {
+        position: relative;
+        border-radius: 8px;
+        border-left: 4px solid var(--adapt-authoring-color-label, transparent) !important;
+      }
+
+      /* Clearance so text never runs up against the bar. The box's own left
+         edge doesn't move, so the bar sits exactly where the outline edge is
+         on an unlabelled level. Needs the .adapt-authoring-editing-active
+         prefix to MATCH the specificity of the per-level "padding: 0.5rem
+         !important" rules above — a 1-class !important rule loses to those
+         outright, so the padding silently stayed at 8px. */
+      .adapt-authoring-color-label-host,
+      .adapt-authoring-editing-active .adapt-authoring-color-label-host {
+        padding-left: 16px !important;
       }
 
       /* Colour Label popover \u2014 matches the shared design (title +
@@ -4670,9 +4743,9 @@ export default function CourseEditor({
       level: "topic" | "section" | "group" | "component",
       ids: LevelActionIds
     ): string => {
-      if (level === "topic") return "";
       const pages = contentPagesRef.current;
       const page = pages.find((candidate) => candidate.id === ids.pageId);
+      if (level === "topic") return page?.colorLabel || "";
       const article = page && ids.articleId ? page.articles.find((candidate) => candidate.id === ids.articleId) : null;
       if (level === "section") return article?.colorLabel || "";
       const block = article && ids.blockId ? article.blocks.find((candidate) => candidate.id === ids.blockId) : null;
@@ -4682,10 +4755,11 @@ export default function CourseEditor({
     };
 
     // Copy (topic/section/group — Component deferred, see memory) + Color
-    // Label (section/group/component — never Topic) icon overlay, bottom-
-    // right corner of the hovered/selected outline. Old-tool parity per
-    // explicit user instruction; copy icon reused from the right panel's
-    // "Copy topic id" style, color-label icon from the new-ui asset.
+    // Label (every level, matching the old tool's context menu, which only
+    // withholds it from 'page-min' and 'course') icon overlay, top-right
+    // corner of the hovered/selected outline. Copy icon reused from the
+    // right panel's "Copy topic id" style, color-label icon from the
+    // new-ui asset.
     const ensureLevelActionIcons = (
       node: Element,
       level: "topic" | "section" | "group" | "component",
@@ -4693,7 +4767,7 @@ export default function CourseEditor({
       isSelected: boolean
     ): Element | null => {
       const showCopy = level !== "component";
-      const showColorLabel = level !== "topic";
+      const showColorLabel = true;
       if (!showCopy && !showColorLabel) return null;
 
       let actions = node.querySelector<HTMLElement>(":scope > [data-preview-level-actions]");
@@ -4750,6 +4824,81 @@ export default function CourseEditor({
       }
 
       return actions;
+    };
+
+    // Colour label indicator: a real 4px solid left border on the SAME box
+    // the hover/selection outline frames (old tool: box-shadow -4px 0 0 on
+    // the level's own element, editorOriginView.js + colorLabels.less).
+    // Unlike every other editing affordance here it is NOT gated by hover,
+    // selection or .adapt-authoring-editing-active — an applied label stays
+    // visible in the resting canvas, just without the dashed ring.
+    const applyColorLabelBorder = (host: HTMLElement, value: string) => {
+      host.classList.add("adapt-authoring-color-label-host");
+      const colour = COLOR_LABEL_HEX[value] ?? "";
+      if (host.style.getPropertyValue("--adapt-authoring-color-label") !== colour) {
+        host.style.setProperty("--adapt-authoring-color-label", colour);
+      }
+    };
+
+    const clearColorLabelBorder = (host: HTMLElement) => {
+      host.classList.remove("adapt-authoring-color-label-host");
+      host.style.removeProperty("--adapt-authoring-color-label");
+    };
+
+    // Same host resolution as resolveHighlightTarget but never CREATES a
+    // placeholder header — a level with no header of its own must not grow
+    // one just to carry a colour label.
+    const findExistingHighlightHost = (
+      level: "topic" | "section" | "group" | "component",
+      id: string
+    ): HTMLElement | null => {
+      const base = doc.querySelector(`[data-adapt-id="${id}"]`);
+      if (!base) return null;
+      const root = level === "topic" ? base.closest(".page") ?? base : base;
+      if (level === "topic") return root.querySelector(".page__header-inner");
+      if (level === "section") return root.querySelector(".article__header-inner");
+      if (level === "group") return root.querySelector(".block__header-inner");
+      return (root.querySelector(".component__inner") as HTMLElement | null) ?? (root as HTMLElement);
+    };
+
+    const syncColorLabelIndicators = (activeNode: Element | null, hoverNode: Element | null) => {
+      const labelled = new Set<HTMLElement>();
+
+      const stamp = (
+        level: "topic" | "section" | "group" | "component",
+        id: string,
+        value: string | undefined
+      ) => {
+        if (!value) return;
+        const host = findExistingHighlightHost(level, id);
+        if (!host) return;
+        // Headerless level: its only host is the synthetic placeholder the
+        // hover/selection path created, which outlives the interaction that
+        // made it. Show the label there ONLY while that level is actually
+        // hovered or selected, per explicit user instruction.
+        if (host.getAttribute("data-preview-injected") === "true" && host !== activeNode && host !== hoverNode) {
+          return;
+        }
+        applyColorLabelBorder(host, value);
+        labelled.add(host);
+      };
+
+      // Ids belonging to a page the iframe isn't currently showing simply
+      // resolve to null, so walking every page needs no selection state.
+      contentPagesRef.current.forEach((page) => {
+        stamp("topic", page.id, page.colorLabel);
+        page.articles.forEach((article) => {
+          stamp("section", article.id, article.colorLabel);
+          article.blocks.forEach((block) => {
+            stamp("group", block.id, block.colorLabel);
+            block.components.forEach((component) => stamp("component", component.id, component.colorLabel));
+          });
+        });
+      });
+
+      doc.querySelectorAll<HTMLElement>(".adapt-authoring-color-label-host").forEach((host) => {
+        if (!labelled.has(host)) clearColorLabelBorder(host);
+      });
     };
 
     // Same title-container/inner class names + placeholder copy
@@ -4863,9 +5012,10 @@ export default function CourseEditor({
 
     let activeActionsHost: Element | null = null;
     let hoverActionsHost: Element | null = null;
+    let hoverNode: Element | null = null;
 
     if (hoverTargetId && hoverLevel) {
-      const hoverNode = resolveHighlightTarget(hoverLevel, hoverTargetId);
+      hoverNode = resolveHighlightTarget(hoverLevel, hoverTargetId);
       // An active level owns its descendants while selected. Showing a
       // second nested hover rectangle inside it creates the misaligned,
       // competing outline seen for Components inside a selected Group.
@@ -4942,6 +5092,8 @@ export default function CourseEditor({
         node.remove();
       }
     });
+
+    syncColorLabelIndicators(activeNode, hoverNode);
   }, [
     hasCanvasSelection,
     menuSelected,
@@ -5271,10 +5423,11 @@ export default function CourseEditor({
       loadCKEditor5In(iframeWindow)
         .then(() => {
           const CKEDITOR = (iframeWindow as any).CKEDITOR;
-          if (!CKEDITOR || !element.isConnected || canvasBodyEditorsRef.current.has(element)) return;
+          if (!CKEDITOR || !Array.isArray(CKEDITOR.pluginsConfig) || !element.isConnected || canvasBodyEditorsRef.current.has(element)) return;
           return CKEDITOR.create(element, {
             plugins: [...CKEDITOR.pluginsConfig, CKEDITOR.SamaritanPlugin],
             toolbar: { items: CANVAS_CKEDITOR_TOOLBAR_ITEMS, shouldNotGroupWhenFull: true },
+            link: CKEDITOR_LINK_CONFIG,
             htmlSupport: { allow: [{ name: /.*/, attributes: true, classes: true, style: true, styles: true }] },
             // On destroy() (deselecting this level), CKEditor writes its
             // current data back into `element` and un-hides it itself —
@@ -5283,17 +5436,9 @@ export default function CourseEditor({
             updateSourceElementOnDestroy: true,
             initialData: options.value || "",
             samaritanOnClick: (editor: any) => {
-              const selection = editor.model.document.selection;
-              let selectedText = "";
-              if (!selection.isCollapsed) {
-                const range = selection.getFirstRange();
-                for (const item of range ? range.getItems() : []) {
-                  if ((item as any).is?.("$textProxy")) selectedText += (item as any).data;
-                }
-              }
               setCanvasSamaritanTarget({
                 editor,
-                seedText: selectedText || editor.getData().replace(/<[^>]+>/g, " ").trim(),
+                seedText: getSamaritanSeedText(editor),
               });
             },
           }).then((editor: any) => {
@@ -5305,6 +5450,11 @@ export default function CourseEditor({
               lastCommittedHtml = html;
               options.onCommit(html);
             };
+            editor.model.document.on("change:data", () => {
+              if (options.ownerKey) {
+                setDirtyNodeKeys((prev) => (prev[options.ownerKey] ? prev : { ...prev, [options.ownerKey]: true }));
+              }
+            });
             // CKEditor's focus tracker covers both its editable surface and
             // toolbar, so this commits only after focus leaves the editor.
             editor.ui.focusTracker.on("change:isFocused", (_event: unknown, _name: unknown, isFocused: boolean) => {
@@ -5385,7 +5535,7 @@ export default function CourseEditor({
               : `topic:${options.pageId}`;
         const onCommit = (html: string) => {
           if (options.level === "topic") {
-            updatePageData(options.pageId, { body: html, description: html });
+            updatePageData(options.pageId, { body: html });
           } else if (options.level === "section" && options.articleId) {
             updateArticle(options.pageId, options.articleId, { description: html });
           } else if (options.level === "group" && options.articleId && options.blockId) {
@@ -5422,7 +5572,12 @@ export default function CourseEditor({
       // ClassicEditor owns a sibling toolbar/wrapper that clearEditable cannot remove.
       canvasBodyEditorsRef.current.forEach((entry, sourceEl) => {
         entry.commit();
-        entry.editor.destroy().catch(() => {});
+        try {
+          sourceEl.style.display = "";
+          entry.editor.destroy().catch(() => {});
+        } catch (err) {
+          console.warn("CKEditor destroy failed", err);
+        }
         canvasBodyEditorsRef.current.delete(sourceEl);
       });
       return;
@@ -5460,7 +5615,12 @@ export default function CourseEditor({
     canvasBodyEditorsRef.current.forEach((entry, sourceEl) => {
       if (entry.ownerKey === currentBodyOwnerKey) return;
       entry.commit();
-      entry.editor.destroy().catch(() => {});
+      try {
+        sourceEl.style.display = "";
+        entry.editor.destroy().catch(() => {});
+      } catch (err) {
+        console.warn("CKEditor destroy failed", err);
+      }
       canvasBodyEditorsRef.current.delete(sourceEl);
     });
 
@@ -6008,7 +6168,7 @@ export default function CourseEditor({
         makeEditable(pageFields.body, {
           level: "topic",
           field: "body",
-          placeholder: "Add page body",
+          placeholder: "Add topic body",
           value: selectedPage.body || "",
           pageId: selectedPage.id,
         });
@@ -6017,12 +6177,14 @@ export default function CourseEditor({
         makeEditable(pageFields.instruction, {
           level: "topic",
           field: "instruction",
-          placeholder: "Add page instruction",
+          placeholder: "Add topic instruction",
           value: selectedPage.instruction || "",
           pageId: selectedPage.id,
         });
       }
     }
+
+    syncPreviewScrollFromLeftPanelRef.current();
   }, [
     hasCanvasSelection,
     componentBehaviourSchemas,
@@ -6847,75 +7009,82 @@ export default function CourseEditor({
   }, [clipboardEntry]);
 
 
-  const syncPreviewScrollFromLeftPanel = useCallback(() => {
+  const syncPreviewScrollFromLeftPanel = useCallback((clearTarget = true) => {
     const iframe = previewFrameRef.current;
     const doc = iframe?.contentDocument;
     if (!doc) return;
-
-    const getVisibleRatio = (element: Element) => {
-      const rect = element.getBoundingClientRect();
-      const viewportHeight = doc.documentElement.clientHeight;
-      const viewportWidth = doc.documentElement.clientWidth;
-
-      if (rect.width <= 0 || rect.height <= 0 || viewportHeight <= 0 || viewportWidth <= 0) {
-        return 0;
-      }
-
-      const visibleHeight = Math.max(
-        0,
-        Math.min(rect.bottom, viewportHeight) - Math.max(rect.top, 0)
-      );
-      const visibleWidth = Math.max(
-        0,
-        Math.min(rect.right, viewportWidth) - Math.max(rect.left, 0)
-      );
-
-      const visibleArea = visibleHeight * visibleWidth;
-      const totalArea = rect.height * rect.width;
-      return totalArea > 0 ? visibleArea / totalArea : 0;
-    };
-
-    const ensureMostlyVisible = (element: Element) => {
-      const MIN_VISIBLE_RATIO = 0.85;
-      if (getVisibleRatio(element) < MIN_VISIBLE_RATIO) {
-        element.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
-      }
-    };
 
     const pendingTarget = pendingLeftPanelScrollTargetRef.current;
     if (!pendingTarget) return;
 
     if (pendingTarget.level === "menu") {
-      const menuNode = doc.querySelector(".menu[data-adapt-id]");
+      const menuNode = doc.querySelector(".menu[data-adapt-id]") ?? doc.querySelector(".menu");
       if (!menuNode) return;
-      ensureMostlyVisible(menuNode);
-      pendingLeftPanelScrollTargetRef.current = null;
+      menuNode.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+      if (clearTarget) pendingLeftPanelScrollTargetRef.current = null;
       return;
     }
 
     if (!pendingTarget.id) return;
 
-    const base = doc.querySelector(`[data-adapt-id="${pendingTarget.id}"]`);
-    if (!base) return;
+    if (pendingTarget.level === "topic") {
+      const pageNode = doc.querySelector(`.page[data-adapt-id="${pendingTarget.id}"]`) ?? doc.querySelector(".page");
+      if (!pageNode) return;
+      const target = pageNode.querySelector(".page__header-inner") ?? pageNode.querySelector(".page__header") ?? pageNode;
+      doc.defaultView?.scrollTo({ top: 0, behavior: "smooth" });
+      target.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+      if (clearTarget) pendingLeftPanelScrollTargetRef.current = null;
+      return;
+    }
 
-    const target = pendingTarget.level === "topic"
-      ? base.querySelector(".page__inner") ?? base.querySelector(".page__header-inner") ?? base
-      : pendingTarget.level === "section"
-        ? base.querySelector(".article__inner") ?? base.querySelector(".article__header-inner") ?? base
-        : pendingTarget.level === "group"
-          ? base.querySelector(".block__inner") ?? base.querySelector(".block__header-inner") ?? base
-          : base;
+    if (pendingTarget.level === "section") {
+      const articleNode = doc.querySelector(`.article[data-adapt-id="${pendingTarget.id}"]`);
+      if (!articleNode) return;
 
-    if (!target) return;
+      const target = articleNode.querySelector(".article__header-inner") ??
+                     articleNode.querySelector(".article__header") ??
+                     articleNode;
 
-    ensureMostlyVisible(target);
+      target.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+      if (clearTarget) pendingLeftPanelScrollTargetRef.current = null;
+      return;
+    }
 
-    pendingLeftPanelScrollTargetRef.current = null;
+    if (pendingTarget.level === "group") {
+      const blockNode = doc.querySelector(`.block[data-adapt-id="${pendingTarget.id}"]`);
+      if (!blockNode) return;
+
+      const target = blockNode.querySelector(".block__header-inner") ??
+                     blockNode.querySelector(".block__header") ??
+                     blockNode;
+
+      target.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+      if (clearTarget) pendingLeftPanelScrollTargetRef.current = null;
+      return;
+    }
+
+    if (pendingTarget.level === "component") {
+      const componentNode = doc.querySelector(`.component[data-adapt-id="${pendingTarget.id}"]`);
+      if (!componentNode) return;
+
+      const target = componentNode.querySelector(".component__inner") ?? componentNode;
+      target.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+      if (clearTarget) pendingLeftPanelScrollTargetRef.current = null;
+      return;
+    }
   }, []);
+
+  const syncPreviewScrollFromLeftPanelRef = useRef<(clearTarget?: boolean) => void>(() => {});
+  useEffect(() => {
+    syncPreviewScrollFromLeftPanelRef.current = syncPreviewScrollFromLeftPanel;
+  }, [syncPreviewScrollFromLeftPanel]);
 
   const queuePreviewScrollFromLeftPanel = useCallback((target: PendingPreviewScrollTarget) => {
     pendingLeftPanelScrollTargetRef.current = target;
-    syncPreviewScrollFromLeftPanel();
+    syncPreviewScrollFromLeftPanel(false);
+    window.requestAnimationFrame(() => {
+      syncPreviewScrollFromLeftPanelRef.current?.(false);
+    });
   }, [syncPreviewScrollFromLeftPanel]);
 
   const clearCanvasSelection = useCallback(() => {
@@ -7415,7 +7584,7 @@ export default function CourseEditor({
         const componentId = popover?.getAttribute("data-preview-action-component-id") ?? null;
         const value = resetColorLabelBtn ? "" : (popover?.getAttribute("data-preview-color-label-pending") ?? "");
         popover?.remove();
-        if (!cancelColorLabelBtn && (level === "section" || level === "group" || level === "component") && pageId) {
+        if (!cancelColorLabelBtn && (level === "topic" || level === "section" || level === "group" || level === "component") && pageId) {
           handleSetColorLabel(level, pageId, articleId, blockId, componentId, value);
         }
         return;
@@ -7821,7 +7990,7 @@ export default function CourseEditor({
       if (level === "topic") {
         if (resolvedField === "title" && !isBlankTitleValue(value)) updatePageData(pageId, { title: value });
         if (resolvedField === "subtitle") updatePageData(pageId, { subtitle: value });
-        if (resolvedField === "body") updatePageData(pageId, { body: value, description: value });
+        if (resolvedField === "body") updatePageData(pageId, { body: value });
         if (resolvedField === "instruction") updatePageData(pageId, { instruction: value });
         return;
       }
@@ -7973,7 +8142,7 @@ export default function CourseEditor({
           return;
         }
         if (resolvedField === "body") {
-          updatePageData(pageId, { body: normalizedValue, description: normalizedValue });
+          updatePageData(pageId, { body: normalizedValue });
           return;
         }
         if (resolvedField === "instruction") {
@@ -8045,6 +8214,12 @@ export default function CourseEditor({
     };
 
     cleanupPreviewListenersRef.current?.();
+    canvasBodyEditorsRef.current.forEach((entry, sourceEl) => {
+      entry.commit();
+      sourceEl.style.display = "";
+      entry.editor.destroy().catch(() => {});
+    });
+    canvasBodyEditorsRef.current.clear();
 
     doc.addEventListener("mouseover", onMouseOver);
     doc.addEventListener("mouseout", onMouseOut);
@@ -8054,7 +8229,7 @@ export default function CourseEditor({
     doc.addEventListener("focusout", onFocusOut, true);
 
     applyPreviewSelectionStyles();
-    syncPreviewInlineEditors();
+    syncPreviewInlineEditorsRef.current();
     syncPreviewTopicSettings();
     syncNavigationFooterPreview();
     syncSwapPositionsControls();
@@ -8141,10 +8316,24 @@ export default function CourseEditor({
     setCanvasTitleLiveOverride(null);
   }, [selectedPageId, selectedArticleId, selectedBlockId, selectedComponentId, menuSelected]);
 
+  const syncPreviewInlineEditorsRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    syncPreviewInlineEditorsRef.current = syncPreviewInlineEditors;
+  }, [syncPreviewInlineEditors]);
+
   useEffect(() => {
     if (isInlineEditingRef.current) return;
     syncPreviewInlineEditors();
-  }, [syncPreviewInlineEditors]);
+  }, [
+    syncPreviewInlineEditors,
+    selectedPageId,
+    selectedArticleId,
+    selectedBlockId,
+    selectedComponentId,
+    menuSelected,
+    hasCanvasSelection,
+    contentPages,
+  ]);
 
   useEffect(() => {
     syncPreviewTopicSettings();
@@ -8493,6 +8682,40 @@ export default function CourseEditor({
     setRightPanelType("menu");
     if (source === "leftPanel") {
       queuePreviewScrollFromLeftPanel({ level: "menu", id: null });
+    }
+  }
+
+  async function handleAddModule(parentModuleId?: string) {
+    try {
+      const parentId = parentModuleId || courseId;
+      const childCount = parentModuleId
+        ? (() => {
+            const findMod = (mods: SModule[]): SModule | null => {
+              for (const m of mods) {
+                if (m.id === parentModuleId) return m;
+                const found = findMod(m.modules);
+                if (found) return found;
+              }
+              return null;
+            };
+            const targetMod = courseStructure ? findMod(courseStructure.modules) : null;
+            return (targetMod?.modules.length ?? 0) + (targetMod?.topics.length ?? 0);
+          })()
+        : (courseStructure?.modules.length ?? 0) + (courseStructure?.topics.length ?? 0);
+
+      const { topicId } = await seedDefaultModule(courseId, parentId, "New Module", childCount + 1);
+      await loadStructureFromDatabase({ pageId: topicId });
+    } catch (error) {
+      console.error("Failed to add module", error);
+    }
+  }
+
+  async function handleDeleteModule(moduleId: string) {
+    try {
+      await deleteStructureNode("module", moduleId);
+      await loadStructureFromDatabase();
+    } catch (error) {
+      console.error("Failed to delete module", error);
     }
   }
 
@@ -9463,14 +9686,19 @@ export default function CourseEditor({
   // Old-tool parity (colorLabelPopupView.js addItem/onReset): immediate
   // persist, matching every other canvas-driven edit in this file.
   function handleSetColorLabel(
-    level: "section" | "group" | "component",
+    level: "topic" | "section" | "group" | "component",
     pageId: string,
     articleId: string | null,
     blockId: string | null,
     componentId: string | null,
     value: string
   ) {
-    if (level === "section" && articleId) {
+    if (level === "topic") {
+      updatePageData(pageId, { colorLabel: value });
+      void updateStructureNode("topic", pageId, { _colorLabel: value }).catch((error) => {
+        console.error("Failed to save color label", error);
+      });
+    } else if (level === "section" && articleId) {
       updateArticle(pageId, articleId, { colorLabel: value });
       void updateStructureNode("section", articleId, { _colorLabel: value }).catch((error) => {
         console.error("Failed to save color label", error);
@@ -9600,6 +9828,10 @@ export default function CourseEditor({
   }
 
   async function saveDraftChanges(): Promise<boolean> {
+    canvasBodyEditorsRef.current.forEach((entry) => {
+      entry.commit();
+    });
+
     if (!hasUnsavedChanges && !pendingExtensionDisableNames.size) {
       return true;
     }
@@ -9673,10 +9905,13 @@ export default function CourseEditor({
           if (!page) continue;
           const topicPatch: Record<string, unknown> = {
             title: page.title,
-            description: page.body,
             subtitle: page.subtitle,
             _subtitle: page.subtitle,
-            body: page.body,
+            // Write back to whichever field the page actually renders, so an
+            // existing pageBody override is never bypassed (leaving the editor
+            // and the preview showing different text) and a new one is never
+            // created where the page only ever had `body`.
+            ...(page.usesPageBodyOverride ? { pageBody: page.body } : { body: page.body }),
             instruction: page.instruction,
             linkText: page.linkText,
             duration: page.duration,
@@ -9699,6 +9934,7 @@ export default function CourseEditor({
             },
             _ariaLevel: isNaN(Number(page.ariaLevel)) ? 0 : Number(page.ariaLevel),
             _isA11yCompletionDescriptionEnabled: page.isA11yCompletionDescriptionEnabled,
+            _colorLabel: page.colorLabel,
             _extensions: page.extensions ?? {},
             _graphic: {
               src: page.graphic?.src || "",
@@ -10032,11 +10268,11 @@ export default function CourseEditor({
     try {
       const expectedType =
         target.level === "topic"
-          ? "Page"
+          ? "Topic"
           : target.level === "section"
-            ? "Article"
+            ? "Section"
             : target.level === "group"
-              ? "Block"
+              ? "Content Group"
               : "Component";
 
       if (template.type !== expectedType) {
@@ -10291,6 +10527,7 @@ export default function CourseEditor({
           }}
           menuPageCreated={menuPageCreated}
           menuSelected={menuSelected}
+          courseStructure={courseStructure}
           contentPages={contentPages}
           selectedPageId={selectedPageId}
           selectedSubPageId={selectedSubPageId}
@@ -10303,6 +10540,15 @@ export default function CourseEditor({
           onArticleSelect={(pageId, articleId) => handleArticleSelect(pageId, articleId, "leftPanel")}
           onBlockSelect={(pageId, articleId, blockId) => handleBlockSelect(pageId, articleId, blockId, "leftPanel")}
           onComponentSelect={(pageId, articleId, blockId, componentId) => handleSelectComponent(pageId, articleId, blockId, componentId, "leftPanel")}
+          onAddModule={() => {
+            void handleAddModule();
+          }}
+          onAddSubModule={(modId) => {
+            void handleAddModule(modId);
+          }}
+          onDeleteModule={(modId) => {
+            void handleDeleteModule(modId);
+          }}
           onAddPage={() => {
             void handleAddPage();
           }}
@@ -10658,7 +10904,7 @@ export default function CourseEditor({
                           </TopicAccordion>
 
                           <TopicAccordion title="Theme settings" open={!!openTopicAccordions.theme} onToggle={(triggerEl) => toggleTopicAccordion("theme", triggerEl)}>
-                            <TopicNestedAccordion title="Page background image">
+                            <TopicNestedAccordion title="Topic background image">
                               <div className="flex flex-col gap-1.5">
                                 <TopicAssetField
                                   resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl}
@@ -10666,7 +10912,7 @@ export default function CourseEditor({
                                   compact
                                   value={asString(pageBackgroundImage._xlarge)}
                                   onPickAsset={() => setTopicAssetPickerTarget({ scope: "themePageBackground", bp: "_xlarge" })}
-                                  onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "themePageBackground", bp: "_xlarge" }, initialValue: asString(pageBackgroundImage._xlarge), title: "Page background image (_xlarge)" })}
+                                  onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "themePageBackground", bp: "_xlarge" }, initialValue: asString(pageBackgroundImage._xlarge), title: "Topic background image (_xlarge)" })}
                                   onClear={() => clearTopicAssetSelection(page.id, { scope: "themePageBackground", bp: "_xlarge" })}
                                 />
                                 <TopicAssetField
@@ -10675,7 +10921,7 @@ export default function CourseEditor({
                                   compact
                                   value={asString(pageBackgroundImage._large)}
                                   onPickAsset={() => setTopicAssetPickerTarget({ scope: "themePageBackground", bp: "_large" })}
-                                  onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "themePageBackground", bp: "_large" }, initialValue: asString(pageBackgroundImage._large), title: "Page background image (_large)" })}
+                                  onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "themePageBackground", bp: "_large" }, initialValue: asString(pageBackgroundImage._large), title: "Topic background image (_large)" })}
                                   onClear={() => clearTopicAssetSelection(page.id, { scope: "themePageBackground", bp: "_large" })}
                                 />
                                 <TopicAssetField
@@ -10684,7 +10930,7 @@ export default function CourseEditor({
                                   compact
                                   value={asString(pageBackgroundImage._medium)}
                                   onPickAsset={() => setTopicAssetPickerTarget({ scope: "themePageBackground", bp: "_medium" })}
-                                  onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "themePageBackground", bp: "_medium" }, initialValue: asString(pageBackgroundImage._medium), title: "Page background image (_medium)" })}
+                                  onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "themePageBackground", bp: "_medium" }, initialValue: asString(pageBackgroundImage._medium), title: "Topic background image (_medium)" })}
                                   onClear={() => clearTopicAssetSelection(page.id, { scope: "themePageBackground", bp: "_medium" })}
                                 />
                                 <TopicAssetField
@@ -10693,12 +10939,12 @@ export default function CourseEditor({
                                   compact
                                   value={asString(pageBackgroundImage._small)}
                                   onPickAsset={() => setTopicAssetPickerTarget({ scope: "themePageBackground", bp: "_small" })}
-                                  onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "themePageBackground", bp: "_small" }, initialValue: asString(pageBackgroundImage._small), title: "Page background image (_small)" })}
+                                  onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "themePageBackground", bp: "_small" }, initialValue: asString(pageBackgroundImage._small), title: "Topic background image (_small)" })}
                                   onClear={() => clearTopicAssetSelection(page.id, { scope: "themePageBackground", bp: "_small" })}
                                 />
                               </div>
                             </TopicNestedAccordion>
-                            <TopicNestedAccordion title="Page background image styles">
+                            <TopicNestedAccordion title="Topic background image styles">
                               <TopicSelect label={BG_REPEAT_LABEL} value={asString(pageBackgroundStyles._backgroundRepeat)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundRepeat: value } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
                               <TopicSelect label={BG_SIZE_LABEL} value={asString(pageBackgroundStyles._backgroundSize)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundSize: value } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
                               <TopicSelect label={BG_POSITION_LABEL} value={asString(pageBackgroundStyles._backgroundPosition)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundPosition: value } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
@@ -10730,7 +10976,7 @@ export default function CourseEditor({
                               <TopicSelect label="Instruction alignment" value={asString(pageHeaderTextAlignment._instruction)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _textAlignment: { ...asRecord(asRecord(current._pageHeader)._textAlignment), _instruction: value } } }))} options={TEXT_ALIGN_OPTIONS} />
                             </TopicNestedAccordion>
 
-                            <TopicNestedAccordion title="Page header background image">
+                            <TopicNestedAccordion title="Topic header background image">
                               <div className="flex flex-col gap-1.5">
                                 <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(pageHeaderBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "themeHeaderBackground", bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "themeHeaderBackground", bp: "_xlarge" }, initialValue: asString(pageHeaderBackgroundImage._xlarge), title: "Header background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "themeHeaderBackground", bp: "_xlarge" })} />
                                 <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(pageHeaderBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "themeHeaderBackground", bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "themeHeaderBackground", bp: "_large" }, initialValue: asString(pageHeaderBackgroundImage._large), title: "Header background image (_large)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "themeHeaderBackground", bp: "_large" })} />
@@ -10738,12 +10984,12 @@ export default function CourseEditor({
                                 <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(pageHeaderBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "themeHeaderBackground", bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "themeHeaderBackground", bp: "_small" }, initialValue: asString(pageHeaderBackgroundImage._small), title: "Header background image (_small)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "themeHeaderBackground", bp: "_small" })} />
                               </div>
                             </TopicNestedAccordion>
-                            <TopicNestedAccordion title="Page header background image styles">
+                            <TopicNestedAccordion title="Topic header background image styles">
                               <TopicSelect label={BG_REPEAT_LABEL} value={asString(pageHeaderBackgroundStyles._backgroundRepeat)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _backgroundStyles: { ...asRecord(asRecord(current._pageHeader)._backgroundStyles), _backgroundRepeat: value } } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
                               <TopicSelect label={BG_SIZE_LABEL} value={asString(pageHeaderBackgroundStyles._backgroundSize)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _backgroundStyles: { ...asRecord(asRecord(current._pageHeader)._backgroundStyles), _backgroundSize: value } } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
                               <TopicSelect label={BG_POSITION_LABEL} value={asString(pageHeaderBackgroundStyles._backgroundPosition)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _backgroundStyles: { ...asRecord(asRecord(current._pageHeader)._backgroundStyles), _backgroundPosition: value } } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
                             </TopicNestedAccordion>
-                            <TopicNestedAccordion title="Page header minimum height">
+                            <TopicNestedAccordion title="Topic header minimum height">
                               <TopicTextInput label="_xlarge" type="number" value={String(asNumberOrEmpty(pageHeaderMinimumHeights._xlarge))} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _minimumHeights: { ...asRecord(asRecord(current._pageHeader)._minimumHeights), _xlarge: parseNumberishInput(value) } } }))} />
                               <TopicTextInput label="_large" type="number" value={String(asNumberOrEmpty(pageHeaderMinimumHeights._large))} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _minimumHeights: { ...asRecord(asRecord(current._pageHeader)._minimumHeights), _large: parseNumberishInput(value) } } }))} />
                               <TopicTextInput label="_medium" type="number" value={String(asNumberOrEmpty(pageHeaderMinimumHeights._medium))} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _minimumHeights: { ...asRecord(asRecord(current._pageHeader)._minimumHeights), _medium: parseNumberishInput(value) } } }))} />
@@ -10874,7 +11120,7 @@ export default function CourseEditor({
                           </TopicAccordion>
 
                           <TopicAccordion title="Advanced Settings" open={!!openTopicAccordions.advanced} onToggle={(triggerEl) => toggleTopicAccordion("advanced", triggerEl)}>
-                            <TopicTextInput label="Page classes" value={page.classes} onChange={(value) => updatePageData(page.id, { classes: value })} />
+                            <TopicTextInput label="Topic classes" value={page.classes} onChange={(value) => updatePageData(page.id, { classes: value })} />
                             <TopicTextInput label="HTML classes" value={page.htmlClasses} onChange={(value) => updatePageData(page.id, { htmlClasses: value })} />
                             <TopicNestedAccordion title="Responsive classes">
                               <TopicTextInput label="_xlarge" value={asString(responsiveClasses._xlarge)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _xlarge: value } }))} />
@@ -11009,15 +11255,15 @@ export default function CourseEditor({
                                   <TopicSelect label="Body alignment" value={asString(articleTextAlignment._body)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _body: value } }))} options={TEXT_ALIGN_OPTIONS} />
                                   <TopicSelect label="Instruction alignment" value={asString(articleTextAlignment._instruction)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _instruction: value } }))} options={TEXT_ALIGN_OPTIONS} />
                                 </TopicNestedAccordion>
-                                <TopicNestedAccordion title="Article background image">
+                                <TopicNestedAccordion title="Section background image">
                                   <div className="flex flex-col gap-1.5">
-                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(articleBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionBackground", articleId: article.id, bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionBackground", articleId: article.id, bp: "_xlarge" }, initialValue: asString(articleBackgroundImage._xlarge), title: "Article background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionBackground", articleId: article.id, bp: "_xlarge" })} />
-                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(articleBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionBackground", articleId: article.id, bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionBackground", articleId: article.id, bp: "_large" }, initialValue: asString(articleBackgroundImage._large), title: "Article background image (_large)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionBackground", articleId: article.id, bp: "_large" })} />
-                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(articleBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionBackground", articleId: article.id, bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionBackground", articleId: article.id, bp: "_medium" }, initialValue: asString(articleBackgroundImage._medium), title: "Article background image (_medium)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionBackground", articleId: article.id, bp: "_medium" })} />
-                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(articleBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionBackground", articleId: article.id, bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionBackground", articleId: article.id, bp: "_small" }, initialValue: asString(articleBackgroundImage._small), title: "Article background image (_small)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionBackground", articleId: article.id, bp: "_small" })} />
+                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(articleBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionBackground", articleId: article.id, bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionBackground", articleId: article.id, bp: "_xlarge" }, initialValue: asString(articleBackgroundImage._xlarge), title: "Section background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionBackground", articleId: article.id, bp: "_xlarge" })} />
+                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(articleBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionBackground", articleId: article.id, bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionBackground", articleId: article.id, bp: "_large" }, initialValue: asString(articleBackgroundImage._large), title: "Section background image (_large)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionBackground", articleId: article.id, bp: "_large" })} />
+                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(articleBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionBackground", articleId: article.id, bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionBackground", articleId: article.id, bp: "_medium" }, initialValue: asString(articleBackgroundImage._medium), title: "Section background image (_medium)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionBackground", articleId: article.id, bp: "_medium" })} />
+                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(articleBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionBackground", articleId: article.id, bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionBackground", articleId: article.id, bp: "_small" }, initialValue: asString(articleBackgroundImage._small), title: "Section background image (_small)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionBackground", articleId: article.id, bp: "_small" })} />
                                   </div>
                                 </TopicNestedAccordion>
-                                <TopicNestedAccordion title="Article background image styles">
+                                <TopicNestedAccordion title="Section background image styles">
                                   <TopicSelect label={BG_REPEAT_LABEL} value={asString(articleBackgroundStyles._backgroundRepeat)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundRepeat: value } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
                                   <TopicSelect label={BG_SIZE_LABEL} value={asString(articleBackgroundStyles._backgroundSize)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundSize: value } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
                                   <TopicSelect label={BG_POSITION_LABEL} value={asString(articleBackgroundStyles._backgroundPosition)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundPosition: value } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
@@ -11025,26 +11271,26 @@ export default function CourseEditor({
                                 {/* Vanilla has no article-header support at all — only Life,
                                     Life v2 and Custom Theme render one. */}
                                 {!courseTheme.toLowerCase().includes("vanilla") && (
-                                  <TopicNestedAccordion title="Article header">
+                                  <TopicNestedAccordion title="Section header">
                                     <TopicNestedAccordion title="Text alignment">
                                       <TopicSelect label="Title alignment" value={asString(articleHeaderTextAlignment._title)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _textAlignment: { ...asRecord(asRecord(current._articleHeader)._textAlignment), _title: value } } }))} options={TEXT_ALIGN_OPTIONS} />
                                       <TopicSelect label="Body alignment" value={asString(articleHeaderTextAlignment._body)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _textAlignment: { ...asRecord(asRecord(current._articleHeader)._textAlignment), _body: value } } }))} options={TEXT_ALIGN_OPTIONS} />
                                       <TopicSelect label="Instruction alignment" value={asString(articleHeaderTextAlignment._instruction)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _textAlignment: { ...asRecord(asRecord(current._articleHeader)._textAlignment), _instruction: value } } }))} options={TEXT_ALIGN_OPTIONS} />
                                     </TopicNestedAccordion>
-                                    <TopicNestedAccordion title="Article header background image">
+                                    <TopicNestedAccordion title="Section header background image">
                                       <div className="flex flex-col gap-1.5">
-                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(articleHeaderBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_xlarge" }, initialValue: asString(articleHeaderBackgroundImage._xlarge), title: "Article header background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_xlarge" })} />
-                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(articleHeaderBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_large" }, initialValue: asString(articleHeaderBackgroundImage._large), title: "Article header background image (_large)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_large" })} />
-                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(articleHeaderBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_medium" }, initialValue: asString(articleHeaderBackgroundImage._medium), title: "Article header background image (_medium)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_medium" })} />
-                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(articleHeaderBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_small" }, initialValue: asString(articleHeaderBackgroundImage._small), title: "Article header background image (_small)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_small" })} />
+                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(articleHeaderBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_xlarge" }, initialValue: asString(articleHeaderBackgroundImage._xlarge), title: "Section header background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_xlarge" })} />
+                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(articleHeaderBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_large" }, initialValue: asString(articleHeaderBackgroundImage._large), title: "Section header background image (_large)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_large" })} />
+                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(articleHeaderBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_medium" }, initialValue: asString(articleHeaderBackgroundImage._medium), title: "Section header background image (_medium)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_medium" })} />
+                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(articleHeaderBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_small" }, initialValue: asString(articleHeaderBackgroundImage._small), title: "Section header background image (_small)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_small" })} />
                                       </div>
                                     </TopicNestedAccordion>
-                                    <TopicNestedAccordion title="Article header background image styles">
+                                    <TopicNestedAccordion title="Section header background image styles">
                                       <TopicSelect label={BG_REPEAT_LABEL} value={asString(articleHeaderBackgroundStyles._backgroundRepeat)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _backgroundStyles: { ...asRecord(asRecord(current._articleHeader)._backgroundStyles), _backgroundRepeat: value } } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
                                       <TopicSelect label={BG_SIZE_LABEL} value={asString(articleHeaderBackgroundStyles._backgroundSize)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _backgroundStyles: { ...asRecord(asRecord(current._articleHeader)._backgroundStyles), _backgroundSize: value } } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
                                       <TopicSelect label={BG_POSITION_LABEL} value={asString(articleHeaderBackgroundStyles._backgroundPosition)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _backgroundStyles: { ...asRecord(asRecord(current._articleHeader)._backgroundStyles), _backgroundPosition: value } } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
                                     </TopicNestedAccordion>
-                                    <TopicNestedAccordion title="Article header minimum height">
+                                    <TopicNestedAccordion title="Section header minimum height">
                                       <TopicTextInput label="_xlarge" type="number" value={String(asNumberOrEmpty(articleHeaderMinimumHeights._xlarge))} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _minimumHeights: { ...asRecord(asRecord(current._articleHeader)._minimumHeights), _xlarge: parseNumberishInput(value) } } }))} />
                                       <TopicTextInput label="_large" type="number" value={String(asNumberOrEmpty(articleHeaderMinimumHeights._large))} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _minimumHeights: { ...asRecord(asRecord(current._articleHeader)._minimumHeights), _large: parseNumberishInput(value) } } }))} />
                                       <TopicTextInput label="_medium" type="number" value={String(asNumberOrEmpty(articleHeaderMinimumHeights._medium))} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _minimumHeights: { ...asRecord(asRecord(current._articleHeader)._minimumHeights), _medium: parseNumberishInput(value) } } }))} />
@@ -11212,15 +11458,15 @@ export default function CourseEditor({
                                   <TopicSelect label="Body alignment" value={asString(asRecord(blockThemeSettings._textAlignment)._body)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _body: value } }))} options={TEXT_ALIGN_OPTIONS} />
                                   <TopicSelect label="Instruction alignment" value={asString(asRecord(blockThemeSettings._textAlignment)._instruction)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _instruction: value } }))} options={TEXT_ALIGN_OPTIONS} />
                                 </TopicNestedAccordion>
-                                <TopicNestedAccordion title="Block background image">
+                                <TopicNestedAccordion title="Content Group background image">
                                   <div className="flex flex-col gap-1.5">
-                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(blockBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" }, initialValue: asString(blockBackgroundImage._xlarge), title: "Block background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" })} />
-                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(blockBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_large" }, initialValue: asString(blockBackgroundImage._large), title: "Block background image (_large)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_large" })} />
-                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(blockBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_medium" }, initialValue: asString(blockBackgroundImage._medium), title: "Block background image (_medium)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_medium" })} />
-                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(blockBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_small" }, initialValue: asString(blockBackgroundImage._small), title: "Block background image (_small)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_small" })} />
+                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(blockBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" }, initialValue: asString(blockBackgroundImage._xlarge), title: "Content Group background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" })} />
+                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(blockBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_large" }, initialValue: asString(blockBackgroundImage._large), title: "Content Group background image (_large)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_large" })} />
+                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(blockBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_medium" }, initialValue: asString(blockBackgroundImage._medium), title: "Content Group background image (_medium)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_medium" })} />
+                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(blockBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_small" }, initialValue: asString(blockBackgroundImage._small), title: "Content Group background image (_small)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_small" })} />
                                   </div>
                                 </TopicNestedAccordion>
-                                <TopicNestedAccordion title="Block background image styles">
+                                <TopicNestedAccordion title="Content Group background image styles">
                                   <TopicSelect label={BG_REPEAT_LABEL} value={asString(blockBackgroundStyles._backgroundRepeat)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundRepeat: value } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
                                   <TopicSelect label={BG_SIZE_LABEL} value={asString(blockBackgroundStyles._backgroundSize)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundSize: value } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
                                   <TopicSelect label={BG_POSITION_LABEL} value={asString(blockBackgroundStyles._backgroundPosition)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundPosition: value } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
@@ -11228,26 +11474,26 @@ export default function CourseEditor({
                                 {/* Vanilla has no block-header support at all — only Life,
                                     Life v2 and Custom Theme render one. */}
                                 {!courseTheme.toLowerCase().includes("vanilla") && (
-                                  <TopicNestedAccordion title="Block header">
+                                  <TopicNestedAccordion title="Content Group header">
                                     <TopicNestedAccordion title="Text alignment">
                                       <TopicSelect label="Title alignment" value={asString(blockHeaderTextAlignment._title)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _textAlignment: { ...asRecord(asRecord(current._blockHeader)._textAlignment), _title: value } } }))} options={TEXT_ALIGN_OPTIONS} />
                                       <TopicSelect label="Body alignment" value={asString(blockHeaderTextAlignment._body)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _textAlignment: { ...asRecord(asRecord(current._blockHeader)._textAlignment), _body: value } } }))} options={TEXT_ALIGN_OPTIONS} />
                                       <TopicSelect label="Instruction alignment" value={asString(blockHeaderTextAlignment._instruction)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _textAlignment: { ...asRecord(asRecord(current._blockHeader)._textAlignment), _instruction: value } } }))} options={TEXT_ALIGN_OPTIONS} />
                                     </TopicNestedAccordion>
-                                    <TopicNestedAccordion title="Block header background image">
+                                    <TopicNestedAccordion title="Content Group header background image">
                                       <div className="flex flex-col gap-1.5">
-                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(blockHeaderBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" }, initialValue: asString(blockHeaderBackgroundImage._xlarge), title: "Block header background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" })} />
-                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(blockHeaderBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_large" }, initialValue: asString(blockHeaderBackgroundImage._large), title: "Block header background image (_large)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_large" })} />
-                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(blockHeaderBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_medium" }, initialValue: asString(blockHeaderBackgroundImage._medium), title: "Block header background image (_medium)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_medium" })} />
-                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(blockHeaderBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_small" }, initialValue: asString(blockHeaderBackgroundImage._small), title: "Block header background image (_small)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_small" })} />
+                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(blockHeaderBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" }, initialValue: asString(blockHeaderBackgroundImage._xlarge), title: "Content Group header background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" })} />
+                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(blockHeaderBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_large" }, initialValue: asString(blockHeaderBackgroundImage._large), title: "Content Group header background image (_large)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_large" })} />
+                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(blockHeaderBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_medium" }, initialValue: asString(blockHeaderBackgroundImage._medium), title: "Content Group header background image (_medium)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_medium" })} />
+                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(blockHeaderBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_small" }, initialValue: asString(blockHeaderBackgroundImage._small), title: "Content Group header background image (_small)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_small" })} />
                                       </div>
                                     </TopicNestedAccordion>
-                                    <TopicNestedAccordion title="Block header background image styles">
+                                    <TopicNestedAccordion title="Content Group header background image styles">
                                       <TopicSelect label={BG_REPEAT_LABEL} value={asString(blockHeaderBackgroundStyles._backgroundRepeat)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _backgroundStyles: { ...asRecord(asRecord(current._blockHeader)._backgroundStyles), _backgroundRepeat: value } } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
                                       <TopicSelect label={BG_SIZE_LABEL} value={asString(blockHeaderBackgroundStyles._backgroundSize)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _backgroundStyles: { ...asRecord(asRecord(current._blockHeader)._backgroundStyles), _backgroundSize: value } } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
                                       <TopicSelect label={BG_POSITION_LABEL} value={asString(blockHeaderBackgroundStyles._backgroundPosition)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _backgroundStyles: { ...asRecord(asRecord(current._blockHeader)._backgroundStyles), _backgroundPosition: value } } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
                                     </TopicNestedAccordion>
-                                    <TopicNestedAccordion title="Block header minimum height">
+                                    <TopicNestedAccordion title="Content Group header minimum height">
                                       <TopicTextInput label="_xlarge" type="number" value={String(asNumberOrEmpty(blockHeaderMinimumHeights._xlarge))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _minimumHeights: { ...asRecord(asRecord(current._blockHeader)._minimumHeights), _xlarge: parseNumberishInput(value) } } }))} />
                                       <TopicTextInput label="_large" type="number" value={String(asNumberOrEmpty(blockHeaderMinimumHeights._large))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _minimumHeights: { ...asRecord(asRecord(current._blockHeader)._minimumHeights), _large: parseNumberishInput(value) } } }))} />
                                       <TopicTextInput label="_medium" type="number" value={String(asNumberOrEmpty(blockHeaderMinimumHeights._medium))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _minimumHeights: { ...asRecord(asRecord(current._blockHeader)._minimumHeights), _medium: parseNumberishInput(value) } } }))} />
@@ -11255,21 +11501,21 @@ export default function CourseEditor({
                                     </TopicNestedAccordion>
                                   </TopicNestedAccordion>
                                 )}
-                                <TopicNestedAccordion title="Block minimum height">
+                                <TopicNestedAccordion title="Content Group minimum height">
                                   <TopicTextInput label="_xlarge" type="number" value={String(asNumberOrEmpty(blockMinimumHeights._xlarge))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _minimumHeights: { ...asRecord(current._minimumHeights), _xlarge: parseNumberishInput(value) } }))} />
                                   <TopicTextInput label="_large" type="number" value={String(asNumberOrEmpty(blockMinimumHeights._large))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _minimumHeights: { ...asRecord(current._minimumHeights), _large: parseNumberishInput(value) } }))} />
                                   <TopicTextInput label="_medium" type="number" value={String(asNumberOrEmpty(blockMinimumHeights._medium))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _minimumHeights: { ...asRecord(current._minimumHeights), _medium: parseNumberishInput(value) } }))} />
                                   <TopicTextInput label="_small" type="number" value={String(asNumberOrEmpty(blockMinimumHeights._small))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _minimumHeights: { ...asRecord(current._minimumHeights), _small: parseNumberishInput(value) } }))} />
                                 </TopicNestedAccordion>
                                 <TopicCheckbox
-                                  label="Divider block?"
+                                  label="Divider content group?"
                                   checked={asBoolean(blockThemeSettings._isDividerBlock)}
                                   onChange={(checked) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _isDividerBlock: checked }))}
                                 />
                                 {/* Only themes whose schema declares _blockColors at block level
                                     support this (e.g. Vanilla has no block colour overrides). */}
                                 {isThemeFieldSupported("block", "_blockColors") && (
-                                  <TopicNestedAccordion title="Block colours">
+                                  <TopicNestedAccordion title="Content Group colours">
                                     <TopicColorField label="Background colour" value={asString(blockColours["block-bg-color"])} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColors: { ...asRecord(current._blockColors), "block-bg-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
                                     <TopicColorField label="Font colour" value={asString(blockColours["block-font-color"])} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColors: { ...asRecord(current._blockColors), "block-font-color": value } }))} paletteRows={FONT_HEADER_COLOUR_PALETTE_ROWS} />
                                     <TopicColorField label="Header colour" value={asString(blockColours["block-header-color"])} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColors: { ...asRecord(current._blockColors), "block-header-color": value } }))} paletteRows={FONT_HEADER_COLOUR_PALETTE_ROWS} />
@@ -11576,17 +11822,11 @@ export default function CourseEditor({
             initialText={canvasSamaritanTarget.seedText}
             courseContext={courseTitle}
             onInsert={(text) => {
-              const html = /<[a-z][\s\S]*>/i.test(text)
-                ? text
-                : text.split(/\n{2,}/).map((para) => `<p>${para.replace(/\n/g, "<br>")}</p>`).join("");
-              canvasSamaritanTarget.editor.setData(html);
+              applyCanvasSamaritanResult(canvasSamaritanTarget.editor, text, "insert");
               setCanvasSamaritanTarget(null);
             }}
             onReplace={(text) => {
-              const html = /<[a-z][\s\S]*>/i.test(text)
-                ? text
-                : text.split(/\n{2,}/).map((para) => `<p>${para.replace(/\n/g, "<br>")}</p>`).join("");
-              canvasSamaritanTarget.editor.setData(html);
+              applyCanvasSamaritanResult(canvasSamaritanTarget.editor, text, "replace");
               setCanvasSamaritanTarget(null);
             }}
             onClose={() => setCanvasSamaritanTarget(null)}

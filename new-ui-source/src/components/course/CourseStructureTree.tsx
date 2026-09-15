@@ -60,7 +60,7 @@ function computeDrop(dragged: Dragged, row: RowRef): DropPlan | null {
 }
 
 const LEVEL_ICON_COLOR: Record<StructureLevel, string> = {
-  module: 'text-[#3d8f7c]',
+  module: STRUCTURE_ICON_COLOR_CLASS.module,
   topic: STRUCTURE_ICON_COLOR_CLASS.topic,
   section: STRUCTURE_ICON_COLOR_CLASS.section,
   contentGroup: STRUCTURE_ICON_COLOR_CLASS.contentGroup,

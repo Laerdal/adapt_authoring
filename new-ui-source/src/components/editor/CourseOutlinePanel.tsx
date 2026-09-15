@@ -5,6 +5,8 @@ import type { ReactNode } from "react";
 import { StructureIcon, STRUCTURE_ICON_COLOR_CLASS } from "@/components/course/StructureIcons";
 import { ConfirmDialog } from "@/components/common";
 import type { ContentPageData } from "@/pages/editor/pageEditorWorkspace";
+import type { CourseStructure, SModule } from "@/types/structure";
+import { mergedChildren } from "@/types/structure";
 
 const ICON_BASE = "/new/assets/icons";
 
@@ -33,6 +35,7 @@ interface CourseOutlinePanelProps {
   menuPageCreated: boolean;
   menuSelected: boolean;
   onMenuSelect: () => void;
+  courseStructure?: CourseStructure | null;
   contentPages: ContentPageData[];
   selectedPageId: string | null;
   selectedSubPageId?: string | null;
@@ -44,6 +47,9 @@ interface CourseOutlinePanelProps {
   onArticleSelect: (pageId: string, articleId: string) => void;
   onBlockSelect: (pageId: string, articleId: string, blockId: string) => void;
   onComponentSelect: (pageId: string, articleId: string, blockId: string, componentId: string) => void;
+  onAddModule?: () => void;
+  onAddSubModule?: (parentModuleId: string) => void;
+  onDeleteModule?: (moduleId: string) => void;
   onAddPage: () => void;
   onDeletePage: (pageId: string) => void;
   onAddArticle: (pageId: string) => void;
@@ -62,23 +68,25 @@ interface CourseOutlinePanelProps {
 }
 
 type AddMenuTarget = {
-  level: "topic" | "section" | "group" | "component";
-  pageId: string;
+  level: "module" | "topic" | "section" | "group" | "component";
+  pageId?: string;
+  moduleId?: string;
   articleId?: string;
   blockId?: string;
 };
 
 type DeleteTarget = {
-  level: "topic" | "section" | "group" | "component";
+  level: "module" | "topic" | "section" | "group" | "component";
   name: string;
-  pageId: string;
+  pageId?: string;
+  moduleId?: string;
   articleId?: string;
   blockId?: string;
   componentId?: string;
 };
 
 function getTargetKey(target: AddMenuTarget) {
-  return `${target.level}:${target.pageId}:${target.articleId ?? ""}:${target.blockId ?? ""}`;
+  return `${target.level}:${target.moduleId ?? ""}:${target.pageId ?? ""}:${target.articleId ?? ""}:${target.blockId ?? ""}`;
 }
 
 function TreeRow({
@@ -175,7 +183,7 @@ function TreeRow({
         <span className="w-[18px] shrink-0 self-center flex items-center justify-center">{icon}</span>
         <span
           title={label || "Untitled"}
-          className={`min-w-0 flex-1 self-center leading-[1.35] break-words line-clamp-2 ${
+          className={`min-w-0 flex-1 self-center leading-[1.35] truncate ${
             labelClassName ?? "text-[13px] font-medium"
           } ${
             selected
@@ -334,6 +342,7 @@ function InlineAddRow({
 
 export default function CourseOutlinePanel({
   onClose,
+  courseStructure,
   contentPages,
   selectedPageId,
   selectedSubPageId,
@@ -345,6 +354,9 @@ export default function CourseOutlinePanel({
   onArticleSelect,
   onBlockSelect,
   onComponentSelect,
+  onAddModule,
+  onAddSubModule,
+  onDeleteModule,
   onAddPage,
   onDeletePage,
   onAddArticle,
@@ -356,6 +368,7 @@ export default function CourseOutlinePanel({
   onUseTemplate,
 }: CourseOutlinePanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
   const [expandedTopics, setExpandedTopics] = useState<Record<string, boolean>>({});
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
@@ -383,13 +396,13 @@ export default function CourseOutlinePanel({
   }
 
   function runAddAction(target: AddMenuTarget) {
-    if (target.level === "topic") {
+    if (target.level === "topic" && target.pageId) {
       onAddPage();
-    } else if (target.level === "section" && target.articleId) {
+    } else if (target.level === "section" && target.pageId && target.articleId) {
       onAddArticle(target.pageId);
-    } else if (target.level === "group" && target.articleId) {
+    } else if (target.level === "group" && target.pageId && target.articleId) {
       onAddBlock(target.pageId, target.articleId);
-    } else if (target.level === "component" && target.articleId && target.blockId) {
+    } else if (target.level === "component" && target.pageId && target.articleId && target.blockId) {
       onAddComponent(target.pageId, target.articleId, target.blockId);
     }
     setActiveAddMenu(null);
@@ -398,13 +411,15 @@ export default function CourseOutlinePanel({
   function confirmDelete() {
     if (!deleteTarget) return;
 
-    if (deleteTarget.level === "topic") {
+    if (deleteTarget.level === "module" && deleteTarget.moduleId) {
+      onDeleteModule?.(deleteTarget.moduleId);
+    } else if (deleteTarget.level === "topic" && deleteTarget.pageId) {
       onDeletePage(deleteTarget.pageId);
-    } else if (deleteTarget.level === "section" && deleteTarget.articleId) {
+    } else if (deleteTarget.level === "section" && deleteTarget.pageId && deleteTarget.articleId) {
       onDeleteArticle(deleteTarget.pageId, deleteTarget.articleId);
-    } else if (deleteTarget.level === "group" && deleteTarget.articleId && deleteTarget.blockId) {
+    } else if (deleteTarget.level === "group" && deleteTarget.pageId && deleteTarget.articleId && deleteTarget.blockId) {
       onDeleteBlock(deleteTarget.pageId, deleteTarget.articleId, deleteTarget.blockId);
-    } else if (deleteTarget.level === "component" && deleteTarget.articleId && deleteTarget.blockId && deleteTarget.componentId) {
+    } else if (deleteTarget.level === "component" && deleteTarget.pageId && deleteTarget.articleId && deleteTarget.blockId && deleteTarget.componentId) {
       onDeleteComponent(
         deleteTarget.pageId,
         deleteTarget.articleId,
@@ -417,238 +432,243 @@ export default function CourseOutlinePanel({
   }
 
   function deleteLabel(level: DeleteTarget["level"]) {
+    if (level === "module") return "Module";
     if (level === "topic") return "Topic";
     if (level === "section") return "Section";
     if (level === "group") return "Group";
     return "Component";
   }
 
-  return (
-    <div ref={panelRef} className="w-[280px] h-full bg-white border-r border-[#d8dee6] flex flex-col shrink-0 overflow-x-hidden">
-      <div className="px-[14px] py-3 border-b border-[#d8dee6] flex items-center justify-between shrink-0">
-        <span className="text-sm tracking-[0.08em] font-semibold text-[#3b4753] uppercase">Structure</span>
-        <button type="button" onClick={onClose} className="w-8 h-8 rounded flex items-center justify-center text-[#6b7280] hover:bg-[#f5f7fa]" aria-label="Collapse structure" title="Collapse structure">
-          <MaskIcon file="back-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-        </button>
-      </div>
+  const allKnownPageIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (!courseStructure) return ids;
+    courseStructure.topics.forEach((t) => ids.add(t.id));
+    const walkModule = (m: SModule) => {
+      m.topics.forEach((t) => ids.add(t.id));
+      m.modules.forEach(walkModule);
+    };
+    courseStructure.modules.forEach(walkModule);
+    return ids;
+  }, [courseStructure]);
 
-      <div className="flex-1 overflow-y-auto overflow-x-hidden py-3">
-        {contentPages.map((page) => {
-          const pageSelected = selectedPageId === page.id && !selectedSubPageId && !selectedArticleId && !selectedBlockId && !selectedComponentId;
+  function renderTopicNode(page: ContentPageData, paddingLeft = 12, depth = 0) {
+    const topicPadding = paddingLeft + depth * 12;
+    const sectionPadding = topicPadding + 16;
+    const groupPadding = sectionPadding + 16;
+    const componentPadding = groupPadding + 16;
+
+    const pageSelected = selectedPageId === page.id && !selectedSubPageId && !selectedArticleId && !selectedBlockId && !selectedComponentId;
+    return (
+      <div key={page.id} className="mb-2">
+        <TreeRow
+          label={page.title}
+          paddingLeft={topicPadding}
+          selected={pageSelected}
+          labelClassName="text-[13px] font-bold"
+          onClick={() => {
+            setActiveAddMenu(null);
+            onPageSelect(page.id);
+          }}
+          icon={<StructureIcon level="topic" size={14} className={STRUCTURE_ICON_COLOR_CLASS.topic} />}
+          canExpand={true}
+          expanded={isExpanded(expandedTopics, page.id)}
+          onToggleExpand={() => setExpandedTopics((previous) => ({ ...previous, [page.id]: !isExpanded(previous, page.id) }))}
+          showAdd={true}
+          onAdd={() => {
+            const target: AddMenuTarget = { level: "topic", pageId: page.id };
+            setActiveAddMenu((previous) => (previous && getTargetKey(previous) === getTargetKey(target) ? null : target));
+          }}
+          showDelete={true}
+          onDelete={() => {
+            setActiveAddMenu(null);
+            setDeleteTarget({
+              level: "topic",
+              name: page.title || "Untitled",
+              pageId: page.id,
+            });
+          }}
+          menuOpen={activeAddKey === getTargetKey({ level: "topic", pageId: page.id })}
+          onAddStartFresh={() => runAddAction({ level: "topic", pageId: page.id })}
+          onAddTemplate={() => {
+            const target: AddMenuTarget = { level: "topic", pageId: page.id };
+            if (onUseTemplate && target.pageId) {
+              onUseTemplate({ level: "topic", pageId: target.pageId });
+              setActiveAddMenu(null);
+              return;
+            }
+            runAddAction(target);
+          }}
+          addLabel="topic"
+          toggleLabel="topic"
+        />
+
+        {isExpanded(expandedTopics, page.id) && page.articles.map((article) => {
+          const articleSelected = selectedArticleId === article.id && !selectedBlockId && !selectedComponentId;
           return (
-            <div key={page.id} className="mb-2">
+            <div key={article.id}>
               <TreeRow
-                label={page.title}
-                paddingLeft={12}
-                selected={pageSelected}
-                labelClassName="text-[13px] font-bold"
+                label={article.title}
+                paddingLeft={sectionPadding}
+                selected={articleSelected}
+                labelClassName="text-[13px] font-medium"
                 onClick={() => {
                   setActiveAddMenu(null);
-                  onPageSelect(page.id);
+                  onArticleSelect(page.id, article.id);
                 }}
-                icon={<StructureIcon level="topic" size={14} className={STRUCTURE_ICON_COLOR_CLASS.topic} />}
+                icon={<StructureIcon level="section" size={14} className={STRUCTURE_ICON_COLOR_CLASS.section} />}
                 canExpand={true}
-                expanded={isExpanded(expandedTopics, page.id)}
-                onToggleExpand={() => setExpandedTopics((previous) => ({ ...previous, [page.id]: !isExpanded(previous, page.id) }))}
+                expanded={isExpanded(expandedSections, article.id)}
+                onToggleExpand={() => setExpandedSections((previous) => ({ ...previous, [article.id]: !isExpanded(previous, article.id) }))}
                 showAdd={true}
                 onAdd={() => {
-                  const target: AddMenuTarget = { level: "topic", pageId: page.id };
+                  const target: AddMenuTarget = { level: "section", pageId: page.id, articleId: article.id };
                   setActiveAddMenu((previous) => (previous && getTargetKey(previous) === getTargetKey(target) ? null : target));
                 }}
                 showDelete={true}
                 onDelete={() => {
                   setActiveAddMenu(null);
                   setDeleteTarget({
-                    level: "topic",
-                    name: page.title || "Untitled",
+                    level: "section",
+                    name: article.title || "Untitled",
                     pageId: page.id,
+                    articleId: article.id,
                   });
                 }}
-                menuOpen={activeAddKey === getTargetKey({ level: "topic", pageId: page.id })}
-                onAddStartFresh={() => runAddAction({ level: "topic", pageId: page.id })}
+                menuOpen={activeAddKey === getTargetKey({ level: "section", pageId: page.id, articleId: article.id })}
+                onAddStartFresh={() => runAddAction({ level: "section", pageId: page.id, articleId: article.id })}
                 onAddTemplate={() => {
-                  const target: AddMenuTarget = { level: "topic", pageId: page.id };
-                  if (onUseTemplate) {
-                    onUseTemplate(target);
+                  const target: AddMenuTarget = { level: "section", pageId: page.id, articleId: article.id };
+                  if (onUseTemplate && target.pageId) {
+                    onUseTemplate({ level: "section", pageId: target.pageId, articleId: target.articleId });
                     setActiveAddMenu(null);
                     return;
                   }
                   runAddAction(target);
                 }}
-                addLabel="topic"
-                toggleLabel="topic"
+                addLabel="section"
+                toggleLabel="section"
               />
 
-              {isExpanded(expandedTopics, page.id) && page.articles.map((article) => {
-                const articleSelected = selectedArticleId === article.id && !selectedBlockId && !selectedComponentId;
+              {isExpanded(expandedSections, article.id) && article.blocks.length === 0 && (
+                <InlineAddRow
+                  label="Add Group"
+                  paddingLeft={groupPadding}
+                  onClick={() => {
+                    const target: AddMenuTarget = { level: "group", pageId: page.id, articleId: article.id };
+                    setActiveAddMenu((previous) => (previous && getTargetKey(previous) === getTargetKey(target) ? null : target));
+                  }}
+                  menuOpen={activeAddKey === getTargetKey({ level: "group", pageId: page.id, articleId: article.id })}
+                  onAddStartFresh={() => runAddAction({ level: "group", pageId: page.id, articleId: article.id })}
+                  onAddTemplate={() => {
+                    const target: AddMenuTarget = { level: "group", pageId: page.id, articleId: article.id };
+                    if (onUseTemplate && target.pageId) {
+                      onUseTemplate({ level: "group", pageId: target.pageId, articleId: target.articleId });
+                      setActiveAddMenu(null);
+                      return;
+                    }
+                    runAddAction(target);
+                  }}
+                  addLabel="group"
+                />
+              )}
+
+              {isExpanded(expandedSections, article.id) && article.blocks.map((block) => {
+                const blockSelected = selectedBlockId === block.id && !selectedComponentId;
+                const canAddComponent = block.components.length < 2;
                 return (
-                  <div key={article.id}>
+                  <div key={block.id}>
                     <TreeRow
-                      label={article.title}
-                      paddingLeft={28}
-                      selected={articleSelected}
-                      labelClassName="text-[13px] font-medium"
+                      label={block.title}
+                      paddingLeft={groupPadding}
+                      selected={blockSelected}
+                      labelClassName="text-[13px] font-normal"
                       onClick={() => {
                         setActiveAddMenu(null);
-                        onArticleSelect(page.id, article.id);
+                        onBlockSelect(page.id, article.id, block.id);
                       }}
-                      icon={<StructureIcon level="section" size={14} className={STRUCTURE_ICON_COLOR_CLASS.section} />}
+                      icon={<StructureIcon level="contentGroup" size={14} className={STRUCTURE_ICON_COLOR_CLASS.contentGroup} />}
                       canExpand={true}
-                      expanded={isExpanded(expandedSections, article.id)}
-                      onToggleExpand={() => setExpandedSections((previous) => ({ ...previous, [article.id]: !isExpanded(previous, article.id) }))}
+                      expanded={isExpanded(expandedGroups, block.id)}
+                      onToggleExpand={() => setExpandedGroups((previous) => ({ ...previous, [block.id]: !isExpanded(previous, block.id) }))}
                       showAdd={true}
                       onAdd={() => {
-                        const target: AddMenuTarget = { level: "section", pageId: page.id, articleId: article.id };
+                        const target: AddMenuTarget = { level: "group", pageId: page.id, articleId: article.id, blockId: block.id };
                         setActiveAddMenu((previous) => (previous && getTargetKey(previous) === getTargetKey(target) ? null : target));
                       }}
                       showDelete={true}
                       onDelete={() => {
                         setActiveAddMenu(null);
                         setDeleteTarget({
-                          level: "section",
-                          name: article.title || "Untitled",
+                          level: "group",
+                          name: block.title || "Untitled",
                           pageId: page.id,
                           articleId: article.id,
+                          blockId: block.id,
                         });
                       }}
-                      menuOpen={activeAddKey === getTargetKey({ level: "section", pageId: page.id, articleId: article.id })}
-                      onAddStartFresh={() => runAddAction({ level: "section", pageId: page.id, articleId: article.id })}
+                      menuOpen={activeAddKey === getTargetKey({ level: "group", pageId: page.id, articleId: article.id, blockId: block.id })}
+                      onAddStartFresh={() => runAddAction({ level: "group", pageId: page.id, articleId: article.id, blockId: block.id })}
                       onAddTemplate={() => {
-                        const target: AddMenuTarget = { level: "section", pageId: page.id, articleId: article.id };
-                        if (onUseTemplate) {
-                          onUseTemplate(target);
+                        const target: AddMenuTarget = { level: "group", pageId: page.id, articleId: article.id, blockId: block.id };
+                        if (onUseTemplate && target.pageId) {
+                          onUseTemplate({ level: "group", pageId: target.pageId, articleId: target.articleId, blockId: target.blockId });
                           setActiveAddMenu(null);
                           return;
                         }
                         runAddAction(target);
                       }}
-                      addLabel="section"
-                      toggleLabel="section"
+                      addLabel="content group"
+                      toggleLabel="content group"
                     />
 
-                    {isExpanded(expandedSections, article.id) && article.blocks.length === 0 && (
-                      <InlineAddRow
-                        label="Add Group"
-                        paddingLeft={44}
+                    {isExpanded(expandedGroups, block.id) && block.components.map((component) => (
+                      <TreeRow
+                        key={component.id}
+                        label={component.settings.title || component.type}
+                        paddingLeft={componentPadding}
+                        selected={selectedComponentId === component.id}
                         onClick={() => {
-                          const target: AddMenuTarget = { level: "group", pageId: page.id, articleId: article.id };
+                          setActiveAddMenu(null);
+                          onComponentSelect(page.id, article.id, block.id, component.id);
+                        }}
+                        icon={<StructureIcon level="component" size={14} className={STRUCTURE_ICON_COLOR_CLASS.component} />}
+                        showDelete={true}
+                        onDelete={() => {
+                          setActiveAddMenu(null);
+                          setDeleteTarget({
+                            level: "component",
+                            name: component.settings.title || component.type || "Untitled",
+                            pageId: page.id,
+                            articleId: article.id,
+                            blockId: block.id,
+                            componentId: component.id,
+                          });
+                        }}
+                      />
+                    ))}
+
+                    {isExpanded(expandedGroups, block.id) && canAddComponent && (
+                      <InlineAddRow
+                        label="Add Component"
+                        paddingLeft={componentPadding}
+                        onClick={() => {
+                          const target: AddMenuTarget = { level: "component", pageId: page.id, articleId: article.id, blockId: block.id };
                           setActiveAddMenu((previous) => (previous && getTargetKey(previous) === getTargetKey(target) ? null : target));
                         }}
-                        menuOpen={activeAddKey === getTargetKey({ level: "group", pageId: page.id, articleId: article.id })}
-                        onAddStartFresh={() => runAddAction({ level: "group", pageId: page.id, articleId: article.id })}
+                        menuOpen={activeAddKey === getTargetKey({ level: "component", pageId: page.id, articleId: article.id, blockId: block.id })}
+                        onAddStartFresh={() => runAddAction({ level: "component", pageId: page.id, articleId: article.id, blockId: block.id })}
                         onAddTemplate={() => {
-                          const target: AddMenuTarget = { level: "group", pageId: page.id, articleId: article.id };
-                          if (onUseTemplate) {
-                            onUseTemplate(target);
+                          const target: AddMenuTarget = { level: "component", pageId: page.id, articleId: article.id, blockId: block.id };
+                          if (onUseTemplate && target.pageId) {
+                            onUseTemplate({ level: "component", pageId: target.pageId, articleId: target.articleId, blockId: target.blockId });
                             setActiveAddMenu(null);
                             return;
                           }
                           runAddAction(target);
                         }}
-                        addLabel="group"
+                        addLabel="component"
                       />
                     )}
-
-                    {isExpanded(expandedSections, article.id) && article.blocks.map((block) => {
-                      const blockSelected = selectedBlockId === block.id && !selectedComponentId;
-                      const canAddComponent = block.components.length < 2;
-                      return (
-                        <div key={block.id}>
-                          <TreeRow
-                            label={block.title}
-                            paddingLeft={44}
-                            selected={blockSelected}
-                            labelClassName="text-[13px] font-normal"
-                            onClick={() => {
-                              setActiveAddMenu(null);
-                              onBlockSelect(page.id, article.id, block.id);
-                            }}
-                            icon={<StructureIcon level="contentGroup" size={14} className={STRUCTURE_ICON_COLOR_CLASS.contentGroup} />}
-                            canExpand={true}
-                            expanded={isExpanded(expandedGroups, block.id)}
-                            onToggleExpand={() => setExpandedGroups((previous) => ({ ...previous, [block.id]: !isExpanded(previous, block.id) }))}
-                            showAdd={true}
-                            onAdd={() => {
-                              const target: AddMenuTarget = { level: "group", pageId: page.id, articleId: article.id, blockId: block.id };
-                              setActiveAddMenu((previous) => (previous && getTargetKey(previous) === getTargetKey(target) ? null : target));
-                            }}
-                            showDelete={true}
-                            onDelete={() => {
-                              setActiveAddMenu(null);
-                              setDeleteTarget({
-                                level: "group",
-                                name: block.title || "Untitled",
-                                pageId: page.id,
-                                articleId: article.id,
-                                blockId: block.id,
-                              });
-                            }}
-                            menuOpen={activeAddKey === getTargetKey({ level: "group", pageId: page.id, articleId: article.id, blockId: block.id })}
-                            onAddStartFresh={() => runAddAction({ level: "group", pageId: page.id, articleId: article.id, blockId: block.id })}
-                            onAddTemplate={() => {
-                              const target: AddMenuTarget = { level: "group", pageId: page.id, articleId: article.id, blockId: block.id };
-                              if (onUseTemplate) {
-                                onUseTemplate(target);
-                                setActiveAddMenu(null);
-                                return;
-                              }
-                              runAddAction(target);
-                            }}
-                            addLabel="content group"
-                            toggleLabel="content group"
-                          />
-
-                          {isExpanded(expandedGroups, block.id) && block.components.map((component) => (
-                            <TreeRow
-                              key={component.id}
-                              label={component.settings.title || component.type}
-                              paddingLeft={60}
-                              selected={selectedComponentId === component.id}
-                              onClick={() => {
-                                setActiveAddMenu(null);
-                                onComponentSelect(page.id, article.id, block.id, component.id);
-                              }}
-                              icon={<StructureIcon level="component" size={14} className={STRUCTURE_ICON_COLOR_CLASS.component} />}
-                              showDelete={true}
-                              onDelete={() => {
-                                setActiveAddMenu(null);
-                                setDeleteTarget({
-                                  level: "component",
-                                  name: component.settings.title || component.type || "Untitled",
-                                  pageId: page.id,
-                                  articleId: article.id,
-                                  blockId: block.id,
-                                  componentId: component.id,
-                                });
-                              }}
-                            />
-                          ))}
-
-                          {isExpanded(expandedGroups, block.id) && canAddComponent && (
-                            <InlineAddRow
-                              label="Add Component"
-                              paddingLeft={60}
-                              onClick={() => {
-                                const target: AddMenuTarget = { level: "component", pageId: page.id, articleId: article.id, blockId: block.id };
-                                setActiveAddMenu((previous) => (previous && getTargetKey(previous) === getTargetKey(target) ? null : target));
-                              }}
-                              menuOpen={activeAddKey === getTargetKey({ level: "component", pageId: page.id, articleId: article.id, blockId: block.id })}
-                              onAddStartFresh={() => runAddAction({ level: "component", pageId: page.id, articleId: article.id, blockId: block.id })}
-                              onAddTemplate={() => {
-                                const target: AddMenuTarget = { level: "component", pageId: page.id, articleId: article.id, blockId: block.id };
-                                if (onUseTemplate) {
-                                  onUseTemplate(target);
-                                  setActiveAddMenu(null);
-                                  return;
-                                }
-                                runAddAction(target);
-                              }}
-                              addLabel="component"
-                            />
-                          )}
-                        </div>
-                      );
-                    })}
                   </div>
                 );
               })}
@@ -656,7 +676,7 @@ export default function CourseOutlinePanel({
               {isExpanded(expandedTopics, page.id) && page.articles.length === 0 && (
                 <InlineAddRow
                   label="Add Section"
-                  paddingLeft={28}
+                  paddingLeft={sectionPadding}
                   onClick={() => onAddArticle(page.id)}
                 />
               )}
@@ -665,7 +685,7 @@ export default function CourseOutlinePanel({
                 <TreeRow
                   key={subPage.id}
                   label={subPage.title}
-                  paddingLeft={28}
+                  paddingLeft={sectionPadding}
                   selected={selectedSubPageId === subPage.id}
                   onClick={() => {
                     setActiveAddMenu(null);
@@ -677,6 +697,120 @@ export default function CourseOutlinePanel({
             </div>
           );
         })}
+      </div>
+    );
+  }
+
+  function renderModuleNode(mod: SModule, paddingLeft = 12, depth = 0) {
+    const children = mergedChildren(mod.modules, mod.topics);
+    const modulePadding = paddingLeft + depth * 12;
+    const childPaddingLeft = modulePadding + 12;
+
+    return (
+      <div key={mod.id} className="mb-2">
+        <TreeRow
+          label={mod.title}
+          paddingLeft={modulePadding}
+          selected={false}
+          labelClassName="text-[13px] font-bold text-[#1d4c60]"
+          onClick={() => {
+            setActiveAddMenu(null);
+            setExpandedModules((previous) => ({ ...previous, [mod.id]: !isExpanded(previous, mod.id) }));
+          }}
+          icon={<StructureIcon level="module" size={14} className={STRUCTURE_ICON_COLOR_CLASS.module} />}
+          canExpand={true}
+          expanded={isExpanded(expandedModules, mod.id)}
+          onToggleExpand={() => setExpandedModules((previous) => ({ ...previous, [mod.id]: !isExpanded(previous, mod.id) }))}
+          showAdd={true}
+          onAdd={() => {
+            onAddSubModule?.(mod.id);
+          }}
+          showDelete={true}
+          onDelete={() => {
+            setActiveAddMenu(null);
+            setDeleteTarget({
+              level: "module",
+              name: mod.title || "Untitled Module",
+              moduleId: mod.id,
+            });
+          }}
+          addLabel="submodule"
+          toggleLabel="module"
+        />
+
+        {isExpanded(expandedModules, mod.id) && (
+          <div>
+            {children.map((child) => {
+              if (child.kind === "module") {
+                return renderModuleNode(child.node, 12, depth + 1);
+              }
+              const page = contentPages.find((p) => p.id === child.node.id);
+              if (page) {
+                return renderTopicNode(page, childPaddingLeft, 0);
+              }
+              return null;
+            })}
+            {children.length === 0 && (
+              <InlineAddRow
+                label="Add Sub-Module"
+                paddingLeft={childPaddingLeft}
+                onClick={() => onAddSubModule?.(mod.id)}
+              />
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div ref={panelRef} className="w-[280px] h-full bg-white border-r border-[#d8dee6] flex flex-col shrink-0 overflow-x-hidden">
+      <div className="px-[14px] py-3 border-b border-[#d8dee6] flex items-center justify-between shrink-0">
+        <span className="text-sm tracking-[0.08em] font-semibold text-[#3b4753] uppercase">Structure</span>
+        <div className="flex items-center gap-[6px]">
+          {onAddModule && (
+            <button
+              type="button"
+              onClick={() => onAddModule()}
+              className="w-[26px] h-[26px] rounded-[6px] border border-[#d8dee6] flex items-center justify-center text-[var(--life-accent1-400)] hover:bg-[var(--life-accent1-050)] hover:border-[var(--life-accent1-300)] transition-colors"
+              aria-label="Add Module"
+              title="Add Module"
+            >
+              <StructureIcon level="module" size={14} className="text-[var(--life-accent1-400)]" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-8 h-8 rounded flex items-center justify-center text-[#6b7280] hover:bg-[#f5f7fa]"
+            aria-label="Collapse structure"
+            title="Collapse structure"
+          >
+            <MaskIcon file="back-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto overflow-x-hidden py-3">
+        {courseStructure ? (
+          <>
+            {mergedChildren(courseStructure.modules, courseStructure.topics).map((child) => {
+              if (child.kind === "module") {
+                return renderModuleNode(child.node, 12);
+              }
+              const page = contentPages.find((p) => p.id === child.node.id);
+              if (page) {
+                return renderTopicNode(page, 12);
+              }
+              return null;
+            })}
+            {contentPages
+              .filter((page) => !allKnownPageIds.has(page.id))
+              .map((page) => renderTopicNode(page, 12))}
+          </>
+        ) : (
+          contentPages.map((page) => renderTopicNode(page, 12))
+        )}
       </div>
 
       {deleteTarget && (

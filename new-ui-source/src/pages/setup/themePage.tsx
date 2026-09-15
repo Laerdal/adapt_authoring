@@ -85,7 +85,7 @@ function calcDesktopSizes(baseRem: number) {
   const pSize = formatSize(p);
 
   return [
-    { label: "H1 (Page Title)", size: h1Size.rem, px: h1Size.px },
+    { label: "H1 (Topic Title)", size: h1Size.rem, px: h1Size.px },
     { label: "H2", size: h2Size.rem, px: h2Size.px },
     { label: "H3", size: h3Size.rem, px: h3Size.px },
     { label: "H4", size: h4Size.rem, px: h4Size.px },
@@ -255,7 +255,7 @@ function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
             </svg>
-            <span className="text-xs text-white flex-1" style={{ fontFamily: cfg.headingFont }}>New Course Title / New Menu/Page Title</span>
+            <span className="text-xs text-white flex-1" style={{ fontFamily: cfg.headingFont }}>New Course Title / New Menu/Topic Title</span>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
@@ -263,13 +263,13 @@ function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
 
           <div className="p-4">
             {/* page title */}
-            <h1 className="font-bold mb-3" style={{ ...headingStyle, fontSize: h1Size }}>{cfg.pageTitleSize === "h6" ? "-" : "New Menu/Page Title"}</h1>
+            <h1 className="font-bold mb-3" style={{ ...headingStyle, fontSize: h1Size }}>{cfg.pageTitleSize === "h6" ? "-" : "New Menu/Topic Title"}</h1>
 
             {/* article block */}
             <div className="border border-[#e5e7eb] rounded-lg p-3 mb-3">
-              <h2 className="font-semibold text-sm mb-1" style={headingStyle}>New Article Title</h2>
+              <h2 className="font-semibold text-sm mb-1" style={headingStyle}>New Section Title</h2>
               <div className="border border-[#e5e7eb] rounded-md p-3">
-                <h3 className="font-semibold text-xs mb-1" style={headingStyle}>New Block Title</h3>
+                <h3 className="font-semibold text-xs mb-1" style={headingStyle}>New Content Group Title</h3>
                 <div className="border border-[#e5e7eb] rounded p-3">
                   <p className="font-semibold text-xs mb-1" style={headingStyle}>New Component Title</p>
                   <p className="text-xs mb-1" style={bodyStyle}>Body text</p>
@@ -330,10 +330,10 @@ function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (
         <ColorField label="Instruction colour" value={cfg.instructionColor} onChange={(v) => set("instructionColor", v)} />
         <ColorField label="Link font colour" value={cfg.linkFontColor} onChange={(v) => set("linkFontColor", v)} />
       </div>
-      {/* page title size */}
+      {/* topic title size */}
       <div className="flex flex-col gap-1.5">
         <span className="text-xs font-medium text-[#374151] flex items-center gap-1">
-          Page Title Size (H1)
+          Topic Title Size (H1)
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
@@ -347,8 +347,8 @@ function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (
           <select
             value={cfg.pageTitleSize}
             onChange={(e) => set("pageTitleSize", e.target.value)}
-            aria-label="Page Title Size (H1)"
-            title="Page Title Size (H1)"
+            aria-label="Topic Title Size (H1)"
+            title="Topic Title Size (H1)"
             className="w-full border-2 border-[var(--life-primary-500)] rounded-lg px-3 py-2.5 text-sm text-[#111827] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] pr-8"
           >
             {H1_SIZE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -391,13 +391,13 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
     },
     {
       id: "page",
-      title: "Page Structure",
+      title: "Topic Structure",
       icon: (
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>
         </svg>
       ),
-      content: <div className="pt-4 text-sm text-[#9ca3af] italic">Page structure options coming soon.</div>,
+      content: <div className="pt-4 text-sm text-[#9ca3af] italic">Topic structure options coming soon.</div>,
     },
     {
       id: "progress",
@@ -501,7 +501,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
                 { key: "markingNotFinal",          label: "Display marking for not-final attempts" },
                 { key: "markingUnansweredCorrect",  label: "Display marking for unanswered correct responses" },
                 { key: "hideFeedbackFirstAttempt",  label: "Hide feedback on first attempt on assessments" },
-                { key: "hidePartiallyCorrect",      label: "Hide partially correct feedback on the question and result page" },
+                { key: "hidePartiallyCorrect",      label: "Hide partially correct feedback on the question and result topic" },
               ] as { key: keyof typeof componentConfig; label: string }[]
             ).map(({ key, label }) => (
               <label key={key} className="flex items-start gap-3 py-2 px-2 rounded-lg hover:bg-[#f9fafb] cursor-pointer group">
@@ -595,26 +595,26 @@ const CUSTOM_ACCORDION_DEFS: CustomSectionDef[] = [
       { key: 'heading-color', label: 'Heading font colour', inputType: 'color' },
       { key: 'instruction-color', label: 'Instruction colour', inputType: 'color' },
       { key: 'link', label: 'Link font colour', inputType: 'color' },
-      { key: 'page-heading-font-size', label: 'Page Title Size (H1)', inputType: 'select', options: CUSTOM_SELECT_PAGE_TITLE_SIZE_OPTIONS },
+      { key: 'page-heading-font-size', label: 'Topic Title Size (H1)', inputType: 'select', options: CUSTOM_SELECT_PAGE_TITLE_SIZE_OPTIONS },
     ],
   },
   {
     id: '_pageStructure',
-    label: 'Page Structure',
+    label: 'Topic Structure',
     fields: [
-      { key: 'page-bg-color', label: 'Page background', inputType: 'color' },
-      { key: 'article-bg-color', label: 'Article background', inputType: 'color' },
-      { key: 'block-bg-color', label: 'Block background', inputType: 'color' },
+      { key: 'page-bg-color', label: 'Topic background', inputType: 'color' },
+      { key: 'article-bg-color', label: 'Section background', inputType: 'color' },
+      { key: 'block-bg-color', label: 'Content Group background', inputType: 'color' },
       { key: 'component-bg-color', label: 'Component background', inputType: 'color' },
-      { key: 'page-header-background-color', label: 'Page header background colour', inputType: 'color' },
-      { key: 'page-header-title-color', label: 'Page header title colour', inputType: 'color' },
-      { key: 'page-header-subtitle-color', label: 'Page header subtitle colour', inputType: 'color' },
-      { key: 'page-header-body-color', label: 'Page header body colour', inputType: 'color' },
-      { key: 'page-header-instruction-color', label: 'Page header instruction colour', inputType: 'color' },
-      { key: 'article-top-padding', label: 'Article top padding', inputType: 'select', options: CUSTOM_SELECT_PADDING_OPTIONS },
-      { key: 'article-bottom-padding', label: 'Article bottom padding', inputType: 'select', options: CUSTOM_SELECT_PADDING_OPTIONS },
-      { key: 'block-top-padding', label: 'Block top padding', inputType: 'select', options: CUSTOM_SELECT_PADDING_OPTIONS },
-      { key: 'block-bottom-padding', label: 'Block bottom padding', inputType: 'select', options: CUSTOM_SELECT_PADDING_OPTIONS },
+      { key: 'page-header-background-color', label: 'Topic header background colour', inputType: 'color' },
+      { key: 'page-header-title-color', label: 'Topic header title colour', inputType: 'color' },
+      { key: 'page-header-subtitle-color', label: 'Topic header subtitle colour', inputType: 'color' },
+      { key: 'page-header-body-color', label: 'Topic header body colour', inputType: 'color' },
+      { key: 'page-header-instruction-color', label: 'Topic header instruction colour', inputType: 'color' },
+      { key: 'article-top-padding', label: 'Section top padding', inputType: 'select', options: CUSTOM_SELECT_PADDING_OPTIONS },
+      { key: 'article-bottom-padding', label: 'Section bottom padding', inputType: 'select', options: CUSTOM_SELECT_PADDING_OPTIONS },
+      { key: 'block-top-padding', label: 'Content Group top padding', inputType: 'select', options: CUSTOM_SELECT_PADDING_OPTIONS },
+      { key: 'block-bottom-padding', label: 'Content Group bottom padding', inputType: 'select', options: CUSTOM_SELECT_PADDING_OPTIONS },
     ],
   },
   {
@@ -984,10 +984,10 @@ const DEFAULT_ON_SCREEN_CONFIG: OnScreenConfig = {
 };
 
 const ON_SCREEN_ROW_DEFS: Array<{ key: OnScreenLevelKey; label: string }> = [
-  { key: 'page', label: 'Page' },
+  { key: 'page', label: 'Topic' },
   { key: 'section', label: 'Section' },
-  { key: 'contentGroup', label: 'Content Group (Block)' },
-  { key: 'content', label: 'Content (Component)' },
+  { key: 'contentGroup', label: 'Content Group' },
+  { key: 'content', label: 'Component' },
 ];
 
 const ON_SCREEN_CLASS_OPTIONS = [
@@ -1880,7 +1880,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                 <line x1="3" y1="18" x2="21" y2="18" />
               </svg>
               <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.76rem', color: navTextColor, flex: 1 }}>
-                New Course Title <span style={{ opacity: 0.7 }}>/ New Page Title</span>
+                New Course Title <span style={{ opacity: 0.7 }}>/ New Topic Title</span>
               </span>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={navIconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="11" cy="11" r="8" />
@@ -1891,10 +1891,10 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
               <div style={{ maxWidth: '560px', margin: '0 auto' }}>
                 <div style={{ padding: '6px 0 14px' }}>
                   <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: titleSize || '3rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '4px' }}>
-                    New Page Title
+                    New Topic Title
                   </div>
                   <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: textColor, fontSize: '0.88rem', lineHeight: 1.45 }}>
-                    Page subtitle
+                    Topic subtitle
                   </div>
                 </div>
 
@@ -2094,7 +2094,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                       <ColorPickerField label="Link font colour" value={customSettings.linkFontColor} onChange={v => setCustomSettings({...customSettings, linkFontColor: v})} />
                     </div>
                     <div className="mt-4">
-                      <p className="text-xs font-bold text-[#111827] mb-2">Page Title Size</p>
+                      <p className="text-xs font-bold text-[#111827] mb-2">Topic Title Size</p>
                       <select value={customSettings.pageTitleSize} onChange={e => setCustomSettings({...customSettings, pageTitleSize: e.target.value})} className="text-xs w-full border-2 border-[var(--life-primary-500)] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:outline-none">
                         {PAGE_TITLE_OPTIONS.map(h => <option key={h} value={h}>{PAGE_TITLE_LABELS[h]}</option>)}
                       </select>
@@ -2324,12 +2324,12 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           </ThemeAccordion>
         )}
 
-        {/* Configuration: Blocks - LIFE and Custom */}
+        {/* Configuration: Content Groups - LIFE and Custom */}
         {selected !== "vanilla" && (
           <ThemeAccordion
-            label="Configuration: Blocks"
-            isOpen={activeAccordion === "Configuration: Blocks"}
-            onToggle={() => setActiveAccordion(activeAccordion === "Configuration: Blocks" ? null : "Configuration: Blocks")}
+            label="Configuration: Content Groups"
+            isOpen={activeAccordion === "Configuration: Content Groups"}
+            onToggle={() => setActiveAccordion(activeAccordion === "Configuration: Content Groups" ? null : "Configuration: Content Groups")}
           >
             <div className="space-y-5">
               <div>
@@ -2467,7 +2467,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     </svg>
                   )}
                 </div>
-                <span className="text-xs text-[#111827] leading-normal">Hide partially correct feedback on the question and result page</span>
+                <span className="text-xs text-[#111827] leading-normal">Hide partially correct feedback on the question and result topic</span>
               </div>
             </div>
           </ThemeAccordion>

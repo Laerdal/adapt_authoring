@@ -13,11 +13,17 @@
 import { useEffect, useRef, useState } from "react";
 import AiAssistPopover from "../storyboard/AiAssistPopover";
 import { loadCKEditor5, CKEDITOR_STANDARD_COLOUR_PALETTE } from "../../utils/ckEditor5Loader";
+import {
+  CKEDITOR_LINK_CONFIG,
+  getSamaritanSeedText,
+  insertAiResultIntoEditor,
+  replaceAiResultInEditor,
+} from "../../utils/ckEditorSamaritan";
 
 const TOOLBAR_ITEMS = [
   "sourceEditing", "showBlocks", "|",
   "undo", "redo", "|",
-  "findAndReplace", "|",
+  "findAndReplace", "selectAll", "|",
   "heading", "|",
   "bold", "italic", "underline", "strikethrough", "subscript", "superscript", "|",
   "alignment", "|",
@@ -61,16 +67,11 @@ export default function RichTextEditor({
           toolbar: { items: TOOLBAR_ITEMS, shouldNotGroupWhenFull: true },
           fontColor: { colors: CKEDITOR_STANDARD_COLOUR_PALETTE },
           fontBackgroundColor: { colors: CKEDITOR_STANDARD_COLOUR_PALETTE },
+          link: CKEDITOR_LINK_CONFIG,
           htmlSupport: { allow: [{ name: /.*/, attributes: true, classes: true, style: true, styles: true }] },
           initialData: value || "",
           samaritanOnClick: (ed: any) => {
-            const selection = ed.model.document.selection;
-            const selectedText = !selection.isCollapsed
-              ? Array.from(selection.getFirstRange()?.getItems() ?? [])
-                  .map((item: any) => (item.is?.("$textProxy") ? item.data : ""))
-                  .join("")
-              : "";
-            setSamaritanSeedText(selectedText || ed.getData().replace(/<[^>]+>/g, " ").trim());
+            setSamaritanSeedText(getSamaritanSeedText(ed));
             setSamaritanOpen(true);
           },
         });
@@ -106,14 +107,15 @@ export default function RichTextEditor({
     }
   }, [disabled]);
 
-  const applySamaritanResult = (text: string) => {
+  // Insert keeps the rest of the field and drops the result at the caret;
+  // Replace swaps the selection (or the whole field when nothing is
+  // selected) — same split the old tool's Samaritan popup makes.
+  const applySamaritanResult = (text: string, mode: "insert" | "replace") => {
     const editor = editorRef.current;
     if (!editor) return;
-    const html = /<[a-z][\s\S]*>/i.test(text)
-      ? text
-      : text.split(/\n{2,}/).map((para) => `<p>${para.replace(/\n/g, "<br>")}</p>`).join("");
-    editor.setData(html);
-    onChangeRef.current(html);
+    if (mode === "insert") insertAiResultIntoEditor(editor, text);
+    else replaceAiResultInEditor(editor, text);
+    onChangeRef.current(editor.getData());
   };
 
   return (
@@ -124,8 +126,8 @@ export default function RichTextEditor({
         <AiAssistPopover
           initialText={samaritanSeedText}
           courseContext={courseContext}
-          onInsert={applySamaritanResult}
-          onReplace={applySamaritanResult}
+          onInsert={(text) => applySamaritanResult(text, "insert")}
+          onReplace={(text) => applySamaritanResult(text, "replace")}
           onClose={() => setSamaritanOpen(false)}
         />
       )}

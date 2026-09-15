@@ -1,4 +1,4 @@
-import { createBrowserRouter, Navigate, RouterProvider } from 'react-router-dom'
+import { createBrowserRouter, Navigate, RouterProvider, useRouteError } from 'react-router-dom'
 import RootLayout from './components/layout/RootLayout'
 import DashboardLayout from './components/layout/DashboardLayout'
 import HomePage from './pages/HomePage'
@@ -13,6 +13,40 @@ import AssetManagementPage from './pages/AssetManagementPage'
 import TemplateManagementPage from './pages/TemplateManagementPage'
 import PluginManagementPage from './pages/PluginManagementPage'
 import { canAccessCourseSettings, canAccessDashboardSection, type DashboardSection, useAuth } from '@/context/AuthContext'
+
+function RootRouteError() {
+  const error = useRouteError() as Error | null;
+  console.error("Route error caught by ErrorBoundary:", error);
+
+  return (
+    <div className="min-h-screen w-full flex items-center justify-center bg-[#F8FAFC] px-4">
+      <div className="max-w-md w-full bg-white rounded-2xl border border-[#E2E8F0] shadow-sm p-6 text-center">
+        <div className="w-12 h-12 rounded-full bg-[#FEF2F2] text-[#DC2626] flex items-center justify-center mx-auto mb-4 font-bold text-xl">
+          !
+        </div>
+        <h2 className="text-lg font-semibold text-[#0F172A] mb-2">Something went wrong</h2>
+        <p className="text-sm text-[#64748B] mb-6">
+          {error?.message || "An unexpected error occurred while loading this view."}
+        </p>
+        <div className="flex items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 text-sm font-medium text-white bg-[#2E7FA1] hover:bg-[#266580] rounded-lg transition-colors"
+          >
+            Reload page
+          </button>
+          <a
+            href="/new/"
+            className="px-4 py-2 text-sm font-medium text-[#475569] bg-[#F1F5F9] hover:bg-[#E2E8F0] rounded-lg transition-colors"
+          >
+            Back to courses
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function DashboardSectionGate({
   section,
@@ -69,6 +103,7 @@ function CourseWorkspaceRouteGate({ children }: { children: React.ReactNode }) {
 export const router = createBrowserRouter([
   {
     element: <RootLayout />,
+    errorElement: <RootRouteError />,
     children: [
       {
         // Dashboard shell — Sidebar + Header shared across these routes

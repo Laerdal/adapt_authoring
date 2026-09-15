@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { getTemplates, deleteTemplate, updateTemplate, type TemplateScope } from '@/api/adaptAuthoring'
 import AiAssistant from '@/components/common/AiAssistant'
 
-type TemplateType = 'Page' | 'Article' | 'Block' | 'Component'
+type TemplateType = 'Topic' | 'Section' | 'Content Group' | 'Component'
 
 interface Template {
   id: number
@@ -15,17 +15,17 @@ interface Template {
 }
 
 const INITIAL_TEMPLATES: Template[] = [
-  { id: 1, name: 'Hero Banner', type: 'Page', description: 'Full-width hero layout with image, headline and CTA.', timestamp: new Date('2026-06-15T09:30:00') },
-  { id: 2, name: 'Learning Article', type: 'Article', description: 'Long-form reading layout with sidebar navigation.', timestamp: new Date('2026-06-18T14:15:00') },
-  { id: 3, name: 'Card Grid', type: 'Block', description: 'Responsive grid of content cards with hover effects.', timestamp: new Date('2026-06-20T11:45:00') },
+  { id: 1, name: 'Hero Banner', type: 'Topic', description: 'Full-width hero layout with image, headline and CTA.', timestamp: new Date('2026-06-15T09:30:00') },
+  { id: 2, name: 'Learning Article', type: 'Section', description: 'Long-form reading layout with sidebar navigation.', timestamp: new Date('2026-06-18T14:15:00') },
+  { id: 3, name: 'Card Grid', type: 'Content Group', description: 'Responsive grid of content cards with hover effects.', timestamp: new Date('2026-06-20T11:45:00') },
   { id: 4, name: 'Progress Tracker', type: 'Component', description: 'Visual step indicator for multi-stage workflows.', timestamp: new Date('2026-06-22T08:00:00') },
-  { id: 5, name: 'Quiz Page', type: 'Page', description: 'Interactive quiz layout with scoring and feedback.', timestamp: new Date('2026-06-23T16:20:00') },
-  { id: 6, name: 'News Article', type: 'Article', description: 'Clean editorial layout with pull-quotes and image support.', timestamp: new Date('2026-06-24T10:05:00') },
-  { id: 7, name: 'Accordion FAQ', type: 'Block', description: 'Collapsible FAQ block with smooth animation.', timestamp: new Date('2026-06-25T13:30:00') },
+  { id: 5, name: 'Quiz Page', type: 'Topic', description: 'Interactive quiz layout with scoring and feedback.', timestamp: new Date('2026-06-23T16:20:00') },
+  { id: 6, name: 'News Article', type: 'Section', description: 'Clean editorial layout with pull-quotes and image support.', timestamp: new Date('2026-06-24T10:05:00') },
+  { id: 7, name: 'Accordion FAQ', type: 'Content Group', description: 'Collapsible FAQ block with smooth animation.', timestamp: new Date('2026-06-25T13:30:00') },
   { id: 8, name: 'Video Player', type: 'Component', description: 'Embedded video with controls and caption support.', timestamp: new Date('2026-06-26T09:00:00') },
 ]
 
-const FILTER_OPTIONS: ('All' | TemplateType)[] = ['All', 'Page', 'Article', 'Block', 'Component']
+const FILTER_OPTIONS: ('All' | TemplateType)[] = ['All', 'Topic', 'Section', 'Content Group', 'Component']
 const PAGE_SIZE_OPTIONS = [5, 10, 20]
 
 function formatTimestamp(date: Date): string {
@@ -40,10 +40,10 @@ function formatTimestamp(date: Date): string {
 }
 
 const TYPE_COLORS: Record<TemplateType, { bg: string; text: string }> = {
-  Page:      { bg: 'bg-[#dbeeff]', text: 'text-[#2d6fa8]' },
-  Article:   { bg: 'bg-[#dcfce7]', text: 'text-[#16a34a]' },
-  Block:     { bg: 'bg-[#fef9c3]', text: 'text-[#a16207]' },
-  Component: { bg: 'bg-[#f3e8ff]', text: 'text-[#7e22ce]' },
+  Topic:         { bg: 'bg-[#dbeeff]', text: 'text-[#2d6fa8]' },
+  Section:       { bg: 'bg-[#dcfce7]', text: 'text-[#16a34a]' },
+  'Content Group': { bg: 'bg-[#fef9c3]', text: 'text-[#a16207]' },
+  Component:     { bg: 'bg-[#f3e8ff]', text: 'text-[#7e22ce]' },
 }
 
 export default function TemplateManagementPage() {
