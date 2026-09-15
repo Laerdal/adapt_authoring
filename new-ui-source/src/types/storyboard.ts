@@ -429,15 +429,20 @@ export interface StoryboardEditorHandle {
   getHeadings(): StoryboardHeading[];
   getSummary(): StoryboardSummary;
   /** Insert content at the cursor (Add Heading / Add Content / Add Instruction).
-   *  `opts.level` sets the heading level (H1–H3) when `kind === 'heading'`. */
-  insert(kind: StoryboardInsertKind, opts?: { level?: number }): void;
+   *  `opts.level` sets the heading level (H1–H3) when `kind === 'heading'`.
+   *  `opts.afterId`, when given and still present in the document, anchors the
+   *  insertion right after that block instead of the editor's live text-cursor
+   *  position (which goes stale once focus leaves the editor for a toolbar
+   *  menu — use the last known active/selected block id here). */
+  insert(kind: StoryboardInsertKind, opts?: { level?: number; afterId?: string }): void;
   /** Insert a pre-populated component card at the cursor (AI Assistance →
    *  Insert). `title` seeds the card title; `data` is merged into the card's
-   *  default data (e.g. `{ description }` for a Text component). Returns the new
+   *  default data (e.g. `{ description }` for a Text component). `afterId`
+   *  behaves as in `insert` above. Returns the new
    *  block id so the caller can anchor follow-up actions (comments). */
   insertComponent(
     kind: StoryboardInsertKind,
-    opts?: { title?: string; data?: Record<string, unknown> }
+    opts?: { title?: string; data?: Record<string, unknown>; afterId?: string }
   ): string | null;
   /** Plain text of the block at the cursor (for AI actions, AC7). */
   getActiveText(): string;

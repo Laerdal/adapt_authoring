@@ -4,11 +4,10 @@
 import { ListTree, PanelLeftClose } from 'lucide-react';
 import type { StoryboardHeading, StoryboardSummary } from '@/types/storyboard';
 import TableOfContents from './TableOfContents';
-import AiGuidance from './AiGuidance';
 
 export default function ContentsPanel({
   headings,
-  summary,
+  summary: _summary,
   activeId,
   onNavigate,
   onCollapse,
@@ -41,13 +40,6 @@ export default function ContentsPanel({
       <nav className="flex-1 overflow-y-auto px-2 py-3">
         <TableOfContents headings={headings} activeId={activeId} onNavigate={onNavigate} />
       </nav>
-
-      <div
-        className="p-3"
-        style={{ borderTop: '1px solid var(--life-color-border-subtle)', background: 'var(--life-color-bg-surface-default)' }}
-      >
-        <AiGuidance summary={summary} />
-      </div>
     </div>
   );
 }

@@ -2806,7 +2806,7 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       emitCard(comp, "groupedContent", {
         showTitle: true,
         description: stripHtml(comp.body || ""),
-        instruction: comp.instruction || "",
+        instruction: comp.instruction || (typeof props.instruction === "string" ? props.instruction : ""),
         items,
       });
       return;
@@ -2931,7 +2931,25 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       });
       return;
     }
-    // Unknown / text → H4 heading + body paragraph (text write-back contract).
+    // Plain text (Adapt's "text" / "laerdal-text" component) → sbComponent
+    // "text" card — the SAME clickable card (Show title / Description /
+    // Instruction / AI / Delete) the "Add Content" flow already creates for a
+    // brand-new Text component. This must match that shape exactly so every
+    // text component in the course — including the empty default one seeded   // clickable and editable. Previously text fell through to the generic
+    // "Unknown" fallback below, which emits a bare H4 heading + body
+    // paragraph; with an empty body (the default component's starting state)
+    // htmlBodyToBlocks() returns zero blocks, so nothing at all was rendered
+    // for it — no heading, no paragraph, nothing to click.
+    if (sbKind === "text") {
+      const compTitle = label(comp);
+      emitCard(comp, "text", {
+        showTitle: !!compTitle,
+        description: stripHtml(comp.body || ""),
+        instruction: comp.instruction || (typeof props.instruction === "string" ? props.instruction : ""),
+      });
+      return;
+    }
+    // Unknown → H4 heading + body paragraph (text write-back contract).
     // Suppress the H4 entirely when the component has no authored title —
     // otherwise the storyboard/export show an anonymous heading line above
     // the body paragraph, which reads as an "empty title" placeholder.
@@ -2971,15 +2989,21 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
     });
   };
   const emitTopic = (page: EngineContentNode) => {
-    // A page/article/block with no authored title (schema default like
-    // "New Menu/Page Title") is projected without its header — see the
-    // storyboardLabel + DEFAULT_SCHEMA_TITLES filter. Emitting empty headings
-    // clutters the document with blank lines and pollutes the Word export.
-    const topicTitle = label(page);
-    if (topicTitle) out.push({ id: page._id, type: "heading", props: { level: 1 }, content: topicTitle });
+    // Structure headings always appear, exactly like Editor Mode's Structure
+    // panel — including a still-unrenamed default node's placeholder title
+    // ("New Topic Title" etc). Editor Mode never hides these (getCourseStructure
+    // above uses the raw title unconditionally), and hiding them here made the
+    // Storyboard document (and its Contents/TOC) look empty for any freshly
+    // created Topic/Section/Content Group, even though the structure exists.
+    // Word/PDF export has its OWN independent placeholder filter
+    // (documentConvert.js::DEFAULT_PLACEHOLDER_TITLES) so suppressing them
+    // here too was redundant for that concern.
+    const rawLabel = (n: EngineContentNode): string => (n.displayTitle || n.title || "").trim() || "Untitled";
+    const topicTitle = rawLabel(page);
+    out.push({ id: page._id, type: "heading", props: { level: 1 }, content: topicTitle });
     for (const article of childrenOf(articles, page._id)) {
-      const articleTitle = label(article);
-      if (articleTitle) out.push({ id: article._id, type: "heading", props: { level: 2 }, content: articleTitle });
+      const articleTitle = rawLabel(article);
+      out.push({ id: article._id, type: "heading", props: { level: 2 }, content: articleTitle });
       // The generation engine caps each Adapt block at 2 components — extra
       // components are placed in continuation blocks that carry the SAME H3
       // title. When we round-trip the course, those continuation blocks would
@@ -2988,9 +3012,8 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       // Storyboard shows one H3 with all its components in their original order.
       let prevTitle: string | null = null;
       for (const blk of childrenOf(blocks, article._id)) {
-        const title = label(blk);
-        // Same suppression rule as pages/articles above.
-        if (title && title !== prevTitle) {
+        const title = rawLabel(blk);
+        if (title !== prevTitle) {
           out.push({ id: blk._id, type: "heading", props: { level: 3 }, content: title });
           prevTitle = title;
         }
@@ -3026,7 +3049,7 @@ export async function saveStoryboardToCourse(
   const label = storyboardLabel;
   const index = new Map<
     string,
-    { level: StructureLevel; title: string; body?: string; component?: string; parentId?: string; properties?: Record<string, unknown> }
+    { level: StructureLevel; title: string; body?: string; instruction?: string; component?: string; parentId?: string; properties?: Record<string, unknown> }
   >();
   contentObjects.forEach((c) =>
     index.set(c._id, { level: c._type === "menu" ? "module" : "topic", title: label(c) })
@@ -3038,6 +3061,7 @@ export async function saveStoryboardToCourse(
       level: "component",
       title: label(c),
       body: c.body || "",
+      instruction: c.instruction || "",
       component: c._component,
       parentId: c._parentId,
       // Kept so an update can seed `patch.properties` from what's actually on
@@ -3105,6 +3129,7 @@ export async function saveStoryboardToCourse(
         image?: ImageData;
         media?: MediaData;
         description?: string;
+        instruction?: string;
         items?: Array<{ title?: string; body?: string; image?: string; imageAssetId?: string }>;
       } = {};
       try {
@@ -3171,6 +3196,25 @@ export async function saveStoryboardToCourse(
           if (fn && it?.imageAssetId) {
             tasks.push(linkContentAsset(courseId, "component", id, info.parentId || "", fn, it.imageAssetId));
           }
+        }
+      } else if (kind === "text" && (info.component === "text" || info.component === "laerdal-text")) {
+        // Plain text component — write the edited description back onto
+        // `body` (matches the ::body branch's HTML-wrapping convention above)
+        // and the instruction field, so the sbComponent "text" card (used for
+        // every text component, including the default one — ADAPT-3902)
+        // round-trips exactly like the legacy heading+paragraph contract did.
+        // The description here is always plain user/AI-authored text (never an
+        // imported-HTML payload), so it must be escaped unconditionally —
+        // trusting a leading "<" as "already HTML" would let raw markup typed
+        // or pasted by a user/AI flow straight into the course body.
+        const rawDescription = (parsed.description || "").trim();
+        const nextBodyHtml = rawDescription ? `<p>${escapeHtml(rawDescription)}</p>` : "";
+        if (stripHtml(nextBodyHtml) !== stripHtml(info.body || "")) {
+          patch.body = nextBodyHtml;
+        }
+        const nextInstruction = (parsed.instruction || "").trim();
+        if (nextInstruction !== (info.instruction || "")) {
+          patch.instruction = nextInstruction;
         }
       }
       if (Object.keys(patch).length) {
