@@ -4765,7 +4765,11 @@ interface EngineAsset {
 
 export async function getAssets(): Promise<DashboardAsset[]> {
   const res = await apiClient.get<EngineAsset[] | { assets?: EngineAsset[] }>("/api/asset/query");
-  const docs = Array.isArray(res) ? res : res?.assets ?? [];
+  const docs = (Array.isArray(res) ? res : res?.assets ?? []).slice().sort((left, right) => {
+    const leftTs = left.createdAt ? new Date(left.createdAt).getTime() : 0;
+    const rightTs = right.createdAt ? new Date(right.createdAt).getTime() : 0;
+    return rightTs - leftTs;
+  });
   return docs.map((a, i) => {
     const format = coerceFormat(a.mimeType, a.assetType);
     return {
