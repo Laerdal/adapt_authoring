@@ -221,6 +221,7 @@ const SPECIAL_NAV = {
   previewStart: "__nav_preview_start__",
   previewCurrent: "__nav_preview_current__",
   exportSource: "__nav_export_source__",
+  publishCourseAction: "__nav_publish_course__",
 } as const;
 
 /* -- Course Structure panel -- */
@@ -2798,18 +2799,20 @@ function CourseCreationCenterContent() {
     }));
   }
 
+  function requestGuardedAction(actionTarget: string, callback: () => void) {
+    if (GUARDED_NAV_IDS.has(activeNav)) {
+      setPendingNavigation(actionTarget);
+      return;
+    }
+
+    setPendingNavigation(null);
+    callback();
+  }
+
   // Smart navigation handler - used by sidebar items
   // When on a guarded setup panel, the page intercepts via pendingNavigation state.
   function handleNavigation(nextPanel: string) {
     if (!nextPanel.startsWith("__nav_") && nextPanel === activeNav) {
-      return;
-    }
-
-    // Export source is a side-effect action, not a page transition; do not
-    // interrupt it with unsaved-changes modal.
-    if (nextPanel === SPECIAL_NAV.exportSource) {
-      setPendingNavigation(null);
-      performNavigation(nextPanel);
       return;
     }
 
@@ -2876,6 +2879,11 @@ function CourseCreationCenterContent() {
 
     if (target === SPECIAL_NAV.exportSource) {
       triggerExportSource();
+      return;
+    }
+
+    if (target === SPECIAL_NAV.publishCourseAction) {
+      openPublishDialog();
       return;
     }
 
@@ -3055,7 +3063,7 @@ function CourseCreationCenterContent() {
             <ExportMenu
               disabled={!courseId || !user?._tenantId}
               exportSourceLoading={exportingSource}
-              onExportSource={() => handleNavigation(SPECIAL_NAV.exportSource)}
+              onExportSource={() => requestGuardedAction(SPECIAL_NAV.exportSource, () => triggerExportSource())}
               onExportPdf={() => handleNavigation("export-pdf")}
             />
           )}
@@ -3063,7 +3071,7 @@ function CourseCreationCenterContent() {
             <PublishMenuButton
               active={activeNav === "publish"}
               onSelectPreflight={() => handleNavigation("publish")}
-              onSelectPublish={openPublishDialog}
+              onSelectPublish={() => requestGuardedAction(SPECIAL_NAV.publishCourseAction, openPublishDialog)}
             />
           </div>
         </div>
