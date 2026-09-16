@@ -375,7 +375,6 @@ export function AssetManagementWorkspace({
   const [search, setSearch]             = useState("");
   const [formatFilter, setFormatFilter] = useState<AssetFormat | "All">(fixedPickerFormat ?? "All");
   const [view, setView]                 = useState<ViewMode>("grid");
-  const [filterOpen, setFilterOpen]     = useState(false);
   const [tagFilterOpen, setTagFilterOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagSearch, setTagSearch]       = useState("");
@@ -389,18 +388,14 @@ export function AssetManagementWorkspace({
 
   const [deleteTarget, setDeleteTarget] = useState<Asset | null>(null);
 
-  const filterRef      = useRef<HTMLDivElement>(null);
   const tagFilterRef   = useRef<HTMLDivElement>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const editFileRef    = useRef<HTMLInputElement>(null);
   const progressTimer  = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Close filter dropdown on outside click
+  // Close tag dropdown on outside click
   useEffect(() => {
     function handleMouseDown(e: MouseEvent) {
-      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
-        setFilterOpen(false);
-      }
       if (tagFilterRef.current && !tagFilterRef.current.contains(e.target as Node)) {
         setTagFilterOpen(false);
       }
@@ -701,47 +696,21 @@ export function AssetManagementWorkspace({
 
         {/* Format filter */}
         {!fixedPickerFormat ? (
-        <div ref={filterRef} className="relative">
-          <button
-            type="button"
-            onClick={() => setFilterOpen((o) => !o)}
-            className={`flex items-center gap-2 px-3 py-2 text-sm border rounded-lg transition-colors ${
-              formatFilter !== "All"
-                ? "border-[#2d6fa8] bg-[#dbeeff] text-[#2d6fa8] font-medium"
-                : "border-[#e5e7eb] bg-white hover:bg-[#f9fafb] text-[#374151]"
-            }`}
-          >
-            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18M7 8h10M11 12h2" />
-            </svg>
-            {FORMAT_LABELS[formatFilter]}
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${filterOpen ? "rotate-180" : ""}`}>
-              <path d="M6 9l6 6 6-6" />
-            </svg>
-          </button>
-          {filterOpen && (
-            <div className="absolute left-0 mt-1 w-44 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-30 py-1">
-              <p className="px-3 py-1.5 text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">Filter by type</p>
-              {FORMATS.map((f) => (
-                <button
-                  key={f}
-                  type="button"
-                  onClick={() => { setFormatFilter(f); setFilterOpen(false); }}
-                  className={`w-full text-left px-3 py-2 text-sm flex items-center justify-between transition-colors ${formatFilter === f ? "bg-[#dbeeff] text-[#2d6fa8] font-medium" : "text-[#374151] hover:bg-[#f9fafb]"}`}
-                >
-                  <span className="flex items-center gap-2">
-                    {f !== "All" && <span className={FORMAT_COLORS[f as AssetFormat].split(" ")[1]}>{FORMAT_ICONS[f as AssetFormat]}</span>}
-                    {FORMAT_LABELS[f]}
-                  </span>
-                  {formatFilter === f && (
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
+        <div className="flex items-center gap-1 bg-[#f3f4f6] rounded-lg p-1">
+          {FORMATS.map((f) => (
+            <button
+              key={f}
+              type="button"
+              onClick={() => setFormatFilter(f)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+                formatFilter === f
+                  ? "bg-white text-[#2d6fa8] shadow-sm"
+                  : "text-[#6b7280] hover:text-[#374151]"
+              }`}
+            >
+              {FORMAT_LABELS[f]}
+            </button>
+          ))}
         </div>
         ) : (
           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#dbeeff] text-xs text-[#2d6fa8] font-medium">
@@ -754,7 +723,6 @@ export function AssetManagementWorkspace({
             type="button"
             onClick={() => {
               setTagFilterOpen((open) => !open);
-              setFilterOpen(false);
               setTagSearch("");
             }}
             className={`flex items-center gap-1.5 px-3 py-2 text-sm border rounded-lg transition-colors whitespace-nowrap ${
