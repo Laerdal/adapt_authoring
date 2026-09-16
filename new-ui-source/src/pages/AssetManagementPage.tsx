@@ -622,7 +622,7 @@ export function AssetManagementWorkspace({
 
   // ── Helpers ─────────────────────────────────────────────────────────────
   const FORMAT_LABELS: Record<AssetFormat | "All", string> = {
-    All: "All Types",
+    All: "All",
     image: "Image",
     audio: "Audio",
     video: "Video",
@@ -682,7 +682,7 @@ export function AssetManagementWorkspace({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Escape") setSearch(""); }}
-            placeholder="Search by name or tag"
+            placeholder="Search by name"
             className="w-full pl-9 pr-4 py-2 text-sm border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent bg-white placeholder-[#9ca3af] text-[#111827] transition-colors"
           />
           {search && (
@@ -805,22 +805,12 @@ export function AssetManagementWorkspace({
         </div>
 
         {/* Active filter chips */}
-        {(search || effectiveFormatFilter !== "All" || selectedTags.length > 0) && (
+        {(search || selectedTags.length > 0) && (
           <div className="flex items-center gap-2 flex-wrap">
             {search && (
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#f3f4f6] text-xs text-[#374151] font-medium">
                 "{search}"
                 <button type="button" onClick={() => setSearch("")} className="text-[#9ca3af] hover:text-[#374151]">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              </span>
-            )}
-            {effectiveFormatFilter !== "All" && !fixedPickerFormat && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#dbeeff] text-xs text-[#2d6fa8] font-medium">
-                {FORMAT_LABELS[effectiveFormatFilter]}
-                <button type="button" onClick={() => setFormatFilter("All")} className="text-[#2d6fa8] hover:text-[#1e4d73]">
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
