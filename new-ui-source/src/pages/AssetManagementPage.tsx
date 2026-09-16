@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback, useDeferredValue, memo } from "react";
-import { getAssets, trashAsset, updateAsset } from "@/api/adaptAuthoring";
+import { getAssets, trashAsset, updateAsset, uploadAsset } from "@/api/adaptAuthoring";
 import type { AssetFormat, DashboardAsset } from "@/api/adaptAuthoring";
 import AiAssistant from "@/components/common/AiAssistant";
 import type { AssetPickerResult, AssetPickerType } from "@/types/assetPicker";
@@ -78,7 +78,7 @@ interface UploadState {
   tags: string;
   formErrors: UploadFormErrors;
   progress: number;
-  uploadedAssetId: number | null;
+  uploadedAssetId: string | null;
 }
 
 interface EditModalState {
@@ -161,8 +161,6 @@ const EMPTY_EDIT = (a: Asset): EditModalState => ({
   tags: a.tags.join(", "),
   replaceFile: null,
 });
-
-let nextId = 1;
 
 function formatBytes(raw: string) { return raw; }
 
@@ -365,8 +363,15 @@ export function AssetManagementWorkspace({
   const [assets, setAssets]             = useState<Asset[]>([]);
   const fixedPickerFormat = pickerMode && pickerAssetType ? pickerAssetType : null;
 
-  const loadAssets = () => { getAssets().then(setAssets).catch(() => setAssets([])); };
-  useEffect(() => { loadAssets(); }, []);
+  const loadAssets = useCallback(async () => {
+    try {
+      const rows = await getAssets();
+      setAssets(rows);
+    } catch {
+      setAssets([]);
+    }
+  }, []);
+  useEffect(() => { void loadAssets(); }, [loadAssets]);
   const [search, setSearch]             = useState("");
   const [formatFilter, setFormatFilter] = useState<AssetFormat | "All">(fixedPickerFormat ?? "All");
   const [view, setView]                 = useState<ViewMode>("grid");
@@ -524,7 +529,7 @@ export function AssetManagementWorkspace({
   }
 
   // ── Upload: validate → upload ─────────────────────────────────────────────
-  function startUpload() {
+  async function startUpload() {
     const errors = validateUploadForm(upload.title, upload.description);
     if (Object.keys(errors).length > 0) {
       setUpload((prev) => ({ ...prev, formErrors: errors }));
@@ -533,44 +538,42 @@ export function AssetManagementWorkspace({
 
     if (!upload.file) return;
 
-    const fmt = detectFormat(upload.file);
-    const localId = nextId++;
-    const newAsset: Asset = {
-      id: localId,
-      backendId: `local-${localId}`,
-      title: upload.title.trim(),
-      description: upload.description.trim(),
-      size: formatFileSize(upload.file.size),
-      format: fmt,
-      tags: upload.tags.split(",").map((t) => t.trim()).filter(Boolean),
-      uploadedAt: new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "2-digit" }).replace(/\//g, "-"),
-    };
+    const file = upload.file;
+    const title = upload.title.trim();
+    const description = upload.description.trim();
+    const tags = upload.tags.split(",").map((t) => t.trim()).filter(Boolean);
 
     setUpload((prev) => ({ ...prev, step: "uploading", progress: 0, formErrors: {} }));
 
-    // Simulate upload progress (scaled to ~2s for small files, ~4s for large)
-    const totalMs = Math.min(4000, Math.max(1500, upload.file.size / 50000));
-    const intervalMs = 60;
-    const increment = (intervalMs / totalMs) * 100;
-
     progressTimer.current = setInterval(() => {
-      setUpload((prev) => {
-        const next = Math.min(prev.progress + increment + (Math.random() * increment * 0.4), 98);
-        if (next >= 98) {
-          clearInterval(progressTimer.current!);
-          // Finalise after a short pause at 98%
-          setTimeout(() => {
-            setAssets((a) => [newAsset, ...a]);
-            setUpload((p) => ({ ...p, step: "done", progress: 100, uploadedAssetId: newAsset.id }));
-          }, 350);
-        }
-        return { ...prev, progress: next };
-      });
-    }, intervalMs);
+      setUpload((prev) => ({
+        ...prev,
+        progress: prev.progress >= 90 ? prev.progress : Math.min(prev.progress + 12, 90),
+      }));
+    }, 120);
+
+    try {
+      const assetId = await uploadAsset(file, title, { description, tags });
+      if (progressTimer.current) {
+        clearInterval(progressTimer.current);
+        progressTimer.current = null;
+      }
+      await loadAssets();
+      setUpload((prev) => ({ ...prev, step: "done", progress: 100, uploadedAssetId: assetId }));
+    } catch {
+      if (progressTimer.current) {
+        clearInterval(progressTimer.current);
+        progressTimer.current = null;
+      }
+      setUpload((prev) => ({ ...prev, step: "details", progress: 0 }));
+    }
   }
 
   function closeUpload() {
-    if (progressTimer.current) clearInterval(progressTimer.current);
+    if (progressTimer.current) {
+      clearInterval(progressTimer.current);
+      progressTimer.current = null;
+    }
     setUploadOpen(false);
     setUpload(EMPTY_UPLOAD);
   }

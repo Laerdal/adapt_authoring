@@ -208,10 +208,24 @@ export async function queryImages(search?: string): Promise<Asset[]> {
 }
 
 // Upload a file as a new asset. Returns the new asset's _id.
-export async function uploadAsset(file: File, title?: string): Promise<string> {
+export async function uploadAsset(
+  file: File,
+  title?: string,
+  options?: {
+    description?: string;
+    tags?: string[];
+    aiTutorCourseId?: string;
+  }
+): Promise<string> {
   const form = new FormData();
   form.append("file", file);
   form.append("title", title ?? file.name);
+  if (options?.description !== undefined) form.append("description", options.description);
+  if (options?.aiTutorCourseId) form.append("aiTutorCourseId", options.aiTutorCourseId);
+  if (options?.tags?.length) {
+    const tagIds = await resolveOrCreateTagIds(options.tags);
+    if (tagIds.length) form.append("tags", tagIds.join(","));
+  }
   const res = await fetch("/api/asset", {
     method: "POST",
     body: form,
