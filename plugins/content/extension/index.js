@@ -622,3 +622,13 @@ initialize();
  */
 
 exports = module.exports = Extension;
+// Additive export, no behaviour change - lets Samaritan's ENABLE_PLUGIN/
+// DISABLE_PLUGIN actions (plugins/services/samaritan, synced from
+// adapt-authoring-plugins) call the same real logic the /api/extension/
+// enable|disable routes already use, instead of a loopback HTTP call or a
+// reimplementation of course _globals/component-property toggling.
+// This file is native to adapt_authoring (not synced from another repo),
+// so unlike the Samaritan plugin itself, this line only survives npm
+// install's plugins/ wipe-and-restore if it is committed here.
+exports.enableExtensions = enableExtensions;
+exports.disableExtensions = disableExtensions;
