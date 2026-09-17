@@ -222,7 +222,7 @@ function AssetPreviewMedia({ asset, onImageMeasure }: { asset: Asset; onImageMea
       <img
         src={serveUrl}
         alt={asset.title}
-        className="max-h-[300px] w-full rounded-xl object-contain"
+        className="max-h-[220px] w-full rounded-xl object-contain"
         onLoad={(event) => {
           const image = event.currentTarget;
           onImageMeasure?.({ width: image.naturalWidth, height: image.naturalHeight });
@@ -233,7 +233,7 @@ function AssetPreviewMedia({ asset, onImageMeasure }: { asset: Asset; onImageMea
 
   if (asset.format === "video") {
     return (
-      <video preload="metadata" controls className="max-h-[300px] w-full rounded-xl bg-[#0f172a] object-contain">
+      <video preload="metadata" controls className="max-h-[220px] w-full rounded-xl bg-[#0f172a] object-contain">
         <source src={serveUrl} type={asset.mimeType} />
       </video>
     );
@@ -241,7 +241,7 @@ function AssetPreviewMedia({ asset, onImageMeasure }: { asset: Asset; onImageMea
 
   if (asset.format === "audio") {
     return (
-      <div className="flex min-h-[220px] flex-col items-center justify-center gap-5 rounded-[20px] border border-[#dbe7f3] bg-[linear-gradient(180deg,#f8fbff_0%,#edf4fb_100%)] px-6 py-8 text-center">
+      <div className="flex min-h-[160px] flex-col items-center justify-center gap-4 rounded-[20px] border border-[#dbe7f3] bg-[linear-gradient(180deg,#f8fbff_0%,#edf4fb_100%)] px-6 py-6 text-center">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-[#2d6fa8] shadow-sm">
           <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
@@ -253,7 +253,7 @@ function AssetPreviewMedia({ asset, onImageMeasure }: { asset: Asset; onImageMea
   }
 
   return (
-    <div className="flex min-h-[220px] flex-col items-center justify-center gap-4 rounded-[20px] border border-dashed border-[#cbd5e1] bg-[#f8fafc] px-6 py-8 text-center">
+    <div className="flex min-h-[160px] flex-col items-center justify-center gap-4 rounded-[20px] border border-dashed border-[#cbd5e1] bg-[#f8fafc] px-6 py-6 text-center">
       <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-[#64748b] shadow-sm">
         <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
@@ -326,81 +326,91 @@ function AssetPreviewPanel({
   }
 
   return (
-    <aside className="xl:sticky xl:top-0 xl:self-start">
-      <div className="overflow-hidden rounded-[24px] border border-[#e5edf5] bg-white shadow-[0_16px_40px_rgba(15,23,42,0.08)]">
+    <aside className="xl:sticky xl:top-0 xl:self-start xl:h-[calc(100vh-10rem)]">
+      <div className="flex h-full flex-col overflow-hidden rounded-[24px] border border-[#e5edf5] bg-white shadow-[0_16px_40px_rgba(15,23,42,0.08)]">
         <div className="border-b border-[#edf2f7] bg-[linear-gradient(135deg,#f6fbff_0%,#eef5fb_100%)] px-5 py-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#2d6fa8]">Asset Preview</p>
         </div>
 
-        <div className="space-y-5 p-5 text-center">
+        <div className="min-h-0 flex-1 overflow-y-auto space-y-6 p-5 text-center pb-10">
           <AssetPreviewMedia asset={asset} onImageMeasure={setImageDimensions} />
 
-          <div>
-            <h3 className="text-[28px] font-semibold leading-tight text-[#2d6fa8] break-words">{asset.title}</h3>
-            {asset.description && (
-              <p className="mt-3 text-sm leading-6 text-[#6b7280] break-words">{asset.description}</p>
-            )}
-          </div>
-
-          <div className="space-y-3 text-sm text-[#6b7280]">
+          <div className="space-y-4">
             <div>
-              <span className="font-medium text-[#111827]">Size:</span> {formatBytes(asset.size)}
+              <h3 className="text-[24px] font-semibold leading-tight text-[#2d6fa8] break-words">{asset.title}</h3>
+              {asset.description && (
+                <p className="mt-3 text-sm leading-6 text-[#6b7280] break-words">{asset.description}</p>
+              )}
             </div>
-            {duration && (
-              <div>
-                <span className="font-medium text-[#111827]">Duration:</span> {duration}
+
+            <div className="rounded-[18px] border border-[#e5edf5] bg-[#f8fbff] px-4 py-3 text-left">
+              <div className="grid gap-2 text-sm text-[#4b5563]">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="font-medium text-[#111827]">Size</span>
+                  <span>{formatBytes(asset.size)}</span>
+                </div>
+                {duration && (
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="font-medium text-[#111827]">Duration</span>
+                    <span>{duration}</span>
+                  </div>
+                )}
+                {width && height && (
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="font-medium text-[#111827]">Dimensions</span>
+                    <span>{width} x {height}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {asset.tags.length > 0 && (
+              <div className="flex flex-wrap justify-center gap-2">
+                {asset.tags.map((tag) => (
+                  <span key={tag} className="rounded-full bg-[#eef6fd] px-2.5 py-1 text-xs font-medium text-[#2d6fa8]">#{tag}</span>
+                ))}
               </div>
             )}
-            {width && height && (
-              <div>
-                <span className="font-medium text-[#111827]">Dimensions:</span> {width} x {height}
-              </div>
-            )}
+
+            <div className="pt-5 mb-5 border-t border-[#edf2f7]">
+              {pickerMode ? (
+                <div className="flex items-center justify-center gap-3 pb-2">
+                  <button
+                    type="button"
+                    onClick={onCancel}
+                    className="inline-flex items-center justify-center rounded-xl border border-[#d1d5db] bg-white px-4 py-2.5 text-sm font-medium text-[#374151] transition-colors hover:bg-[#f9fafb]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onConfirm?.(asset)}
+                    className="inline-flex items-center justify-center rounded-xl bg-[#2d6fa8] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#245c8f]"
+                  >
+                    Add
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center gap-3 pb-2">
+                  <button
+                    type="button"
+                    onClick={() => onEdit(asset)}
+                    className="inline-flex items-center justify-center rounded-xl bg-[#2d6fa8] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#245c8f]"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onDelete(asset)}
+                    className="inline-flex items-center justify-center rounded-xl bg-[#ff5c73] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#ef445c]"
+                  >
+                    Delete
+                  </button>
+                </div>
+              )}
+            </div>
+
           </div>
-
-          {asset.tags.length > 0 && (
-            <div className="flex flex-wrap justify-center gap-2">
-              {asset.tags.map((tag) => (
-                <span key={tag} className="rounded-full bg-[#eef6fd] px-2.5 py-1 text-xs font-medium text-[#2d6fa8]">#{tag}</span>
-              ))}
-            </div>
-          )}
-
-          {pickerMode ? (
-            <div className="flex items-center justify-center gap-2 pt-1">
-              <button
-                type="button"
-                onClick={onCancel}
-                className="inline-flex items-center justify-center rounded-xl border border-[#d1d5db] bg-white px-4 py-2.5 text-sm font-medium text-[#374151] transition-colors hover:bg-[#f9fafb]"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => onConfirm?.(asset)}
-                className="inline-flex items-center justify-center rounded-xl bg-[#2d6fa8] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#245c8f]"
-              >
-                Add
-              </button>
-            </div>
-          ) : (
-            <div className="flex items-center justify-center gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => onEdit(asset)}
-                className="inline-flex items-center justify-center rounded-xl bg-[#2d6fa8] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#245c8f]"
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                onClick={() => onDelete(asset)}
-                className="inline-flex items-center justify-center rounded-xl bg-[#ff5c73] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#ef445c]"
-              >
-                Delete
-              </button>
-            </div>
-          )}
         </div>
       </div>
     </aside>
