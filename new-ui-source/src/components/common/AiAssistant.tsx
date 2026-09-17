@@ -250,7 +250,13 @@ export default function AiAssistant({
     if (busy) return
     setMessages([{ role: 'ai', text: CLEARED_GREETING }])
     setInput('')
-    await aiTutorClearHistory()
+    // Best-effort: the chat is already reset client-side regardless of
+    // whether the server-side history clear succeeds.
+    try {
+      await aiTutorClearHistory()
+    } catch {
+      // ignore — nothing actionable for the user here
+    }
   }
 
   return (
@@ -385,7 +391,7 @@ export default function AiAssistant({
                 onKeyDown={handleKeyDown}
                 rows={1}
                 disabled={busy}
-                placeholder="Ask me anything about the authoring tool\u2026"
+                placeholder="Ask me anything about the authoring tool.."
                 className="flex-1 resize-none text-sm px-3 py-2.5 rounded-xl border border-[#e5e7eb] focus:outline-none focus:ring-2 focus:ring-[#6b4fa8] focus:border-transparent text-[#374151] placeholder-[#9ca3af] bg-[#fafafa] disabled:opacity-60"
               />
               <button

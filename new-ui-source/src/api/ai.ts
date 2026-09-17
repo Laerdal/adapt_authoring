@@ -86,32 +86,48 @@ export interface AiTutorContext {
 
 export interface AiTutorChatResponse {
   reply: string;
-  // Always empty here — the storyboard AI proxy (see below) doesn't supply
-  // citations. Kept on the response shape so the widget's rendering code
-  // doesn't need to change if a citation-capable backend is added later.
   citationBadges: CitationBadge[];
 }
 
-// NOTE: the full-parity "AI Tutor" server (routes under /api/ai-tutor/*,
-// `plugins/services/ai-tutor` + the legacy `frontend/src/plugins/ai-tutor`)
-// is not part of this deployment — it isn't registered by any plugin in this
-// repo/branch, so every call against it 404s. The only AI route actually
-// registered here is the storyboard proxy this file already talks to
-// (`plugins/content/storyboard/routes/index.js`, POST /api/storyboard/ai
-// → handleAi). Route the widget through that instead of a service that isn't
-// deployed.
+// Envelope every route in plugins/services/ai-tutor responds with (see
+// utils/sendResponse.js: `sendSuccess` → `{ success, data }`, `sendError` →
+// `{ success: false, error }`).
+interface AiTutorEnvelope<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
+
+// The full-parity "AI Tutor" service (Azure OpenAI + retrieval + citations +
+// server-side conversation history — see `plugins/services/ai-tutor`) IS
+// registered and running (`rest.post('/ai-tutor/chat', handleChat)` in
+// `plugins/services/ai-tutor/routes/index.js`) — it's just untracked by git
+// in this branch, which is not the same as "not deployed". The legacy
+// authoring tool widget (`frontend/src/plugins/ai-tutor/views/chatPanelView.js`)
+// already talks to it directly at POST /api/ai-tutor/chat with
+// `{ message, context }` and reads `resp.data.reply` / `resp.data.citationBadges`.
+// This widget must hit the same route with the same shape so both surfaces
+// share one Samaritan brain — routing through the storyboard text-rewrite
+// proxy instead (as a previous fix mistakenly did) skips the retrieval/
+// grounding/history behind /api/ai-tutor/chat, which is why Studio's replies
+// diverged from the Authoring Tool's.
 export async function aiTutorChat(
   message: string,
   context?: AiTutorContext
 ): Promise<AiTutorChatResponse> {
-  const reply = await storyboardAi("suggest", message, context ? JSON.stringify(context) : undefined);
-  return { reply, citationBadges: [] };
+  const res = await apiClient.post<AiTutorEnvelope<AiTutorChatResponse>>("/api/ai-tutor/chat", {
+    message,
+    context,
+  });
+  if (!res.success || !res.data) {
+    throw new Error(res.error || "AI Tutor request failed.");
+  }
+  return { reply: res.data.reply ?? "", citationBadges: res.data.citationBadges ?? [] };
 }
 
-// The storyboard AI proxy is stateless — it has no server-side conversation
-// memory to clear, so there is nothing to fail here (previously this called
-// a non-existent /api/ai-tutor/history/clear and swallowed the resulting
-// 404, which let the widget claim "Conversation cleared" while the
-// (nonexistent) server session was untouched). "New chat" is purely a
-// client-side reset; kept async for call-site compatibility.
-export async function aiTutorClearHistory(): Promise<void> {}
+// Clears this session's server-side conversation history so the next message
+// starts a fresh context (see `handleClearHistory` / `utils/sessionHistory.js`
+// in plugins/services/ai-tutor) — same route the legacy widget calls.
+export async function aiTutorClearHistory(): Promise<void> {
+  await apiClient.post<AiTutorEnvelope<unknown>>("/api/ai-tutor/history/clear");
+}
