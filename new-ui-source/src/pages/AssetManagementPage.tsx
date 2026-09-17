@@ -89,6 +89,11 @@ interface EditModalState {
   replaceFile: File | null;
 }
 
+interface AssetPreviewDimensions {
+  width?: number;
+  height?: number;
+}
+
 // Accepted MIME types grouped by format
 const ACCEPTED_MIME: Record<AssetFormat, string[]> = {
   image: ["image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml"],
@@ -133,6 +138,36 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function normalizeDimension(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return undefined;
+}
+
+function formatDuration(value: unknown): string | null {
+  const seconds = typeof value === "number"
+    ? value > 1000 ? value / 1000 : value
+    : typeof value === "string"
+      ? Number(value)
+      : NaN;
+
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+
+  const totalSeconds = Math.round(seconds);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainingSeconds = totalSeconds % 60;
+
+  if (hours > 0) {
+    return [hours, minutes, remainingSeconds].map((part, index) => index === 0 ? String(part) : String(part).padStart(2, "0")).join(":");
+  }
+
+  return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
+}
+
 function validateUploadForm(title: string, description: string): UploadFormErrors {
   const errors: UploadFormErrors = {};
   if (!title.trim()) errors.title = "Title is required.";
@@ -173,24 +208,218 @@ interface AssetItemProps {
   asset: Asset;
   onEdit?: (asset: Asset) => void;
   onDelete?: (asset: Asset) => void;
-  selectable?: boolean;
-  onSelect?: (asset: Asset) => void;
+  clickable?: boolean;
+  onActivate?: (asset: Asset) => void;
   hideActions?: boolean;
+  selected?: boolean;
 }
 
-const AssetCardItem = memo(function AssetCardItem({ asset, onEdit, onDelete, selectable = false, onSelect, hideActions = false }: AssetItemProps) {
+function AssetPreviewMedia({ asset, onImageMeasure }: { asset: Asset; onImageMeasure?: (dimensions: AssetPreviewDimensions) => void }) {
+  const serveUrl = `/api/asset/serve/${asset.backendId}`;
+
+  if (asset.format === "image") {
+    return (
+      <img
+        src={serveUrl}
+        alt={asset.title}
+        className="max-h-[300px] w-full rounded-xl object-contain"
+        onLoad={(event) => {
+          const image = event.currentTarget;
+          onImageMeasure?.({ width: image.naturalWidth, height: image.naturalHeight });
+        }}
+      />
+    );
+  }
+
+  if (asset.format === "video") {
+    return (
+      <video preload="metadata" controls className="max-h-[300px] w-full rounded-xl bg-[#0f172a] object-contain">
+        <source src={serveUrl} type={asset.mimeType} />
+      </video>
+    );
+  }
+
+  if (asset.format === "audio") {
+    return (
+      <div className="flex min-h-[220px] flex-col items-center justify-center gap-5 rounded-[20px] border border-[#dbe7f3] bg-[linear-gradient(180deg,#f8fbff_0%,#edf4fb_100%)] px-6 py-8 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-[#2d6fa8] shadow-sm">
+          <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+          </svg>
+        </div>
+        <audio src={serveUrl} controls className="w-full" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-[220px] flex-col items-center justify-center gap-4 rounded-[20px] border border-dashed border-[#cbd5e1] bg-[#f8fafc] px-6 py-8 text-center">
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-[#64748b] shadow-sm">
+        <svg width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+        </svg>
+      </div>
+      <p className="text-sm text-[#64748b]">Preview is not available for this file type.</p>
+    </div>
+  );
+}
+
+function AssetPreviewPanel({
+  asset,
+  pickerMode = false,
+  onEdit,
+  onDelete,
+  onConfirm,
+  onCancel,
+}: {
+  asset: Asset | null;
+  pickerMode?: boolean;
+  onEdit: (asset: Asset) => void;
+  onDelete: (asset: Asset) => void;
+  onConfirm?: (asset: Asset) => void;
+  onCancel?: () => void;
+}) {
+  const [imageDimensions, setImageDimensions] = useState<AssetPreviewDimensions>({});
+
+  useEffect(() => {
+    setImageDimensions({});
+  }, [asset?.backendId]);
+
+  const metadataWidth = normalizeDimension(asset?.metadata?.width);
+  const metadataHeight = normalizeDimension(asset?.metadata?.height);
+  const width = metadataWidth ?? imageDimensions.width;
+  const height = metadataHeight ?? imageDimensions.height;
+  const duration = formatDuration(asset?.metadata?.duration);
+
+  if (!asset) {
+    return (
+      <aside className="xl:sticky xl:top-0 xl:self-start">
+        <div className="rounded-[24px] border border-[#e5edf5] bg-white/90 p-6 text-center shadow-[0_16px_40px_rgba(15,23,42,0.06)] backdrop-blur">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#eef6fd] text-[#2d6fa8]">
+            <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <h2 className="mt-4 text-sm font-semibold uppercase tracking-[0.18em] text-[#2d6fa8]">Preview</h2>
+          <p className="mt-3 text-sm leading-6 text-[#6b7280]">Select an asset to preview it here with file details and dimensions.</p>
+          {pickerMode && (
+            <div className="mt-5 flex items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={onCancel}
+                className="inline-flex items-center justify-center rounded-xl border border-[#d1d5db] bg-white px-4 py-2.5 text-sm font-medium text-[#374151] transition-colors hover:bg-[#f9fafb]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled
+                className="inline-flex items-center justify-center rounded-xl bg-[#2d6fa8] px-4 py-2.5 text-sm font-semibold text-white opacity-40"
+              >
+                Add
+              </button>
+            </div>
+          )}
+        </div>
+      </aside>
+    );
+  }
+
+  return (
+    <aside className="xl:sticky xl:top-0 xl:self-start">
+      <div className="overflow-hidden rounded-[24px] border border-[#e5edf5] bg-white shadow-[0_16px_40px_rgba(15,23,42,0.08)]">
+        <div className="border-b border-[#edf2f7] bg-[linear-gradient(135deg,#f6fbff_0%,#eef5fb_100%)] px-5 py-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#2d6fa8]">Asset Preview</p>
+        </div>
+
+        <div className="space-y-5 p-5 text-center">
+          <AssetPreviewMedia asset={asset} onImageMeasure={setImageDimensions} />
+
+          <div>
+            <h3 className="text-[28px] font-semibold leading-tight text-[#2d6fa8] break-words">{asset.title}</h3>
+            {asset.description && (
+              <p className="mt-3 text-sm leading-6 text-[#6b7280] break-words">{asset.description}</p>
+            )}
+          </div>
+
+          <div className="space-y-3 text-sm text-[#6b7280]">
+            <div>
+              <span className="font-medium text-[#111827]">Size:</span> {formatBytes(asset.size)}
+            </div>
+            {duration && (
+              <div>
+                <span className="font-medium text-[#111827]">Duration:</span> {duration}
+              </div>
+            )}
+            {width && height && (
+              <div>
+                <span className="font-medium text-[#111827]">Dimensions:</span> {width} x {height}
+              </div>
+            )}
+          </div>
+
+          {asset.tags.length > 0 && (
+            <div className="flex flex-wrap justify-center gap-2">
+              {asset.tags.map((tag) => (
+                <span key={tag} className="rounded-full bg-[#eef6fd] px-2.5 py-1 text-xs font-medium text-[#2d6fa8]">#{tag}</span>
+              ))}
+            </div>
+          )}
+
+          {pickerMode ? (
+            <div className="flex items-center justify-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={onCancel}
+                className="inline-flex items-center justify-center rounded-xl border border-[#d1d5db] bg-white px-4 py-2.5 text-sm font-medium text-[#374151] transition-colors hover:bg-[#f9fafb]"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => onConfirm?.(asset)}
+                className="inline-flex items-center justify-center rounded-xl bg-[#2d6fa8] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#245c8f]"
+              >
+                Add
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => onEdit(asset)}
+                className="inline-flex items-center justify-center rounded-xl bg-[#2d6fa8] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#245c8f]"
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => onDelete(asset)}
+                className="inline-flex items-center justify-center rounded-xl bg-[#ff5c73] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#ef445c]"
+              >
+                Delete
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+const AssetCardItem = memo(function AssetCardItem({ asset, onEdit, onDelete, clickable = false, onActivate, hideActions = false, selected = false }: AssetItemProps) {
   return (
     <div
-      role={selectable ? "button" : undefined}
-      tabIndex={selectable ? 0 : undefined}
-      onClick={selectable ? () => onSelect?.(asset) : undefined}
-      onKeyDown={selectable ? (e) => {
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onClick={clickable ? () => onActivate?.(asset) : undefined}
+      onKeyDown={clickable ? (e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          onSelect?.(asset);
+          onActivate?.(asset);
         }
       } : undefined}
-      className={`bg-white border border-[#e5e7eb] rounded-xl overflow-hidden transition-shadow flex flex-col group ${selectable ? "cursor-pointer hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:ring-offset-2" : "hover:shadow-md"}`}
+      className={`rounded-xl overflow-hidden transition-all flex flex-col group border ${selected ? "border-[#2d6fa8] shadow-[0_12px_28px_rgba(45,111,168,0.22)] ring-2 ring-[#dbeeff]" : "border-[#e5e7eb]"} bg-white ${clickable ? "cursor-pointer hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:ring-offset-2" : "hover:shadow-md"}`}
     >
       {/* Thumbnail */}
       <div className={`h-32 ${THUMBNAIL_COLORS[asset.format]} flex items-center justify-center`}>
@@ -240,7 +469,7 @@ const AssetCardItem = memo(function AssetCardItem({ asset, onEdit, onDelete, sel
       <div className="px-4 py-3 border-t border-[#f3f4f6] flex items-center gap-2">
         <button
           type="button"
-          onClick={() => onEdit(asset)}
+          onClick={(event) => { event.stopPropagation(); onEdit(asset); }}
           className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#374151] border border-[#e5e7eb] rounded-lg hover:bg-[#f9fafb] transition-colors"
         >
           <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -251,7 +480,7 @@ const AssetCardItem = memo(function AssetCardItem({ asset, onEdit, onDelete, sel
         </button>
         <button
           type="button"
-          onClick={() => onDelete(asset)}
+          onClick={(event) => { event.stopPropagation(); onDelete(asset); }}
           className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#ef4444] border border-[#fecaca] rounded-lg hover:bg-[#fef2f2] transition-colors"
         >
           <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -267,19 +496,19 @@ const AssetCardItem = memo(function AssetCardItem({ asset, onEdit, onDelete, sel
   );
 });
 
-const AssetListItem = memo(function AssetListItem({ asset, onEdit, onDelete, selectable = false, onSelect, hideActions = false }: AssetItemProps) {
+const AssetListItem = memo(function AssetListItem({ asset, onEdit, onDelete, clickable = false, onActivate, hideActions = false, selected = false }: AssetItemProps) {
   return (
     <tr
-      role={selectable ? "button" : undefined}
-      tabIndex={selectable ? 0 : undefined}
-      onClick={selectable ? () => onSelect?.(asset) : undefined}
-      onKeyDown={selectable ? (e) => {
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onClick={clickable ? () => onActivate?.(asset) : undefined}
+      onKeyDown={clickable ? (e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          onSelect?.(asset);
+          onActivate?.(asset);
         }
       } : undefined}
-      className={`border-b border-[#f3f4f6] transition-colors group/row ${selectable ? "cursor-pointer hover:bg-[#eff6ff] focus:outline-none focus:bg-[#eff6ff]" : "hover:bg-[#fafafa]"}`}
+      className={`border-b border-[#f3f4f6] transition-colors group/row ${selected ? "bg-[#eef6fd]" : ""} ${clickable ? "cursor-pointer hover:bg-[#eff6ff] focus:outline-none focus:bg-[#eff6ff]" : "hover:bg-[#fafafa]"}`}
     >
       {/* Icon + Title */}
       <td className="px-4 py-3">
@@ -323,7 +552,7 @@ const AssetListItem = memo(function AssetListItem({ asset, onEdit, onDelete, sel
         <div className="flex items-center justify-end gap-1">
           <button
             type="button"
-            onClick={() => onEdit(asset)}
+            onClick={(event) => { event.stopPropagation(); onEdit(asset); }}
             title="Edit asset"
             className="p-1.5 rounded-lg text-[#9ca3af] hover:text-[#2d6fa8] hover:bg-[#dbeeff] transition-colors"
           >
@@ -334,7 +563,7 @@ const AssetListItem = memo(function AssetListItem({ asset, onEdit, onDelete, sel
           </button>
           <button
             type="button"
-            onClick={() => onDelete(asset)}
+            onClick={(event) => { event.stopPropagation(); onDelete(asset); }}
             title="Delete asset"
             className="p-1.5 rounded-lg text-[#9ca3af] hover:text-[#ef4444] hover:bg-[#fef2f2] transition-colors"
           >
@@ -378,6 +607,7 @@ export function AssetManagementWorkspace({
   const [tagFilterOpen, setTagFilterOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagSearch, setTagSearch]       = useState("");
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
 
   const [uploadOpen, setUploadOpen]     = useState(false);
   const [upload, setUpload]             = useState<UploadState>(EMPTY_UPLOAD);
@@ -465,6 +695,17 @@ export function AssetManagementWorkspace({
     });
   }, [assets, deferredSearch, effectiveFormatFilter, selectedTags]);
 
+  const selectedAsset = useMemo(
+    () => filtered.find((asset) => asset.backendId === selectedAssetId) ?? null,
+    [filtered, selectedAssetId],
+  );
+
+  useEffect(() => {
+    if (pickerMode || !selectedAssetId) return;
+    if (filtered.some((asset) => asset.backendId === selectedAssetId)) return;
+    setSelectedAssetId(null);
+  }, [filtered, pickerMode, selectedAssetId]);
+
   useEffect(() => {
     if (!fixedPickerFormat) return;
     setFormatFilter(fixedPickerFormat);
@@ -489,6 +730,14 @@ export function AssetManagementWorkspace({
     if (!result) return;
     onPickAsset?.(result);
   }, [onPickAsset]);
+
+  const handleAssetActivate = useCallback((asset: Asset) => {
+    setSelectedAssetId(asset.backendId);
+  }, []);
+
+  const handleConfirmPickerSelection = useCallback((asset: Asset) => {
+    handlePickSelection(asset);
+  }, [handlePickSelection]);
 
   const clearTags = useCallback(() => {
     setSelectedTags([]);
@@ -612,6 +861,9 @@ export function AssetManagementWorkspace({
     const target = deleteTarget;
     setDeleteTarget(null);
     if (!target?.backendId) return;
+    if (selectedAssetId === target.backendId) {
+      setSelectedAssetId(null);
+    }
     setAssets((prev) => prev.filter((a) => a.id !== target.id));
     try {
       await trashAsset(target.backendId);
@@ -645,15 +897,7 @@ export function AssetManagementWorkspace({
           <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">{pickerMode ? (pickerTitle || "Select Asset") : "Asset Management"}</h1>
           <p className="text-sm text-[#6b7280] mt-1">{pickerMode ? (pickerDescription || "Choose an asset to continue.") : "Upload, organize, and manage your course assets."}</p>
         </div>
-        {pickerMode ? (
-          <button
-            type="button"
-            onClick={onCancelPick}
-            className="shrink-0 flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[#374151] bg-white border border-[#d1d5db] hover:bg-[#f9fafb] rounded-lg transition-colors"
-          >
-            Cancel
-          </button>
-        ) : (
+        {pickerMode ? null : (
           <button
             type="button"
             onClick={() => { setUpload(EMPTY_UPLOAD); setUploadOpen(true); }}
@@ -866,6 +1110,8 @@ export function AssetManagementWorkspace({
 
       {/* ── Content ── */}
       <div className="flex-1 px-6 md:px-8 pb-6 overflow-y-auto">
+        <div className={`grid items-start gap-6 ${pickerMode ? "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px]" : "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px]"}`}>
+          <div className="min-w-0">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <div className="w-16 h-16 rounded-2xl bg-[#f3f4f6] flex items-center justify-center mb-4">
@@ -877,8 +1123,8 @@ export function AssetManagementWorkspace({
             <p className="text-xs text-[#9ca3af] mt-1">Try adjusting your search or filter, or upload a new asset.</p>
           </div>
         ) : view === "grid" ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filtered.map((a) => <AssetCardItem key={a.id} asset={a} onEdit={handleEditAsset} onDelete={handleDeleteAsset} selectable={pickerMode} onSelect={handlePickSelection} hideActions={hideActions} />)}
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-4">
+            {filtered.map((a) => <AssetCardItem key={a.id} asset={a} onEdit={handleEditAsset} onDelete={handleDeleteAsset} clickable onActivate={handleAssetActivate} hideActions={hideActions} selected={selectedAssetId === a.backendId} />)}
           </div>
         ) : (
           <div className="rounded-xl border border-[#e5e7eb] overflow-hidden bg-white">
@@ -896,11 +1142,22 @@ export function AssetManagementWorkspace({
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((a) => <AssetListItem key={a.id} asset={a} onEdit={handleEditAsset} onDelete={handleDeleteAsset} selectable={pickerMode} onSelect={handlePickSelection} hideActions={hideActions} />)}
+                {filtered.map((a) => <AssetListItem key={a.id} asset={a} onEdit={handleEditAsset} onDelete={handleDeleteAsset} clickable onActivate={handleAssetActivate} hideActions={hideActions} selected={selectedAssetId === a.backendId} />)}
               </tbody>
             </table>
           </div>
         )}
+          </div>
+
+          <AssetPreviewPanel
+            asset={selectedAsset}
+            pickerMode={pickerMode}
+            onEdit={handleEditAsset}
+            onDelete={handleDeleteAsset}
+            onConfirm={handleConfirmPickerSelection}
+            onCancel={onCancelPick}
+          />
+        </div>
       </div>
 
       {!hideAssistant ? <AiAssistant context="Asset Management" /> : null}

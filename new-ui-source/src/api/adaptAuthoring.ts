@@ -4748,6 +4748,11 @@ export interface DashboardAsset {
   filename?: string;
   path?: string;
   mimeType?: string;
+  metadata?: {
+    width?: number;
+    height?: number;
+    duration?: number | string;
+  };
 }
 
 interface EngineAsset {
@@ -4761,6 +4766,11 @@ interface EngineAsset {
   assetType?: string;
   tags?: Array<string | { title?: string }>;
   createdAt?: string;
+  metadata?: {
+    width?: number;
+    height?: number;
+    duration?: number | string;
+  };
 }
 
 export async function getAssets(): Promise<DashboardAsset[]> {
@@ -4787,6 +4797,7 @@ export async function getAssets(): Promise<DashboardAsset[]> {
       filename: a.filename,
       path: a.path,
       mimeType: a.mimeType,
+      metadata: a.metadata,
     };
   });
 }
