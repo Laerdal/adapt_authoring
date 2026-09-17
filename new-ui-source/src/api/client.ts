@@ -35,7 +35,10 @@ class ApiClient {
         // Session expired/dropped → bounce to the engine login, like the old UI.
         if (response.status === 401) window.location.assign("/");
         const error = await response.json().catch(() => ({ message: response.statusText }));
-        const err = new Error(error.message || error.statusCode || `HTTP ${response.status}`);
+        // Some services (e.g. plugins/services/ai-tutor) respond with a
+        // `{ success: false, error }` envelope instead of `{ message }` — fall
+        // back to that field too so callers see the server's real error text.
+        const err = new Error(error.message || error.error || error.statusCode || `HTTP ${response.status}`);
         (err as Error & { status?: number }).status = response.status;
         throw err;
       }

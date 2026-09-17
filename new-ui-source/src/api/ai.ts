@@ -129,5 +129,11 @@ export async function aiTutorChat(
 // starts a fresh context (see `handleClearHistory` / `utils/sessionHistory.js`
 // in plugins/services/ai-tutor) — same route the legacy widget calls.
 export async function aiTutorClearHistory(): Promise<void> {
-  await apiClient.post<AiTutorEnvelope<unknown>>("/api/ai-tutor/history/clear");
+  const res = await apiClient.post<AiTutorEnvelope<unknown>>("/api/ai-tutor/history/clear");
+  if (!res.success) {
+    // A 200 with `{ success: false, error }` must still fail loudly — otherwise
+    // the caller (and the UI) would report the conversation as cleared while
+    // server-side history is untouched.
+    throw new Error(res.error || "Failed to clear AI Tutor history.");
+  }
 }
