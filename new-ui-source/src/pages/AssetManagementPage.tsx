@@ -437,7 +437,7 @@ function AssetPreviewPanel({
   );
 }
 
-const AssetCardItem = memo(function AssetCardItem({ asset, onEdit, onDelete, clickable = false, onActivate, hideActions = false, selected = false }: AssetItemProps) {
+const AssetCardItem = memo(function AssetCardItem({ asset, clickable = false, onActivate, selected = false }: AssetItemProps) {
   return (
     <div
       role={clickable ? "button" : undefined}
@@ -493,35 +493,6 @@ const AssetCardItem = memo(function AssetCardItem({ asset, onEdit, onDelete, cli
           </div>
         )}
       </div>
-
-      {/* Actions */}
-      {!hideActions && onEdit && onDelete ? (
-      <div className="px-4 py-3 border-t border-[#f3f4f6] flex items-center gap-2">
-        <button
-          type="button"
-          onClick={(event) => { event.stopPropagation(); onEdit(asset); }}
-          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#374151] border border-[#e5e7eb] rounded-lg hover:bg-[#f9fafb] transition-colors"
-        >
-          <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-            <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-          </svg>
-          Edit
-        </button>
-        <button
-          type="button"
-          onClick={(event) => { event.stopPropagation(); onDelete(asset); }}
-          className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-[#ef4444] border border-[#fecaca] rounded-lg hover:bg-[#fef2f2] transition-colors"
-        >
-          <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="3 6 5 6 21 6" />
-            <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-            <path d="M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
-          </svg>
-          Delete
-        </button>
-      </div>
-      ) : null}
     </div>
   );
 });
