@@ -4795,6 +4795,7 @@ interface EngineAsset {
   size?: number;
   mimeType?: string;
   assetType?: string;
+  _isDeleted?: boolean;
   tags?: Array<string | { title?: string }>;
   createdAt?: string;
   metadata?: {
@@ -4805,8 +4806,11 @@ interface EngineAsset {
 }
 
 export async function getAssets(): Promise<DashboardAsset[]> {
-  const res = await apiClient.get<EngineAsset[] | { assets?: EngineAsset[] }>("/api/asset/query?search[_isDeleted]=false");
-  const docs = (Array.isArray(res) ? res : res?.assets ?? []).slice().sort((left, right) => {
+  const res = await apiClient.get<EngineAsset[] | { assets?: EngineAsset[] }>("/api/asset/query");
+  const docs = (Array.isArray(res) ? res : res?.assets ?? [])
+    .filter((asset) => asset?._isDeleted !== true)
+    .slice()
+    .sort((left, right) => {
     const leftTs = left.createdAt ? new Date(left.createdAt).getTime() : 0;
     const rightTs = right.createdAt ? new Date(right.createdAt).getTime() : 0;
     return rightTs - leftTs;
