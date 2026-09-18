@@ -88,6 +88,7 @@ interface EditModalState {
   description: string;
   tags: string;
   replaceFile: File | null;
+  saveError: string | null;
 }
 
 interface AssetPreviewDimensions {
@@ -186,6 +187,14 @@ function getUploadErrorMessage(error: unknown): string {
   return "Asset upload failed. Please try again.";
 }
 
+function getEditErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    const message = error.message.trim();
+    if (message) return message;
+  }
+  return "Couldn't save asset changes. Please try again.";
+}
+
 const EMPTY_UPLOAD: UploadState = {
   step: "pick",
   file: null,
@@ -205,6 +214,7 @@ const EMPTY_EDIT = (a: Asset): EditModalState => ({
   description: a.description,
   tags: a.tags.join(", "),
   replaceFile: null,
+  saveError: null,
 });
 
 function formatBytes(raw: string) { return raw; }
@@ -852,34 +862,41 @@ export function AssetManagementWorkspace({
   async function saveEdit() {
     if (!editState?.asset || !editState.title.trim() || !editState.description.trim()) return;
 
+    const asset = editState.asset;
     const nextTitle = editState.title.trim();
     const nextDescription = editState.description.trim();
     const nextTags = editState.tags.split(",").map((t) => t.trim()).filter(Boolean);
 
-    await updateAsset(editState.asset.backendId, {
-      title: nextTitle,
-      description: nextDescription,
-      tags: nextTags,
-    });
+    setEditState((prev) => prev ? { ...prev, saveError: null } : prev);
 
-    setAssets((prev) => prev.map((a) =>
-      a.id === editState.asset!.id
-        ? {
-            ...a,
-            title: nextTitle,
-            description: nextDescription,
-            tags: nextTags,
-          }
-        : a
-    ));
-    setEditState(null);
+    try {
+      await updateAsset(asset.backendId, {
+        title: nextTitle,
+        description: nextDescription,
+        tags: nextTags,
+      });
+
+      setAssets((prev) => prev.map((a) =>
+        a.id === asset.id
+          ? {
+              ...a,
+              title: nextTitle,
+              description: nextDescription,
+              tags: nextTags,
+            }
+          : a
+      ));
+      setEditState(null);
+    } catch (error) {
+      setEditState((prev) => prev ? { ...prev, saveError: getEditErrorMessage(error) } : prev);
+    }
   }
 
   function handleEditDrop(e: React.DragEvent) {
     e.preventDefault();
     setEditDrag(false);
     const f = e.dataTransfer.files[0] ?? null;
-    if (f) setEditState((prev) => prev ? { ...prev, replaceFile: f } : prev);
+    if (f) setEditState((prev) => prev ? { ...prev, replaceFile: f, saveError: null } : prev);
   }
 
   // ── Delete ──────────────────────────────────────────────────────────────
@@ -1507,8 +1524,14 @@ export function AssetManagementWorkspace({
                     <p className="text-sm text-[#6b7280]">Drop a new file here or click to browse</p>
                   )}
                 </div>
-                <input ref={editFileRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0] ?? null; if (f) setEditState((p) => p ? { ...p, replaceFile: f } : p); }} />
+                <input ref={editFileRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0] ?? null; if (f) setEditState((p) => p ? { ...p, replaceFile: f, saveError: null } : p); }} />
               </div>
+
+              {editState.saveError && (
+                <div className="rounded-lg border border-[#fecaca] bg-[#fef2f2] px-3.5 py-3 text-sm text-[#b91c1c]">
+                  {editState.saveError}
+                </div>
+              )}
 
               {/* Title */}
               <div>
@@ -1518,7 +1541,7 @@ export function AssetManagementWorkspace({
                 <input
                   type="text"
                   value={editState.title}
-                  onChange={(e) => setEditState((p) => p ? { ...p, title: e.target.value } : p)}
+                  onChange={(e) => setEditState((p) => p ? { ...p, title: e.target.value, saveError: null } : p)}
                   placeholder="Asset title"
                   className="w-full px-3 py-2 text-sm border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent placeholder-[#9ca3af]"
                 />
@@ -1531,7 +1554,7 @@ export function AssetManagementWorkspace({
                 </label>
                 <textarea
                   value={editState.description}
-                  onChange={(e) => setEditState((p) => p ? { ...p, description: e.target.value } : p)}
+                  onChange={(e) => setEditState((p) => p ? { ...p, description: e.target.value, saveError: null } : p)}
                   placeholder="Describe this asset…"
                   rows={3}
                   aria-invalid={!editState.description.trim() ? "true" : "false"}
@@ -1552,7 +1575,7 @@ export function AssetManagementWorkspace({
                 <input
                   type="text"
                   value={editState.tags}
-                  onChange={(e) => setEditState((p) => p ? { ...p, tags: e.target.value } : p)}
+                  onChange={(e) => setEditState((p) => p ? { ...p, tags: e.target.value, saveError: null } : p)}
                   placeholder="tag1, tag2, tag3"
                   className="w-full px-3 py-2 text-sm border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent placeholder-[#9ca3af]"
                 />
