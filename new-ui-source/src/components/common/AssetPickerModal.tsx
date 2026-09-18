@@ -15,8 +15,10 @@ const KIND_TEXT: Record<AssetKind, { title: string; description: string }> = {
   h5p: { title: "Select an H5P File", description: "Choose an H5P package from Asset Management to continue." },
 };
 
-export default function AssetPickerModal({ onSelect, onClose, assetType = "image" }: AssetPickerModalProps) {
-  const text = KIND_TEXT[assetType];
+export default function AssetPickerModal({ onSelect, onClose, assetType }: AssetPickerModalProps) {
+  const text = assetType
+    ? KIND_TEXT[assetType]
+    : { title: "Select Asset", description: "Choose an asset from Asset Management to continue." };
 
   return (
     <div className="fixed inset-0 z-[90] bg-[#f8fafc]">
