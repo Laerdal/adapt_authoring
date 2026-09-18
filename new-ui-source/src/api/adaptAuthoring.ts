@@ -581,7 +581,20 @@ function scorePluginMatch(plugin: EnginePluginType, label: string, kind: "theme"
   if (!keywords.length) return 0;
 
   const hitCount = keywords.filter((k) => name.includes(k) || display.includes(k)).length;
-  return hitCount ? 70 + hitCount : 0;
+  if (!hitCount) return 0;
+
+  // A generic keyword (e.g. "life") matches BOTH a base plugin and its
+  // versioned variant (adapt-laerdal-life AND adapt-laerdal-life-v2) — without
+  // this, "LIFE Theme" could resolve to whichever variant happens to come
+  // first in the API's response order. Deprioritise a candidate carrying an
+  // unrequested "vN" suffix so the base plugin wins unless the label itself
+  // asked for that variant (e.g. a future "LIFE Theme v2" label).
+  const variantSuffix = /v\d+$/;
+  const candidateIsVariant = variantSuffix.test(name) || variantSuffix.test(display);
+  const targetIsVariant = variantSuffix.test(target);
+  const variantPenalty = candidateIsVariant && !targetIsVariant ? 5 : 0;
+
+  return 70 + hitCount - variantPenalty;
 }
 
 function resolvePluginId(options: EnginePluginType[], label: string, kind: "theme" | "menu"): string | null {
@@ -3566,6 +3579,24 @@ export function findAppliedPluginSchemaFields(
   if (!levelSchemas) return null;
   const match = Object.values(levelSchemas).find((entry) => entry?.name === appliedPluginName);
   return match?.properties ?? null;
+}
+
+// Same lookup as findAppliedPluginSchemaFields, but returns the schema's own
+// KEY (e.g. "_life-v2") rather than its fields — this is the real, engine-
+// authoritative `themeSettings`/`menuSettings` object key for the currently
+// applied theme/menu at this level, straight from the plugin's own
+// `targetAttribute` (server-stamped as this entry's `.name` match). Prefer
+// this over any hand-rolled name-substring heuristic (e.g. guessing "_life"
+// vs "_life-v2" from the theme's display name) - those heuristics can only
+// ever guess, and guessing wrong silently strands saved settings under a key
+// the real theme/old tool never reads.
+export function findAppliedPluginSchemaKey(
+  levelSchemas: Record<string, PluginSettingsFieldSchema> | undefined,
+  appliedPluginName: string
+): string | null {
+  if (!levelSchemas) return null;
+  const match = Object.entries(levelSchemas).find(([, entry]) => entry?.name === appliedPluginName);
+  return match?.[0] ?? null;
 }
 
 // Raw course-level `_extensions` (actual stored values, no schema defaults
