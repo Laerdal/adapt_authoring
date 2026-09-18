@@ -98,7 +98,7 @@ function Section({
 
 function CheckboxRow({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: React.ReactNode }) {
   return (
-    <label className="flex items-start gap-3 py-1 cursor-pointer group">
+    <label className="relative flex items-start gap-3 py-1 cursor-pointer group">
       <input
         type="checkbox"
         checked={checked}
@@ -697,7 +697,7 @@ export function CdnDeploymentPage({
                   </svg>
                 }
               >
-                <label className="flex items-start gap-3 cursor-pointer group">
+                <label className="relative flex items-start gap-3 cursor-pointer group">
                   <input
                     type="checkbox"
                     checked={includeExport}
