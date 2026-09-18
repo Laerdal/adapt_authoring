@@ -95,6 +95,12 @@ function newResource(): LearningResource {
   };
 }
 
+function learningResourcePickerType(format: ResourceFormat): import("../../types/assetPicker").AssetPickerType {
+  if (format === "document") return "other";
+  if (format === "media") return "media";
+  return "all";
+}
+
 /* small helpers */
 function LrToggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
   return (
@@ -339,6 +345,7 @@ function AddResourceDialog({
 
     {assetPickerOpen && (
       <AssetPickerModal
+        assetType={learningResourcePickerType(res.format)}
         onSelect={(asset) => {
           set("assetValue", asset.assetLink);
           setErrors((prev) => ({ ...prev, source: undefined }));
@@ -1837,6 +1844,7 @@ export function LearnerExperiencePanel({
 
       {assetPickerOpen && (
         <AssetPickerModal
+          assetType="other"
           onSelect={(asset) => {
             const name = asset.assetLink.split("/").pop() ?? asset.assetLink;
             setAtState((prev) => ({

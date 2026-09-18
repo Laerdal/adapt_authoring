@@ -554,6 +554,7 @@ export default function CourseCard({
       {/* ── ASSET PICKER MODAL ── */}
       {assetPickerOpen && (
         <AssetPickerModal
+          assetType="image"
           onSelect={handleAssetSelected}
           onClose={() => setAssetPickerOpen(false)}
         />

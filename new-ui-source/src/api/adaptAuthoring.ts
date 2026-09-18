@@ -208,10 +208,24 @@ export async function queryImages(search?: string): Promise<Asset[]> {
 }
 
 // Upload a file as a new asset. Returns the new asset's _id.
-export async function uploadAsset(file: File, title?: string): Promise<string> {
+export async function uploadAsset(
+  file: File,
+  title?: string,
+  options?: {
+    description?: string;
+    tags?: string[];
+    aiTutorCourseId?: string;
+  }
+): Promise<string> {
   const form = new FormData();
   form.append("file", file);
   form.append("title", title ?? file.name);
+  if (options?.description !== undefined) form.append("description", options.description);
+  if (options?.aiTutorCourseId) form.append("aiTutorCourseId", options.aiTutorCourseId);
+  if (options?.tags?.length) {
+    const tagIds = await resolveOrCreateTagIds(options.tags);
+    if (tagIds.length) form.append("tags", tagIds.join(","));
+  }
   const res = await fetch("/api/asset", {
     method: "POST",
     body: form,
@@ -4762,22 +4776,45 @@ export interface DashboardAsset {
   tags: string[];
   uploadedAt: string;
   thumbnail?: string;
+  filename?: string;
+  path?: string;
+  mimeType?: string;
+  metadata?: {
+    width?: number;
+    height?: number;
+    duration?: number | string;
+  };
 }
 
 interface EngineAsset {
   _id: string;
   title?: string;
+  filename?: string;
+  path?: string;
   description?: string;
   size?: number;
   mimeType?: string;
   assetType?: string;
+  _isDeleted?: boolean;
   tags?: Array<string | { title?: string }>;
   createdAt?: string;
+  metadata?: {
+    width?: number;
+    height?: number;
+    duration?: number | string;
+  };
 }
 
 export async function getAssets(): Promise<DashboardAsset[]> {
   const res = await apiClient.get<EngineAsset[] | { assets?: EngineAsset[] }>("/api/asset/query");
-  const docs = Array.isArray(res) ? res : res?.assets ?? [];
+  const docs = (Array.isArray(res) ? res : res?.assets ?? [])
+    .filter((asset) => asset?._isDeleted !== true)
+    .slice()
+    .sort((left, right) => {
+    const leftTs = left.createdAt ? new Date(left.createdAt).getTime() : 0;
+    const rightTs = right.createdAt ? new Date(right.createdAt).getTime() : 0;
+    return rightTs - leftTs;
+  });
   return docs.map((a, i) => {
     const format = coerceFormat(a.mimeType, a.assetType);
     return {
@@ -4792,12 +4829,33 @@ export async function getAssets(): Promise<DashboardAsset[]> {
         : [],
       uploadedAt: fmtDate(a.createdAt),
       thumbnail: format === "image" ? `/api/asset/serve/${a._id}` : undefined,
+      filename: a.filename,
+      path: a.path,
+      mimeType: a.mimeType,
+      metadata: a.metadata,
     };
   });
 }
 
 export function trashAsset(backendId: string): Promise<unknown> {
   return apiClient.put(`/api/asset/trash/${backendId}`);
+}
+
+export async function updateAsset(
+  backendId: string,
+  patch: {
+    title?: string;
+    description?: string;
+    tags?: string[];
+  }
+): Promise<unknown> {
+  const updateData: Record<string, unknown> = { _id: backendId };
+  if (patch.title !== undefined) updateData.title = patch.title;
+  if (patch.description !== undefined) updateData.description = patch.description;
+  if (patch.tags !== undefined) {
+    updateData.tags = (await resolveOrCreateTagIds(patch.tags)).map((id) => ({ _id: id }));
+  }
+  return apiClient.put(`/api/asset/${backendId}`, updateData);
 }
 
 // ── Plugins (all bower-backed plugin types) ───────────────────────────────────

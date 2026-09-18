@@ -55,6 +55,7 @@ import {
   seedDefaultModule,
   seedDefaultSection,
   seedDefaultTopic,
+  type AssetKind,
   type ComponentTypeOption,
   type DashboardTemplate,
   type ExtensionFieldSchema,
@@ -226,8 +227,8 @@ type TopicAssetTarget =
   | { scope: "contentGroupBackground"; articleId: string; blockId: string; bp: BreakpointKey }
   | { scope: "contentGroupHeaderBackground"; articleId: string; blockId: string; bp: BreakpointKey }
   | { scope: "componentBackground"; articleId: string; blockId: string; componentId: string; bp: BreakpointKey }
-  | { scope: "componentProperty"; articleId: string; blockId: string; componentId: string; path: string }
-  | { scope: "extensionProperty"; level: "topic" | "section" | "contentGroup" | "component"; articleId?: string; blockId?: string; componentId?: string; extensionKey: string; path: string }
+  | { scope: "componentProperty"; articleId: string; blockId: string; componentId: string; path: string; assetType?: AssetKind }
+  | { scope: "extensionProperty"; level: "topic" | "section" | "contentGroup" | "component"; articleId?: string; blockId?: string; componentId?: string; extensionKey: string; path: string; assetType?: AssetKind }
   | { scope: "themeHeaderGraphic" }
   | { scope: "themeHeaderBackground"; bp: BreakpointKey }
   | { scope: "menuGraphic" }
@@ -662,10 +663,47 @@ type BehaviourAssetContext = {
   blockId?: string;
   componentId?: string;
   resolveAssetPreviewUrl: (value: string) => string | null;
-  onPickAsset: (path: string, extensionKey?: string) => void;
+  onPickAsset: (path: string, assetType?: AssetKind, extensionKey?: string) => void;
   onPickExternal: (path: string, currentValue: string, extensionKey?: string) => void;
   onClear: (path: string, extensionKey?: string) => void;
 };
+
+function getBehaviourAssetType(fieldName: string, fieldSchema: BehaviourFieldSchema): AssetKind | undefined {
+  const inputType = typeof fieldSchema.inputType === "string" ? fieldSchema.inputType.toLowerCase() : "";
+  const suffix = inputType.startsWith("asset")
+    ? inputType.replace(/^asset:?/, "").trim()
+    : "";
+
+  if (suffix === "image" || suffix === "audio" || suffix === "video" || suffix === "h5p") {
+    return suffix;
+  }
+
+  const normalizedField = fieldName.toLowerCase();
+  if (normalizedField === "poster" || normalizedField.includes("image") || normalizedField.includes("graphic") || normalizedField.includes("background")) {
+    return "image";
+  }
+  if (["mp4", "webm"].includes(normalizedField) || normalizedField.includes("video")) {
+    return "video";
+  }
+  if (["mp3", "ogg"].includes(normalizedField) || normalizedField.includes("audio")) {
+    return "audio";
+  }
+  if (normalizedField.includes("h5p")) {
+    return "h5p";
+  }
+
+  return undefined;
+}
+
+function resolveTopicAssetPickerType(target: TopicAssetTarget): AssetKind | undefined {
+  switch (target.scope) {
+    case "componentProperty":
+    case "extensionProperty":
+      return target.assetType ?? "image";
+    default:
+      return "image";
+  }
+}
 
 function truncateBehaviourItemTitle(value: string): string {
   const stripped = value.replace(/<[^>]*>/g, "").trim();
@@ -743,7 +781,7 @@ function BehaviourField({
             label={label}
             required={isRequired}
             value={asString(objectValue.src)}
-            onPickAsset={() => assetContext.onPickAsset(`${path}.src`)}
+            onPickAsset={() => assetContext.onPickAsset(`${path}.src`, getBehaviourAssetType(fieldName, fieldSchema))}
             onPickExternal={() => assetContext.onPickExternal(`${path}.src`, asString(objectValue.src))}
             onClear={() => assetContext.onClear(`${path}.src`)}
           />
@@ -914,7 +952,7 @@ function BehaviourField({
         label={label}
         required={isRequired}
         value={stringValue}
-        onPickAsset={() => assetContext.onPickAsset(path)}
+        onPickAsset={() => assetContext.onPickAsset(path, getBehaviourAssetType(fieldName, fieldSchema))}
         onPickExternal={() => assetContext.onPickExternal(path, stringValue)}
         onClear={() => assetContext.onClear(path)}
       />
@@ -1268,7 +1306,7 @@ function ExtensionListItem({
                 onChange={onFieldChange}
                 assetContext={assetContext && {
                   ...assetContext,
-                  onPickAsset: (path) => assetContext.onPickAsset(path, itemKey),
+                  onPickAsset: (path, assetType) => assetContext.onPickAsset(path, assetType, itemKey),
                   onPickExternal: (path, currentValue) => assetContext.onPickExternal(path, currentValue, itemKey),
                   onClear: (path) => assetContext.onClear(path, itemKey),
                 }}
@@ -3851,9 +3889,9 @@ export default function CourseEditor({
       ids: { articleId?: string; blockId?: string; componentId?: string } = {}
     ): BehaviourAssetContext => ({
       resolveAssetPreviewUrl: resolveTopicAssetPreviewUrl,
-      onPickAsset: (path, extensionKey) => {
+      onPickAsset: (path, assetType, extensionKey) => {
         if (!extensionKey) return;
-        setTopicAssetPickerTarget({ scope: "extensionProperty", level, ...ids, extensionKey, path });
+        setTopicAssetPickerTarget({ scope: "extensionProperty", level, ...ids, extensionKey, path, assetType });
       },
       onPickExternal: (path, currentValue, extensionKey) => {
         if (!extensionKey) return;
@@ -11819,7 +11857,7 @@ export default function CourseEditor({
                                     blockId: block.id,
                                     componentId: component.id,
                                     resolveAssetPreviewUrl: resolveTopicAssetPreviewUrl,
-                                    onPickAsset: (assetPath) => setTopicAssetPickerTarget({ scope: "componentProperty", articleId: article.id, blockId: block.id, componentId: component.id, path: assetPath }),
+                                    onPickAsset: (assetPath, assetType) => setTopicAssetPickerTarget({ scope: "componentProperty", articleId: article.id, blockId: block.id, componentId: component.id, path: assetPath, assetType }),
                                     onPickExternal: (assetPath, currentValue) => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "componentProperty", articleId: article.id, blockId: block.id, componentId: component.id, path: assetPath }, initialValue: currentValue, title: "Select External Asset" }),
                                     onClear: (assetPath) => clearTopicAssetSelection(page.id, { scope: "componentProperty", articleId: article.id, blockId: block.id, componentId: component.id, path: assetPath }),
                                   };
@@ -11955,6 +11993,7 @@ export default function CourseEditor({
 
         {topicAssetPickerTarget && selectedPageId ? (
           <AssetPickerModal
+            assetType={resolveTopicAssetPickerType(topicAssetPickerTarget)}
             onClose={() => setTopicAssetPickerTarget(null)}
             onSelect={(asset) => {
               const resolvedAssetLink = asset.assetLink || asset.url || asset.id;
