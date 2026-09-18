@@ -242,6 +242,23 @@ function matchesPickerAssetType(asset: Asset, pickerType: AssetPickerType): bool
   return asset.format === pickerType;
 }
 
+function isSvgAsset(asset: Asset): boolean {
+  return (asset.mimeType || "").toLowerCase() === "image/svg+xml" || /\.svg$/i.test(asset.filename || asset.title || "");
+}
+
+function assetCardPreviewSrc(asset: Asset): string | null {
+  if (!asset.backendId) return null;
+  if (asset.format === "image") {
+    return isSvgAsset(asset)
+      ? `/api/asset/serve/${asset.backendId}${assetExtension(asset)}`
+      : `/api/asset/thumb/${asset.backendId}`;
+  }
+  if (asset.format === "video") {
+    return `/api/asset/thumb/${asset.backendId}`;
+  }
+  return null;
+}
+
 function isDirectFormatPickerType(pickerType: AssetPickerType): pickerType is AssetFormat {
   return pickerType === "image" || pickerType === "audio" || pickerType === "video" || pickerType === "other";
 }
@@ -259,6 +276,45 @@ interface AssetItemProps {
   onActivate?: (asset: Asset) => void;
   hideActions?: boolean;
   selected?: boolean;
+}
+
+function AssetCardThumbnail({ asset }: { asset: Asset }) {
+  const [showFallback, setShowFallback] = useState(false);
+  const previewSrc = assetCardPreviewSrc(asset);
+  const iconColorClass = FORMAT_COLORS[asset.format].split(" ")[1];
+
+  return (
+    <div className={`relative h-32 overflow-hidden ${THUMBNAIL_COLORS[asset.format]} flex items-center justify-center`}>
+      {!showFallback && previewSrc ? (
+        <>
+          <img
+            src={previewSrc}
+            alt={asset.title || asset.filename || `${asset.format} asset`}
+            className="h-full w-full object-cover"
+            onError={() => setShowFallback(true)}
+          />
+          {asset.format === "video" ? (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-gradient-to-t from-black/25 via-transparent to-transparent">
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-[1px]">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <polygon points="8,6 19,12 8,18" />
+                </svg>
+              </span>
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <span className={`${iconColorClass} opacity-60`}>
+          <svg width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.2}>
+            {asset.format === "image" && <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />}
+            {asset.format === "audio" && <path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />}
+            {asset.format === "video" && <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />}
+            {asset.format === "other" && <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />}
+          </svg>
+        </span>
+      )}
+    </div>
+  );
 }
 
 function AssetPreviewMedia({ asset, onImageMeasure }: { asset: Asset; onImageMeasure?: (dimensions: AssetPreviewDimensions) => void }) {
@@ -479,16 +535,7 @@ const AssetCardItem = memo(function AssetCardItem({ asset, clickable = false, on
       className={`rounded-xl overflow-hidden transition-all flex flex-col group border ${selected ? "border-[#2d6fa8] shadow-[0_12px_28px_rgba(45,111,168,0.22)] ring-2 ring-[#dbeeff]" : "border-[#e5e7eb]"} bg-white ${clickable ? "cursor-pointer hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:ring-offset-2" : "hover:shadow-md"}`}
     >
       {/* Thumbnail */}
-      <div className={`h-32 ${THUMBNAIL_COLORS[asset.format]} flex items-center justify-center`}>
-        <span className={`${FORMAT_COLORS[asset.format].split(" ")[1]} opacity-60`}>
-          <svg width="40" height="40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.2}>
-            {asset.format === "image" && <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />}
-            {asset.format === "audio" && <path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />}
-            {asset.format === "video" && <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.87v6.26a1 1 0 01-1.447.894L15 14M3 8a2 2 0 012-2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8z" />}
-            {asset.format === "other" && <path strokeLinecap="round" strokeLinejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />}
-          </svg>
-        </span>
-      </div>
+      <AssetCardThumbnail asset={asset} />
 
       {/* Body */}
       <div className="p-4 flex flex-col gap-2 flex-1">
