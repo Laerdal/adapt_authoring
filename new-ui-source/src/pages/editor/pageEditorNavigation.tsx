@@ -47,7 +47,7 @@ interface PageEditorNavigationProps {
   onAddModule?: () => void;
   onAddSubModule?: (parentModuleId: string) => void;
   onDeleteModule?: (moduleId: string) => void;
-  onAddPage: () => void;
+  onAddPage: (moduleId?: string) => void;
   onDeletePage: (pageId: string) => void;
   onAddArticle: (pageId: string) => void;
   onDeleteArticle: (pageId: string, articleId: string) => void;
@@ -61,6 +61,7 @@ interface PageEditorNavigationProps {
     pageId: string;
     articleId?: string;
     blockId?: string;
+    moduleId?: string;
   }) => void;
 }
 

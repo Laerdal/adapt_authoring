@@ -36,6 +36,7 @@ import {
   getComponentBehaviourSchema,
   getComponentExtensionSchema,
   getCourseAssetMappings,
+  getCourseBootstrapData,
   getCourseStructure,
   getExtensionSchemasByLevel,
   getExtensionTypeOptions,
@@ -43,6 +44,7 @@ import {
   getThemeSettingsSchemaByLevel,
   getMenuSettingsSchemaByLevel,
   findAppliedPluginSchemaFields,
+  findAppliedPluginSchemaKey,
   type PluginSettingsFieldSchema,
   pasteTemplateIntoCourse,
   publishCoursePackage,
@@ -3145,8 +3147,39 @@ export default function CourseEditor({
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   const [courseTitle, setCourseTitle] = useState(initialTitle);
   const [courseDescription] = useState(initialDescription);
-  const [courseTheme] = useState(initialTheme);
-  const [courseMenu] = useState(initialMenu);
+  // initialTheme/initialMenu arrive via React Router navigation state
+  // (passed by whichever screen linked into the editor) and are only ever
+  // used as an instant-paint HINT, never trusted as the final answer - they
+  // can be MISSING entirely (a direct URL load, hard refresh, or bookmarked
+  // link has no location.state at all) or STALE (real, but from whenever
+  // this editor tab was originally opened - if the course's applied theme
+  // was later changed via Course Settings in a DIFFERENT tab/session, or the
+  // user simply navigated in a while ago, router state never refreshes on
+  // its own). Since theme-settings key resolution, colour palettes, and
+  // isThemeFieldSupported gating all key off this value, either case
+  // silently breaks all of them. Always self-correct against the course's
+  // REAL current config (same source CoursePreviewPage.tsx already uses) -
+  // this can only ever replace an initial guess with the true value, never
+  // the other way round.
+  const [courseTheme, setCourseTheme] = useState(initialTheme);
+  const [courseMenu, setCourseMenu] = useState(initialMenu);
+  useEffect(() => {
+    if (!courseId || courseId === "new-course") return;
+    let cancelled = false;
+    void getCourseBootstrapData(courseId)
+      .then((data) => {
+        if (cancelled) return;
+        if (data.themeName) setCourseTheme(data.themeName);
+        if (data.menuName) setCourseMenu(data.menuName);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // Only ever re-runs if the course itself changes - courseTheme/courseMenu
+    // are corrected exactly once per course load, not on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId]);
 
   const [menuPageCreated, setMenuPageCreated] = useState(false);
   const [menuSelected, setMenuSelected] = useState(false);
@@ -3329,6 +3362,7 @@ export default function CourseEditor({
     pageId: string;
     articleId?: string;
     blockId?: string;
+    moduleId?: string;
   } | null>(null);
   const previewBuildRequestIdRef = useRef(0);
   const copiedTopicIdResetTimerRef = useRef<number | null>(null);
@@ -3345,6 +3379,25 @@ export default function CourseEditor({
   // every keystroke (it depends on contentPages) reuses the same instance
   // instead of recreating it and losing focus/cursor position.
   const canvasBodyEditorsRef = useRef<Map<HTMLElement, { editor: any; editableEl: HTMLElement; ownerKey: string; commit: () => void }>>(new Map());
+
+  // CKEditor5's own destroy() can throw SYNCHRONOUSLY ("Right-hand side of
+  // 'instanceof' is not an object", inside its updateSourceElement) when the
+  // iframe navigated/reloaded out from under it (its sourceElement's owner
+  // window/realm is gone) - a bare `.catch(() => {})` only guards a REJECTED
+  // promise, not a synchronous throw before the promise is even returned, so
+  // that class of error was escaping as an uncaught exception and wedging
+  // the whole click/hover pipeline (reported as "can't select or hover
+  // anything" right after this error). Wrap every destroy call through this
+  // instead of calling `.destroy()` directly.
+  const safeDestroyCanvasEditor = (editor: any) => {
+    try {
+      const result = editor?.destroy?.();
+      if (result && typeof result.catch === "function") result.catch(() => {});
+    } catch {
+      // Already gone/broken - nothing more we can do, and nothing left to
+      // clean up on our side either.
+    }
+  };
 
   // Apply a Samaritan result to a canvas body editor. The popover lives in
   // the parent document, so focus never returns to the editor on its own —
@@ -5094,6 +5147,37 @@ export default function CourseEditor({
     });
 
     syncColorLabelIndicators(activeNode, hoverNode);
+
+    // Topic/Section header insets (margin-left/right, CSS above) were
+    // originally hardcoded to 8px on the assumption that Content Group's
+    // own real inset (block__inner's theme padding minus the -0.5rem
+    // pull-back on .block__header-inner/.component__container) is always
+    // 8px too. That inset is NOT constant — it comes from the theme's own
+    // real (often responsive) CSS, so it can differ at different iframe
+    // widths. Since the canvas iframe's rendered width changes whenever a
+    // side panel is collapsed/expanded (no side panel resize event fires,
+    // but the iframe's own layout box genuinely changes size), a hardcoded
+    // value drifts out of sync with Content Group/Component's real inset
+    // at some widths — reported as "alignment fine at one screen size,
+    // off once panels are collapsed/expanded". Fixed by measuring the
+    // REAL, live inset each run (from whichever header actually exists —
+    // real or the synthetic placeholder ensureLevelHeaderHost just
+    // created above) and applying that exact value to Topic/Section
+    // instead of trusting the CSS constant.
+    const insetContainer = doc.querySelector(".page__inner") as HTMLElement | null;
+    const insetReference = (doc.querySelector(".component__inner") ??
+      doc.querySelector(".block__header-inner")) as HTMLElement | null;
+    if (insetContainer && insetReference) {
+      const containerRect = insetContainer.getBoundingClientRect();
+      const refRect = insetReference.getBoundingClientRect();
+      const leftInset = Math.max(0, Math.round(refRect.left - containerRect.left));
+      const rightInset = Math.max(0, Math.round(containerRect.right - refRect.right));
+      doc.querySelectorAll(".page__header-inner, .article__header-inner").forEach((node) => {
+        const el = node as HTMLElement;
+        el.style.setProperty("margin-left", `${leftInset}px`, "important");
+        el.style.setProperty("margin-right", `${rightInset}px`, "important");
+      });
+    }
   }, [
     hasCanvasSelection,
     menuSelected,
@@ -5397,7 +5481,7 @@ export default function CourseEditor({
       canvasBodyEditorsRef.current.forEach((entry, sourceEl) => {
         if (sourceEl !== element && !sourceEl.isConnected) {
           entry.commit();
-          entry.editor.destroy().catch(() => {});
+          safeDestroyCanvasEditor(entry.editor);
           canvasBodyEditorsRef.current.delete(sourceEl);
         }
       });
@@ -5445,10 +5529,19 @@ export default function CourseEditor({
             const editableEl = editor.ui.getEditableElement() as HTMLElement;
             let lastCommittedHtml = options.value || "";
             const commit = () => {
-              const html = editor.getData();
-              if (html === lastCommittedHtml) return;
-              lastCommittedHtml = html;
-              options.onCommit(html);
+              // Guards the same class of "iframe navigated out from under a
+              // still-referenced editor" failure as safeDestroyCanvasEditor -
+              // editor.getData() can throw once the underlying document/model
+              // is gone, and this runs unconditionally in several cleanup
+              // sweeps right before destroy.
+              try {
+                const html = editor.getData();
+                if (html === lastCommittedHtml) return;
+                lastCommittedHtml = html;
+                options.onCommit(html);
+              } catch {
+                // Nothing left to commit to a torn-down editor.
+              }
             };
             editor.model.document.on("change:data", () => {
               if (options.ownerKey) {
@@ -5572,12 +5665,8 @@ export default function CourseEditor({
       // ClassicEditor owns a sibling toolbar/wrapper that clearEditable cannot remove.
       canvasBodyEditorsRef.current.forEach((entry, sourceEl) => {
         entry.commit();
-        try {
-          sourceEl.style.display = "";
-          entry.editor.destroy().catch(() => {});
-        } catch (err) {
-          console.warn("CKEditor destroy failed", err);
-        }
+        sourceEl.style.display = "";
+        safeDestroyCanvasEditor(entry.editor);
         canvasBodyEditorsRef.current.delete(sourceEl);
       });
       return;
@@ -5615,12 +5704,8 @@ export default function CourseEditor({
     canvasBodyEditorsRef.current.forEach((entry, sourceEl) => {
       if (entry.ownerKey === currentBodyOwnerKey) return;
       entry.commit();
-      try {
-        sourceEl.style.display = "";
-        entry.editor.destroy().catch(() => {});
-      } catch (err) {
-        console.warn("CKEditor destroy failed", err);
-      }
+      sourceEl.style.display = "";
+      safeDestroyCanvasEditor(entry.editor);
       canvasBodyEditorsRef.current.delete(sourceEl);
     });
 
@@ -6227,7 +6312,7 @@ export default function CourseEditor({
       (pageNode.querySelector(".page__header") as HTMLElement | null) ??
       (pageNode.querySelector(".page__header-inner") as HTMLElement | null);
 
-    const activeThemeSettings = getActiveThemeSettings(selectedPage.themeSettings);
+    const activeThemeSettings = getActiveThemeSettings(selectedPage.themeSettings, "contentobject");
     const headerSettings = asRecord(activeThemeSettings._pageHeader);
     const pageBackgroundImage = asRecord(activeThemeSettings._backgroundImage) as TopicResponsiveAssetMap;
     const pageBackgroundStyles = asRecord(activeThemeSettings._backgroundStyles);
@@ -6236,7 +6321,7 @@ export default function CourseEditor({
     const headerMinimumHeights = asRecord(headerSettings._minimumHeights);
     const headerTextAlignment = asRecord(headerSettings._textAlignment);
     const headerGraphic = asRecord(headerSettings._graphic);
-    const activeMenuSettings = getActiveMenuSettings(selectedPage.menuSettings);
+    const activeMenuSettings = getActiveMenuSettings(selectedPage.menuSettings, "contentobject");
     const menuHeaderSettings = asRecord(activeMenuSettings._menuHeader);
     const menuBackgroundImage = asRecord(activeMenuSettings._backgroundImage) as TopicResponsiveAssetMap;
     const menuBackgroundStyles = asRecord(activeMenuSettings._backgroundStyles);
@@ -6525,7 +6610,7 @@ export default function CourseEditor({
         articleNode;
       const articleHeaderNode =
         (articleNode?.querySelector(".article__header") as HTMLElement | null) ?? articleInner;
-      const articleThemeSettings = getActiveThemeSettings(selectedArticle.themeSettings);
+      const articleThemeSettings = getActiveThemeSettings(selectedArticle.themeSettings, "article");
       const articleBackgroundImage = asRecord(articleThemeSettings._backgroundImage) as TopicResponsiveAssetMap;
       const articleBackgroundStyles = asRecord(articleThemeSettings._backgroundStyles);
       const articleBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(articleBackgroundImage));
@@ -6566,11 +6651,21 @@ export default function CourseEditor({
         (blockNode?.querySelector(".block__inner") as HTMLElement | null) ??
         (blockNode?.querySelector(".block__header-inner") as HTMLElement | null) ??
         blockNode;
-      const blockThemeSettings = getActiveThemeSettings(selectedBlock.themeSettings);
+      const blockThemeSettings = getActiveThemeSettings(selectedBlock.themeSettings, "block");
       const blockBackgroundImage = asRecord(blockThemeSettings._backgroundImage) as TopicResponsiveAssetMap;
       const blockBackgroundStyles = asRecord(blockThemeSettings._backgroundStyles);
       const blockBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(blockBackgroundImage));
       applyBackgroundStyles(blockInner, blockBackgroundUrl, blockBackgroundStyles);
+
+      // "Content Group minimum height" (top-level _minimumHeights, distinct
+      // from _blockHeader's own nested minimum height applied further below)
+      // - was previously only wired to the right-panel field, never synced.
+      const blockMinHeight = pickResponsiveNumber(asRecord(blockThemeSettings._minimumHeights) as TopicMinimumHeights);
+      if (typeof blockMinHeight === "number") {
+        blockInner?.style.setProperty("min-height", `${blockMinHeight}px`);
+      } else {
+        blockInner?.style.removeProperty("min-height");
+      }
 
       const blockTextAlignment = asRecord(blockThemeSettings._textAlignment);
       applyTextAlignWithin(blockNode, ".block__title-inner", asString(blockTextAlignment._title));
@@ -6636,7 +6731,7 @@ export default function CourseEditor({
       const componentInner =
         (componentNode?.querySelector(".component__inner") as HTMLElement | null) ??
         componentNode;
-      const componentThemeSettings = getActiveThemeSettings(selectedComponent.themeSettings);
+      const componentThemeSettings = getActiveThemeSettings(selectedComponent.themeSettings, "component");
       const componentBackgroundImage = asRecord(componentThemeSettings._backgroundImage) as TopicResponsiveAssetMap;
       const componentBackgroundStyles = asRecord(componentThemeSettings._backgroundStyles);
       const componentBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(componentBackgroundImage));
@@ -8217,7 +8312,7 @@ export default function CourseEditor({
     canvasBodyEditorsRef.current.forEach((entry, sourceEl) => {
       entry.commit();
       sourceEl.style.display = "";
-      entry.editor.destroy().catch(() => {});
+      safeDestroyCanvasEditor(entry.editor);
     });
     canvasBodyEditorsRef.current.clear();
 
@@ -8251,6 +8346,24 @@ export default function CourseEditor({
     });
     swapPositionsObserver.observe(doc.body, { childList: true, subtree: true });
 
+    // Re-measures the Topic/Section header alignment insets (see the
+    // dynamic inset sync at the end of applyPreviewSelectionStyles above)
+    // whenever the iframe's OWN viewport actually changes size — this is
+    // what fires when a side panel is collapsed/expanded (the canvas
+    // <main> resizes, so the iframe element resizes, so its contentWindow
+    // gets a real native "resize" event), which can cross a theme
+    // breakpoint and change Content Group/Component's real inset without
+    // any selection/hover state changing at all.
+    let alignmentResizeRafId: number | null = null;
+    const onPreviewResize = () => {
+      if (alignmentResizeRafId !== null) return;
+      alignmentResizeRafId = window.requestAnimationFrame(() => {
+        alignmentResizeRafId = null;
+        applyPreviewSelectionStylesRef.current();
+      });
+    };
+    iframe.contentWindow?.addEventListener("resize", onPreviewResize);
+
     cleanupPreviewListenersRef.current = () => {
       if (hoverRafId !== null) {
         window.cancelAnimationFrame(hoverRafId);
@@ -8258,7 +8371,11 @@ export default function CourseEditor({
       if (swapObserverRafId !== null) {
         window.cancelAnimationFrame(swapObserverRafId);
       }
+      if (alignmentResizeRafId !== null) {
+        window.cancelAnimationFrame(alignmentResizeRafId);
+      }
       swapPositionsObserver.disconnect();
+      iframe.contentWindow?.removeEventListener("resize", onPreviewResize);
       cancelTitleAutoRevert();
       doc.removeEventListener("mouseover", onMouseOver);
       doc.removeEventListener("mouseout", onMouseOut);
@@ -8719,9 +8836,25 @@ export default function CourseEditor({
     }
   }
 
-  async function handleAddPage() {
+  async function handleAddPage(parentModuleId?: string) {
     try {
-      const newPageId = await seedDefaultTopic(courseId, courseId, NEW_TOPIC_TITLE, contentPages.length + 1);
+      const parentId = parentModuleId || courseId;
+      const siblingCount = parentModuleId
+        ? (() => {
+            const findMod = (mods: SModule[]): SModule | null => {
+              for (const m of mods) {
+                if (m.id === parentModuleId) return m;
+                const found = findMod(m.modules);
+                if (found) return found;
+              }
+              return null;
+            };
+            const targetMod = courseStructure ? findMod(courseStructure.modules) : null;
+            return targetMod?.topics.length ?? 0;
+          })()
+        : contentPages.length;
+
+      const newPageId = await seedDefaultTopic(courseId, parentId, NEW_TOPIC_TITLE, siblingCount + 1);
       await loadStructureFromDatabase({ pageId: newPageId });
     } catch (error) {
       console.error("Failed to add topic", error);
@@ -8958,7 +9091,17 @@ export default function CourseEditor({
     return Object.prototype.hasOwnProperty.call(fields, fieldKey);
   }
 
-  function resolveThemeSettingsKey(settings: Record<string, unknown>) {
+  function resolveThemeSettingsKey(settings: Record<string, unknown>, level?: ExtensionSchemaLevel) {
+    // Authoritative source first: the schema entry whose `.name` matches the
+    // currently applied theme carries its OWN real key (e.g. "_life-v2"),
+    // straight from the plugin's own `targetAttribute` - no guessing. Only
+    // fall back to the name-substring heuristic below while schema data
+    // hasn't loaded yet (or this level genuinely has no theme schema).
+    if (level) {
+      const schemaKey = findAppliedPluginSchemaKey(themeSettingsSchemaByLevel?.[level], courseTheme);
+      if (schemaKey) return schemaKey;
+    }
+
     const normalizedThemeName = courseTheme.toLowerCase();
     const preferredKey = normalizedThemeName.includes("custom")
       ? "_custom"
@@ -8979,7 +9122,12 @@ export default function CourseEditor({
     return firstNestedKey ?? preferredKey;
   }
 
-  function resolveMenuSettingsKey(settings: Record<string, unknown>) {
+  function resolveMenuSettingsKey(settings: Record<string, unknown>, level?: ExtensionSchemaLevel) {
+    if (level) {
+      const schemaKey = findAppliedPluginSchemaKey(menuSettingsSchemaByLevel?.[level], courseMenu);
+      if (schemaKey) return schemaKey;
+    }
+
     const normalizedMenuName = courseMenu.toLowerCase();
     const preferredKey = normalizedMenuName.includes("box")
       ? "_boxMenu"
@@ -9002,7 +9150,7 @@ export default function CourseEditor({
     return firstNestedKey ?? preferredKey;
   }
 
-  function getActiveThemeSettings(settingsValue: unknown): TopicThemeSettings {
+  function getActiveThemeSettings(settingsValue: unknown, level?: ExtensionSchemaLevel): TopicThemeSettings {
     const settings = asRecord(settingsValue);
     if (
       Object.prototype.hasOwnProperty.call(settings, "_backgroundImage") ||
@@ -9014,11 +9162,11 @@ export default function CourseEditor({
       return settings as TopicThemeSettings;
     }
 
-    const key = resolveThemeSettingsKey(settings);
+    const key = resolveThemeSettingsKey(settings, level);
     return asRecord(settings[key]) as TopicThemeSettings;
   }
 
-  function getActiveMenuSettings(settingsValue: unknown): TopicMenuSettings {
+  function getActiveMenuSettings(settingsValue: unknown, level?: ExtensionSchemaLevel): TopicMenuSettings {
     const settings = asRecord(settingsValue);
     if (
       Object.prototype.hasOwnProperty.call(settings, "_graphic") ||
@@ -9028,7 +9176,7 @@ export default function CourseEditor({
       return settings as TopicMenuSettings;
     }
 
-    const key = resolveMenuSettingsKey(settings);
+    const key = resolveMenuSettingsKey(settings, level);
     return asRecord(settings[key]) as TopicMenuSettings;
   }
 
@@ -9068,13 +9216,13 @@ export default function CourseEditor({
   // exactly. Only used for panel reads — live-preview sync keeps reading the
   // raw stored value so the preview never shows an un-saved implied value.
   function getActiveThemeSettingsWithDefaults(settingsValue: unknown, level: ExtensionSchemaLevel): TopicThemeSettings {
-    const active = getActiveThemeSettings(settingsValue);
+    const active = getActiveThemeSettings(settingsValue, level);
     const defaults = getThemeSchemaDefaultsForLevel(level);
     return deepMergeSchemaDefaults<TopicThemeSettings>(defaults, active as Record<string, unknown>);
   }
 
   function getActiveMenuSettingsWithDefaults(settingsValue: unknown, level: ExtensionSchemaLevel): TopicMenuSettings {
-    const active = getActiveMenuSettings(settingsValue);
+    const active = getActiveMenuSettings(settingsValue, level);
     const defaults = getMenuSchemaDefaultsForLevel(level);
     return deepMergeSchemaDefaults<TopicMenuSettings>(defaults, active as Record<string, unknown>);
   }
@@ -9096,7 +9244,7 @@ export default function CourseEditor({
                 return { ...p, themeSettings: updater(rawThemeSettings as TopicThemeSettings) };
               }
 
-              const themeKey = resolveThemeSettingsKey(rawThemeSettings);
+              const themeKey = resolveThemeSettingsKey(rawThemeSettings, "contentobject");
               const scopedThemeSettings = asRecord(rawThemeSettings[themeKey]) as TopicThemeSettings;
               return {
                 ...p,
@@ -9133,7 +9281,7 @@ export default function CourseEditor({
                   return { ...a, themeSettings: updater(rawThemeSettings as TopicThemeSettings) };
                 }
 
-                const themeKey = resolveThemeSettingsKey(rawThemeSettings);
+                const themeKey = resolveThemeSettingsKey(rawThemeSettings, "article");
                 const scopedThemeSettings = asRecord(rawThemeSettings[themeKey]) as TopicThemeSettings;
                 return {
                   ...a,
@@ -9180,7 +9328,7 @@ export default function CourseEditor({
                           return { ...b, themeSettings: updater(rawThemeSettings as TopicThemeSettings) };
                         }
 
-                        const themeKey = resolveThemeSettingsKey(rawThemeSettings);
+                        const themeKey = resolveThemeSettingsKey(rawThemeSettings, "block");
                         const scopedThemeSettings = asRecord(rawThemeSettings[themeKey]) as TopicThemeSettings;
                         return {
                           ...b,
@@ -9235,7 +9383,7 @@ export default function CourseEditor({
                                   return { ...c, themeSettings: updater(rawThemeSettings as TopicThemeSettings) };
                                 }
 
-                                const themeKey = resolveThemeSettingsKey(rawThemeSettings);
+                                const themeKey = resolveThemeSettingsKey(rawThemeSettings, "component");
                                 const scopedThemeSettings = asRecord(rawThemeSettings[themeKey]) as TopicThemeSettings;
                                 return {
                                   ...c,
@@ -9273,7 +9421,7 @@ export default function CourseEditor({
                 return { ...p, menuSettings: updater(rawMenuSettings as TopicMenuSettings) };
               }
 
-              const menuKey = resolveMenuSettingsKey(rawMenuSettings);
+              const menuKey = resolveMenuSettingsKey(rawMenuSettings, "contentobject");
               const scopedMenuSettings = asRecord(rawMenuSettings[menuKey]) as TopicMenuSettings;
               return {
                 ...p,
@@ -10255,6 +10403,7 @@ export default function CourseEditor({
     pageId: string;
     articleId?: string;
     blockId?: string;
+    moduleId?: string;
   }) {
     setAddTemplateTarget(target);
   }
@@ -10264,6 +10413,7 @@ export default function CourseEditor({
     pageId: string;
     articleId?: string;
     blockId?: string;
+    moduleId?: string;
   }, template: DashboardTemplate) {
     try {
       const expectedType =
@@ -10282,6 +10432,10 @@ export default function CourseEditor({
       let parentId = courseId;
       let sortOrder = contentPages.length + 1;
       let layout: "full" | "left" | "right" | undefined;
+
+      if (target.level === "topic" && target.moduleId) {
+        parentId = target.moduleId;
+      }
 
       if (target.level === "section") {
         const page = contentPages.find((item) => item.id === target.pageId);
@@ -10549,8 +10703,8 @@ export default function CourseEditor({
           onDeleteModule={(modId) => {
             void handleDeleteModule(modId);
           }}
-          onAddPage={() => {
-            void handleAddPage();
+          onAddPage={(moduleId) => {
+            void handleAddPage(moduleId);
           }}
           onDeletePage={deletePage}
           onAddArticle={handleAddArticle}

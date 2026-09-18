@@ -50,7 +50,7 @@ interface CourseOutlinePanelProps {
   onAddModule?: () => void;
   onAddSubModule?: (parentModuleId: string) => void;
   onDeleteModule?: (moduleId: string) => void;
-  onAddPage: () => void;
+  onAddPage: (moduleId?: string) => void;
   onDeletePage: (pageId: string) => void;
   onAddArticle: (pageId: string) => void;
   onDeleteArticle: (pageId: string, articleId: string) => void;
@@ -64,6 +64,7 @@ interface CourseOutlinePanelProps {
     pageId: string;
     articleId?: string;
     blockId?: string;
+    moduleId?: string;
   }) => void;
 }
 
@@ -397,7 +398,7 @@ export default function CourseOutlinePanel({
 
   function runAddAction(target: AddMenuTarget) {
     if (target.level === "topic" && target.pageId) {
-      onAddPage();
+      onAddPage(target.moduleId);
     } else if (target.level === "section" && target.pageId && target.articleId) {
       onAddArticle(target.pageId);
     } else if (target.level === "group" && target.pageId && target.articleId) {
@@ -451,7 +452,7 @@ export default function CourseOutlinePanel({
     return ids;
   }, [courseStructure]);
 
-  function renderTopicNode(page: ContentPageData, paddingLeft = 12, depth = 0) {
+  function renderTopicNode(page: ContentPageData, paddingLeft = 12, depth = 0, moduleId?: string) {
     const topicPadding = paddingLeft + depth * 12;
     const sectionPadding = topicPadding + 16;
     const groupPadding = sectionPadding + 16;
@@ -475,7 +476,7 @@ export default function CourseOutlinePanel({
           onToggleExpand={() => setExpandedTopics((previous) => ({ ...previous, [page.id]: !isExpanded(previous, page.id) }))}
           showAdd={true}
           onAdd={() => {
-            const target: AddMenuTarget = { level: "topic", pageId: page.id };
+            const target: AddMenuTarget = { level: "topic", pageId: page.id, moduleId };
             setActiveAddMenu((previous) => (previous && getTargetKey(previous) === getTargetKey(target) ? null : target));
           }}
           showDelete={true}
@@ -487,12 +488,12 @@ export default function CourseOutlinePanel({
               pageId: page.id,
             });
           }}
-          menuOpen={activeAddKey === getTargetKey({ level: "topic", pageId: page.id })}
-          onAddStartFresh={() => runAddAction({ level: "topic", pageId: page.id })}
+          menuOpen={activeAddKey === getTargetKey({ level: "topic", pageId: page.id, moduleId })}
+          onAddStartFresh={() => runAddAction({ level: "topic", pageId: page.id, moduleId })}
           onAddTemplate={() => {
-            const target: AddMenuTarget = { level: "topic", pageId: page.id };
+            const target: AddMenuTarget = { level: "topic", pageId: page.id, moduleId };
             if (onUseTemplate && target.pageId) {
-              onUseTemplate({ level: "topic", pageId: target.pageId });
+              onUseTemplate({ level: "topic", pageId: target.pageId, moduleId: target.moduleId });
               setActiveAddMenu(null);
               return;
             }
@@ -746,7 +747,7 @@ export default function CourseOutlinePanel({
               }
               const page = contentPages.find((p) => p.id === child.node.id);
               if (page) {
-                return renderTopicNode(page, childPaddingLeft, 0);
+                return renderTopicNode(page, childPaddingLeft, 0, mod.id);
               }
               return null;
             })}
