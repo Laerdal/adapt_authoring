@@ -77,6 +77,7 @@ interface UploadState {
   description: string;
   tags: string;
   formErrors: UploadFormErrors;
+  uploadError: string | null;
   progress: number;
   uploadedAssetId: string | null;
 }
@@ -177,6 +178,14 @@ function validateUploadForm(title: string, description: string): UploadFormError
   return errors;
 }
 
+function getUploadErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    const message = error.message.trim();
+    if (message) return message;
+  }
+  return "Asset upload failed. Please try again.";
+}
+
 const EMPTY_UPLOAD: UploadState = {
   step: "pick",
   file: null,
@@ -185,6 +194,7 @@ const EMPTY_UPLOAD: UploadState = {
   description: "",
   tags: "",
   formErrors: {},
+  uploadError: null,
   progress: 0,
   uploadedAssetId: null,
 };
@@ -773,6 +783,7 @@ export function AssetManagementWorkspace({
       fileValidation: validation,
       title: prev.title || autoTitle,
       formErrors: {},
+      uploadError: null,
     }));
   }, []);
 
@@ -797,7 +808,7 @@ export function AssetManagementWorkspace({
     const description = upload.description.trim();
     const tags = upload.tags.split(",").map((t) => t.trim()).filter(Boolean);
 
-    setUpload((prev) => ({ ...prev, step: "uploading", progress: 0, formErrors: {} }));
+    setUpload((prev) => ({ ...prev, step: "uploading", progress: 0, formErrors: {}, uploadError: null }));
 
     progressTimer.current = setInterval(() => {
       setUpload((prev) => ({
@@ -814,12 +825,17 @@ export function AssetManagementWorkspace({
       }
       await loadAssets();
       setUpload((prev) => ({ ...prev, step: "done", progress: 100, uploadedAssetId: assetId }));
-    } catch {
+    } catch (error) {
       if (progressTimer.current) {
         clearInterval(progressTimer.current);
         progressTimer.current = null;
       }
-      setUpload((prev) => ({ ...prev, step: "details", progress: 0 }));
+      setUpload((prev) => ({
+        ...prev,
+        step: "details",
+        progress: 0,
+        uploadError: getUploadErrorMessage(error),
+      }));
     }
   }
 
@@ -1198,6 +1214,12 @@ export function AssetManagementWorkspace({
             {(upload.step === "pick" || upload.step === "details") && (
               <>
                 <div className="px-6 py-5 overflow-y-auto flex flex-col gap-4">
+                  {upload.uploadError && (
+                    <div className="rounded-lg border border-[#fecaca] bg-[#fef2f2] px-3.5 py-3 text-sm text-[#b91c1c]">
+                      {upload.uploadError}
+                    </div>
+                  )}
+
                   {/* Drop zone */}
                   <div
                     onDragOver={(e) => { e.preventDefault(); setUploadDrag(true); }}
@@ -1240,7 +1262,7 @@ export function AssetManagementWorkspace({
                         )}
                         <button
                           type="button"
-                          onClick={(e) => { e.stopPropagation(); setUpload((p) => ({ ...p, file: null, fileValidation: { ok: true }, title: "" })); }}
+                          onClick={(e) => { e.stopPropagation(); setUpload((p) => ({ ...p, file: null, fileValidation: { ok: true }, title: "", uploadError: null })); }}
                           className="text-xs text-[#9ca3af] hover:text-[#374151] underline underline-offset-2"
                         >
                           Choose a different file
@@ -1277,7 +1299,7 @@ export function AssetManagementWorkspace({
                     <input
                       type="text"
                       value={upload.title}
-                      onChange={(e) => setUpload((p) => ({ ...p, title: e.target.value, formErrors: { ...p.formErrors, title: undefined } }))}
+                      onChange={(e) => setUpload((p) => ({ ...p, title: e.target.value, formErrors: { ...p.formErrors, title: undefined }, uploadError: null }))}
                       placeholder="Enter asset title"
                       maxLength={120}
                       aria-invalid={upload.formErrors.title ? "true" : "false"}
@@ -1309,7 +1331,7 @@ export function AssetManagementWorkspace({
                     </label>
                     <textarea
                       value={upload.description}
-                      onChange={(e) => setUpload((p) => ({ ...p, description: e.target.value, formErrors: { ...p.formErrors, description: undefined } }))}
+                      onChange={(e) => setUpload((p) => ({ ...p, description: e.target.value, formErrors: { ...p.formErrors, description: undefined }, uploadError: null }))}
                       placeholder="Describe what this asset is and how it should be used…"
                       rows={3}
                       aria-invalid={upload.formErrors.description ? "true" : "false"}
@@ -1335,7 +1357,7 @@ export function AssetManagementWorkspace({
                     <input
                       type="text"
                       value={upload.tags}
-                      onChange={(e) => setUpload((p) => ({ ...p, tags: e.target.value }))}
+                      onChange={(e) => setUpload((p) => ({ ...p, tags: e.target.value, uploadError: null }))}
                       placeholder="cpr, training, emergency"
                       className="w-full px-3 py-2 text-sm border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent placeholder-[#9ca3af]"
                     />
