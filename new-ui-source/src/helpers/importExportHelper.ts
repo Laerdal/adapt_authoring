@@ -163,6 +163,11 @@ function bool(value: unknown, fallback = false): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
 
+function stripDocumentMetadata(value: AnyRecord): AnyRecord {
+  const { _id, _courseId, _tenantId, __v, ...rest } = value;
+  return rest;
+}
+
 function normalizePluginName(value: string): string {
   return value.trim().toLowerCase();
 }
@@ -274,14 +279,14 @@ export async function saveValidatorEnablerPdfSettings(
   }
   const course = await apiClient.get<EngineCourseDetails>(`/api/content/course/${courseId}`);
 
-  const existingConfig = obj(obj(config._extensions)[VALIDATOR_ENABLER_EXTENSION_TARGET]);
+  const existingConfig = stripDocumentMetadata(obj(obj(config._extensions)[VALIDATOR_ENABLER_EXTENSION_TARGET]));
   const nextGlobalValidatorConfig = {
     ...existingConfig,
     _isEnabled: shouldEnable,
   };
 
-  const existingCourseRoot = obj(course[VALIDATOR_ENABLER_EXTENSION_TARGET]);
-  const existingCourseExtension = obj(obj(course._extensions)[VALIDATOR_ENABLER_EXTENSION_TARGET]);
+  const existingCourseRoot = stripDocumentMetadata(obj(course[VALIDATOR_ENABLER_EXTENSION_TARGET]));
+  const existingCourseExtension = stripDocumentMetadata(obj(obj(course._extensions)[VALIDATOR_ENABLER_EXTENSION_TARGET]));
   const coverPageImage = settings.coverPageSource === "url" ? settings.coverPageUrl : settings.coverPageUrl;
   const footerLogoImage = settings.footerLogoSource === "url" ? settings.footerLogoUrl : settings.footerLogoUrl;
   const nextCourseValidatorConfig = {
