@@ -699,7 +699,7 @@ function resolveTopicAssetPickerType(target: TopicAssetTarget): AssetKind | unde
   switch (target.scope) {
     case "componentProperty":
     case "extensionProperty":
-      return target.assetType;
+      return target.assetType ?? "image";
     default:
       return "image";
   }

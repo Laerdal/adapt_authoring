@@ -235,8 +235,15 @@ function assetExtension(asset?: Asset): string {
 }
 
 function matchesPickerAssetType(asset: Asset, pickerType: AssetPickerType): boolean {
+  if (pickerType === "all") return true;
+  if (pickerType === "media") return asset.format === "audio" || asset.format === "video";
+  if (pickerType === "other") return asset.format === "other" && !isH5pAsset(asset);
   if (pickerType === "h5p") return isH5pAsset(asset);
   return asset.format === pickerType;
+}
+
+function isDirectFormatPickerType(pickerType: AssetPickerType): pickerType is AssetFormat {
+  return pickerType === "image" || pickerType === "audio" || pickerType === "video" || pickerType === "other";
 }
 
 // List-item components live at module scope (not inside AssetManagementPage) so
@@ -624,7 +631,7 @@ export function AssetManagementWorkspace({
   useEffect(() => { void loadAssets(); }, [loadAssets]);
   const [search, setSearch]             = useState("");
   const [formatFilter, setFormatFilter] = useState<AssetFormat | "All">(
-    fixedPickerFormat && fixedPickerFormat !== "h5p" ? fixedPickerFormat : "All"
+    fixedPickerFormat && isDirectFormatPickerType(fixedPickerFormat) ? fixedPickerFormat : "All"
   );
   const [view, setView]                 = useState<ViewMode>("grid");
   const [tagFilterOpen, setTagFilterOpen] = useState(false);
@@ -701,7 +708,7 @@ export function AssetManagementWorkspace({
   );
 
   const effectiveFormatFilter: AssetFormat | "All" =
-    fixedPickerFormat && fixedPickerFormat !== "h5p" ? fixedPickerFormat : formatFilter;
+    fixedPickerFormat && isDirectFormatPickerType(fixedPickerFormat) ? fixedPickerFormat : formatFilter;
   const filtered = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
     return assets.filter((a) => {
@@ -733,7 +740,7 @@ export function AssetManagementWorkspace({
   }, [filtered, pickerMode, selectedAssetId]);
 
   useEffect(() => {
-    if (!fixedPickerFormat || fixedPickerFormat === "h5p") return;
+    if (!fixedPickerFormat || !isDirectFormatPickerType(fixedPickerFormat)) return;
     setFormatFilter(fixedPickerFormat);
   }, [fixedPickerFormat]);
 
@@ -914,11 +921,13 @@ export function AssetManagementWorkspace({
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────
-  const FORMAT_LABELS: Record<AssetFormat | "All" | "h5p", string> = {
+  const FORMAT_LABELS: Record<AssetFormat | "All" | "all" | "media" | "h5p", string> = {
     All: "All",
+    all: "All Assets",
     image: "Image",
     audio: "Audio",
     video: "Video",
+    media: "Media",
     other: "Other",
     h5p: "H5P",
   };
