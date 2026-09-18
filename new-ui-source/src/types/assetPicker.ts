@@ -1,4 +1,4 @@
-export type AssetPickerType = "image" | "audio" | "video";
+export type AssetPickerType = "image" | "audio" | "video" | "h5p";
 
 export interface AssetPickerResult {
   id: string;

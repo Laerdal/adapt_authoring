@@ -219,6 +219,26 @@ const EMPTY_EDIT = (a: Asset): EditModalState => ({
 
 function formatBytes(raw: string) { return raw; }
 
+function isH5pAsset(asset: Asset): boolean {
+  return /\.h5p$/i.test(asset.filename || asset.title || "");
+}
+
+function assetExtension(asset?: Asset): string {
+  if (!asset) return "";
+  const name = asset.filename || asset.title || "";
+  const dot = name.lastIndexOf(".");
+  if (dot > -1 && dot < name.length - 1) return name.slice(dot).toLowerCase();
+  const sub = (asset.mimeType || "").split("/")[1];
+  if (!sub) return "";
+  const map: Record<string, string> = { jpeg: "jpg", "svg+xml": "svg" };
+  return "." + (map[sub] || sub);
+}
+
+function matchesPickerAssetType(asset: Asset, pickerType: AssetPickerType): boolean {
+  if (pickerType === "h5p") return isH5pAsset(asset);
+  return asset.format === pickerType;
+}
+
 // List-item components live at module scope (not inside AssetManagementPage) so
 // their identity is stable across renders. Declaring them inside the page made
 // React remount the entire asset list on every keystroke (search/upload/edit
@@ -603,7 +623,9 @@ export function AssetManagementWorkspace({
   }, []);
   useEffect(() => { void loadAssets(); }, [loadAssets]);
   const [search, setSearch]             = useState("");
-  const [formatFilter, setFormatFilter] = useState<AssetFormat | "All">(fixedPickerFormat ?? "All");
+  const [formatFilter, setFormatFilter] = useState<AssetFormat | "All">(
+    fixedPickerFormat && fixedPickerFormat !== "h5p" ? fixedPickerFormat : "All"
+  );
   const [view, setView]                 = useState<ViewMode>("grid");
   const [tagFilterOpen, setTagFilterOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -678,7 +700,8 @@ export function AssetManagementWorkspace({
     [availableTags, tagSearch],
   );
 
-  const effectiveFormatFilter: AssetFormat | "All" = fixedPickerFormat ?? formatFilter;
+  const effectiveFormatFilter: AssetFormat | "All" =
+    fixedPickerFormat && fixedPickerFormat !== "h5p" ? fixedPickerFormat : formatFilter;
   const filtered = useMemo(() => {
     const q = deferredSearch.trim().toLowerCase();
     return assets.filter((a) => {
@@ -686,7 +709,9 @@ export function AssetManagementWorkspace({
         q === "" ||
         a.title.toLowerCase().includes(q) ||
         a.tags.some((t) => t.toLowerCase().includes(q));
-      const matchFormat = effectiveFormatFilter === "All" || a.format === effectiveFormatFilter;
+      const matchFormat = fixedPickerFormat
+        ? matchesPickerAssetType(a, fixedPickerFormat)
+        : effectiveFormatFilter === "All" || a.format === effectiveFormatFilter;
       const matchTags =
         selectedTags.length === 0 ||
         selectedTags.every((tag) =>
@@ -694,7 +719,7 @@ export function AssetManagementWorkspace({
         );
       return matchSearch && matchFormat && matchTags;
     });
-  }, [assets, deferredSearch, effectiveFormatFilter, selectedTags]);
+  }, [assets, deferredSearch, effectiveFormatFilter, fixedPickerFormat, selectedTags]);
 
   const selectedAsset = useMemo(
     () => filtered.find((asset) => asset.backendId === selectedAssetId) ?? null,
@@ -708,14 +733,14 @@ export function AssetManagementWorkspace({
   }, [filtered, pickerMode, selectedAssetId]);
 
   useEffect(() => {
-    if (!fixedPickerFormat) return;
+    if (!fixedPickerFormat || fixedPickerFormat === "h5p") return;
     setFormatFilter(fixedPickerFormat);
   }, [fixedPickerFormat]);
 
   function toPickerResult(asset: Asset): AssetPickerResult | null {
     if (!asset.backendId) return null;
     const id = asset.backendId;
-    const url = asset.thumbnail || `/api/asset/serve/${id}`;
+    const url = `/api/asset/serve/${id}${assetExtension(asset)}`;
     const normalizedPath = (asset.path || "").trim().replace(/^\/+/, "");
     let assetLink = url;
     if (normalizedPath.startsWith("course/assets/")) {
@@ -756,7 +781,9 @@ export function AssetManagementWorkspace({
   // ── Upload: step "pick" ───────────────────────────────────────────────────
   const handleUploadFile = useCallback((f: File | null) => {
     if (!f) return;
-    const validation = validateFile(f);
+    const validation = fixedPickerFormat === "h5p" && !/\.h5p$/i.test(f.name)
+      ? { ok: false, error: "Please choose a .h5p file." }
+      : validateFile(f);
     const autoTitle = f.name.replace(/\.[^.]+$/, "");
     setUpload((prev) => ({
       ...prev,
@@ -766,7 +793,7 @@ export function AssetManagementWorkspace({
       formErrors: {},
       uploadError: null,
     }));
-  }, []);
+  }, [fixedPickerFormat]);
 
   function handleUploadDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -887,12 +914,13 @@ export function AssetManagementWorkspace({
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────
-  const FORMAT_LABELS: Record<AssetFormat | "All", string> = {
+  const FORMAT_LABELS: Record<AssetFormat | "All" | "h5p", string> = {
     All: "All",
     image: "Image",
     audio: "Audio",
     video: "Video",
     other: "Other",
+    h5p: "H5P",
   };
 
   const FORMATS: (AssetFormat | "All")[] = ["All", "image", "audio", "video", "other"];
