@@ -120,13 +120,30 @@ function CheckboxRow({ checked, onChange, label }: { checked: boolean; onChange:
   );
 }
 
-function FieldLabel({ label }: { label: string }) {
+function FieldLabel({ label, hint }: { label: string; hint?: string }) {
+  const tooltipId = React.useId();
   return (
     <span className="text-xs font-semibold text-[#374151] flex items-center gap-1">
       {label}
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-      </svg>
+      {hint && (
+        <span
+          className="relative inline-flex group"
+          tabIndex={0}
+          aria-label={`${label}: ${hint}`}
+          aria-describedby={tooltipId}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          <span
+            id={tooltipId}
+            role="tooltip"
+            className="pointer-events-none absolute left-0 bottom-full z-20 mb-1.5 w-max max-w-[240px] rounded-[8px] bg-[#215369] px-3 py-1 text-[11px] font-medium text-[#ffffff] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+          >
+            {hint}
+          </span>
+        </span>
+      )}
     </span>
   );
 }
@@ -136,7 +153,7 @@ function TextField({
 }: { label: string; hint?: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <FieldLabel label={label} />
+      <FieldLabel label={label} hint={hint} />
       <input
         type="text"
         value={value}
@@ -154,7 +171,7 @@ function SelectField({
 }: { label: string; hint?: string; value: string; onChange: (v: string) => void; options: readonly string[] }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <FieldLabel label={label} />
+      <FieldLabel label={label} hint={hint} />
       <div className="relative">
         <select
           value={value}
