@@ -212,7 +212,8 @@ export function loadCKEditor5In(targetWindow: Window): Promise<void> {
         if (
           (targetWindow as any).CKEDITOR_LOADED &&
           (targetWindow as any).CKEDITOR &&
-          Array.isArray((targetWindow as any).CKEDITOR.pluginsConfig)
+          Array.isArray((targetWindow as any).CKEDITOR.pluginsConfig) &&
+          (targetWindow as any).CKEDITOR.PasteToolsPlugin
         ) {
           resolve();
           return true;
@@ -221,14 +222,20 @@ export function loadCKEditor5In(targetWindow: Window): Promise<void> {
       };
 
       if (!checkLoaded()) {
-        targetWindow.addEventListener("ckeditor5-loaded", () => resolve(), { once: true });
+        const onLoaded = () => {
+          if (!checkLoaded()) return;
+          targetWindow.removeEventListener("ckeditor5-loaded", onLoaded);
+        };
+        targetWindow.addEventListener("ckeditor5-loaded", onLoaded);
         const interval = setInterval(() => {
           if (checkLoaded()) {
             clearInterval(interval);
+            targetWindow.removeEventListener("ckeditor5-loaded", onLoaded);
           }
         }, 30);
         setTimeout(() => {
           clearInterval(interval);
+          targetWindow.removeEventListener("ckeditor5-loaded", onLoaded);
           if (!checkLoaded()) {
             if (isTop) loadPromise = null;
             else iframeLoadPromises.delete(targetWindow);
