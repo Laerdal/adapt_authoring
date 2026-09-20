@@ -4021,7 +4021,10 @@ export async function createComponent(
   // re-apply the schema defaults so nested sub-trees (e.g. _buttons) persist.
   if (Object.keys(schemaDefaults).length) {
     try {
-      await apiClient.put(`/api/content/component/${id}`, schemaDefaults);
+      await apiClient.put(`/api/content/component/${id}`, {
+        ...schemaDefaults,
+        _layout: layout,
+      });
     } catch {
       /* non-fatal */
     }

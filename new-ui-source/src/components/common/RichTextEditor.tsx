@@ -12,27 +12,21 @@
 // re-porting the old tool's bespoke AiAgentPlugin.
 import { useEffect, useRef, useState } from "react";
 import AiAssistPopover from "../storyboard/AiAssistPopover";
-import { loadCKEditor5, CKEDITOR_STANDARD_COLOUR_PALETTE } from "../../utils/ckEditor5Loader";
+import {
+  CKEDITOR_FULL_TOOLBAR_ITEMS,
+  CKEDITOR_HEADING_CONFIG,
+  CKEDITOR_IMAGE_CONFIG,
+  CKEDITOR_LIST_CONFIG,
+  CKEDITOR_STANDARD_COLOUR_PALETTE,
+  CKEDITOR_TABLE_CONFIG,
+  loadCKEditor5,
+} from "../../utils/ckEditor5Loader";
 import {
   CKEDITOR_LINK_CONFIG,
   getSamaritanSeedText,
   insertAiResultIntoEditor,
   replaceAiResultInEditor,
 } from "../../utils/ckEditorSamaritan";
-
-const TOOLBAR_ITEMS = [
-  "sourceEditing", "showBlocks", "|",
-  "undo", "redo", "|",
-  "findAndReplace", "selectAll", "|",
-  "heading", "|",
-  "bold", "italic", "underline", "strikethrough", "subscript", "superscript", "|",
-  "alignment", "|",
-  "numberedList", "bulletedList", "outdent", "indent", "|",
-  "blockQuote", "insertTable", "link", "|",
-  "fontColor", "fontBackgroundColor", "|",
-  "specialCharacters", "uploadImage", "|",
-  "samaritan",
-];
 
 export default function RichTextEditor({
   value,
@@ -63,10 +57,14 @@ export default function RichTextEditor({
         if (cancelled || !containerRef.current) return;
         const CKEDITOR = (window as any).CKEDITOR;
         const editor = await CKEDITOR.create(containerRef.current, {
-          plugins: [...CKEDITOR.pluginsConfig, CKEDITOR.SamaritanPlugin],
-          toolbar: { items: TOOLBAR_ITEMS, shouldNotGroupWhenFull: true },
+          plugins: [...CKEDITOR.pluginsConfig, CKEDITOR.SamaritanPlugin, CKEDITOR.PasteToolsPlugin],
+          toolbar: { items: [...CKEDITOR_FULL_TOOLBAR_ITEMS.slice(0, -1), "pasteWithFormatting", "xmlToHtml", "|", "samaritan"], shouldNotGroupWhenFull: true },
           fontColor: { colors: CKEDITOR_STANDARD_COLOUR_PALETTE },
           fontBackgroundColor: { colors: CKEDITOR_STANDARD_COLOUR_PALETTE },
+          heading: CKEDITOR_HEADING_CONFIG,
+          list: CKEDITOR_LIST_CONFIG,
+          table: CKEDITOR_TABLE_CONFIG,
+          image: CKEDITOR_IMAGE_CONFIG,
           link: CKEDITOR_LINK_CONFIG,
           htmlSupport: { allow: [{ name: /.*/, attributes: true, classes: true, style: true, styles: true }] },
           initialData: value || "",

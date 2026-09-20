@@ -6,7 +6,15 @@ import AddTemplateDrawer from "../../components/course/AddTemplateDrawer";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
 import RichTextEditor from "../../components/common/RichTextEditor";
 import AiAssistPopover from "../../components/storyboard/AiAssistPopover";
-import { loadCKEditor5In } from "../../utils/ckEditor5Loader";
+import {
+  CKEDITOR_FULL_TOOLBAR_ITEMS,
+  CKEDITOR_HEADING_CONFIG,
+  CKEDITOR_IMAGE_CONFIG,
+  CKEDITOR_LIST_CONFIG,
+  CKEDITOR_STANDARD_COLOUR_PALETTE,
+  CKEDITOR_TABLE_CONFIG,
+  loadCKEditor5In,
+} from "../../utils/ckEditor5Loader";
 import {
   CKEDITOR_LINK_CONFIG,
   getSamaritanSeedText,
@@ -3373,12 +3381,13 @@ export default function CourseEditor({
   const rightPanelScrollRef = useRef<HTMLElement | null>(null);
   const cleanupPreviewListenersRef = useRef<(() => void) | null>(null);
   const pendingLeftPanelScrollTargetRef = useRef<PendingPreviewScrollTarget | null>(null);
+  const swapPersistenceQueueRef = useRef<Map<string, Promise<void>>>(new Map());
   // Canvas "body" fields get a real CKEditor 5 instance (matching the old
   // tool: every TextArea schema field renders CKEditor, body included) —
   // keyed by the source element so re-running syncPreviewInlineEditors on
   // every keystroke (it depends on contentPages) reuses the same instance
   // instead of recreating it and losing focus/cursor position.
-  const canvasBodyEditorsRef = useRef<Map<HTMLElement, { editor: any; editableEl: HTMLElement; ownerKey: string; commit: () => void }>>(new Map());
+  const canvasBodyEditorsRef = useRef<Map<HTMLElement, { editor: any; editableEl: HTMLElement; ownerKey: string; commit: () => string | null }>>(new Map());
 
   // CKEditor5's own destroy() can throw SYNCHRONOUSLY ("Right-hand side of
   // 'instanceof' is not an object", inside its updateSourceElement) when the
@@ -3422,6 +3431,18 @@ export default function CourseEditor({
   }) => {
     const requestId = ++structureLoadRequestIdRef.current;
     const isCurrentRequest = () => isMountedRef.current && requestId === structureLoadRequestIdRef.current;
+
+    if (selection) {
+      pendingLeftPanelScrollTargetRef.current = selection.componentId
+        ? { level: "component", id: selection.componentId }
+        : selection.blockId
+          ? { level: "group", id: selection.blockId }
+          : selection.articleId
+            ? { level: "section", id: selection.articleId }
+            : selection.pageId
+              ? { level: "topic", id: selection.pageId }
+              : null;
+    }
 
     if (!courseId || courseId === "new-course") {
       if (isCurrentRequest()) {
@@ -4093,7 +4114,7 @@ export default function CourseEditor({
       }
 
       /* Permanent (not hover/active-conditional) vertical gutter around
-         every real Section/Content Group/Component element while editing.
+        every real Section/Content Group element while editing.
          Two problems this solves at once: (1) a hover/selection dashed box
          can never visually touch/merge with the next sibling's box, since
          there's always real space between the underlying elements
@@ -4106,8 +4127,7 @@ export default function CourseEditor({
          Component underneath. Mirrors Quick Edit's own always-on editing
          spacing (.editable { margin: 20px auto } in page.less). */
       .adapt-authoring-editing-active .article,
-      .adapt-authoring-editing-active .block,
-      .adapt-authoring-editing-active .component {
+      .adapt-authoring-editing-active .block {
         margin-top: 10px !important;
         margin-bottom: 10px !important;
       }
@@ -4120,6 +4140,11 @@ export default function CourseEditor({
          margin math on either side that could overflow past 100% width. */
       .adapt-authoring-editing-active .component__container {
         gap: 16px !important;
+      }
+
+      .adapt-authoring-editing-active .component__container:has(> .adapt-authoring-swap-positions-row) {
+        flex-wrap: wrap !important;
+        align-items: flex-start !important;
       }
 
       /* Without this, a headless Section's own gutter (the margin above
@@ -4390,17 +4415,31 @@ export default function CourseEditor({
 
       /* Merged swap-positions control (syncSwapPositionsControls) — a single
          always-visible plain-text affordance (no button chrome) replacing
-         the old tool's per-component move-left/move-right arrows. Anchored
-         to the right-hand component's own box (position:relative set
-         inline by syncSwapPositionsControls), sitting just above that
-         component's own top border, aligned to its right edge. */
+         the old tool's per-component move-left/move-right arrows. It lives
+         in normal flow before the component row, so a selected group's
+         header/editor can never overlap it. It must not be sticky: once the
+         button is rendered, its hit area must stay at that rendered position
+         while the canvas scrolls. */
+      .adapt-authoring-swap-positions-row {
+        position: static !important;
+        flex: 0 0 100% !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        display: flex !important;
+        justify-content: flex-end !important;
+        align-items: center !important;
+        min-height: 20px !important;
+        margin: 0 !important;
+        padding-right: 20px !important;
+        z-index: 9 !important;
+        pointer-events: auto !important;
+      }
+
       .adapt-authoring-swap-positions-btn {
-        position: absolute;
-        top: -20px;
-        right: 20px;
-        z-index: 5;
+        position: relative;
+        z-index: 8 !important;
         margin: 0;
-        padding: 0;
+        padding: 2px 0;
         border: none;
         background: transparent;
         outline: none;
@@ -4929,7 +4968,11 @@ export default function CourseEditor({
         // hover/selection path created, which outlives the interaction that
         // made it. Show the label there ONLY while that level is actually
         // hovered or selected, per explicit user instruction.
-        if (host.getAttribute("data-preview-injected") === "true" && host !== activeNode && host !== hoverNode) {
+        const header = host.closest(".page__header, .article__header, .block__header");
+        const isSyntheticHeader =
+          host.getAttribute("data-preview-injected") === "true" ||
+          header?.getAttribute("data-preview-injected") === "true";
+        if (isSyntheticHeader && host !== activeNode && host !== hoverNode) {
           return;
         }
         applyColorLabelBorder(host, value);
@@ -5454,18 +5497,6 @@ export default function CourseEditor({
     const PREVIEW_INLINE_FIELD_CONTAINER_SELECTOR =
       ".page__title, .page__subtitle, .page__body, .page__instruction, .article__title, .article__body, .article__instruction, .block__title, .block__body, .block__instruction, .component__title, .component__body, .component__instruction, .laerdal-text__subtitle";
 
-    const CANVAS_CKEDITOR_TOOLBAR_ITEMS = [
-      "sourceEditing", "showBlocks", "|",
-      "undo", "redo", "|",
-      "bold", "italic", "underline", "strikethrough", "|",
-      "alignment", "|",
-      "numberedList", "bulletedList", "outdent", "indent", "|",
-      "blockQuote", "insertTable", "link", "|",
-      "fontColor", "fontBackgroundColor", "|",
-      "specialCharacters", "uploadImage", "|",
-      "samaritan",
-    ];
-
     // Real CKEditor 5 for canvas "body" fields (matches the old tool: every
     // TextArea schema field gets CKEditor, body included — even when empty,
     // just an empty editor canvas, no placeholder text). Created ONCE per
@@ -5509,8 +5540,14 @@ export default function CourseEditor({
           const CKEDITOR = (iframeWindow as any).CKEDITOR;
           if (!CKEDITOR || !Array.isArray(CKEDITOR.pluginsConfig) || !element.isConnected || canvasBodyEditorsRef.current.has(element)) return;
           return CKEDITOR.create(element, {
-            plugins: [...CKEDITOR.pluginsConfig, CKEDITOR.SamaritanPlugin],
-            toolbar: { items: CANVAS_CKEDITOR_TOOLBAR_ITEMS, shouldNotGroupWhenFull: true },
+            plugins: [...CKEDITOR.pluginsConfig, CKEDITOR.SamaritanPlugin, CKEDITOR.PasteToolsPlugin],
+            toolbar: { items: [...CKEDITOR_FULL_TOOLBAR_ITEMS.slice(0, -1), "pasteWithFormatting", "xmlToHtml", "|", "samaritan"], shouldNotGroupWhenFull: true },
+            fontColor: { colors: CKEDITOR_STANDARD_COLOUR_PALETTE },
+            fontBackgroundColor: { colors: CKEDITOR_STANDARD_COLOUR_PALETTE },
+            heading: CKEDITOR_HEADING_CONFIG,
+            list: CKEDITOR_LIST_CONFIG,
+            table: CKEDITOR_TABLE_CONFIG,
+            image: CKEDITOR_IMAGE_CONFIG,
             link: CKEDITOR_LINK_CONFIG,
             htmlSupport: { allow: [{ name: /.*/, attributes: true, classes: true, style: true, styles: true }] },
             // On destroy() (deselecting this level), CKEditor writes its
@@ -5528,7 +5565,7 @@ export default function CourseEditor({
           }).then((editor: any) => {
             const editableEl = editor.ui.getEditableElement() as HTMLElement;
             let lastCommittedHtml = options.value || "";
-            const commit = () => {
+            const commit = (): string | null => {
               // Guards the same class of "iframe navigated out from under a
               // still-referenced editor" failure as safeDestroyCanvasEditor -
               // editor.getData() can throw once the underlying document/model
@@ -5536,11 +5573,13 @@ export default function CourseEditor({
               // sweeps right before destroy.
               try {
                 const html = editor.getData();
-                if (html === lastCommittedHtml) return;
+                if (html === lastCommittedHtml) return html;
                 lastCommittedHtml = html;
                 options.onCommit(html);
+                return html;
               } catch {
                 // Nothing left to commit to a torn-down editor.
+                return null;
               }
             };
             editor.model.document.on("change:data", () => {
@@ -5561,6 +5600,8 @@ export default function CourseEditor({
             // duplicate "Add ... body" behind/above the CKEditor box.
             element.style.display = "none";
             element.classList.remove("adapt-authoring-preview-inline-empty");
+            const h5pContainer = element.closest(".component.laerdal-h5p")?.querySelector<HTMLElement>(".laerdal-h5p__container");
+            h5pContainer?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
           });
         })
         .catch((err) => console.warn("Canvas CKEditor init failed", err))
@@ -5714,18 +5755,26 @@ export default function CourseEditor({
       const componentHost = (componentNode?.querySelector(".component__inner") ?? componentNode) as HTMLElement | null;
       if (!componentHost) return;
 
+      const componentKey = (selectedComponent.settings.componentKey || "").toLowerCase();
+
       // Some component templates render their own widget (image, H5P
       // iframe, etc.) as a SIBLING of .component__inner rather than a child
       // of it (e.g. `.component > .component__widget, .component__inner`).
       // Reordering only inside componentHost can't fix that — the header
       // group has to be pinned ahead of its container's own siblings too.
-      if (componentNode && componentHost !== componentNode && componentHost.parentElement === componentNode) {
+      // H5P owns a nested about:blank iframe and must keep its framework DOM
+      // order intact while its body field is upgraded to CKEditor.
+      if (
+        componentKey !== "laerdal-h5p" &&
+        componentNode &&
+        componentHost !== componentNode &&
+        componentHost.parentElement === componentNode
+      ) {
         componentNode.insertBefore(componentHost, componentNode.firstChild);
       }
 
       componentHost.classList.add("adapt-authoring-preview-inline-structured-header", "adapt-authoring-preview-inline-structured-header--component");
 
-      const componentKey = (selectedComponent.settings.componentKey || "").toLowerCase();
       // Note: component.settings.properties always carries `subtitle`/
       // `instruction` keys (seeded as empty strings) for every component
       // regardless of type — createComponent() in adaptAuthoring.ts seeds
@@ -6960,15 +7009,14 @@ export default function CourseEditor({
   }, [contentPages, navFooterCourseButtons, selectedPageId]);
 
   // Old-tool parity (editorPageComponentView.js evaluateMove): a Content
-  // Group with exactly one left + one right (half-width) component can swap
-  // which side each one renders on. The old tool exposes this as a move
+  // Group with exactly two components can swap which side each one renders
+  // on. The old tool exposes this as a move
   // arrow on EACH component's own sidebar; here it's merged into a single
   // "Swap positions" control injected once per qualifying block, permanently
   // visible (not hover/selection-gated) — matches old tool's move arrows,
-  // which are equally always-on while editing. Anchored to the RIGHT
-  // component's own box (absolutely positioned, see the injected stylesheet)
-  // so it always sits just above that component's own top border, aligned
-  // to its right edge — never the block header.
+  // which are equally always-on while editing. Rendered in normal flow
+  // between the Content Group header and its component row so it reserves
+  // vertical space instead of overlapping the selected group editor.
   const syncSwapPositionsControls = useCallback(() => {
     const iframe = previewFrameRef.current;
     const doc = iframe?.contentDocument;
@@ -6981,18 +7029,37 @@ export default function CourseEditor({
 
     page.articles.forEach((article) => {
       article.blocks.forEach((block) => {
-        const leftComponent = block.components.find((component) => component.layout === "left");
-        const rightComponent = block.components.find((component) => component.layout === "right");
-        if (block.components.length !== 2 || !leftComponent || !rightComponent) return;
+        if (block.components.length !== 2) return;
+        const explicitLeft = block.components.find((component) => component.layout === "left");
+        const explicitRight = block.components.find((component) => component.layout === "right");
+        const leftComponent = explicitLeft ?? block.components.find((component) => component.id !== explicitRight?.id) ?? block.components[0];
+        const rightComponent = explicitRight ?? block.components.find((component) => component.id !== leftComponent.id) ?? block.components[1];
 
         qualifyingBlockIds.add(block.id);
 
-        const rightComponentNode = doc.querySelector(`.component[data-adapt-id="${rightComponent.id}"]`) as HTMLElement | null;
-        const rightComponentHost = (rightComponentNode?.querySelector(".component__inner") as HTMLElement | null) ?? rightComponentNode;
-        if (!rightComponentHost) return;
+        const blockNode = doc.querySelector(`.block[data-adapt-id="${block.id}"]`) as HTMLElement | null;
+        const blockInner = (blockNode?.querySelector(".block__inner") as HTMLElement | null) ?? blockNode;
+        const componentContainer = blockInner?.querySelector(".component__container") as HTMLElement | null;
+        if (!blockInner || !componentContainer) return;
 
-        if (rightComponentHost.style.position !== "relative") {
-          rightComponentHost.style.position = "relative";
+        let row = doc.querySelector<HTMLElement>(`[data-preview-swap-positions-row][data-preview-swap-block-id="${block.id}"]`);
+        if (!row) {
+          row = doc.createElement("div");
+          row.className = "adapt-authoring-swap-positions-row";
+          row.setAttribute("data-preview-swap-positions-row", "true");
+          row.setAttribute("data-preview-swap-block-id", block.id);
+        }
+        if (componentContainer.firstElementChild !== row) {
+          componentContainer.insertBefore(row, componentContainer.firstChild);
+        }
+        const iframeRect = iframe.getBoundingClientRect();
+        const rightPanelRect = rightPanelScrollRef.current?.getBoundingClientRect();
+        const coveredRightWidth = rightPanelRect && rightPanelRect.left < iframeRect.right
+          ? Math.max(0, Math.ceil(iframeRect.right - rightPanelRect.left))
+          : 0;
+        const rowRightPadding = `${coveredRightWidth + 20}px`;
+        if (row.style.paddingRight !== rowRightPadding) {
+          row.style.paddingRight = rowRightPadding;
         }
 
         // Looked up by block id (not scoped to the current host) so a button
@@ -7015,8 +7082,8 @@ export default function CourseEditor({
         // frame forever and continually resetting the browser's own
         // :hover tracking on the button (so it could never sustain a
         // hover, and clicks landed unreliably mid-churn).
-        if (rightComponentHost.firstChild !== btn) {
-          rightComponentHost.insertBefore(btn, rightComponentHost.firstChild);
+        if (btn.parentElement !== row) {
+          row.appendChild(btn);
         }
         btn.setAttribute("data-preview-swap-page-id", page.id);
         btn.setAttribute("data-preview-swap-article-id", article.id);
@@ -7029,6 +7096,10 @@ export default function CourseEditor({
     doc.querySelectorAll("[data-preview-swap-positions-btn]").forEach((node) => {
       const blockId = node.getAttribute("data-preview-swap-block-id");
       if (!blockId || !qualifyingBlockIds.has(blockId)) node.remove();
+    });
+    doc.querySelectorAll("[data-preview-swap-positions-row]").forEach((node) => {
+      const blockId = node.getAttribute("data-preview-swap-block-id");
+      if (!blockId || !qualifyingBlockIds.has(blockId) || !node.querySelector("[data-preview-swap-positions-btn]")) node.remove();
     });
   }, [contentPages, selectedPageId]);
 
@@ -7162,7 +7233,13 @@ export default function CourseEditor({
       const componentNode = doc.querySelector(`.component[data-adapt-id="${pendingTarget.id}"]`);
       if (!componentNode) return;
 
-      const target = componentNode.querySelector(".component__inner") ?? componentNode;
+      // Selecting a component can expand its inline editor and push an
+      // embedded player below the canvas viewport. For H5P, keep the actual
+      // player container in view rather than stopping at the component
+      // header; other components retain the existing component-inner target.
+      const target = componentNode.querySelector(".laerdal-h5p__container") ??
+                     componentNode.querySelector(".component__inner") ??
+                     componentNode;
       target.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
       if (clearTarget) pendingLeftPanelScrollTargetRef.current = null;
       return;
@@ -7392,6 +7469,33 @@ export default function CourseEditor({
       const blockId = target?.closest(".block")?.getAttribute("data-adapt-id") ?? null;
       const componentId = target?.closest(".component")?.getAttribute("data-adapt-id") ?? null;
 
+      // The component-container gap is never a Content Group target. For a
+      // normal block, blank block padding is also neutral; a headless block
+      // is different because that padding is its only hover surface before
+      // the synthetic header has been created by a prior selection.
+      if (level === "group" && target?.closest(".block__inner")) {
+        if (target.closest(".component__container")) {
+          return { pageId: null, articleId: null, blockId: null, componentId: null, level: null };
+        }
+
+        const block = target.closest(".block");
+        const hasBlockHeader = !!block?.querySelector(".block__header, .block__header-inner");
+        if (hasBlockHeader && !target.closest(".block__header, .block__header-inner, .component")) {
+          return { pageId: null, articleId: null, blockId: null, componentId: null, level: null };
+        }
+      }
+
+      if (level === "group" && selectedComponentId && selectedBlockId === blockId) {
+        const block = target?.closest(".block");
+        const header = block?.querySelector(".block__header-inner");
+        const isHeadlessSelectedParent =
+          header?.getAttribute("data-preview-injected") === "true" ||
+          header?.closest(".block__header")?.getAttribute("data-preview-injected") === "true";
+        if (isHeadlessSelectedParent) {
+          return { pageId: null, articleId: null, blockId: null, componentId: null, level: null };
+        }
+      }
+
       return {
         pageId,
         articleId,
@@ -7454,6 +7558,21 @@ export default function CourseEditor({
       hoverRafId = window.requestAnimationFrame(applyHoverState);
     };
 
+    const clearPreviewHoverNow = () => {
+      pendingHoverState = null;
+      if (hoverRafId !== null) {
+        window.cancelAnimationFrame(hoverRafId);
+        hoverRafId = null;
+      }
+      doc.querySelectorAll(".adapt-authoring-preview-hover").forEach((node) => {
+        node.classList.remove("adapt-authoring-preview-hover");
+        if (!node.classList.contains("adapt-authoring-preview-active")) {
+          node.removeAttribute("data-preview-bridge-label");
+        }
+      });
+      setPreviewHoverState({ pageId: null, articleId: null, blockId: null, componentId: null, level: null });
+    };
+
     const setSwapHoverHighlight = (swapBtn: HTMLElement, active: boolean) => {
       const leftId = swapBtn.getAttribute("data-preview-swap-left-id");
       const rightId = swapBtn.getAttribute("data-preview-swap-right-id");
@@ -7478,24 +7597,52 @@ export default function CourseEditor({
       });
     };
 
+    const getEventElement = (target: EventTarget | null): Element | null => {
+      if (!target) return null;
+      const candidate = target as Element;
+      if (typeof candidate.closest === "function") return candidate;
+      return (target as Node).parentElement ?? null;
+    };
+
     const onMouseOver = (event: Event) => {
-      const target = event.target as Element | null;
+      const target = getEventElement(event.target);
       const swapBtn = target?.closest("[data-preview-swap-positions-btn]") as HTMLElement | null;
       if (swapBtn) {
+        clearPreviewHoverNow();
         setSwapHoverHighlight(swapBtn, true);
+        return;
+      }
+      if (target?.closest("[data-preview-swap-positions-row]")) {
+        clearPreviewHoverNow();
+        return;
       }
       const state = resolvePreviewIds(target);
       queueHoverState(state);
     };
 
     const onMouseOut = (event: MouseEvent) => {
-      const target = event.target as Element | null;
+      const target = getEventElement(event.target);
       const swapBtn = target?.closest("[data-preview-swap-positions-btn]") as HTMLElement | null;
       if (swapBtn) {
         const relatedTarget = event.relatedTarget as Node | null;
         if (!relatedTarget || !swapBtn.contains(relatedTarget)) {
           setSwapHoverHighlight(swapBtn, false);
         }
+        if (getEventElement(relatedTarget)?.closest("[data-preview-swap-positions-row]")) {
+          clearPreviewHoverNow();
+          return;
+        }
+        if (relatedTarget && doc.contains(relatedTarget)) {
+          queueHoverState(resolvePreviewIds(relatedTarget as Element));
+        }
+        return;
+      }
+      if (target?.closest("[data-preview-swap-positions-row]")) {
+        const relatedTarget = event.relatedTarget as Node | null;
+        if (!relatedTarget || !doc.contains(relatedTarget)) {
+          clearPreviewHoverNow();
+        }
+        return;
       }
       const relatedTarget = event.relatedTarget as Node | null;
       if (relatedTarget && doc.contains(relatedTarget)) return;
@@ -7503,8 +7650,17 @@ export default function CourseEditor({
     };
 
     const onClick = (event: Event) => {
-      const target = event.target as Element | null;
+      const target = getEventElement(event.target);
       if (!target) return;
+
+      // Paste dialogs live inside the preview iframe document. Keep every
+      // click inside the dialog out of canvas selection/outside-click logic;
+      // only clicking the backdrop itself closes the dialog.
+      const pasteDialog = target.closest("[data-adapt-authoring-paste-dialog]") as HTMLElement | null;
+      if (pasteDialog) {
+        if (target === pasteDialog) pasteDialog.remove();
+        return;
+      }
 
       const swapBtn = target.closest("[data-preview-swap-positions-btn]") as HTMLElement | null;
       if (swapBtn) {
@@ -7516,6 +7672,9 @@ export default function CourseEditor({
         const leftId = swapBtn.getAttribute("data-preview-swap-left-id");
         const rightId = swapBtn.getAttribute("data-preview-swap-right-id");
         if (pageId && articleId && blockId && leftId && rightId) {
+          const keepSwapHover = swapBtn.matches(":hover");
+          clearPreviewHoverNow();
+          setSwapHoverHighlight(swapBtn, false);
           // Instant, glitch-free swap: reorder/reclass the REAL DOM nodes
           // synchronously right here (no reload, no waiting on a React
           // re-render) — persistence to the database only happens later,
@@ -7529,16 +7688,16 @@ export default function CourseEditor({
             rightNode.classList.add("is-left");
             leftNode.parentElement!.insertBefore(rightNode, leftNode);
 
-            // leftNode is now the visually-right component — move the swap
-            // control there in the same synchronous pass so it never shows
-            // pinned to the old side for even one frame.
-            const newRightHost = (leftNode.querySelector(".component__inner") as HTMLElement | null) ?? leftNode;
-            newRightHost.style.position = "relative";
-            newRightHost.insertBefore(swapBtn, newRightHost.firstChild);
             swapBtn.setAttribute("data-preview-swap-left-id", rightId);
             swapBtn.setAttribute("data-preview-swap-right-id", leftId);
           }
           handleSwapComponentPositions(pageId, articleId, blockId, leftId, rightId);
+          if (keepSwapHover) {
+            iframe?.contentWindow?.requestAnimationFrame(() => {
+              clearPreviewHoverNow();
+              if (swapBtn.matches(":hover")) setSwapHoverHighlight(swapBtn, true);
+            });
+          }
         }
         return;
       }
@@ -7723,6 +7882,10 @@ export default function CourseEditor({
       // Its instance exists only for the currently selected node, so this is
       // never a selection gesture; cancelling this capture-phase click was
       // preventing component-body text from accepting a cursor or typing.
+      // CKEditor balloon forms are mounted next to the editor in the iframe
+      // body, so they are outside `.ck-editor` even though their buttons
+      // belong to the active editor (for example, the Link form's Save).
+      if (target.closest(".ck-balloon-panel")) return;
       if (target.closest(".ck-editor")) return;
 
       // Real MCQ/Checklist/etc. item templates give each option a native
@@ -8329,7 +8492,42 @@ export default function CourseEditor({
     syncNavigationFooterPreview();
     syncSwapPositionsControls();
     syncPasteZones();
+    if (!pendingLeftPanelScrollTargetRef.current && !menuSelected) {
+      pendingLeftPanelScrollTargetRef.current = selectedComponentId
+        ? { level: "component", id: selectedComponentId }
+        : selectedBlockId
+          ? { level: "group", id: selectedBlockId }
+          : selectedArticleId
+            ? { level: "section", id: selectedArticleId }
+            : selectedPageId
+              ? { level: "topic", id: selectedPageId }
+              : null;
+    }
     syncPreviewScrollFromLeftPanel();
+
+    const selectedPreviewTarget = !menuSelected
+      ? selectedComponentId
+        ? { level: "component" as const, id: selectedComponentId }
+        : selectedBlockId
+          ? { level: "group" as const, id: selectedBlockId }
+          : selectedArticleId
+            ? { level: "section" as const, id: selectedArticleId }
+            : selectedPageId
+              ? { level: "topic" as const, id: selectedPageId }
+              : null
+      : null;
+    const selectionScrollTimers: number[] = [];
+    if (selectedPreviewTarget) {
+      const retrySelectionScroll = () => {
+        pendingLeftPanelScrollTargetRef.current = selectedPreviewTarget;
+        syncPreviewScrollFromLeftPanel();
+      };
+      selectionScrollTimers.push(
+        window.setTimeout(retrySelectionScroll, 250),
+        window.setTimeout(retrySelectionScroll, 750),
+        window.setTimeout(retrySelectionScroll, 1400)
+      );
+    }
 
     // Retries syncSwapPositionsControls whenever the real framework DOM
     // changes on its own (e.g. an assessment-results component finishing an
@@ -8342,6 +8540,7 @@ export default function CourseEditor({
       swapObserverRafId = window.requestAnimationFrame(() => {
         swapObserverRafId = null;
         syncSwapPositionsControlsRef.current();
+        syncPreviewScrollFromLeftPanelRef.current();
       });
     });
     swapPositionsObserver.observe(doc.body, { childList: true, subtree: true });
@@ -8360,6 +8559,7 @@ export default function CourseEditor({
       alignmentResizeRafId = window.requestAnimationFrame(() => {
         alignmentResizeRafId = null;
         applyPreviewSelectionStylesRef.current();
+        syncSwapPositionsControlsRef.current();
       });
     };
     iframe.contentWindow?.addEventListener("resize", onPreviewResize);
@@ -8374,6 +8574,7 @@ export default function CourseEditor({
       if (alignmentResizeRafId !== null) {
         window.cancelAnimationFrame(alignmentResizeRafId);
       }
+      selectionScrollTimers.forEach((timerId) => window.clearTimeout(timerId));
       swapPositionsObserver.disconnect();
       iframe.contentWindow?.removeEventListener("resize", onPreviewResize);
       cancelTitleAutoRevert();
@@ -8408,6 +8609,11 @@ export default function CourseEditor({
     syncPasteZones,
     syncPreviewScrollFromLeftPanel,
     contentPages,
+    menuSelected,
+    selectedArticleId,
+    selectedBlockId,
+    selectedComponentId,
+    selectedPageId,
   ]);
 
   useEffect(() => {
@@ -9728,7 +9934,7 @@ export default function CourseEditor({
   // side each of a Content Group's two half-width components renders on.
   // The real canvas DOM is already swapped instantly by the click handler
   // above. Old tool persists a move immediately (no separate Save step) —
-  // matched here via a background PUT for each component, WITHOUT any
+  // matched here via queued background PUTs for each component, WITHOUT any
   // structure reload (loadStructureFromDatabase would re-fetch and re-mount
   // the whole iframe, causing the exact refresh/flash this is meant to avoid).
   function handleSwapComponentPositions(
@@ -9766,12 +9972,25 @@ export default function CourseEditor({
           : p
       )
     );
-    void Promise.all([
-      updateComponentLayout(leftComponentId, "right"),
-      updateComponentLayout(rightComponentId, "left"),
-    ]).catch((error) => {
-      console.error("Failed to save swapped component positions", error);
-    });
+    const previousPersistence = swapPersistenceQueueRef.current.get(blockId) ?? Promise.resolve();
+    const persistence = previousPersistence
+      .catch(() => undefined)
+      .then(async () => {
+        await Promise.all([
+          updateComponentLayout(leftComponentId, "right"),
+          updateComponentLayout(rightComponentId, "left"),
+        ]);
+      });
+    swapPersistenceQueueRef.current.set(blockId, persistence);
+    void persistence
+      .catch((error) => {
+        console.error("Failed to save swapped component positions", error);
+      })
+      .finally(() => {
+        if (swapPersistenceQueueRef.current.get(blockId) === persistence) {
+          swapPersistenceQueueRef.current.delete(blockId);
+        }
+      });
   }
 
   // Old-tool parity (editorOriginView.js onCopy -> editorView.js
@@ -9976,15 +10195,52 @@ export default function CourseEditor({
   }
 
   async function saveDraftChanges(): Promise<boolean> {
+    const committedCanvasBodyValues = new Map<string, string>();
     canvasBodyEditorsRef.current.forEach((entry) => {
-      entry.commit();
+      const html = entry.commit();
+      if (html !== null) committedCanvasBodyValues.set(entry.ownerKey, html);
     });
 
-    if (!hasUnsavedChanges && !pendingExtensionDisableNames.size) {
+    if (!hasUnsavedChanges && !pendingExtensionDisableNames.size && !committedCanvasBodyValues.size) {
       return true;
     }
 
-    const pages = contentPages;
+    // React state updates from commit() are asynchronous. Use the committed
+    // editor values directly for this save instead of the stale render
+    // snapshot captured when the Save handler was created.
+    const pages = cloneContentPages(contentPages);
+    committedCanvasBodyValues.forEach((html, ownerKey) => {
+      const [level, id] = ownerKey.split(":");
+      if (!id) return;
+      if (level === "topic") {
+        const page = pages.find((candidate) => candidate.id === id);
+        if (page) page.body = html;
+      } else if (level === "article") {
+        for (const page of pages) {
+          const article = page.articles.find((candidate) => candidate.id === id);
+          if (article) { article.description = html; break; }
+        }
+      } else if (level === "block") {
+        for (const page of pages) {
+          for (const article of page.articles) {
+            const block = article.blocks.find((candidate) => candidate.id === id);
+            if (block) { block.description = html; return; }
+          }
+        }
+      } else if (level === "component") {
+        for (const page of pages) {
+          for (const article of page.articles) {
+            for (const block of article.blocks) {
+              const component = block.components.find((candidate) => candidate.id === id);
+              if (component) {
+                component.settings = { ...component.settings, description: html };
+                return;
+              }
+            }
+          }
+        }
+      }
+    });
     const findPage = (pageId: string) => pages.find((page) => page.id === pageId);
     const findArticle = (articleId: string) => {
       for (const page of pages) {
@@ -10017,7 +10273,7 @@ export default function CourseEditor({
     try {
       setIsSavingSelection(true);
 
-      const currentFieldNames = collectCourseAssetFieldNames(contentPages);
+      const currentFieldNames = collectCourseAssetFieldNames(pages);
       const savedFieldNames = collectCourseAssetFieldNames(savedContentPages);
 
       const removedFieldNames = [...savedFieldNames].filter((fieldName) => !currentFieldNames.has(fieldName));
@@ -10044,7 +10300,8 @@ export default function CourseEditor({
         await Promise.all(upserts);
       }
 
-      for (const key of Object.keys(dirtyNodeKeys)) {
+      const saveKeys = new Set([...Object.keys(dirtyNodeKeys), ...committedCanvasBodyValues.keys()]);
+      for (const key of saveKeys) {
         const [level, id] = key.split(":");
         if (!id) continue;
 
@@ -10249,7 +10506,8 @@ export default function CourseEditor({
         setPendingExtensionDisableNames(new Set());
       }
 
-      setSavedContentPages(cloneContentPages(contentPages));
+      setContentPages(pages);
+      setSavedContentPages(cloneContentPages(pages));
       setDirtyNodeKeys({});
       setPreviewRefreshToken((current) => current + 1);
       return true;
