@@ -1,0 +1,141 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - develop
+  push:
+    branches:
+      - develop
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * *'
+
+concurrency:
+  group: adapt-authoring-ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '18'
+  STUDIO_E2E_REPO: Laerdal/adapt-e2e-test
+  STUDIO_E2E_WORKFLOW: playwright.yml
+  STUDIO_E2E_BRANCH: develop
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'schedule' && 'develop' || github.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Run backend tests
+        run: npm test
+
+      - name: Install new UI dependencies
+        working-directory: new-ui-source
+        run: npm install --ignore-scripts
+
+      - name: Run new UI tests
+        working-directory: new-ui-source
+        run: npm test
+
+      - name: Trigger Studio E2E workflow
+        id: trigger_e2e
+        env:
+          STUDIO_E2E_TOKEN: ${{ secrets.STUDIO_E2E_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${STUDIO_E2E_TOKEN:-}" ]; then
+            echo "Missing required secret: STUDIO_E2E_TOKEN"
+            exit 1
+          fi
+
+          dispatch_time=$(date -u +%s)
+
+          curl -fsS -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${STUDIO_E2E_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${STUDIO_E2E_REPO}/actions/workflows/${STUDIO_E2E_WORKFLOW}/dispatches" \
+            -d "{\"ref\":\"${STUDIO_E2E_BRANCH}\"}"
+
+          echo "dispatch_time=${dispatch_time}" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for Studio E2E completion
+        env:
+          STUDIO_E2E_TOKEN: ${{ secrets.STUDIO_E2E_TOKEN }}
+          DISPATCH_TIME: ${{ steps.trigger_e2e.outputs.dispatch_time }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${STUDIO_E2E_TOKEN:-}" ]; then
+            echo "Missing required secret: STUDIO_E2E_TOKEN"
+            exit 1
+          fi
+
+          for attempt in $(seq 1 90); do
+            response=$(curl -fsS \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer ${STUDIO_E2E_TOKEN}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/repos/${STUDIO_E2E_REPO}/actions/workflows/${STUDIO_E2E_WORKFLOW}/runs?branch=${STUDIO_E2E_BRANCH}&event=workflow_dispatch&per_page=20")
+
+            run_id=$(printf '%s' "$response" | jq -r --argjson cutoff "$DISPATCH_TIME" '
+              [.workflow_runs[]
+                | select((.created_at | fromdateiso8601) >= $cutoff)
+              ]
+              | sort_by(.created_at)
+              | last
+              | .id // empty
+            ')
+
+            status=$(printf '%s' "$response" | jq -r --argjson cutoff "$DISPATCH_TIME" '
+              [.workflow_runs[]
+                | select((.created_at | fromdateiso8601) >= $cutoff)
+              ]
+              | sort_by(.created_at)
+              | last
+              | .status // empty
+            ')
+
+            conclusion=$(printf '%s' "$response" | jq -r --argjson cutoff "$DISPATCH_TIME" '
+              [.workflow_runs[]
+                | select((.created_at | fromdateiso8601) >= $cutoff)
+              ]
+              | sort_by(.created_at)
+              | last
+              | .conclusion // empty
+            ')
+
+            if [ -n "$run_id" ] && [ "$status" = "completed" ]; then
+              if [ "$conclusion" != "success" ]; then
+                echo "Studio E2E workflow failed with conclusion: $conclusion"
+                exit 1
+              fi
+
+              echo "Studio E2E workflow completed successfully."
+              exit 0
+            fi
+
+            sleep 20
+          done
+
+          echo "Timed out waiting for Studio E2E workflow to finish."
+          exit 1
