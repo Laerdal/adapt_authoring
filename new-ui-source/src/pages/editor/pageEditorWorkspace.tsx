@@ -1046,6 +1046,7 @@ type ExtensionFieldRenderer = (args: {
 
 type ExtensionsAccordionBodyProps = {
   levelLabel: string;
+  componentKey?: string;
   extensions: Record<string, unknown>;
   onChange: (next: Record<string, unknown>) => void;
   schemasForLevel: Record<string, ExtensionFieldSchema>;
@@ -1056,6 +1057,74 @@ type ExtensionsAccordionBodyProps = {
   getInheritanceTag?: (key: string) => ExtensionInheritanceTag;
   assetContext?: BehaviourAssetContext;
 };
+
+const ALL_COMPONENT_LEVEL_EXTENSION_NAMES = new Set([
+  "adapt-additional-material",
+  "adapt-contrib-pageLevelProgress",
+  "adapt-estimated-time",
+  "adapt-hint",
+  "adapt-integrated-media",
+  "adapt-laerdal-pageLevelProgress",
+  "adapt-search",
+]);
+
+const QUESTION_COMPONENT_KEYS = new Set([
+  "gmcq",
+  "laerdal-checklist",
+  "draganddropzone",
+  "sentenceordering",
+  "laerdal-slider",
+  "matching",
+  "mcq",
+  "preassessment",
+  "slider",
+  "textinput",
+]);
+
+const RESULT_COMPONENT_KEYS = new Set(["assessmentresults", "assessmentresultstotal"]);
+
+const ASSESSMENT_COMPONENT_KEYS = new Set(QUESTION_COMPONENT_KEYS);
+ASSESSMENT_COMPONENT_KEYS.delete("preassessment");
+
+const IMAGE_ENLARGE_COMPONENT_KEYS = new Set([
+  "accordion",
+  "gmcq",
+  "graphic",
+  "laerdal-cards",
+  "laerdal-imageslider",
+  "laerdal-tabs",
+  "narrative",
+  "talk",
+]);
+
+const QUESTION_BEHAVIOUR_EXTENSION_NAMES = new Set([
+  "adapt-answer-specific-feedback",
+  "adapt-contrib-tutor",
+  "adapt-question-state-graphic",
+]);
+
+const QUESTION_FLOW_COMPONENT_KEYS = new Set(ASSESSMENT_COMPONENT_KEYS);
+QUESTION_FLOW_COMPONENT_KEYS.delete("laerdal-checklist");
+
+function isComponentExtensionAllowed(extensionName: string | undefined, componentKey: string): boolean {
+  if (!extensionName) return true;
+  if (ALL_COMPONENT_LEVEL_EXTENSION_NAMES.has(extensionName)) return true;
+  if (extensionName === "adapt-results-page-detail-feedback") {
+    return QUESTION_COMPONENT_KEYS.has(componentKey) || RESULT_COMPONENT_KEYS.has(componentKey);
+  }
+  if (QUESTION_BEHAVIOUR_EXTENSION_NAMES.has(extensionName)) {
+    return QUESTION_COMPONENT_KEYS.has(componentKey);
+  }
+  if (extensionName === "adapt-contrib-assessment") return ASSESSMENT_COMPONENT_KEYS.has(componentKey);
+  if (extensionName === "adapt-adaptiveContent") return componentKey === "diagnosticresults";
+  if (extensionName === "adapt-inline-feedback") return false;
+  if (extensionName === "adapt-image-enlarge") return IMAGE_ENLARGE_COMPONENT_KEYS.has(componentKey);
+  if (extensionName === "adapt-contrib-trickle") return QUESTION_FLOW_COMPONENT_KEYS.has(componentKey);
+
+  // Decision Tree is explicitly marked "keep how it is" in the shared sheet.
+  // Unknown/future schemas also retain the existing schema-driven behavior.
+  return true;
+}
 
 function extensionDisplayName(
   key: string,
@@ -1292,6 +1361,7 @@ function ExtensionListItem({
 
 function ExtensionsAccordionBody({
   levelLabel,
+  componentKey,
   extensions,
   onChange,
   schemasForLevel,
@@ -1304,6 +1374,7 @@ function ExtensionsAccordionBody({
 }: ExtensionsAccordionBodyProps) {
   const allKeys = Object.keys(schemasForLevel)
     .filter((key) => extensionHasVisibleContentAtLevel(schemasForLevel[key]))
+    .filter((key) => !componentKey || isComponentExtensionAllowed(schemasForLevel[key]?.name, componentKey))
     .sort((a, b) => a.localeCompare(b));
   const addedKeys = allKeys.filter((key) => Object.prototype.hasOwnProperty.call(extensions, key));
   const availableKeys = allKeys.filter((key) => !addedKeys.includes(key));
@@ -12116,6 +12187,7 @@ export default function CourseEditor({
                               <TopicAccordion title="Extensions" open={!!openComponentAccordions.extensions} onToggle={(triggerEl) => toggleComponentAccordion("extensions", triggerEl)}>
                                 <ExtensionsAccordionBody
                                   levelLabel="component"
+                                  componentKey={(component.settings.componentKey || "").toLowerCase()}
                                   extensions={asRecord(component.extensions)}
                                   schemasForLevel={componentExtensionSchemas[(component.settings.componentKey || "").toLowerCase()] ?? {}}
                                   extensionTypeOptions={extensionTypeOptions}
