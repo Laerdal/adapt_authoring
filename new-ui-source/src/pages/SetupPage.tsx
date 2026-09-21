@@ -2860,50 +2860,69 @@ function CourseCreationCenterContent() {
   }
 
   function renderPanel() {
-    if (activeNav === "overview") return <CourseOverviewPage courseId={courseId} title={title} description={description} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "structure")
-      return (
-        <CourseStructurePanel
-          courseId={courseId}
-          courseTitle={title}
-          onOpenEditor={(pageId) => requestGuardedAction(() => openEditor(pageId))}
-          onOpenStoryboard={() => handleNavigation("storyboarding")}
-          onNavigationRequest={performNavigation}
-          pendingNavigation={pendingNavigation}
-          onPendingNavigationHandled={() => setPendingNavigation(null)}
-        />
-      );
-    if (activeNav === "theme") return <SelectThemePage initialThemeName={savedThemeName} initialThemeVariables={savedThemeVariables} initialPresetId={savedPresetId} courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} onThemeSaved={({ themeName, themeVariables, themePresetId }) => { setSavedThemeName(themeName); setSavedThemeVariables(themeVariables); setSavedPresetId(themePresetId); }} />;
-    if (activeNav === "menu") return <MenuPage courseId={courseId} initialMenuName={savedMenuName} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "navigation") return <NavigationPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "accessibility") return <AccessibilityPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "tracking") return <TrackingAnalyticsPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "learner-experience") return <LearnerExperiencePanel courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "completion") return <CompletionProgressPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "technical-settings") return <TechnicalSettingPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "cdn-deployment") return <CdnDeploymentPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "translation") return <LegacyTranslationPanel courseId={courseId} />;
-    if (activeNav === "publish") return <PreflightValidatorPage courseId={courseId} onNavigationRequest={setActiveNav} />;
-    if (activeNav === "export-pdf" && canExportCourse) {
-      return (
-        <ExportPdfPage
-          courseId={courseId}
-          courseTitle={title}
-          onNavigationRequest={performNavigation}
-          pendingNavigation={pendingNavigation}
-          onPendingNavigationHandled={() => setPendingNavigation(null)}
-        />
-      );
+    switch (activeNav) {
+      case "overview":
+        return <CourseOverviewPage courseId={courseId} title={title} description={description} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "structure":
+        return (
+          <CourseStructurePanel
+            courseId={courseId}
+            courseTitle={title}
+            onOpenEditor={(pageId) => requestGuardedAction(() => openEditor(pageId))}
+            onOpenStoryboard={() => handleNavigation("storyboarding")}
+            onNavigationRequest={performNavigation}
+            pendingNavigation={pendingNavigation}
+            onPendingNavigationHandled={() => setPendingNavigation(null)}
+          />
+        );
+      case "theme":
+        return <SelectThemePage initialThemeName={savedThemeName} initialThemeVariables={savedThemeVariables} initialPresetId={savedPresetId} courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} onThemeSaved={({ themeName, themeVariables, themePresetId }) => { setSavedThemeName(themeName); setSavedThemeVariables(themeVariables); setSavedPresetId(themePresetId); }} />;
+      case "menu":
+        return <MenuPage courseId={courseId} initialMenuName={savedMenuName} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "navigation":
+        return <NavigationPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "accessibility":
+        return <AccessibilityPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "tracking":
+        return <TrackingAnalyticsPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "learner-experience":
+        return <LearnerExperiencePanel courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "completion":
+        return <CompletionProgressPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "technical-settings":
+        return <TechnicalSettingPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "cdn-deployment":
+        return <CdnDeploymentPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "translation":
+        return <LegacyTranslationPanel courseId={courseId} />;
+      case "publish":
+        return <PreflightValidatorPage courseId={courseId} onNavigationRequest={setActiveNav} />;
+      case "export-pdf":
+        if (canExportCourse) {
+          return (
+            <ExportPdfPage
+              courseId={courseId}
+              courseTitle={title}
+              onNavigationRequest={performNavigation}
+              pendingNavigation={pendingNavigation}
+              onPendingNavigationHandled={() => setPendingNavigation(null)}
+            />
+          );
+        }
+        break;
+      case "storyboarding":
+        return (
+          <StoryboardWorkspace
+            courseId={courseId}
+            courseTitle={title}
+            onBack={() => setActiveNav("overview")}
+            onTitleChange={setTitle}
+          />
+        );
+      default:
+        break;
     }
-    if (activeNav === "storyboarding")
-      return (
-        <StoryboardWorkspace
-          courseId={courseId}
-          courseTitle={title}
-          onBack={() => setActiveNav("overview")}
-          onTitleChange={setTitle}
-        />
-      );
+
     return <ComingSoonPanel label={activeItem?.label ?? ""} />;
   }
 
