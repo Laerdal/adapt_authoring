@@ -29,6 +29,8 @@ import { PreflightValidatorPage } from "./setup/preflightValidatorPage";
 import PublishMenuButton from "../components/publish/PublishMenuButton";
 import PublishCourseDialog, { type PublishCoursePhase } from "../components/publish/PublishCourseDialog";
 import ExportDialog from "../components/common/ExportDialog";
+import { AssetManagementWorkspace } from "./AssetManagementPage";
+import type { AssetPickerRequest, AssetPickerResult } from "../types/assetPicker";
 
 const ICON_BASE = "/new/assets/icons";
 
@@ -213,6 +215,8 @@ const GUARDED_NAV_IDS = new Set([
   ...NAV_ITEMS.filter((item) => item.heading !== true && item.guarded).map((item) => item.id),
   "export-pdf",
 ]);
+
+type SetupAssetPickerRequest = AssetPickerRequest;
 
 /* -- Course Structure panel -- */
 function CourseStructurePanel({
@@ -2692,6 +2696,7 @@ function CourseCreationCenterContent() {
     Object.fromEntries(NAV_GROUPS.map((group) => [group.id, true]))
   );
   const contentScrollRef = useRef<HTMLElement | null>(null);
+  const [assetPickerRequest, setAssetPickerRequest] = useState<SetupAssetPickerRequest | null>(null);
 
   // Tracks requested navigation when on a panel with unsaved changes
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
@@ -2753,6 +2758,7 @@ function CourseCreationCenterContent() {
   }, []);
 
   const activeItem = NAV_ITEMS.find((n) => !n.heading && n.id === activeNav);
+  const panelHeading = assetPickerRequest?.title || activeItem?.label || "Course Overview";
   const loginName = user?.username || user?.email || "Not signed in";
 
   function toggleGroup(groupId: string) {
@@ -2780,7 +2786,7 @@ function CourseCreationCenterContent() {
   }
 
   function renderPanel() {
-    if (activeNav === "overview") return <CourseOverviewPage courseId={courseId} title={title} description={description} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+    if (activeNav === "overview") return <CourseOverviewPage courseId={courseId} title={title} description={description} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} onRequestAssetPicker={setAssetPickerRequest} />;
     if (activeNav === "structure")
       return (
         <CourseStructurePanel
@@ -2932,11 +2938,11 @@ function CourseCreationCenterContent() {
       {/* Hidden on Storyboard: it isn't part of the Course Configuration nav
           (activeItem resolves to nothing there) and StoryboardTopBar already
           provides its own Export/Publish-equivalent actions. */}
-      {activeNav !== "storyboarding" && (
+      {activeNav !== "storyboarding" && !assetPickerRequest && (
         <div className="h-[56px] bg-white border-b border-[#d8dde6] flex items-center px-4 md:px-6 gap-3 shrink-0 relative z-10">
           <div className="flex items-center gap-2 text-[#111827] min-w-0">
             <SidebarMaskIcon file="overview-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current opacity-80" />
-            <span className="text-base font-semibold truncate">{activeItem?.label ?? "Course Overview"}</span>
+            <span className="text-base font-semibold truncate">{panelHeading}</span>
           </div>
 
         <div className="ml-auto flex items-center gap-4">
@@ -2989,7 +2995,7 @@ function CourseCreationCenterContent() {
             (StoryboardTopBar) per the Figma design — showing Course
             Configuration alongside it duplicated navigation/export actions.
             Course Configuration itself is unaffected on every other tab. */}
-        {activeNav !== "storyboarding" && (
+        {activeNav !== "storyboarding" && !assetPickerRequest && (
         <aside
           className={`h-full bg-white border-r border-[#d8dde6] flex flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-16" : "w-[256px]"}`}
         >
@@ -3109,9 +3115,28 @@ function CourseCreationCenterContent() {
 
         {/* -- Right content panel -- */}
         <main ref={contentScrollRef} className={`flex-1 overflow-hidden min-h-0 bg-[#f8fafc] ${activeNav === "menu" || activeNav === "navigation" || activeNav === "storyboarding" || activeNav === "translation" ? "" : "overflow-y-auto px-8 py-8"}`}>
-          {renderPanel()}
+          <div className={`h-full ${assetPickerRequest ? "hidden" : ""}`}>
+            {renderPanel()}
+          </div>
         </main>
       </div>
+
+      {assetPickerRequest ? (
+        <div className="fixed inset-0 z-[90] bg-[#f8fafc]">
+          <AssetManagementWorkspace
+            pickerMode
+            pickerAssetType={assetPickerRequest.assetType}
+            pickerTitle={assetPickerRequest.title}
+            pickerDescription={assetPickerRequest.description}
+            hideAssistant
+            onCancelPick={() => setAssetPickerRequest(null)}
+            onPickAsset={(asset: AssetPickerResult) => {
+              assetPickerRequest.onSelect(asset);
+              setAssetPickerRequest(null);
+            }}
+          />
+        </div>
+      ) : null}
       {showExportDialog && <ExportDialog onClose={() => setShowExportDialog(false)} />}
 
       {publishDialogPhase && (
