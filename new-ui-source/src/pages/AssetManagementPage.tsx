@@ -617,6 +617,7 @@ export function AssetManagementWorkspace({
   const [editState, setEditState]       = useState<EditModalState | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<Asset | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<Asset | null>(null);
 
   const tagFilterRef   = useRef<HTMLDivElement>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
@@ -886,15 +887,23 @@ export function AssetManagementWorkspace({
     }
   }
 
-  async function handleRestoreDeletedAsset(asset: Asset) {
+  async function confirmRestore() {
+    const target = restoreTarget;
+    setRestoreTarget(null);
+    if (!target?.backendId) return;
+
     try {
-      await restoreAsset(asset.backendId);
+      await restoreAsset(target.backendId);
       setLastDeletedAsset(null);
       setSelectedAssetId(null);
       await loadAssets();
     } catch (error) {
       setLastDeletedAsset((prev) => prev ? { ...prev, saveError: getEditErrorMessage(error) } as Asset & { saveError?: string } : prev);
     }
+  }
+
+  function handleRestoreDeletedAsset(asset: Asset) {
+    setRestoreTarget(asset);
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────
@@ -1522,51 +1531,72 @@ export function AssetManagementWorkspace({
       {/* ════════════════════════════════════════════════════════════════
           Delete Confirmation Modal
       ════════════════════════════════════════════════════════════════ */}
-      {!pickerMode && deleteTarget && (
+      {!pickerMode && (deleteTarget || restoreTarget) && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-          onClick={(e) => { if (e.target === e.currentTarget) setDeleteTarget(null); }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setDeleteTarget(null);
+              setRestoreTarget(null);
+            }
+          }}
         >
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
             <div className="px-6 pt-6 pb-4">
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#fef2f2] flex items-center justify-center shrink-0 mt-0.5">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                    <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${deleteTarget ? "bg-[#fef2f2]" : "bg-[#ecfdf5]"}`}>
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke={deleteTarget ? "#ef4444" : "#16a34a"}
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    {deleteTarget ? (
+                      <>
+                        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                        <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+                      </>
+                    ) : (
+                      <path d="M5 12l4 4L19 2" />
+                    )}
                   </svg>
                 </div>
                 <div>
-                  <h2 className="font-semibold text-[#111827] text-base">Delete Asset</h2>
+                  <h2 className="font-semibold text-[#111827] text-base">{deleteTarget ? "Delete Asset" : "Restore Asset"}</h2>
                   <p className="text-sm text-[#6b7280] mt-1">
-                    Are you sure you want to delete <span className="font-medium text-[#111827]">"{deleteTarget.title}"</span>?
+                    {deleteTarget ? (
+                      <>Are you sure you want to delete <span className="font-medium text-[#111827]">"{deleteTarget.title}"</span>?</>
+                    ) : (
+                      <>Are you sure you want to restore <span className="font-medium text-[#111827]">"{restoreTarget?.title}"</span>?</>
+                    )}
                   </p>
                 </div>
-              </div>
-            </div>
-
-            <div className="px-6 pb-5">
-              <div className="p-4 rounded-lg bg-[#fef2f2] border border-[#fecaca]">
-                <p className="text-sm text-[#b91c1c]">
-                  ⚠ This action cannot be undone. The asset will be permanently removed.
-                </p>
               </div>
             </div>
 
             <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#e5e7eb]">
               <button
                 type="button"
-                onClick={() => setDeleteTarget(null)}
+                onClick={() => {
+                  setDeleteTarget(null);
+                  setRestoreTarget(null);
+                }}
                 className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={confirmDelete}
-                className="px-4 py-2 text-sm font-semibold text-white bg-[#ef4444] hover:bg-[#dc2626] rounded-lg transition-colors"
+                onClick={deleteTarget ? confirmDelete : confirmRestore}
+                className={`px-4 py-2 text-sm font-semibold text-white rounded-lg transition-colors ${
+                  deleteTarget ? "bg-[#ef4444] hover:bg-[#dc2626]" : "bg-[#16a34a] hover:bg-[#15803d]"
+                }`}
               >
-                Delete Asset
+                {deleteTarget ? "Delete Asset" : "Restore Asset"}
               </button>
             </div>
           </div>
