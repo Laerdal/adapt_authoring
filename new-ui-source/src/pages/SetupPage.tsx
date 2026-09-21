@@ -214,15 +214,7 @@ const GUARDED_NAV_IDS = new Set([
   "export-pdf",
 ]);
 
-const SPECIAL_NAV = {
-  back: "__nav_back__",
-  home: "__nav_home__",
-  editor: "__nav_editor__",
-  previewStart: "__nav_preview_start__",
-  previewCurrent: "__nav_preview_current__",
-  exportSource: "__nav_export_source__",
-  publishCourseAction: "__nav_publish_course__",
-} as const;
+const DEFERRED_NAV_ACTION = "__deferred_nav_action__";
 
 /* -- Course Structure panel -- */
 function CourseStructurePanel({
@@ -2729,6 +2721,7 @@ function CourseCreationCenterContent() {
     Object.fromEntries(NAV_GROUPS.map((group) => [group.id, true]))
   );
   const contentScrollRef = useRef<HTMLElement | null>(null);
+  const deferredNavigationActionRef = useRef<(() => void) | null>(null);
 
   // Tracks requested navigation when on a panel with unsaved changes
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
@@ -2799,12 +2792,14 @@ function CourseCreationCenterContent() {
     }));
   }
 
-  function requestGuardedAction(actionTarget: string, callback: () => void) {
+  function requestGuardedAction(callback: () => void) {
     if (GUARDED_NAV_IDS.has(activeNav)) {
-      setPendingNavigation(actionTarget);
+      deferredNavigationActionRef.current = callback;
+      setPendingNavigation(DEFERRED_NAV_ACTION);
       return;
     }
 
+    deferredNavigationActionRef.current = null;
     setPendingNavigation(null);
     callback();
   }
@@ -2812,9 +2807,11 @@ function CourseCreationCenterContent() {
   // Smart navigation handler - used by sidebar items
   // When on a guarded setup panel, the page intercepts via pendingNavigation state.
   function handleNavigation(nextPanel: string) {
-    if (!nextPanel.startsWith("__nav_") && nextPanel === activeNav) {
+    if (nextPanel === activeNav) {
       return;
     }
+
+    deferredNavigationActionRef.current = null;
 
     if (GUARDED_NAV_IDS.has(activeNav)) {
       // Signal to the active guarded setup page that navigation is requested.
@@ -2848,42 +2845,10 @@ function CourseCreationCenterContent() {
   }
 
   function performNavigation(target: string) {
-    if (target === SPECIAL_NAV.back) {
-      if (window.history.length > 1) navigate(-1);
-      else navigate("/");
-      return;
-    }
-
-    if (target === SPECIAL_NAV.home) {
-      navigate("/");
-      return;
-    }
-
-    if (target === SPECIAL_NAV.editor || target.startsWith(`${SPECIAL_NAV.editor}:`)) {
-      const pageId = target.startsWith(`${SPECIAL_NAV.editor}:`)
-        ? decodeURIComponent(target.slice(`${SPECIAL_NAV.editor}:`.length))
-        : undefined;
-      openEditor(pageId);
-      return;
-    }
-
-    if (target === SPECIAL_NAV.previewStart) {
-      openPreview(false);
-      return;
-    }
-
-    if (target === SPECIAL_NAV.previewCurrent) {
-      openPreview(true);
-      return;
-    }
-
-    if (target === SPECIAL_NAV.exportSource) {
-      triggerExportSource();
-      return;
-    }
-
-    if (target === SPECIAL_NAV.publishCourseAction) {
-      openPublishDialog();
+    if (target === DEFERRED_NAV_ACTION) {
+      const deferredAction = deferredNavigationActionRef.current;
+      deferredNavigationActionRef.current = null;
+      deferredAction?.();
       return;
     }
 
@@ -2894,13 +2859,6 @@ function CourseCreationCenterContent() {
     setActiveNav(target);
   }
 
-  function buildEditorNavigationTarget(pageId?: string) {
-    const trimmedPageId = (pageId || "").trim();
-    return trimmedPageId
-      ? `${SPECIAL_NAV.editor}:${encodeURIComponent(trimmedPageId)}`
-      : SPECIAL_NAV.editor;
-  }
-
   function renderPanel() {
     if (activeNav === "overview") return <CourseOverviewPage courseId={courseId} title={title} description={description} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
     if (activeNav === "structure")
@@ -2908,7 +2866,7 @@ function CourseCreationCenterContent() {
         <CourseStructurePanel
           courseId={courseId}
           courseTitle={title}
-          onOpenEditor={(pageId) => handleNavigation(buildEditorNavigationTarget(pageId))}
+          onOpenEditor={(pageId) => requestGuardedAction(() => openEditor(pageId))}
           onOpenStoryboard={() => handleNavigation("storyboarding")}
           onNavigationRequest={performNavigation}
           pendingNavigation={pendingNavigation}
@@ -3037,12 +2995,15 @@ function CourseCreationCenterContent() {
         courseTitle={title}
         loginName={loginName}
         activeNav={primaryTopNav}
-        onBack={() => handleNavigation(SPECIAL_NAV.back)}
-        onHome={() => handleNavigation(SPECIAL_NAV.home)}
+        onBack={() => requestGuardedAction(() => {
+          if (window.history.length > 1) navigate(-1);
+          else navigate("/");
+        })}
+        onHome={() => requestGuardedAction(() => navigate("/"))}
         onOpenCourseSettings={() => handleNavigation("overview")}
         onOpenStoryboard={() => handleNavigation("storyboarding")}
-        onOpenEditor={() => handleNavigation(buildEditorNavigationTarget())}
-        onOpenPreview={(startFromCurrentPage) => handleNavigation(startFromCurrentPage ? SPECIAL_NAV.previewCurrent : SPECIAL_NAV.previewStart)}
+        onOpenEditor={() => requestGuardedAction(() => openEditor())}
+        onOpenPreview={(startFromCurrentPage) => requestGuardedAction(() => openPreview(startFromCurrentPage))}
         previewDisabled={!courseId}
         editorDisabled={!courseId}
       />
@@ -3063,7 +3024,7 @@ function CourseCreationCenterContent() {
             <ExportMenu
               disabled={!courseId || !user?._tenantId}
               exportSourceLoading={exportingSource}
-              onExportSource={() => requestGuardedAction(SPECIAL_NAV.exportSource, () => triggerExportSource())}
+              onExportSource={() => requestGuardedAction(() => triggerExportSource())}
               onExportPdf={() => handleNavigation("export-pdf")}
             />
           )}
@@ -3071,7 +3032,7 @@ function CourseCreationCenterContent() {
             <PublishMenuButton
               active={activeNav === "publish"}
               onSelectPreflight={() => handleNavigation("publish")}
-              onSelectPublish={() => requestGuardedAction(SPECIAL_NAV.publishCourseAction, openPublishDialog)}
+              onSelectPublish={() => requestGuardedAction(openPublishDialog)}
             />
           </div>
         </div>
