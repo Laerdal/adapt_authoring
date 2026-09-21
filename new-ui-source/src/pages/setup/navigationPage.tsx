@@ -766,6 +766,7 @@ export function NavigationPage({
 
       {assetPickerOpen && (
         <AssetPickerModal
+          assetType="image"
           onClose={() => setAssetPickerOpen(false)}
           onSelect={({ url }) => {
             setHeaderLogo({ src: url });
