@@ -108,7 +108,7 @@ const ACCEPTED_EXTS: Record<AssetFormat, string[]> = {
   video: ["mp4", "webm", "mov", "avi"],
   other: [],
 };
-const MAX_SIZE_MB = 500;
+const MAX_SIZE_MB = 600;
 
 function detectFormat(file: File): AssetFormat {
   const mime = file.type.toLowerCase();
@@ -982,7 +982,6 @@ export function AssetManagementWorkspace({
       <div className="px-6 md:px-8 pt-6 pb-4 flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">{pickerMode ? (pickerTitle || "Select Asset") : "Asset Management"}</h1>
-          <p className="text-sm text-[#6b7280] mt-1">{pickerMode ? (pickerDescription || "Choose an asset to continue.") : "Upload, organize, and manage your course assets."}</p>
         </div>
         {pickerMode ? null : (
           <button
