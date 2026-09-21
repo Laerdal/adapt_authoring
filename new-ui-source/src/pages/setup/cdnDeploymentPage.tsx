@@ -592,7 +592,6 @@ export function CdnDeploymentPage({
 
   // Project/Course Id together (with cdnid) form the CDN destination path
   // (see destination.js: `${groupid}/courses/${courseid}/${version}`). If
-  // either still matches ADAPT-3842's shared "default-project" / "default-course"
   // placeholders, deploying would target a generic path other unconfigured
   // courses share, overwriting each other's content — so we reject either
   // default, not just the pair.
