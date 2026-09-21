@@ -96,14 +96,34 @@ function Section({
   );
 }
 
-function ToggleSwitch({ checked, onChange, label, disabled = false }: { checked: boolean; onChange: (v: boolean) => void; label: React.ReactNode; disabled?: boolean }) {
+// Same constraint the legacy CDN form enforces (backboneFormsOverrides.js): 30 char
+// cap, alphanumerics + '-' + '_' only. The values are eventually passed as
+// --groupid / --courseid to the `cdndeploy` CLI, so keep this in sync if the CLI
+// tightens its input rules.
+const CDN_ID_MAX_LENGTH = 30;
+const CDN_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
+function sanitizeCdnId(v: string): string {
+  return v.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, CDN_ID_MAX_LENGTH);
+}
+function validateCdnId(v: string, fieldLabel: string): string | undefined {
+  if (!v) return `${fieldLabel} is required.`;
+  if (v.length > CDN_ID_MAX_LENGTH) return `${fieldLabel} must be ${CDN_ID_MAX_LENGTH} characters or fewer.`;
+  if (!CDN_ID_PATTERN.test(v)) return `${fieldLabel} may only contain letters, numbers, '-' and '_'.`;
+  return undefined;
+}
+
+function ToggleSwitch({ checked, onChange, label, disabled = false, ariaLabel }: { checked: boolean; onChange: (v: boolean) => void; label: React.ReactNode; disabled?: boolean; ariaLabel?: string }) {
+  const labelId = React.useId();
+  const stringLabel = typeof label === "string" ? label : undefined;
   return (
     <div className={`flex items-center justify-between gap-3 py-1 ${disabled ? "opacity-40" : ""}`}>
-      <span className="text-sm font-semibold text-[var(--life-base-black)] leading-snug">{label}</span>
+      <span id={labelId} className="text-sm font-semibold text-[var(--life-base-black)] leading-snug">{label}</span>
       <button
         type="button"
         role="switch"
         aria-checked={checked}
+        aria-label={ariaLabel ?? stringLabel}
+        aria-labelledby={ariaLabel || stringLabel ? undefined : labelId}
         disabled={disabled}
         onClick={() => !disabled && onChange(!checked)}
         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:ring-offset-1 ${checked ? "bg-[var(--life-primary-500)]" : "bg-[#d1d5db]"} ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
@@ -145,19 +165,25 @@ function FieldLabel({ label, hint }: { label: string; hint?: string }) {
 }
 
 function TextField({
-  label, hint, value, onChange, placeholder,
-}: { label: string; hint?: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
+  label, hint, value, onChange, placeholder, error, maxLength, sanitize,
+}: { label: string; hint?: string; value: string; onChange: (v: string) => void; placeholder?: string; error?: string; maxLength?: number; sanitize?: (v: string) => string }) {
   return (
     <div className="flex flex-col gap-1.5">
       <FieldLabel label={label} hint={hint} />
       <input
         type="text"
         value={value}
-        onChange={(e) => onChange(e.target.value)}
+        maxLength={maxLength}
+        onChange={(e) => onChange(sanitize ? sanitize(e.target.value) : e.target.value)}
         placeholder={placeholder}
-        className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:border-transparent transition-colors"
+        aria-invalid={!!error}
+        className={`w-full px-3 py-2 text-sm rounded-lg border bg-white text-[#111827] focus:outline-none focus:ring-2 focus:border-transparent transition-colors ${error ? "border-[var(--life-error-500)] focus:ring-[var(--life-error-500)]" : "border-[#e5e7eb] focus:ring-[var(--life-primary-500)]"}`}
       />
-      {hint && <p className="text-[11px] text-[#9ca3af] leading-snug">{hint}</p>}
+      {error ? (
+        <p className="text-[11px] text-[var(--life-error-500)] leading-snug">{error}</p>
+      ) : hint ? (
+        <p className="text-[11px] text-[#9ca3af] leading-snug">{hint}</p>
+      ) : null}
     </div>
   );
 }
@@ -413,6 +439,15 @@ export function CdnDeploymentPage({
 
   async function persist(next: CdnDeploymentSettings): Promise<boolean> {
     if (!courseId) return false;
+    if (next.isEnabled) {
+      const groupErr = validateCdnId(next.groupid, "Project");
+      const courseErr = validateCdnId(next.courseid, "Course Id");
+      const firstErr = groupErr || courseErr;
+      if (firstErr) {
+        setToast({ type: "error", message: firstErr });
+        return false;
+      }
+    }
     setSaving(true);
     try {
       await saveCdnDeploymentSettings(courseId, next);
@@ -595,8 +630,12 @@ export function CdnDeploymentPage({
     (cfg.groupid === DEFAULT_CDN_DEPLOYMENT_SETTINGS.groupid ||
       cfg.courseid === DEFAULT_CDN_DEPLOYMENT_SETTINGS.courseid);
 
+  const groupidError = cfg && cfg.isEnabled ? validateCdnId(cfg.groupid, "Project") : undefined;
+  const courseidError = cfg && cfg.isEnabled ? validateCdnId(cfg.courseid, "Course Id") : undefined;
+  const hasIdentityErrors = !!(groupidError || courseidError);
+
   const canTrigger =
-    !!cfg?.isEnabled && !!cfg.cdnid && !!cfg.groupid && !!cfg.courseid && !!cfg.version && !building && !identityMatchesDefault;
+    !!cfg?.isEnabled && !!cfg.cdnid && !!cfg.groupid && !!cfg.courseid && !!cfg.version && !building && !identityMatchesDefault && !hasIdentityErrors;
 
   return (
     <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
@@ -642,12 +681,18 @@ export function CdnDeploymentPage({
                       hint="Which project does this course belong to? Set the project ID with less than 30 characters and no special characters allowed."
                       value={cfg.groupid}
                       onChange={(v) => set({ groupid: v })}
+                      maxLength={CDN_ID_MAX_LENGTH}
+                      sanitize={sanitizeCdnId}
+                      error={groupidError}
                     />
                     <TextField
                       label="Course Id"
                       hint="Set the course ID with less than 30 characters and no special characters allowed."
                       value={cfg.courseid}
                       onChange={(v) => set({ courseid: v })}
+                      maxLength={CDN_ID_MAX_LENGTH}
+                      sanitize={sanitizeCdnId}
+                      error={courseidError}
                     />
                     <TextField
                       label="Version"

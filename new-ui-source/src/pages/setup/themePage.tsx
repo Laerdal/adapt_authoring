@@ -1455,17 +1455,34 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   // which re-runs hydration and mutates snapshot inputs (customSettings/vanillaColors/…).
   // If we captured the snapshot synchronously inside handleSave, the next render
   // reads different state and hasChanges flips true, re-showing the popup.
-  // Debounce the re-capture: the cleanup fires whenever any snapshot input changes
-  // (buildUnsavedStateSnapshot's identity changes with its deps), so the timer
-  // effectively waits for state to stabilize before capturing.
+  //
+  // The debounced re-capture must NOT swallow an edit the user makes during the
+  // window. We tie the re-capture to two conditions: (1) the parent prop actually
+  // changed after the save (i.e. hydration ran), and (2) no user pointer/key
+  // input arrived while the window was open. If either fails, we drop the
+  // pending sync without overwriting `lastSavedStateSnapshot`, so hasChanges
+  // correctly reflects the user's edit.
   const [pendingSnapshotSync, setPendingSnapshotSync] = useState(false);
   useEffect(() => {
     if (!pendingSnapshotSync) return;
+    let cancelled = false;
+    const bail = () => {
+      if (cancelled) return;
+      cancelled = true;
+      setPendingSnapshotSync(false);
+    };
+    window.addEventListener("pointerdown", bail, true);
+    window.addEventListener("keydown", bail, true);
     const timeout = setTimeout(() => {
+      if (cancelled) return;
       setLastSavedStateSnapshot(buildUnsavedStateSnapshot());
       setPendingSnapshotSync(false);
     }, 100);
-    return () => clearTimeout(timeout);
+    return () => {
+      clearTimeout(timeout);
+      window.removeEventListener("pointerdown", bail, true);
+      window.removeEventListener("keydown", bail, true);
+    };
   }, [pendingSnapshotSync, buildUnsavedStateSnapshot]);
 
   const hasChanges =
