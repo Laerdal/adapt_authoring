@@ -498,7 +498,7 @@ function AssetPreviewPanel({
                     onClick={() => onRestore?.(asset)}
                     className="inline-flex items-center justify-center rounded-xl bg-[#16a34a] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#15803d]"
                   >
-                    Recover Asset
+                    Restore
                   </button>
                 </div>
               ) : (
@@ -540,10 +540,31 @@ const AssetCardItem = memo(function AssetCardItem({ asset, clickable = false, on
           onActivate?.(asset);
         }
       } : undefined}
-      className={`rounded-xl overflow-hidden transition-all flex flex-col group border ${selected ? "border-[#2d6fa8] shadow-[0_12px_28px_rgba(45,111,168,0.22)] ring-2 ring-[#dbeeff]" : "border-[#e5e7eb]"} bg-white ${clickable ? "cursor-pointer hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:ring-offset-2" : "hover:shadow-md"}`}
+      className={`rounded-xl overflow-hidden transition-all flex flex-col group border ${selected ? "border-[#2d6fa8] shadow-[0_12px_28px_rgba(45,111,168,0.22)] ring-2 ring-[#dbeeff]" : "border-[#e5e7eb]"} bg-white ${clickable ? "cursor-pointer hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:ring-offset-2" : "hover:shadow-md"} ${asset.isDeleted ? "opacity-80 grayscale-[0.2]" : ""}`}
     >
-      {/* Thumbnail */}
-      <AssetCardThumbnail asset={asset} />
+      <div className="relative">
+        {/* Thumbnail */}
+        <div className="relative h-32 overflow-hidden">
+          <AssetCardThumbnail asset={asset} />
+          {asset.isDeleted && (
+            <div className="absolute inset-0 bg-white/80" aria-hidden="true">
+              <i
+                className="fa fa-ban"
+                style={{
+                  position: "relative",
+                  top: "50%",
+                  display: "block",
+                  marginTop: "-36px",
+                  color: "#ff5567",
+                  fontSize: "72px",
+                  lineHeight: "72px",
+                  textAlign: "center",
+                }}
+              />
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Body */}
       <div className="p-4 flex flex-col gap-2 flex-1">
@@ -593,12 +614,12 @@ export function AssetManagementWorkspace({
 
   const loadAssets = useCallback(async () => {
     try {
-      const rows = await getAssets();
+      const rows = await getAssets(!pickerMode);
       setAssets(rows);
     } catch {
       setAssets([]);
     }
-  }, []);
+  }, [pickerMode]);
   useEffect(() => { void loadAssets(); }, [loadAssets]);
   const [search, setSearch]             = useState("");
   const [formatFilter, setFormatFilter] = useState<AssetFormat | "All">(

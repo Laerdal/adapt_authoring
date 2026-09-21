@@ -4809,10 +4809,10 @@ interface EngineAsset {
   };
 }
 
-export async function getAssets(): Promise<DashboardAsset[]> {
+export async function getAssets(includeDeleted = false): Promise<DashboardAsset[]> {
   const res = await apiClient.get<EngineAsset[] | { assets?: EngineAsset[] }>("/api/asset/query");
   const docs = (Array.isArray(res) ? res : res?.assets ?? [])
-    .filter((asset) => asset?._isDeleted !== true)
+    .filter((asset) => includeDeleted || asset?._isDeleted !== true)
     .slice()
     .sort((left, right) => {
     const leftTs = left.createdAt ? new Date(left.createdAt).getTime() : 0;
@@ -4836,6 +4836,7 @@ export async function getAssets(): Promise<DashboardAsset[]> {
       filename: a.filename,
       path: a.path,
       mimeType: a.mimeType,
+      isDeleted: !!a._isDeleted,
       metadata: a.metadata,
     };
   });
