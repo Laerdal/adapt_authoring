@@ -4782,6 +4782,7 @@ export interface DashboardAsset {
   filename?: string;
   path?: string;
   mimeType?: string;
+  isDeleted?: boolean;
   metadata?: {
     width?: number;
     height?: number;
@@ -4842,6 +4843,10 @@ export async function getAssets(): Promise<DashboardAsset[]> {
 
 export function trashAsset(backendId: string): Promise<unknown> {
   return apiClient.put(`/api/asset/trash/${backendId}`);
+}
+
+export function restoreAsset(backendId: string): Promise<unknown> {
+  return apiClient.put(`/api/asset/restore/${backendId}`);
 }
 
 export async function updateAsset(

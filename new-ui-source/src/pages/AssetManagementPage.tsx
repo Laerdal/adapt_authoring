@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback, useDeferredValue, memo } from "react";
-import { getAssets, trashAsset, updateAsset, uploadAsset } from "@/api/adaptAuthoring";
+import { getAssets, trashAsset, restoreAsset, updateAsset, uploadAsset } from "@/api/adaptAuthoring";
 import type { AssetFormat, DashboardAsset } from "@/api/adaptAuthoring";
 import AiAssistant from "@/components/common/AiAssistant";
 import type { AssetPickerResult, AssetPickerType } from "@/types/assetPicker";
@@ -370,6 +370,7 @@ function AssetPreviewPanel({
   onDelete,
   onConfirm,
   onCancel,
+  onRestore,
 }: {
   asset: Asset | null;
   pickerMode?: boolean;
@@ -377,6 +378,7 @@ function AssetPreviewPanel({
   onDelete: (asset: Asset) => void;
   onConfirm?: (asset: Asset) => void;
   onCancel?: () => void;
+  onRestore?: (asset: Asset) => void;
 }) {
   const [imageDimensions, setImageDimensions] = useState<AssetPreviewDimensions>({});
 
@@ -489,6 +491,16 @@ function AssetPreviewPanel({
                     Add
                   </button>
                 </div>
+              ) : asset.isDeleted ? (
+                <div className="flex items-center justify-center gap-3 pb-2">
+                  <button
+                    type="button"
+                    onClick={() => onRestore?.(asset)}
+                    className="inline-flex items-center justify-center rounded-xl bg-[#16a34a] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#15803d]"
+                  >
+                    Recover Asset
+                  </button>
+                </div>
               ) : (
                 <div className="flex items-center justify-center gap-3 pb-2">
                   <button
@@ -596,6 +608,7 @@ export function AssetManagementWorkspace({
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagSearch, setTagSearch]       = useState("");
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [lastDeletedAsset, setLastDeletedAsset] = useState<Asset | null>(null);
 
   const [uploadOpen, setUploadOpen]     = useState(false);
   const [upload, setUpload]             = useState<UploadState>(EMPTY_UPLOAD);
@@ -685,15 +698,18 @@ export function AssetManagementWorkspace({
   }, [assets, deferredSearch, effectiveFormatFilter, fixedPickerFormat, selectedTags]);
 
   const selectedAsset = useMemo(
-    () => filtered.find((asset) => asset.backendId === selectedAssetId) ?? null,
-    [filtered, selectedAssetId],
+    () => filtered.find((asset) => asset.backendId === selectedAssetId)
+      ?? (selectedAssetId && lastDeletedAsset && lastDeletedAsset.backendId === selectedAssetId ? lastDeletedAsset : null)
+      ?? null,
+    [filtered, selectedAssetId, lastDeletedAsset],
   );
 
   useEffect(() => {
     if (pickerMode || !selectedAssetId) return;
     if (filtered.some((asset) => asset.backendId === selectedAssetId)) return;
+    if (lastDeletedAsset && lastDeletedAsset.backendId === selectedAssetId) return;
     setSelectedAssetId(null);
-  }, [filtered, pickerMode, selectedAssetId]);
+  }, [filtered, pickerMode, selectedAssetId, lastDeletedAsset]);
 
   useEffect(() => {
     if (!fixedPickerFormat || !isDirectFormatPickerType(fixedPickerFormat)) return;
@@ -721,6 +737,7 @@ export function AssetManagementWorkspace({
   }, [onPickAsset]);
 
   const handleAssetActivate = useCallback((asset: Asset) => {
+    setLastDeletedAsset((prev) => (prev && prev.backendId === asset.backendId ? prev : null));
     setSelectedAssetId(asset.backendId);
   }, []);
 
@@ -853,19 +870,30 @@ export function AssetManagementWorkspace({
     }
   }
 
-  // ── Delete ──────────────────────────────────────────────────────────────
+  // ── Delete / Restore ─────────────────────────────────────────────────────
   async function confirmDelete() {
     const target = deleteTarget;
     setDeleteTarget(null);
     if (!target?.backendId) return;
-    if (selectedAssetId === target.backendId) {
-      setSelectedAssetId(null);
-    }
-    setAssets((prev) => prev.filter((a) => a.id !== target.id));
+
+    setLastDeletedAsset({ ...target, isDeleted: true });
+    setSelectedAssetId(target.backendId);
+
     try {
       await trashAsset(target.backendId);
     } finally {
-      loadAssets();
+      await loadAssets();
+    }
+  }
+
+  async function handleRestoreDeletedAsset(asset: Asset) {
+    try {
+      await restoreAsset(asset.backendId);
+      setLastDeletedAsset(null);
+      setSelectedAssetId(null);
+      await loadAssets();
+    } catch (error) {
+      setLastDeletedAsset((prev) => prev ? { ...prev, saveError: getEditErrorMessage(error) } as Asset & { saveError?: string } : prev);
     }
   }
 
@@ -1110,6 +1138,7 @@ export function AssetManagementWorkspace({
             onDelete={handleDeleteAsset}
             onConfirm={handleConfirmPickerSelection}
             onCancel={onCancelPick}
+            onRestore={handleRestoreDeletedAsset}
           />
         </div>
       </div>
