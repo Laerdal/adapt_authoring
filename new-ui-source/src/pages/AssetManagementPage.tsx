@@ -87,7 +87,6 @@ interface EditModalState {
   title: string;
   description: string;
   tags: string;
-  replaceFile: File | null;
   saveError: string | null;
 }
 
@@ -213,7 +212,6 @@ const EMPTY_EDIT = (a: Asset): EditModalState => ({
   title: a.title,
   description: a.description,
   tags: a.tags.join(", "),
-  replaceFile: null,
   saveError: null,
 });
 
@@ -691,13 +689,11 @@ export function AssetManagementWorkspace({
   const [uploadDrag, setUploadDrag]     = useState(false);
 
   const [editState, setEditState]       = useState<EditModalState | null>(null);
-  const [editDrag, setEditDrag]         = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState<Asset | null>(null);
 
   const tagFilterRef   = useRef<HTMLDivElement>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
-  const editFileRef    = useRef<HTMLInputElement>(null);
   const progressTimer  = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Close tag dropdown on outside click
@@ -942,13 +938,6 @@ export function AssetManagementWorkspace({
     } catch (error) {
       setEditState((prev) => prev ? { ...prev, saveError: getEditErrorMessage(error) } : prev);
     }
-  }
-
-  function handleEditDrop(e: React.DragEvent) {
-    e.preventDefault();
-    setEditDrag(false);
-    const f = e.dataTransfer.files[0] ?? null;
-    if (f) setEditState((prev) => prev ? { ...prev, replaceFile: f, saveError: null } : prev);
   }
 
   // ── Delete ──────────────────────────────────────────────────────────────
@@ -1396,10 +1385,10 @@ export function AssetManagementWorkspace({
                     </div>
                   </div>
 
-                  {/* Description */}
+                  {/* Asset Description */}
                   <div>
                     <label className="block text-xs font-semibold text-[#374151] mb-1.5">
-                      Description <span className="text-[#ef4444]">*</span>
+                      Asset Description <span className="text-[#ef4444]">*</span>
                     </label>
                     <textarea
                       value={upload.description}
@@ -1556,42 +1545,16 @@ export function AssetManagementWorkspace({
 
             {/* Body */}
             <div className="px-6 py-5 overflow-y-auto flex flex-col gap-4">
-              {/* Replace file drop zone */}
-              <div>
-                <p className="text-xs font-semibold text-[#374151] mb-1.5">Replace File (optional)</p>
-                <div
-                  onDragOver={(e) => { e.preventDefault(); setEditDrag(true); }}
-                  onDragLeave={() => setEditDrag(false)}
-                  onDrop={handleEditDrop}
-                  onClick={() => editFileRef.current?.click()}
-                  className={`border-2 border-dashed rounded-xl p-4 flex items-center gap-3 cursor-pointer transition-colors ${
-                    editDrag ? "border-[#2d6fa8] bg-[#dbeeff]" : "border-[#d1d5db] hover:border-[#2d6fa8] hover:bg-[#f9fafb]"
-                  }`}
-                >
-                  <div className="w-8 h-8 rounded-lg bg-[#f3f4f6] flex items-center justify-center shrink-0">
-                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="#6b7280" strokeWidth={1.8}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
-                    </svg>
-                  </div>
-                  {editState.replaceFile ? (
-                    <p className="text-sm font-medium text-[#2d6fa8]">{editState.replaceFile.name}</p>
-                  ) : (
-                    <p className="text-sm text-[#6b7280]">Drop a new file here or click to browse</p>
-                  )}
-                </div>
-                <input ref={editFileRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0] ?? null; if (f) setEditState((p) => p ? { ...p, replaceFile: f, saveError: null } : p); }} />
-              </div>
-
               {editState.saveError && (
                 <div className="rounded-lg border border-[#fecaca] bg-[#fef2f2] px-3.5 py-3 text-sm text-[#b91c1c]">
                   {editState.saveError}
                 </div>
               )}
 
-              {/* Title */}
+              {/* Asset Title */}
               <div>
                 <label className="block text-xs font-semibold text-[#374151] mb-1.5">
-                  Title <span className="text-[#ef4444]">*</span>
+                  Asset Title <span className="text-[#ef4444]">*</span>
                 </label>
                 <input
                   type="text"
@@ -1602,10 +1565,10 @@ export function AssetManagementWorkspace({
                 />
               </div>
 
-              {/* Description */}
+              {/* Asset Description */}
               <div>
                 <label className="block text-xs font-semibold text-[#374151] mb-1.5">
-                  Description <span className="text-[#ef4444]">*</span>
+                  Asset Description <span className="text-[#ef4444]">*</span>
                 </label>
                 <textarea
                   value={editState.description}
