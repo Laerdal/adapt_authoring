@@ -96,27 +96,23 @@ function Section({
   );
 }
 
-function CheckboxRow({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: React.ReactNode }) {
+function ToggleSwitch({ checked, onChange, label, disabled = false }: { checked: boolean; onChange: (v: boolean) => void; label: React.ReactNode; disabled?: boolean }) {
   return (
-    <label className="flex items-start gap-3 py-1 cursor-pointer group">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="sr-only peer"
-      />
-      <div
-        aria-hidden="true"
-        className="mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd] peer-focus-visible:ring-2 peer-focus-visible:ring-[var(--life-primary-500)] peer-focus-visible:ring-offset-1"
+    <div className={`flex items-center justify-between gap-3 py-1 ${disabled ? "opacity-40" : ""}`}>
+      <span className="text-sm font-semibold text-[var(--life-base-black)] leading-snug">{label}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        disabled={disabled}
+        onClick={() => !disabled && onChange(!checked)}
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:ring-offset-1 ${checked ? "bg-[var(--life-primary-500)]" : "bg-[#d1d5db]"} ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
       >
-        {checked && (
-          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-        )}
-      </div>
-      <span className="text-sm font-semibold text-[var(--life-base-black)]">{label}</span>
-    </label>
+        <span
+          className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-5" : "translate-x-1"}`}
+        />
+      </button>
+    </div>
   );
 }
 
@@ -592,7 +588,6 @@ export function CdnDeploymentPage({
 
   // Project/Course Id together (with cdnid) form the CDN destination path
   // (see destination.js: `${groupid}/courses/${courseid}/${version}`) — while
-  // both still match the schema defaults ADAPT-3842's shared "default-project"/
   // "default-course" placeholders, deploying would target the same generic
   // path every unconfigured course shares, overwriting each other's content.
   const identityMatchesDefault =
@@ -631,38 +626,38 @@ export function CdnDeploymentPage({
                   </svg>
                 }
               >
-                <CheckboxRow checked={cfg.isEnabled} onChange={(v) => set({ isEnabled: v })} label="Is Enabled" />
+                <ToggleSwitch checked={cfg.isEnabled} onChange={(v) => set({ isEnabled: v })} label="Is Enabled" />
 
                 {cfg.isEnabled && (
                   <div className="flex flex-col gap-3 mt-1">
                     <SelectField
                       label="CDN Storage Container"
-                      hint="Name of the storage container."
+                      hint="Which CDN server should the course be deployed to? Only live courses should be deployed to prod, and the rest should point to the dev environment."
                       value={cfg.cdnid}
                       onChange={(v) => set({ cdnid: v })}
                       options={CDN_STORAGE_CONTAINERS}
                     />
                     <TextField
                       label="Project"
-                      hint="The program this module/course belongs to."
+                      hint="Which project does this course belong to? Set the project ID with less than 30 characters and no special characters allowed."
                       value={cfg.groupid}
                       onChange={(v) => set({ groupid: v })}
                     />
                     <TextField
                       label="Course Id"
-                      hint="Name of the course in the program."
+                      hint="Set the course ID with less than 30 characters and no special characters allowed."
                       value={cfg.courseid}
                       onChange={(v) => set({ courseid: v })}
                     />
                     <TextField
                       label="Version"
-                      hint="Version string, appears in course pages."
+                      hint="Sets the version"
                       value={cfg.version}
                       onChange={(v) => set({ version: v })}
                     />
                     <TextField
                       label="Build Trigger Comment"
-                      hint="Message recorded with this deployment."
+                      hint="Update the build trigger information"
                       value={cfg.buildTriggerComment}
                       onChange={(v) => set({ buildTriggerComment: v })}
                     />

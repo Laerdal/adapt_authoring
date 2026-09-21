@@ -3108,7 +3108,7 @@ function CourseCreationCenterContent() {
         )}
 
         {/* -- Right content panel -- */}
-        <main ref={contentScrollRef} className={`flex-1 overflow-hidden min-h-0 bg-[#f8fafc] ${activeNav === "menu" || activeNav === "navigation" || activeNav === "storyboarding" || activeNav === "translation" ? "" : "overflow-y-auto px-8 py-8"}`}>
+        <main ref={contentScrollRef} className={`flex-1 min-h-0 min-w-0 bg-[#f8fafc] ${activeNav === "navigation" || activeNav === "storyboarding" || activeNav === "translation" ? "flex flex-col overflow-hidden" : activeNav === "menu" ? "overflow-y-auto" : "overflow-y-auto px-8 py-8"}`}>
           {renderPanel()}
         </main>
       </div>

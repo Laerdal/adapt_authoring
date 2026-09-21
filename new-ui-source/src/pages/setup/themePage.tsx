@@ -1238,6 +1238,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         themePresetId: selectedPresetId,
       });
       setLastSavedStateSnapshot(buildUnsavedStateSnapshot());
+      // Parent may re-hydrate `initialThemeVariables` with normalized values after
+      // save, which triggers a second snapshot capture once state settles.
+      setPendingSnapshotSync(true);
 
       const navTarget = consumePendingNavigation();
       if (navTarget) onNavigationRequest?.(navTarget);
@@ -1448,9 +1451,27 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     setLastSavedStateSnapshot(buildUnsavedStateSnapshot());
   }, [buildUnsavedStateSnapshot, initialHydrationComplete, lastSavedStateSnapshot]);
 
+  // After a save, the parent may push a normalized `initialThemeVariables` prop,
+  // which re-runs hydration and mutates snapshot inputs (customSettings/vanillaColors/…).
+  // If we captured the snapshot synchronously inside handleSave, the next render
+  // reads different state and hasChanges flips true, re-showing the popup.
+  // Debounce the re-capture: the cleanup fires whenever any snapshot input changes
+  // (buildUnsavedStateSnapshot's identity changes with its deps), so the timer
+  // effectively waits for state to stabilize before capturing.
+  const [pendingSnapshotSync, setPendingSnapshotSync] = useState(false);
+  useEffect(() => {
+    if (!pendingSnapshotSync) return;
+    const timeout = setTimeout(() => {
+      setLastSavedStateSnapshot(buildUnsavedStateSnapshot());
+      setPendingSnapshotSync(false);
+    }, 100);
+    return () => clearTimeout(timeout);
+  }, [pendingSnapshotSync, buildUnsavedStateSnapshot]);
+
   const hasChanges =
     initialHydrationComplete &&
     !!lastSavedStateSnapshot &&
+    !pendingSnapshotSync &&
     buildUnsavedStateSnapshot() !== lastSavedStateSnapshot;
 
   const {
