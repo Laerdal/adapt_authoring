@@ -125,7 +125,7 @@ function FieldLabel({ label, hint }: { label: string; hint?: string }) {
         <span
           className="relative inline-flex group"
           tabIndex={0}
-          aria-label={`${label}: ${hint}`}
+          aria-label={`More information about ${label}`}
           aria-describedby={tooltipId}
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -592,8 +592,8 @@ export function CdnDeploymentPage({
   // path every unconfigured course shares, overwriting each other's content.
   const identityMatchesDefault =
     !!cfg &&
-    cfg.groupid === DEFAULT_CDN_DEPLOYMENT_SETTINGS.groupid &&
-    cfg.courseid === DEFAULT_CDN_DEPLOYMENT_SETTINGS.courseid;
+    (cfg.groupid === DEFAULT_CDN_DEPLOYMENT_SETTINGS.groupid ||
+      cfg.courseid === DEFAULT_CDN_DEPLOYMENT_SETTINGS.courseid);
 
   const canTrigger =
     !!cfg?.isEnabled && !!cfg.cdnid && !!cfg.groupid && !!cfg.courseid && !!cfg.version && !building && !identityMatchesDefault;
@@ -664,9 +664,10 @@ export function CdnDeploymentPage({
 
                     {identityMatchesDefault ? (
                       <p className="text-xs text-[var(--life-warning-500)] bg-[var(--life-warning-050)] border border-[var(--life-warning-100)] rounded-lg px-3 py-2">
-                        Project and Course Id are still set to their default placeholder values ("default-project" /
-                        "default-course"). Update them to match this course before you can trigger a CDN build —
-                        deploying with the shared defaults would overwrite another course's deployment at the same path.
+                        Project and/or Course Id is still set to a default placeholder value ("default-project" /
+                        "default-course"). Update both to values specific to this course before you can trigger a CDN
+                        build — deploying with a shared default would overwrite another course's deployment at the
+                        same path.
                       </p>
                     ) : dirty ? (
                       // Only shown while the edits are unsaved (`dirty`) — this is a heads-up about the
@@ -692,7 +693,7 @@ export function CdnDeploymentPage({
                   </svg>
                 }
               >
-                <label className="flex items-start gap-3 cursor-pointer group">
+                <label className="relative flex items-start gap-3 cursor-pointer group">
                   <input
                     type="checkbox"
                     checked={includeExport}

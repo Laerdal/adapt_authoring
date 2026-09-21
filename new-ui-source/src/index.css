@@ -79,6 +79,7 @@
   --surface:    var(--life-neutral-050);   /* color.neutral.050 — canvas bg */
   --foreground: var(--life-base-black);
   --border:     var(--life-neutral-100);   /* color.neutral.100 */
+  --ckeditor-toolbar-bg: var(--life-neutral-050);
 
   /* Canvas — card */
   --canvas-card-bg:           rgba(46, 127, 161, 0.10);  /* primary.500 @ 10% */
@@ -344,11 +345,37 @@ html, body {
 .rich-text-editor-field .ck.ck-toolbar {
   width: 100%;
   box-sizing: border-box;
+  background-color: var(--ckeditor-toolbar-bg) !important;
   flex-wrap: wrap;
   row-gap: 2px;
 }
 .rich-text-editor-field .ck.ck-toolbar__items {
   flex-wrap: wrap;
+}
+.rich-text-editor-field .ck.ck-toolbar .ck-button {
+  border-radius: 4px;
+  color: var(--life-primary-700);
+}
+.rich-text-editor-field .ck.ck-toolbar .ck-button:hover:not(.ck-disabled),
+.rich-text-editor-field .ck.ck-toolbar .ck-button.ck-on {
+  background: var(--life-primary-020) !important;
+  color: var(--life-primary-700) !important;
+}
+.rich-text-editor-field .ck.ck-toolbar .ck-button__icon {
+  width: 20px;
+  height: 20px;
+}
+.rich-text-editor-field .ck.ck-toolbar .ck-button__icon[viewBox="0 0 20 20"],
+.rich-text-editor-field .ck.ck-toolbar .ck-button__icon[viewBox="0 0 115.28 122.88"] {
+  overflow: visible !important;
+}
+.rich-text-editor-field .ck.ck-toolbar .ck-button__icon[viewBox="0 0 20 20"] path,
+.rich-text-editor-field .ck.ck-toolbar .ck-button__icon[viewBox="0 0 115.28 122.88"] path {
+  fill: var(--life-neutral-800) !important;
+}
+.rich-text-editor-field .ck.ck-toolbar .ck-button[data-cke-tooltip-text="Paste with formatting"],
+.rich-text-editor-field .ck.ck-toolbar .ck-button[data-cke-tooltip-text="Paste your XML"] {
+  position: relative;
 }
 .rich-text-editor-field .ck.ck-content {
   min-height: 100px;
