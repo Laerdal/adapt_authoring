@@ -53,8 +53,6 @@ const THUMBNAIL_COLORS: Record<AssetFormat, string> = {
   other: "bg-gradient-to-br from-[#f3f4f6] to-[#d1d5db]",
 };
 
-type ViewMode = "grid" | "list";
-
 // ── Upload types ─────────────────────────────────────────────────────────────
 
 type UploadStep = "pick" | "details" | "uploading" | "done" | "error";
@@ -569,90 +567,6 @@ const AssetCardItem = memo(function AssetCardItem({ asset, clickable = false, on
   );
 });
 
-const AssetListItem = memo(function AssetListItem({ asset, onEdit, onDelete, clickable = false, onActivate, hideActions = false, selected = false }: AssetItemProps) {
-  return (
-    <tr
-      role={clickable ? "button" : undefined}
-      tabIndex={clickable ? 0 : undefined}
-      onClick={clickable ? () => onActivate?.(asset) : undefined}
-      onKeyDown={clickable ? (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onActivate?.(asset);
-        }
-      } : undefined}
-      className={`border-b border-[#f3f4f6] transition-colors group/row ${selected ? "bg-[#eef6fd]" : ""} ${clickable ? "cursor-pointer hover:bg-[#eff6ff] focus:outline-none focus:bg-[#eff6ff]" : "hover:bg-[#fafafa]"}`}
-    >
-      {/* Icon + Title */}
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-3">
-          <div className={`w-8 h-8 rounded-lg ${THUMBNAIL_COLORS[asset.format]} flex items-center justify-center shrink-0`}>
-            <span className={`${FORMAT_COLORS[asset.format].split(" ")[1]} opacity-70`}>{FORMAT_ICONS[asset.format]}</span>
-          </div>
-          <span className="text-sm font-medium text-[#111827]">{asset.title}</span>
-        </div>
-      </td>
-
-      {/* Description */}
-      <td className="px-4 py-3 max-w-xs">
-        <p className="text-sm text-[#6b7280] truncate">{asset.description || "—"}</p>
-      </td>
-
-      {/* Size */}
-      <td className="px-4 py-3 text-sm text-[#6b7280] whitespace-nowrap">{asset.size}</td>
-
-      {/* Format */}
-      <td className="px-4 py-3">
-        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${FORMAT_COLORS[asset.format]}`}>
-          {FORMAT_ICONS[asset.format]}
-          {asset.format}
-        </span>
-      </td>
-
-      {/* Tags */}
-      <td className="px-4 py-3">
-        <div className="flex flex-wrap gap-1">
-          {asset.tags.slice(0, 2).map((t) => (
-            <span key={t} className="px-1.5 py-0.5 bg-[#f3f4f6] text-[#6b7280] rounded text-[10px]">#{t}</span>
-          ))}
-          {asset.tags.length > 2 && <span className="text-[10px] text-[#9ca3af]">+{asset.tags.length - 2}</span>}
-        </div>
-      </td>
-
-      {/* Actions */}
-      {!hideActions && onEdit && onDelete ? (
-      <td className="px-4 py-3">
-        <div className="flex items-center justify-end gap-1">
-          <button
-            type="button"
-            onClick={(event) => { event.stopPropagation(); onEdit(asset); }}
-            title="Edit asset"
-            className="p-1.5 rounded-lg text-[#9ca3af] hover:text-[#2d6fa8] hover:bg-[#dbeeff] transition-colors"
-          >
-            <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            onClick={(event) => { event.stopPropagation(); onDelete(asset); }}
-            title="Delete asset"
-            className="p-1.5 rounded-lg text-[#9ca3af] hover:text-[#ef4444] hover:bg-[#fef2f2] transition-colors"
-          >
-            <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-              <path d="M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
-            </svg>
-          </button>
-        </div>
-      </td>
-      ) : null}
-    </tr>
-  );
-});
-
 export function AssetManagementWorkspace({
   pickerMode = false,
   pickerAssetType,
@@ -678,7 +592,6 @@ export function AssetManagementWorkspace({
   const [formatFilter, setFormatFilter] = useState<AssetFormat | "All">(
     fixedPickerFormat && isDirectFormatPickerType(fixedPickerFormat) ? fixedPickerFormat : "All"
   );
-  const [view, setView]                 = useState<ViewMode>("grid");
   const [tagFilterOpen, setTagFilterOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagSearch, setTagSearch]       = useState("");
@@ -1167,31 +1080,6 @@ export function AssetManagementWorkspace({
 
         <span className="ml-auto text-xs text-[#9ca3af]">{filtered.length} asset{filtered.length !== 1 ? "s" : ""}</span>
 
-        {/* View toggle */}
-        <div className="flex items-center border border-[#e5e7eb] rounded-lg overflow-hidden shrink-0">
-          <button
-            type="button"
-            onClick={() => setView("grid")}
-            title="Grid view"
-            className={`p-2 transition-colors ${view === "grid" ? "bg-[#2d6fa8] text-white" : "text-[#6b7280] hover:bg-[#f9fafb]"}`}
-          >
-            <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
-              <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            onClick={() => setView("list")}
-            title="List view"
-            className={`p-2 transition-colors ${view === "list" ? "bg-[#2d6fa8] text-white" : "text-[#6b7280] hover:bg-[#f9fafb]"}`}
-          >
-            <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
-              <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
-            </svg>
-          </button>
-        </div>
       </div>
 
       {/* ── Content ── */}
@@ -1208,29 +1096,9 @@ export function AssetManagementWorkspace({
             <p className="text-sm font-medium text-[#374151]">No assets found</p>
             <p className="text-xs text-[#9ca3af] mt-1">Try adjusting your search or filter, or upload a new asset.</p>
           </div>
-        ) : view === "grid" ? (
+        ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-4">
             {filtered.map((a) => <AssetCardItem key={a.id} asset={a} onEdit={handleEditAsset} onDelete={handleDeleteAsset} clickable onActivate={handleAssetActivate} hideActions={hideActions} selected={selectedAssetId === a.backendId} />)}
-          </div>
-        ) : (
-          <div className="rounded-xl border border-[#e5e7eb] overflow-hidden bg-white">
-            <table className="w-full text-sm min-w-[640px]">
-              <thead>
-                <tr className="bg-[#f9fafb] border-b border-[#e5e7eb]">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#374151] uppercase tracking-wide">Title</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#374151] uppercase tracking-wide">Description</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#374151] uppercase tracking-wide whitespace-nowrap">Size</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#374151] uppercase tracking-wide">Format</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#374151] uppercase tracking-wide">Tags</th>
-                  {!hideActions ? (
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#374151] uppercase tracking-wide">Actions</th>
-                  ) : null}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((a) => <AssetListItem key={a.id} asset={a} onEdit={handleEditAsset} onDelete={handleDeleteAsset} clickable onActivate={handleAssetActivate} hideActions={hideActions} selected={selectedAssetId === a.backendId} />)}
-              </tbody>
-            </table>
           </div>
         )}
           </div>
