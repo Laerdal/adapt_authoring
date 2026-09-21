@@ -5274,12 +5274,13 @@ export default function CourseEditor({
     // value drifts out of sync with Content Group/Component's real inset
     // at some widths — reported as "alignment fine at one screen size,
     // off once panels are collapsed/expanded". Fixed by measuring the
-    // REAL, live inset each run (from whichever header actually exists —
-    // real or the synthetic placeholder ensureLevelHeaderHost just
-    // created above) and applying that exact value to Topic/Section
-    // instead of trusting the CSS constant.
+    // REAL, live inset each run from a full-width Content Group reference
+    // and applying that exact value to Topic/Section instead of trusting
+    // the CSS constant. Do not use an individual .component__inner here:
+    // once a Content Group has two components, that node is intentionally
+    // half-width and would squeeze Topic/Section to the left half too.
     const insetContainer = doc.querySelector(".page__inner") as HTMLElement | null;
-    const insetReference = (doc.querySelector(".component__inner") ??
+    const insetReference = (doc.querySelector(".component__container") ??
       doc.querySelector(".block__header-inner")) as HTMLElement | null;
     if (insetContainer && insetReference) {
       const containerRect = insetContainer.getBoundingClientRect();
