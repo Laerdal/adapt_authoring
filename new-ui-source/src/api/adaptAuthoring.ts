@@ -208,10 +208,24 @@ export async function queryImages(search?: string): Promise<Asset[]> {
 }
 
 // Upload a file as a new asset. Returns the new asset's _id.
-export async function uploadAsset(file: File, title?: string): Promise<string> {
+export async function uploadAsset(
+  file: File,
+  title?: string,
+  options?: {
+    description?: string;
+    tags?: string[];
+    aiTutorCourseId?: string;
+  }
+): Promise<string> {
   const form = new FormData();
   form.append("file", file);
   form.append("title", title ?? file.name);
+  if (options?.description !== undefined) form.append("description", options.description);
+  if (options?.aiTutorCourseId) form.append("aiTutorCourseId", options.aiTutorCourseId);
+  if (options?.tags?.length) {
+    const tagIds = await resolveOrCreateTagIds(options.tags);
+    if (tagIds.length) form.append("tags", tagIds.join(","));
+  }
   const res = await fetch("/api/asset", {
     method: "POST",
     body: form,
@@ -567,7 +581,20 @@ function scorePluginMatch(plugin: EnginePluginType, label: string, kind: "theme"
   if (!keywords.length) return 0;
 
   const hitCount = keywords.filter((k) => name.includes(k) || display.includes(k)).length;
-  return hitCount ? 70 + hitCount : 0;
+  if (!hitCount) return 0;
+
+  // A generic keyword (e.g. "life") matches BOTH a base plugin and its
+  // versioned variant (adapt-laerdal-life AND adapt-laerdal-life-v2) — without
+  // this, "LIFE Theme" could resolve to whichever variant happens to come
+  // first in the API's response order. Deprioritise a candidate carrying an
+  // unrequested "vN" suffix so the base plugin wins unless the label itself
+  // asked for that variant (e.g. a future "LIFE Theme v2" label).
+  const variantSuffix = /v\d+$/;
+  const candidateIsVariant = variantSuffix.test(name) || variantSuffix.test(display);
+  const targetIsVariant = variantSuffix.test(target);
+  const variantPenalty = candidateIsVariant && !targetIsVariant ? 5 : 0;
+
+  return 70 + hitCount - variantPenalty;
 }
 
 function resolvePluginId(options: EnginePluginType[], label: string, kind: "theme" | "menu"): string | null {
@@ -929,7 +956,7 @@ export async function getCoursePages(courseId: string): Promise<CoursePageOption
   return (Array.isArray(rows) ? rows : [])
     .filter((r) => r._type === "page")
     .sort(bySortOrder)
-    .map((r) => ({ id: r._id, title: r.displayTitle || r.title || "Untitled Page" }));
+    .map((r) => ({ id: r._id, title: r.displayTitle || r.title || "Untitled Topic" }));
 }
 
 type AnyRecord = Record<string, unknown>;
@@ -2222,6 +2249,7 @@ interface EngineContentNode {
   subtitle?: string;
   _subtitle?: string;
   body?: string;
+  pageBody?: string;
   description?: string;
   instruction?: string;
   _sortOrder?: number;
@@ -2348,8 +2376,10 @@ export async function getCourseStructure(
       sortOrder: page._sortOrder ?? 0,
       subtitle: page.subtitle || page._subtitle || "",
       body: page.body || "",
+      pageBody: page.pageBody || "",
       instruction: page.instruction || "",
       description: page.description || "",
+      colorLabel: page._colorLabel || "",
       graphic: {
         src: typeof pageGraphic?.src === "string" ? pageGraphic.src : "",
         alt: typeof pageGraphic?.alt === "string" ? pageGraphic.alt : "",
@@ -2803,7 +2833,7 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       emitCard(comp, "groupedContent", {
         showTitle: true,
         description: stripHtml(comp.body || ""),
-        instruction: comp.instruction || "",
+        instruction: comp.instruction || (typeof props.instruction === "string" ? props.instruction : ""),
         items,
       });
       return;
@@ -2928,7 +2958,25 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       });
       return;
     }
-    // Unknown / text → H4 heading + body paragraph (text write-back contract).
+    // Plain text (Adapt's "text" / "laerdal-text" component) → sbComponent
+    // "text" card — the SAME clickable card (Show title / Description /
+    // Instruction / AI / Delete) the "Add Content" flow already creates for a
+    // brand-new Text component. This must match that shape exactly so every
+    // text component in the course — including the empty default one seeded   // clickable and editable. Previously text fell through to the generic
+    // "Unknown" fallback below, which emits a bare H4 heading + body
+    // paragraph; with an empty body (the default component's starting state)
+    // htmlBodyToBlocks() returns zero blocks, so nothing at all was rendered
+    // for it — no heading, no paragraph, nothing to click.
+    if (sbKind === "text") {
+      const compTitle = label(comp);
+      emitCard(comp, "text", {
+        showTitle: !!compTitle,
+        description: stripHtml(comp.body || ""),
+        instruction: comp.instruction || (typeof props.instruction === "string" ? props.instruction : ""),
+      });
+      return;
+    }
+    // Unknown → H4 heading + body paragraph (text write-back contract).
     // Suppress the H4 entirely when the component has no authored title —
     // otherwise the storyboard/export show an anonymous heading line above
     // the body paragraph, which reads as an "empty title" placeholder.
@@ -2968,15 +3016,21 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
     });
   };
   const emitTopic = (page: EngineContentNode) => {
-    // A page/article/block with no authored title (schema default like
-    // "New Menu/Page Title") is projected without its header — see the
-    // storyboardLabel + DEFAULT_SCHEMA_TITLES filter. Emitting empty headings
-    // clutters the document with blank lines and pollutes the Word export.
-    const topicTitle = label(page);
-    if (topicTitle) out.push({ id: page._id, type: "heading", props: { level: 1 }, content: topicTitle });
+    // Structure headings always appear, exactly like Editor Mode's Structure
+    // panel — including a still-unrenamed default node's placeholder title
+    // ("New Topic Title" etc). Editor Mode never hides these (getCourseStructure
+    // above uses the raw title unconditionally), and hiding them here made the
+    // Storyboard document (and its Contents/TOC) look empty for any freshly
+    // created Topic/Section/Content Group, even though the structure exists.
+    // Word/PDF export has its OWN independent placeholder filter
+    // (documentConvert.js::DEFAULT_PLACEHOLDER_TITLES) so suppressing them
+    // here too was redundant for that concern.
+    const rawLabel = (n: EngineContentNode): string => (n.displayTitle || n.title || "").trim() || "Untitled";
+    const topicTitle = rawLabel(page);
+    out.push({ id: page._id, type: "heading", props: { level: 1 }, content: topicTitle });
     for (const article of childrenOf(articles, page._id)) {
-      const articleTitle = label(article);
-      if (articleTitle) out.push({ id: article._id, type: "heading", props: { level: 2 }, content: articleTitle });
+      const articleTitle = rawLabel(article);
+      out.push({ id: article._id, type: "heading", props: { level: 2 }, content: articleTitle });
       // The generation engine caps each Adapt block at 2 components — extra
       // components are placed in continuation blocks that carry the SAME H3
       // title. When we round-trip the course, those continuation blocks would
@@ -2985,9 +3039,8 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       // Storyboard shows one H3 with all its components in their original order.
       let prevTitle: string | null = null;
       for (const blk of childrenOf(blocks, article._id)) {
-        const title = label(blk);
-        // Same suppression rule as pages/articles above.
-        if (title && title !== prevTitle) {
+        const title = rawLabel(blk);
+        if (title !== prevTitle) {
           out.push({ id: blk._id, type: "heading", props: { level: 3 }, content: title });
           prevTitle = title;
         }
@@ -3023,7 +3076,7 @@ export async function saveStoryboardToCourse(
   const label = storyboardLabel;
   const index = new Map<
     string,
-    { level: StructureLevel; title: string; body?: string; component?: string; parentId?: string; properties?: Record<string, unknown> }
+    { level: StructureLevel; title: string; body?: string; instruction?: string; component?: string; parentId?: string; properties?: Record<string, unknown> }
   >();
   contentObjects.forEach((c) =>
     index.set(c._id, { level: c._type === "menu" ? "module" : "topic", title: label(c) })
@@ -3035,6 +3088,7 @@ export async function saveStoryboardToCourse(
       level: "component",
       title: label(c),
       body: c.body || "",
+      instruction: c.instruction || "",
       component: c._component,
       parentId: c._parentId,
       // Kept so an update can seed `patch.properties` from what's actually on
@@ -3102,6 +3156,7 @@ export async function saveStoryboardToCourse(
         image?: ImageData;
         media?: MediaData;
         description?: string;
+        instruction?: string;
         items?: Array<{ title?: string; body?: string; image?: string; imageAssetId?: string }>;
       } = {};
       try {
@@ -3168,6 +3223,25 @@ export async function saveStoryboardToCourse(
           if (fn && it?.imageAssetId) {
             tasks.push(linkContentAsset(courseId, "component", id, info.parentId || "", fn, it.imageAssetId));
           }
+        }
+      } else if (kind === "text" && (info.component === "text" || info.component === "laerdal-text")) {
+        // Plain text component — write the edited description back onto
+        // `body` (matches the ::body branch's HTML-wrapping convention above)
+        // and the instruction field, so the sbComponent "text" card (used for
+        // every text component, including the default one — ADAPT-3902)
+        // round-trips exactly like the legacy heading+paragraph contract did.
+        // The description here is always plain user/AI-authored text (never an
+        // imported-HTML payload), so it must be escaped unconditionally —
+        // trusting a leading "<" as "already HTML" would let raw markup typed
+        // or pasted by a user/AI flow straight into the course body.
+        const rawDescription = (parsed.description || "").trim();
+        const nextBodyHtml = rawDescription ? `<p>${escapeHtml(rawDescription)}</p>` : "";
+        if (stripHtml(nextBodyHtml) !== stripHtml(info.body || "")) {
+          patch.body = nextBodyHtml;
+        }
+        const nextInstruction = (parsed.instruction || "").trim();
+        if (nextInstruction !== (info.instruction || "")) {
+          patch.instruction = nextInstruction;
         }
       }
       if (Object.keys(patch).length) {
@@ -3505,6 +3579,24 @@ export function findAppliedPluginSchemaFields(
   if (!levelSchemas) return null;
   const match = Object.values(levelSchemas).find((entry) => entry?.name === appliedPluginName);
   return match?.properties ?? null;
+}
+
+// Same lookup as findAppliedPluginSchemaFields, but returns the schema's own
+// KEY (e.g. "_life-v2") rather than its fields — this is the real, engine-
+// authoritative `themeSettings`/`menuSettings` object key for the currently
+// applied theme/menu at this level, straight from the plugin's own
+// `targetAttribute` (server-stamped as this entry's `.name` match). Prefer
+// this over any hand-rolled name-substring heuristic (e.g. guessing "_life"
+// vs "_life-v2" from the theme's display name) - those heuristics can only
+// ever guess, and guessing wrong silently strands saved settings under a key
+// the real theme/old tool never reads.
+export function findAppliedPluginSchemaKey(
+  levelSchemas: Record<string, PluginSettingsFieldSchema> | undefined,
+  appliedPluginName: string
+): string | null {
+  if (!levelSchemas) return null;
+  const match = Object.entries(levelSchemas).find(([, entry]) => entry?.name === appliedPluginName);
+  return match?.[0] ?? null;
 }
 
 // Raw course-level `_extensions` (actual stored values, no schema defaults
@@ -3943,7 +4035,10 @@ export async function createComponent(
   // re-apply the schema defaults so nested sub-trees (e.g. _buttons) persist.
   if (Object.keys(schemaDefaults).length) {
     try {
-      await apiClient.put(`/api/content/component/${id}`, schemaDefaults);
+      await apiClient.put(`/api/content/component/${id}`, {
+        ...schemaDefaults,
+        _layout: layout,
+      });
     } catch {
       /* non-fatal */
     }
@@ -3963,6 +4058,19 @@ function getTextComponentType(): Promise<ComponentTypeOption | null> {
       .catch(() => null);
   }
   return textComponentPromise;
+}
+
+// Seed a Module → Topic → Section → Content Group → text Component under `parentId`
+// (the course, or a parent module). Returns the new module and topic ids.
+export async function seedDefaultModule(
+  courseId: string,
+  parentId: string,
+  moduleTitle = "New Module",
+  sortOrder = 1
+): Promise<{ moduleId: string; topicId: string }> {
+  const moduleId = await createModule(courseId, parentId, moduleTitle, sortOrder);
+  const topicId = await seedDefaultTopic(courseId, moduleId, NEW_TOPIC_TITLE, 1);
+  return { moduleId, topicId };
 }
 
 // Seed a Topic → Section → Content Group → text Component under `parentId`
@@ -4511,22 +4619,22 @@ export function deleteUser(userBackendId: string): Promise<unknown> {
 }
 
 // ── Templates ─────────────────────────────────────────────────────────────────
-export type TemplateType = "Page" | "Article" | "Block" | "Component";
+export type TemplateType = "Topic" | "Section" | "Content Group" | "Component";
 // The engine stores the template's content kind in `referenceType`
-// (contentobject/article/block/component). A "contentobject" template is a Page.
+// (contentobject/article/block/component). A "contentobject" template is a Topic.
 const coerceTemplateType = (v?: string): TemplateType => {
   switch ((v ?? "").toLowerCase()) {
     case "contentobject":
     case "page":
-      return "Page";
+      return "Topic";
     case "article":
-      return "Article";
+      return "Section";
     case "block":
-      return "Block";
+      return "Content Group";
     case "component":
       return "Component";
     default:
-      return "Page";
+      return "Topic";
   }
 };
 
@@ -4671,22 +4779,45 @@ export interface DashboardAsset {
   tags: string[];
   uploadedAt: string;
   thumbnail?: string;
+  filename?: string;
+  path?: string;
+  mimeType?: string;
+  metadata?: {
+    width?: number;
+    height?: number;
+    duration?: number | string;
+  };
 }
 
 interface EngineAsset {
   _id: string;
   title?: string;
+  filename?: string;
+  path?: string;
   description?: string;
   size?: number;
   mimeType?: string;
   assetType?: string;
+  _isDeleted?: boolean;
   tags?: Array<string | { title?: string }>;
   createdAt?: string;
+  metadata?: {
+    width?: number;
+    height?: number;
+    duration?: number | string;
+  };
 }
 
 export async function getAssets(): Promise<DashboardAsset[]> {
   const res = await apiClient.get<EngineAsset[] | { assets?: EngineAsset[] }>("/api/asset/query");
-  const docs = Array.isArray(res) ? res : res?.assets ?? [];
+  const docs = (Array.isArray(res) ? res : res?.assets ?? [])
+    .filter((asset) => asset?._isDeleted !== true)
+    .slice()
+    .sort((left, right) => {
+    const leftTs = left.createdAt ? new Date(left.createdAt).getTime() : 0;
+    const rightTs = right.createdAt ? new Date(right.createdAt).getTime() : 0;
+    return rightTs - leftTs;
+  });
   return docs.map((a, i) => {
     const format = coerceFormat(a.mimeType, a.assetType);
     return {
@@ -4701,12 +4832,33 @@ export async function getAssets(): Promise<DashboardAsset[]> {
         : [],
       uploadedAt: fmtDate(a.createdAt),
       thumbnail: format === "image" ? `/api/asset/serve/${a._id}` : undefined,
+      filename: a.filename,
+      path: a.path,
+      mimeType: a.mimeType,
+      metadata: a.metadata,
     };
   });
 }
 
 export function trashAsset(backendId: string): Promise<unknown> {
   return apiClient.put(`/api/asset/trash/${backendId}`);
+}
+
+export async function updateAsset(
+  backendId: string,
+  patch: {
+    title?: string;
+    description?: string;
+    tags?: string[];
+  }
+): Promise<unknown> {
+  const updateData: Record<string, unknown> = { _id: backendId };
+  if (patch.title !== undefined) updateData.title = patch.title;
+  if (patch.description !== undefined) updateData.description = patch.description;
+  if (patch.tags !== undefined) {
+    updateData.tags = (await resolveOrCreateTagIds(patch.tags)).map((id) => ({ _id: id }));
+  }
+  return apiClient.put(`/api/asset/${backendId}`, updateData);
 }
 
 // ── Plugins (all bower-backed plugin types) ───────────────────────────────────

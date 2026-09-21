@@ -1,5 +1,6 @@
 import { CourseOutlinePanel } from "../../components/editor/index";
 import type { ContentPageData } from "./pageEditorWorkspace";
+import type { CourseStructure } from "../../types/structure";
 
 const ICON_BASE = "/new/assets/icons";
 
@@ -30,6 +31,7 @@ interface PageEditorNavigationProps {
   onOpenPanels: () => void;
   menuPageCreated: boolean;
   menuSelected: boolean;
+  courseStructure?: CourseStructure | null;
   contentPages: ContentPageData[];
   selectedPageId: string | null;
   selectedSubPageId: string | null;
@@ -42,7 +44,10 @@ interface PageEditorNavigationProps {
   onArticleSelect: (pageId: string, articleId: string) => void;
   onBlockSelect: (pageId: string, articleId: string, blockId: string) => void;
   onComponentSelect: (pageId: string, articleId: string, blockId: string, componentId: string) => void;
-  onAddPage: () => void;
+  onAddModule?: () => void;
+  onAddSubModule?: (parentModuleId: string) => void;
+  onDeleteModule?: (moduleId: string) => void;
+  onAddPage: (moduleId?: string) => void;
   onDeletePage: (pageId: string) => void;
   onAddArticle: (pageId: string) => void;
   onDeleteArticle: (pageId: string, articleId: string) => void;
@@ -56,6 +61,7 @@ interface PageEditorNavigationProps {
     pageId: string;
     articleId?: string;
     blockId?: string;
+    moduleId?: string;
   }) => void;
 }
 
@@ -66,6 +72,7 @@ export default function PageEditorNavigation({
   onOpenPanels,
   menuPageCreated,
   menuSelected,
+  courseStructure,
   contentPages,
   selectedPageId,
   selectedSubPageId,
@@ -78,6 +85,9 @@ export default function PageEditorNavigation({
   onArticleSelect,
   onBlockSelect,
   onComponentSelect,
+  onAddModule,
+  onAddSubModule,
+  onDeleteModule,
   onAddPage,
   onDeletePage,
   onAddArticle,
@@ -106,6 +116,7 @@ export default function PageEditorNavigation({
             menuPageCreated={menuPageCreated}
             menuSelected={menuSelected}
             onMenuSelect={onMenuSelect}
+            courseStructure={courseStructure}
             contentPages={contentPages}
             selectedPageId={selectedPageId}
             selectedSubPageId={selectedSubPageId}
@@ -117,6 +128,9 @@ export default function PageEditorNavigation({
             onArticleSelect={onArticleSelect}
             onBlockSelect={onBlockSelect}
             onComponentSelect={onComponentSelect}
+            onAddModule={onAddModule}
+            onAddSubModule={onAddSubModule}
+            onDeleteModule={onDeleteModule}
             onAddPage={onAddPage}
             onDeletePage={onDeletePage}
             onAddArticle={onAddArticle}

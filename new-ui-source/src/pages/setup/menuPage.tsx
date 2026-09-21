@@ -1443,6 +1443,7 @@ export function MenuPage({
 
       {assetPickerTarget ? (
         <AssetPickerModal
+          assetType="image"
           onSelect={(asset) => {
             const resolvedAssetLink = asset.assetLink || asset.url || asset.id;
             applyAssetValue(assetPickerTarget, resolvedAssetLink);

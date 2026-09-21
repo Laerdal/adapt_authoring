@@ -12,21 +12,21 @@
 // re-porting the old tool's bespoke AiAgentPlugin.
 import { useEffect, useRef, useState } from "react";
 import AiAssistPopover from "../storyboard/AiAssistPopover";
-import { loadCKEditor5, CKEDITOR_STANDARD_COLOUR_PALETTE } from "../../utils/ckEditor5Loader";
-
-const TOOLBAR_ITEMS = [
-  "sourceEditing", "showBlocks", "|",
-  "undo", "redo", "|",
-  "findAndReplace", "|",
-  "heading", "|",
-  "bold", "italic", "underline", "strikethrough", "subscript", "superscript", "|",
-  "alignment", "|",
-  "numberedList", "bulletedList", "outdent", "indent", "|",
-  "blockQuote", "insertTable", "link", "|",
-  "fontColor", "fontBackgroundColor", "|",
-  "specialCharacters", "uploadImage", "|",
-  "samaritan",
-];
+import {
+  CKEDITOR_FULL_TOOLBAR_ITEMS,
+  CKEDITOR_HEADING_CONFIG,
+  CKEDITOR_IMAGE_CONFIG,
+  CKEDITOR_LIST_CONFIG,
+  CKEDITOR_STANDARD_COLOUR_PALETTE,
+  CKEDITOR_TABLE_CONFIG,
+  loadCKEditor5,
+} from "../../utils/ckEditor5Loader";
+import {
+  CKEDITOR_LINK_CONFIG,
+  getSamaritanSeedText,
+  insertAiResultIntoEditor,
+  replaceAiResultInEditor,
+} from "../../utils/ckEditorSamaritan";
 
 export default function RichTextEditor({
   value,
@@ -57,20 +57,19 @@ export default function RichTextEditor({
         if (cancelled || !containerRef.current) return;
         const CKEDITOR = (window as any).CKEDITOR;
         const editor = await CKEDITOR.create(containerRef.current, {
-          plugins: [...CKEDITOR.pluginsConfig, CKEDITOR.SamaritanPlugin],
-          toolbar: { items: TOOLBAR_ITEMS, shouldNotGroupWhenFull: true },
+          plugins: [...CKEDITOR.pluginsConfig, CKEDITOR.SamaritanPlugin, CKEDITOR.PasteToolsPlugin],
+          toolbar: { items: [...CKEDITOR_FULL_TOOLBAR_ITEMS.slice(0, -1), "pasteWithFormatting", "xmlToHtml", "|", "samaritan"], shouldNotGroupWhenFull: true },
           fontColor: { colors: CKEDITOR_STANDARD_COLOUR_PALETTE },
           fontBackgroundColor: { colors: CKEDITOR_STANDARD_COLOUR_PALETTE },
+          heading: CKEDITOR_HEADING_CONFIG,
+          list: CKEDITOR_LIST_CONFIG,
+          table: CKEDITOR_TABLE_CONFIG,
+          image: CKEDITOR_IMAGE_CONFIG,
+          link: CKEDITOR_LINK_CONFIG,
           htmlSupport: { allow: [{ name: /.*/, attributes: true, classes: true, style: true, styles: true }] },
           initialData: value || "",
           samaritanOnClick: (ed: any) => {
-            const selection = ed.model.document.selection;
-            const selectedText = !selection.isCollapsed
-              ? Array.from(selection.getFirstRange()?.getItems() ?? [])
-                  .map((item: any) => (item.is?.("$textProxy") ? item.data : ""))
-                  .join("")
-              : "";
-            setSamaritanSeedText(selectedText || ed.getData().replace(/<[^>]+>/g, " ").trim());
+            setSamaritanSeedText(getSamaritanSeedText(ed));
             setSamaritanOpen(true);
           },
         });
@@ -106,14 +105,15 @@ export default function RichTextEditor({
     }
   }, [disabled]);
 
-  const applySamaritanResult = (text: string) => {
+  // Insert keeps the rest of the field and drops the result at the caret;
+  // Replace swaps the selection (or the whole field when nothing is
+  // selected) — same split the old tool's Samaritan popup makes.
+  const applySamaritanResult = (text: string, mode: "insert" | "replace") => {
     const editor = editorRef.current;
     if (!editor) return;
-    const html = /<[a-z][\s\S]*>/i.test(text)
-      ? text
-      : text.split(/\n{2,}/).map((para) => `<p>${para.replace(/\n/g, "<br>")}</p>`).join("");
-    editor.setData(html);
-    onChangeRef.current(html);
+    if (mode === "insert") insertAiResultIntoEditor(editor, text);
+    else replaceAiResultInEditor(editor, text);
+    onChangeRef.current(editor.getData());
   };
 
   return (
@@ -124,8 +124,8 @@ export default function RichTextEditor({
         <AiAssistPopover
           initialText={samaritanSeedText}
           courseContext={courseContext}
-          onInsert={applySamaritanResult}
-          onReplace={applySamaritanResult}
+          onInsert={(text) => applySamaritanResult(text, "insert")}
+          onReplace={(text) => applySamaritanResult(text, "replace")}
           onClose={() => setSamaritanOpen(false)}
         />
       )}

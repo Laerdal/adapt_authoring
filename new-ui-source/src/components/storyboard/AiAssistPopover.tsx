@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { HelpCircle, X, RefreshCw, Send } from 'lucide-react';
 import { samaritanAssist, type SamaritanAction } from '@/api/ai';
+import { normalizeAssistantText, repairMojibake } from '@/utils/ckEditorSamaritan';
 import SamaritanIcon from './SamaritanIcon';
 
 interface QuickAction {
@@ -40,7 +41,9 @@ export default function AiAssistPopover({
   onReplace: (text: string) => void;
   onClose: () => void;
 }) {
-  const [content, setContent] = useState(initialText);
+  // Safety net for every caller: non-breaking spaces become ordinary ones and
+  // any text that arrived UTF-8-decoded-as-Latin-1 is repaired before display.
+  const [content, setContent] = useState(() => normalizeAssistantText(initialText));
   const [prompt, setPrompt] = useState('');
   const [result, setResult] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -67,7 +70,7 @@ export default function AiAssistPopover({
     setError(null);
     setResult(null);
     try {
-      const out = (
+      const out = repairMojibake(
         await samaritanAssist(action, content, { instruction, context: courseContext })
       ).trim();
       if (!out) {

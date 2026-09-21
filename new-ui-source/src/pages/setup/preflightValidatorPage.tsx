@@ -26,6 +26,7 @@ import {
   ensureValidatorEnablerEnabled,
   getCdnDeploymentSettings,
   saveCdnDeploymentSettings,
+  DEFAULT_CDN_DEPLOYMENT_SETTINGS,
   type PreflightReport,
   type PreflightAssessmentArticle,
   type PreflightCheckIssue,
@@ -338,6 +339,20 @@ export function PreflightValidatorPage({
       }
       if (!cdnSettings.cdnid || !cdnSettings.groupid || !cdnSettings.courseid || !cdnSettings.version) {
         setValidationWarning("CDN Deployment is not fully configured. Complete the CDN Deployment settings before running this validation.");
+        return;
+      }
+      // Same guard as cdnDeploymentPage.tsx: if either groupid or courseid
+      // still matches ADAPT-3842's shared "default-project" / "default-course"
+      // placeholders, deploying would target a generic CDN path other
+      // unconfigured courses share, overwriting each other's content — so we
+      // reject either default, not just the pair.
+      if (
+        cdnSettings.groupid === DEFAULT_CDN_DEPLOYMENT_SETTINGS.groupid ||
+        cdnSettings.courseid === DEFAULT_CDN_DEPLOYMENT_SETTINGS.courseid
+      ) {
+        setValidationWarning(
+          "Project and/or Course Id is still set to a default placeholder value (\"default-project\" / \"default-course\"). Update both to values specific to this course in CDN Deployment settings before running this validation.",
+        );
         return;
       }
 

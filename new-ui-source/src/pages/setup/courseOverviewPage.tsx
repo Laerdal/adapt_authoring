@@ -7,7 +7,7 @@ import {
   updateCourse,
   type UserSummary,
 } from "../../api/adaptAuthoring";
-import AssetPickerModal from "../../components/common/AssetPickerModal";
+import type { AssetPickerRequest } from "../../types/assetPicker";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
@@ -18,6 +18,7 @@ interface CourseOverviewPageProps {
   onNavigationRequest?: (nav: string) => void;
   pendingNavigation?: string | null;
   onPendingNavigationHandled?: () => void;
+  onRequestAssetPicker?: (request: AssetPickerRequest) => void;
 }
 
 const LANGUAGES: { label: string; iso: string }[] = [
@@ -55,6 +56,7 @@ export function CourseOverviewPage({
   onNavigationRequest,
   pendingNavigation,
   onPendingNavigationHandled,
+  onRequestAssetPicker,
 }: CourseOverviewPageProps) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -81,7 +83,6 @@ export function CourseOverviewPage({
   const [tagInput, setTagInput] = useState("");
   const [heroAssetId, setHeroAssetId] = useState<string | null>(null);
   const [heroPreviewUrl, setHeroPreviewUrl] = useState<string | null>(null);
-  const [isAssetPickerOpen, setIsAssetPickerOpen] = useState(false);
   const [language, setLanguage] = useState("");
 
   // Collaboration — wired to _isShared and _shareWithUsers on the engine
@@ -379,6 +380,19 @@ export function CourseOverviewPage({
     setSaveSuccess(false);
   }
 
+  function handleRequestCourseImagePicker() {
+    onRequestAssetPicker?.({
+      assetType: "image",
+      title: "Select Course Image",
+      description: "Choose a cover image for this course.",
+      onSelect: (asset) => {
+        setHeroAssetId(asset.id);
+        setHeroPreviewUrl(asset.url || `/api/asset/serve/${asset.id}`);
+        markDirty();
+      },
+    });
+  }
+
   function handleEmailInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "ArrowDown") {
       if (!showEmailSuggestions || emailSuggestions.length === 0) return;
@@ -535,11 +549,11 @@ export function CourseOverviewPage({
             role="button"
             tabIndex={0}
             aria-label={heroPreviewUrl ? "Replace course image" : "Choose a cover image"}
-            onClick={() => setIsAssetPickerOpen(true)}
+            onClick={handleRequestCourseImagePicker}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                setIsAssetPickerOpen(true);
+                handleRequestCourseImagePicker();
               }
             }}
             className="group relative cursor-pointer overflow-hidden"
@@ -928,18 +942,6 @@ export function CourseOverviewPage({
           </div>
         </div>
       )}
-
-      {isAssetPickerOpen ? (
-        <AssetPickerModal
-          onSelect={(asset) => {
-            setHeroAssetId(asset.id);
-            setHeroPreviewUrl(asset.url || `/api/asset/serve/${asset.id}`);
-            markDirty();
-            setIsAssetPickerOpen(false);
-          }}
-          onClose={() => setIsAssetPickerOpen(false)}
-        />
-      ) : null}
 
       <UnsavedChangesModal
         isOpen={showConfirmModal}

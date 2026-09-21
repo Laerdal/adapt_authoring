@@ -103,8 +103,12 @@ export interface STopic {
   sortOrder: number;
   subtitle?: string;
   body?: string;
+  // contentobject.pageBody: "If set, this text will be shown instead of the
+  // body text when this page is viewed" (body stays the menu-item text).
+  pageBody?: string;
   instruction?: string;
   description?: string;
+  colorLabel?: string;
   graphic?: {
     src?: string;
     alt?: string;

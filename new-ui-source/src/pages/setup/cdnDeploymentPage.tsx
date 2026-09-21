@@ -98,7 +98,7 @@ function Section({
 
 function CheckboxRow({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: React.ReactNode }) {
   return (
-    <label className="flex items-start gap-3 py-1 cursor-pointer group">
+    <label className="relative flex items-start gap-3 py-1 cursor-pointer group">
       <input
         type="checkbox"
         checked={checked}
@@ -120,13 +120,30 @@ function CheckboxRow({ checked, onChange, label }: { checked: boolean; onChange:
   );
 }
 
-function FieldLabel({ label }: { label: string }) {
+function FieldLabel({ label, hint }: { label: string; hint?: string }) {
+  const tooltipId = React.useId();
   return (
     <span className="text-xs font-semibold text-[#374151] flex items-center gap-1">
       {label}
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-      </svg>
+      {hint && (
+        <span
+          className="relative inline-flex group"
+          tabIndex={0}
+          aria-label={`More information about ${label}`}
+          aria-describedby={tooltipId}
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          <span
+            id={tooltipId}
+            role="tooltip"
+            className="pointer-events-none absolute left-0 bottom-full z-20 mb-1.5 w-max max-w-[240px] rounded-[8px] bg-[#215369] px-3 py-1 text-[11px] font-medium text-[#ffffff] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+          >
+            {hint}
+          </span>
+        </span>
+      )}
     </span>
   );
 }
@@ -136,7 +153,7 @@ function TextField({
 }: { label: string; hint?: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <FieldLabel label={label} />
+      <FieldLabel label={label} hint={hint} />
       <input
         type="text"
         value={value}
@@ -154,7 +171,7 @@ function SelectField({
 }: { label: string; hint?: string; value: string; onChange: (v: string) => void; options: readonly string[] }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <FieldLabel label={label} />
+      <FieldLabel label={label} hint={hint} />
       <div className="relative">
         <select
           value={value}
@@ -347,14 +364,10 @@ export function CdnDeploymentPage({
     (async () => {
       setLoading(true);
       try {
-        const [settings, version] = await Promise.all([
-          getCdnDeploymentSettings(courseId),
-          getCdnVersion().catch(() => ""),
-        ]);
+        const settings = await getCdnDeploymentSettings(courseId);
         if (cancelled) return;
         setCfg(settings);
         setSavedSnapshot(settings);
-        setCdnCliVersion(version);
       } catch {
         // Without this, a failed fetch left `cfg` null forever and the page
         // was stuck on the loading spinner indefinitely — fall back to the
@@ -371,6 +384,23 @@ export function CdnDeploymentPage({
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId]);
+
+  // The CLI version string is a display-only footnote ("NPM cdndeploy
+  // version: …") backed by a `cdndeploy -version` subprocess spawn, which can
+  // be noticeably slower than the settings fetch above (process startup +
+  // module load vs. a single DB read). It was previously awaited in the same
+  // Promise.all as the settings load, so the whole page sat behind the
+  // loading spinner until that subprocess finished, even though the version
+  // string has no bearing on the form being usable. Fetch it independently,
+  // off the critical path, so a slow/hanging CLI can never delay the page
+  // becoming interactive.
+  useEffect(() => {
+    let cancelled = false;
+    getCdnVersion()
+      .then((v) => { if (!cancelled) setCdnCliVersion(v); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -441,6 +471,19 @@ export function CdnDeploymentPage({
 
   function handleTriggerBuild() {
     if (!cfg || building) return;
+    // Guard even though the trigger button is already disabled in this state
+    // (defense in depth against any other call path). Deploying while Project/
+    // Course Id are still the literal schema-default placeholders would publish
+    // this course's build to the same shared CDN path every other
+    // as-yet-unconfigured course would also deploy to, silently overwriting
+    // whatever is already there.
+    if (identityMatchesDefault) {
+      setToast({
+        type: "error",
+        message: "Update Project and Course Id from their default placeholder values before deploying.",
+      });
+      return;
+    }
     setBuilding(true);
     setLogEntries([]);
     // Clear any previously-fetched previous-links table — after a build, only
@@ -547,7 +590,18 @@ export function CdnDeploymentPage({
     }
   }
 
-  const canTrigger = !!cfg?.isEnabled && !!cfg.cdnid && !!cfg.groupid && !!cfg.courseid && !!cfg.version && !building;
+  // Project/Course Id together (with cdnid) form the CDN destination path
+  // (see destination.js: `${groupid}/courses/${courseid}/${version}`). If
+  // placeholders, deploying would target a generic path other unconfigured
+  // courses share, overwriting each other's content — so we reject either
+  // default, not just the pair.
+  const identityMatchesDefault =
+    !!cfg &&
+    (cfg.groupid === DEFAULT_CDN_DEPLOYMENT_SETTINGS.groupid ||
+      cfg.courseid === DEFAULT_CDN_DEPLOYMENT_SETTINGS.courseid);
+
+  const canTrigger =
+    !!cfg?.isEnabled && !!cfg.cdnid && !!cfg.groupid && !!cfg.courseid && !!cfg.version && !building && !identityMatchesDefault;
 
   return (
     <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
@@ -612,6 +666,25 @@ export function CdnDeploymentPage({
                       value={cfg.buildTriggerComment}
                       onChange={(v) => set({ buildTriggerComment: v })}
                     />
+
+                    {identityMatchesDefault ? (
+                      <p className="text-xs text-[var(--life-warning-500)] bg-[var(--life-warning-050)] border border-[var(--life-warning-100)] rounded-lg px-3 py-2">
+                        Project and/or Course Id is still set to a default placeholder value ("default-project" /
+                        "default-course"). Update both to values specific to this course before you can trigger a CDN
+                        build — deploying with a shared default would overwrite another course's deployment at the
+                        same path.
+                      </p>
+                    ) : dirty ? (
+                      // Only shown while the edits are unsaved (`dirty`) — this is a heads-up about the
+                      // *pending* change, so it should go away once the user saves (at which point
+                      // `savedSnapshot` catches up to `cfg` and these are simply the current settings,
+                      // not a change still waiting to be applied).
+                      <p className="text-xs text-[var(--life-primary-600)] bg-[var(--life-primary-050)] border border-[var(--life-primary-100)] rounded-lg px-3 py-2">
+                        You've changed the default CDN settings. If this course was previously deployed under
+                        different Project / Course Id / Version values, save and trigger a new build to overwrite the
+                        existing deployment with these settings.
+                      </p>
+                    ) : null}
                   </div>
                 )}
               </Section>
@@ -625,7 +698,7 @@ export function CdnDeploymentPage({
                   </svg>
                 }
               >
-                <label className="flex items-start gap-3 cursor-pointer group">
+                <label className="relative flex items-start gap-3 cursor-pointer group">
                   <input
                     type="checkbox"
                     checked={includeExport}
