@@ -210,6 +210,7 @@ type TopicThemeSettings = {
 };
 
 type TopicMenuSettings = {
+  _renderAsGroup?: boolean;
   _graphic?: {
     _src?: string;
     alt?: string;
@@ -2900,7 +2901,7 @@ function mapStructureToPages(
       menuSettings: topic.menuSettings && typeof topic.menuSettings === "object"
         ? topic.menuSettings as TopicMenuSettings
         : {},
-      linkText: topic.linkText || "",
+      linkText: topic.linkText || "View",
       duration: topic.duration || "",
       lockType: topic.lockType || "",
       lockedBy: Array.isArray(topic.lockedBy) ? topic.lockedBy : [],
@@ -11300,15 +11301,6 @@ export default function CourseEditor({
                       const pageHeaderMinimumHeights = asRecord(pageHeader._minimumHeights);
 
                       const menuSettings = getActiveMenuSettingsWithDefaults(page.menuSettings, "contentobject");
-                      const menuGraphic = asRecord(menuSettings._graphic);
-                      const menuBackgroundImage = asRecord(menuSettings._backgroundImage);
-                      const menuBackgroundStyles = asRecord(menuSettings._backgroundStyles);
-                      const menuHeader = asRecord(menuSettings._menuHeader);
-                      const menuHeaderTextAlignment = asRecord(menuHeader._textAlignment);
-                      const menuHeaderBackgroundImage = asRecord(menuHeader._backgroundImage);
-                      const menuHeaderBackgroundStyles = asRecord(menuHeader._backgroundStyles);
-                      const menuHeaderMinimumHeights = asRecord(menuHeader._minimumHeights);
-                      const showMenuSubtitleAlignment = courseMenu === "Box Menu";
 
                       return (
                         <div className="px-4 py-4 border-b border-[#e6ebf0] space-y-2">
@@ -11555,77 +11547,11 @@ export default function CourseEditor({
                           </TopicAccordion>
 
                           <TopicAccordion title="Menu Appearance" open={!!openTopicAccordions.menu} onToggle={(triggerEl) => toggleTopicAccordion("menu", triggerEl)}>
-                            {/* _graphic/_skipSubmenuView/lockedNotification only exist on the
-                                course-level menu schema, never at the page (contentobject) level. */}
-                            {isMenuFieldSupported("contentobject", "_graphic") && (
-                              <>
-                                <TopicAssetField
-                                  resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl}
-                                  label="Menu graphic"
-                                  compact
-                                  value={asString(menuGraphic._src)}
-                                  onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuGraphic" })}
-                                  onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuGraphic" }, initialValue: asString(menuGraphic._src), title: "Menu graphic" })}
-                                  onClear={() => clearTopicAssetSelection(page.id, { scope: "menuGraphic" })}
-                                />
-                                <TopicTextInput label="Alternative text" value={asString(menuGraphic.alt)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _graphic: { ...asRecord(current._graphic), alt: value } }))} />
-                              </>
-                            )}
-                            {isMenuFieldSupported("contentobject", "_skipSubmenuView") && (
-                              <TopicCheckbox label="Skip submenu view" checked={asBoolean(menuSettings._skipSubmenuView)} onChange={(checked) => updatePageMenuSettings(page.id, (current) => ({ ...current, _skipSubmenuView: checked }))} />
-                            )}
-                            {isMenuFieldSupported("contentobject", "lockedNotification") && (
-                              <TopicTextInput label="Locked notification text" value={asString(menuSettings.lockedNotification)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, lockedNotification: value }))} />
-                            )}
-
-                            {/* _backgroundImage/_backgroundStyles: not declared for Box Menu at page level. */}
-                            {isMenuFieldSupported("contentobject", "_backgroundImage") && (
-                              <div className="flex flex-col gap-1.5">
-                                <div className="text-[13px] font-semibold text-[var(--life-base-black)]">Menu background image</div>
-                                <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(menuBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuBackground", bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuBackground", bp: "_xlarge" }, initialValue: asString(menuBackgroundImage._xlarge), title: "Menu background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuBackground", bp: "_xlarge" })} />
-                                <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(menuBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuBackground", bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuBackground", bp: "_large" }, initialValue: asString(menuBackgroundImage._large), title: "Menu background image (_large)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuBackground", bp: "_large" })} />
-                                <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(menuBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuBackground", bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuBackground", bp: "_medium" }, initialValue: asString(menuBackgroundImage._medium), title: "Menu background image (_medium)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuBackground", bp: "_medium" })} />
-                                <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(menuBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuBackground", bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuBackground", bp: "_small" }, initialValue: asString(menuBackgroundImage._small), title: "Menu background image (_small)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuBackground", bp: "_small" })} />
-                              </div>
-                            )}
-                            {isMenuFieldSupported("contentobject", "_backgroundStyles") && (
-                              <TopicNestedAccordion title="Menu background image styles">
-                                <TopicSelect label={BG_REPEAT_LABEL} value={asString(menuBackgroundStyles._backgroundRepeat)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundRepeat: value } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
-                                <TopicSelect label={BG_SIZE_LABEL} value={asString(menuBackgroundStyles._backgroundSize)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundSize: value } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
-                                <TopicSelect label={BG_POSITION_LABEL} value={asString(menuBackgroundStyles._backgroundPosition)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundPosition: value } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
-                              </TopicNestedAccordion>
-                            )}
-
-                            {/* _menuHeader: not declared for Box Menu at page level. */}
-                            {isMenuFieldSupported("contentobject", "_menuHeader") && (
-                              <>
-                                <TopicCheckbox label="Display image above menu header" checked={asBoolean(menuHeader._displayAboveHeader)} onChange={(checked) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _displayAboveHeader: checked } }))} />
-                                <TopicSelect label="Title alignment" value={asString(menuHeaderTextAlignment._title)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _textAlignment: { ...asRecord(asRecord(current._menuHeader)._textAlignment), _title: value } } }))} options={TEXT_ALIGN_OPTIONS} />
-                                {showMenuSubtitleAlignment ? <TopicSelect label="Subtitle alignment" value={asString(menuHeaderTextAlignment._subtitle)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _textAlignment: { ...asRecord(asRecord(current._menuHeader)._textAlignment), _subtitle: value } } }))} options={TEXT_ALIGN_OPTIONS} /> : null}
-                                <TopicSelect label="Body alignment" value={asString(menuHeaderTextAlignment._body)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _textAlignment: { ...asRecord(asRecord(current._menuHeader)._textAlignment), _body: value } } }))} options={TEXT_ALIGN_OPTIONS} />
-                                <TopicSelect label="Instruction alignment" value={asString(menuHeaderTextAlignment._instruction)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _textAlignment: { ...asRecord(asRecord(current._menuHeader)._textAlignment), _instruction: value } } }))} options={TEXT_ALIGN_OPTIONS} />
-
-                                <div className="flex flex-col gap-1.5">
-                                  <div className="text-[13px] font-semibold text-[var(--life-base-black)]">Menu header background image</div>
-                                  <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(menuHeaderBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuHeaderBackground", bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuHeaderBackground", bp: "_xlarge" }, initialValue: asString(menuHeaderBackgroundImage._xlarge), title: "Menu header background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuHeaderBackground", bp: "_xlarge" })} />
-                                  <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(menuHeaderBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuHeaderBackground", bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuHeaderBackground", bp: "_large" }, initialValue: asString(menuHeaderBackgroundImage._large), title: "Menu header background image (_large)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuHeaderBackground", bp: "_large" })} />
-                                  <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(menuHeaderBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuHeaderBackground", bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuHeaderBackground", bp: "_medium" }, initialValue: asString(menuHeaderBackgroundImage._medium), title: "Menu header background image (_medium)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuHeaderBackground", bp: "_medium" })} />
-                                  <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(menuHeaderBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "menuHeaderBackground", bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "menuHeaderBackground", bp: "_small" }, initialValue: asString(menuHeaderBackgroundImage._small), title: "Menu header background image (_small)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "menuHeaderBackground", bp: "_small" })} />
-                                </div>
-                                <TopicNestedAccordion title="Menu header background image styles">
-                                  <TopicSelect label={BG_REPEAT_LABEL} value={asString(menuHeaderBackgroundStyles._backgroundRepeat)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _backgroundStyles: { ...asRecord(asRecord(current._menuHeader)._backgroundStyles), _backgroundRepeat: value } } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
-                                  <TopicSelect label={BG_SIZE_LABEL} value={asString(menuHeaderBackgroundStyles._backgroundSize)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _backgroundStyles: { ...asRecord(asRecord(current._menuHeader)._backgroundStyles), _backgroundSize: value } } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
-                                  <TopicSelect label={BG_POSITION_LABEL} value={asString(menuHeaderBackgroundStyles._backgroundPosition)} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _backgroundStyles: { ...asRecord(asRecord(current._menuHeader)._backgroundStyles), _backgroundPosition: value } } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
-                                </TopicNestedAccordion>
-
-                                <TopicNestedAccordion title="Menu header minimum height">
-                                  <TopicTextInput label="_xlarge" type="number" value={String(asNumberOrEmpty(menuHeaderMinimumHeights._xlarge))} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _minimumHeights: { ...asRecord(asRecord(current._menuHeader)._minimumHeights), _xlarge: parseNumberishInput(value) } } }))} />
-                                  <TopicTextInput label="_large" type="number" value={String(asNumberOrEmpty(menuHeaderMinimumHeights._large))} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _minimumHeights: { ...asRecord(asRecord(current._menuHeader)._minimumHeights), _large: parseNumberishInput(value) } } }))} />
-                                  <TopicTextInput label="_medium" type="number" value={String(asNumberOrEmpty(menuHeaderMinimumHeights._medium))} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _minimumHeights: { ...asRecord(asRecord(current._menuHeader)._minimumHeights), _medium: parseNumberishInput(value) } } }))} />
-                                  <TopicTextInput label="_small" type="number" value={String(asNumberOrEmpty(menuHeaderMinimumHeights._small))} onChange={(value) => updatePageMenuSettings(page.id, (current) => ({ ...current, _menuHeader: { ...asRecord(current._menuHeader), _minimumHeights: { ...asRecord(asRecord(current._menuHeader)._minimumHeights), _small: parseNumberishInput(value) } } }))} />
-                                </TopicNestedAccordion>
-                              </>
-                            )}
+                            <TopicCheckbox
+                              label="Enable as menu group?"
+                              checked={asBoolean(menuSettings._renderAsGroup)}
+                              onChange={(checked) => updatePageMenuSettings(page.id, (current) => ({ ...current, _renderAsGroup: checked }))}
+                            />
                           </TopicAccordion>
 
                           <TopicAccordion title="Media" open={!!openTopicAccordions.media} onToggle={(triggerEl) => toggleTopicAccordion("media", triggerEl)}>

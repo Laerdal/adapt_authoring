@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { canManageCourses, useAuth } from "@/context/AuthContext";
+import ProfileMenu from "@/components/common/ProfileMenu";
 
 type PrimaryTopNav = "settings" | "storyboard" | "editor";
 type TopBarNav = PrimaryTopNav | "preview";
@@ -223,9 +224,8 @@ export default function CommonCourseTopBarRow({
 
         {trailingActions}
 
-        <div className="hidden xl:flex items-center pl-3 border-l border-[#d8dde6]">
-          <span className="max-w-[260px] truncate text-[13px] font-medium text-[#9ca3af] select-none">{loginName}</span>
-        </div>
+        <div className="w-px h-8 bg-[#d8dde6] mx-1" />
+        <ProfileMenu />
       </div>
     </header>
   );
