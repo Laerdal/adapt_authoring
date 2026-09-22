@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback, useDeferredValue, memo } from "react";
-import { getAssets, trashAsset, restoreAsset, updateAsset, uploadAsset } from "@/api/adaptAuthoring";
+import { getAssets, getMaxFileUploadSize, trashAsset, restoreAsset, updateAsset, uploadAsset } from "@/api/adaptAuthoring";
 import type { AssetFormat, DashboardAsset } from "@/api/adaptAuthoring";
 import AiAssistant from "@/components/common/AiAssistant";
 import type { AssetPickerResult, AssetPickerType } from "@/types/assetPicker";
@@ -106,7 +106,21 @@ const ACCEPTED_EXTS: Record<AssetFormat, string[]> = {
   video: ["mp4", "webm", "mov", "avi"],
   other: [],
 };
-const MAX_SIZE_MB = 600;
+const DEFAULT_MAX_FILE_UPLOAD_SIZE = "600MB";
+
+function parseMaxFileUploadSizeMb(value: string): number {
+  const match = value.trim().match(/^(\d+(?:\.\d+)?)\s*(KB|MB|GB|TB)?$/i);
+  if (!match) return 600;
+
+  const amount = Number(match[1]);
+  const unit = (match[2] ?? "MB").toUpperCase();
+  if (!Number.isFinite(amount) || amount <= 0) return 600;
+
+  if (unit === "KB") return amount / 1024;
+  if (unit === "GB") return amount * 1024;
+  if (unit === "TB") return amount * 1024 * 1024;
+  return amount;
+}
 
 function detectFormat(file: File): AssetFormat {
   const mime = file.type.toLowerCase();
@@ -120,10 +134,11 @@ function detectFormat(file: File): AssetFormat {
   return "other";
 }
 
-function validateFile(file: File): FileValidation {
+function validateFile(file: File, maxFileUploadSize: string): FileValidation {
+  const maxSizeMB = parseMaxFileUploadSizeMb(maxFileUploadSize);
   const sizeMB = file.size / (1024 * 1024);
-  if (sizeMB > MAX_SIZE_MB) {
-    return { ok: false, error: `File is too large (${sizeMB.toFixed(1)} MB). Maximum allowed size is ${MAX_SIZE_MB} MB.` };
+  if (sizeMB > maxSizeMB) {
+    return { ok: false, error: `File is too large (${sizeMB.toFixed(1)} MB). Maximum allowed size is ${maxFileUploadSize}.` };
   }
   if (file.size === 0) {
     return { ok: false, error: "File appears to be empty." };
@@ -640,6 +655,7 @@ export function AssetManagementWorkspace({
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [lastDeletedAsset, setLastDeletedAsset] = useState<Asset | null>(null);
   const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [maxFileUploadSize, setMaxFileUploadSize] = useState(DEFAULT_MAX_FILE_UPLOAD_SIZE);
 
   const [uploadOpen, setUploadOpen]     = useState(false);
   const [upload, setUpload]             = useState<UploadState>(EMPTY_UPLOAD);
@@ -684,6 +700,16 @@ export function AssetManagementWorkspace({
   // Clean up progress timer on unmount
   useEffect(() => {
     return () => { if (progressTimer.current) clearInterval(progressTimer.current); };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getMaxFileUploadSize().then((value) => {
+      if (!cancelled) setMaxFileUploadSize(value);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const deferredSearch = useDeferredValue(search);
@@ -796,7 +822,7 @@ export function AssetManagementWorkspace({
     if (!f) return;
     const validation = fixedPickerFormat === "h5p" && !/\.h5p$/i.test(f.name)
       ? { ok: false, error: "Please choose a .h5p file." }
-      : validateFile(f);
+      : validateFile(f, maxFileUploadSize);
     const autoTitle = f.name.replace(/\.[^.]+$/, "");
     setUpload((prev) => ({
       ...prev,
@@ -806,7 +832,7 @@ export function AssetManagementWorkspace({
       formErrors: {},
       uploadError: null,
     }));
-  }, [fixedPickerFormat]);
+  }, [fixedPickerFormat, maxFileUploadSize]);
 
   function handleUploadDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -1279,7 +1305,7 @@ export function AssetManagementWorkspace({
                         </div>
                         <div className="text-center">
                           <p className="text-sm font-medium text-[#374151]">Drop file here or click to browse</p>
-                          <p className="text-xs text-[#9ca3af] mt-1">Images, audio, video, or documents — max {MAX_SIZE_MB} MB</p>
+                          <p className="text-xs text-[#9ca3af] mt-1">Images, audio, video, or documents — max {maxFileUploadSize}</p>
                         </div>
                       </>
                     )}

@@ -169,6 +169,15 @@ export async function getInstanceName(): Promise<string> {
   }
 }
 
+export async function getMaxFileUploadSize(): Promise<string> {
+  try {
+    const cfg = await apiClient.get<{ maxFileUploadSize?: string }>("/config/config.json");
+    return (cfg?.maxFileUploadSize ?? "").trim() || "600MB";
+  } catch {
+    return "600MB";
+  }
+}
+
 // ── Assets ───────────────────────────────────────────────────────────────────
 export interface Asset {
   _id: string;
