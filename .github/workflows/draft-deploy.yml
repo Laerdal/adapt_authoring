@@ -1,0 +1,57 @@
+name: Draft Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment name
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - stg
+          - prod
+      image_tag:
+        description: Built image tag to deploy
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check deployment prerequisites
+        run: |
+          set -euo pipefail
+
+          missing=0
+
+          if [ ! -d deploy ] && [ ! -d charts ]; then
+            echo "::error::Missing deployment manifests. Add Helm charts or another deployment definition before enabling CD."
+            missing=1
+          fi
+
+          if [ ! -f .github/environments/${{ inputs.environment }}.env.example ]; then
+            echo "::warning::No environment contract found at .github/environments/${{ inputs.environment }}.env.example"
+            echo "::warning::Add environment-specific variable documentation before enabling deploys."
+          fi
+
+          if [ "$missing" -ne 0 ]; then
+            echo "Draft workflow only: deployment assets are not present in this repo yet."
+            exit 1
+          fi
+
+      - name: Draft next steps
+        run: |
+          echo "When deployment assets exist, extend this workflow to:"
+          echo "1. Authenticate to the target platform"
+          echo "2. Apply manifests or run helm upgrade"
+          echo "3. Run a post-deploy smoke check"
+          echo "4. Trigger the external browser E2E workflow after a successful deploy"

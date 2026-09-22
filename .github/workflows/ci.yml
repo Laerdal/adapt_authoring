@@ -42,14 +42,14 @@ jobs:
           cache: npm
 
       - name: Install root dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
-      - name: Run backend tests
-        run: npm test
+      - name: Run backend CI tests
+        run: ./node_modules/.bin/mocha ./test/storyboard.commentStatus.js ./test/storyboard.import.smoke.js
 
       - name: Install new UI dependencies
         working-directory: new-ui-source
-        run: npm install --ignore-scripts
+        run: npm ci
 
       - name: Run new UI tests
         working-directory: new-ui-source

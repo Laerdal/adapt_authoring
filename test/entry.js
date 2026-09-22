@@ -111,7 +111,6 @@ function removeTestData(done) {
       var MongoClient = mongodb.MongoClient;
       var connStr = 'mongodb://' + testConfig.dbHost + ':' + testConfig.dbPort + '/' + testConfig.dbName;
       MongoClient.connect(connStr, {
-        domainsEnabled: true,
         useNewUrlParser: true,
         useUnifiedTopology: true
       }, function(error, client) {

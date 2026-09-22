@@ -1,0 +1,44 @@
+name: Draft Image Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Check image-build prerequisites
+        run: |
+          set -euo pipefail
+
+          missing=0
+
+          if [ ! -f Dockerfile ]; then
+            echo "::error::Missing Dockerfile at repository root. Add a production image definition before enabling deployment workflows."
+            missing=1
+          fi
+
+          if [ ! -f .dockerignore ]; then
+            echo "::warning::.dockerignore is missing. Add one before enabling container builds."
+          fi
+
+          if [ "$missing" -ne 0 ]; then
+            echo "Draft workflow only: preflight failed because deployable container assets are not in this repo yet."
+            exit 1
+          fi
+
+      - name: Draft next steps
+        run: |
+          echo "When containerization is ready, extend this workflow to:"
+          echo "1. Build the authoring image"
+          echo "2. Push the image to the chosen registry"
+          echo "3. Publish the image tag as an artifact or workflow output"
