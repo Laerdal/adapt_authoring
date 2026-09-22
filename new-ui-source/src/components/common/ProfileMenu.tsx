@@ -9,7 +9,7 @@ function getInitials(firstName?: string, lastName?: string, email?: string) {
 }
 
 function toDisplayNamePart(value?: string) {
-  return value?.trim().toLowerCase().replace(/\b\w/g, (character) => character.toUpperCase()) || "";
+  return value?.trim().toLowerCase().replace(/(^|[\s'-])(\p{L})/gu, (_, separator, character) => `${separator}${character.toUpperCase()}`) || "";
 }
 
 function openFeedback() {
