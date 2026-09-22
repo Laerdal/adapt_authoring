@@ -254,6 +254,16 @@
 .menu-canvas-input-align-center { text-align: center; }
 .menu-canvas-input-align-right  { text-align: right;  }
 
+/* Prevent sr-only form controls from causing scroll-to-top on focus.
+   Absolutely-positioned .sr-only inputs with no positioned ancestor land
+   at the top of the nearest scroll container; clicking the label focuses
+   the input and the browser scrolls to reveal it, jumping the page to the
+   top. Anchoring the wrapping label positions the input at its natural
+   location instead. */
+label:has(.sr-only) {
+  position: relative;
+}
+
 *, *::before, *::after {
   box-sizing: border-box;
 }
