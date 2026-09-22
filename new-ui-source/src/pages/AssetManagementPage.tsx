@@ -371,6 +371,7 @@ function AssetPreviewPanel({
   onConfirm,
   onCancel,
   onRestore,
+  restoreError,
 }: {
   asset: Asset | null;
   pickerMode?: boolean;
@@ -379,6 +380,7 @@ function AssetPreviewPanel({
   onConfirm?: (asset: Asset) => void;
   onCancel?: () => void;
   onRestore?: (asset: Asset) => void;
+  restoreError?: string | null;
 }) {
   const [imageDimensions, setImageDimensions] = useState<AssetPreviewDimensions>({});
 
@@ -492,14 +494,21 @@ function AssetPreviewPanel({
                   </button>
                 </div>
               ) : asset.isDeleted ? (
-                <div className="flex items-center justify-center gap-3 pb-2">
-                  <button
-                    type="button"
-                    onClick={() => onRestore?.(asset)}
-                    className="inline-flex items-center justify-center rounded-xl bg-[#16a34a] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#15803d]"
-                  >
-                    Restore
-                  </button>
+                <div className="space-y-3 pb-2">
+                  {restoreError && (
+                    <div className="rounded-xl border border-[#fecaca] bg-[#fef2f2] px-3.5 py-3 text-left text-sm text-[#b91c1c]">
+                      {restoreError}
+                    </div>
+                  )}
+                  <div className="flex items-center justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => onRestore?.(asset)}
+                      className="inline-flex items-center justify-center rounded-xl bg-[#16a34a] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#15803d]"
+                    >
+                      Restore
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <div className="flex items-center justify-center gap-3 pb-2">
@@ -630,6 +639,7 @@ export function AssetManagementWorkspace({
   const [tagSearch, setTagSearch]       = useState("");
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [lastDeletedAsset, setLastDeletedAsset] = useState<Asset | null>(null);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
 
   const [uploadOpen, setUploadOpen]     = useState(false);
   const [upload, setUpload]             = useState<UploadState>(EMPTY_UPLOAD);
@@ -760,6 +770,7 @@ export function AssetManagementWorkspace({
 
   const handleAssetActivate = useCallback((asset: Asset) => {
     setLastDeletedAsset((prev) => (prev && prev.backendId === asset.backendId ? prev : null));
+    setRestoreError(null);
     setSelectedAssetId(asset.backendId);
   }, []);
 
@@ -898,6 +909,7 @@ export function AssetManagementWorkspace({
     setDeleteTarget(null);
     if (!target?.backendId) return;
 
+    setRestoreError(null);
     setLastDeletedAsset({ ...target, isDeleted: true });
     setSelectedAssetId(target.backendId);
 
@@ -914,16 +926,18 @@ export function AssetManagementWorkspace({
     if (!target?.backendId) return;
 
     try {
+      setRestoreError(null);
       await restoreAsset(target.backendId);
       setLastDeletedAsset(null);
       setSelectedAssetId(null);
       await loadAssets();
     } catch (error) {
-      setLastDeletedAsset((prev) => prev ? { ...prev, saveError: getEditErrorMessage(error) } as Asset & { saveError?: string } : prev);
+      setRestoreError(getEditErrorMessage(error));
     }
   }
 
   function handleRestoreDeletedAsset(asset: Asset) {
+    setRestoreError(null);
     setRestoreTarget(asset);
   }
 
@@ -1169,6 +1183,7 @@ export function AssetManagementWorkspace({
             onConfirm={handleConfirmPickerSelection}
             onCancel={onCancelPick}
             onRestore={handleRestoreDeletedAsset}
+            restoreError={selectedAsset?.isDeleted ? restoreError : null}
           />
         </div>
       </div>
