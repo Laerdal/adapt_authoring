@@ -2867,7 +2867,7 @@ function CourseCreationCenterContent() {
   function renderPanel() {
     switch (activeNav) {
       case "overview":
-        return <CourseOverviewPage courseId={courseId} title={title} description={description} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+        return <CourseOverviewPage courseId={courseId} title={title} description={description} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} onRequestAssetPicker={setAssetPickerRequest} />;
       case "structure":
         return (
           <CourseStructurePanel
