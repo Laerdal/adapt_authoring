@@ -622,9 +622,11 @@ export function CdnDeploymentPage({
   }
 
   // Project/Course Id together (with cdnid) form the CDN destination path
-  // (see destination.js: `${groupid}/courses/${courseid}/${version}`) — while
-  // "default-course" placeholders, deploying would target the same generic
-  // path every unconfigured course shares, overwriting each other's content.
+  // (see destination.js: `${groupid}/courses/${courseid}/${version}`). If either
+  // ID is still the schema-default placeholder ("default-project" /
+  // "default-course"), deploying would target the same generic path every
+  // unconfigured course shares, overwriting each other's content — so block
+  // deploys until both are set to course-specific values.
   const identityMatchesDefault =
     !!cfg &&
     (cfg.groupid === DEFAULT_CDN_DEPLOYMENT_SETTINGS.groupid ||
@@ -678,7 +680,7 @@ export function CdnDeploymentPage({
                     />
                     <TextField
                       label="Project"
-                      hint="Which project does this course belong to? Set the project ID with less than 30 characters and no special characters allowed."
+                      hint="Which project does this course belong to? Set the project ID with 30 characters or fewer and no special characters allowed."
                       value={cfg.groupid}
                       onChange={(v) => set({ groupid: v })}
                       maxLength={CDN_ID_MAX_LENGTH}
@@ -687,7 +689,7 @@ export function CdnDeploymentPage({
                     />
                     <TextField
                       label="Course Id"
-                      hint="Set the course ID with less than 30 characters and no special characters allowed."
+                      hint="Set the course ID with 30 characters or fewer and no special characters allowed."
                       value={cfg.courseid}
                       onChange={(v) => set({ courseid: v })}
                       maxLength={CDN_ID_MAX_LENGTH}
