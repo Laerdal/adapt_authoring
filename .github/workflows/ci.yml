@@ -3,10 +3,10 @@ name: CI
 on:
   pull_request:
     branches:
-      - develop
+      - adapt-studio-cicd-setup
   push:
     branches:
-      - develop
+      - adapt-studio-cicd-setup
   workflow_dispatch:
   schedule:
     - cron: '0 2 * * *'
@@ -25,7 +25,7 @@ env:
   STUDIO_E2E_BRANCH: develop
 
 jobs:
-  ci:
+  backend-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 120
 
@@ -47,6 +47,22 @@ jobs:
       - name: Run backend CI tests
         run: ./node_modules/.bin/mocha ./test/storyboard.commentStatus.js ./test/storyboard.import.smoke.js
 
+  new-ui-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'schedule' && 'develop' || github.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
       - name: Install new UI dependencies
         working-directory: new-ui-source
         run: npm ci
@@ -54,6 +70,22 @@ jobs:
       - name: Run new UI tests
         working-directory: new-ui-source
         run: npm test
+
+  trigger-studio-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    needs:
+      - backend-tests
+      - new-ui-tests
+    if: ${{ secrets.STUDIO_E2E_TOKEN != '' }}
+    outputs:
+      dispatch_time: ${{ steps.trigger_e2e.outputs.dispatch_time }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'schedule' && 'develop' || github.ref }}
 
       - name: Trigger Studio E2E workflow
         id: trigger_e2e
@@ -78,10 +110,18 @@ jobs:
 
           echo "dispatch_time=${dispatch_time}" >> "$GITHUB_OUTPUT"
 
+  wait-for-studio-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    needs:
+      - trigger-studio-e2e
+    if: ${{ secrets.STUDIO_E2E_TOKEN != '' }}
+
+    steps:
       - name: Wait for Studio E2E completion
         env:
           STUDIO_E2E_TOKEN: ${{ secrets.STUDIO_E2E_TOKEN }}
-          DISPATCH_TIME: ${{ steps.trigger_e2e.outputs.dispatch_time }}
+          DISPATCH_TIME: ${{ needs.trigger-studio-e2e.outputs.dispatch_time }}
         run: |
           set -euo pipefail
 
