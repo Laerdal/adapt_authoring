@@ -169,6 +169,15 @@ export async function getInstanceName(): Promise<string> {
   }
 }
 
+export async function getMaxFileUploadSize(): Promise<string> {
+  try {
+    const cfg = await apiClient.get<{ maxFileUploadSize?: string }>("/config/config.json");
+    return (cfg?.maxFileUploadSize ?? "").trim() || "600MB";
+  } catch {
+    return "600MB";
+  }
+}
+
 // ── Assets ───────────────────────────────────────────────────────────────────
 export interface Asset {
   _id: string;
@@ -4782,6 +4791,7 @@ export interface DashboardAsset {
   filename?: string;
   path?: string;
   mimeType?: string;
+  isDeleted?: boolean;
   metadata?: {
     width?: number;
     height?: number;
@@ -4808,10 +4818,10 @@ interface EngineAsset {
   };
 }
 
-export async function getAssets(): Promise<DashboardAsset[]> {
+export async function getAssets(includeDeleted = false): Promise<DashboardAsset[]> {
   const res = await apiClient.get<EngineAsset[] | { assets?: EngineAsset[] }>("/api/asset/query");
   const docs = (Array.isArray(res) ? res : res?.assets ?? [])
-    .filter((asset) => asset?._isDeleted !== true)
+    .filter((asset) => includeDeleted || asset?._isDeleted !== true)
     .slice()
     .sort((left, right) => {
     const leftTs = left.createdAt ? new Date(left.createdAt).getTime() : 0;
@@ -4835,6 +4845,7 @@ export async function getAssets(): Promise<DashboardAsset[]> {
       filename: a.filename,
       path: a.path,
       mimeType: a.mimeType,
+      isDeleted: !!a._isDeleted,
       metadata: a.metadata,
     };
   });
@@ -4842,6 +4853,10 @@ export async function getAssets(): Promise<DashboardAsset[]> {
 
 export function trashAsset(backendId: string): Promise<unknown> {
   return apiClient.put(`/api/asset/trash/${backendId}`);
+}
+
+export function restoreAsset(backendId: string): Promise<unknown> {
+  return apiClient.put(`/api/asset/restore/${backendId}`);
 }
 
 export async function updateAsset(
