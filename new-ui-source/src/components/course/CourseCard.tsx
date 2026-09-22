@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useState, useRef } from "react";
 import ImageCropper from "@/components/common/ImageCropper";
 import AssetPickerModal from "@/components/common/AssetPickerModal";
+import TagOverflowList from "@/components/common/TagOverflowList";
 
 interface CourseCardProps {
   id: number;
@@ -224,20 +225,7 @@ export default function CourseCard({
               </div>
             </div>
             <p title={description} className="text-xs text-[#6b7280] leading-relaxed line-clamp-2 flex-1">{description}</p>
-            {tags.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {tags.slice(0, 3).map((tag) => (
-                  <span key={tag} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#dbeeff] text-[#1e4d73]">
-                    {tag}
-                  </span>
-                ))}
-                {tags.length > 3 && (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#f3f4f6] text-[#6b7280]">
-                    +{tags.length - 3}
-                  </span>
-                )}
-              </div>
-            )}
+            <TagOverflowList tags={tags} />
             <div className="flex items-center gap-1.5 text-xs text-[#9ca3af]">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
@@ -289,16 +277,7 @@ export default function CourseCard({
                   {authorName}
                 </div>
               )}
-              {tags.slice(0, 3).map((tag) => (
-                <span key={tag} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#dbeeff] text-[#1e4d73]">
-                  {tag}
-                </span>
-              ))}
-              {tags.length > 3 && (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[#f3f4f6] text-[#6b7280]">
-                  +{tags.length - 3}
-                </span>
-              )}
+              {tags.length > 0 && <TagOverflowList tags={tags} className="flex-1" />}
             </div>
           </div>
 
