@@ -216,6 +216,7 @@ const GUARDED_NAV_IDS = new Set([
   "export-pdf",
 ]);
 
+const DEFERRED_NAV_ACTION = "__deferred_nav_action__";
 type SetupAssetPickerRequest = AssetPickerRequest;
 
 /* -- Course Structure panel -- */
@@ -349,36 +350,6 @@ function CourseStructurePanel({
         </p>
       </div>
 
-      {/* Unsaved-changes bar — edits persist only on Save Changes */}
-      {dirty && (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-[#e5e7eb] bg-white shadow-sm px-4 py-2.5">
-          <div className="flex items-center gap-2">
-            <svg className="shrink-0 text-[#f59e0b]" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" />
-            </svg>
-            <span className="text-sm text-[#4b5563]">Unsaved changes</span>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={discard}
-              disabled={saving}
-              className="px-3 py-1.5 text-sm rounded-lg text-[#374151] bg-white border border-[#e5e7eb] hover:bg-[#f9fafb] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => void save()}
-              disabled={saving}
-              className="px-3.5 py-1.5 text-sm font-semibold rounded-lg text-white bg-[#2d6fa8] hover:bg-[#235694] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {saving ? "Saving…" : "Save Changes"}
-            </button>
-          </div>
-        </div>
-      )}
-
       {error && (
         <div className="mb-4 rounded-lg border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b]">
           {error.message}
@@ -465,6 +436,63 @@ function CourseStructurePanel({
                 </svg>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {!loading && dirty && (
+        <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-4 rounded-xl border border-[var(--life-warning-100)] bg-white px-4 py-3 shadow-lg animate-fade-in-down">
+          <span className="flex items-center gap-2 text-sm text-[#374151]">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--life-warning-500)"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className="shrink-0"
+            >
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            Unsaved changes
+          </span>
+          {error && <span className="max-w-[180px] truncate text-xs text-[#ef4444]">{error.message}</span>}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={discard}
+              disabled={saving}
+              className="rounded-lg border border-[#d1d5db] bg-white px-4 py-2 text-sm font-medium text-[#374151] transition-colors hover:bg-[#f9fafb] disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={() => void save()}
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-lg bg-[var(--life-primary-500)] px-4 py-2 text-sm font-semibold text-[var(--life-base-white)] transition-colors hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:opacity-50"
+            >
+              {saving && (
+                <svg
+                  className="animate-spin"
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                </svg>
+              )}
+              {saving ? "Saving…" : "Save Changes"}
+            </button>
           </div>
         </div>
       )}
@@ -2696,6 +2724,7 @@ function CourseCreationCenterContent() {
     Object.fromEntries(NAV_GROUPS.map((group) => [group.id, true]))
   );
   const contentScrollRef = useRef<HTMLElement | null>(null);
+  const deferredNavigationActionRef = useRef<(() => void) | null>(null);
   const [assetPickerRequest, setAssetPickerRequest] = useState<SetupAssetPickerRequest | null>(null);
 
   // Tracks requested navigation when on a panel with unsaved changes
@@ -2768,6 +2797,18 @@ function CourseCreationCenterContent() {
     }));
   }
 
+  function requestGuardedAction(callback: () => void) {
+    if (GUARDED_NAV_IDS.has(activeNav)) {
+      deferredNavigationActionRef.current = callback;
+      setPendingNavigation(DEFERRED_NAV_ACTION);
+      return;
+    }
+
+    deferredNavigationActionRef.current = null;
+    setPendingNavigation(null);
+    callback();
+  }
+
   // Smart navigation handler - used by sidebar items
   // When on a guarded setup panel, the page intercepts via pendingNavigation state.
   function handleNavigation(nextPanel: string) {
@@ -2775,61 +2816,118 @@ function CourseCreationCenterContent() {
       return;
     }
 
+    deferredNavigationActionRef.current = null;
+
     if (GUARDED_NAV_IDS.has(activeNav)) {
       // Signal to the active guarded setup page that navigation is requested.
       // The page decides whether to show a confirmation modal or allow navigation.
       setPendingNavigation(nextPanel);
     } else {
       setPendingNavigation(null);
-      setActiveNav(nextPanel);
+      performNavigation(nextPanel);
     }
   }
 
-  function renderPanel() {
-    if (activeNav === "overview") return <CourseOverviewPage courseId={courseId} title={title} description={description} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} onRequestAssetPicker={setAssetPickerRequest} />;
-    if (activeNav === "structure")
-      return (
-        <CourseStructurePanel
-          courseId={courseId}
-          courseTitle={title}
-          onOpenEditor={(pageId) => openEditor(pageId)}
-          onOpenStoryboard={() => setActiveNav("storyboarding")}
-          onNavigationRequest={setActiveNav}
-          pendingNavigation={pendingNavigation}
-          onPendingNavigationHandled={() => setPendingNavigation(null)}
-        />
-      );
-    if (activeNav === "theme") return <SelectThemePage initialThemeName={savedThemeName} initialThemeVariables={savedThemeVariables} initialPresetId={savedPresetId} courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} onThemeSaved={({ themeName, themeVariables, themePresetId }) => { setSavedThemeName(themeName); setSavedThemeVariables(themeVariables); setSavedPresetId(themePresetId); }} />;
-    if (activeNav === "menu") return <MenuPage courseId={courseId} initialMenuName={savedMenuName} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "navigation") return <NavigationPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "accessibility") return <AccessibilityPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "tracking") return <TrackingAnalyticsPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "learner-experience") return <LearnerExperiencePanel courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "completion") return <CompletionProgressPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "technical-settings") return <TechnicalSettingPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "cdn-deployment") return <CdnDeploymentPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "translation") return <LegacyTranslationPanel courseId={courseId} />;
-    if (activeNav === "publish") return <PreflightValidatorPage courseId={courseId} onNavigationRequest={setActiveNav} />;
-    if (activeNav === "export-pdf" && canExportCourse) {
-      return (
-        <ExportPdfPage
-          courseId={courseId}
-          courseTitle={title}
-          onNavigationRequest={setActiveNav}
-          pendingNavigation={pendingNavigation}
-          onPendingNavigationHandled={() => setPendingNavigation(null)}
-        />
-      );
+  function triggerExportSource() {
+    void runExportSourceAction({
+      exportingSource,
+      tenantId: user?._tenantId,
+      courseId,
+      setExportingSource,
+      onProcessingStart: () => {
+        setExportPopup({ status: "processing", message: "Preparing course source export…" });
+      },
+      onDownloadStarted: () => {
+        setExportPopup({ status: "success", message: "Course source exported successfully" });
+      },
+      onUnavailable: () => {
+        setExportPopup({ status: "error", message: "Course export is not available right now." });
+      },
+      onError: (message) => {
+        setExportPopup({ status: "error", message: `Unable to export source. ${message}` });
+      },
+    });
+  }
+
+  function performNavigation(target: string) {
+    if (target === DEFERRED_NAV_ACTION) {
+      const deferredAction = deferredNavigationActionRef.current;
+      deferredNavigationActionRef.current = null;
+      deferredAction?.();
+      return;
     }
-    if (activeNav === "storyboarding")
-      return (
-        <StoryboardWorkspace
-          courseId={courseId}
-          courseTitle={title}
-          onBack={() => setActiveNav("overview")}
-          onTitleChange={setTitle}
-        />
-      );
+
+    if (target === "export-pdf") {
+      setExportPopup(null);
+    }
+
+    setActiveNav(target);
+  }
+
+  function renderPanel() {
+    switch (activeNav) {
+      case "overview":
+        return <CourseOverviewPage courseId={courseId} title={title} description={description} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} onRequestAssetPicker={setAssetPickerRequest} />;
+      case "structure":
+        return (
+          <CourseStructurePanel
+            courseId={courseId}
+            courseTitle={title}
+            onOpenEditor={(pageId) => requestGuardedAction(() => openEditor(pageId))}
+            onOpenStoryboard={() => handleNavigation("storyboarding")}
+            onNavigationRequest={performNavigation}
+            pendingNavigation={pendingNavigation}
+            onPendingNavigationHandled={() => setPendingNavigation(null)}
+          />
+        );
+      case "theme":
+        return <SelectThemePage initialThemeName={savedThemeName} initialThemeVariables={savedThemeVariables} initialPresetId={savedPresetId} courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} onThemeSaved={({ themeName, themeVariables, themePresetId }) => { setSavedThemeName(themeName); setSavedThemeVariables(themeVariables); setSavedPresetId(themePresetId); }} />;
+      case "menu":
+        return <MenuPage courseId={courseId} initialMenuName={savedMenuName} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "navigation":
+        return <NavigationPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "accessibility":
+        return <AccessibilityPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "tracking":
+        return <TrackingAnalyticsPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "learner-experience":
+        return <LearnerExperiencePanel courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "completion":
+        return <CompletionProgressPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "technical-settings":
+        return <TechnicalSettingPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "cdn-deployment":
+        return <CdnDeploymentPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "translation":
+        return <LegacyTranslationPanel courseId={courseId} />;
+      case "publish":
+        return <PreflightValidatorPage courseId={courseId} onNavigationRequest={setActiveNav} />;
+      case "export-pdf":
+        if (canExportCourse) {
+          return (
+            <ExportPdfPage
+              courseId={courseId}
+              courseTitle={title}
+              onNavigationRequest={performNavigation}
+              pendingNavigation={pendingNavigation}
+              onPendingNavigationHandled={() => setPendingNavigation(null)}
+            />
+          );
+        }
+        break;
+      case "storyboarding":
+        return (
+          <StoryboardWorkspace
+            courseId={courseId}
+            courseTitle={title}
+            onBack={() => setActiveNav("overview")}
+            onTitleChange={setTitle}
+          />
+        );
+      default:
+        break;
+    }
+
     return <ComingSoonPanel label={activeItem?.label ?? ""} />;
   }
 
@@ -2921,15 +3019,15 @@ function CourseCreationCenterContent() {
         courseTitle={title}
         loginName={loginName}
         activeNav={primaryTopNav}
-        onBack={() => window.history.length > 1 ? navigate(-1) : navigate("/")}
-        onHome={() => navigate("/")}
-        onOpenCourseSettings={() => {
-          navigate(`/course/${courseId}/setup`);
-          setActiveNav("overview");
-        }}
+        onBack={() => requestGuardedAction(() => {
+          if (window.history.length > 1) navigate(-1);
+          else navigate("/");
+        })}
+        onHome={() => requestGuardedAction(() => navigate("/"))}
+        onOpenCourseSettings={() => handleNavigation("overview")}
         onOpenStoryboard={() => handleNavigation("storyboarding")}
-        onOpenEditor={() => openEditor()}
-        onOpenPreview={(startFromCurrentPage) => openPreview(startFromCurrentPage)}
+        onOpenEditor={() => requestGuardedAction(() => openEditor())}
+        onOpenPreview={(startFromCurrentPage) => requestGuardedAction(() => openPreview(startFromCurrentPage))}
         previewDisabled={!courseId}
         editorDisabled={!courseId}
       />
@@ -2950,37 +3048,15 @@ function CourseCreationCenterContent() {
             <ExportMenu
               disabled={!courseId || !user?._tenantId}
               exportSourceLoading={exportingSource}
-              onExportSource={() => {
-                void runExportSourceAction({
-                  exportingSource,
-                  tenantId: user?._tenantId,
-                  courseId,
-                  setExportingSource,
-                  onProcessingStart: () => {
-                    setExportPopup({ status: "processing", message: "Preparing course source export…" });
-                  },
-                  onDownloadStarted: () => {
-                    setExportPopup({ status: "success", message: "Course source exported successfully" });
-                  },
-                  onUnavailable: () => {
-                    setExportPopup({ status: "error", message: "Course export is not available right now." });
-                  },
-                  onError: (message) => {
-                    setExportPopup({ status: "error", message: `Unable to export source. ${message}` });
-                  },
-                });
-              }}
-              onExportPdf={() => {
-                setExportPopup(null);
-                setActiveNav("export-pdf");
-              }}
+              onExportSource={() => requestGuardedAction(() => triggerExportSource())}
+              onExportPdf={() => handleNavigation("export-pdf")}
             />
           )}
 
             <PublishMenuButton
               active={activeNav === "publish"}
               onSelectPreflight={() => handleNavigation("publish")}
-              onSelectPublish={openPublishDialog}
+              onSelectPublish={() => requestGuardedAction(openPublishDialog)}
             />
           </div>
         </div>
@@ -3114,10 +3190,8 @@ function CourseCreationCenterContent() {
         )}
 
         {/* -- Right content panel -- */}
-        <main ref={contentScrollRef} className={`flex-1 overflow-hidden min-h-0 bg-[#f8fafc] ${activeNav === "menu" || activeNav === "navigation" || activeNav === "storyboarding" || activeNav === "translation" ? "" : "overflow-y-auto px-8 py-8"}`}>
-          <div className={`h-full ${assetPickerRequest ? "hidden" : ""}`}>
-            {renderPanel()}
-          </div>
+        <main ref={contentScrollRef} className={`flex-1 min-h-0 min-w-0 bg-[#f8fafc] ${activeNav === "navigation" || activeNav === "storyboarding" || activeNav === "translation" ? "flex flex-col overflow-hidden" : activeNav === "menu" ? "overflow-y-auto" : "overflow-y-auto px-8 py-8"}`}>
+          {renderPanel()}
         </main>
       </div>
 

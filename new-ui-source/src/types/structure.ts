@@ -157,10 +157,18 @@ export type ContainerChild =
   | { kind: "topic"; node: STopic; sortOrder: number };
 
 export function mergedChildren(modules: SModule[], topics: STopic[]): ContainerChild[] {
-  const children: ContainerChild[] = [
-    ...modules.map((node) => ({ kind: "module" as const, node, sortOrder: node.sortOrder })),
-    ...topics.map((node) => ({ kind: "topic" as const, node, sortOrder: node.sortOrder })),
-  ];
+  const seen = new Set<string>();
+  const children: ContainerChild[] = [];
+  for (const node of modules) {
+    if (seen.has(node.id)) continue;
+    seen.add(node.id);
+    children.push({ kind: "module" as const, node, sortOrder: node.sortOrder });
+  }
+  for (const node of topics) {
+    if (seen.has(node.id)) continue;
+    seen.add(node.id);
+    children.push({ kind: "topic" as const, node, sortOrder: node.sortOrder });
+  }
   return children.sort((a, b) => a.sortOrder - b.sortOrder);
 }
 

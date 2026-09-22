@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback, useDeferredValue, memo } from "react";
-import { getAssets, trashAsset, updateAsset, uploadAsset } from "@/api/adaptAuthoring";
+import { getAssets, getMaxFileUploadSize, trashAsset, restoreAsset, updateAsset, uploadAsset } from "@/api/adaptAuthoring";
 import type { AssetFormat, DashboardAsset } from "@/api/adaptAuthoring";
 import AiAssistant from "@/components/common/AiAssistant";
 import type { AssetPickerResult, AssetPickerType } from "@/types/assetPicker";
@@ -53,8 +53,6 @@ const THUMBNAIL_COLORS: Record<AssetFormat, string> = {
   other: "bg-gradient-to-br from-[#f3f4f6] to-[#d1d5db]",
 };
 
-type ViewMode = "grid" | "list";
-
 // ── Upload types ─────────────────────────────────────────────────────────────
 
 type UploadStep = "pick" | "details" | "uploading" | "done" | "error";
@@ -87,7 +85,6 @@ interface EditModalState {
   title: string;
   description: string;
   tags: string;
-  replaceFile: File | null;
   saveError: string | null;
 }
 
@@ -109,7 +106,21 @@ const ACCEPTED_EXTS: Record<AssetFormat, string[]> = {
   video: ["mp4", "webm", "mov", "avi"],
   other: [],
 };
-const MAX_SIZE_MB = 500;
+const DEFAULT_MAX_FILE_UPLOAD_SIZE = "600MB";
+
+function parseMaxFileUploadSizeMb(value: string): number {
+  const match = value.trim().match(/^(\d+(?:\.\d+)?)\s*(KB|MB|GB|TB)?$/i);
+  if (!match) return 600;
+
+  const amount = Number(match[1]);
+  const unit = (match[2] ?? "MB").toUpperCase();
+  if (!Number.isFinite(amount) || amount <= 0) return 600;
+
+  if (unit === "KB") return amount / 1024;
+  if (unit === "GB") return amount * 1024;
+  if (unit === "TB") return amount * 1024 * 1024;
+  return amount;
+}
 
 function detectFormat(file: File): AssetFormat {
   const mime = file.type.toLowerCase();
@@ -123,10 +134,11 @@ function detectFormat(file: File): AssetFormat {
   return "other";
 }
 
-function validateFile(file: File): FileValidation {
+function validateFile(file: File, maxFileUploadSize: string): FileValidation {
+  const maxSizeMB = parseMaxFileUploadSizeMb(maxFileUploadSize);
   const sizeMB = file.size / (1024 * 1024);
-  if (sizeMB > MAX_SIZE_MB) {
-    return { ok: false, error: `File is too large (${sizeMB.toFixed(1)} MB). Maximum allowed size is ${MAX_SIZE_MB} MB.` };
+  if (sizeMB > maxSizeMB) {
+    return { ok: false, error: `File is too large (${sizeMB.toFixed(1)} MB). Maximum allowed size is ${maxFileUploadSize}.` };
   }
   if (file.size === 0) {
     return { ok: false, error: "File appears to be empty." };
@@ -213,7 +225,6 @@ const EMPTY_EDIT = (a: Asset): EditModalState => ({
   title: a.title,
   description: a.description,
   tags: a.tags.join(", "),
-  replaceFile: null,
   saveError: null,
 });
 
@@ -374,6 +385,8 @@ function AssetPreviewPanel({
   onDelete,
   onConfirm,
   onCancel,
+  onRestore,
+  restoreError,
 }: {
   asset: Asset | null;
   pickerMode?: boolean;
@@ -381,6 +394,8 @@ function AssetPreviewPanel({
   onDelete: (asset: Asset) => void;
   onConfirm?: (asset: Asset) => void;
   onCancel?: () => void;
+  onRestore?: (asset: Asset) => void;
+  restoreError?: string | null;
 }) {
   const [imageDimensions, setImageDimensions] = useState<AssetPreviewDimensions>({});
 
@@ -493,6 +508,23 @@ function AssetPreviewPanel({
                     Add
                   </button>
                 </div>
+              ) : asset.isDeleted ? (
+                <div className="space-y-3 pb-2">
+                  {restoreError && (
+                    <div className="rounded-xl border border-[#fecaca] bg-[#fef2f2] px-3.5 py-3 text-left text-sm text-[#b91c1c]">
+                      {restoreError}
+                    </div>
+                  )}
+                  <div className="flex items-center justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => onRestore?.(asset)}
+                      className="inline-flex items-center justify-center rounded-xl bg-[#16a34a] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#15803d]"
+                    >
+                      Restore
+                    </button>
+                  </div>
+                </div>
               ) : (
                 <div className="flex items-center justify-center gap-3 pb-2">
                   <button
@@ -532,10 +564,31 @@ const AssetCardItem = memo(function AssetCardItem({ asset, clickable = false, on
           onActivate?.(asset);
         }
       } : undefined}
-      className={`rounded-xl overflow-hidden transition-all flex flex-col group border ${selected ? "border-[#2d6fa8] shadow-[0_12px_28px_rgba(45,111,168,0.22)] ring-2 ring-[#dbeeff]" : "border-[#e5e7eb]"} bg-white ${clickable ? "cursor-pointer hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:ring-offset-2" : "hover:shadow-md"}`}
+      className={`rounded-xl overflow-hidden transition-all flex flex-col group border ${selected ? "border-[#2d6fa8] shadow-[0_12px_28px_rgba(45,111,168,0.22)] ring-2 ring-[#dbeeff]" : "border-[#e5e7eb]"} bg-white ${clickable ? "cursor-pointer hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:ring-offset-2" : "hover:shadow-md"} ${asset.isDeleted ? "opacity-80 grayscale-[0.2]" : ""}`}
     >
-      {/* Thumbnail */}
-      <AssetCardThumbnail asset={asset} />
+      <div className="relative">
+        {/* Thumbnail */}
+        <div className="relative h-32 overflow-hidden">
+          <AssetCardThumbnail asset={asset} />
+          {asset.isDeleted && (
+            <div className="absolute inset-0 bg-white/80" aria-hidden="true">
+              <i
+                className="fa fa-ban"
+                style={{
+                  position: "relative",
+                  top: "50%",
+                  display: "block",
+                  marginTop: "-36px",
+                  color: "#ff5567",
+                  fontSize: "72px",
+                  lineHeight: "72px",
+                  textAlign: "center",
+                }}
+              />
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Body */}
       <div className="p-4 flex flex-col gap-2 flex-1">
@@ -571,90 +624,6 @@ const AssetCardItem = memo(function AssetCardItem({ asset, clickable = false, on
   );
 });
 
-const AssetListItem = memo(function AssetListItem({ asset, onEdit, onDelete, clickable = false, onActivate, hideActions = false, selected = false }: AssetItemProps) {
-  return (
-    <tr
-      role={clickable ? "button" : undefined}
-      tabIndex={clickable ? 0 : undefined}
-      onClick={clickable ? () => onActivate?.(asset) : undefined}
-      onKeyDown={clickable ? (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onActivate?.(asset);
-        }
-      } : undefined}
-      className={`border-b border-[#f3f4f6] transition-colors group/row ${selected ? "bg-[#eef6fd]" : ""} ${clickable ? "cursor-pointer hover:bg-[#eff6ff] focus:outline-none focus:bg-[#eff6ff]" : "hover:bg-[#fafafa]"}`}
-    >
-      {/* Icon + Title */}
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-3">
-          <div className={`w-8 h-8 rounded-lg ${THUMBNAIL_COLORS[asset.format]} flex items-center justify-center shrink-0`}>
-            <span className={`${FORMAT_COLORS[asset.format].split(" ")[1]} opacity-70`}>{FORMAT_ICONS[asset.format]}</span>
-          </div>
-          <span className="text-sm font-medium text-[#111827]">{asset.title}</span>
-        </div>
-      </td>
-
-      {/* Description */}
-      <td className="px-4 py-3 max-w-xs">
-        <p className="text-sm text-[#6b7280] truncate">{asset.description || "—"}</p>
-      </td>
-
-      {/* Size */}
-      <td className="px-4 py-3 text-sm text-[#6b7280] whitespace-nowrap">{asset.size}</td>
-
-      {/* Format */}
-      <td className="px-4 py-3">
-        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide ${FORMAT_COLORS[asset.format]}`}>
-          {FORMAT_ICONS[asset.format]}
-          {asset.format}
-        </span>
-      </td>
-
-      {/* Tags */}
-      <td className="px-4 py-3">
-        <div className="flex flex-wrap gap-1">
-          {asset.tags.slice(0, 2).map((t) => (
-            <span key={t} className="px-1.5 py-0.5 bg-[#f3f4f6] text-[#6b7280] rounded text-[10px]">#{t}</span>
-          ))}
-          {asset.tags.length > 2 && <span className="text-[10px] text-[#9ca3af]">+{asset.tags.length - 2}</span>}
-        </div>
-      </td>
-
-      {/* Actions */}
-      {!hideActions && onEdit && onDelete ? (
-      <td className="px-4 py-3">
-        <div className="flex items-center justify-end gap-1">
-          <button
-            type="button"
-            onClick={(event) => { event.stopPropagation(); onEdit(asset); }}
-            title="Edit asset"
-            className="p-1.5 rounded-lg text-[#9ca3af] hover:text-[#2d6fa8] hover:bg-[#dbeeff] transition-colors"
-          >
-            <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
-              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            onClick={(event) => { event.stopPropagation(); onDelete(asset); }}
-            title="Delete asset"
-            className="p-1.5 rounded-lg text-[#9ca3af] hover:text-[#ef4444] hover:bg-[#fef2f2] transition-colors"
-          >
-            <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-              <path d="M10 11v6M14 11v6M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
-            </svg>
-          </button>
-        </div>
-      </td>
-      ) : null}
-    </tr>
-  );
-});
-
 export function AssetManagementWorkspace({
   pickerMode = false,
   pickerAssetType,
@@ -669,35 +638,36 @@ export function AssetManagementWorkspace({
 
   const loadAssets = useCallback(async () => {
     try {
-      const rows = await getAssets();
+      const rows = await getAssets(!pickerMode);
       setAssets(rows);
     } catch {
       setAssets([]);
     }
-  }, []);
+  }, [pickerMode]);
   useEffect(() => { void loadAssets(); }, [loadAssets]);
   const [search, setSearch]             = useState("");
   const [formatFilter, setFormatFilter] = useState<AssetFormat | "All">(
     fixedPickerFormat && isDirectFormatPickerType(fixedPickerFormat) ? fixedPickerFormat : "All"
   );
-  const [view, setView]                 = useState<ViewMode>("grid");
   const [tagFilterOpen, setTagFilterOpen] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagSearch, setTagSearch]       = useState("");
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [lastDeletedAsset, setLastDeletedAsset] = useState<Asset | null>(null);
+  const [restoreError, setRestoreError] = useState<string | null>(null);
+  const [maxFileUploadSize, setMaxFileUploadSize] = useState(DEFAULT_MAX_FILE_UPLOAD_SIZE);
 
   const [uploadOpen, setUploadOpen]     = useState(false);
   const [upload, setUpload]             = useState<UploadState>(EMPTY_UPLOAD);
   const [uploadDrag, setUploadDrag]     = useState(false);
 
   const [editState, setEditState]       = useState<EditModalState | null>(null);
-  const [editDrag, setEditDrag]         = useState(false);
 
   const [deleteTarget, setDeleteTarget] = useState<Asset | null>(null);
+  const [restoreTarget, setRestoreTarget] = useState<Asset | null>(null);
 
   const tagFilterRef   = useRef<HTMLDivElement>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
-  const editFileRef    = useRef<HTMLInputElement>(null);
   const progressTimer  = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Close tag dropdown on outside click
@@ -730,6 +700,16 @@ export function AssetManagementWorkspace({
   // Clean up progress timer on unmount
   useEffect(() => {
     return () => { if (progressTimer.current) clearInterval(progressTimer.current); };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getMaxFileUploadSize().then((value) => {
+      if (!cancelled) setMaxFileUploadSize(value);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const deferredSearch = useDeferredValue(search);
@@ -776,15 +756,18 @@ export function AssetManagementWorkspace({
   }, [assets, deferredSearch, effectiveFormatFilter, fixedPickerFormat, selectedTags]);
 
   const selectedAsset = useMemo(
-    () => filtered.find((asset) => asset.backendId === selectedAssetId) ?? null,
-    [filtered, selectedAssetId],
+    () => filtered.find((asset) => asset.backendId === selectedAssetId)
+      ?? (selectedAssetId && lastDeletedAsset && lastDeletedAsset.backendId === selectedAssetId ? lastDeletedAsset : null)
+      ?? null,
+    [filtered, selectedAssetId, lastDeletedAsset],
   );
 
   useEffect(() => {
     if (pickerMode || !selectedAssetId) return;
     if (filtered.some((asset) => asset.backendId === selectedAssetId)) return;
+    if (lastDeletedAsset && lastDeletedAsset.backendId === selectedAssetId) return;
     setSelectedAssetId(null);
-  }, [filtered, pickerMode, selectedAssetId]);
+  }, [filtered, pickerMode, selectedAssetId, lastDeletedAsset]);
 
   useEffect(() => {
     if (!fixedPickerFormat || !isDirectFormatPickerType(fixedPickerFormat)) return;
@@ -812,6 +795,8 @@ export function AssetManagementWorkspace({
   }, [onPickAsset]);
 
   const handleAssetActivate = useCallback((asset: Asset) => {
+    setLastDeletedAsset((prev) => (prev && prev.backendId === asset.backendId ? prev : null));
+    setRestoreError(null);
     setSelectedAssetId(asset.backendId);
   }, []);
 
@@ -837,7 +822,7 @@ export function AssetManagementWorkspace({
     if (!f) return;
     const validation = fixedPickerFormat === "h5p" && !/\.h5p$/i.test(f.name)
       ? { ok: false, error: "Please choose a .h5p file." }
-      : validateFile(f);
+      : validateFile(f, maxFileUploadSize);
     const autoTitle = f.name.replace(/\.[^.]+$/, "");
     setUpload((prev) => ({
       ...prev,
@@ -847,7 +832,7 @@ export function AssetManagementWorkspace({
       formErrors: {},
       uploadError: null,
     }));
-  }, [fixedPickerFormat]);
+  }, [fixedPickerFormat, maxFileUploadSize]);
 
   function handleUploadDrop(e: React.DragEvent) {
     e.preventDefault();
@@ -944,27 +929,42 @@ export function AssetManagementWorkspace({
     }
   }
 
-  function handleEditDrop(e: React.DragEvent) {
-    e.preventDefault();
-    setEditDrag(false);
-    const f = e.dataTransfer.files[0] ?? null;
-    if (f) setEditState((prev) => prev ? { ...prev, replaceFile: f, saveError: null } : prev);
-  }
-
-  // ── Delete ──────────────────────────────────────────────────────────────
+  // ── Delete / Restore ─────────────────────────────────────────────────────
   async function confirmDelete() {
     const target = deleteTarget;
     setDeleteTarget(null);
     if (!target?.backendId) return;
-    if (selectedAssetId === target.backendId) {
-      setSelectedAssetId(null);
-    }
-    setAssets((prev) => prev.filter((a) => a.id !== target.id));
+
+    setRestoreError(null);
+    setLastDeletedAsset({ ...target, isDeleted: true });
+    setSelectedAssetId(target.backendId);
+
     try {
       await trashAsset(target.backendId);
     } finally {
-      loadAssets();
+      await loadAssets();
     }
+  }
+
+  async function confirmRestore() {
+    const target = restoreTarget;
+    setRestoreTarget(null);
+    if (!target?.backendId) return;
+
+    try {
+      setRestoreError(null);
+      await restoreAsset(target.backendId);
+      setLastDeletedAsset(null);
+      setSelectedAssetId(null);
+      await loadAssets();
+    } catch (error) {
+      setRestoreError(getEditErrorMessage(error));
+    }
+  }
+
+  function handleRestoreDeletedAsset(asset: Asset) {
+    setRestoreError(null);
+    setRestoreTarget(asset);
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────
@@ -993,7 +993,6 @@ export function AssetManagementWorkspace({
       <div className="px-6 md:px-8 pt-6 pb-4 flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">{pickerMode ? (pickerTitle || "Select Asset") : "Asset Management"}</h1>
-          <p className="text-sm text-[#6b7280] mt-1">{pickerMode ? (pickerDescription || "Choose an asset to continue.") : "Upload, organize, and manage your course assets."}</p>
         </div>
         {pickerMode ? null : (
           <button
@@ -1179,31 +1178,6 @@ export function AssetManagementWorkspace({
 
         <span className="ml-auto text-xs text-[#9ca3af]">{filtered.length} asset{filtered.length !== 1 ? "s" : ""}</span>
 
-        {/* View toggle */}
-        <div className="flex items-center border border-[#e5e7eb] rounded-lg overflow-hidden shrink-0">
-          <button
-            type="button"
-            onClick={() => setView("grid")}
-            title="Grid view"
-            className={`p-2 transition-colors ${view === "grid" ? "bg-[#2d6fa8] text-white" : "text-[#6b7280] hover:bg-[#f9fafb]"}`}
-          >
-            <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
-              <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            onClick={() => setView("list")}
-            title="List view"
-            className={`p-2 transition-colors ${view === "list" ? "bg-[#2d6fa8] text-white" : "text-[#6b7280] hover:bg-[#f9fafb]"}`}
-          >
-            <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
-              <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
-            </svg>
-          </button>
-        </div>
       </div>
 
       {/* ── Content ── */}
@@ -1220,29 +1194,9 @@ export function AssetManagementWorkspace({
             <p className="text-sm font-medium text-[#374151]">No assets found</p>
             <p className="text-xs text-[#9ca3af] mt-1">Try adjusting your search or filter, or upload a new asset.</p>
           </div>
-        ) : view === "grid" ? (
+        ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-4">
             {filtered.map((a) => <AssetCardItem key={a.id} asset={a} onEdit={handleEditAsset} onDelete={handleDeleteAsset} clickable onActivate={handleAssetActivate} hideActions={hideActions} selected={selectedAssetId === a.backendId} />)}
-          </div>
-        ) : (
-          <div className="rounded-xl border border-[#e5e7eb] overflow-hidden bg-white">
-            <table className="w-full text-sm min-w-[640px]">
-              <thead>
-                <tr className="bg-[#f9fafb] border-b border-[#e5e7eb]">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#374151] uppercase tracking-wide">Title</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#374151] uppercase tracking-wide">Description</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#374151] uppercase tracking-wide whitespace-nowrap">Size</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#374151] uppercase tracking-wide">Format</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-[#374151] uppercase tracking-wide">Tags</th>
-                  {!hideActions ? (
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-[#374151] uppercase tracking-wide">Actions</th>
-                  ) : null}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((a) => <AssetListItem key={a.id} asset={a} onEdit={handleEditAsset} onDelete={handleDeleteAsset} clickable onActivate={handleAssetActivate} hideActions={hideActions} selected={selectedAssetId === a.backendId} />)}
-              </tbody>
-            </table>
           </div>
         )}
           </div>
@@ -1254,6 +1208,8 @@ export function AssetManagementWorkspace({
             onDelete={handleDeleteAsset}
             onConfirm={handleConfirmPickerSelection}
             onCancel={onCancelPick}
+            onRestore={handleRestoreDeletedAsset}
+            restoreError={selectedAsset?.isDeleted ? restoreError : null}
           />
         </div>
       </div>
@@ -1349,7 +1305,7 @@ export function AssetManagementWorkspace({
                         </div>
                         <div className="text-center">
                           <p className="text-sm font-medium text-[#374151]">Drop file here or click to browse</p>
-                          <p className="text-xs text-[#9ca3af] mt-1">Images, audio, video, or documents — max {MAX_SIZE_MB} MB</p>
+                          <p className="text-xs text-[#9ca3af] mt-1">Images, audio, video, or documents — max {maxFileUploadSize}</p>
                         </div>
                       </>
                     )}
@@ -1396,10 +1352,10 @@ export function AssetManagementWorkspace({
                     </div>
                   </div>
 
-                  {/* Description */}
+                  {/* Asset Description */}
                   <div>
                     <label className="block text-xs font-semibold text-[#374151] mb-1.5">
-                      Description <span className="text-[#ef4444]">*</span>
+                      Asset Description <span className="text-[#ef4444]">*</span>
                     </label>
                     <textarea
                       value={upload.description}
@@ -1546,7 +1502,7 @@ export function AssetManagementWorkspace({
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
             {/* Header */}
             <div className="px-6 py-4 border-b border-[#e5e7eb] flex items-center justify-between shrink-0">
-              <h2 className="font-semibold text-[#111827] text-base">Edit Asset</h2>
+              <h2 className="font-semibold text-[#111827] text-base">Edit Asset Details</h2>
               <button type="button" onClick={() => setEditState(null)} className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#f3f4f6] transition-colors">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -1556,42 +1512,16 @@ export function AssetManagementWorkspace({
 
             {/* Body */}
             <div className="px-6 py-5 overflow-y-auto flex flex-col gap-4">
-              {/* Replace file drop zone */}
-              <div>
-                <p className="text-xs font-semibold text-[#374151] mb-1.5">Replace File (optional)</p>
-                <div
-                  onDragOver={(e) => { e.preventDefault(); setEditDrag(true); }}
-                  onDragLeave={() => setEditDrag(false)}
-                  onDrop={handleEditDrop}
-                  onClick={() => editFileRef.current?.click()}
-                  className={`border-2 border-dashed rounded-xl p-4 flex items-center gap-3 cursor-pointer transition-colors ${
-                    editDrag ? "border-[#2d6fa8] bg-[#dbeeff]" : "border-[#d1d5db] hover:border-[#2d6fa8] hover:bg-[#f9fafb]"
-                  }`}
-                >
-                  <div className="w-8 h-8 rounded-lg bg-[#f3f4f6] flex items-center justify-center shrink-0">
-                    <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="#6b7280" strokeWidth={1.8}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
-                    </svg>
-                  </div>
-                  {editState.replaceFile ? (
-                    <p className="text-sm font-medium text-[#2d6fa8]">{editState.replaceFile.name}</p>
-                  ) : (
-                    <p className="text-sm text-[#6b7280]">Drop a new file here or click to browse</p>
-                  )}
-                </div>
-                <input ref={editFileRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0] ?? null; if (f) setEditState((p) => p ? { ...p, replaceFile: f, saveError: null } : p); }} />
-              </div>
-
               {editState.saveError && (
                 <div className="rounded-lg border border-[#fecaca] bg-[#fef2f2] px-3.5 py-3 text-sm text-[#b91c1c]">
                   {editState.saveError}
                 </div>
               )}
 
-              {/* Title */}
+              {/* Asset Title */}
               <div>
                 <label className="block text-xs font-semibold text-[#374151] mb-1.5">
-                  Title <span className="text-[#ef4444]">*</span>
+                  Asset Title <span className="text-[#ef4444]">*</span>
                 </label>
                 <input
                   type="text"
@@ -1602,10 +1532,10 @@ export function AssetManagementWorkspace({
                 />
               </div>
 
-              {/* Description */}
+              {/* Asset Description */}
               <div>
                 <label className="block text-xs font-semibold text-[#374151] mb-1.5">
-                  Description <span className="text-[#ef4444]">*</span>
+                  Asset Description <span className="text-[#ef4444]">*</span>
                 </label>
                 <textarea
                   value={editState.description}
@@ -1663,51 +1593,72 @@ export function AssetManagementWorkspace({
       {/* ════════════════════════════════════════════════════════════════
           Delete Confirmation Modal
       ════════════════════════════════════════════════════════════════ */}
-      {!pickerMode && deleteTarget && (
+      {!pickerMode && (deleteTarget || restoreTarget) && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-          onClick={(e) => { if (e.target === e.currentTarget) setDeleteTarget(null); }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setDeleteTarget(null);
+              setRestoreTarget(null);
+            }
+          }}
         >
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
             <div className="px-6 pt-6 pb-4">
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#fef2f2] flex items-center justify-center shrink-0 mt-0.5">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                    <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${deleteTarget ? "bg-[#fef2f2]" : "bg-[#ecfdf5]"}`}>
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke={deleteTarget ? "#ef4444" : "#16a34a"}
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    {deleteTarget ? (
+                      <>
+                        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                        <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+                      </>
+                    ) : (
+                      <path d="M5 12l4 4L19 2" />
+                    )}
                   </svg>
                 </div>
                 <div>
-                  <h2 className="font-semibold text-[#111827] text-base">Delete Asset</h2>
+                  <h2 className="font-semibold text-[#111827] text-base">{deleteTarget ? "Delete Asset" : "Restore Asset"}</h2>
                   <p className="text-sm text-[#6b7280] mt-1">
-                    Are you sure you want to delete <span className="font-medium text-[#111827]">"{deleteTarget.title}"</span>?
+                    {deleteTarget ? (
+                      <>Are you sure you want to delete <span className="font-medium text-[#111827]">"{deleteTarget.title}"</span>?</>
+                    ) : (
+                      <>Are you sure you want to restore <span className="font-medium text-[#111827]">"{restoreTarget?.title}"</span>?</>
+                    )}
                   </p>
                 </div>
-              </div>
-            </div>
-
-            <div className="px-6 pb-5">
-              <div className="p-4 rounded-lg bg-[#fef2f2] border border-[#fecaca]">
-                <p className="text-sm text-[#b91c1c]">
-                  ⚠ This action cannot be undone. The asset will be permanently removed.
-                </p>
               </div>
             </div>
 
             <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#e5e7eb]">
               <button
                 type="button"
-                onClick={() => setDeleteTarget(null)}
+                onClick={() => {
+                  setDeleteTarget(null);
+                  setRestoreTarget(null);
+                }}
                 className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={confirmDelete}
-                className="px-4 py-2 text-sm font-semibold text-white bg-[#ef4444] hover:bg-[#dc2626] rounded-lg transition-colors"
+                onClick={deleteTarget ? confirmDelete : confirmRestore}
+                className={`px-4 py-2 text-sm font-semibold text-white rounded-lg transition-colors ${
+                  deleteTarget ? "bg-[#ef4444] hover:bg-[#dc2626]" : "bg-[#16a34a] hover:bg-[#15803d]"
+                }`}
               >
-                Delete Asset
+                {deleteTarget ? "Delete Asset" : "Restore Asset"}
               </button>
             </div>
           </div>
