@@ -184,7 +184,7 @@ export default function UserManagementPage() {
       <div className="px-6 md:px-8 pt-6 pb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">User Management</h1>
-          <p className="text-sm text-[#6b7280] mt-1">Manage users, roles, and access for this instance.</p>
+          <p className="text-sm text-[#6b7280] mt-1">Manage users, roles, and access for this instance</p>
         </div>
       </div>
 

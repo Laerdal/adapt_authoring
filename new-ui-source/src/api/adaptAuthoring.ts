@@ -423,6 +423,14 @@ export async function fetchDashboardTags(term = ""): Promise<Array<{ title: stri
 
 // Update course details — resolves tag titles to IDs before sending to the engine.
 // Sends both `title` and `displayTitle` to keep the dashboard and course menu in sync.
+export function isSafeLanguageCode(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed !== value) return false;
+  if (/[\\/]/.test(trimmed)) return false;
+  if (trimmed.includes("..") || trimmed.startsWith(".") || trimmed.endsWith(".")) return false;
+  return /^[A-Za-z]{2,8}(?:[-_][A-Za-z0-9]{2,8})*$/.test(trimmed);
+}
+
 export async function updateCourse(
   backendId: string,
   patch: {
@@ -437,6 +445,7 @@ export async function updateCourse(
     isShared?: boolean;
     shareWithUserIds?: string[];
     language?: string;
+    direction?: "ltr" | "rtl";
   }
 ): Promise<unknown> {
   const updateData: Record<string, unknown> = {};
@@ -459,16 +468,34 @@ export async function updateCourse(
   }
   if (patch.isShared !== undefined) updateData._isShared = patch.isShared;
   if (patch.shareWithUserIds !== undefined) updateData._shareWithUsers = patch.shareWithUserIds;
+  const normalizedLanguage : string | undefined = patch.language?.trim();
+  if (normalizedLanguage !== undefined) {
+    if (!isSafeLanguageCode(normalizedLanguage)) {
+      throw new Error("Invalid language code. Use a safe ISO-style value such as en, ar, or zh-CN.");
+    }
+  }
 
   const coursePromise = apiClient.put(`/api/content/course/${backendId}`, updateData);
 
-  // _defaultLanguage lives on the config document — fetch it by courseId to get its _id
-  if (patch.language !== undefined) {
+  // _defaultLanguage and _defaultDirection live on the config document — fetch it by courseId to get its _id.
+  if (patch.language !== undefined || patch.direction !== undefined) {
     const config = await apiClient.get<EngineConfigDetails>(`/api/content/config/${backendId}`);
     if (config._id) {
+      const nextLanguage = (normalizedLanguage ?? (config._defaultLanguage ?? "").trim()).trim();
+      const nextDirection = patch.direction ?? (
+        nextLanguage ? (
+          nextLanguage.toLowerCase().split(/[-_]/)[0] === "ar" ||
+          nextLanguage.toLowerCase().split(/[-_]/)[0] === "he" ||
+          nextLanguage.toLowerCase().split(/[-_]/)[0] === "ur"
+            ? "rtl"
+            : "ltr"
+        ) : "ltr"
+      );
+
       await apiClient.put(`/api/content/config/${config._id}`, {
         _courseId: backendId,
-        _defaultLanguage: patch.language,
+        _defaultLanguage: nextLanguage,
+        _defaultDirection: nextDirection,
       });
     }
   }
@@ -536,6 +563,7 @@ interface EngineConfigDetails {
   _menu?: string;
   _themePreset?: string;
   _defaultLanguage?: string;
+  _defaultDirection?: "ltr" | "rtl";
   // Map of installed extensions, keyed by the plugin's bower `extension` field
   // (e.g. "course-menu"); each entry carries the full bower `name`.
   _enabledExtensions?: Record<string, { _id: string; name: string; version?: string; targetAttribute?: string }>;
@@ -548,6 +576,7 @@ export interface CourseBootstrapData {
   title: string;
   displayTitle: string;
   subtitle: string;
+  body: string;
   description: string;
   instruction: string;
   heroAssetId: string | null;
@@ -802,6 +831,7 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
     title: course.title || "Untitled Course",
     displayTitle: course.displayTitle ?? "",
     subtitle: course.subtitle ?? course._subtitle ?? "",
+    body: course.body ?? "",
     description: course.description || "",
     instruction: course.instruction ?? "",
     heroAssetId,
