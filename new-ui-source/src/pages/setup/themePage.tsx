@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { saveThemeForCourse, saveThemeVariables, getThemePresets, saveThemePreset, applyThemePreset, getThemePresetParentTheme, renameThemePreset, deleteThemePreset, type ThemePreset } from "../../api/adaptAuthoring";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
-import { InfoFieldLabel } from "../../components/common/InfoIcon";
+import InfoIcon, { InfoFieldLabel } from "../../components/common/InfoIcon";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
@@ -2443,7 +2443,13 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     </svg>
                   )}
                 </div>
-                <span className="text-xs text-[#111827] leading-normal">Display marking for not-final attempts</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-[#111827] leading-normal">Display marking for not-final attempts</span>
+                  <InfoIcon
+                    label="Display marking for not-final attempts"
+                    hint="Non-final question attempts are marked the same way as final attempts. Applies to all question components except H5P and Laerdal Drag and Drop"
+                  />
+                </div>
               </div>
 
               <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCheckUnanswered(!checkUnanswered)}>
@@ -2467,7 +2473,13 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     </svg>
                   )}
                 </div>
-                <span className="text-xs text-[#111827] leading-normal">Display marking for unanswered correct responses</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-[#111827] leading-normal">Display marking for unanswered responses</span>
+                  <InfoIcon
+                    label="Display marking for unanswered responses"
+                    hint="Shows or hides markings for partially correct answers according to the “Show Marking” setting under the article-level Assessment settings."
+                  />
+                </div>
               </div>
 
               <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCheckHideFeedback(!checkHideFeedback)}>
@@ -2491,7 +2503,13 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     </svg>
                   )}
                 </div>
-                <span className="text-xs text-[#111827] leading-normal">Hide feedback on first attempt on assessments</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-[#111827] leading-normal">Hide feedback on first attempt on assessments</span>
+                  <InfoIcon
+                    label="Hide feedback on first attempt on assessments"
+                    hint="Controls whether feedback is hidden on the first attempt in assessment courses."
+                  />
+                </div>
               </div>
 
               <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCheckHidePartial(!checkHidePartial)}>
@@ -2515,7 +2533,13 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     </svg>
                   )}
                 </div>
-                <span className="text-xs text-[#111827] leading-normal">Hide partially correct feedback on the question and result topic</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-[#111827] leading-normal">Hide partially correct feedback on the question and result topic</span>
+                  <InfoIcon
+                    label="Hide partially correct feedback on the question and result topic"
+                    hint="Controls whether feedback for partially correct answers is hidden on the question and results pages in assessments."
+                  />
+                </div>
               </div>
             </div>
           </ThemeAccordion>
