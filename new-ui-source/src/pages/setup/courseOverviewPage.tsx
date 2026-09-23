@@ -500,7 +500,7 @@ export function CourseOverviewPage({
 
         {/* Sub-Title */}
         <div>
-          <label style={labelStyle}>Sub-Title</label>
+          <label style={labelStyle}>Subtitle</label>
           <input
             value={formSubtitle}
             onChange={(e) => { setFormSubtitle(e.target.value); markDirty(); }}
