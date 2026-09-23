@@ -65,7 +65,6 @@ export default function UserManagementPage() {
   const [sortDir, setSortDir]         = useState<SortDir>("asc");
   const [page, setPage]               = useState(1);
   const [pageSize, setPageSize]       = useState(10);
-  const [filterOpen, setFilterOpen]   = useState(false);
 
   // Row-action state
   const [deleteTarget, setDeleteTarget]         = useState<User | null>(null);
@@ -79,7 +78,6 @@ export default function UserManagementPage() {
       if (tableRef.current && !tableRef.current.contains(e.target as Node)) {
         setRoleMenuTarget(null);
         setActionMenuTarget(null);
-        setFilterOpen(false);
       }
     }
     document.addEventListener("mousedown", handleMouseDown);
@@ -226,61 +224,24 @@ export default function UserManagementPage() {
         </div>
 
         {/* Role filter */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setFilterOpen((o) => !o)}
-            aria-label="Filter by role"
-            aria-expanded={filterOpen}
-            className={`flex items-center gap-2 px-3 py-2 text-sm border rounded-lg transition-colors ${
-              roleFilter !== "All"
-                ? "border-[#2d6fa8] bg-[#dbeeff] text-[#2d6fa8] font-medium"
-                : "border-[#e5e7eb] bg-white hover:bg-[#f9fafb] text-[#374151]"
-            }`}
-          >
-            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18M7 8h10M11 12h2" />
-            </svg>
-            {roleFilter === "All" ? "All Roles" : roleFilter}
-            {roleFilter !== "All" && (
-              <span className="ml-0.5 w-4 h-4 rounded-full bg-[#2d6fa8] text-white text-[10px] font-bold flex items-center justify-center">1</span>
-            )}
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${filterOpen ? "rotate-180" : ""}`}>
-              <path d="M6 9l6 6 6-6" />
-            </svg>
-          </button>
-          {filterOpen && (
-            <div className="absolute left-0 mt-1 w-52 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-30 py-1">
-              <p className="px-3 py-1.5 text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">Filter by role</p>
-              {(["All", ...ROLES] as const).map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => { setRoleFilter(r as Role | "All"); setFilterOpen(false); setPage(1); }}
-                  className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${roleFilter === r ? "bg-[#dbeeff] text-[#2d6fa8] font-medium" : "text-[#374151] hover:bg-[#f9fafb]"}`}
-                >
-                  {r === "All" ? "All Roles" : r}
-                  {roleFilter === r && (
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  )}
-                </button>
-              ))}
-              {roleFilter !== "All" && (
-                <>
-                  <div className="border-t border-[#f3f4f6] my-1" />
-                  <button
-                    type="button"
-                    onClick={() => { setRoleFilter("All"); setFilterOpen(false); setPage(1); }}
-                    className="w-full text-left px-3 py-2 text-sm text-[#ef4444] hover:bg-[#fef2f2] transition-colors"
-                  >
-                    Clear filter
-                  </button>
-                </>
-              )}
-            </div>
-          )}
+        <div className="flex items-center gap-1 bg-[#f3f4f6] rounded-lg p-1">
+          {(["All", ...ROLES] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() => {
+                setRoleFilter(option as Role | "All");
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+                roleFilter === option
+                  ? "bg-white text-[#2d6fa8] shadow-sm"
+                  : "text-[#6b7280] hover:text-[#374151]"
+              }`}
+            >
+              {option}
+            </button>
+          ))}
         </div>
 
         {/* Active filter chips */}
@@ -332,7 +293,7 @@ export default function UserManagementPage() {
 
       {/* ── Table ── */}
       <div className="flex-1 px-6 md:px-8 pb-4">
-        <div className="rounded-xl border border-[#e5e7eb] overflow-hidden bg-white">
+        <div className="rounded-xl border border-[#e5e7eb] overflow-visible bg-white">
           <table className="w-full text-sm min-w-[700px]">
             <thead>
               <tr className="bg-[#f9fafb] border-b border-[#e5e7eb]">

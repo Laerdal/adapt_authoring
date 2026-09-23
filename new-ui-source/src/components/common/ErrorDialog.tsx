@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 export interface ErrorDialogProps {
   open: boolean;
-  title?: string;
-  message: string;
+  title?: ReactNode;
+  message: ReactNode;
   debugDetails?: string;
   primaryLabel?: string;
   secondaryLabel?: string;
@@ -43,7 +43,7 @@ export default function ErrorDialog({
             </svg>
           </div>
           <h2 className="font-semibold text-[#111827] text-base mb-3">{title}</h2>
-          <p className="text-sm text-[#6b7280]">{message}</p>
+          <div className="text-sm text-[#6b7280]">{message}</div>
 
           {debugDetails && (
             <div className="mt-5 w-full text-left">
@@ -70,7 +70,7 @@ export default function ErrorDialog({
             <button
               type="button"
               onClick={onSecondary ?? onClose}
-              className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
+              className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors cursor-pointer"
             >
               {secondaryLabel}
             </button>
@@ -78,7 +78,7 @@ export default function ErrorDialog({
           <button
             type="button"
             onClick={onPrimary ?? onClose}
-            className="px-5 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors"
+            className="px-5 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors cursor-pointer"
           >
             {primaryLabel}
           </button>

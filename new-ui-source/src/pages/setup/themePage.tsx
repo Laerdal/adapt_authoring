@@ -192,21 +192,21 @@ function FontSelect({ label, value, onChange }: { label: string; value: string; 
 function Accordion({ title, icon, children, defaultOpen = false }: { title: string; icon: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border border-[#e5e7eb] rounded-xl overflow-hidden">
+    <div className="border border-[#e5e7eb] rounded-xl overflow-hidden bg-white">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between px-4 py-3.5 bg-white hover:bg-[#f9fafb] transition-colors"
+        className="group w-full flex items-center justify-between gap-3 px-5 py-4 !h-[56px] text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
       >
-        <div className="flex items-center gap-2.5 text-sm font-semibold text-[#111827]">
-          <span className="text-[#6b7280]">{icon}</span>
+        <div className="flex items-center gap-2.5 text-sm font-semibold text-current">
+          <span className="text-current">{icon}</span>
           {title}
         </div>
         <svg
           width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-          className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          className="shrink-0 ml-auto text-current"
         >
-          <polyline points="6 9 12 15 18 9" />
+          <polyline points={open ? "6 9 12 15 18 9" : "9 6 15 12 9 18"} />
         </svg>
       </button>
       {open && <div className="px-[22px] py-[20px] border-t border-[#f3f4f6] bg-white">{children}</div>}
@@ -2104,14 +2104,14 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           {CUSTOM_ACCORDION_DEFS.map((acc) => {
             const isOpen = activeCustomAccordion === acc.id;
             return (
-              <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-hidden">
+              <div key={acc.id} className="border border-[#e5e7eb] rounded-xl overflow-hidden bg-white">
                 <button
                   onClick={() => setActiveCustomAccordion(isOpen ? null : acc.id)}
-                  className={`w-full flex items-center justify-between px-4 py-3 transition-colors border-b border-[#e5e7eb] ${isOpen ? 'bg-[#f9fafb]' : 'bg-white hover:bg-[#f9fafb]'}`}
+                  className="group w-full flex items-center justify-between gap-3 px-5 py-4 !h-[56px] text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
                 >
-                  <span className="text-xs font-bold text-[#111827]">{acc.label}</span>
-                  <svg className={`w-4 h-4 text-[#6b7280] transition-transform ${isOpen ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="6 9 12 15 18 9" />
+                  <span className="text-sm font-bold text-current">{acc.label}</span>
+                  <svg className="shrink-0 ml-auto text-current" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points={isOpen ? "6 9 12 15 18 9" : "9 6 15 12 9 18"} />
                   </svg>
                 </button>
                 {isOpen && acc.id === 'global' && (
@@ -2158,7 +2158,13 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
   return (
     // <div className="max-w-3xl w-full px-6 py-6">
-    <div className="w-full px-6 py-6 font-[var(--font-family-primary)]">
+    <div className="flex flex-col h-full w-full bg-[#f7f9fb] font-[var(--font-family-primary)]">
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb]">
+        <h2 className="text-xl font-bold text-[var(--life-base-black)] m-0">Theme</h2>
+        <p className="text-sm text-[#6b7280] mt-0.5 mb-0">Choose and configure the visual theme for your course.</p>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="w-full px-6 py-6">
       <div className="flex items-start justify-between mb-6">
         <div>
           <h2 className="text-base font-semibold text-[var(--life-base-black)]">
@@ -2603,24 +2609,26 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
             {VANILLA_ACCORDION_DEFS.map((acc) => {
               const isOpen = activeVanillaAccordion === acc.id;
               return (
-                <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-hidden">
+                <div key={acc.id} className="border border-[#e5e7eb] rounded-xl overflow-hidden bg-white">
                   <button
                     onClick={() => setActiveVanillaAccordion(isOpen ? null : acc.id)}
-                    className={`w-full flex items-center justify-between px-4 py-3 transition-colors border-b border-[#e5e7eb] ${isOpen ? 'bg-[#f9fafb]' : 'bg-white hover:bg-[#f9fafb]'}`}
+                    className="group w-full flex items-center justify-between gap-3 px-5 py-4 !h-[56px] text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
                   >
-                    <span className="text-xs font-bold text-[#111827]">{acc.label}</span>
+                    <span className="text-sm font-bold text-current">{acc.label}</span>
                     <svg
-                      className={`w-4 h-4 text-[#6b7280] transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                      className="shrink-0 ml-auto text-current"
+                      width="18"
+                      height="18"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="2"
                     >
-                      <polyline points="6 9 12 15 18 9" />
+                      <polyline points={isOpen ? "6 9 12 15 18 9" : "9 6 15 12 9 18"} />
                     </svg>
                   </button>
                   {isOpen && (
-                    <div className="px-4 py-4 bg-white border-t border-[#e5e7eb]">
+                    <div className="px-5 pb-5 pt-1 bg-white border-t border-[#f3f4f6]">
                       <div className="flex flex-col gap-4">
                         {acc.fields.map((field) => {
                           const key = `${acc.id}::${field.key}`;
@@ -2692,24 +2700,26 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                 {CUSTOM_ACCORDION_DEFS.map((acc) => {
                   const isOpen = activeCustomAccordion === acc.id;
                   return (
-                    <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-hidden">
+                    <div key={acc.id} className="border border-[#e5e7eb] rounded-xl overflow-hidden bg-white">
                       <button
                         onClick={() => setActiveCustomAccordion(isOpen ? null : acc.id)}
-                        className={`w-full flex items-center justify-between px-4 py-3 transition-colors ${isOpen ? 'bg-[#f9fafb]' : 'bg-white hover:bg-[#f9fafb]'}`}
+                        className="group w-full flex items-center justify-between gap-3 px-5 py-4 !h-[56px] text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
                       >
-                        <span className="text-xs font-bold text-[#111827]">{acc.label}</span>
+                        <span className="text-sm font-bold text-current">{acc.label}</span>
                         <svg
-                          className={`w-4 h-4 text-[#6b7280] transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                          className="shrink-0 ml-auto text-current"
+                          width="18"
+                          height="18"
                           viewBox="0 0 24 24"
                           fill="none"
                           stroke="currentColor"
                           strokeWidth="2"
                         >
-                          <polyline points="6 9 12 15 18 9" />
+                          <polyline points={isOpen ? "6 9 12 15 18 9" : "9 6 15 12 9 18"} />
                         </svg>
                       </button>
                       {isOpen && (
-                        <div className="px-4 py-4 bg-white border-t border-[#e5e7eb]">
+                        <div className="px-5 pb-5 pt-1 bg-white border-t border-[#f3f4f6]">
                           <div className="grid grid-cols-2 gap-x-4 gap-y-4">
                             {acc.fields.map((field) => {
                               const key = `${acc.id}::${field.key}`;
@@ -2763,6 +2773,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           </div>
         </div>
       )}
+      </div>
+      </div>
 
       <UnsavedChangesModal
         isOpen={showConfirmModal}
@@ -3025,24 +3037,26 @@ function ThemeAccordion({
   onToggle: () => void;
 }) {
   return (
-    <div className="border border-[#e5e7eb] rounded-lg overflow-hidden">
+    <div className="border border-[#e5e7eb] rounded-xl overflow-hidden bg-white">
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-[var(--life-neutral-100)] transition-colors border-b border-[var(--life-neutral-200)]"
+        className="group w-full flex items-center justify-between gap-3 px-5 py-4 !h-[56px] text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
       >
-        <span className="text-sm font-semibold text-[var(--life-base-black)]">{label}</span>
+        <span className="text-sm font-bold text-current">{label}</span>
         <svg
-          className={`w-4 h-4 text-[#6b7280] transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          className="shrink-0 ml-auto text-current"
+          width="18"
+          height="18"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
           strokeWidth="2"
         >
-          <polyline points="6 9 12 15 18 9" />
+          <polyline points={isOpen ? "6 9 12 15 18 9" : "9 6 15 12 9 18"} />
         </svg>
       </button>
       {isOpen && (
-        <div className="px-4 py-3 bg-white border-t border-[#e5e7eb]">
+        <div className="px-5 pb-5 pt-1 bg-white border-t border-[#f3f4f6]">
           {children}
         </div>
       )}
