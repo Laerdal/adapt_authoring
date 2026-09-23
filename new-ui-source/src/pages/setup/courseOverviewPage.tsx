@@ -490,7 +490,7 @@ export function CourseOverviewPage({
           <input
             value={formTitle}
             onChange={(e) => { setFormTitle(e.target.value); markDirty(); }}
-            placeholder="e.g. Advanced Cardiac Life Support"
+            placeholder="Title to be displayed in the course main menu"
             disabled={loading}
             style={inputBase}
             onFocus={focusIn}
@@ -504,7 +504,7 @@ export function CourseOverviewPage({
           <input
             value={formSubtitle}
             onChange={(e) => { setFormSubtitle(e.target.value); markDirty(); }}
-            placeholder="A brief subtitle for your course"
+            placeholder="Subtitle to be displayed in the course main menu"
             disabled={loading}
             style={inputBase}
             onFocus={focusIn}
@@ -636,7 +636,7 @@ export function CourseOverviewPage({
               value={tagInput}
               onChange={(e) => setTagInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddTag(); } }}
-              placeholder="Type a tag and press Enter"
+              placeholder="Add tags to your course by entering one or more words, separated with  a comma"
               disabled={loading}
               style={{ ...inputBase, flex: 1 }}
               onFocus={focusIn}
