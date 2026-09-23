@@ -8,6 +8,8 @@ import {
   type UserSummary,
 } from "../../api/adaptAuthoring";
 import type { AssetPickerRequest } from "../../types/assetPicker";
+import { BasicRichTextEditor, isEditorEmpty } from "../../components/common";
+import { isSafeLanguageCode } from "../../api/adaptAuthoring";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
@@ -42,7 +44,21 @@ const LANGUAGES: { label: string; iso: string }[] = [
   { label: "Korean", iso: "ko" },
   { label: "Turkish", iso: "tr" },
   { label: "Hindi", iso: "hi" },
+  { label: "Hebrew", iso: "he" },
+  { label: "Urdu", iso: "ur" },
+  { label: "Other", iso: "other" },
 ];
+
+const RTL_LANGUAGE_CODES = new Set(["ar", "he", "ur"]);
+
+function getLanguageDirection(languageValue: string): "ltr" | "rtl" {
+  const normalized = languageValue.trim().toLowerCase();
+  if (!normalized) return "ltr";
+  const primaryLanguage = normalized.split(/[-_]/)[0];
+  if (RTL_LANGUAGE_CODES.has(primaryLanguage)) return "rtl";
+  if (/[\u0590-\u08FF\uFB1D-\uFB4F\u0600-\u06FF]/.test(primaryLanguage)) return "rtl";
+  return "ltr";
+}
 
 interface Collaborator {
   userId: string;   // ObjectId on the server
@@ -66,6 +82,7 @@ export function CourseOverviewPage({
   // Committed values (server state)
   const [savedTitle, setSavedTitle] = useState(initialTitle);
   const [savedSubtitle, setSavedSubtitle] = useState("");
+  const [savedBody, setSavedBody] = useState("");
   const [savedDesc, setSavedDesc] = useState(initialDescription);
   const [savedInstruction, setSavedInstruction] = useState("");
   const [savedTags, setSavedTags] = useState<string[]>([]);
@@ -77,6 +94,7 @@ export function CourseOverviewPage({
   // Live form values
   const [formTitle, setFormTitle] = useState(initialTitle);
   const [formSubtitle, setFormSubtitle] = useState("");
+  const [formBody, setFormBody] = useState(""); 
   const [formDesc, setFormDesc] = useState(initialDescription);
   const [formInstruction, setFormInstruction] = useState("");
   const [tags, setTags] = useState<string[]>([]);
@@ -84,6 +102,8 @@ export function CourseOverviewPage({
   const [heroAssetId, setHeroAssetId] = useState<string | null>(null);
   const [heroPreviewUrl, setHeroPreviewUrl] = useState<string | null>(null);
   const [language, setLanguage] = useState("");
+  const [customLanguage, setCustomLanguage] = useState("");
+  const [selectedLanguageOption, setSelectedLanguageOption] = useState("");
 
   // Collaboration — wired to _isShared and _shareWithUsers on the engine
   const [shareMode, setShareMode] = useState<"all" | "specific">("specific");
@@ -98,6 +118,11 @@ export function CourseOverviewPage({
   const emailSearchRequestIdRef = useRef(0);
   const [showAuthoringBanner, setShowAuthoringBanner] = useState(true);
 
+  // Remount key for the Body rich-text editor. Bumping this forces the
+  // uncontrolled contentEditable surface to re-initialize its innerHTML
+  // (used after bootstrap load and on discard).
+  const [bodyEditorKey, setBodyEditorKey] = useState(0);
+
   function serializeCollaborators(list: Collaborator[]) {
     return [...list]
       .sort((a, b) => a.userId.localeCompare(b.userId))
@@ -108,6 +133,7 @@ export function CourseOverviewPage({
   const isDirty =
     formTitle !== savedTitle ||
     formSubtitle !== savedSubtitle ||
+    formBody !== savedBody ||
     formDesc !== savedDesc ||
     formInstruction !== savedInstruction ||
     heroAssetId !== savedHeroAssetId ||
@@ -128,19 +154,26 @@ export function CourseOverviewPage({
         if (cancelled) return;
         setSavedTitle(data.title);
         setSavedSubtitle(data.subtitle);
+        setSavedBody(data.body);
         setSavedDesc(data.description);
         setSavedInstruction(data.instruction);
         setSavedTags(data.tags);
         setSavedHeroAssetId(data.heroAssetId);
         setFormTitle(data.title);
         setFormSubtitle(data.subtitle);
+        setFormBody(data.body);
+        setBodyEditorKey((k) => k + 1);
         setFormDesc(data.description);
         setFormInstruction(data.instruction);
         setTags(data.tags);
         setHeroAssetId(data.heroAssetId);
         setHeroPreviewUrl(data.heroAssetId ? `/api/asset/serve/${data.heroAssetId}` : null);
-        setLanguage(data.language);
-        setSavedLanguage(data.language);
+        const normalizedLanguage = data.language || "";
+        const isKnownLanguage = !!normalizedLanguage && LANGUAGES.some((entry) => entry.iso === normalizedLanguage);
+        setLanguage(normalizedLanguage);
+        setSavedLanguage(normalizedLanguage);
+        setCustomLanguage(isKnownLanguage ? "" : normalizedLanguage);
+        setSelectedLanguageOption(isKnownLanguage ? normalizedLanguage : normalizedLanguage ? "other" : "");
 
         // Load sharing state
         const isShared = data.isShared;
@@ -310,25 +343,55 @@ export function CourseOverviewPage({
     setSaveSuccess(false);
     try {
       const isSharedAll = shareMode === "all";
+      const bodyToPersist = isEditorEmpty(formBody) ? "" : formBody;
+      const languageToPersist = selectedLanguageOption === "other" ? customLanguage.trim() : language.trim();
+      const normalizedLanguageForSave = languageToPersist.trim();
+
+      if (!normalizedLanguageForSave) {
+        setSaveError("Default language is required.");
+        return false;
+      }
+
+      if (!isSafeLanguageCode(normalizedLanguageForSave)) {
+        const message = selectedLanguageOption === "other"
+          ? "Custom language code is invalid. Use a safe ISO-style value such as en, ar, or zh-CN."
+          : "Default language is invalid. Please select a valid language.";
+        setSaveError(message);
+        return false;
+      }
+
+      const directionToPersist = getLanguageDirection(normalizedLanguageForSave);
       await updateCourse(courseId, {
         title: formTitle.trim(),
         displayTitle: formTitle.trim(),
         subtitle: formSubtitle.trim(),
+        body: bodyToPersist,
         description: formDesc.trim(),
         instruction: formInstruction.trim(),
         heroAssetId,
         tags,
         isShared: isSharedAll,
         shareWithUserIds: isSharedAll ? [] : collaborators.map((c) => c.userId),
-        language,
+        language: normalizedLanguageForSave,
+        direction: directionToPersist,
       });
       setSavedTitle(formTitle.trim());
       setSavedSubtitle(formSubtitle.trim());
       setSavedDesc(formDesc.trim());
+      setSavedBody(bodyToPersist);
+      setFormBody(bodyToPersist);
       setSavedInstruction(formInstruction.trim());
       setSavedTags(tags);
       setSavedHeroAssetId(heroAssetId);
-      setSavedLanguage(language);
+      setSavedLanguage(normalizedLanguageForSave);
+      setLanguage(normalizedLanguageForSave);
+      setSelectedLanguageOption(
+        normalizedLanguageForSave && LANGUAGES.some((entry) => entry.iso === normalizedLanguageForSave)
+          ? normalizedLanguageForSave
+          : normalizedLanguageForSave
+            ? "other"
+            : ""
+      );
       setSavedIsShared(isSharedAll);
       const nextSavedCollaborators = isSharedAll ? [] : collaborators;
       setSavedCollaborators(nextSavedCollaborators);
@@ -362,12 +425,17 @@ export function CourseOverviewPage({
   function handleDiscard() {
     setFormTitle(savedTitle);
     setFormSubtitle(savedSubtitle);
+    setFormBody(savedBody);
+    setBodyEditorKey((k) => k + 1);
     setFormDesc(savedDesc);
     setFormInstruction(savedInstruction);
     setTags(savedTags);
     setHeroAssetId(savedHeroAssetId);
     setHeroPreviewUrl(savedHeroAssetId ? `/api/asset/serve/${savedHeroAssetId}` : null);
     setLanguage(savedLanguage);
+    const isKnownSavedLanguage = !!savedLanguage && LANGUAGES.some((entry) => entry.iso === savedLanguage);
+    setCustomLanguage(isKnownSavedLanguage ? "" : savedLanguage);
+    setSelectedLanguageOption(isKnownSavedLanguage ? savedLanguage : savedLanguage ? "other" : "");
     setTagInput("");
     setShareMode(savedIsShared ? "all" : "specific");
     setCollaborators(savedCollaborators);
@@ -378,6 +446,20 @@ export function CourseOverviewPage({
     setEmailError(null);
     setSaveError(null);
     setSaveSuccess(false);
+  }
+
+  function handleLanguageSelectionChange(nextValue: string) {
+    if (nextValue === "other") {
+      setSelectedLanguageOption("other");
+      setLanguage(customLanguage.trim());
+      markDirty();
+      return;
+    }
+
+    setSelectedLanguageOption(nextValue);
+    setLanguage(nextValue);
+    setCustomLanguage("");
+    markDirty();
   }
 
   function handleRequestCourseImagePicker() {
@@ -455,7 +537,16 @@ export function CourseOverviewPage({
   }
 
   return (
-    <div style={{ maxWidth: 672, fontFamily: '"Lato", sans-serif' }}>
+    <div
+      dir="ltr"
+      style={{
+        maxWidth: 672,
+        fontFamily: '"Lato", sans-serif',
+        direction: "ltr",
+        textAlign: "left",
+        unicodeBidi: "plaintext",
+      }}
+    >
 
       {/* ── Header ───────────────────────────────────────────────── */}
       <div style={{ marginBottom: 28 }}>
@@ -512,18 +603,32 @@ export function CourseOverviewPage({
           />
         </div>
 
+
         {/* Description */}
         <div>
           <label style={labelStyle}>Description</label>
           <textarea
             rows={4}
             value={formDesc}
-            onChange={(e) => { setFormDesc(e.target.value); markDirty(); }}
+            onChange={(e) => { setFormDesc(e.target.value); markDirty();}}
             placeholder="Describe what this course is about and what learners will gain"
             disabled={loading}
             style={textareaBase}
             onFocus={focusIn}
             onBlur={focusOut}
+          />
+        </div>
+
+          {/* Body */}
+        <div>
+          <label style={labelStyle}>Body</label>
+          <BasicRichTextEditor
+            key={bodyEditorKey}
+            html={formBody}
+            onChange={(next) => { setFormBody(next); markDirty(); }}
+            disabled={loading}
+            placeholder="Add the main content for this course overview"
+            ariaLabel="Body"
           />
         </div>
 
@@ -672,16 +777,16 @@ export function CourseOverviewPage({
           <label style={labelStyle}>Default Language</label>
           <div style={{ position: "relative" }}>
             <select
-              value={language}
-              onChange={(e) => { setLanguage(e.target.value); markDirty(); }}
-              style={{ ...inputBase, appearance: "none", WebkitAppearance: "none", paddingRight: 36, cursor: "pointer", color: language ? "var(--life-base-black)" : "var(--life-neutral-400)" } as React.CSSProperties}
+              value={selectedLanguageOption}
+              onChange={(e) => handleLanguageSelectionChange(e.target.value)}
+              style={{ ...inputBase, appearance: "none", WebkitAppearance: "none", paddingRight: 36, cursor: "pointer", color: selectedLanguageOption ? "var(--life-base-black)" : "var(--life-neutral-400)" } as React.CSSProperties}
               onFocus={focusIn}
               onBlur={focusOut}
             >
               <option value="">Select language</option>
               {LANGUAGES.map((lang) => (
                 <option key={lang.iso} value={lang.iso}>
-                  {lang.iso.toUpperCase()} — {lang.label}
+                  {lang.iso === "other" ? lang.label : `${lang.iso.toUpperCase()} — ${lang.label}`}
                 </option>
               ))}
             </select>
@@ -689,6 +794,25 @@ export function CourseOverviewPage({
               <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
+          {selectedLanguageOption === "other" && (
+            <div style={{ marginTop: 10 }}>
+              <input
+                type="text"
+                value={customLanguage}
+                onChange={(e) => {
+                  const nextCustomValue = e.target.value;
+                  setCustomLanguage(nextCustomValue);
+                  setLanguage(nextCustomValue);
+                  setSelectedLanguageOption("other");
+                  markDirty();
+                }}
+                placeholder="Enter the default language"
+                style={inputBase}
+                onFocus={focusIn}
+                onBlur={focusOut}
+              />
+            </div>
+          )}
         </div>
 
       </div>
