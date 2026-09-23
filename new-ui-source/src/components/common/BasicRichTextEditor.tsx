@@ -32,16 +32,76 @@ export function isProbablyHtml(value: string): boolean {
 /**
  * Normalize incoming value for the contentEditable surface. Plain text with
  * line breaks is converted to `<br>` so paragraph structure survives the
- * round-trip; existing HTML values are passed through unchanged.
+ * round-trip; existing HTML values are sanitized to a safe allowlist before
+ * being assigned to `innerHTML`.
  */
 export function normalizeHtmlForEditor(value: string): string {
   if (!value) return "";
-  if (isProbablyHtml(value)) return value;
+  if (isProbablyHtml(value)) return sanitizeEditorHtml(value);
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/\r?\n/g, "<br>");
+}
+
+export function sanitizeEditorHtml(rawHtml: string): string {
+  const value = (rawHtml ?? "").trim();
+  if (!value) return "";
+
+  if (typeof document === "undefined") {
+    const cleaned = value
+      .replace(/<\s*(script|iframe|object|embed|svg|math|style|meta|link|base)\b[\s\S]*?(?:<\s*\/\s*\1\s*>|\/>)/gi, "")
+      .replace(/\s+on[a-z0-9_-]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+      .replace(/\s+(style|srcdoc)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "")
+      .replace(/(\s+(?:href|src)\s*=\s*)(?:"\s*(?:javascript:|vbscript:|data:text\/html)[^"]*"|'\s*(?:javascript:|vbscript:|data:text\/html)[^']*'|\s*(?:javascript:|vbscript:|data:text\/html)[^\s>]+)/gi, " ");
+
+    return cleaned.trim() || "";
+  }
+
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = value;
+
+  const allowedTags = new Set([
+    "a", "b", "blockquote", "br", "code", "em", "i", "img", "li", "ol", "p",
+    "s", "span", "strike", "strong", "sub", "sup", "table", "tbody", "td", "th",
+    "thead", "tr", "u", "ul"
+  ]);
+
+  const allowedAttributes = new Set(["alt", "colspan", "href", "rowspan", "src", "title"]);
+
+  const nodes = Array.from(wrapper.querySelectorAll("*"));
+  for (const node of nodes) {
+    const element = node as HTMLElement;
+    const tag = element.tagName.toLowerCase();
+
+    if (!allowedTags.has(tag)) {
+      element.replaceWith(...Array.from(element.childNodes));
+      continue;
+    }
+
+    for (const attribute of Array.from(element.attributes)) {
+      const name = attribute.name.toLowerCase();
+      const attributeValue = attribute.value.trim();
+
+      if (name.startsWith("on") || name === "style" || name === "srcdoc") {
+        element.removeAttribute(attribute.name);
+        continue;
+      }
+
+      if (!allowedAttributes.has(name)) {
+        element.removeAttribute(attribute.name);
+        continue;
+      }
+
+      if ((name === "href" || name === "src") && /^(javascript:|vbscript:|data:text\/html)/i.test(attributeValue)) {
+        element.removeAttribute(attribute.name);
+      }
+    }
+  }
+
+  const sanitizedHtml = wrapper.innerHTML.trim();
+  return sanitizedHtml && sanitizedHtml !== "<br>" ? sanitizedHtml : "";
 }
 
 /**
@@ -188,53 +248,7 @@ const TOGGLE_COMMANDS = new Set([
 ]);
 
 function sanitizeAiHtml(rawHtml: string): string {
-  const value = (rawHtml ?? "").trim();
-  if (!value) return "";
-
-  const wrapper = document.createElement("div");
-  wrapper.innerHTML = value;
-
-  const allowedTags = new Set([
-    "a", "b", "blockquote", "br", "code", "em", "i", "img", "li", "ol", "p",
-    "s", "span", "strike", "strong", "sub", "sup", "table", "tbody", "td", "th",
-    "thead", "tr", "u", "ul"
-  ]);
-
-  const allowedAttributes = new Set(["alt", "colspan", "href", "rowspan", "src", "title"]);
-
-  const nodes = Array.from(wrapper.querySelectorAll("*"));
-  for (const node of nodes) {
-    const element = node as HTMLElement;
-    const tag = element.tagName.toLowerCase();
-
-    if (!allowedTags.has(tag)) {
-      element.replaceWith(...Array.from(element.childNodes));
-      continue;
-    }
-
-    for (const attribute of Array.from(element.attributes)) {
-      const name = attribute.name.toLowerCase();
-      const value = attribute.value.trim();
-
-      if (name.startsWith("on") || name === "style" || name === "srcdoc") {
-        element.removeAttribute(attribute.name);
-        continue;
-      }
-
-      if (!allowedAttributes.has(name)) {
-        element.removeAttribute(attribute.name);
-        continue;
-      }
-
-      if ((name === "href" || name === "src") && /^(javascript:|vbscript:|data:text\/html)/i.test(value)) {
-        element.removeAttribute(attribute.name);
-      }
-    }
-  }
-
-  const sanitizedHtml = wrapper.innerHTML.trim();
-  if (!sanitizedHtml || sanitizedHtml === "<br>") return "";
-  return sanitizedHtml;
+  return sanitizeEditorHtml(rawHtml);
 }
 
 export default function BasicRichTextEditor({
