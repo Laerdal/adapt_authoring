@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { getUsers, setUserRole, deleteUser } from "@/api/adaptAuthoring";
 import AiAssistant from "@/components/common/AiAssistant";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 
 type Role = "Super Admin" | "Authenticated User" | "Course Creator";
 
@@ -600,62 +601,14 @@ export default function UserManagementPage() {
 
       {/* ── Delete confirmation modal ── */}
       {deleteTarget && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-          onClick={(e) => { if (e.target === e.currentTarget) setDeleteTarget(null); }}
-        >
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
-            {/* Header */}
-            <div className="px-6 pt-6 pb-4">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#fef2f2] flex items-center justify-center shrink-0 mt-0.5">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                    <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-                  </svg>
-                </div>
-                <div>
-                  <h2 className="font-semibold text-[#111827] text-base">Delete User</h2>
-                  <p className="text-sm text-[#6b7280] mt-1">
-                    You are about to delete <span className="font-medium text-[#111827]">{deleteTarget.email}</span>.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Body */}
-            <div className="px-6 pb-5 flex flex-col gap-3">
-              <div className="p-4 rounded-lg bg-[#fef3c7] border border-[#fde68a]">
-                <p className="text-sm font-semibold text-[#92400e]">
-                  Ownership of this user's courses will be transferred to you.
-                </p>
-              </div>
-              <div className="p-4 rounded-lg bg-[#fef2f2] border border-[#fecaca]">
-                <p className="text-sm text-[#b91c1c]">
-                  ⚠ This action cannot be reverted. The user will be permanently removed.
-                </p>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#e5e7eb]">
-              <button
-                type="button"
-                onClick={() => setDeleteTarget(null)}
-                className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmDelete}
-                className="px-4 py-2 text-sm font-semibold text-white bg-[#ef4444] hover:bg-[#dc2626] rounded-lg transition-colors"
-              >
-                Delete User
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          open
+          title="Delete User"
+          message="Are you sure you want to delete this user?"
+          note={<>Ownership of this user's courses will be transferred to you. This action cannot be reverted. The user will be permanently removed.</>}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={confirmDelete}
+        />
       )}
 
     </div>

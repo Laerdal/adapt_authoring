@@ -2,6 +2,17 @@
 @import url("https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.5.0/css/font-awesome.min.css");
 @import "tailwindcss";
 
+/* Match the legacy JIRA feedback trigger placement in the new UI shell. */
+a#atlwdg-trigger {
+  display: none !important;
+}
+
+/* The collector's desktop breakpoint relies on its legacy content-box sizing. */
+#atlwdg-container,
+#atlwdg-container iframe#atlwdg-frame {
+  box-sizing: content-box;
+}
+
 :root {
   /* ── LIFE Design System — Primitive Color Tokens ────────────────── */
 

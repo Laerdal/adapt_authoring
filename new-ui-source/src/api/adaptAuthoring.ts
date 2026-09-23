@@ -2403,7 +2403,7 @@ export async function getCourseStructure(
         src: typeof pageGraphic?.src === "string" ? pageGraphic.src : "",
         alt: typeof pageGraphic?.alt === "string" ? pageGraphic.alt : "",
       },
-      linkText: page.linkText || "",
+      linkText: page.linkText || "View",
       duration: page.duration || "",
       lockType: page._lockType || "",
       lockedBy: Array.isArray(page._lockedBy)
@@ -3892,7 +3892,7 @@ export function createTopic(
     body: "",
     description: "",
     instruction: "",
-    linkText: "",
+    linkText: "View",
     duration: "",
     _lockType: "",
     _lockedBy: [],

@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback, useDeferredValue, me
 import { getAssets, getMaxFileUploadSize, trashAsset, restoreAsset, updateAsset, uploadAsset } from "@/api/adaptAuthoring";
 import type { AssetFormat, DashboardAsset } from "@/api/adaptAuthoring";
 import AiAssistant from "@/components/common/AiAssistant";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 import type { AssetPickerResult, AssetPickerType } from "@/types/assetPicker";
 
 type Asset = DashboardAsset;
@@ -1593,76 +1594,30 @@ export function AssetManagementWorkspace({
       {/* ════════════════════════════════════════════════════════════════
           Delete Confirmation Modal
       ════════════════════════════════════════════════════════════════ */}
-      {!pickerMode && (deleteTarget || restoreTarget) && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-          onClick={(e) => {
-            if (e.target === e.currentTarget) {
-              setDeleteTarget(null);
-              setRestoreTarget(null);
-            }
+      {!pickerMode && deleteTarget && (
+        <ConfirmDialog
+          open
+          title="Delete Asset"
+          message="Are you sure you want to delete this asset?"
+          note="This will move the asset out of the active asset list."
+          onCancel={() => {
+            setDeleteTarget(null);
           }}
-        >
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
-            <div className="px-6 pt-6 pb-4">
-              <div className="flex items-start gap-3">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${deleteTarget ? "bg-[#fef2f2]" : "bg-[#ecfdf5]"}`}>
-                  <svg
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke={deleteTarget ? "#ef4444" : "#16a34a"}
-                    strokeWidth={2}
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    {deleteTarget ? (
-                      <>
-                        <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                        <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-                      </>
-                    ) : (
-                      <path d="M5 12l4 4L19 2" />
-                    )}
-                  </svg>
-                </div>
-                <div>
-                  <h2 className="font-semibold text-[#111827] text-base">{deleteTarget ? "Delete Asset" : "Restore Asset"}</h2>
-                  <p className="text-sm text-[#6b7280] mt-1">
-                    {deleteTarget ? (
-                      <>Are you sure you want to delete <span className="font-medium text-[#111827]">"{deleteTarget.title}"</span>?</>
-                    ) : (
-                      <>Are you sure you want to restore <span className="font-medium text-[#111827]">"{restoreTarget?.title}"</span>?</>
-                    )}
-                  </p>
-                </div>
-              </div>
-            </div>
+          onConfirm={confirmDelete}
+        />
+      )}
 
-            <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#e5e7eb]">
-              <button
-                type="button"
-                onClick={() => {
-                  setDeleteTarget(null);
-                  setRestoreTarget(null);
-                }}
-                className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={deleteTarget ? confirmDelete : confirmRestore}
-                className={`px-4 py-2 text-sm font-semibold text-white rounded-lg transition-colors ${
-                  deleteTarget ? "bg-[#ef4444] hover:bg-[#dc2626]" : "bg-[#16a34a] hover:bg-[#15803d]"
-                }`}
-              >
-                {deleteTarget ? "Delete Asset" : "Restore Asset"}
-              </button>
-            </div>
-          </div>
-        </div>
+      {!pickerMode && restoreTarget && (
+        <ConfirmDialog
+          open
+          title="Restore Asset"
+          message={<>Are you sure you want to restore <span className="font-medium text-[#111827]">"{restoreTarget.title}"</span>?</>}
+          variant="success"
+          cancelLabel="Cancel"
+          confirmLabel="Restore Asset"
+          onCancel={() => setRestoreTarget(null)}
+          onConfirm={confirmRestore}
+        />
       )}
     </div>
   );
