@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { saveThemeForCourse, saveThemeVariables, getThemePresets, saveThemePreset, applyThemePreset, getThemePresetParentTheme, renameThemePreset, deleteThemePreset, type ThemePreset } from "../../api/adaptAuthoring";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
+import { InfoFieldLabel } from "../../components/common/InfoIcon";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
@@ -1004,6 +1005,7 @@ const ON_SCREEN_CLASS_OPTIONS = [
 function LifeListField({
   title,
   description,
+  titleHint,
   items,
   errors,
   onAdd,
@@ -1014,6 +1016,7 @@ function LifeListField({
 }: {
   title: string;
   description: string;
+  titleHint?: string;
   items: Array<LifeSpriteSheet | LifeSingleIcon>;
   errors: LifeListItemErrors[];
   onAdd: () => void;
@@ -1025,7 +1028,11 @@ function LifeListField({
   return (
     <div className="space-y-3">
       <div>
-        <p className="text-xs font-semibold text-[#111827] mb-1.5">{title}</p>
+        <InfoFieldLabel
+          label={title}
+          hint={titleHint}
+          className="mb-1.5"
+        />
         <p className="text-xs text-[#6b7280] leading-relaxed">{description}</p>
       </div>
       <div className="space-y-3">
@@ -2298,6 +2305,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                   <LifeListField
                     title="Custom Icons: Sprite Sheets"
                     description="Add a reference to an external sprite sheet with icons that can be used in the course."
+                    titleHint="Add a reference to an external sprite sheet with icons that can be used in the course."
                     items={lifeCourseConfig._svgSpriteSheets}
                     errors={lifeCourseConfigErrors._svgSpriteSheets}
                     idLabel="Icon Set Name"
@@ -2329,6 +2337,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                   <LifeListField
                     title="Custom Icons: Single Icons"
                     description="Add a reference to an external individual icon that can be used in the course."
+                    titleHint="Add a reference to an external individual icon that can be used in the course."
                     items={lifeCourseConfig._singleIcons}
                     errors={lifeCourseConfigErrors._singleIcons}
                     idLabel="Icon Id"
