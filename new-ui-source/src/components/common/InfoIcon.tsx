@@ -1,5 +1,9 @@
 import React from "react";
 
+function stopPropagation(event: React.SyntheticEvent) {
+  event.stopPropagation();
+}
+
 interface InfoIconProps {
   label: string;
   hint?: string;
@@ -25,6 +29,8 @@ export function InfoIcon({
       tabIndex={0}
       aria-label={`More information about ${label}`}
       aria-describedby={tooltipId}
+      onClick={stopPropagation}
+      onMouseDown={stopPropagation}
     >
       <svg
         width="13"
