@@ -731,7 +731,7 @@ export default function HomePage() {
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#e5e7eb]">
               <div>
                 <h2 className="font-semibold text-[#111827] text-base">Create New Course</h2>
-                <p className="text-xs text-[#6b7280] mt-0.5">Set up the basics before entering the editor</p>
+                <p className="text-xs text-[#6b7280] mt-0.5">Set up the course basics to get started.</p>
               </div>
               <button
                 type="button"
