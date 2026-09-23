@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { saveThemeForCourse, saveThemeVariables, getThemePresets, saveThemePreset, applyThemePreset, getThemePresetParentTheme, renameThemePreset, deleteThemePreset, type ThemePreset } from "../../api/adaptAuthoring";
+import ConfirmDialog from "../../components/common/ConfirmDialog";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
@@ -2831,14 +2832,14 @@ function ManagePresetsModal({
   const [editingName, setEditingName] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmDeleteTarget, setConfirmDeleteTarget] = useState<ThemePreset | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   function startEdit(preset: ThemePreset) {
     setEditingId(preset._id);
     setEditingName(preset.displayName);
     setEditError(null);
-    setConfirmDeleteId(null);
+    setConfirmDeleteTarget(null);
   }
 
   function cancelEdit() {
@@ -2877,15 +2878,17 @@ function ManagePresetsModal({
     try {
       await deleteThemePreset(preset._id);
       onPresetDeleted(preset._id);
-      setConfirmDeleteId(null);
+      setConfirmDeleteTarget(null);
     } catch {
       setErrorMsg('Failed to delete preset.');
+      setConfirmDeleteTarget(null);
     } finally {
       setDeletingId(null);
     }
   }
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
       <div
         className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
@@ -2951,31 +2954,6 @@ function ManagePresetsModal({
                     </button>
                   </div>
                 </div>
-              ) : confirmDeleteId === preset._id ? (
-                /* Delete confirmation */
-                <div className="space-y-1.5">
-                  <p className="text-xs text-[#374151] leading-snug">
-                    Delete preset <strong>"{preset.displayName}"</strong>?{' '}
-                    <span className="font-semibold text-[#ef4444]">This will affect any existing courses using this preset.</span>
-                  </p>
-                  <div className="flex gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => confirmDelete(preset)}
-                      disabled={deletingId === preset._id}
-                      className="text-xs font-semibold px-3 py-1.5 bg-[#ef4444] text-white rounded-md hover:bg-[#dc2626] disabled:opacity-50 transition-colors"
-                    >
-                      {deletingId === preset._id ? 'Deleting…' : 'Delete'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmDeleteId(null)}
-                      className="text-xs px-3 py-1.5 border border-[#d1d5db] text-[#6b7280] rounded-md hover:bg-[#f9fafb] transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
               ) : (
                 /* Normal row */
                 <div className="flex items-center justify-between gap-2">
@@ -2993,8 +2971,9 @@ function ManagePresetsModal({
                     </button>
                     <button
                       type="button"
-                      onClick={() => { setConfirmDeleteId(preset._id); cancelEdit(); }}
+                      onClick={() => { setConfirmDeleteTarget(preset); cancelEdit(); }}
                       title="Delete preset"
+                      disabled={deletingId === preset._id}
                       className="p-1.5 rounded-md border border-[#e5e7eb] text-[#6b7280] hover:bg-[#fef2f2] hover:text-[#ef4444] hover:border-[#ef4444] transition-colors"
                     >
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -3020,6 +2999,17 @@ function ManagePresetsModal({
         </div>
       </div>
     </div>
+    {confirmDeleteTarget && (
+      <ConfirmDialog
+        open
+        title="Delete Preset"
+        message={<>Are you sure you want to delete <span className="font-medium text-[#111827]">"{confirmDeleteTarget.displayName}"</span>?</>}
+        note="This will affect any existing courses using this preset."
+        onCancel={() => setConfirmDeleteTarget(null)}
+        onConfirm={() => confirmDelete(confirmDeleteTarget)}
+      />
+    )}
+    </>
   );
 }
 

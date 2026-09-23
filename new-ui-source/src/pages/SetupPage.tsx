@@ -29,6 +29,7 @@ import { PreflightValidatorPage } from "./setup/preflightValidatorPage";
 import PublishMenuButton from "../components/publish/PublishMenuButton";
 import PublishCourseDialog, { type PublishCoursePhase } from "../components/publish/PublishCourseDialog";
 import ExportDialog from "../components/common/ExportDialog";
+import ErrorDialog from "../components/common/ErrorDialog";
 import { AssetManagementWorkspace } from "./AssetManagementPage";
 import type { AssetPickerRequest, AssetPickerResult } from "../types/assetPicker";
 
@@ -259,6 +260,7 @@ function CourseStructurePanel({
     remove,
     moveNode,
   } = useCourseStructure(courseId, courseTitle);
+  const [dismissedStructureError, setDismissedStructureError] = useState<Error | null>(null);
 
   // Edits are staged locally and saved only on demand — confirm before leaving
   // with unsaved changes (mirrors Technical Settings / Navigation).
@@ -350,11 +352,12 @@ function CourseStructurePanel({
         </p>
       </div>
 
-      {error && (
-        <div className="mb-4 rounded-lg border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b]">
-          {error.message}
-        </div>
-      )}
+      <ErrorDialog
+        open={!!error && dismissedStructureError !== error}
+        title="Error"
+        message={error?.message || ""}
+        onClose={() => setDismissedStructureError(error)}
+      />
 
       {!courseId ? (
         <div className="rounded-lg border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b]">
@@ -460,7 +463,6 @@ function CourseStructurePanel({
             </svg>
             Unsaved changes
           </span>
-          {error && <span className="max-w-[180px] truncate text-xs text-[#ef4444]">{error.message}</span>}
           <div className="flex items-center gap-2">
             <button
               type="button"
