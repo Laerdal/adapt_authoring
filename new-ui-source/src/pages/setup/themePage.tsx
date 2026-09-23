@@ -2711,16 +2711,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Left column: Breadcrumb + Accordions */}
             <div className="space-y-4">
-              <div className="text-xs text-[#6b7280]">
-                <span className="font-semibold">Theme</span>
-                {activeCustomAccordion && (
-                  <>
-                    <span className="mx-1.5">/</span>
-                    <span className="font-semibold">{CUSTOM_ACCORDION_DEFS.find(a => a.id === activeCustomAccordion)?.label}</span>
-                  </>
-                )}
-              </div>
-
               <div className="space-y-2">
                 {CUSTOM_ACCORDION_DEFS.map((acc) => {
                   const isOpen = activeCustomAccordion === acc.id;
