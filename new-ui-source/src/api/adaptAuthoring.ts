@@ -423,6 +423,14 @@ export async function fetchDashboardTags(term = ""): Promise<Array<{ title: stri
 
 // Update course details — resolves tag titles to IDs before sending to the engine.
 // Sends both `title` and `displayTitle` to keep the dashboard and course menu in sync.
+export function isSafeLanguageCode(value: string): boolean {
+  const code = value.trim();
+  if (!code || code !== value.trim()) return false;
+  if (/[\\/]/.test(code)) return false;
+  if (code.includes("..") || code.startsWith(".") || code.endsWith(".")) return false;
+  return /^[A-Za-z]{2,8}(?:[-_][A-Za-z0-9]{2,8})*$/.test(code);
+}
+
 export async function updateCourse(
   backendId: string,
   patch: {
@@ -460,6 +468,12 @@ export async function updateCourse(
   }
   if (patch.isShared !== undefined) updateData._isShared = patch.isShared;
   if (patch.shareWithUserIds !== undefined) updateData._shareWithUsers = patch.shareWithUserIds;
+  if (patch.language !== undefined) {
+    const languageCode = patch.language.trim();
+    if (!isSafeLanguageCode(languageCode)) {
+      throw new Error("Invalid language code. Use a safe ISO-style value such as en, ar, or zh-CN.");
+    }
+  }
 
   const coursePromise = apiClient.put(`/api/content/course/${backendId}`, updateData);
 

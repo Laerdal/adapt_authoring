@@ -50,12 +50,22 @@ export function normalizeHtmlForEditor(value: string): string {
  * cosmetic paragraph node.
  */
 export function isEditorEmpty(html: string): boolean {
-  const stripped = html
-    .replace(/<\s*br\s*\/?\s*>/gi, "")
-    .replace(/<\s*p\s*>\s*<\s*\/\s*p\s*>/gi, "")
-    .replace(/<[^>]*>/g, "")
-    .replace(/&nbsp;/gi, " ")
+  const source = (html ?? "").trim();
+  if (!source) return true;
+
+  const container = document.createElement("div");
+  container.innerHTML = source;
+
+  const meaningfulElement = container.querySelector(
+    "img, video, audio, iframe, object, embed, svg, canvas, table, ul, ol, li, blockquote, hr, pre, code"
+  );
+  if (meaningfulElement) return false;
+
+  const stripped = (container.textContent ?? "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
+
   return stripped.length === 0;
 }
 
@@ -186,6 +196,56 @@ function defaultTimestamp(_now: Date): string {
   return "Time";
 }
 
+function sanitizeAiHtml(rawHtml: string): string {
+  const value = (rawHtml ?? "").trim();
+  if (!value) return "";
+
+  const wrapper = document.createElement("div");
+  wrapper.innerHTML = value;
+
+  const allowedTags = new Set([
+    "a", "b", "blockquote", "br", "code", "em", "i", "img", "li", "ol", "p",
+    "s", "span", "strike", "strong", "sub", "sup", "table", "tbody", "td", "th",
+    "thead", "tr", "u", "ul"
+  ]);
+
+  const allowedAttributes = new Set(["alt", "colspan", "href", "rowspan", "src", "title"]);
+
+  const nodes = Array.from(wrapper.querySelectorAll("*"));
+  for (const node of nodes) {
+    const element = node as HTMLElement;
+    const tag = element.tagName.toLowerCase();
+
+    if (!allowedTags.has(tag)) {
+      element.replaceWith(...Array.from(element.childNodes));
+      continue;
+    }
+
+    for (const attribute of Array.from(element.attributes)) {
+      const name = attribute.name.toLowerCase();
+      const value = attribute.value.trim();
+
+      if (name.startsWith("on") || name === "style" || name === "srcdoc") {
+        element.removeAttribute(attribute.name);
+        continue;
+      }
+
+      if (!allowedAttributes.has(name)) {
+        element.removeAttribute(attribute.name);
+        continue;
+      }
+
+      if ((name === "href" || name === "src") && /^(javascript:|vbscript:|data:text\/html)/i.test(value)) {
+        element.removeAttribute(attribute.name);
+      }
+    }
+  }
+
+  const sanitizedHtml = wrapper.innerHTML.trim();
+  if (!sanitizedHtml || sanitizedHtml === "<br>") return "";
+  return sanitizedHtml;
+}
+
 export default function BasicRichTextEditor({
   html,
   onChange,
@@ -198,6 +258,8 @@ export default function BasicRichTextEditor({
   courseContext,
 }: BasicRichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement | null>(null);
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
+  const selectionRangeRef = useRef<Range | null>(null);
   const [focused, setFocused] = useState(false);
   const [toolbarVisible, setToolbarVisible] = useState(false);
   const [samaritanOpen, setSamaritanOpen] = useState(false);
@@ -287,39 +349,68 @@ export default function BasicRichTextEditor({
     return normalizeAssistantText(getEditorPlainText());
   }, [getEditorPlainText]);
 
+  const storeSelectionForSamaritan = useCallback(() => {
+    const editor = editorRef.current;
+    const selection = window.getSelection();
+    if (!editor || !selection || selection.rangeCount === 0) {
+      selectionRangeRef.current = null;
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    if (editor.contains(range.startContainer) && editor.contains(range.endContainer)) {
+      selectionRangeRef.current = range.cloneRange();
+      return;
+    }
+
+    selectionRangeRef.current = null;
+  }, []);
+
   const applySamaritanResult = useCallback((text: string, mode: "insert" | "replace") => {
     if (!editorRef.current || !text) return;
-    const html = aiResultToHtml(text);
-    const selection = window.getSelection();
-    if (!selection || !editorRef.current.contains(selection.anchorNode)) {
-      if (mode === "replace") {
-        editorRef.current.innerHTML = html;
+
+    const html = sanitizeAiHtml(aiResultToHtml(text));
+    if (!html) return;
+
+    const editor = editorRef.current;
+    const fallbackSelection = window.getSelection();
+    const rangeFromSelection = fallbackSelection && fallbackSelection.rangeCount > 0
+      ? fallbackSelection.getRangeAt(0)
+      : null;
+
+    const activeRange = selectionRangeRef.current && editor.contains(selectionRangeRef.current.startContainer)
+      ? selectionRangeRef.current.cloneRange()
+      : rangeFromSelection && editor.contains(rangeFromSelection.startContainer) && editor.contains(rangeFromSelection.endContainer)
+        ? rangeFromSelection.cloneRange()
+        : null;
+
+    editor.focus();
+
+    if (activeRange) {
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(activeRange);
+      const finalRange = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+      if (!finalRange) {
+        if (mode === "replace") editor.innerHTML = html;
+        else editor.insertAdjacentHTML("beforeend", html);
+      } else if (mode === "replace") {
+        if (finalRange.collapsed) {
+          editor.innerHTML = html;
+        } else {
+          finalRange.deleteContents();
+          finalRange.insertNode(finalRange.createContextualFragment(html));
+        }
       } else {
-        editorRef.current.insertAdjacentHTML("beforeend", html);
+        finalRange.insertNode(finalRange.createContextualFragment(html));
+        finalRange.collapse(false);
       }
-      emit();
-      syncFormats();
-      return;
-    }
-    const range = selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
-    if (!range) {
-      if (mode === "replace") editorRef.current.innerHTML = html;
-      else editorRef.current.insertAdjacentHTML("beforeend", html);
-      emit();
-      syncFormats();
-      return;
-    }
-    if (mode === "replace") {
-      if (selection.isCollapsed) {
-        editorRef.current.innerHTML = html;
-      } else {
-        range.deleteContents();
-        range.insertNode(range.createContextualFragment(html));
-      }
+    } else if (mode === "replace") {
+      editor.innerHTML = html;
     } else {
-      range.insertNode(range.createContextualFragment(html));
-      range.collapse(false);
+      editor.insertAdjacentHTML("beforeend", html);
     }
+
     emit();
     syncFormats();
   }, [emit, syncFormats]);
@@ -360,6 +451,16 @@ export default function BasicRichTextEditor({
     >
       {toolbarVisible && (
         <div
+          ref={toolbarRef}
+          onFocusCapture={() => setToolbarVisible(true)}
+          onBlurCapture={(event) => {
+            const nextTarget = event.relatedTarget as Node | null;
+            const containsFocus = !!nextTarget && (
+              (editorRef.current?.contains(nextTarget) ?? false) ||
+              (toolbarRef.current?.contains(nextTarget) ?? false)
+            );
+            if (!containsFocus) setToolbarVisible(false);
+          }}
           style={{
             display: "flex",
             alignItems: "center",
@@ -409,6 +510,7 @@ export default function BasicRichTextEditor({
             onMouseDown={(e) => {
               e.preventDefault();
               if (disabled) return;
+              storeSelectionForSamaritan();
               setSamaritanSeedText(getSeedTextForSamaritan());
               setSamaritanOpen(true);
             }}
@@ -465,7 +567,15 @@ export default function BasicRichTextEditor({
         onMouseUp={syncFormats}
         onPaste={handlePaste}
         onFocus={() => { setFocused(true); setToolbarVisible(true); syncFormats(); }}
-        onBlur={() => { setFocused(false); setToolbarVisible(false); }}
+        onBlur={(event) => {
+          const nextTarget = event.relatedTarget as Node | null;
+          const containsFocus = !!nextTarget && (
+            (editorRef.current?.contains(nextTarget) ?? false) ||
+            (toolbarRef.current?.contains(nextTarget) ?? false)
+          );
+          setFocused(false);
+          setToolbarVisible(containsFocus);
+        }}
         className="empty:before:content-[attr(data-placeholder)] empty:before:text-[var(--life-neutral-400)]"
         style={{
           minHeight,

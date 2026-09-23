@@ -9,6 +9,7 @@ import {
 } from "../../api/adaptAuthoring";
 import type { AssetPickerRequest } from "../../types/assetPicker";
 import { BasicRichTextEditor, isEditorEmpty } from "../../components/common";
+import { isSafeLanguageCode } from "../../api/adaptAuthoring";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
@@ -344,6 +345,10 @@ export function CourseOverviewPage({
       const bodyToPersist = isEditorEmpty(formBody) ? "" : formBody;
       const languageToPersist = selectedLanguageOption === "other" ? customLanguage.trim() : language;
       const normalizedLanguageForSave = languageToPersist.trim();
+      if (selectedLanguageOption === "other" && !isSafeLanguageCode(normalizedLanguageForSave)) {
+        setSaveError("Custom language code is invalid. Use a safe ISO-style value such as en, ar, or zh-CN.");
+        return false;
+      }
       const directionToPersist = getLanguageDirection(normalizedLanguageForSave);
       await updateCourse(courseId, {
         title: formTitle.trim(),
@@ -363,6 +368,7 @@ export function CourseOverviewPage({
       setSavedSubtitle(formSubtitle.trim());
       setSavedDesc(formDesc.trim());
       setSavedBody(bodyToPersist);
+      setFormBody(bodyToPersist);
       setSavedInstruction(formInstruction.trim());
       setSavedTags(tags);
       setSavedHeroAssetId(heroAssetId);
