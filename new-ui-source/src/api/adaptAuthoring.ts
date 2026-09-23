@@ -424,11 +424,11 @@ export async function fetchDashboardTags(term = ""): Promise<Array<{ title: stri
 // Update course details — resolves tag titles to IDs before sending to the engine.
 // Sends both `title` and `displayTitle` to keep the dashboard and course menu in sync.
 export function isSafeLanguageCode(value: string): boolean {
-  const code = value.trim();
-  if (!code || code !== value.trim()) return false;
-  if (/[\\/]/.test(code)) return false;
-  if (code.includes("..") || code.startsWith(".") || code.endsWith(".")) return false;
-  return /^[A-Za-z]{2,8}(?:[-_][A-Za-z0-9]{2,8})*$/.test(code);
+  const trimmed = value.trim();
+  if (!trimmed || trimmed !== value) return false;
+  if (/[\\/]/.test(trimmed)) return false;
+  if (trimmed.includes("..") || trimmed.startsWith(".") || trimmed.endsWith(".")) return false;
+  return /^[A-Za-z]{2,8}(?:[-_][A-Za-z0-9]{2,8})*$/.test(trimmed);
 }
 
 export async function updateCourse(
@@ -468,9 +468,9 @@ export async function updateCourse(
   }
   if (patch.isShared !== undefined) updateData._isShared = patch.isShared;
   if (patch.shareWithUserIds !== undefined) updateData._shareWithUsers = patch.shareWithUserIds;
-  if (patch.language !== undefined) {
-    const languageCode = patch.language.trim();
-    if (!isSafeLanguageCode(languageCode)) {
+  const normalizedLanguage : string | undefined = patch.language?.trim();
+  if (normalizedLanguage !== undefined) {
+    if (!isSafeLanguageCode(normalizedLanguage)) {
       throw new Error("Invalid language code. Use a safe ISO-style value such as en, ar, or zh-CN.");
     }
   }
@@ -481,9 +481,15 @@ export async function updateCourse(
   if (patch.language !== undefined || patch.direction !== undefined) {
     const config = await apiClient.get<EngineConfigDetails>(`/api/content/config/${backendId}`);
     if (config._id) {
-      const nextLanguage = patch.language ?? config._defaultLanguage ?? "";
+      const nextLanguage = (normalizedLanguage ?? (config._defaultLanguage ?? "").trim()).trim();
       const nextDirection = patch.direction ?? (
-        nextLanguage ? (nextLanguage.toLowerCase() === "ar" || nextLanguage.toLowerCase() === "he" || nextLanguage.toLowerCase() === "ur" ? "rtl" : "ltr") : "ltr"
+        nextLanguage ? (
+          nextLanguage.toLowerCase().split(/[-_]/)[0] === "ar" ||
+          nextLanguage.toLowerCase().split(/[-_]/)[0] === "he" ||
+          nextLanguage.toLowerCase().split(/[-_]/)[0] === "ur"
+            ? "rtl"
+            : "ltr"
+        ) : "ltr"
       );
 
       await apiClient.put(`/api/content/config/${config._id}`, {

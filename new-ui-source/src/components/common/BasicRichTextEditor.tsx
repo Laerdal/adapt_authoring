@@ -1,8 +1,8 @@
 // Lightweight rich-text editor for simple inline formatting (bold, italic,
-// underline, strikethrough, subscript, superscript) plus a one-click "insert
-// current time" action. Intended as a reusable drop-in for any form field that
-// previously used a plain <textarea> but needs basic formatting parity with the
-// legacy CKEditor Body field (Course Overview → Body, article summaries, etc.).
+// underline, strikethrough, subscript, superscript) and AI assistance.
+// Intended as a reusable drop-in for any form field that previously used a
+// plain <textarea> but needs basic formatting parity with the legacy CKEditor
+// Body field (Course Overview → Body, article summaries, etc.).
 //
 // This is intentionally NOT the full CKEditor 5 wrapper (see RichTextEditor.tsx).
 // Use this when you want a small, dependency-free surface with just the core
@@ -82,11 +82,6 @@ export interface BasicRichTextEditorProps {
   minHeight?: number;
   /** Extra formatting commands to show alongside the defaults. */
   extraCommands?: FormatCommand[];
-  /**
-   * Override how the "insert time" button formats the timestamp. Defaults to
-   * the browser's short local time (e.g. "3:45 PM").
-   */
-  formatTimestamp?: (now: Date) => string;
   /** Optional aria-label for the editable region. */
   ariaLabel?: string;
   /** Optional course context to send to Samaritan when the AI-action is used. */
@@ -192,10 +187,6 @@ const TOGGLE_COMMANDS = new Set([
   "bold", "italic", "underline", "strikeThrough", "subscript", "superscript",
 ]);
 
-function defaultTimestamp(_now: Date): string {
-  return "Time";
-}
-
 function sanitizeAiHtml(rawHtml: string): string {
   const value = (rawHtml ?? "").trim();
   if (!value) return "";
@@ -253,7 +244,6 @@ export default function BasicRichTextEditor({
   placeholder,
   minHeight = 96,
   extraCommands,
-  formatTimestamp = defaultTimestamp,
   ariaLabel,
   courseContext,
 }: BasicRichTextEditorProps) {
@@ -309,10 +299,6 @@ export default function BasicRichTextEditor({
     emit();
     syncFormats();
   }, [disabled, emit, syncFormats]);
-
-  const insertTimestamp = useCallback(() => {
-    insertText(formatTimestamp(new Date()));
-  }, [insertText, formatTimestamp]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (disabled) return;

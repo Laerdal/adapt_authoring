@@ -54,8 +54,9 @@ const RTL_LANGUAGE_CODES = new Set(["ar", "he", "ur"]);
 function getLanguageDirection(languageValue: string): "ltr" | "rtl" {
   const normalized = languageValue.trim().toLowerCase();
   if (!normalized) return "ltr";
-  if (RTL_LANGUAGE_CODES.has(normalized)) return "rtl";
-  if (/[\u0590-\u08FF\uFB1D-\uFB4F\u0600-\u06FF]/.test(normalized)) return "rtl";
+  const primaryLanguage = normalized.split(/[-_]/)[0];
+  if (RTL_LANGUAGE_CODES.has(primaryLanguage)) return "rtl";
+  if (/[\u0590-\u08FF\uFB1D-\uFB4F\u0600-\u06FF]/.test(primaryLanguage)) return "rtl";
   return "ltr";
 }
 
@@ -343,12 +344,22 @@ export function CourseOverviewPage({
     try {
       const isSharedAll = shareMode === "all";
       const bodyToPersist = isEditorEmpty(formBody) ? "" : formBody;
-      const languageToPersist = selectedLanguageOption === "other" ? customLanguage.trim() : language;
+      const languageToPersist = selectedLanguageOption === "other" ? customLanguage.trim() : language.trim();
       const normalizedLanguageForSave = languageToPersist.trim();
-      if (selectedLanguageOption === "other" && !isSafeLanguageCode(normalizedLanguageForSave)) {
-        setSaveError("Custom language code is invalid. Use a safe ISO-style value such as en, ar, or zh-CN.");
+
+      if (!normalizedLanguageForSave) {
+        setSaveError("Default language is required.");
         return false;
       }
+
+      if (!isSafeLanguageCode(normalizedLanguageForSave)) {
+        const message = selectedLanguageOption === "other"
+          ? "Custom language code is invalid. Use a safe ISO-style value such as en, ar, or zh-CN."
+          : "Default language is invalid. Please select a valid language.";
+        setSaveError(message);
+        return false;
+      }
+
       const directionToPersist = getLanguageDirection(normalizedLanguageForSave);
       await updateCourse(courseId, {
         title: formTitle.trim(),
