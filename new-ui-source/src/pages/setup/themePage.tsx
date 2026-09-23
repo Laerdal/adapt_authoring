@@ -2164,7 +2164,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <h2 className="text-base font-semibold text-[var(--life-base-black)]">
             Select Theme <span className="text-red-500">*</span>
           </h2>
-          <p className="text-sm text-[var(--life-neutral-300)] mt-0.5">Choose a theme for your course.</p>
+          <p className="text-sm text-[var(--life-neutral-300)] mt-0.5"> Select the base theme for your course </p>
         </div>
       </div>
 
