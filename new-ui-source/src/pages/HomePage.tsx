@@ -408,7 +408,7 @@ export default function HomePage() {
           <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
             <div>
               <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">{location.pathname === '/shared' ? 'Shared with Me' : 'My Courses'}</h1>
-              <p className="text-sm text-[#6b7280] mt-1">Manage and organize your courses</p>
+              <p className="text-sm text-[#6b7280] mt-1">{location.pathname === '/shared' ? 'View and access courses shared with you' : 'Manage and organize your courses'}</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {/* Import */}
