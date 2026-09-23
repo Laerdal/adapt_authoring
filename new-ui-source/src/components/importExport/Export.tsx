@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import ErrorDialog from "../common/ErrorDialog";
 
 interface ExportMenuProps {
   onExportSource?: () => void;
@@ -21,27 +22,36 @@ export function ExportStatusPopup({
   status: "processing" | "success" | "error";
   message: string;
 }) {
+  const [dismissedErrorMessage, setDismissedErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (status === "error") setDismissedErrorMessage(null);
+  }, [message, status]);
+
+  if (status === "error") {
+    return (
+      <ErrorDialog
+        open={dismissedErrorMessage !== message}
+        title="Error"
+        message={message}
+        onClose={() => setDismissedErrorMessage(message)}
+      />
+    );
+  }
+
   return (
     <div
       className={`fixed top-6 right-6 z-[9999] flex items-center gap-3 min-w-[380px] max-w-[440px] px-5 py-3.5 rounded-[10px] shadow-[0_10px_30px_rgba(0,0,0,0.24)] border transition-all duration-200 ${
         status === "success"
           ? "bg-[#16a34a] border-[#15803d] text-white"
-          : status === "error"
-            ? "bg-[#dc2626] border-[#b91c1c] text-white"
-            : "bg-[#4b5563] border-[#374151] text-white"
+          : "bg-[#4b5563] border-[#374151] text-white"
       }`}
-      role={status === "error" ? "alert" : "status"}
-      aria-live={status === "error" ? "assertive" : "polite"}
+      role="status"
+      aria-live="polite"
     >
       {status === "success" ? (
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
           <polyline points="20 6 9 17 4 12" />
-        </svg>
-      ) : status === "error" ? (
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-          <path d="M12 8v4" />
-          <path d="M12 16h.01" />
-          <circle cx="12" cy="12" r="9" />
         </svg>
       ) : (
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.75" strokeLinecap="round" className="animate-spin shrink-0">

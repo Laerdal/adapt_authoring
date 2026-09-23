@@ -23,6 +23,7 @@ import {
 } from "../../utils/ckEditorSamaritan";
 import TopicAssetField, { toRenderableAssetUrl } from "../../components/common/AssetSelectionField";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
+import ErrorDialog from "../../components/common/ErrorDialog";
 import { CheckboxIndicator } from "../../components/common/Checkbox";
 import CourseStructureMap from "../../components/course/CourseStructureMap";
 import { StructureIcon, STRUCTURE_ICON_COLOR_CLASS } from "../../components/course/StructureIcons";
@@ -3310,6 +3311,8 @@ export default function CourseEditor({
   const [structureLoadError, setStructureLoadError] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [dismissedStructureLoadError, setDismissedStructureLoadError] = useState<string | null>(null);
+  const [dismissedPreviewError, setDismissedPreviewError] = useState<string | null>(null);
   const [titleValidationWarning, setTitleValidationWarning] = useState<string | null>(null);
   // "Samaritan Assistance" triggered from a canvas body field's CKEditor
   // toolbar button — the popover itself is this same React app's existing
@@ -4059,6 +4062,7 @@ export default function CourseEditor({
     const buildPreview = async () => {
       setIsPreviewLoading(true);
       setPreviewError(null);
+      setDismissedPreviewError(null);
 
       try {
         // Studio surface: ensure a render shell exists (cached unless the theme/menu/
@@ -11095,12 +11099,6 @@ export default function CourseEditor({
             <div className="flex items-center justify-center h-full">
               <div className="text-sm text-[#6b7280]">Loading course structure...</div>
             </div>
-          ) : structureLoadError ? (
-            <div className="flex items-center justify-center h-full px-6">
-              <div className="max-w-md rounded-xl border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b] text-center">
-                {structureLoadError}
-              </div>
-            </div>
           ) : !menuPageCreated ? (
             <div className="flex items-center justify-center h-full">
               <div className="flex flex-col items-center gap-5 text-center px-6 select-none">
@@ -11149,12 +11147,6 @@ export default function CourseEditor({
                       <p className="text-sm font-semibold text-[#1f2937]">Building course preview...</p>
                       <p className="mt-1 text-xs text-[#6b7280]">The real preview will update when generation completes.</p>
                     </div>
-                  </div>
-                )}
-
-                {previewError && !isPreviewLoading && (
-                  <div className="absolute inset-x-4 top-4 rounded-xl border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b] shadow-sm">
-                    {previewError}
                   </div>
                 )}
 
@@ -12354,11 +12346,25 @@ export default function CourseEditor({
           message="You have unsaved changes. Save before leaving this page?"
         />
 
+        <ErrorDialog
+          open={!!structureLoadError && dismissedStructureLoadError !== structureLoadError}
+          title="Error"
+          message={structureLoadError || ""}
+          onClose={() => setDismissedStructureLoadError(structureLoadError)}
+        />
+
+        <ErrorDialog
+          open={!!previewError && !isPreviewLoading && dismissedPreviewError !== previewError}
+          title="Error"
+          message="Error generating preview, please contact an administrator."
+          debugDetails={previewError || undefined}
+          onClose={() => setDismissedPreviewError(previewError)}
+        />
+
         <ConfirmDialog
           open={!!extensionRemovalTarget}
           title={`Remove ${extensionRemovalTarget?.displayName ?? "extension"}`}
           message="Removing it will remove the extension from this course. Do you still want to proceed?"
-          confirmLabel="Remove"
           onCancel={() => setExtensionRemovalTarget(null)}
           onConfirm={confirmRemoveExtension}
         />

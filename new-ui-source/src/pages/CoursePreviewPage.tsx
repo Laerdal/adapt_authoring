@@ -8,6 +8,7 @@ import ExportMenu, { ExportStatusPopup } from "../components/importExport/Export
 import { runExportSourceAction } from "../helpers/importExportHelper";
 import PublishMenuButton from "../components/publish/PublishMenuButton";
 import PublishCourseDialog, { type PublishCoursePhase } from "../components/publish/PublishCourseDialog";
+import ErrorDialog from "../components/common/ErrorDialog";
 
 type DeviceMode = "desktop" | "tablet" | "mobile";
 type QuickEditGuardMode = "leave-preview" | "course-navigation";
@@ -124,6 +125,7 @@ export default function CoursePreviewPage() {
   const [retryToken, setRetryToken] = useState(0);
   const [retrying, setRetrying] = useState(false);
   const [previewErrorMessage, setPreviewErrorMessage] = useState("");
+  const [previewErrorDialogDismissed, setPreviewErrorDialogDismissed] = useState(false);
 
   useEffect(() => {
     const tenantId = user?._tenantId;
@@ -132,6 +134,7 @@ export default function CoursePreviewPage() {
     const force = retryToken > 0;
     setPreviewState("preparing");
     setPreviewErrorMessage("");
+    setPreviewErrorDialogDismissed(false);
     (async () => {
       try {
         await ensurePreviewEditEnabledForCourse(id);
@@ -155,8 +158,18 @@ export default function CoursePreviewPage() {
 
   const retryPreview = useCallback(() => {
     setRetrying(true);
+    setPreviewErrorDialogDismissed(false);
     setRetryToken((n) => n + 1);
   }, []);
+
+  const closePreviewErrorDialog = useCallback(() => {
+    setPreviewErrorDialogDismissed(true);
+    if (window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate(id ? `/course/${id}/setup` : "/");
+  }, [id, navigate]);
 
 
   const pageId = (params.get("pageId") || "").trim();
@@ -522,9 +535,6 @@ export default function CoursePreviewPage() {
                 ? "Preview is unavailable for this course."
                 : "Preparing preview…"}
             </span>
-            {previewState === "error" && previewErrorMessage && (
-              <span className="text-xs text-[#9ca3af] max-w-md text-center">{previewErrorMessage}</span>
-            )}
             {previewState === "error" && id && user?._tenantId && (
               <button
                 type="button"
@@ -620,6 +630,14 @@ export default function CoursePreviewPage() {
         saveLabel="Save"
       />
       {exportPopup && <ExportStatusPopup status={exportPopup.status} message={exportPopup.message} />}
+
+      <ErrorDialog
+        open={previewState === "error" && !previewErrorDialogDismissed}
+        title="Error"
+        message="Error generating preview, please contact an administrator."
+        debugDetails={previewErrorMessage}
+        onClose={closePreviewErrorDialog}
+      />
 
       {publishDialogPhase && (
         <PublishCourseDialog

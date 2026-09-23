@@ -3,6 +3,7 @@ import { useState, useRef } from "react";
 import ImageCropper from "@/components/common/ImageCropper";
 import AssetPickerModal from "@/components/common/AssetPickerModal";
 import TagOverflowList from "@/components/common/TagOverflowList";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 
 interface CourseCardProps {
   id: number;
@@ -142,7 +143,8 @@ export default function CourseCard({
       <button
         type="button"
         onClick={(e) => { e.preventDefault(); setMenuOpen((o) => !o); }}
-        aria-label="More options"
+        aria-label="Course options"
+        title="Course options"
         className={className}
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -214,7 +216,8 @@ export default function CourseCard({
                 <button
                   type="button"
                   onClick={(e) => { e.preventDefault(); setMenuOpen((o) => !o); }}
-                  aria-label="More options"
+                  aria-label="Course options"
+                  title="Course options"
                   className="p-1.5 rounded-lg text-[#6b7280] hover:text-[#374151] hover:bg-[#f3f4f6] transition-colors"
                 >
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
@@ -483,52 +486,14 @@ export default function CourseCard({
       )}
 
       {/* ── DELETE CONFIRMATION MODAL ── */}
-      {deleteOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-          onClick={(e) => { if (e.target === e.currentTarget) setDeleteOpen(false); }}
-        >
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
-            <div className="px-6 pt-6 pb-4">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#fef2f2] flex items-center justify-center shrink-0 mt-0.5">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                    <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-                  </svg>
-                </div>
-                <div>
-                  <h2 className="font-semibold text-[#111827] text-base">Delete Course</h2>
-                  <p className="text-sm text-[#6b7280] mt-1">
-                    You are about to delete <span className="font-medium text-[#111827]">"{title}"</span>.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="px-6 pb-5">
-              <div className="p-4 rounded-lg bg-[#fef2f2] border border-[#fecaca]">
-                <p className="text-sm text-[#b91c1c]">
-                  ⚠ This action cannot be undone. The course and all its content will be permanently deleted.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#e5e7eb]">
-              <button type="button" onClick={() => setDeleteOpen(false)} className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors">
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => { setDeleteOpen(false); onDelete(); }}
-                className="px-4 py-2 text-sm font-semibold text-white bg-[#ef4444] hover:bg-[#dc2626] rounded-lg transition-colors"
-              >
-                Delete Course
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={deleteOpen}
+        title="Delete Course"
+        message="Are you sure you want to delete this course?"
+        note="This action cannot be undone. The course and all its content will be permanently deleted."
+        onCancel={() => setDeleteOpen(false)}
+        onConfirm={() => { setDeleteOpen(false); onDelete(); }}
+      />
 
       {/* ── ASSET PICKER MODAL ── */}
       {assetPickerOpen && (
