@@ -486,7 +486,7 @@ function AssetPreviewPanel({
             {asset.tags.length > 0 && (
               <div className="flex flex-wrap justify-center gap-2">
                 {asset.tags.map((tag) => (
-                  <span key={tag} className="rounded-full bg-[#eef6fd] px-2.5 py-1 text-xs font-medium text-[#2d6fa8]">#{tag}</span>
+                  <span key={tag} className="rounded-full bg-[#eef6fd] px-2.5 py-1 text-xs font-medium text-[#2d6fa8]">{tag}</span>
                 ))}
               </div>
             )}
@@ -615,7 +615,7 @@ const AssetCardItem = memo(function AssetCardItem({ asset, clickable = false, on
         {asset.tags.length > 0 && (
           <div className="flex flex-wrap gap-1 pt-1">
             {asset.tags.slice(0, 3).map((t) => (
-              <span key={t} className="px-1.5 py-0.5 bg-[#f3f4f6] text-[#6b7280] rounded text-[10px]">#{t}</span>
+              <span key={t} className="px-1.5 py-0.5 bg-[#f3f4f6] text-[#6b7280] rounded text-[10px]">{t}</span>
             ))}
             {asset.tags.length > 3 && <span className="px-1.5 py-0.5 text-[10px] text-[#9ca3af]">+{asset.tags.length - 3}</span>}
           </div>
@@ -1116,7 +1116,7 @@ export function AssetManagementWorkspace({
                         isSelected ? "bg-[#dbeeff] text-[#2d6fa8] font-medium" : "text-[#374151] hover:bg-[#f9fafb]"
                       }`}
                     >
-                      <span>#{tag}</span>
+                      <span>{tag}</span>
                       {isSelected && (
                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="20 6 9 17 4 12" />
@@ -1161,7 +1161,7 @@ export function AssetManagementWorkspace({
             )}
             {selectedTags.map((tag) => (
               <span key={tag} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#eef2ff] text-xs text-[#3730a3] font-medium">
-                Tag: #{tag}
+                Tag: {tag}
                 <button
                   type="button"
                   onClick={() => setSelectedTags((prev) => prev.filter((item) => item.toLowerCase() !== tag.toLowerCase()))}
@@ -1394,7 +1394,7 @@ export function AssetManagementWorkspace({
                     {upload.tags && (
                       <div className="flex flex-wrap gap-1.5 mt-2">
                         {upload.tags.split(",").map((t) => t.trim()).filter(Boolean).map((t) => (
-                          <span key={t} className="px-2 py-0.5 bg-[#f3f4f6] text-[#6b7280] rounded text-xs">#{t}</span>
+                          <span key={t} className="px-2 py-0.5 bg-[#f3f4f6] text-[#6b7280] rounded text-xs">{t}</span>
                         ))}
                       </div>
                     )}

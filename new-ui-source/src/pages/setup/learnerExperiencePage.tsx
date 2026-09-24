@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
+import RichTextEditor from "../../components/common/RichTextEditor";
 import {
   defaultAiTutorSettings,
   defaultCourseFeedbackSettings,
@@ -27,6 +28,7 @@ import {
 } from "../../helpers/learnerExperienceHelper";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
+import { htmlToPlainText } from "../../utils/ckEditorSamaritan";
 
 /* -------------------------------------------------------------
    LEARNER EXPERIENCE PANEL - Learning Resources accordion
@@ -37,6 +39,7 @@ type ResourceFormat = LearningResourceItem["format"];
 // Re-use imported types under local names for backwards compat with existing JSX
 type LearningResource = LearningResourceItem;
 type LearningResourcesState = LearningResourcesSettings;
+type LearnerExperienceAccordion = "learningResources" | "learnerNotes" | "learnerSearch" | "aiTutor" | "courseFeedback";
 
 type LearningResourceFilterText = LrFilterTextHelper;
 
@@ -102,29 +105,100 @@ function learningResourcePickerType(format: ResourceFormat): import("../../types
 }
 
 /* small helpers */
-function LrToggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+function LrToggle({
+  checked,
+  onChange,
+  label,
+  align = "left",
+  help,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  align?: "left" | "right";
+  help?: React.ReactNode;
+}) {
+  if (align === "right") {
+    return (
+      <div>
+        <div className="flex items-center justify-between gap-3 py-2">
+          <span className="text-sm font-semibold text-[var(--life-base-black)] leading-snug">{label}</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={checked}
+            aria-label={label}
+            onClick={() => onChange(!checked)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:ring-offset-1 ${checked ? "bg-[var(--life-primary-500)]" : "bg-[#d1d5db]"}`}
+          >
+            <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-5" : "translate-x-1"}`} />
+          </button>
+        </div>
+        {help}
+      </div>
+    );
+  }
+
   return (
-    <label className="flex items-center gap-2 cursor-pointer select-none">
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        onClick={() => onChange(!checked)}
-        className={`relative w-9 h-5 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2d6fa8] ${checked ? "bg-[#2d6fa8]" : "bg-[#d1d5db]"}`}
-      >
-        <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-150 ${checked ? "translate-x-4" : ""}`} />
-      </button>
-      <span className="text-sm text-[#374151]">{label}</span>
-    </label>
+    <div>
+      <label className="flex items-center gap-2 cursor-pointer select-none">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          onClick={() => onChange(!checked)}
+          className={`relative w-9 h-5 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2d6fa8] ${checked ? "bg-[#2d6fa8]" : "bg-[#d1d5db]"}`}
+        >
+          <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-150 ${checked ? "translate-x-4" : ""}`} />
+        </button>
+        <span className="text-sm text-[#374151]">{label}</span>
+      </label>
+      {help}
+    </div>
   );
 }
 
-function LrField({ label, children }: { label: string; children: React.ReactNode }) {
+function LrField({ label, help, children }: { label: string; help?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
       <label className="text-xs font-semibold text-[#374151]">{label}</label>
+      {help}
       {children}
     </div>
+  );
+}
+
+function LrHelp({ children }: { children: React.ReactNode }) {
+  return <p className="text-xs text-[#6b7280] mt-1 leading-snug">{children}</p>;
+}
+
+function ClickToEditRichText({
+  value,
+  onChange,
+  placeholder,
+  courseContext,
+}: {
+  value: string;
+  onChange: (html: string) => void;
+  placeholder: string;
+  courseContext: string;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  if (editing) {
+    return <RichTextEditor value={value} onChange={onChange} placeholder={placeholder} courseContext={courseContext} />;
+  }
+
+  const preview = htmlToPlainText(value).trim();
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      className="w-full min-h-[96px] px-3 py-2 text-left text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#374151] hover:border-[#2d6fa8] hover:bg-[#f8fbff] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8]"
+      aria-label={preview ? "Click to edit thank you message" : placeholder}
+    >
+      {preview || <span className="text-[#9ca3af]">{placeholder}</span>}
+    </button>
   );
 }
 
@@ -226,6 +300,7 @@ function AddResourceDialog({
             checked={res.forceDownload}
             onChange={(v) => set("forceDownload", v)}
             label="Force download"
+            help={<LrHelp>Forces the resource to be downloaded rather than opened in the browser. Only supported in browsers that support the 'download' attribute and for resources that are part of the course content/hosted on the same URL.</LrHelp>}
           />
 
           {/* Title */}
@@ -244,7 +319,7 @@ function AddResourceDialog({
           </LrField>
 
           {/* File Name */}
-          <LrField label="File Name">
+          <LrField label="File Name" help={<LrHelp>Used to set the name of the downloaded file to something different to the source filename. Only supported in browsers that support the 'download' attribute and for resources that are part of the course content/hosted on the same URL. Forces the file to be downloaded regardless of what 'Force download' is set to.</LrHelp>}>
             <input
               type="text"
               value={res.fileName}
@@ -319,7 +394,7 @@ function AddResourceDialog({
           <LrToggle
             checked={res.displayOnEveryPage}
             onChange={(v) => set("displayOnEveryPage", v)}
-            label="Is display on every page?"
+            label="Is displayed on every page?"
           />
         </div>
 
@@ -404,9 +479,9 @@ function ResourceFormatIcon({ format }: { format: ResourceFormat }) {
 /* -- Course Feedback types -- */
 type CourseFeedbackState = CourseFeedbackSettings;
 
-const COURSE_FEEDBACK_OPTIONS: { value: CourseFeedbackOption; label: string }[] = [
-  { value: "autoOpen",        label: "Auto-open on course complete" },
-  { value: "hideAfterSubmit", label: "Hide button after submission" },
+const COURSE_FEEDBACK_OPTIONS: { value: CourseFeedbackOption; label: string; help: string }[] = [
+  { value: "autoOpen",        label: "Auto-open on course complete", help: "If the feedback widget hasn’t been opened or submitted, it will automatically open when the course is completed. The feedback button remains visible regardless of this setting." },
+  { value: "hideAfterSubmit", label: "Hide button after submission", help: "Hide the feedback button after the user submits feedback. By default, the button remains visible." },
 ];
 
 /* -- Ask AI Tutor types -- */
@@ -438,7 +513,7 @@ function LrCheckList<T extends string>({
   selected,
   onChange,
 }: {
-  options: { value: T; label: string }[];
+  options: { value: T; label: string; help?: string }[];
   selected: T[];
   onChange: (v: T[]) => void;
 }) {
@@ -451,7 +526,7 @@ function LrCheckList<T extends string>({
   }
   return (
     <div className="space-y-1">
-      {options.map(({ value, label }) => {
+      {options.map(({ value, label, help }) => {
         const checked = selected.includes(value);
         return (
           <label
@@ -472,7 +547,10 @@ function LrCheckList<T extends string>({
                 </svg>
               )}
             </div>
-            <span className="text-sm text-[#374151] leading-snug">{label}</span>
+            <span className="text-sm text-[#374151] leading-snug">
+              {label}
+              {help && <span className="block mt-1"><LrHelp>{help}</LrHelp></span>}
+            </span>
           </label>
         );
       })}
@@ -572,21 +650,21 @@ function LeAccordion({
   children: React.ReactNode;
 }) {
   return (
-    <div className="border border-[#e5e7eb] rounded-xl overflow-hidden">
+    <div className="border border-[#e5e7eb] rounded-xl overflow-hidden bg-white">
       <button
         type="button"
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-4 py-3.5 bg-white hover:bg-[#f9fafb] transition-colors"
+        className="group w-full flex items-center justify-between gap-3 px-5 py-4 text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
       >
         <div className="flex items-center gap-2.5">
-          <span className="text-[#2d6fa8]">{icon}</span>
-          <span className="text-sm font-semibold text-[#111827]">{title}</span>
+          <span className="text-current">{icon}</span>
+          <span className="text-sm font-semibold text-current">{title}</span>
         </div>
         <svg
-          width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-          className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+          className="shrink-0 ml-auto text-current"
         >
-          <polyline points="6 9 12 15 18 9"/>
+          <polyline points={open ? "6 9 12 15 18 9" : "9 6 15 12 9 18"}/>
         </svg>
       </button>
       {open && (
@@ -615,7 +693,10 @@ export function LearnerExperiencePanel({
   const [lrLoading, setLrLoading] = useState(false);
   const [lrSaving, setLrSaving] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [lrOpen, setLrOpen] = useState(false);
+  const [openAccordion, setOpenAccordion] = useState<LearnerExperienceAccordion | "">("");
+  const toggleAccordion = (accordion: LearnerExperienceAccordion) => {
+    setOpenAccordion((current) => (current === accordion ? "" : accordion));
+  };
 
   const setLr = <K extends keyof LearningResourcesState>(k: K, v: LearningResourcesState[K]) =>
     setLrState((prev) => ({ ...prev, [k]: v }));
@@ -638,7 +719,6 @@ export function LearnerExperiencePanel({
   }
 
   /* -- Learner Notes state -- */
-  const [lnOpen, setLnOpen] = useState(false);
   const [lnState, setLnState] = useState<LearnerNotesState>(defaultLearnerNotesSettings());
   const [savedLnState, setSavedLnState] = useState<LearnerNotesState>(defaultLearnerNotesSettings());
   const [lnLoading, setLnLoading] = useState(false);
@@ -649,13 +729,10 @@ export function LearnerExperiencePanel({
   const [lnToast, setLnToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [lrFieldErrors, setLrFieldErrors] = useState<{ sectionTitle?: string }>({});
   const [lnFieldErrors, setLnFieldErrors] = useState<Partial<Record<LearnerNotesRequiredKey, string>>>({});
-  const [lsOpen, setLsOpen] = useState(false);
   const [lsState, setLsState] = useState<LearnerSearchState>(defaultLearnerSearchSettings());
   const [savedLsState, setSavedLsState] = useState<LearnerSearchState>(defaultLearnerSearchSettings());
-  const [cfOpen, setCfOpen] = useState(false);
   const [cfState, setCfState] = useState<CourseFeedbackState>(defaultCourseFeedbackSettings());
   const [savedCfState, setSavedCfState] = useState<CourseFeedbackState>(defaultCourseFeedbackSettings());
-  const [atOpen, setAtOpen] = useState(false);
   const [atState, setAtState] = useState<AiTutorState>(defaultAiTutorSettings());
   const [savedAtState, setSavedAtState] = useState<AiTutorState>(defaultAiTutorSettings());
   const [assetPickerOpen, setAssetPickerOpen] = useState(false);
@@ -863,7 +940,7 @@ export function LearnerExperiencePanel({
 
     if (lrState.enabled && !lrState.sectionTitle.trim()) {
       nextLrFieldErrors.sectionTitle = "Title is required.";
-      setLrOpen(true);
+      setOpenAccordion("learningResources");
       hasErrors = true;
     }
     setLrFieldErrors(nextLrFieldErrors);
@@ -894,7 +971,7 @@ export function LearnerExperiencePanel({
       }
 
       if (Object.keys(nextLnFieldErrors).length > 0) {
-        setLnOpen(true);
+        setOpenAccordion("learnerNotes");
       }
     }
     setLnFieldErrors(nextLnFieldErrors);
@@ -971,19 +1048,20 @@ export function LearnerExperiencePanel({
   }
 
   return (
-    <div className="max-w-2xl w-full">
+    <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
       {/* header */}
-      <div className="mb-6">
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb]">
         <h2 className="text-xl font-bold text-[#111827]">Learner Experience</h2>
         <p className="text-sm text-[#6b7280] mt-0.5">Configure what learners see and can access throughout the course.</p>
       </div>
 
-      <div className="space-y-3">
+      <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="max-w-2xl px-6 py-6 flex flex-col gap-3">
 
         {/* -- Learning Resources accordion -- */}
         <LeAccordion
-          open={lrOpen}
-          onToggle={() => setLrOpen((o) => !o)}
+          open={openAccordion === "learningResources"}
+          onToggle={() => toggleAccordion("learningResources")}
           title="Learning Resources"
           icon={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -1003,6 +1081,7 @@ export function LearnerExperiencePanel({
               checked={lrState.enabled}
               onChange={(v) => setLr("enabled", v)}
               label="Enable Learning Resources"
+              align="right"
             />
           </div>
 
@@ -1035,7 +1114,7 @@ export function LearnerExperiencePanel({
               </LrField>
 
               {/* Description */}
-              <LrField label="Description">
+              <LrField label="Description" help={<LrHelp>The description text for the resources button which displays when more than one extension is using the drawer.</LrHelp>}>
                 <textarea
                   value={lrState.description}
                   onChange={(e) => setLr("description", e.target.value)}
@@ -1045,17 +1124,7 @@ export function LearnerExperiencePanel({
                 />
               </LrField>
 
-              <LrField label="Display Title">
-                <input
-                  type="text"
-                  value={lrState.displayTitle}
-                  onChange={(e) => setLr("displayTitle", e.target.value)}
-                  placeholder="e.g. Resources"
-                  className={LR_INPUT}
-                />
-              </LrField>
-
-              <LrField label="Body">
+              <LrField label="Body" help={<LrHelp>The body text for the resources which displays at the top of the resources drawer.</LrHelp>}>
                 <input
                   type="text"
                   value={lrState.body}
@@ -1079,6 +1148,7 @@ export function LearnerExperiencePanel({
                 checked={lrState.enableFilterButton}
                 onChange={(v) => setLr("enableFilterButton", v)}
                 label="Enable filter button"
+                help={<LrHelp>Turns the filter buttons on and off. Note that the filter buttons will be automatically disabled if all resource items have the same Type value.</LrHelp>}
               />
 
               <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
@@ -1161,8 +1231,8 @@ export function LearnerExperiencePanel({
 
         {/* -- Learner Notes accordion -- */}
         <LeAccordion
-          open={lnOpen}
-          onToggle={() => setLnOpen((o) => !o)}
+          open={openAccordion === "learnerNotes"}
+          onToggle={() => toggleAccordion("learnerNotes")}
           title="Learner Notes"
           icon={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -1181,6 +1251,7 @@ export function LearnerExperiencePanel({
               checked={lnState.enabled}
               onChange={(v) => setLn("enabled", v)}
               label="Enable Notes"
+              align="right"
             />
           </div>
 
@@ -1357,8 +1428,8 @@ export function LearnerExperiencePanel({
 
         {/* -- Learner Search accordion -- */}
         <LeAccordion
-          open={lsOpen}
-          onToggle={() => setLsOpen((o) => !o)}
+          open={openAccordion === "learnerSearch"}
+          onToggle={() => toggleAccordion("learnerSearch")}
           title="Learner Search"
           icon={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -1373,7 +1444,7 @@ export function LearnerExperiencePanel({
             </div>
           )}
           <div className={`pt-3${lsState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
-            <LrToggle checked={lsState.enabled} onChange={(v) => setLs("enabled", v)} label="Enable Search" />
+            <LrToggle checked={lsState.enabled} onChange={(v) => setLs("enabled", v)} label="Enable Search" align="right" />
           </div>
 
           {lsState.enabled && (
@@ -1390,16 +1461,6 @@ export function LearnerExperiencePanel({
                   <LrToggle checked={lsState.matchOn.contentWordEqualsPhraseWord} onChange={(v) => setMatchOn("contentWordEqualsPhraseWord", v)} label="A word in the content equals the search phrase word" />
                   <LrToggle checked={lsState.matchOn.phraseWordBeginsContentWord} onChange={(v) => setMatchOn("phraseWordBeginsContentWord", v)} label="A word in the content starts with the search phrase word" />
                 </div>
-              </div>
-
-              {/* Preview */}
-              <div className="grid grid-cols-2 gap-4">
-                <LrField label="Preview Words">
-                  <input type="number" min={0} value={lsState.previewWords} onChange={(e) => setLs("previewWords", Number(e.target.value))} className={LR_INPUT} />
-                </LrField>
-                <LrField label="Preview Characters">
-                  <input type="number" min={0} value={lsState.previewCharacters} onChange={(e) => setLs("previewCharacters", Number(e.target.value))} className={LR_INPUT} />
-                </LrField>
               </div>
 
               {/* Display options */}
@@ -1423,9 +1484,6 @@ export function LearnerExperiencePanel({
               <div className="grid grid-cols-2 gap-4">
                 <LrField label="Minimum Word Length">
                   <input type="number" min={1} value={lsState.minimumWordLength} onChange={(e) => setLs("minimumWordLength", Number(e.target.value))} className={LR_INPUT} />
-                </LrField>
-                <LrField label="Frequency Importance">
-                  <input type="number" min={0} value={lsState.frequencyImportance} onChange={(e) => setLs("frequencyImportance", Number(e.target.value))} className={LR_INPUT} />
                 </LrField>
               </div>
 
@@ -1451,8 +1509,8 @@ export function LearnerExperiencePanel({
 
         {/* -- Ask AI Tutor accordion -- */}
         <LeAccordion
-          open={atOpen}
-          onToggle={() => setAtOpen((o) => !o)}
+          open={openAccordion === "aiTutor"}
+          onToggle={() => toggleAccordion("aiTutor")}
           title="Ask AI Tutor"
           icon={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -1472,6 +1530,7 @@ export function LearnerExperiencePanel({
               checked={atState.enabled}
               onChange={(v) => setAt("enabled", v)}
               label="Enable AI Tutor"
+              align="right"
             />
           </div>
 
@@ -1557,8 +1616,8 @@ export function LearnerExperiencePanel({
 
         {/* -- Laerdal Course Feedback accordion -- */}
         <LeAccordion
-          open={cfOpen}
-          onToggle={() => setCfOpen((o) => !o)}
+          open={openAccordion === "courseFeedback"}
+          onToggle={() => toggleAccordion("courseFeedback")}
           title="Laerdal Course Feedback"
           icon={
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -1573,6 +1632,7 @@ export function LearnerExperiencePanel({
               checked={cfState.enabled}
               onChange={(v) => setCf("enabled", v)}
               label="Enable Laerdal Course Feedback"
+              align="right"
             />
           </div>
 
@@ -1703,7 +1763,7 @@ export function LearnerExperiencePanel({
                           className={LR_INPUT}
                         />
                       </LrField>
-                      <LrField label="Maximum character length">
+                      <LrField label="Maximum character length" help={<LrHelp>Maximum characters allowed (for SCORM 1.2 compatibility, recommended 250 or less)</LrHelp>}>
                         <input
                           type="number"
                           min={0}
@@ -1743,19 +1803,18 @@ export function LearnerExperiencePanel({
                 </div>
               </div>
 
-              {/* Thankyou message */}
+              {/* Thank you message */}
               <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
                 <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Thankyou Message</p>
+                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">THANK YOU MESSAGE</p>
                 </div>
                 <div className="px-4 py-4">
                   <LrField label="Body">
-                    <textarea
+                    <ClickToEditRichText
                       value={cfState.thankYouBody}
-                      onChange={(e) => setCf("thankYouBody", e.target.value)}
+                      onChange={(html) => setCf("thankYouBody", html)}
                       placeholder="e.g. Thank you for your feedback!"
-                      rows={3}
-                      className={LR_TEXTAREA}
+                      courseContext={courseId}
                     />
                   </LrField>
                 </div>
@@ -1763,6 +1822,13 @@ export function LearnerExperiencePanel({
             </>
           )}
         </LeAccordion>
+
+        <div className="flex items-start gap-2.5 rounded-lg bg-[#fff7ed] border border-[#fed7aa] px-4 py-3">
+          <span className="text-base leading-none mt-0.5" aria-hidden="true">💡</span>
+          <p className="text-sm text-[#9a3412] leading-snug">
+            <span className="font-semibold">Tip:</span> Manage learner engagement features including Feedback, AI Tutor, Resources, Notes, and Search. Feedback submissions are reported in Course Insights, while AI Tutor activity is retained in backend logs and available through the ELT team.
+          </p>
+        </div>
 
       </div>
 
@@ -1774,6 +1840,7 @@ export function LearnerExperiencePanel({
       )}
 
       <div className="h-8" />
+      </div>
 
       {!lnLoading && !lsLoading && !cfLoading && !atLoading && hasChanges && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-3 rounded-xl bg-white border border-[var(--life-warning-100)] shadow-lg animate-fade-in-down">

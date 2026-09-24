@@ -1994,6 +1994,68 @@ export async function saveCourseAssessmentSettings(
   });
 }
 
+// ── Adaptive Content ────────────────────────────────────────────────────────
+// The `adapt-adaptiveContent` extension stores course-level settings at
+// `_extensions._adaptiveContent` and includes its own `_isEnabled` flag. Keep
+// the stored settings object when disabled so existing values are not lost.
+const ADAPTIVE_CONTENT_EXTENSION_NAME = "adapt-adaptiveContent";
+
+export interface CourseAdaptiveContentSettings {
+  _isEnabled?: boolean;
+  _shouldSubmitScore?: boolean;
+  _diagnosticAssessmentId?: string;
+  _finalAssessmentId?: string;
+  [key: string]: unknown;
+}
+
+export async function getCourseAdaptiveContentSettings(courseId: string): Promise<CourseAdaptiveContentSettings> {
+  const course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+  const source = obj(obj(course._extensions)._adaptiveContent);
+
+  return {
+    ...source,
+    _isEnabled: bool(source._isEnabled, false),
+    _shouldSubmitScore: bool(source._shouldSubmitScore, true),
+    _diagnosticAssessmentId: str(source._diagnosticAssessmentId, ""),
+    _finalAssessmentId: str(source._finalAssessmentId, ""),
+  };
+}
+
+export async function saveCourseAdaptiveContentSettings(
+  courseId: string,
+  settings: CourseAdaptiveContentSettings,
+): Promise<void> {
+  let course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+  const config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+
+  const shouldEnable = bool(settings._isEnabled, false);
+  const isInstalled = isExtensionInstalledByName(config, ADAPTIVE_CONTENT_EXTENSION_NAME);
+  if (shouldEnable && !isInstalled) {
+    const ids = await resolveExtensionTypeIdsByNames([ADAPTIVE_CONTENT_EXTENSION_NAME]);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/enable/${courseId}`, { extensions: ids });
+      course = await apiClient.get<AnyRecord>(`/api/content/course/${courseId}`);
+    }
+  }
+
+  const existingAdaptiveContent = obj(obj(course._extensions)._adaptiveContent);
+  const nextAdaptiveContent: CourseAdaptiveContentSettings = {
+    ...existingAdaptiveContent,
+    ...settings,
+    _isEnabled: shouldEnable,
+    _shouldSubmitScore: bool(settings._shouldSubmitScore, bool(existingAdaptiveContent._shouldSubmitScore, true)),
+    _diagnosticAssessmentId: str(settings._diagnosticAssessmentId, str(existingAdaptiveContent._diagnosticAssessmentId, "")),
+    _finalAssessmentId: str(settings._finalAssessmentId, str(existingAdaptiveContent._finalAssessmentId, "")),
+  };
+
+  await apiClient.put(`/api/content/course/${courseId}`, {
+    _extensions: {
+      ...obj(course._extensions),
+      _adaptiveContent: nextAdaptiveContent,
+    },
+  });
+}
+
 // ── Estimated Time ───────────────────────────────────────────────────────────
 // The `adapt-estimated-time` extension stores its settings in two places:
 //   • course document `_extensions._estimatedTime` (or root `_estimatedTime`):
@@ -3446,7 +3508,13 @@ export async function getComponentBehaviourSchema(
     });
   }
 
-  return componentTypePropertiesCache[key] ?? {};
+  const availableTypeSchema = componentTypePropertiesCache[key];
+  if (availableTypeSchema) return availableTypeSchema;
+
+  // Deprecated component types are intentionally absent from
+  // /api/componenttype, but an existing course instance must remain editable.
+  const mergedSchema = await fetchMergedComponentSchema(key);
+  return mergedSchema?.properties ?? {};
 }
 
 // ── Extensions accordion (Topic/Section/Content Group/Component) ───────────
@@ -4937,11 +5005,16 @@ export interface DashboardPlugin {
   id: number;
   backendId: string;
   name: string;
+  packageName: string;
   description: string;
   version: string;
   author: string;
+  homepage?: string;
   category: PluginCategory;
   status: PluginStatus;
+  isDeprecated: boolean;
+  isLocalPackage: boolean;
+  isAddedByDefault: boolean;
   installedDate: string;
 }
 
@@ -4952,7 +5025,11 @@ interface EnginePlugin {
   description?: string;
   version?: string;
   author?: string;
+  homepage?: string;
+  isLocalPackage?: boolean;
+  _isAddedByDefault?: boolean;
   _isAvailableInEditor?: boolean;
+  _isDeprecated?: boolean;
   createdAt?: string;
 }
 
@@ -4979,11 +5056,16 @@ export async function getPlugins(category?: PluginCategory | null): Promise<Dash
       id: ++seq,
       backendId: p._id,
       name: p.displayName || p.name || "Unknown",
+      packageName: p.name || "",
       description: p.description || "",
       version: p.version || "",
       author: p.author || "",
+      homepage: p.homepage,
       category: cat,
       status: (p._isAvailableInEditor === false ? "Disabled" : "Enabled") as PluginStatus,
+      isDeprecated: p._isDeprecated === true,
+      isLocalPackage: p.isLocalPackage === true,
+      isAddedByDefault: p._isAddedByDefault === true,
       installedDate: fmtDate(p.createdAt),
     }))
   );
@@ -4997,6 +5079,51 @@ export function setPluginEnabled(
   return apiClient.put(`/api/${PLUGIN_CATEGORY_ENDPOINTS[category]}/${backendId}`, {
     _isAvailableInEditor: enabled,
   });
+}
+
+export function setPluginAddedByDefault(backendId: string, enabled: boolean): Promise<unknown> {
+  return apiClient.put(`/api/extensiontype/${backendId}`, { _isAddedByDefault: enabled });
+}
+
+export async function checkPluginUpdate(
+  category: PluginCategory,
+  backendId: string
+): Promise<boolean> {
+  const result = await apiClient.get<{ isUpdateable?: boolean }>(
+    `/api/${PLUGIN_CATEGORY_ENDPOINTS[category]}/checkversion/${backendId}`
+  );
+  return result.isUpdateable === true;
+}
+
+export function updatePlugin(category: PluginCategory, backendId: string): Promise<unknown> {
+  return apiClient.post(`/api/${PLUGIN_CATEGORY_ENDPOINTS[category]}/update`, { targets: [backendId] });
+}
+
+export async function getPluginUses(
+  category: PluginCategory,
+  backendId: string
+): Promise<Array<{ _id: string; title: string; createdByEmail?: string }>> {
+  const result = await apiClient.get<{ courses?: Array<{ _id: string; title: string; createdByEmail?: string }> }>(
+    `/api/${PLUGIN_CATEGORY_ENDPOINTS[category]}/${backendId}/uses`
+  );
+  return result.courses ?? [];
+}
+
+export function deletePlugin(category: PluginCategory, backendId: string): Promise<unknown> {
+  return apiClient.delete(`/api/${PLUGIN_CATEGORY_ENDPOINTS[category]}/${backendId}`);
+}
+
+export async function uploadPlugin(file: File): Promise<{ pluginType?: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await fetch("/api/upload/contentplugin", {
+    method: "POST",
+    body: formData,
+    credentials: "same-origin",
+  });
+  const result = await response.json().catch(() => ({ message: response.statusText }));
+  if (!response.ok) throw new Error(result.message || "Plugin upload failed");
+  return result;
 }
 
 // ── Storyboard Authoring (ADAPT-3760 / ADAPT-3779) ──────────────────────────
