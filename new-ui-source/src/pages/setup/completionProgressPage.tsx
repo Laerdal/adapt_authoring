@@ -541,7 +541,7 @@ function CompletionRulesContent({
         {cfg.assessmentCompletionEnabled && (
           <div className="px-4 py-4 flex flex-col gap-4">
             <CpCheckbox
-              label="Percentage based"
+              label="Choose whether the pass mark uses a percentage or raw score"
               checked={cfg.assessmentIsPercentageBased}
               onChange={(v) => set("assessmentIsPercentageBased", v)}
             />
