@@ -682,6 +682,17 @@ export async function getThemeTypeVariablesSchemaByName(pluginName: string): Pro
   return variables as Record<string, unknown>;
 }
 
+export async function getThemeTypeVariablesSchemaByLabel(label: string): Promise<Record<string, unknown> | null> {
+  const rows = await getThemeTypes();
+  const match = resolveBestPluginOption(rows, label, "theme");
+  if (!match) return null;
+
+  const pluginName = match.name || match.displayName;
+  if (!pluginName) return null;
+
+  return getThemeTypeVariablesSchemaByName(pluginName);
+}
+
 async function getMenuTypes(): Promise<EnginePluginType[]> {
   const rows = await apiClient.get<EnginePluginType[]>("/api/menutype");
   return Array.isArray(rows) ? rows : [];

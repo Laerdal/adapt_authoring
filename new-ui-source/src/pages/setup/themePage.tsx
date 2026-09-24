@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
-import { saveThemeForCourse, saveThemeVariables, getThemePresets, saveThemePreset, applyThemePreset, getThemePresetParentTheme, renameThemePreset, deleteThemePreset, getThemeTypeVariablesSchemaByName, type ThemePreset } from "../../api/adaptAuthoring";
+import { saveThemeForCourse, saveThemeVariables, getThemePresets, saveThemePreset, applyThemePreset, getThemePresetParentTheme, renameThemePreset, deleteThemePreset, getThemeTypeVariablesSchemaByLabel, type ThemePreset } from "../../api/adaptAuthoring";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import InfoIcon, { InfoFieldLabel } from "../../components/common/InfoIcon";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
@@ -663,12 +663,6 @@ const CUSTOM_ACCORDION_DEFS: CustomSectionDef[] = [
     ],
   },
 ];
-
-const THEME_SCHEMA_PLUGIN_NAMES: Record<string, string> = {
-  life: 'adapt-laerdal-life-v2',
-  custom: 'custom-theme',
-  vanilla: 'adapt-contrib-vanilla',
-};
 
 function getSchemaText(schema: Record<string, unknown> | null | undefined, key: string): string | undefined {
   const value = schema?.[key];
@@ -1428,15 +1422,20 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       };
     }
 
-    const pluginName = THEME_SCHEMA_PLUGIN_NAMES[selected];
-    if (!pluginName) {
+    const themeLabelMap: Record<string, string> = {
+      life: 'LIFE Theme',
+      vanilla: 'Vanilla Theme',
+      custom: 'Custom Theme',
+    };
+    const themeLabel = themeLabelMap[selected];
+    if (!themeLabel) {
       setSelectedThemeSchema(undefined);
       return () => {
         cancelled = true;
       };
     }
 
-    void getThemeTypeVariablesSchemaByName(pluginName)
+    void getThemeTypeVariablesSchemaByLabel(themeLabel)
       .then((schema) => {
         if (!cancelled) setSelectedThemeSchema(schema ?? undefined);
       })
