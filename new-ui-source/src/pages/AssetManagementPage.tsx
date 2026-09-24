@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback, useDeferredValue, memo } from "react";
 import { getAssets, getMaxFileUploadSize, trashAsset, restoreAsset, updateAsset, uploadAsset } from "@/api/adaptAuthoring";
 import type { AssetFormat, DashboardAsset } from "@/api/adaptAuthoring";
+import { usePageLoader } from "@/hooks";
 import AiAssistant from "@/components/common/AiAssistant";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import type { AssetPickerResult, AssetPickerType } from "@/types/assetPicker";
@@ -635,14 +636,20 @@ export function AssetManagementWorkspace({
   hideAssistant = false,
 }: AssetManagementWorkspaceProps) {
   const [assets, setAssets]             = useState<Asset[]>([]);
+  const [isLoadingAssets, setIsLoadingAssets] = useState(true);
   const fixedPickerFormat = pickerMode && pickerAssetType ? pickerAssetType : null;
 
+  usePageLoader(!pickerMode && isLoadingAssets);
+
   const loadAssets = useCallback(async () => {
+    setIsLoadingAssets(true);
     try {
       const rows = await getAssets(!pickerMode);
       setAssets(rows);
     } catch {
       setAssets([]);
+    } finally {
+      setIsLoadingAssets(false);
     }
   }, [pickerMode]);
   useEffect(() => { void loadAssets(); }, [loadAssets]);

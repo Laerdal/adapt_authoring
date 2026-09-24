@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Routes } from './routes'
 import { AuthProvider } from '@/context/AuthContext'
+import { PageTransitionProvider } from '@/context/PageTransitionContext'
 import { logout } from '@/api/adaptAuthoring'
 
 // Match the old UI (frontend/src/modules/user/index.js): log the user out after
@@ -30,7 +31,9 @@ export default function App() {
   useIdleLogout()
   return (
     <AuthProvider>
-      <Routes />
+      <PageTransitionProvider>
+        <Routes />
+      </PageTransitionProvider>
     </AuthProvider>
   )
 }

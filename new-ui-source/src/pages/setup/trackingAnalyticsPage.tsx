@@ -5,6 +5,7 @@ import {
   saveTrackingAnalyticsSettings,
   type TrackingAnalyticsSettings,
 } from "../../api/adaptAuthoring";
+import { usePageLoader } from "../../hooks";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 import { CheckboxIndicator } from "../../components/common/Checkbox";
@@ -970,6 +971,7 @@ export function TrackingAnalyticsPage({
   const [trackingPlugin, setTrackingPlugin] = useState<TrackingPlugin | null>(null);
   const [analyticsPlugin, setAnalyticsPlugin] = useState<AnalyticsPlugin | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  usePageLoader(isLoading);
   const [isSaving, setIsSaving] = useState(false);
   const [savedSnapshot, setSavedSnapshot] = useState<TrackingAnalyticsPageSnapshot>(DEFAULT_SNAPSHOT);
   const [sourceSettings, setSourceSettings] = useState<TrackingAnalyticsSettings>(defaultTrackingAnalyticsSettings());

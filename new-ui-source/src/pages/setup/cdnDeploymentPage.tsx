@@ -14,6 +14,7 @@ import {
   type CdnDeploymentSettings,
   type CdnLinkEntry,
 } from "../../api/adaptAuthoring";
+import { usePageLoader } from "../../hooks";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 import { CheckboxIndicator } from "../../components/common/Checkbox";
@@ -310,6 +311,7 @@ export function CdnDeploymentPage({
   const { user } = useAuth();
 
   const [loading, setLoading] = useState(true);
+  usePageLoader(loading);
   const [cfg, setCfg] = useState<CdnDeploymentSettings | null>(null);
   const [savedSnapshot, setSavedSnapshot] = useState<CdnDeploymentSettings | null>(null);
   const [saving, setSaving] = useState(false);

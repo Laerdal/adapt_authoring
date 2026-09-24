@@ -14,6 +14,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Loader2, PanelLeftOpen, PanelRightOpen } from 'lucide-react';
+import { usePageLoader } from '@/hooks';
 import type {
   ActiveBlockInfo,
   StoryboardDocument,
@@ -202,6 +203,7 @@ export default function StoryboardWorkspace({
   const [booted, setBooted] = useState(false);
   const initialContent = useRef<unknown[]>(STARTER_DOCUMENT);
   const bootstrapped = useRef(false);
+  usePageLoader(sb.loading || !booted);
   // block id → generated content id, for idempotent regeneration (AC11).
   const generatedMap = useRef<Record<string, string>>({});
 

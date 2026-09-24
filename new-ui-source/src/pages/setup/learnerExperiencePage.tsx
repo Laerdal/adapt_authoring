@@ -26,6 +26,7 @@ import {
   type LearningResourcesSettings,
   type LearningResourceFilterText as LrFilterTextHelper,
 } from "../../helpers/learnerExperienceHelper";
+import { usePageLoader } from "../../hooks";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 import { htmlToPlainText } from "../../utils/ckEditorSamaritan";
@@ -725,6 +726,7 @@ export function LearnerExperiencePanel({
   const [lsLoading, setLsLoading] = useState(false);
   const [atLoading, setAtLoading] = useState(false);
   const [cfLoading, setCfLoading] = useState(false);
+  usePageLoader(lrLoading || lnLoading || lsLoading || atLoading || cfLoading);
   const [lnSaving, setLnSaving] = useState(false);
   const [lnToast, setLnToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [lrFieldErrors, setLrFieldErrors] = useState<{ sectionTitle?: string }>({});

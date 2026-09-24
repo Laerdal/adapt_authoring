@@ -32,6 +32,7 @@ import PublishCourseDialog, { type PublishCoursePhase } from "../components/publ
 import ExportDialog from "../components/common/ExportDialog";
 import ErrorDialog from "../components/common/ErrorDialog";
 import { AssetManagementWorkspace } from "./AssetManagementPage";
+import { PageTransitionBoundary, usePageTransition } from "../context/PageTransitionContext";
 import type { AssetPickerRequest, AssetPickerResult } from "../types/assetPicker";
 
 const ICON_BASE = "/new/assets/icons";
@@ -2643,6 +2644,7 @@ function CourseCreationCenterContent() {
   const contentScrollRef = useRef<HTMLElement | null>(null);
   const deferredNavigationActionRef = useRef<(() => void) | null>(null);
   const [assetPickerRequest, setAssetPickerRequest] = useState<SetupAssetPickerRequest | null>(null);
+  const { beginTransition } = usePageTransition();
 
   // Tracks requested navigation when on a panel with unsaved changes
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
@@ -2788,10 +2790,15 @@ function CourseCreationCenterContent() {
       return;
     }
 
+    if (target === activeNav) {
+      return;
+    }
+
     if (target === "export-pdf") {
       setExportPopup(null);
     }
 
+    beginTransition();
     setActiveNav(target);
   }
 
@@ -3122,7 +3129,9 @@ function CourseCreationCenterContent() {
 
         {/* -- Right content panel -- */}
         <main ref={contentScrollRef} className={`flex-1 min-h-0 min-w-0 bg-[#f7f9fb] ${fullCanvasPanels.has(activeNav) || activeNav === "storyboarding" || activeNav === "translation" ? "flex flex-col overflow-hidden" : "overflow-y-auto px-8 py-8"}`}>
-          {renderPanel()}
+          <PageTransitionBoundary key={activeNav}>
+            {renderPanel()}
+          </PageTransitionBoundary>
         </main>
       </div>
 

@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { getTemplates, deleteTemplate, updateTemplate, type TemplateScope } from '@/api/adaptAuthoring'
+import { usePageLoader } from '@/hooks'
 import AiAssistant from '@/components/common/AiAssistant'
 import ConfirmDialog from '@/components/common/ConfirmDialog'
 
@@ -49,9 +50,18 @@ const TYPE_COLORS: Record<TemplateType, { bg: string; text: string }> = {
 
 export default function TemplateManagementPage() {
   const [templates, setTemplates] = useState<Template[]>([])
+  const [loading, setLoading] = useState(true)
   const [scope, setScope] = useState<TemplateScope>('mine')
 
-  const loadTemplates = () => { getTemplates(scope).then(setTemplates).catch(() => setTemplates([])) }
+  usePageLoader(loading)
+
+  const loadTemplates = () => {
+    setLoading(true)
+    getTemplates(scope)
+      .then(setTemplates)
+      .catch(() => setTemplates([]))
+      .finally(() => setLoading(false))
+  }
   useEffect(() => { loadTemplates() }, [scope])
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'All' | TemplateType>('All')
