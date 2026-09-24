@@ -43,6 +43,7 @@ import { isDefaultSchemaTitle, stripPlaceholderHeadings } from './placeholderTit
 import {
   planStoryboardGeneration,
   generateStoryboardCourse,
+  validateStoryboardHierarchy,
   type GenerationPlan,
   type GenerationResult,
 } from '@/api/storyboardGeneration';
@@ -437,6 +438,12 @@ export default function StoryboardWorkspace({
   const handleConfirmImport = async (mode: ImportMode) => {
     if (!importPreview) return;
     const { blocks, fileName } = importPreview;
+    const hierarchyIssues = validateStoryboardHierarchy(blocks as unknown[]);
+    if (hierarchyIssues.length > 0) {
+      flash(`Import blocked — ${hierarchyIssues[0]}`);
+      setImportPreview(null);
+      return;
+    }
     setImportPreview(null);
 
     if (mode === 'reimport') {
@@ -444,6 +451,7 @@ export default function StoryboardWorkspace({
       flash('Updating content…');
       try {
         const result = await applyContentOnlyImport(courseId, blocks);
+        await review.refresh();
         const fresh = await getCourseStoryboardBlocks(courseId);
         if (fresh.length) {
           editorRef.current?.setDocument(fresh);

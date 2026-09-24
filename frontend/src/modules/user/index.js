@@ -10,47 +10,12 @@ define(function(require) {
   var ResetPasswordView = require('./views/resetPasswordView');
   var UserPasswordResetModel = require('./models/userPasswordResetModel');
 
-  var inactivityTimer;
-  var idleTimeLimit = (Origin.constants.maxAge ?  Origin.constants.maxAge : 3600000); // 1 hrs of inactivity before logout or 1 hour by default - if maxAge is not defined.
-
-  // Function to handle user activity and reset inactivity timer
-  function resetInactivityTimer() {
-    if (inactivityTimer) {
-      clearTimeout(inactivityTimer);
-    }
-    inactivityTimer = setTimeout(logoutUser, idleTimeLimit); // Log out after 1 hour of inactivity
-  }
-
-  // Function to log out the user
-  function logoutUser() {
-    console.log("User logged out due to inactivity");
-    Origin.Notify.alert({
-      type: 'error',
-      text: Origin.l10n.t('app.errorsessionexpired')
-    });  
-    Origin.sessionModel.logout();
-  }
-
-  // Listen for various user interactions to reset the inactivity timer
-  document.addEventListener('mousemove', resetInactivityTimer);
-  document.addEventListener('mousedown', resetInactivityTimer);
-  document.addEventListener('scroll', resetInactivityTimer);
-
-  window.addEventListener('scroll', resetInactivityTimer);
-  document.addEventListener('keydown', resetInactivityTimer);
-  window.addEventListener('resize', resetInactivityTimer);
-  
-  window.addEventListener('click', resetInactivityTimer);
-  document.addEventListener('click', resetInactivityTimer);
-  
-  document.addEventListener('touchstart', resetInactivityTimer);
-  document.addEventListener('pointerdown', resetInactivityTimer);
-   
-  document.addEventListener('focus', resetInactivityTimer, true); // Capture the event on the document level
-  document.addEventListener('visibilitychange', resetInactivityTimer);
-
-  // Initializing the inactivity timer when the module loads
-  resetInactivityTimer();
+  // A client-side idle timer used to live here, calling Origin.sessionModel.logout()
+  // (a real `$.post('api/logout')`) after 1hr of no DOM activity on THIS page.
+  // Removed: it destroyed the single shared server session (server-side maxAge
+  // + resave already logs out correctly after 1hr of real inactivity across
+  // BOTH the classic and new UI), so leaving a classic tab open and idle could
+  // silently log a user out of the new UI mid-work with no warning.
 
   // Helper function to check if we should redirect to external authentication
   function shouldUseExternalAuth() {

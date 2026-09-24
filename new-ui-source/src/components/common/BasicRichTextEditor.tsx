@@ -17,7 +17,7 @@
 //   • Formatting uses `document.execCommand`, mirroring the existing
 //     RichTextEditor used inside SetupPage's menu panel.
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import AiAssistPopover from "../storyboard/AiAssistPopover";
 import SamaritanIcon from "../storyboard/SamaritanIcon";
 import { aiResultToHtml, htmlToPlainText, normalizeAssistantText } from "../../utils/ckEditorSamaritan";
@@ -43,6 +43,15 @@ export function normalizeHtmlForEditor(value: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/\r?\n/g, "<br>");
+}
+
+export function shouldSyncEditorHtml(currentHtml: string, incomingHtml: string, isFocused: boolean): boolean {
+  if (isFocused) return false;
+  return normalizeHtmlForEditor(currentHtml) !== normalizeHtmlForEditor(incomingHtml);
+}
+
+export function resolveEditorFontSize(fontSize?: number | string): number | string {
+  return fontSize ?? 14;
 }
 
 export function sanitizeEditorHtml(rawHtml: string): string {
@@ -132,7 +141,7 @@ export function isEditorEmpty(html: string): boolean {
 // ── Component ───────────────────────────────────────────────────────────────
 
 export interface BasicRichTextEditorProps {
-  /** Current HTML value. Only read on mount / remount. */
+  /** Current HTML value. May be refreshed externally after a save/load. */
   html: string;
   /** Called with the latest inner HTML after every user edit. */
   onChange: (html: string) => void;
@@ -146,6 +155,10 @@ export interface BasicRichTextEditorProps {
   ariaLabel?: string;
   /** Optional course context to send to Samaritan when the AI-action is used. */
   courseContext?: string;
+  /** Optional reset token that explicitly remounts the editor surface on external replacement. */
+  resetKey?: string | number;
+  /** Optional text size override for the editable surface. */
+  fontSize?: number | string;
 }
 
 export interface FormatCommand {
@@ -197,50 +210,54 @@ const ListNumberIcon = (
   </svg>
 );
 
-const DEFAULT_COMMANDS: FormatCommand[] = [
-  {
-    cmd: "bold", title: "Bold (Ctrl+B)",
-    icon: (
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" />
-        <path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" />
-      </svg>
-    ),
-  },
-  {
-    cmd: "italic", title: "Italic (Ctrl+I)",
-    icon: (
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <line x1="19" y1="4" x2="10" y2="4" />
-        <line x1="14" y1="20" x2="5" y2="20" />
-        <line x1="15" y1="4" x2="9" y2="20" />
-      </svg>
-    ),
-  },
-  {
-    cmd: "underline", title: "Underline (Ctrl+U)",
-    icon: (
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3" />
-        <line x1="4" y1="21" x2="20" y2="21" />
-      </svg>
-    ),
-  },
-  {
-    cmd: "strikeThrough", title: "Strikethrough",
-    icon: (
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M17.3 12H6.7" />
-        <path d="M10 7.5C10 6.1 11.1 5 12.5 5c1 0 1.9.6 2.3 1.5" />
-        <path d="M6 16.5C6 17.9 7.1 19 8.5 19h5.5a3 3 0 0 0 0-6H6" />
-      </svg>
-    ),
-  },
-  { cmd: "subscript", title: "Subscript", icon: SubscriptIcon },
-  { cmd: "superscript", title: "Superscript", icon: SuperscriptIcon },
-  { cmd: "insertUnorderedList", title: "Bullet list", icon: ListBulletIcon },
-  { cmd: "insertOrderedList", title: "Numbered list", icon: ListNumberIcon },
-];
+export function getDefaultEditorCommands(): FormatCommand[] {
+  return [
+    {
+      cmd: "bold", title: "Bold (Ctrl+B)",
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" />
+          <path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" />
+        </svg>
+      ),
+    },
+    {
+      cmd: "italic", title: "Italic (Ctrl+I)",
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="19" y1="4" x2="10" y2="4" />
+          <line x1="14" y1="20" x2="5" y2="20" />
+          <line x1="15" y1="4" x2="9" y2="20" />
+        </svg>
+      ),
+    },
+    {
+      cmd: "underline", title: "Underline (Ctrl+U)",
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3" />
+          <line x1="4" y1="21" x2="20" y2="21" />
+        </svg>
+      ),
+    },
+    {
+      cmd: "strikeThrough", title: "Strikethrough",
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M17.3 12H6.7" />
+          <path d="M10 7.5C10 6.1 11.1 5 12.5 5c1 0 1.9.6 2.3 1.5" />
+          <path d="M6 16.5C6 17.9 7.1 19 8.5 19h5.5a3 3 0 0 0 0-6H6" />
+        </svg>
+      ),
+    },
+    { cmd: "subscript", title: "Subscript", icon: SubscriptIcon },
+    { cmd: "superscript", title: "Superscript", icon: SuperscriptIcon },
+    { cmd: "insertUnorderedList", title: "Bullet list", icon: ListBulletIcon },
+    { cmd: "insertOrderedList", title: "Numbered list", icon: ListNumberIcon },
+  ];
+}
+
+const DEFAULT_COMMANDS: FormatCommand[] = getDefaultEditorCommands();
 
 // Commands whose active state we mirror in the toolbar.
 const TOGGLE_COMMANDS = new Set([
@@ -260,10 +277,13 @@ export default function BasicRichTextEditor({
   extraCommands,
   ariaLabel,
   courseContext,
+  resetKey,
+  fontSize,
 }: BasicRichTextEditorProps) {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const selectionRangeRef = useRef<Range | null>(null);
+  const lastResetKeyRef = useRef<string | number | undefined>(resetKey);
   const [focused, setFocused] = useState(false);
   const [toolbarVisible, setToolbarVisible] = useState(false);
   const [samaritanOpen, setSamaritanOpen] = useState(false);
@@ -272,11 +292,28 @@ export default function BasicRichTextEditor({
 
   const initRef = useCallback((node: HTMLDivElement | null) => {
     editorRef.current = node;
-    if (node) node.innerHTML = normalizeHtmlForEditor(html);
-    // Only run when the node mounts; `html` is intentionally excluded so we
-    // don't stomp on the caret while typing. Parent should bump `key` to reset.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (node && node.dataset.editorInitialized !== "true") {
+      node.dataset.editorInitialized = "true";
+      node.innerHTML = normalizeHtmlForEditor(html);
+    }
   }, []);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+
+    const normalizedHtml = normalizeHtmlForEditor(html);
+    const shouldReset = resetKey !== undefined && resetKey !== lastResetKeyRef.current;
+    const shouldRefresh = shouldSyncEditorHtml(editor.innerHTML, normalizedHtml, focused);
+
+    if (shouldReset || shouldRefresh) {
+      editor.innerHTML = normalizedHtml;
+    }
+
+    if (resetKey !== undefined) {
+      lastResetKeyRef.current = resetKey;
+    }
+  }, [focused, html, resetKey]);
 
   const syncFormats = useCallback(() => {
     if (typeof document === "undefined") return;
@@ -419,7 +456,7 @@ export default function BasicRichTextEditor({
 
   const containerStyle: React.CSSProperties = {
     fontFamily: '"Lato", sans-serif',
-    fontSize: 14,
+    fontSize: resolveEditorFontSize(fontSize),
     color: "var(--life-base-black)",
     background: disabled ? "var(--life-neutral-050)" : "#ffffff",
     border: `1px solid ${focused ? "var(--life-primary-500)" : "var(--life-neutral-400)"}`,
@@ -587,7 +624,7 @@ export default function BasicRichTextEditor({
           textAlign: "left",
           lineHeight: 1.5,
           fontFamily: "inherit",
-          fontSize: 14,
+          fontSize: resolveEditorFontSize(fontSize),
           color: "var(--life-base-black)",
         }}
       />

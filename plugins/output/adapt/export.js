@@ -183,7 +183,10 @@ function copyFrameworkFiles(results, filesCopied) {
       return filesCopied(error);
     }
     const includesRE = new RegExp(includes.map(i => `\/${i}(\/|$)`).join('|'));
-    const excludesRE = new RegExp(/\.git\b|\.DS_Store|\/node_modules|\/courses\b|\/course\b(?!\.)|\/exports\b/);
+    // studio-shells: routes/studio/index.js's cached framework shells, keyed by
+    // theme/menu/plugin fingerprint and shared across every course - engine-side
+    // build cache, not course content, and never read back on import.
+    const excludesRE = new RegExp(/\.git\b|\.DS_Store|\/node_modules|\/courses\b|\/course\b(?!\.)|\/exports\b|\/studio-shells\b/);
     const pluginsRE = new RegExp('\/components\/|\/extensions\/|\/menu\/|\/theme\/');
 
     fs.copy(FRAMEWORK_ROOT_DIR, EXPORT_DIR, {
