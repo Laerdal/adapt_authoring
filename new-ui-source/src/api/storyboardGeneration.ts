@@ -692,6 +692,55 @@ export function pruneEmptyContainers(topics: GenTopic[]): void {
   }
 }
 
+/** Warn when the document tries to skip required hierarchy levels. The parser
+ * intentionally fills missing parents (Topic/Section/Content Group) so legacy
+ * docs still generate, but every explicit heading should follow the intended
+ * Course → Topic → Article → Block → Component ladder. */
+export function validateStoryboardHierarchy(doc: unknown[]): string[] {
+  const issues: string[] = [];
+  let seenTopic = false;
+  let seenSection = false;
+  let seenGroup = false;
+
+  for (const raw of doc as GenBlock[]) {
+    if (raw.type !== "heading") continue;
+    const level = Number(raw.props?.level ?? 1);
+    const title = inlineToText(raw.content).trim() || "Untitled";
+
+    if (!Number.isInteger(level) || level < 1 || level > 4) {
+      issues.push(`Unsupported heading level ${level} for "${title}" — storyboard headings must stay within H1–H4.`);
+      continue;
+    }
+
+    if (level === 1) {
+      seenTopic = true;
+      seenSection = false;
+      seenGroup = false;
+      continue;
+    }
+
+    if (level === 2) {
+      if (!seenTopic) issues.push(`H2 heading "${title}" appears before any H1 Topic. Add a Topic heading first.`);
+      seenSection = true;
+      seenGroup = false;
+      continue;
+    }
+
+    if (level === 3) {
+      if (!seenTopic) issues.push(`H3 heading "${title}" appears before any H1 Topic. Add a Topic heading first.`);
+      if (!seenSection) issues.push(`H3 heading "${title}" is missing its parent H2 section. Add a Section heading before it.`);
+      seenGroup = true;
+      continue;
+    }
+
+    if (!seenTopic) issues.push(`H4 heading "${title}" appears before any H1 Topic. Add a Topic heading first.`);
+    if (!seenSection) issues.push(`H4 heading "${title}" is missing its parent H2 section. Add a Section heading before it.`);
+    if (!seenGroup) issues.push(`H4 heading "${title}" is missing its parent H3 content group. Add a Content Group heading before it.`);
+  }
+
+  return issues;
+}
+
 async function fetchCourseIndex(courseId: string) {
   const [contentObjects, articles, blocks, components] = await Promise.all([
     getContentByCourse("contentobject", courseId),
@@ -764,6 +813,8 @@ export async function planStoryboardGeneration(
 
   const issues: string[] = [];
   const warnings: string[] = [];
+  const hierarchyIssues = validateStoryboardHierarchy(doc);
+  if (hierarchyIssues.length) issues.push(...hierarchyIssues);
   if (tree.length === 0) {
     issues.push(
       hadTopicsBeforePruning
@@ -797,6 +848,11 @@ export async function generateStoryboardCourse(
   generatedContentMap: Record<string, string> = {},
   options: { skipDeletes?: boolean } = {}
 ): Promise<GenerationResult> {
+  const hierarchyIssues = validateStoryboardHierarchy(doc);
+  if (hierarchyIssues.length > 0) {
+    throw new Error(hierarchyIssues.join(' '));
+  }
+
   const [index, availableTypes] = await Promise.all([fetchCourseIndex(courseId), getAvailableComponents()]);
   const { resolve } = makeResolver(index as never, generatedContentMap);
   const tree = parseDocToTree(doc, resolve);

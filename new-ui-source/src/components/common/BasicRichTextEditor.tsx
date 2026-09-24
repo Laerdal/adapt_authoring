@@ -197,50 +197,54 @@ const ListNumberIcon = (
   </svg>
 );
 
-const DEFAULT_COMMANDS: FormatCommand[] = [
-  {
-    cmd: "bold", title: "Bold (Ctrl+B)",
-    icon: (
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" />
-        <path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" />
-      </svg>
-    ),
-  },
-  {
-    cmd: "italic", title: "Italic (Ctrl+I)",
-    icon: (
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <line x1="19" y1="4" x2="10" y2="4" />
-        <line x1="14" y1="20" x2="5" y2="20" />
-        <line x1="15" y1="4" x2="9" y2="20" />
-      </svg>
-    ),
-  },
-  {
-    cmd: "underline", title: "Underline (Ctrl+U)",
-    icon: (
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3" />
-        <line x1="4" y1="21" x2="20" y2="21" />
-      </svg>
-    ),
-  },
-  {
-    cmd: "strikeThrough", title: "Strikethrough",
-    icon: (
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M17.3 12H6.7" />
-        <path d="M10 7.5C10 6.1 11.1 5 12.5 5c1 0 1.9.6 2.3 1.5" />
-        <path d="M6 16.5C6 17.9 7.1 19 8.5 19h5.5a3 3 0 0 0 0-6H6" />
-      </svg>
-    ),
-  },
-  { cmd: "subscript", title: "Subscript", icon: SubscriptIcon },
-  { cmd: "superscript", title: "Superscript", icon: SuperscriptIcon },
-  { cmd: "insertUnorderedList", title: "Bullet list", icon: ListBulletIcon },
-  { cmd: "insertOrderedList", title: "Numbered list", icon: ListNumberIcon },
-];
+export function getDefaultEditorCommands(): FormatCommand[] {
+  return [
+    {
+      cmd: "bold", title: "Bold (Ctrl+B)",
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" />
+          <path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z" />
+        </svg>
+      ),
+    },
+    {
+      cmd: "italic", title: "Italic (Ctrl+I)",
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="19" y1="4" x2="10" y2="4" />
+          <line x1="14" y1="20" x2="5" y2="20" />
+          <line x1="15" y1="4" x2="9" y2="20" />
+        </svg>
+      ),
+    },
+    {
+      cmd: "underline", title: "Underline (Ctrl+U)",
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3" />
+          <line x1="4" y1="21" x2="20" y2="21" />
+        </svg>
+      ),
+    },
+    {
+      cmd: "strikeThrough", title: "Strikethrough",
+      icon: (
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M17.3 12H6.7" />
+          <path d="M10 7.5C10 6.1 11.1 5 12.5 5c1 0 1.9.6 2.3 1.5" />
+          <path d="M6 16.5C6 17.9 7.1 19 8.5 19h5.5a3 3 0 0 0 0-6H6" />
+        </svg>
+      ),
+    },
+    { cmd: "subscript", title: "Subscript", icon: SubscriptIcon },
+    { cmd: "superscript", title: "Superscript", icon: SuperscriptIcon },
+    { cmd: "insertUnorderedList", title: "Bullet list", icon: ListBulletIcon },
+    { cmd: "insertOrderedList", title: "Numbered list", icon: ListNumberIcon },
+  ];
+}
+
+const DEFAULT_COMMANDS: FormatCommand[] = getDefaultEditorCommands();
 
 // Commands whose active state we mirror in the toolbar.
 const TOGGLE_COMMANDS = new Set([

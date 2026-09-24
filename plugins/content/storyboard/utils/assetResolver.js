@@ -337,6 +337,14 @@ async function _lookupTenantName(tenantId) {
   }
 }
 
+function normalizeDocxImageType(rawType) {
+  const type = String(rawType || '').trim().toLowerCase().replace(/^image\//, '');
+  if (type === 'svg+xml') return 'svg';
+  if (type === 'jpeg') return 'jpg';
+  if (['png', 'jpg', 'gif', 'bmp', 'svg'].includes(type)) return type;
+  return type || 'png';
+}
+
 // Map an asset record's mime type to the `type` string docx expects.
 function docxImageType(mimeType, filename) {
   const m = String(mimeType || '').toLowerCase();
@@ -383,13 +391,56 @@ function resolveDataUri(link, alt) {
   const buffer = Buffer.from(m[2], 'base64');
   if (!buffer.length) return null;
   const { width, height } = sizeFromBuffer(buffer);
-  const type = m[1].toLowerCase() === 'jpeg' ? 'jpg' : m[1].toLowerCase();
+  const type = normalizeDocxImageType(m[1]);
   return { buffer, type, width, height, alt: String(alt || '') };
 }
 
 // Given a stored media/image ref, resolve to `{ buffer, type, width, height,
 // alt }` or `null` if the asset isn't reachable (external URL, deleted, no
 // permission). Preserves aspect ratio, capped at MAX_WIDTH_PX.
+function normalizeCourseAssetLink(link) {
+  if (!link) return '';
+  return String(link).trim().replace(/^\/+/, '').replace(/^course\/assets\//i, '');
+}
+
+function safeDecodeURIComponent(value) {
+  try {
+    return decodeURIComponent(value);
+  } catch (e) {
+    return value;
+  }
+}
+
+async function findCourseAssetRecord(link, ctx) {
+  if (!link) return null;
+  const normalized = normalizeCourseAssetLink(link);
+  if (!normalized) return null;
+
+  const candidates = new Set();
+  const variants = [
+    normalized,
+    safeDecodeURIComponent(normalized),
+    encodeURIComponent(normalized),
+    safeDecodeURIComponent(normalized.replace(/^\/+/, '')),
+  ];
+  for (const variant of variants) {
+    if (!variant) continue;
+    candidates.add(variant);
+    const base = variant.split(/[?#]/)[0];
+    if (base && base !== variant) candidates.add(base);
+  }
+
+  for (const filename of candidates) {
+    const rec = await retrieveAsset({ filename }, ctx);
+    if (rec) return rec;
+    const pathLike = await retrieveAsset({ path: { $regex: new RegExp(`(?:^|[\\/])${filename.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } }, ctx);
+    if (pathLike) return pathLike;
+  }
+
+  const raw = await retrieveAsset({ path: { $regex: new RegExp(`(?:^|[\\/])${normalizeCourseAssetLink(link).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } }, ctx);
+  return raw || null;
+}
+
 async function resolveImageRef(ref, ctx) {
   if (!ref || typeof ref !== 'object') return null;
   const link = String(ref.link || '');
@@ -401,8 +452,9 @@ async function resolveImageRef(ref, ctx) {
   let assetRec = null;
   if (assetId) assetRec = await retrieveAsset({ _id: assetId }, ctx);
   if (!assetRec && link.startsWith(COURSE_ASSETS_PREFIX)) {
-    const filename = link.slice(COURSE_ASSETS_PREFIX.length);
-    if (filename) assetRec = await retrieveAsset({ filename }, ctx);
+    assetRec = await findCourseAssetRecord(link, ctx);
+  } else if (!assetRec && link.startsWith('/' + COURSE_ASSETS_PREFIX)) {
+    assetRec = await findCourseAssetRecord(link.replace(/^\/+/, ''), ctx);
   }
   if (!assetRec) return null;
 
@@ -423,10 +475,35 @@ async function resolveImageRef(ref, ctx) {
 // Accept either a full ref object (`{ link, assetId, alt }`) or a bare link
 // string — the emitCard-side data has been through a couple of iterations so
 // keep back-compat.
+async function normalizeImageForEmbedding(resolved) {
+  if (!resolved || !resolved.buffer) return resolved;
+  const type = String(resolved.type || '').toLowerCase();
+  if (type !== 'svg' && type !== 'svg+xml') return resolved;
+  try {
+    const sharp = require('sharp');
+    const png = await sharp(resolved.buffer).png().toBuffer();
+    return {
+      ...resolved,
+      buffer: png,
+      type: 'png',
+      width: Math.max(1, Number(resolved.width) || FALLBACK_WIDTH),
+      height: Math.max(1, Number(resolved.height) || FALLBACK_HEIGHT),
+    };
+  } catch (e) {
+    return {
+      ...resolved,
+      buffer: Buffer.from(resolved.buffer),
+      type: 'svg',
+      width: Math.max(1, Number(resolved.width) || FALLBACK_WIDTH),
+      height: Math.max(1, Number(resolved.height) || FALLBACK_HEIGHT),
+    };
+  }
+}
+
 async function resolveAnyImage(input, ctx) {
   if (!input) return null;
   if (typeof input === 'string') return resolveImageRef({ link: input }, ctx);
   return resolveImageRef(input, ctx);
 }
 
-module.exports = { resolveImageRef, resolveAnyImage };
+module.exports = { resolveImageRef, resolveAnyImage, normalizeImageForEmbedding };

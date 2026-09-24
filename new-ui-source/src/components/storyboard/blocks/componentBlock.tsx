@@ -34,6 +34,8 @@ import { storyboardActions } from '../storyboardActions';
 import { resolveCommentAnchor } from '../commentAnchor';
 import type { AssetKind } from '@/api/adaptAuthoring';
 import AssetPickerModal from '@/components/common/AssetPickerModal';
+import { BasicRichTextEditor } from '@/components/common';
+import { sanitizeEditorHtml } from '@/components/common/BasicRichTextEditor';
 import { CheckboxIndicator } from '@/components/common/Checkbox';
 import { emptyMediaData, safePreviewSrc, toEmbedUrl, type AssetRef, type ImageData, type MediaData } from '../mediaMapping';
 import SamaritanIcon from '../SamaritanIcon';
@@ -392,7 +394,13 @@ function ComponentBody({ kind, data, set }: { kind: ComponentKind; data: Compone
     return (
       <div>
         <span className={labelCls}>Description</span>
-        <textarea value={data.description} onKeyDown={stop} onChange={(e) => set({ ...data, description: e.target.value })} rows={2} placeholder="New component content…" className={`${inputCls} resize-y`} />
+        <BasicRichTextEditor
+          html={data.description}
+          onChange={(html) => set({ ...data, description: html })}
+          placeholder="New component content…"
+          minHeight={110}
+          ariaLabel="Component description"
+        />
       </div>
     );
   }
@@ -663,11 +671,15 @@ function ComponentPreview({ kind, title, data }: { kind: ComponentKind; title: s
   const instruction = data.instruction ? <p className="mt-2 text-sm italic text-muted-foreground">{data.instruction}</p> : null;
 
   if (kind === 'text') {
+    const descriptionHtml = sanitizeEditorHtml(data.description);
     return (
       <div>
         {heading}
-        {data.description ? (
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{data.description}</p>
+        {descriptionHtml ? (
+          <div
+            className="text-sm leading-relaxed text-foreground"
+            dangerouslySetInnerHTML={{ __html: descriptionHtml }}
+          />
         ) : (
           <p className="text-sm italic text-muted-foreground">No content yet — click Edit to add some.</p>
         )}

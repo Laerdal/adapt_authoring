@@ -41,7 +41,7 @@ import {
 } from '@/types/storyboard';
 import { storyboardSchema } from './schema';
 import { makeComponentBlock, isComponentKind, type ComponentKind } from './blocks/componentBlock';
-import { inlineText, resolveCommentAnchor } from './commentAnchor';
+import { inlineText, resolveCommentAnchor, resolveInsertionAnchor } from './commentAnchor';
 
 // Toggle button for the subscript/superscript styles added to storyboardSchema
 // (schema.ts) — BlockNote's own BasicTextStyleButton can't be reused here: its
@@ -208,13 +208,16 @@ function BlockNoteStoryboardEditorImpl(
 
   const insert = useCallback(
     (kind: StoryboardInsertKind, opts?: { level?: number; afterId?: string }) => {
-      // Anchor after the given block id when supplied (the workspace's last
-      // known active/selected block) rather than the editor's live
-      // text-cursor position, which BlockNote can no longer resolve reliably
-      // once focus has moved to a toolbar dropdown — that previously caused
-      // content to land in the wrong place ("adding where I click" instead of
-      // after the block the author was actually working on).
-      const anchorBlock = (opts?.afterId && editor.getBlock(opts.afterId)) || editor.getTextCursorPosition().block;
+      // Anchor to the end of the current structural section (Topic/Section/
+      // Content Group) instead of the raw cursor block. The preferred anchor is
+      // the workspace's last active block; when it is stale or absent, the
+      // fallback is the last block of the current container or the end of the
+      // document. This keeps inserts from landing in the middle of authored
+      // content after focus has moved to a toolbar item.
+      const preferredAnchorId = opts?.afterId && editor.getBlock(opts.afterId) ? opts.afterId : undefined;
+      const anchorId = resolveInsertionAnchor(editor.document, preferredAnchorId);
+      const cursorBlock = editor.getTextCursorPosition().block;
+      const anchorBlock = anchorId ? editor.getBlock(anchorId) ?? cursorBlock : cursorBlock;
       const inserted = editor.insertBlocks(
         [blockForKind(kind, opts?.level) as never],
         anchorBlock,
@@ -231,7 +234,10 @@ function BlockNoteStoryboardEditorImpl(
   const insertComponent = useCallback(
     (kind: StoryboardInsertKind, opts?: { title?: string; data?: Record<string, unknown>; afterId?: string }): string | null => {
       if (!isComponentKind(kind)) return null;
-      const anchorBlock = (opts?.afterId && editor.getBlock(opts.afterId)) || editor.getTextCursorPosition().block;
+      const preferredAnchorId = opts?.afterId && editor.getBlock(opts.afterId) ? opts.afterId : undefined;
+      const anchorId = resolveInsertionAnchor(editor.document, preferredAnchorId);
+      const cursorBlock = editor.getTextCursorPosition().block;
+      const anchorBlock = anchorId ? editor.getBlock(anchorId) ?? cursorBlock : cursorBlock;
       const inserted = editor.insertBlocks(
         [makeComponentBlock(kind as ComponentKind, opts) as never],
         anchorBlock,
