@@ -389,7 +389,7 @@ function TranscriptFields({ kind, media, set }: { kind: 'video' | 'audio'; media
   );
 }
 
-function ComponentBody({ kind, data, set }: { kind: ComponentKind; data: ComponentData; set: (d: ComponentData) => void }) {
+function ComponentBody({ kind, data, set, blockId }: { kind: ComponentKind; data: ComponentData; set: (d: ComponentData) => void; blockId: string }) {
   if (kind === 'text') {
     return (
       <div>
@@ -400,6 +400,7 @@ function ComponentBody({ kind, data, set }: { kind: ComponentKind; data: Compone
           placeholder="New component content…"
           minHeight={110}
           ariaLabel="Component description"
+          resetKey={blockId}
         />
       </div>
     );
@@ -938,7 +939,7 @@ export const componentBlock = createReactBlockSpec(
           </div>
 
           {/* Body */}
-          <ComponentBody kind={kind} data={model} set={setData} />
+          <ComponentBody kind={kind} data={model} set={setData} blockId={block.id} />
 
           {/* Instruction */}
           <label className="mt-2 block">

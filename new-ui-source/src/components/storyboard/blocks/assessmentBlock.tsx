@@ -617,6 +617,7 @@ export const assessmentBlock = createReactBlockSpec(
               placeholder="Type the question here"
               minHeight={90}
               ariaLabel="Question body"
+              resetKey={block.id}
             />
           </label>
 
