@@ -100,7 +100,7 @@ interface PreviewBuildResponse {
 
 const ICON_BASE = "/new/assets/icons";
 const RIGHT_PANEL_MIN_WIDTH = 300;
-const RIGHT_PANEL_MAX_EXPANSION_RATIO = 0.1;
+const RIGHT_PANEL_MAX_EXPANSION_RATIO = 0.5;
 
 function MaskIcon({ file, className }: { file: string; className?: string }) {
   const iconPath = `${ICON_BASE}/${file}`;
@@ -1371,7 +1371,7 @@ function ExtensionListItem({
         </button>
       </div>
       {open && !!settingsKeys.length && (
-        <div className="px-3 pb-3 pt-2.5 border-t border-[#eef2f6] flex flex-col gap-2.5">
+        <div className="extension-settings-content px-3 pb-3 pt-2.5 border-t border-[#eef2f6] flex flex-col gap-2.5 text-[12px]">
           {settingsKeys.map((fieldKey) => {
             const childSchema = settingsFields[fieldKey] as BehaviourFieldSchema;
             if (!childSchema || typeof childSchema !== "object") return null;
@@ -7910,6 +7910,13 @@ export default function CourseEditor({
         return;
       }
 
+      // Let real course dialogs handle their own controls (especially the
+      // framework notify close button) instead of treating those clicks as
+      // canvas selection gestures.
+      if (target.closest(".notify, [role='dialog'], [aria-modal='true'], [data-modal], [data-overlay]")) {
+        return;
+      }
+
       const swapBtn = target.closest("[data-preview-swap-positions-btn]") as HTMLElement | null;
       if (swapBtn) {
         event.preventDefault();
@@ -11429,7 +11436,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                     <button
                       type="button"
                       onClick={() => setRightPanelOpen(false)}
-                      className="sticky top-0 z-10 w-full h-[56px] shrink-0 border-b border-[#d8dee6] bg-white px-3.5 flex items-center gap-2 text-[#3b4753]"
+                      className="w-full h-[56px] shrink-0 border-b border-[#d8dee6] bg-white px-3.5 flex items-center gap-2 text-[#3b4753]"
                       aria-label="Collapse properties"
                       title="Collapse properties"
                     >
@@ -11572,6 +11579,17 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                     onChange={onChange}
                                     courseButtons={navFooterCourseButtons}
                                   />
+                                ) : extensionName === "adapt-scroll-navigator" && fieldKey === "_isAnimate" ? (
+                                  <div className="flex flex-col gap-1.5">
+                                    <TopicCheckbox
+                                      label="Is animated"
+                                      checked={Boolean(value)}
+                                      onChange={(checked) => onChange(fieldKey, checked)}
+                                    />
+                                    <p className="pl-6 text-[11px] leading-relaxed text-[#6b7280]">
+                                      Enable pulsing animation on both navigator buttons (runs for a limited time).
+                                    </p>
+                                  </div>
                                 ) : null
                               }
                               getInheritanceTag={(key) =>

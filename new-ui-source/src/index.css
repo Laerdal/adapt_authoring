@@ -354,6 +354,15 @@ html, body {
 .rich-text-editor-field .ck.ck-editor {
   width: 100%;
 }
+/* Right-panel editors live inside the panel's own scroll container. Keep the
+   toolbar in normal flow so focusing the editable area cannot make it detach
+   and pin itself while the panel scrolls. */
+.rich-text-editor-field .ck-sticky-panel,
+.rich-text-editor-field .ck-sticky-panel__content {
+  position: static !important;
+  top: auto !important;
+  width: 100% !important;
+}
 .rich-text-editor-field .ck.ck-toolbar {
   width: 100%;
   box-sizing: border-box;
@@ -367,6 +376,8 @@ html, body {
 .rich-text-editor-field .ck.ck-toolbar .ck-button {
   border-radius: 4px;
   color: var(--life-primary-700);
+  min-height: 26px;
+  padding: 2px 4px;
 }
 .rich-text-editor-field .ck.ck-toolbar .ck-button:hover:not(.ck-disabled),
 .rich-text-editor-field .ck.ck-toolbar .ck-button.ck-on {
@@ -374,8 +385,8 @@ html, body {
   color: var(--life-primary-700) !important;
 }
 .rich-text-editor-field .ck.ck-toolbar .ck-button__icon {
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
 }
 .rich-text-editor-field .ck.ck-toolbar .ck-button__icon[viewBox="0 0 20 20"],
 .rich-text-editor-field .ck.ck-toolbar .ck-button__icon[viewBox="0 0 115.28 122.88"] {
@@ -398,6 +409,12 @@ html, body {
 .rich-text-editor-field .ck.ck-button.ck-button_with-text .ck-button__label {
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* Extension setting fields use one compact 12px scale, but CKEditor's own
+   toolbar/content styles must remain in control of the editor surface. */
+.extension-settings-content *:not(.rich-text-editor-field):not(.rich-text-editor-field *) {
+  font-size: 12px !important;
 }
 
 /* ────────────────────────────────────────────────────────────────────

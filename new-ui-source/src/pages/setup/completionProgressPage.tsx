@@ -747,12 +747,12 @@ function ProgressBarStylePicker({
     {
       value: "continuous",
       label: "Continuous bar",
-      description: "A single bar spanning the full width beneath the navigation bar.",
+      description: "A single bar spanning the full width beneath the navigation bar. (Laerdal Page Level Progress)",
     },
     {
       value: "compact",
       label: "Compact indicator",
-      description: "A small pill-shaped progress indicator inside the navigation bar.",
+      description: "A small pill-shaped progress indicator inside the navigation bar. (Page Level Progress)",
     },
   ];
   return (

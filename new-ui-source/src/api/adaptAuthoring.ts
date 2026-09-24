@@ -361,8 +361,10 @@ export interface CourseQuery {
 // indexed, so it settles ties; ObjectId is ~creation-ordered (newest-first = -1).
 const SORT_OPERATORS: Record<CourseSort, Array<[string, string]>> = {
   recent:       [["updatedAt", "-1"], ["_id", "-1"]],
-  "alpha-asc":  [["title", "1"],  ["_id", "1"]],
-  "alpha-desc": [["title", "-1"], ["_id", "1"]],
+  // The dashboard displays displayTitle; sorting by the internal title makes
+  // copied courses appear in the wrong alphabetical position.
+  "alpha-asc":  [["displayTitle", "1"],  ["_id", "1"]],
+  "alpha-desc": [["displayTitle", "-1"], ["_id", "1"]],
 };
 
 // Escape regex metacharacters so the server's `new RegExp(term, 'i')` treats the
