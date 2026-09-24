@@ -1079,7 +1079,6 @@ const ON_SCREEN_CLASS_OPTIONS = [
 function LifeListField({
   title,
   description,
-  titleHint,
   items,
   errors,
   onAdd,
@@ -1093,7 +1092,6 @@ function LifeListField({
 }: {
   title: string;
   description: string;
-  titleHint?: string;
   items: Array<LifeSpriteSheet | LifeSingleIcon>;
   errors: LifeListItemErrors[];
   onAdd: () => void;
@@ -1110,7 +1108,6 @@ function LifeListField({
       <div>
         <InfoFieldLabel
           label={title}
-          hint={titleHint}
           className="mb-1.5"
         />
         <p className="text-xs text-[#6b7280] leading-relaxed">{description}</p>
@@ -2435,7 +2432,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                   <LifeListField
                     title={getSchemaText(getSchemaField(selectedThemeSchema, '_course', '_svgSpriteSheets'), 'title') ?? 'Custom Icons: Sprite Sheets'}
                     description={getSchemaText(getSchemaField(selectedThemeSchema, '_course', '_svgSpriteSheets'), 'help') ?? 'Add a reference to an external sprite sheet with icons that can be used in the course.'}
-                    titleHint={getSchemaText(getSchemaField(selectedThemeSchema, '_course', '_svgSpriteSheets'), 'help')}
                     items={lifeCourseConfig._svgSpriteSheets}
                     errors={lifeCourseConfigErrors._svgSpriteSheets}
                     idLabel={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_svgSpriteSheets'), '_spriteSheetId', 'title') ?? 'Icon Set Name'}
@@ -2470,7 +2466,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                   <LifeListField
                     title={getSchemaText(getSchemaField(selectedThemeSchema, '_course', '_singleIcons'), 'title') ?? 'Custom Icons: Single Icons'}
                     description={getSchemaText(getSchemaField(selectedThemeSchema, '_course', '_singleIcons'), 'help') ?? 'Add a reference to an external individual icon that can be used in the course.'}
-                    titleHint={getSchemaText(getSchemaField(selectedThemeSchema, '_course', '_singleIcons'), 'help')}
                     items={lifeCourseConfig._singleIcons}
                     errors={lifeCourseConfigErrors._singleIcons}
                     idLabel={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_singleIcons'), 'iconId', 'title') ?? 'Icon Id'}
@@ -2566,7 +2561,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         {selected !== "vanilla" && (
           <ThemeAccordion
             label={getSchemaText(selectedThemeComponentSchema, 'title') ?? 'Configuration: Components'}
-            hint={getSchemaText(selectedThemeComponentSchema, 'help')}
             isOpen={isLifeTheme || activeAccordion === "Configuration: Components"}
             onToggle={() => {
               if (isLifeTheme) return;
