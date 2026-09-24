@@ -7,9 +7,11 @@ export { default as ErrorDialog } from "./ErrorDialog";
 export { default as InfoIcon, InfoFieldLabel } from "./InfoIcon";
 export {
   default as BasicRichTextEditor,
+  getDefaultEditorCommands,
   isEditorEmpty,
   isProbablyHtml,
   normalizeHtmlForEditor,
+  sanitizeEditorHtml,
   type BasicRichTextEditorProps,
   type FormatCommand,
 } from "./BasicRichTextEditor";

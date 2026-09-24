@@ -269,8 +269,9 @@ function pushTextParagraphs(children, text, opts) {
 // back to a bracketed text reference if resolution failed (external URL, etc.).
 async function pushImageRef(children, ref, label, ctx) {
   try {
-    const resolved = await assetResolver.resolveAnyImage(ref, ctx);
+    let resolved = await assetResolver.resolveAnyImage(ref, ctx);
     if (resolved) {
+      resolved = await assetResolver.normalizeImageForEmbedding(resolved) || resolved;
       children.push(
         new Paragraph({
           spacing: { before: 120, after: 120 },
@@ -790,7 +791,8 @@ const PDF_HEADING_SIZE = { 1: 20, 2: 16, 3: 14, 4: 12 };
 
 async function resolveForPdf(ref, ctx) {
   try {
-    return await assetResolver.resolveAnyImage(ref, ctx);
+    const resolved = await assetResolver.resolveAnyImage(ref, ctx);
+    return resolved ? await assetResolver.normalizeImageForEmbedding(resolved) : null;
   } catch (e) {
     return null;
   }

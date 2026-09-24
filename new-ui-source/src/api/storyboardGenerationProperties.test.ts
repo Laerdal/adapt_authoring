@@ -78,4 +78,15 @@ describe('generateStoryboardCourse preserves unrelated existing component proper
     expect((properties._graphic as { large?: string }).large).toBe('new.png');
     expect(properties._extraCustomField).toBe('must-survive');
   });
+
+  it('rejects malformed hierarchy before creating or updating any course content', async () => {
+    const doc = [
+      { type: 'heading', props: { level: 2 }, content: 'Section without Topic' },
+      { type: 'heading', props: { level: 3 }, content: 'Group without Section' },
+    ];
+
+    await expect(generateStoryboardCourse('course-1', doc, {}, { skipDeletes: true })).rejects.toThrow(/H2 heading.*Topic/);
+    expect(mockPut).not.toHaveBeenCalled();
+    expect(mockPost).not.toHaveBeenCalled();
+  });
 });
