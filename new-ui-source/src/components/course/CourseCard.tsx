@@ -339,10 +339,10 @@ export default function CourseCard({
       {/* ── EDIT MODAL ── */}
       {modalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-4"
           onClick={(e) => { if (e.target === e.currentTarget && !cropSrc) setModalOpen(false); }}
         >
-          <div className={`bg-white rounded-2xl shadow-xl flex flex-col overflow-hidden ${cropSrc ? "w-full max-w-xl" : "w-full max-w-md"}`}>
+          <div className={`bg-white rounded-2xl shadow-xl flex flex-col overflow-hidden max-h-[calc(100vh-2rem)] min-h-0 ${cropSrc ? "w-full max-w-xl" : "w-full max-w-md"}`}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-[#e5e7eb] shrink-0">
               <h2 className="font-semibold text-[#111827] text-base">
                 {cropSrc ? "Crop & Adjust Image" : "Edit Course Details"}
@@ -368,7 +368,7 @@ export default function CourseCard({
               </div>
             ) : (
             <>
-            <div className="px-5 py-5 flex flex-col gap-4 overflow-y-auto">
+            <div className="px-5 py-5 flex flex-col gap-4 overflow-y-auto min-h-0">
               <div>
                 <label className="block text-sm font-medium text-[#374151] mb-2">Cover Image</label>
                 {/* Preview + actions row when image exists */}
