@@ -620,13 +620,13 @@ function CompletionFeedbackContent({
         {cfg.completionNotifierEnabled && (
           <div className="px-4 py-4 flex flex-col gap-4">
             <CpTextInput
-              label="Text for message first line"
+              label="First line message for the completion notifier"
               value={cfg.notifierLine1}
               onChange={(v) => set("notifierLine1", v)}
               placeholder="e.g. Congratulations!"
             />
             <CpTextInput
-              label="Text for message second line"
+              label="Second line message for the completion notifier"
               value={cfg.notifierLine2}
               onChange={(v) => set("notifierLine2", v)}
               placeholder="e.g. You have completed this course."
