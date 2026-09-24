@@ -17,7 +17,6 @@ import {
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 import { CheckboxIndicator } from "../../components/common/Checkbox";
-import { InfoFieldLabel } from "../../components/common/InfoIcon";
 
 /* ── Shared bits (mirrors NavigationPage's conventions) ─────────────────── */
 
@@ -137,16 +136,12 @@ function ToggleSwitch({ checked, onChange, label, disabled = false, ariaLabel }:
   );
 }
 
-function FieldLabel({ label, hint }: { label: string; hint?: string }) {
-  return <InfoFieldLabel label={label} hint={hint} />;
-}
-
 function TextField({
   label, hint, value, onChange, placeholder, error, maxLength, sanitize,
 }: { label: string; hint?: string; value: string; onChange: (v: string) => void; placeholder?: string; error?: string; maxLength?: number; sanitize?: (v: string) => string }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <FieldLabel label={label} hint={hint} />
+      <span className="text-sm font-semibold text-[var(--life-base-black)] leading-snug">{label}</span>
       <input
         type="text"
         value={value}
@@ -170,7 +165,7 @@ function SelectField({
 }: { label: string; hint?: string; value: string; onChange: (v: string) => void; options: readonly string[] }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <FieldLabel label={label} hint={hint} />
+      <span className="text-sm font-semibold text-[var(--life-base-black)] leading-snug">{label}</span>
       <div className="relative">
         <select
           value={value}
@@ -644,7 +639,7 @@ export function CdnDeploymentPage({
                   </svg>
                 }
               >
-                <ToggleSwitch checked={cfg.isEnabled} onChange={(v) => set({ isEnabled: v })} label="Is Enabled" />
+                <ToggleSwitch checked={cfg.isEnabled} onChange={(v) => set({ isEnabled: v })} label="Enable CDN settings" />
 
                 {cfg.isEnabled && (
                   <div className="flex flex-col gap-3 mt-1">
