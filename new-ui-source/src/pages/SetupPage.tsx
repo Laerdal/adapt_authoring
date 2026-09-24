@@ -1518,6 +1518,7 @@ function RichTextEditor({
           placeholder={placeholder}
           minHeight={multiline ? 80 : 38}
           ariaLabel={label}
+          fontSize={fontSize}
         />
       </div>
     </div>
