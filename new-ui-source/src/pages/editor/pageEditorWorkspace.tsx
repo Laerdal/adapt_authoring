@@ -32,6 +32,11 @@ import { UnsavedChangesModal } from "../setup/unsavedChangesModal";
 import PublishCourseDialog, { type PublishCoursePhase } from "../../components/publish/PublishCourseDialog";
 import PageEditorTopBar from "./pageEditorTopBar";
 import PageEditorNavigation from "./pageEditorNavigation";
+// Samaritan MVP workspace - see its own file header for why selection state
+// is passed as props rather than the (non-functional, in embedded mode)
+// studio:selected postMessage event. Not yet demoed/approved for the
+// develop branch - see the feature branch this work lands on.
+import SamaritanWorkspace from "../../components/samaritan/SamaritanWorkspace";
 import { useNavigate } from "react-router-dom";
 import { apiClient } from "../../api/client";
 import {
@@ -3275,6 +3280,7 @@ interface CourseEditorProps {
   initialTheme?: string;
   initialMenu?: string;
   initialPageId?: string;
+  initialAiTopic?: string;
 }
 
 export default function CourseEditor({
@@ -3284,6 +3290,7 @@ export default function CourseEditor({
   initialTheme = "LIFE Theme",
   initialMenu = "LIFE Menu",
   initialPageId,
+  initialAiTopic,
 }: CourseEditorProps) {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -11154,6 +11161,26 @@ export default function CourseEditor({
 
   return (
     <div className="flex flex-col h-screen bg-white overflow-hidden">
+      {courseId && courseId !== "new-course" && (
+        <SamaritanWorkspace
+          courseId={courseId}
+          selectedBlockId={selectedBlockId}
+          selectedComponentId={selectedComponentId}
+          hasCanvasSelection={hasCanvasSelection}
+          autoSendMessage={initialAiTopic}
+          onExecuted={(componentId) =>
+            loadStructureFromDatabase({
+              pageId: selectedPageId,
+              articleId: selectedArticleId,
+              blockId: selectedBlockId,
+              componentId
+            })
+          }
+          onStructureChanged={() =>
+            loadStructureFromDatabase({ pageId: selectedPageId, articleId: selectedArticleId, blockId: selectedBlockId })
+          }
+        />
+      )}
       <PageEditorTopBar
         courseTitle={courseTitle}
         onCourseTitleChange={setCourseTitle}

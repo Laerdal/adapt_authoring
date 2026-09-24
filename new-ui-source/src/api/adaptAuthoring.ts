@@ -790,7 +790,10 @@ async function applyCourseSelections(courseId: string, themeLabel?: string, menu
   }
 }
 
-export async function createCourse(input: CreateCourseInput): Promise<CreatedCourse> {
+export async function createCourse(
+  input: CreateCourseInput,
+  opts?: { skipDefaultSeed?: boolean }
+): Promise<CreatedCourse> {
   const created = await apiClient.post<CreatedCourse>("/api/courses", input);
 
   // The generic course-creation route leaves `_buttons` as the engine
@@ -798,10 +801,19 @@ export async function createCourse(input: CreateCourseInput): Promise<CreatedCou
   // up front so this course never hits the question-component crash at all.
   await ensureCourseButtonDefaults(created.id);
 
-  try {
-    await seedDefaultStructure(created.id);
-  } catch (err) {
-    console.warn("Failed to seed default course structure", err);
+  // skipDefaultSeed: the "Create with AI" wizard (HomePage) needs a course
+  // with a root topic and nothing else, so Samaritan's course-outline
+  // reasoning (which checks for zero existing articles/blocks/components)
+  // populates this course directly instead of creating a second, orphaned
+  // one - seedDefaultStructure's placeholder article/block/component would
+  // defeat that check and get left behind as clutter alongside the real
+  // AI-generated content.
+  if (!opts?.skipDefaultSeed) {
+    try {
+      await seedDefaultStructure(created.id);
+    } catch (err) {
+      console.warn("Failed to seed default course structure", err);
+    }
   }
 
   try {

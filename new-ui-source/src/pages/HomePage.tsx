@@ -5,6 +5,8 @@ import AiAssistant from '@/components/common/AiAssistant'
 import PermissionDeniedModal from '@/components/common/PermissionDeniedModal'
 import { useAuth, isSuperAdmin, canManageCourses } from '@/context/AuthContext'
 import { createCourse, deleteCourse, duplicateCourse, fetchDashboardCourses, fetchDashboardTags, getAuthoringMenuOptions, getAuthoringThemeOptions, updateCourse, type CourseSort } from '@/api/adaptAuthoring'
+import BuildMethodPickerModal from '@/components/dashboard/BuildMethodPickerModal'
+import BuildWithAiWizard from '@/components/dashboard/BuildWithAiWizard'
 import ImportCourseModal from '@/components/importExport/Import'
 
 
@@ -234,6 +236,8 @@ export default function HomePage() {
   }, []);
 
   // Create modal
+  const [isBuildPickerOpen, setIsBuildPickerOpen] = useState(false)
+  const [isAiWizardOpen, setIsAiWizardOpen] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [newTitle, setNewTitle]     = useState('')
   const [newDesc, setNewDesc]       = useState('')
@@ -446,7 +450,7 @@ export default function HomePage() {
                     showPermissionDenied('Create Course', 'You do not have permission to create a new course.');
                     return;
                   }
-                  openCreateModal();
+                  setIsBuildPickerOpen(true);
                 }}
                 className="flex items-center gap-2 px-4 py-2.5 bg-[#2d6fa8] hover:bg-[#245c8f] text-white text-sm font-semibold rounded-lg transition-colors"
               >
@@ -719,6 +723,33 @@ export default function HomePage() {
         message={permissionDialog?.message ?? 'You do not have permission to perform this action.'}
         onClose={() => setPermissionDialog(null)}
       />
+
+      {/* Create New Course: method picker (scratch vs. AI) */}
+      {isBuildPickerOpen && (
+        <BuildMethodPickerModal
+          onClose={() => setIsBuildPickerOpen(false)}
+          onBuildFromScratch={() => {
+            setIsBuildPickerOpen(false)
+            openCreateModal()
+          }}
+          onBuildWithAI={() => {
+            setIsBuildPickerOpen(false)
+            setIsAiWizardOpen(true)
+          }}
+        />
+      )}
+
+      {isAiWizardOpen && (
+        <BuildWithAiWizard
+          defaultTheme={pickPreferredTheme(themeOptions)}
+          defaultMenu={pickPreferredMenu(menuOptions)}
+          onClose={() => setIsAiWizardOpen(false)}
+          onComplete={(courseId) => {
+            setIsAiWizardOpen(false)
+            navigate(`/course/${courseId}`)
+          }}
+        />
+      )}
 
       {/* Create Course Modal */}
       {createOpen && (
