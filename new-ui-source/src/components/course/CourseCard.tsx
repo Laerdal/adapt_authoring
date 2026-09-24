@@ -38,6 +38,7 @@ export default function CourseCard({
   const [editHeroAssetId, setEditHeroAssetId] = useState<string | null>(heroAssetId);
   const [editTags, setEditTags]             = useState<string[]>(tags);
   const [tagInput, setTagInput]             = useState("");
+  const [tagError, setTagError]             = useState<string | null>(null);
   const [cropSrc, setCropSrc]               = useState<string | null>(null);
   const [assetPickerOpen, setAssetPickerOpen] = useState(false);
   const menuRef                             = useRef<HTMLDivElement>(null);
@@ -45,7 +46,18 @@ export default function CourseCard({
 
   function addTag() {
     const t = tagInput.trim();
-    if (!t || editTags.includes(t)) { setTagInput(""); return; }
+    if (!t) {
+      setTagError(null);
+      return;
+    }
+
+    if (editTags.includes(t)) {
+      setTagError(`Tag "${t}" already exists.`);
+      setTagInput("");
+      return;
+    }
+
+    setTagError(null);
     setEditTags((prev) => [...prev, t]);
     setTagInput("");
   }
@@ -454,7 +466,10 @@ export default function CourseCard({
                   <input
                     type="text"
                     value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
+                    onChange={(e) => {
+                      setTagInput(e.target.value);
+                      if (tagError) setTagError(null);
+                    }}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
                     placeholder="Add a tag and press Enter"
                     className="flex-1 px-3 py-2 text-sm border border-[#d1d5db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent text-[#111827]"
@@ -468,6 +483,9 @@ export default function CourseCard({
                     Add
                   </button>
                 </div>
+                {tagError && (
+                  <p className="mt-2 text-xs text-[#ef4444]">{tagError}</p>
+                )}
               </div>
             </div>
 
