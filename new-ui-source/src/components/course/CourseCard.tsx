@@ -77,6 +77,7 @@ export default function CourseCard({
     setEditHeroAssetId(heroAssetId);
     setEditTags(tags);
     setTagInput("");
+    setTagError(null);
     setCropSrc(null);
     setModalOpen(true);
   }
@@ -352,7 +353,12 @@ export default function CourseCard({
       {modalOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-4"
-          onClick={(e) => { if (e.target === e.currentTarget && !cropSrc) setModalOpen(false); }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !cropSrc) {
+              setModalOpen(false);
+              setTagError(null);
+            }
+          }}
         >
           <div className={`bg-white rounded-2xl shadow-xl flex flex-col overflow-hidden max-h-[calc(100vh-2rem)] min-h-0 ${cropSrc ? "w-full max-w-xl" : "w-full max-w-md"}`}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-[#e5e7eb] shrink-0">
