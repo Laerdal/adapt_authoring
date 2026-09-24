@@ -78,19 +78,19 @@ export function InfoFieldLabel({
   const hasHint = typeof hint === "string" && hint.trim().length > 0;
 
   return (
-    <div className={`relative z-10 inline-flex max-w-full items-start gap-1 text-xs font-semibold text-[#374151] ${className}`}>
-      <span className="break-words leading-snug">
+    <div className={`relative z-10 min-w-0 text-xs font-semibold text-[#374151] ${className}`}>
+      <span className="leading-snug">
         {label}
+        {hasHint && (
+          <InfoIcon
+            label={label}
+            hint={hint}
+            className="ml-1 inline-flex align-middle translate-y-[-1px]"
+            iconClassName={iconClassName}
+            tooltipClassName={tooltipClassName}
+          />
+        )}
       </span>
-      {hasHint && (
-        <InfoIcon
-          label={label}
-          hint={hint}
-          className="mt-[1px]"
-          iconClassName={iconClassName}
-          tooltipClassName={tooltipClassName}
-        />
-      )}
     </div>
   );
 }

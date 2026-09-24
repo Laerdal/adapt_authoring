@@ -730,6 +730,14 @@ function getThemeComponentSectionSchema(
   return getSchemaField(schema, '_componentConfig') ?? getSchemaField(schema, '_components');
 }
 
+function getSchemaPropertyField(
+  sectionSchema: Record<string, unknown> | null | undefined,
+  fieldKey: string,
+): Record<string, unknown> | undefined {
+  const properties = sectionSchema?.properties as Record<string, unknown> | undefined;
+  return properties?.[fieldKey] as Record<string, unknown> | undefined;
+}
+
 const CUSTOM_FIELD_DEFAULTS: Record<string, string> = {
   '_global::_primaryBrandColor': '#2e7fa1',
   '_global::_secondaryBrandColor': '#25837e',
@@ -2591,8 +2599,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                   )}
                 </div>
                 <InfoFieldLabel
-                  label={getSchemaText(getSchemaField(selectedThemeComponentSchema, '_canShowFinalMarking'), 'title') ?? 'Display marking for not-final attempts'}
-                  hint={getSchemaText(getSchemaField(selectedThemeComponentSchema, '_canShowFinalMarking'), 'help')}
+                  label={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_canShowFinalMarking'), 'title') ?? 'Display marking for not-final attempts'}
+                  hint={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_canShowFinalMarking'), 'help')}
                   className="leading-normal"
                 />
               </div>
@@ -2619,8 +2627,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                   )}
                 </div>
                 <InfoFieldLabel
-                  label={getSchemaText(getSchemaField(selectedThemeComponentSchema, '_hidePartiallyDisplayMarking'), 'title') ?? 'Display marking for unanswered correct responses'}
-                  hint={getSchemaText(getSchemaField(selectedThemeComponentSchema, '_hidePartiallyDisplayMarking'), 'help')}
+                  label={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_hidePartiallyDisplayMarking'), 'title') ?? 'Display marking for unanswered correct responses'}
+                  hint={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_hidePartiallyDisplayMarking'), 'help')}
                   className="leading-normal"
                 />
               </div>
@@ -2647,8 +2655,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                   )}
                 </div>
                 <InfoFieldLabel
-                  label={getSchemaText(getSchemaField(selectedThemeComponentSchema, '_hideFeedbackFirstAttempt'), 'title') ?? 'Hide feedback on first attempt on assessments'}
-                  hint={getSchemaText(getSchemaField(selectedThemeComponentSchema, '_hideFeedbackFirstAttempt'), 'help')}
+                  label={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_hideFeedbackFirstAttempt'), 'title') ?? 'Hide feedback on first attempt on assessments'}
+                  hint={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_hideFeedbackFirstAttempt'), 'help')}
                   className="leading-normal"
                 />
               </div>
@@ -2675,8 +2683,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                   )}
                 </div>
                 <InfoFieldLabel
-                  label={getSchemaText(getSchemaField(selectedThemeComponentSchema, '_hidePartiallyFeedback'), 'title') ?? 'Hide partially correct feedback on the question and result page'}
-                  hint={getSchemaText(getSchemaField(selectedThemeComponentSchema, '_hidePartiallyFeedback'), 'help')}
+                  label={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_hidePartiallyFeedback'), 'title') ?? 'Hide partially correct feedback on the question and result page'}
+                  hint={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_hidePartiallyFeedback'), 'help')}
                   className="leading-normal"
                 />
               </div>
