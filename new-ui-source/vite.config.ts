@@ -4,8 +4,9 @@ import path from 'path'
 import tsconfigPaths from 'vite-tsconfig-paths'
 
 export default defineConfig({
-  // Served by the Adapt engine under /new (express.static('public') + routes/new).
-  base: '/new/',
+  // Served by the Adapt engine at the site root (routes/new mounts the built
+  // output at "/", not "/new" - see routes/new/index.js).
+  base: '/',
   plugins: [react(), tsconfigPaths()],
   resolve: {
     alias: {

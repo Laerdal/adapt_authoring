@@ -59,6 +59,14 @@ permissions.ignoreRoute(/^\/studio\/?.*$/);
 
 const SHELLS_DIRNAME = 'studio-shells';
 const FP_MARKER = '.studio-fp';
+// No eviction existed before this - shells accumulated forever, one per
+// theme/menu/plugin combination ever previewed (confirmed: 15 shells, 97MB,
+// on a single local dev machine after normal testing). Shells are cheap to
+// regenerate (one grunt build, then re-cached), so a 30-day age-based sweep
+// is a safe, low-stakes bound: worst case is one slower rebuild the next time
+// a rarely-used combination is previewed, never data loss.
+const LAST_USED_MARKER = '.last-used';
+const SHELL_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
 
 function frameworkRoot() {
   return path.join(
@@ -73,8 +81,20 @@ function courseBuildRoot(tenantId, courseId) {
   );
 }
 
+function shellsRootDir() {
+  return path.join(frameworkRoot(), SHELLS_DIRNAME);
+}
+
 function shellCacheDir(fingerprint) {
-  return path.join(frameworkRoot(), SHELLS_DIRNAME, fingerprint);
+  return path.join(shellsRootDir(), fingerprint);
+}
+
+// Stamped on every snapshot AND every restore, so "last used" reflects actual
+// use (including cache HITS, which only ever read from shellDir) rather than
+// just the last time it happened to be rebuilt - a frequently-restored-but-
+// rarely-rebuilt shell must not look stale just because writes are rare.
+function touchLastUsed(shellDir, cb) {
+  fsx.writeFile(path.join(shellDir, LAST_USED_MARKER), new Date().toISOString(), cb);
 }
 
 // Stable set of names from either ['a','b'] or [{name:'a'},…] or {a:{…}} shapes.
@@ -122,7 +142,10 @@ function snapshotShell(buildRoot, fingerprint, cb) {
   const dest = shellCacheDir(fingerprint);
   fsx.emptyDir(dest, err => {
     if (err) return cb(err);
-    fsx.copy(buildRoot, dest, { filter: (src) => !isCoursePayload(buildRoot, src) }, cb);
+    fsx.copy(buildRoot, dest, { filter: (src) => !isCoursePayload(buildRoot, src) }, err2 => {
+      if (err2) return cb(err2);
+      touchLastUsed(dest, cb);
+    });
   });
 }
 
@@ -130,9 +153,46 @@ function snapshotShell(buildRoot, fingerprint, cb) {
 function restoreShell(fingerprint, buildRoot, cb) {
   fsx.copy(shellCacheDir(fingerprint), buildRoot, { overwrite: true }, err => {
     if (err) return cb(err);
+    touchLastUsed(shellCacheDir(fingerprint), () => {});
     fsx.writeFile(path.join(buildRoot, FP_MARKER), fingerprint, cb);
   });
 }
+
+// Best-effort, once-per-boot sweep - never allowed to throw or delay startup.
+// A shell with no marker yet (every shell that existed before this feature
+// shipped) is stamped as just-used rather than deleted, so upgrading to this
+// code doesn't immediately wipe out a cache that was actually fine.
+function pruneStaleShells() {
+  const root = shellsRootDir();
+  fsx.readdir(root, (err, entries) => {
+    if (err) return; // no shells directory yet - nothing to prune
+    entries.forEach(name => {
+      const dir = path.join(root, name);
+      const markerPath = path.join(dir, LAST_USED_MARKER);
+      fsx.stat(dir, (err2, stat) => {
+        if (err2 || !stat.isDirectory()) return;
+        fsx.stat(markerPath, (err3, markerStat) => {
+          if (err3) return touchLastUsed(dir, () => {}); // pre-existing shell, no marker yet
+          const ageMs = Date.now() - markerStat.mtimeMs;
+          if (ageMs <= SHELL_MAX_AGE_MS) return;
+          fsx.remove(dir, err4 => {
+            if (err4) return logger.log('warn', `Studio: failed to prune stale shell ${name}: ${err4.message}`);
+            logger.log('info', `Studio: pruned stale shell ${name} (unused for ${Math.round(ageMs / 86400000)} days)`);
+          });
+        });
+      });
+    });
+  });
+}
+
+// Run the sweep once, a few seconds after this module loads (not blocking
+// startup). NOT hung off the app's own 'serverStarted' event: routes/* files
+// are require()'d BY a 'serverStarted' listener (lib/router.js), so by the
+// time this line runs that event has already fired - registering another
+// listener for it here would silently never fire (confirmed the hard way).
+// This file only ever loads once per process, so a plain one-shot timer here
+// is equivalent to "once per boot" without depending on event timing.
+setTimeout(pruneStaleShells, 5000);
 
 // On any successful build, warm the cache for that course's fingerprint.
 (function registerPreviewListener() {
@@ -180,9 +240,37 @@ const DATA_FILES = {
  *   - a short TTL covers slightly-staggered requests without going stale —
  *     content edits reload the surface, which re-assembles after the TTL.
  * ------------------------------------------------------------------ */
-const LIVE_TTL_MS = 3000;
+// Was a 3-second blind TTL - every course view/edit re-assembled the whole
+// course from Mongo at least every 3s regardless of whether anything actually
+// changed, which is what made Studio/preview noticeably heavier than the
+// classic UI's build-once-and-reuse preview. Freshness is now guaranteed by
+// invalidateLiveCache() below (fired on every real content write, from ANY
+// source - the classic UI, the new-UI editor, or Quick Edit - since they all
+// funnel through the same contentmanager), so this TTL is just a generous
+// safety net against an entry never getting invalidated, not the mechanism
+// staleness actually relies on.
+const LIVE_TTL_MS = 10 * 60 * 1000;
 const liveCache = new Map();     // key -> { at, data }
 const liveInflight = new Map();  // key -> [callback]
+
+// A create/update/destroy result's shape varies enough across content types
+// (and destroy in particular doesn't reliably hand back _courseId) that
+// targeting just the affected course's cache key risks silently missing an
+// invalidation. Clearing the whole (small, in-memory) cache on any relevant
+// write can never leave a stale entry behind, and costs nothing beyond a
+// Map#clear() - no DB call, no dependency on the classic UI's own build/cache
+// mechanism, just the same "don't serve content older than the last save"
+// guarantee implemented independently for this live-JSON path.
+function invalidateLiveCache(data, cb) {
+  liveCache.clear();
+  cb(null, data);
+}
+
+['course', 'contentobject', 'article', 'block', 'component'].forEach(function (type) {
+  ['create', 'update', 'destroy'].forEach(function (action) {
+    origin().contentmanager.addContentHook(action, type, { when: 'post' }, invalidateLiveCache);
+  });
+});
 
 function getSanitizedCourse(tenantId, courseId, cb) {
   const key = tenantId + ':' + courseId;
