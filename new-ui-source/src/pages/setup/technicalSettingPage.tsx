@@ -167,13 +167,14 @@ function CustomCssEditor({ value, onChange, expanded }: { value: string; onChang
   return <div ref={containerRef} className="relative w-full" aria-label="Custom CSS/LESS editor" />;
 }
 
-function TsAccordion({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
+type TechnicalAccordion = "display" | "assistive" | "runtime";
+
+function TsAccordion({ title, open, onToggle, children }: { title: string; open: boolean; onToggle: () => void; children: React.ReactNode }) {
   return (
     <div className="border border-[#e5e7eb] rounded-xl overflow-hidden bg-white">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={onToggle}
         className="group w-full flex items-center justify-between gap-3 px-5 py-4 text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors cursor-pointer"
       >
         <span className="text-sm font-semibold text-current">{title}</span>
@@ -337,15 +338,20 @@ export function TechnicalSettingPage({
   const [sourceMaps, setSourceMaps] = useState(false);
   const [enableLogging, setEnableLogging] = useState(true);
   const [logLevel, setLogLevel] = useState("info");
+  const [logToConsole, setLogToConsole] = useState(true);
+  const [warnFirstOnly, setWarnFirstOnly] = useState(false);
   const [strictMode, setStrictMode] = useState(true);
   const [buildSettings, setBuildSettings] = useState<CourseTechnicalSettings["build"]>({});
+  const [supportedBrowsersOverride, setSupportedBrowsersOverride] = useState("");
   const [customCss, setCustomCss] = useState("");
   const [cssExpanded, setCssExpanded] = useState(false);
+  const [openAccordion, setOpenAccordion] = useState<TechnicalAccordion | "">("display");
 
   const [originalValues, setOriginalValues] = useState({
     smallBp: 0, mediumBp: 720, largeBp: 960, xlBp: 1280,
     optimizedScroll: false, sourceMaps: false,
     enableLogging: true, logLevel: "info", customCss: "", strictMode: true,
+    logToConsole: true, warnFirstOnly: false, supportedBrowsersOverride: "",
   });
 
   const hasChanges =
@@ -357,6 +363,9 @@ export function TechnicalSettingPage({
     originalValues.sourceMaps !== sourceMaps ||
     originalValues.enableLogging !== enableLogging ||
     originalValues.logLevel !== logLevel ||
+    originalValues.logToConsole !== logToConsole ||
+    originalValues.warnFirstOnly !== warnFirstOnly ||
+    originalValues.supportedBrowsersOverride !== supportedBrowsersOverride ||
     originalValues.customCss !== customCss ||
     originalValues.strictMode !== strictMode;
 
@@ -416,9 +425,12 @@ export function TechnicalSettingPage({
         const uiLevel = logLevelReverseMap[dbLevel] || "info";
         setEnableLogging(enableLog);
         setLogLevel(uiLevel);
+        setLogToConsole(config._logging?._console ?? true);
+        setWarnFirstOnly(config._logging?._warnFirstOnly ?? false);
 
         const strict = config.build?.strictMode ?? true;
         setBuildSettings(config.build ?? {});
+        setSupportedBrowsersOverride(config.build?.targets ?? "");
         setStrictMode(strict);
 
         const customCssValue = style || "";
@@ -430,6 +442,9 @@ export function TechnicalSettingPage({
           sourceMaps: sourceMap,
           enableLogging: enableLog, logLevel: uiLevel,
           customCss: customCssValue, strictMode: strict,
+          logToConsole: config._logging?._console ?? true,
+          warnFirstOnly: config._logging?._warnFirstOnly ?? false,
+          supportedBrowsersOverride: config.build?.targets ?? "",
         });
       } catch (err) {
         console.error("Failed to load technical settings", err);
@@ -468,15 +483,22 @@ export function TechnicalSettingPage({
       if (optimizedScroll !== originalValues.optimizedScroll) {
         changedFields._scrollingContainer = { _isEnabled: optimizedScroll };
       }
-      if (enableLogging !== originalValues.enableLogging || logLevel !== originalValues.logLevel) {
+        if (enableLogging !== originalValues.enableLogging ||
+          logLevel !== originalValues.logLevel ||
+          logToConsole !== originalValues.logToConsole ||
+          warnFirstOnly !== originalValues.warnFirstOnly) {
         changedFields._logging = {
           _isEnabled: enableLogging,
           _level: logLevelMap[logLevel] || "info",
-          _console: true,
+          _console: logToConsole,
+          _warnFirstOnly: warnFirstOnly,
         };
       }
+      if (supportedBrowsersOverride !== originalValues.supportedBrowsersOverride) {
+        changedFields.build = { ...buildSettings, targets: supportedBrowsersOverride };
+      }
       if (strictMode !== originalValues.strictMode) {
-        changedFields.build = { ...buildSettings, strictMode };
+        changedFields.build = { ...changedFields.build, strictMode };
       }
 
       await Promise.all([
@@ -488,6 +510,7 @@ export function TechnicalSettingPage({
       setOriginalValues({
         smallBp, mediumBp, largeBp, xlBp,
         optimizedScroll, sourceMaps, enableLogging, logLevel, customCss, strictMode,
+        logToConsole, warnFirstOnly, supportedBrowsersOverride,
       });
       setBuildSettings((current) => ({ ...current, strictMode }));
       setToast({ type: "success", message: "Changes saved successfully" });
@@ -512,6 +535,9 @@ export function TechnicalSettingPage({
       sourceMaps: originalValues.sourceMaps,
       enableLogging: originalValues.enableLogging,
       logLevel: originalValues.logLevel,
+      logToConsole: originalValues.logToConsole,
+      warnFirstOnly: originalValues.warnFirstOnly,
+      supportedBrowsersOverride: originalValues.supportedBrowsersOverride,
       customCss: originalValues.customCss,
       strictMode: originalValues.strictMode,
     });
@@ -523,6 +549,9 @@ export function TechnicalSettingPage({
     setSourceMaps(originalValues.sourceMaps);
     setEnableLogging(originalValues.enableLogging);
     setLogLevel(originalValues.logLevel);
+    setLogToConsole(originalValues.logToConsole);
+    setWarnFirstOnly(originalValues.warnFirstOnly);
+    setSupportedBrowsersOverride(originalValues.supportedBrowsersOverride);
     setCustomCss(originalValues.customCss);
     setStrictMode(originalValues.strictMode);
 
@@ -576,7 +605,7 @@ export function TechnicalSettingPage({
       ) : (
         <>
           <div className="flex flex-col gap-4">
-            <TsAccordion title="Display & Responsiveness" defaultOpen>
+            <TsAccordion title="Display & Responsiveness" open={openAccordion === "display"} onToggle={() => setOpenAccordion((current) => current === "display" ? "" : "display")}>
               <div className="flex flex-col gap-3">
                 <div>
                   <p className="text-[13px] font-bold text-[var(--life-base-black)]">Screen Size</p>
@@ -603,7 +632,7 @@ export function TechnicalSettingPage({
               </div>
             </TsAccordion>
 
-            <TsAccordion title="Assistive & Embedded Experience">
+            <TsAccordion title="Assistive & Embedded Experience" open={openAccordion === "assistive"} onToggle={() => setOpenAccordion((current) => current === "assistive" ? "" : "assistive")}>
               <p className="text-[13px] text-[var(--life-neutral-300)] mb-[6px]">Control how your course behaves in assistive and embedded environments (LMS iframes, WebViews).</p>
               <div className="flex flex-col gap-4">
                 <TsCheckbox id="ts-opt-scroll" label="Enable optimized scroll for iFrames" description="Improves scroll behavior when the course is embedded inside an iframe." checked={optimizedScroll} onChange={setOptimizedScroll} />
@@ -611,7 +640,7 @@ export function TechnicalSettingPage({
               </div>
             </TsAccordion>
 
-            <TsAccordion title="Runtime Behavior">
+            <TsAccordion title="Runtime Behavior" open={openAccordion === "runtime"} onToggle={() => setOpenAccordion((current) => current === "runtime" ? "" : "runtime")}>
               <p className="text-[13px] text-[var(--life-neutral-300)] mb-[6px]">Configure how your course operates when run.</p>
               <div className="flex flex-col gap-4">
                 <div className="flex flex-col gap-3">
@@ -625,8 +654,35 @@ export function TechnicalSettingPage({
                   <div className="pl-7">
                     <TsDropdown label="Log Level" value={logLevel} options={LOG_LEVEL_OPTIONS} onChange={setLogLevel} />
                   </div>
+                  <div className="flex flex-col gap-3">
+                    <TsCheckbox
+                      id="ts-log-console"
+                      label="Log to browser console?"
+                      description="Writes runtime logging messages to the browser console."
+                      checked={logToConsole}
+                      onChange={setLogToConsole}
+                    />
+                    <TsCheckbox
+                      id="ts-warn-first"
+                      label="Show only first deprecated and removed warnings?"
+                      description="Limits deprecated and removed warnings to the first occurrence of each warning."
+                      checked={warnFirstOnly}
+                      onChange={setWarnFirstOnly}
+                    />
+                  </div>
                 </div>
                 <TsCheckbox id="ts-strict" label="Use strict mode?" checked={strictMode} onChange={setStrictMode} />
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-sm font-semibold text-[#374151]">Supported browsers override</label>
+                  <p className="text-[13px] text-[var(--life-neutral-300)] mt-[4px] mb-[4px]">Override the browser targets used when the course is built.</p>
+                  <input
+                    type="text"
+                    value={supportedBrowsersOverride}
+                    onChange={(e) => setSupportedBrowsersOverride(e.target.value)}
+                    className="w-full text-sm text-[#374151] border border-[#d1d5db] rounded-[8px] px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
+                    style={{ borderRadius: 8 }}
+                  />
+                </div>
               </div>
             </TsAccordion>
 
@@ -673,6 +729,13 @@ export function TechnicalSettingPage({
                   <CustomCssEditor value={customCss} onChange={setCustomCss} expanded={cssExpanded} />
                 </div>
               </div>
+            </div>
+
+            <div className="flex items-start gap-2.5 rounded-lg bg-[#fff7ed] border border-[#fed7aa] px-4 py-3">
+              <span className="text-base leading-none mt-0.5" aria-hidden="true">💡</span>
+              <p className="text-sm text-[#9a3412] leading-snug">
+                <span className="font-semibold">Tip:</span> Use custom CSS with caution. Custom styles may be affected by future framework updates, especially when underlying class names or component structures change. Review and validate custom styling after major platform upgrades.
+              </p>
             </div>
           </div>
 

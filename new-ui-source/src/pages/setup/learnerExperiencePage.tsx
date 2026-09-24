@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
+import RichTextEditor from "../../components/common/RichTextEditor";
 import {
   defaultAiTutorSettings,
   defaultCourseFeedbackSettings,
@@ -27,6 +28,7 @@ import {
 } from "../../helpers/learnerExperienceHelper";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
+import { htmlToPlainText } from "../../utils/ckEditorSamaritan";
 
 /* -------------------------------------------------------------
    LEARNER EXPERIENCE PANEL - Learning Resources accordion
@@ -108,52 +110,95 @@ function LrToggle({
   onChange,
   label,
   align = "left",
+  help,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   label: string;
   align?: "left" | "right";
+  help?: React.ReactNode;
 }) {
   if (align === "right") {
     return (
-      <div className="flex items-center justify-between gap-3 py-2">
-        <span className="text-sm font-semibold text-[var(--life-base-black)] leading-snug">{label}</span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={checked}
-          aria-label={label}
-          onClick={() => onChange(!checked)}
-          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:ring-offset-1 ${checked ? "bg-[var(--life-primary-500)]" : "bg-[#d1d5db]"}`}
-        >
-          <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-5" : "translate-x-1"}`} />
-        </button>
+      <div>
+        <div className="flex items-center justify-between gap-3 py-2">
+          <span className="text-sm font-semibold text-[var(--life-base-black)] leading-snug">{label}</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={checked}
+            aria-label={label}
+            onClick={() => onChange(!checked)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:ring-offset-1 ${checked ? "bg-[var(--life-primary-500)]" : "bg-[#d1d5db]"}`}
+          >
+            <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-5" : "translate-x-1"}`} />
+          </button>
+        </div>
+        {help}
       </div>
     );
   }
 
   return (
-    <label className="flex items-center gap-2 cursor-pointer select-none">
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        onClick={() => onChange(!checked)}
-        className={`relative w-9 h-5 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2d6fa8] ${checked ? "bg-[#2d6fa8]" : "bg-[#d1d5db]"}`}
-      >
-        <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-150 ${checked ? "translate-x-4" : ""}`} />
-      </button>
-      <span className="text-sm text-[#374151]">{label}</span>
-    </label>
+    <div>
+      <label className="flex items-center gap-2 cursor-pointer select-none">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          onClick={() => onChange(!checked)}
+          className={`relative w-9 h-5 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2d6fa8] ${checked ? "bg-[#2d6fa8]" : "bg-[#d1d5db]"}`}
+        >
+          <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-150 ${checked ? "translate-x-4" : ""}`} />
+        </button>
+        <span className="text-sm text-[#374151]">{label}</span>
+      </label>
+      {help}
+    </div>
   );
 }
 
-function LrField({ label, children }: { label: string; children: React.ReactNode }) {
+function LrField({ label, help, children }: { label: string; help?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
       <label className="text-xs font-semibold text-[#374151]">{label}</label>
+      {help}
       {children}
     </div>
+  );
+}
+
+function LrHelp({ children }: { children: React.ReactNode }) {
+  return <p className="text-xs text-[#6b7280] mt-1 leading-snug">{children}</p>;
+}
+
+function ClickToEditRichText({
+  value,
+  onChange,
+  placeholder,
+  courseContext,
+}: {
+  value: string;
+  onChange: (html: string) => void;
+  placeholder: string;
+  courseContext: string;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  if (editing) {
+    return <RichTextEditor value={value} onChange={onChange} placeholder={placeholder} courseContext={courseContext} />;
+  }
+
+  const preview = htmlToPlainText(value).trim();
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      className="w-full min-h-[96px] px-3 py-2 text-left text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#374151] hover:border-[#2d6fa8] hover:bg-[#f8fbff] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8]"
+      aria-label={preview ? "Click to edit thank you message" : placeholder}
+    >
+      {preview || <span className="text-[#9ca3af]">{placeholder}</span>}
+    </button>
   );
 }
 
@@ -255,6 +300,7 @@ function AddResourceDialog({
             checked={res.forceDownload}
             onChange={(v) => set("forceDownload", v)}
             label="Force download"
+            help={<LrHelp>Forces the resource to be downloaded rather than opened in the browser. Only supported in browsers that support the 'download' attribute and for resources that are part of the course content/hosted on the same URL.</LrHelp>}
           />
 
           {/* Title */}
@@ -273,7 +319,7 @@ function AddResourceDialog({
           </LrField>
 
           {/* File Name */}
-          <LrField label="File Name">
+          <LrField label="File Name" help={<LrHelp>Used to set the name of the downloaded file to something different to the source filename. Only supported in browsers that support the 'download' attribute and for resources that are part of the course content/hosted on the same URL. Forces the file to be downloaded regardless of what 'Force download' is set to.</LrHelp>}>
             <input
               type="text"
               value={res.fileName}
@@ -348,7 +394,7 @@ function AddResourceDialog({
           <LrToggle
             checked={res.displayOnEveryPage}
             onChange={(v) => set("displayOnEveryPage", v)}
-            label="Is display on every page?"
+            label="Is displayed on every page?"
           />
         </div>
 
@@ -433,9 +479,9 @@ function ResourceFormatIcon({ format }: { format: ResourceFormat }) {
 /* -- Course Feedback types -- */
 type CourseFeedbackState = CourseFeedbackSettings;
 
-const COURSE_FEEDBACK_OPTIONS: { value: CourseFeedbackOption; label: string }[] = [
-  { value: "autoOpen",        label: "Auto-open on course complete" },
-  { value: "hideAfterSubmit", label: "Hide button after submission" },
+const COURSE_FEEDBACK_OPTIONS: { value: CourseFeedbackOption; label: string; help: string }[] = [
+  { value: "autoOpen",        label: "Auto-open on course complete", help: "If the feedback widget hasn’t been opened or submitted, it will automatically open when the course is completed. The feedback button remains visible regardless of this setting." },
+  { value: "hideAfterSubmit", label: "Hide button after submission", help: "Hide the feedback button after the user submits feedback. By default, the button remains visible." },
 ];
 
 /* -- Ask AI Tutor types -- */
@@ -467,7 +513,7 @@ function LrCheckList<T extends string>({
   selected,
   onChange,
 }: {
-  options: { value: T; label: string }[];
+  options: { value: T; label: string; help?: string }[];
   selected: T[];
   onChange: (v: T[]) => void;
 }) {
@@ -480,7 +526,7 @@ function LrCheckList<T extends string>({
   }
   return (
     <div className="space-y-1">
-      {options.map(({ value, label }) => {
+      {options.map(({ value, label, help }) => {
         const checked = selected.includes(value);
         return (
           <label
@@ -501,7 +547,10 @@ function LrCheckList<T extends string>({
                 </svg>
               )}
             </div>
-            <span className="text-sm text-[#374151] leading-snug">{label}</span>
+            <span className="text-sm text-[#374151] leading-snug">
+              {label}
+              {help && <span className="block mt-1"><LrHelp>{help}</LrHelp></span>}
+            </span>
           </label>
         );
       })}
@@ -1065,7 +1114,7 @@ export function LearnerExperiencePanel({
               </LrField>
 
               {/* Description */}
-              <LrField label="Description">
+              <LrField label="Description" help={<LrHelp>The description text for the resources button which displays when more than one extension is using the drawer.</LrHelp>}>
                 <textarea
                   value={lrState.description}
                   onChange={(e) => setLr("description", e.target.value)}
@@ -1075,7 +1124,7 @@ export function LearnerExperiencePanel({
                 />
               </LrField>
 
-              <LrField label="Body">
+              <LrField label="Body" help={<LrHelp>The body text for the resources which displays at the top of the resources drawer.</LrHelp>}>
                 <input
                   type="text"
                   value={lrState.body}
@@ -1099,6 +1148,7 @@ export function LearnerExperiencePanel({
                 checked={lrState.enableFilterButton}
                 onChange={(v) => setLr("enableFilterButton", v)}
                 label="Enable filter button"
+                help={<LrHelp>Turns the filter buttons on and off. Note that the filter buttons will be automatically disabled if all resource items have the same Type value.</LrHelp>}
               />
 
               <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
@@ -1413,16 +1463,6 @@ export function LearnerExperiencePanel({
                 </div>
               </div>
 
-              {/* Preview */}
-              <div className="grid grid-cols-2 gap-4">
-                <LrField label="Preview Words">
-                  <input type="number" min={0} value={lsState.previewWords} onChange={(e) => setLs("previewWords", Number(e.target.value))} className={LR_INPUT} />
-                </LrField>
-                <LrField label="Preview Characters">
-                  <input type="number" min={0} value={lsState.previewCharacters} onChange={(e) => setLs("previewCharacters", Number(e.target.value))} className={LR_INPUT} />
-                </LrField>
-              </div>
-
               {/* Display options */}
               <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
                 <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
@@ -1444,9 +1484,6 @@ export function LearnerExperiencePanel({
               <div className="grid grid-cols-2 gap-4">
                 <LrField label="Minimum Word Length">
                   <input type="number" min={1} value={lsState.minimumWordLength} onChange={(e) => setLs("minimumWordLength", Number(e.target.value))} className={LR_INPUT} />
-                </LrField>
-                <LrField label="Frequency Importance">
-                  <input type="number" min={0} value={lsState.frequencyImportance} onChange={(e) => setLs("frequencyImportance", Number(e.target.value))} className={LR_INPUT} />
                 </LrField>
               </div>
 
@@ -1726,7 +1763,7 @@ export function LearnerExperiencePanel({
                           className={LR_INPUT}
                         />
                       </LrField>
-                      <LrField label="Maximum character length">
+                      <LrField label="Maximum character length" help={<LrHelp>Maximum characters allowed (for SCORM 1.2 compatibility, recommended 250 or less)</LrHelp>}>
                         <input
                           type="number"
                           min={0}
@@ -1766,19 +1803,18 @@ export function LearnerExperiencePanel({
                 </div>
               </div>
 
-              {/* Thankyou message */}
+              {/* Thank you message */}
               <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
                 <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Thankyou Message</p>
+                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">THANK YOU MESSAGE</p>
                 </div>
                 <div className="px-4 py-4">
                   <LrField label="Body">
-                    <textarea
+                    <ClickToEditRichText
                       value={cfState.thankYouBody}
-                      onChange={(e) => setCf("thankYouBody", e.target.value)}
+                      onChange={(html) => setCf("thankYouBody", html)}
                       placeholder="e.g. Thank you for your feedback!"
-                      rows={3}
-                      className={LR_TEXTAREA}
+                      courseContext={courseId}
                     />
                   </LrField>
                 </div>
@@ -1786,6 +1822,13 @@ export function LearnerExperiencePanel({
             </>
           )}
         </LeAccordion>
+
+        <div className="flex items-start gap-2.5 rounded-lg bg-[#fff7ed] border border-[#fed7aa] px-4 py-3">
+          <span className="text-base leading-none mt-0.5" aria-hidden="true">💡</span>
+          <p className="text-sm text-[#9a3412] leading-snug">
+            <span className="font-semibold">Tip:</span> Manage learner engagement features including Feedback, AI Tutor, Resources, Notes, and Search. Feedback submissions are reported in Course Insights, while AI Tutor activity is retained in backend logs and available through the ELT team.
+          </p>
+        </div>
 
       </div>
 
