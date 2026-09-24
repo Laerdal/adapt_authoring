@@ -150,10 +150,6 @@ function TreeRow({
         }}
         className="flex items-center gap-[6px] min-w-0 flex-1 cursor-pointer"
       >
-        <span className="w-[14px] h-[14px] shrink-0 self-center flex items-center justify-center text-[#b8c4cf] group-hover:text-[#6b7280] cursor-grab hover:text-[#4b5563]">
-          <MaskIcon file="drag-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-        </span>
-
         {canExpand ? (
           <button
             type="button"

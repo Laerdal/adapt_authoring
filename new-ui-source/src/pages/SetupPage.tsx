@@ -285,8 +285,8 @@ function CourseStructurePanel({
   }
 
   return (
-    <div className="max-w-5xl w-full">
-      <div className="flex items-start justify-between mb-4">
+    <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-start justify-between gap-4">
         <div>
           <h2 className="text-xl font-bold text-[#111827]">Course Structure</h2>
           <p className="text-sm text-[#6b7280] mt-0.5">Build your structure before editing.</p>
@@ -334,6 +334,9 @@ function CourseStructurePanel({
           </button>
         </div>
       </div>
+
+      <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="max-w-5xl px-6 py-6">
 
       {/* Rules banner (top) */}
       <div className="mb-3 p-3.5 rounded-lg bg-[#f0faf8] border border-[#99e6de] text-sm text-[#0d7377]">
@@ -516,6 +519,8 @@ function CourseStructurePanel({
         onSave={handleConfirmSave}
         onClose={clearPendingNavigation}
       />
+      </div>
+      </div>
     </div>
   );
 }
@@ -2790,6 +2795,20 @@ function CourseCreationCenterContent() {
 
   const activeItem = NAV_ITEMS.find((n) => !n.heading && n.id === activeNav);
   const panelHeading = assetPickerRequest?.title || activeItem?.label || "Course Overview";
+  const panelIcon = activeItem?.icon || <SidebarMaskIcon file="overview-icon.svg" />;
+  const fullCanvasPanels = new Set([
+    "overview",
+    "structure",
+    "theme",
+    "menu",
+    "navigation",
+    "completion",
+    "learner-experience",
+    "tracking",
+    "accessibility",
+    "technical-settings",
+    "cdn-deployment",
+  ]);
   const loginName = user?.username || user?.email || "Not signed in";
 
   function toggleGroup(groupId: string) {
@@ -2897,7 +2916,7 @@ function CourseCreationCenterContent() {
       case "completion":
         return <CompletionProgressPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
       case "technical-settings":
-        return <TechnicalSettingPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+        return <TechnicalSettingPage courseId={courseId} courseTitle={title} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
       case "cdn-deployment":
         return <CdnDeploymentPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
       case "translation":
@@ -3041,7 +3060,7 @@ function CourseCreationCenterContent() {
       {activeNav !== "storyboarding" && !assetPickerRequest && (
         <div className="h-[56px] bg-white border-b border-[#d8dde6] flex items-center px-4 md:px-6 gap-3 shrink-0 relative z-10">
           <div className="flex items-center gap-2 text-[#111827] min-w-0">
-            <SidebarMaskIcon file="overview-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current opacity-80" />
+            <span className="shrink-0 opacity-80">{panelIcon}</span>
             <span className="text-base font-semibold truncate">{panelHeading}</span>
           </div>
 
@@ -3192,7 +3211,7 @@ function CourseCreationCenterContent() {
         )}
 
         {/* -- Right content panel -- */}
-        <main ref={contentScrollRef} className={`flex-1 min-h-0 min-w-0 bg-[#f8fafc] ${activeNav === "navigation" || activeNav === "storyboarding" || activeNav === "translation" ? "flex flex-col overflow-hidden" : activeNav === "menu" ? "overflow-y-auto" : "overflow-y-auto px-8 py-8"}`}>
+        <main ref={contentScrollRef} className={`flex-1 min-h-0 min-w-0 bg-[#f7f9fb] ${fullCanvasPanels.has(activeNav) || activeNav === "storyboarding" || activeNav === "translation" ? "flex flex-col overflow-hidden" : "overflow-y-auto px-8 py-8"}`}>
           {renderPanel()}
         </main>
       </div>

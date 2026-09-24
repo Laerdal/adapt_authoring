@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { createPortal } from "react-dom";
 import colorLabelIconSvgRaw from "../../../public/assets/icons/color-label-icon.svg?raw";
 import AddComponentDrawer from "../../components/course/AddComponentDrawer";
@@ -98,6 +99,8 @@ interface PreviewBuildResponse {
 }
 
 const ICON_BASE = "/new/assets/icons";
+const RIGHT_PANEL_MIN_WIDTH = 300;
+const RIGHT_PANEL_MAX_EXPANSION_RATIO = 0.1;
 
 function MaskIcon({ file, className }: { file: string; className?: string }) {
   const iconPath = `${ICON_BASE}/${file}`;
@@ -1108,6 +1111,11 @@ const ALL_COMPONENT_LEVEL_EXTENSION_NAMES = new Set([
   "adapt-search",
 ]);
 
+const PAGE_LEVEL_PROGRESS_EXTENSION_NAMES = new Set([
+  "adapt-contrib-pageLevelProgress",
+  "adapt-laerdal-pageLevelProgress",
+]);
+
 const QUESTION_COMPONENT_KEYS = new Set([
   "gmcq",
   "laerdal-checklist",
@@ -1412,9 +1420,25 @@ function ExtensionsAccordionBody({
   getInheritanceTag,
   assetContext,
 }: ExtensionsAccordionBodyProps) {
+  const visibleExtensionNames = new Set(extensionTypeOptions.map((option) => option.name));
+  const addedProgressExtensionName = Object.entries(schemasForLevel).find(([key, schema]) => (
+    Object.prototype.hasOwnProperty.call(extensions, key) &&
+    PAGE_LEVEL_PROGRESS_EXTENSION_NAMES.has(schema?.name ?? "")
+  ))?.[1]?.name;
   const allKeys = Object.keys(schemasForLevel)
     .filter((key) => extensionHasVisibleContentAtLevel(schemasForLevel[key]))
+    .filter((key) => {
+      const extensionName = schemasForLevel[key]?.name;
+      return Object.prototype.hasOwnProperty.call(extensions, key) ||
+        !extensionTypeOptions.length || !extensionName || visibleExtensionNames.has(extensionName);
+    })
     .filter((key) => !componentKey || isComponentExtensionAllowed(schemasForLevel[key]?.name, componentKey))
+    .filter((key) => {
+      const extensionName = schemasForLevel[key]?.name ?? "";
+      return !addedProgressExtensionName ||
+        !PAGE_LEVEL_PROGRESS_EXTENSION_NAMES.has(extensionName) ||
+        extensionName === addedProgressExtensionName;
+    })
     .sort((a, b) => a.localeCompare(b));
   const addedKeys = allKeys.filter((key) => Object.prototype.hasOwnProperty.call(extensions, key));
   const availableKeys = allKeys.filter((key) => !addedKeys.includes(key));
@@ -3303,6 +3327,8 @@ export default function CourseEditor({
   const [menuPageCreated, setMenuPageCreated] = useState(false);
   const [menuSelected, setMenuSelected] = useState(false);
   const [rightPanelOpen, setRightPanelOpen] = useState(false);
+  const [rightPanelWidth, setRightPanelWidth] = useState(RIGHT_PANEL_MIN_WIDTH);
+  const [isResizingRightPanel, setIsResizingRightPanel] = useState(false);
   const [rightPanelType, setRightPanelType] = useState<"menu" | "page" | "subpage" | "article" | "block" | "component" | "addComponent" | "structure">("menu");
   const [showStructureMap, setShowStructureMap] = useState(false);
   const [menuData, setMenuData] = useState<MenuPageData>(defaultMenuPage);
@@ -3491,7 +3517,14 @@ export default function CourseEditor({
   const copiedBlockIdResetTimerRef = useRef<number | null>(null);
   const copiedComponentIdResetTimerRef = useRef<number | null>(null);
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
-  const rightPanelScrollRef = useRef<HTMLElement | null>(null);
+  const rightPanelContainerRef = useRef<HTMLElement | null>(null);
+  const rightPanelScrollRef = useRef<HTMLDivElement | null>(null);
+  const rightPanelResizeStateRef = useRef<{
+    panelRight: number;
+    previousCursor: string;
+    previousUserSelect: string;
+  } | null>(null);
+  const canvasRef = useRef<HTMLElement | null>(null);
   const cleanupPreviewListenersRef = useRef<(() => void) | null>(null);
   const pendingLeftPanelScrollTargetRef = useRef<PendingPreviewScrollTarget | null>(null);
   const swapPersistenceQueueRef = useRef<Map<string, Promise<void>>>(new Map());
@@ -3520,6 +3553,86 @@ export default function CourseEditor({
       // clean up on our side either.
     }
   };
+
+  const getRightPanelMaxWidth = useCallback(() => {
+    const panel = rightPanelContainerRef.current;
+    const canvas = canvasRef.current;
+    if (!panel || !canvas) return RIGHT_PANEL_MIN_WIDTH;
+    const availableWidth = panel.getBoundingClientRect().right - canvas.getBoundingClientRect().left;
+    return RIGHT_PANEL_MIN_WIDTH + Math.floor(availableWidth * RIGHT_PANEL_MAX_EXPANSION_RATIO);
+  }, []);
+
+  const resizeRightPanelTo = useCallback((width: number) => {
+    setRightPanelWidth(Math.round(Math.min(getRightPanelMaxWidth(), Math.max(RIGHT_PANEL_MIN_WIDTH, width))));
+  }, [getRightPanelMaxWidth]);
+
+  const clampRightPanelWidth = useCallback(() => {
+    setRightPanelWidth((width) => (
+      Math.round(Math.min(getRightPanelMaxWidth(), Math.max(RIGHT_PANEL_MIN_WIDTH, width)))
+    ));
+  }, [getRightPanelMaxWidth]);
+
+  const finishRightPanelResize = useCallback(() => {
+    const resizeState = rightPanelResizeStateRef.current;
+    if (!resizeState) return;
+    rightPanelResizeStateRef.current = null;
+    document.body.style.cursor = resizeState.previousCursor;
+    document.body.style.userSelect = resizeState.previousUserSelect;
+    setIsResizingRightPanel(false);
+  }, []);
+
+  const handleRightPanelResizeMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const resizeState = rightPanelResizeStateRef.current;
+    if (!resizeState) return;
+    resizeRightPanelTo(resizeState.panelRight - event.clientX);
+  }, [resizeRightPanelTo]);
+
+  const handleRightPanelResizeStart = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const panelRight = rightPanelContainerRef.current?.getBoundingClientRect().right;
+    if (panelRight === undefined) return;
+
+    rightPanelResizeStateRef.current = {
+      panelRight,
+      previousCursor: document.body.style.cursor,
+      previousUserSelect: document.body.style.userSelect,
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    setIsResizingRightPanel(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isResizingRightPanel) return;
+    window.addEventListener("pointerup", finishRightPanelResize);
+    window.addEventListener("pointercancel", finishRightPanelResize);
+    window.addEventListener("blur", finishRightPanelResize);
+    return () => {
+      window.removeEventListener("pointerup", finishRightPanelResize);
+      window.removeEventListener("pointercancel", finishRightPanelResize);
+      window.removeEventListener("blur", finishRightPanelResize);
+    };
+  }, [finishRightPanelResize, isResizingRightPanel]);
+
+  useEffect(() => {
+    setRightPanelWidth(RIGHT_PANEL_MIN_WIDTH);
+  }, [courseId]);
+
+  useEffect(() => {
+    const clampWidth = () => {
+      if (!rightPanelContainerRef.current || !canvasRef.current) return;
+      clampRightPanelWidth();
+    };
+    window.addEventListener("resize", clampWidth);
+    return () => window.removeEventListener("resize", clampWidth);
+  }, [clampRightPanelWidth]);
+
+  useEffect(() => {
+    if (!rightPanelOpen) return;
+    const frameId = window.requestAnimationFrame(clampRightPanelWidth);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [clampRightPanelWidth, rightPanelOpen]);
 
   // Apply a Samaritan result to a canvas body editor. The popover lives in
   // the parent document, so focus never returns to the editor on its own —
@@ -4936,9 +5049,9 @@ export default function CourseEditor({
     };
 
     const toBadgeLabel = (level: "menu" | "topic" | "section" | "group" | "component") => {
-      if (level === "topic") return "Topic";
-      if (level === "section") return "Section";
-      if (level === "group") return "Content Group";
+      if (level === "topic") return "Topic (Page)";
+      if (level === "section") return "Section (Article)";
+      if (level === "group") return "Content Group (Block)";
       if (level === "component") return "Component";
       return "Menu";
     };
@@ -5335,6 +5448,28 @@ export default function CourseEditor({
         el.style.setProperty("margin-left", `${leftInset}px`, "important");
         el.style.setProperty("margin-right", `${rightInset}px`, "important");
       });
+    }
+
+    // Reserve space for extension UI that paints below a fixed top nav's own box.
+    const navEl = doc.querySelector(".nav") as HTMLElement | null;
+    const pageHeaderInner = doc.querySelector(".page__header-inner") as HTMLElement | null;
+    if (navEl && pageHeaderInner) {
+      const navPosition = getComputedStyle(navEl).position;
+      let navOverflow = 0;
+      if (navPosition === "fixed" || navPosition === "sticky") {
+        const navRect = navEl.getBoundingClientRect();
+        let maxDescendantBottom = navRect.bottom;
+        navEl.querySelectorAll("*").forEach((descendant) => {
+          const descendantBottom = (descendant as HTMLElement).getBoundingClientRect().bottom;
+          if (descendantBottom > maxDescendantBottom) maxDescendantBottom = descendantBottom;
+        });
+        navOverflow = Math.max(0, Math.ceil(maxDescendantBottom - navRect.bottom));
+      }
+      if (navOverflow > 0) {
+        pageHeaderInner.style.setProperty("margin-top", `${navOverflow + 4}px`, "important");
+      } else {
+        pageHeaderInner.style.removeProperty("margin-top");
+      }
     }
   }, [
     hasCanvasSelection,
@@ -7311,9 +7446,7 @@ export default function CourseEditor({
     if (pendingTarget.level === "topic") {
       const pageNode = doc.querySelector(`.page[data-adapt-id="${pendingTarget.id}"]`) ?? doc.querySelector(".page");
       if (!pageNode) return;
-      const target = pageNode.querySelector(".page__header-inner") ?? pageNode.querySelector(".page__header") ?? pageNode;
-      doc.defaultView?.scrollTo({ top: 0, behavior: "smooth" });
-      target.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+      pageNode.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
       if (clearTarget) pendingLeftPanelScrollTargetRef.current = null;
       return;
     }
@@ -11092,6 +11225,7 @@ export default function CourseEditor({
 
         {/* Canvas */}
         <main
+          ref={canvasRef}
           className="flex-1 min-w-0 bg-[#F2F2F2] overflow-y-auto overflow-x-hidden relative"
           onClick={handleCanvasClick}
         >
@@ -11202,6 +11336,15 @@ export default function CourseEditor({
         {/* Right properties panel — fixed until collapsed or preview mode */}
         {menuPageCreated && (
           <>
+            {isResizingRightPanel && (
+              <div
+                className="fixed inset-0 z-[100] cursor-col-resize touch-none"
+                onPointerMove={handleRightPanelResizeMove}
+                onPointerUp={finishRightPanelResize}
+                onPointerCancel={finishRightPanelResize}
+                aria-hidden="true"
+              />
+            )}
             {rightPanelOpen && (
               <div
                 className="md:hidden fixed inset-0 z-30 bg-black/40"
@@ -11211,7 +11354,39 @@ export default function CourseEditor({
             )}
 
             {rightPanelOpen ? (
-              <aside ref={rightPanelScrollRef} className="fixed md:relative inset-y-0 right-0 z-40 md:z-auto h-full w-[300px] bg-white border-l border-[#d8dee6] overflow-y-auto overflow-x-hidden shrink-0">
+              <aside
+                ref={rightPanelContainerRef}
+                className="fixed md:relative inset-y-0 right-0 z-40 md:z-auto h-full w-[min(300px,100vw)] md:w-[var(--properties-panel-width)] min-w-0 bg-white border-l border-[#d8dee6] overflow-hidden shrink-0"
+                style={{ "--properties-panel-width": `${rightPanelWidth}px` } as CSSProperties}
+              >
+                <div
+                  role="separator"
+                  aria-label="Resize properties panel"
+                  aria-orientation="vertical"
+aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
+                  aria-valuemax={getRightPanelMaxWidth()}
+                  aria-valuenow={rightPanelWidth}
+                  tabIndex={0}
+                  title="Drag to resize properties panel"
+                  onPointerDown={handleRightPanelResizeStart}
+                  onDoubleClick={() => setRightPanelWidth(RIGHT_PANEL_MIN_WIDTH)}
+                  onKeyDown={(event) => {
+                    if (event.key === "ArrowLeft") {
+                      event.preventDefault();
+                      resizeRightPanelTo(rightPanelWidth + 20);
+                    } else if (event.key === "ArrowRight") {
+                      event.preventDefault();
+                      resizeRightPanelTo(rightPanelWidth - 20);
+                    } else if (event.key === "Home") {
+                      event.preventDefault();
+                      setRightPanelWidth(RIGHT_PANEL_MIN_WIDTH);
+                    }
+                  }}
+                  className={`group hidden md:flex absolute inset-y-0 left-0 z-30 w-2 cursor-col-resize touch-none items-center justify-center outline-none ${isResizingRightPanel ? "bg-[#2e7fa1]/10" : ""}`}
+                >
+                  <span className={`h-12 w-1 rounded-full transition-colors ${isResizingRightPanel ? "bg-[#2e7fa1]" : "bg-[#94a3b8] group-hover:bg-[#2e7fa1] group-focus-visible:bg-[#2e7fa1]"}`} />
+                </div>
+                <div ref={rightPanelScrollRef} className="h-full overflow-y-auto overflow-x-hidden">
                 {(() => {
                 const page = selectedPageId ? contentPages.find((p) => p.id === selectedPageId) : undefined;
                 const article = page && selectedArticleId ? page.articles.find((a) => a.id === selectedArticleId) : undefined;
@@ -12221,6 +12396,7 @@ export default function CourseEditor({
                 );
               })()}
               <div className="h-10 shrink-0" aria-hidden="true" />
+              </div>
               </aside>
             ) : (
               <aside className="hidden md:flex h-full w-[56px] bg-white border-l border-[#d8dee6] shrink-0 flex-col items-center py-3">
@@ -12358,6 +12534,11 @@ export default function CourseEditor({
           title="Error"
           message="Error generating preview, please contact an administrator."
           debugDetails={previewError || undefined}
+          secondaryLabel="Retry"
+          onSecondary={() => {
+            setDismissedPreviewError(previewError);
+            setPreviewRefreshToken((current) => current + 1);
+          }}
           onClose={() => setDismissedPreviewError(previewError)}
         />
 

@@ -81,10 +81,9 @@ function ToggleSwitch({
 
 /* ── Navigation Panel ── */
 
-// Collapsible card matching the Figma "Navigation Settings" accordion sections.
+// Collapsible card matching the LIFE accordion button states.
 // Controlled (single-open): the parent owns which section is expanded so opening
-// one collapses the others. Header has a hover state and a right-aligned chevron
-// that rotates down when open.
+// one collapses the others.
 function NavAccordion({
   title,
   subtitle,
@@ -99,22 +98,22 @@ function NavAccordion({
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden transition-shadow hover:shadow-sm">
+    <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
       <button
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-[var(--life-primary-020)] transition-colors"
+        className="group w-full flex items-center justify-between gap-3 px-5 py-4 text-left bg-white text-[#111827] transition-colors hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] disabled:bg-[#f7f7f7] disabled:text-[#b7b7b7]"
       >
         <div className="min-w-0">
-          <h3 className="text-sm font-bold text-[var(--life-base-black)]">{title}</h3>
-          {subtitle && <p className="text-xs text-[#9ca3af] mt-0.5 leading-snug">{subtitle}</p>}
+          <h3 className="text-sm font-bold text-current">{title}</h3>
+          {subtitle && <p className="text-xs text-[#6b7280] mt-0.5 leading-snug group-hover:text-[#0f5f75]">{subtitle}</p>}
         </div>
         <svg
-          className={`shrink-0 ml-auto transition-transform duration-200 ${open ? "rotate-90" : ""}`}
-          width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--life-primary-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+          className="shrink-0 ml-auto text-current"
+          width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
         >
-          <polyline points="9 18 15 12 9 6" />
+          <polyline points={open ? "6 9 12 15 18 9" : "9 6 15 12 9 18"} />
         </svg>
       </button>
       {open && <div className="px-5 pb-5 pt-1 border-t border-[#f3f4f6] flex flex-col gap-3">{children}</div>}
