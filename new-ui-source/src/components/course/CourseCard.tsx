@@ -472,6 +472,8 @@ export default function CourseCard({
                   <input
                     type="text"
                     value={tagInput}
+                    aria-invalid={Boolean(tagError)}
+                    aria-describedby={tagError ? "course-tag-error" : undefined}
                     onChange={(e) => {
                       setTagInput(e.target.value);
                       if (tagError) setTagError(null);
@@ -490,7 +492,9 @@ export default function CourseCard({
                   </button>
                 </div>
                 {tagError && (
-                  <p className="mt-2 text-xs text-[#ef4444]">{tagError}</p>
+                  <p id="course-tag-error" role="alert" aria-live="assertive" className="mt-2 text-xs text-[#ef4444]">
+                    {tagError}
+                  </p>
                 )}
               </div>
             </div>
