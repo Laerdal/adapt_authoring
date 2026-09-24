@@ -134,24 +134,24 @@ function AccordionCard({
         type="button"
         aria-expanded={open}
         onClick={onToggle}
-        className="w-full px-4 py-3.5 flex items-center justify-between bg-white hover:bg-[#f9fafb] transition-colors"
+        className="group w-full px-5 py-4 flex items-center justify-between gap-3 text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
       >
         <div className="flex items-center gap-2.5">
-          <span className="text-[#6b7280]">{icon}</span>
-          <span className="text-sm font-semibold text-[#111827]">{title}</span>
+          <span className="text-current">{icon}</span>
+          <span className="text-sm font-semibold text-current">{title}</span>
         </div>
         <svg
           width="16"
           height="16"
           viewBox="0 0 24 24"
           fill="none"
-          stroke="#6b7280"
+          stroke="currentColor"
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          className="shrink-0 ml-auto text-current"
         >
-          <polyline points="6 9 12 15 18 9" />
+          <polyline points={open ? "6 9 12 15 18 9" : "9 6 15 12 9 18"} />
         </svg>
       </button>
       {open && <div className="px-[22px] py-[20px] border-t border-[#f3f4f6] space-y-4">{children}</div>}
@@ -963,8 +963,10 @@ export function TrackingAnalyticsPage({
   pendingNavigation?: string | null;
   onPendingNavigationHandled?: () => void;
 }) {
-  const [trackingOpen, setTrackingOpen] = useState(false);
-  const [analyticsOpen, setAnalyticsOpen] = useState(false);
+  const [openAccordion, setOpenAccordion] = useState<"tracking" | "analytics" | "">("");
+  const toggleAccordion = (accordion: "tracking" | "analytics") => {
+    setOpenAccordion((current) => (current === accordion ? "" : accordion));
+  };
   const [trackingPlugin, setTrackingPlugin] = useState<TrackingPlugin | null>(null);
   const [analyticsPlugin, setAnalyticsPlugin] = useState<AnalyticsPlugin | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -1157,17 +1159,18 @@ export function TrackingAnalyticsPage({
 
   return (
     <>
-      <div className="max-w-2xl w-full pb-24">
-        <div className="mb-6">
+      <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
+        <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb]">
           <h2 className="text-xl font-bold text-[#111827]">Tracking &amp; Analytics</h2>
           <p className="text-sm text-[#6b7280] mt-0.5">Configure LMS tracking standards and analytics integrations for this course.</p>
         </div>
 
-        <div className="flex flex-col gap-4">
+        <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="max-w-2xl px-6 py-6 pb-24 flex flex-col gap-4">
         <AccordionCard
           title="Tracking"
-          open={trackingOpen}
-          onToggle={() => setTrackingOpen((open) => !open)}
+          open={openAccordion === "tracking"}
+          onToggle={() => toggleAccordion("tracking")}
           icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></svg>}
         >
           <div role="radiogroup" aria-label="Tracking plugin" className="flex flex-col gap-1.5">
@@ -1427,8 +1430,8 @@ export function TrackingAnalyticsPage({
 
         <AccordionCard
           title="Analytics"
-          open={analyticsOpen}
-          onToggle={() => setAnalyticsOpen((open) => !open)}
+          open={openAccordion === "analytics"}
+          onToggle={() => toggleAccordion("analytics")}
           icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>}
         >
           <div className="flex flex-col gap-1.5">
@@ -1498,6 +1501,7 @@ export function TrackingAnalyticsPage({
         </p>
       </div>
 
+      </div>
       </div>
 
       {!isLoading && hasChanges && (

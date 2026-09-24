@@ -538,9 +538,9 @@ export function CourseOverviewPage({
 
   return (
     <div
+      className="flex flex-col h-full w-full bg-[#f7f9fb]"
       dir="ltr"
       style={{
-        maxWidth: 672,
         fontFamily: '"Lato", sans-serif',
         direction: "ltr",
         textAlign: "left",
@@ -549,14 +549,17 @@ export function CourseOverviewPage({
     >
 
       {/* ── Header ───────────────────────────────────────────────── */}
-      <div style={{ marginBottom: 28 }}>
-        <h4 style={{ fontFamily: '"Lato", sans-serif', fontSize: 20, fontWeight: 700, color: "var(--life-base-black)", margin: 0 }}>
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb]">
+        <h2 className="text-xl font-bold text-[var(--life-base-black)] m-0">
           Course Overview
-        </h4>
-        <p style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-neutral-400)", margin: "4px 0 0" }}>
+        </h2>
+        <p className="text-sm text-[#6b7280] mt-0.5 mb-0">
           Click any field to review and edit its content inline.
         </p>
       </div>
+
+      <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="max-w-2xl px-6 py-6">
 
       {/* ── Banners ──────────────────────────────────────────────── */}
       {saveError && (
@@ -741,7 +744,7 @@ export function CourseOverviewPage({
               value={tagInput}
               onChange={(e) => setTagInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddTag(); } }}
-              placeholder="Add tags to your course by entering one or more words, separated with  a comma"
+              placeholder="Add tags to your course and press Enter"
               disabled={loading}
               style={{ ...inputBase, flex: 1 }}
               onFocus={focusIn}
@@ -1074,6 +1077,8 @@ export function CourseOverviewPage({
         onSave={handleConfirmSave}
         onClose={clearPendingNavigation}
       />
+      </div>
+      </div>
     </div>
   );
 }

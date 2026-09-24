@@ -325,23 +325,27 @@ function initialize () {
               }
               if (typeof userCache[course.createdBy] === 'string') {
                 shortCourse.createdByEmail = userCache[course.createdBy]
-                return callback();
+              } else {
+                db.retrieve('user', {_id: course.createdBy}, function (err, users) {
+                  if (err) {
+                    return callback(err);
+                  }
+
+                  if (users.length !== 1) {
+                    shortCourse.createdByEmail = '';
+                  } else {
+                    shortCourse.createdByEmail = users[0].email;
+                    userCache[course.createdBy] = users[0].email;
+                  }
+
+                  returnData.push(shortCourse);
+                  callback();
+                });
+                return;
               }
 
-              db.retrieve('user', {_id: course.createdBy}, function (err, users) {
-                if (err) {
-                  return callback(err);
-                }
-
-                if (users.length !== 1) {
-                  shortCourse.createdByEmail = '';
-                } else {
-                  shortCourse.createdByEmail = users[0].email;
-                  userCache[course.createdBy] = users[0].email;
-                }
-                returnData.push(shortCourse);
-                callback();
-              });
+              returnData.push(shortCourse);
+              callback();
             });
           }, function(err){
             if (err) {
@@ -433,6 +437,11 @@ BowerPlugin.prototype.initialize = function (plugin) {
             if (!adminUser) {
               var deprecated = getDeprecatedForType(plugin.type);
               results = results.filter(function(r) { return deprecated.indexOf(r.name) === -1; });
+            } else {
+              var adminDeprecated = getDeprecatedForType(plugin.type);
+              results = results.map(function(r) {
+                return _.extend({}, r, { _isDeprecated: adminDeprecated.indexOf(r.name) !== -1 });
+              });
             }
 
             res.statusCode = 200;

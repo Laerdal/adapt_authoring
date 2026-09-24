@@ -408,7 +408,7 @@ export default function HomePage() {
           <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
             <div>
               <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">{location.pathname === '/shared' ? 'Shared with Me' : 'My Courses'}</h1>
-              <p className="text-sm text-[#6b7280] mt-1">Manage and organize your courses</p>
+              <p className="text-sm text-[#6b7280] mt-1">{location.pathname === '/shared' ? 'View and access courses shared with you' : 'Manage and organize your courses'}</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {/* Import */}
@@ -537,7 +537,7 @@ export default function HomePage() {
                             isSelected ? 'bg-[#dbeeff] text-[#2d6fa8] font-medium' : 'text-[#374151] hover:bg-[#f9fafb]'
                           }`}
                         >
-                          <span>#{tag}</span>
+                          <span>{tag}</span>
                           {isSelected && (
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
                               <polyline points="20 6 9 17 4 12" />
@@ -643,7 +643,7 @@ export default function HomePage() {
               )}
               {selectedTags.map((tag) => (
                 <span key={tag} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#eef2ff] text-xs text-[#3730a3] font-medium">
-                  Tag: #{tag}
+                  Tag: {tag}
                   <button
                     type="button"
                     onClick={() => setSelectedTags((prev) => prev.filter((item) => item.toLowerCase() !== tag.toLowerCase()))}
