@@ -620,6 +620,7 @@ export const assessmentBlock = createReactBlockSpec(
               resetKey={block.id}
             />
           </label>
+          
 
           <Body kind={kind} data={model} update={update} />
           <FeedbackGroup fb={fb} set={(f) => update({ ...model, feedback: f })} />

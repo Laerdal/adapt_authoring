@@ -405,6 +405,7 @@ function ComponentBody({ kind, data, set, blockId }: { kind: ComponentKind; data
       </div>
     );
   }
+  
 
   if (kind === 'groupedContent') {
     const items = data.items ?? [];
