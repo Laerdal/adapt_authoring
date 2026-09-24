@@ -196,6 +196,21 @@ function parseData(kind: ComponentKind, raw: string): ComponentData {
   return defaultComponentData(kind);
 }
 
+export type RichTextEditableField =
+  | 'description'
+  | 'instruction'
+  | 'itemBody'
+  | 'completionBody'
+  | 'bandFeedback';
+
+export function getRichTextEditableFields(kind: ComponentKind): RichTextEditableField[] {
+  const fields: RichTextEditableField[] = ['instruction'];
+  if (kind === 'text') fields.unshift('description');
+  if (kind === 'groupedContent') fields.push('itemBody');
+  if (kind === 'assessmentResult') fields.push('completionBody', 'bandFeedback');
+  return fields;
+}
+
 // A component with real content (loaded from an existing document/course)
 // opens collapsed in read-only Preview; a brand-new, still-blank
 // component (just inserted from Add Content) opens expanded so the author can
@@ -355,6 +370,38 @@ function AssetField({
 
 // ── Per-kind bodies ──────────────────────────────────────────────────────────
 
+function RichTextField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  minHeight = 110,
+  ariaLabel,
+  resetKey,
+}: {
+  label: string;
+  value: string;
+  onChange: (html: string) => void;
+  placeholder?: string;
+  minHeight?: number;
+  ariaLabel?: string;
+  resetKey?: string | number;
+}) {
+  return (
+    <div>
+      <span className={labelCls}>{label}</span>
+      <BasicRichTextEditor
+        html={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        minHeight={minHeight}
+        ariaLabel={ariaLabel ?? label}
+        resetKey={resetKey}
+      />
+    </div>
+  );
+}
+
 function TranscriptFields({ kind, media, set }: { kind: 'video' | 'audio'; media: MediaData; set: (m: MediaData) => void }) {
   const field = (key: keyof MediaData, label: string, ph: string) => (
     <label className="block">
@@ -392,20 +439,17 @@ function TranscriptFields({ kind, media, set }: { kind: 'video' | 'audio'; media
 function ComponentBody({ kind, data, set, blockId }: { kind: ComponentKind; data: ComponentData; set: (d: ComponentData) => void; blockId: string }) {
   if (kind === 'text') {
     return (
-      <div>
-        <span className={labelCls}>Description</span>
-        <BasicRichTextEditor
-          html={data.description}
-          onChange={(html) => set({ ...data, description: html })}
-          placeholder="New component content…"
-          minHeight={110}
-          ariaLabel="Component description"
-          resetKey={blockId}
-        />
-      </div>
+      <RichTextField
+        label="Description"
+        value={data.description}
+        onChange={(html) => set({ ...data, description: html })}
+        placeholder="New component content…"
+        minHeight={110}
+        ariaLabel="Component description"
+        resetKey={blockId}
+      />
     );
   }
-  
 
   if (kind === 'groupedContent') {
     const items = data.items ?? [];
@@ -422,7 +466,17 @@ function ComponentBody({ kind, data, set, blockId }: { kind: ComponentKind; data
               </button>
             </div>
             <input value={it.title} placeholder="Item title" onKeyDown={stop} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))} className={`${inputCls} mb-1`} />
-            <textarea value={it.body} placeholder="Item body — what should the learner read here?" onKeyDown={stop} rows={2} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, body: e.target.value } : x)))} className={`${inputCls} mb-1 resize-y`} />
+            <div className="mb-1">
+              <RichTextField
+                label={`Item ${i + 1} body`}
+                value={it.body}
+                onChange={(html) => setItems(items.map((x, j) => (j === i ? { ...x, body: html } : x)))}
+                placeholder="Item body — what should the learner read here?"
+                minHeight={100}
+                ariaLabel={`Grouped content item ${i + 1} body`}
+                resetKey={`${blockId}-${i}`}
+              />
+            </div>
             <AssetField
               assetType="image"
               value={
@@ -558,20 +612,20 @@ function ComponentBody({ kind, data, set, blockId }: { kind: ComponentKind; data
             className={inputCls}
           />
         </label>
-        <label className="block">
-          <span className={labelCls}>Completion body</span>
-          <textarea
+        <div>
+          <RichTextField
+            label="Completion body"
             value={r.completionBody}
+            onChange={(html) => setR({ completionBody: html })}
             placeholder="e.g. You scored {{scoreAsPercent}}%."
-            rows={2}
-            onKeyDown={stop}
-            onChange={(e) => setR({ completionBody: e.target.value })}
-            className={`${inputCls} resize-y`}
+            minHeight={90}
+            ariaLabel="Assessment completion body"
+            resetKey={`${blockId}-completion-body`}
           />
           <span className="mt-0.5 block text-[11px] italic text-muted-foreground">
             Supports {'{{score}}'}, {'{{scoreAsPercent}}'}, {'{{maxScore}}'}, {'{{correct}}'}, {'{{questionCount}}'}.
           </span>
-        </label>
+        </div>
         <div className="rounded border border-border p-2">
           <div className={labelCls}>Score bands</div>
           {bands.map((b, i) => (
@@ -588,14 +642,14 @@ function ComponentBody({ kind, data, set, blockId }: { kind: ComponentKind; data
                   className={inputCls}
                 />
               </label>
-              <label className="block">
-                <span className={labelCls}>Feedback</span>
-                <textarea
+              <div>
+                <RichTextField
+                  label="Feedback"
                   value={b.feedback}
-                  rows={2}
-                  onKeyDown={stop}
-                  onChange={(e) => setBands(bands.map((x, j) => (j === i ? { ...x, feedback: e.target.value } : x)))}
-                  className={`${inputCls} resize-y`}
+                  onChange={(html) => setBands(bands.map((x, j) => (j === i ? { ...x, feedback: html } : x)))}
+                  minHeight={80}
+                  ariaLabel={`Score band ${i + 1} feedback`}
+                  resetKey={`${blockId}-band-${i}`}
                 />
                 <label className="mt-1 flex items-center gap-1.5 text-xs text-foreground cursor-pointer group">
                   <input
@@ -608,7 +662,7 @@ function ComponentBody({ kind, data, set, blockId }: { kind: ComponentKind; data
                   <CheckboxIndicator checked={b.allowRetry} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
                   Allow retry
                 </label>
-              </label>
+              </div>
               <button
                 type="button"
                 aria-label="Remove band"
@@ -670,7 +724,8 @@ function MediaPlaceholder({ Icon, label }: { Icon: typeof Type; label: string })
 
 function ComponentPreview({ kind, title, data }: { kind: ComponentKind; title: string; data: ComponentData }) {
   const heading = data.showTitle && title ? <h4 className="mb-2 text-base font-semibold text-foreground">{title}</h4> : null;
-  const instruction = data.instruction ? <p className="mt-2 text-sm italic text-muted-foreground">{data.instruction}</p> : null;
+const instructionHtml = sanitizeEditorHtml(data.instruction);
+      const instruction = instructionHtml ? <div className="mt-2 text-sm italic text-muted-foreground" dangerouslySetInnerHTML={{ __html: instructionHtml }} /> : null;
 
   if (kind === 'text') {
     const descriptionHtml = sanitizeEditorHtml(data.description);
@@ -697,15 +752,18 @@ function ComponentPreview({ kind, title, data }: { kind: ComponentKind; title: s
         {heading}
         <p className="mb-4 text-sm italic text-muted-foreground">Select each heading to find out more.</p>
         <div className="space-y-5">
-          {items.map((it, i) => (
-            <div key={i} className="flex items-start justify-between gap-4">
-              <div className="min-w-0 flex-1">
-                <div className="font-semibold text-foreground">{it.title || `Item ${i + 1}`}</div>
-                {it.body && <div className="mt-0.5 whitespace-pre-wrap text-sm text-foreground">{it.body}</div>}
+          {items.map((it, i) => {
+            const bodyHtml = sanitizeEditorHtml(it.body);
+            return (
+              <div key={i} className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <div className="font-semibold text-foreground">{it.title || `Item ${i + 1}`}</div>
+                  {bodyHtml && <div className="mt-0.5 text-sm text-foreground" dangerouslySetInnerHTML={{ __html: bodyHtml }} />}
+                </div>
+                {safePreviewSrc(it.imageUrl, it.image) && <img src={safePreviewSrc(it.imageUrl, it.image)} alt="" className="h-20 w-32 shrink-0 rounded-md object-cover" />}
               </div>
-              {safePreviewSrc(it.imageUrl, it.image) && <img src={safePreviewSrc(it.imageUrl, it.image)} alt="" className="h-20 w-32 shrink-0 rounded-md object-cover" />}
-            </div>
-          ))}
+            );
+          })}
         </div>
         {instruction}
       </div>
@@ -797,6 +855,7 @@ function ComponentPreview({ kind, title, data }: { kind: ComponentKind; title: s
   if (kind === 'assessmentResult') {
     const r = data.result;
     const bands = r?.bands ?? [];
+    const completionHtml = sanitizeEditorHtml(r?.completionBody ?? '');
     return (
       <div>
         {heading}
@@ -804,20 +863,29 @@ function ComponentPreview({ kind, title, data }: { kind: ComponentKind; title: s
           <div className="mb-2 inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             <Award className="h-3.5 w-3.5" /> Assessment result
           </div>
-          {r?.completionBody ? (
-            <p className="whitespace-pre-wrap text-sm text-foreground">{r.completionBody}</p>
+          {completionHtml ? (
+            <div className="text-sm text-foreground" dangerouslySetInnerHTML={{ __html: completionHtml }} />
           ) : (
             <p className="text-sm italic text-muted-foreground">Completion body not set.</p>
           )}
           {bands.length > 0 && (
             <ul className="mt-2 space-y-1 text-xs">
-              {bands.map((b, i) => (
-                <li key={i} className="flex items-baseline gap-2">
-                  <span className="min-w-[3rem] rounded bg-background px-1 py-0.5 text-[10px] font-semibold text-muted-foreground">≥ {b.score}%</span>
-                  <span className="text-foreground">{b.feedback || <span className="italic text-muted-foreground">(no feedback)</span>}</span>
-                  {b.allowRetry && <span className="text-muted-foreground">· retry</span>}
-                </li>
-              ))}
+              {bands.map((b, i) => {
+                const feedbackHtml = sanitizeEditorHtml(b.feedback || '');
+                return (
+                  <li key={i} className="flex items-baseline gap-2">
+                    <span className="min-w-[3rem] rounded bg-background px-1 py-0.5 text-[10px] font-semibold text-muted-foreground">≥ {b.score}%</span>
+                    <span className="text-foreground">
+                      {feedbackHtml ? (
+                        <span dangerouslySetInnerHTML={{ __html: feedbackHtml }} />
+                      ) : (
+                        <span className="italic text-muted-foreground">(no feedback)</span>
+                      )}
+                    </span>
+                    {b.allowRetry && <span className="text-muted-foreground">· retry</span>}
+                  </li>
+                );
+              })}
             </ul>
           )}
           {r?.assessmentId && (
@@ -943,10 +1011,17 @@ export const componentBlock = createReactBlockSpec(
           <ComponentBody kind={kind} data={model} set={setData} blockId={block.id} />
 
           {/* Instruction */}
-          <label className="mt-2 block">
-            <span className={labelCls}>Instruction text (optional)</span>
-            <input value={model.instruction} placeholder="e.g. Watch the video before continuing." onKeyDown={stop} onChange={(e) => setData({ ...model, instruction: e.target.value })} className={inputCls} />
-          </label>
+          <div className="mt-2">
+            <RichTextField
+              label="Instruction text (optional)"
+              value={model.instruction}
+              onChange={(html) => setData({ ...model, instruction: html })}
+              placeholder="e.g. Watch the video before continuing."
+              minHeight={80}
+              ariaLabel="Instruction text"
+              resetKey={`${block.id}-instruction`}
+            />
+          </div>
 
           {/* Suggested components */}
           {!dismissed && (
