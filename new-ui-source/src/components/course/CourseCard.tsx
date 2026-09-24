@@ -360,7 +360,7 @@ export default function CourseCard({
             }
           }}
         >
-          <div className={`bg-white rounded-2xl shadow-xl flex flex-col overflow-hidden max-h-[calc(100vh-2rem)] min-h-0 ${cropSrc ? "w-full max-w-xl" : "w-full max-w-md"}`}>
+          <div className={`bg-white rounded-2xl shadow-xl flex flex-col min-h-0 ${cropSrc ? "w-full max-w-xl max-h-[calc(100vh-2rem)] overflow-y-auto" : "w-full max-w-md max-h-[calc(100vh-2rem)] overflow-hidden"}`}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-[#e5e7eb] shrink-0">
               <h2 className="font-semibold text-[#111827] text-base">
                 {cropSrc ? "Crop & Adjust Image" : "Edit Course Details"}
@@ -376,7 +376,7 @@ export default function CourseCard({
 
             {/* ── Crop view ── */}
             {cropSrc ? (
-              <div className="px-5 py-5">
+              <div className="px-5 py-5 overflow-y-auto">
                 <ImageCropper
                   src={cropSrc}
                   aspectRatio={16 / 9}
