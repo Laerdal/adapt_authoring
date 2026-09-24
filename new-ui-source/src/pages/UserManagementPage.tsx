@@ -229,8 +229,8 @@ export default function UserManagementPage() {
             <button
               key={option}
               type="button"
+              aria-pressed={roleFilter === option}
               onClick={() => {
-                setRoleFilter(option as Role | "All");
                 setPage(1);
               }}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
