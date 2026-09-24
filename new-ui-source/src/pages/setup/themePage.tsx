@@ -665,7 +665,7 @@ const CUSTOM_ACCORDION_DEFS: CustomSectionDef[] = [
 ];
 
 const THEME_SCHEMA_PLUGIN_NAMES: Record<string, string> = {
-  life: 'adapt-laerdal-life',
+  life: 'adapt-laerdal-life-v2',
   custom: 'custom-theme',
   vanilla: 'adapt-contrib-vanilla',
 };
@@ -1412,6 +1412,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   const [activeCustomAccordion, setActiveCustomAccordion] = useState<string | null>('_global');
   const [customSettings, setCustomSettings] = useState<Record<string, string>>(CUSTOM_FIELD_DEFAULTS);
   const [selectedThemeSchema, setSelectedThemeSchema] = useState<Record<string, unknown> | undefined>(undefined);
+  const isLifeTheme = selected === 'life';
 
   useEffect(() => {
     let cancelled = false;
@@ -2414,8 +2415,11 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <ThemeAccordion
             label={getSchemaText(getSchemaField(selectedThemeSchema, '_course'), 'title') ?? 'Configuration: Course'}
             hint={getSchemaText(getSchemaField(selectedThemeSchema, '_course'), 'help')}
-            isOpen={activeAccordion === "Configuration: Course"}
-            onToggle={() => setActiveAccordion(activeAccordion === "Configuration: Course" ? null : "Configuration: Course")}
+            isOpen={isLifeTheme || activeAccordion === "Configuration: Course"}
+            onToggle={() => {
+              if (isLifeTheme) return;
+              setActiveAccordion(activeAccordion === "Configuration: Course" ? null : "Configuration: Course");
+            }}
           >
             <div className="space-y-6">
               {selected === 'life' || selected === 'custom' ? (
@@ -2501,8 +2505,11 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <ThemeAccordion
             label={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks'), 'title') ?? 'Configuration: Content Groups'}
             hint={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks'), 'help')}
-            isOpen={activeAccordion === "Configuration: Content Groups"}
-            onToggle={() => setActiveAccordion(activeAccordion === "Configuration: Content Groups" ? null : "Configuration: Content Groups")}
+            isOpen={isLifeTheme || activeAccordion === "Configuration: Content Groups"}
+            onToggle={() => {
+              if (isLifeTheme) return;
+              setActiveAccordion(activeAccordion === "Configuration: Content Groups" ? null : "Configuration: Content Groups");
+            }}
           >
             <div className="space-y-5">
               <div>
@@ -2552,8 +2559,11 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <ThemeAccordion
             label={getSchemaText(selectedThemeComponentSchema, 'title') ?? 'Configuration: Components'}
             hint={getSchemaText(selectedThemeComponentSchema, 'help')}
-            isOpen={activeAccordion === "Configuration: Components"}
-            onToggle={() => setActiveAccordion(activeAccordion === "Configuration: Components" ? null : "Configuration: Components")}
+            isOpen={isLifeTheme || activeAccordion === "Configuration: Components"}
+            onToggle={() => {
+              if (isLifeTheme) return;
+              setActiveAccordion(activeAccordion === "Configuration: Components" ? null : "Configuration: Components");
+            }}
           >
             <div className="space-y-5">
               <p className="text-xs text-[#6b7280] leading-relaxed">
@@ -2764,13 +2774,19 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <div className="space-y-2">
             {VANILLA_ACCORDION_DEFS.map((acc) => {
               const isOpen = activeVanillaAccordion === acc.id;
+              const sectionSchema = getSchemaField(selectedThemeSchema, acc.id);
+              const sectionLabel = getSchemaText(sectionSchema, 'title') ?? acc.label;
+              const sectionHint = getSchemaText(sectionSchema, 'help');
               return (
                 <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-visible">
                   <button
                     onClick={() => setActiveVanillaAccordion(isOpen ? null : acc.id)}
                     className={`w-full flex items-center justify-between px-4 py-3 transition-colors border-b border-[#e5e7eb] ${isOpen ? 'bg-[#f9fafb]' : 'bg-white hover:bg-[#f9fafb]'}`}
                   >
-                    <span className="text-xs font-bold text-[#111827]">{acc.label}</span>
+                    <span className="flex items-center gap-1.5 text-xs font-bold text-[#111827]">
+                      {sectionLabel}
+                      {sectionHint && <InfoIcon label={sectionLabel} hint={sectionHint} />}
+                    </span>
                     <svg
                       className={`w-4 h-4 text-[#6b7280] transition-transform ${isOpen ? 'rotate-180' : ''}`}
                       viewBox="0 0 24 24"
@@ -2788,9 +2804,16 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                           const key = `${acc.id}::${field.key}`;
                           const colorVal = vanillaColors[key] ?? '';
                           const isEmpty = !colorVal;
+                          const fieldSchema = getSchemaField(selectedThemeSchema, acc.id, field.key);
+                          const fieldLabel = getSchemaText(fieldSchema, 'title') ?? field.label;
+                          const fieldHint = getSchemaText(fieldSchema, 'help');
                           return (
                             <div key={field.key}>
-                              <p className="text-xs text-[#111827] mb-2 leading-snug">{field.label}</p>
+                              <InfoFieldLabel
+                                label={fieldLabel}
+                                hint={fieldHint}
+                                className="mb-2 text-[#111827]"
+                              />
                               <label
                                 style={{
                                   display: 'block',
