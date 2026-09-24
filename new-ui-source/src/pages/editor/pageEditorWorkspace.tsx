@@ -11362,7 +11362,8 @@ export default function CourseEditor({
                   role="separator"
                   aria-label="Resize properties panel"
                   aria-orientation="vertical"
-                  aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
+aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
+                  aria-valuemax={getRightPanelMaxWidth()}
                   aria-valuenow={rightPanelWidth}
                   tabIndex={0}
                   title="Drag to resize properties panel"
