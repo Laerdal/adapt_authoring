@@ -1429,7 +1429,8 @@ function ExtensionsAccordionBody({
     .filter((key) => extensionHasVisibleContentAtLevel(schemasForLevel[key]))
     .filter((key) => {
       const extensionName = schemasForLevel[key]?.name;
-      return !extensionTypeOptions.length || !extensionName || visibleExtensionNames.has(extensionName);
+      return Object.prototype.hasOwnProperty.call(extensions, key) ||
+        !extensionTypeOptions.length || !extensionName || visibleExtensionNames.has(extensionName);
     })
     .filter((key) => !componentKey || isComponentExtensionAllowed(schemasForLevel[key]?.name, componentKey))
     .filter((key) => {
@@ -7445,7 +7446,7 @@ export default function CourseEditor({
     if (pendingTarget.level === "topic") {
       const pageNode = doc.querySelector(`.page[data-adapt-id="${pendingTarget.id}"]`) ?? doc.querySelector(".page");
       if (!pageNode) return;
-      doc.defaultView?.scrollTo({ top: 0, behavior: "smooth" });
+      pageNode.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
       if (clearTarget) pendingLeftPanelScrollTargetRef.current = null;
       return;
     }

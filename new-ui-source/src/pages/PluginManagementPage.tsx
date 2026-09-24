@@ -142,7 +142,7 @@ function UploadPluginModal({
               <Upload size={26} aria-hidden="true" />
             </span>
             <span className="text-base font-semibold text-[#111827]">{file ? file.name : "Click to browse files"}</span>
-            <span className="mt-3 text-sm text-[#6b7280]">Supports .zip, .tar.gz, .tgz</span>
+            <span className="mt-3 text-sm text-[#6b7280]">Supports .zip</span>
           </button>
           <p className="mt-3 text-left text-sm text-[#6b7280]">Maximum upload file size: {maxFileUploadSize}.</p>
           <input
@@ -389,7 +389,7 @@ export default function PluginManagementPage() {
           </div>
           <div className="flex items-center gap-1 rounded-lg bg-[#f3f4f6] p-1">
             {FILTER_OPTIONS.map((option) => (
-              <button key={option.value} type="button" onClick={() => { setFilter(option.value); setPage(1); }} className={`whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${filter === option.value ? "bg-white text-[#2d6fa8] shadow-sm" : "text-[#6b7280] hover:text-[#374151]"}`}>
+              <button key={option.value} type="button" aria-pressed={filter === option.value} onClick={() => { setFilter(option.value); setPage(1); }} className={`whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${filter === option.value ? "bg-white text-[#2d6fa8] shadow-sm" : "text-[#6b7280] hover:text-[#374151]"}`}>
                 {option.label}
               </button>
             ))}

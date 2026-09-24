@@ -72,6 +72,9 @@ function loadAceScript(src: string): Promise<void> {
 function CustomCssEditor({ value, onChange, expanded }: { value: string; onChange: (value: string) => void; expanded: boolean }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<any>(null);
+  const valueRef = useRef(value);
+  const layoutSizeRef = useRef({ width: 0, height: 0 });
+  valueRef.current = value;
 
   useEffect(() => {
     let disposed = false;
@@ -89,7 +92,8 @@ function CustomCssEditor({ value, onChange, expanded }: { value: string; onChang
           theme: "ace/theme/chrome",
         });
         editorRef.current = editor;
-        editor.setValue(value, -1);
+        editor.setTheme("ace/theme/chrome");
+        editor.setValue(valueRef.current, -1);
         editor.setOptions({
           enableBasicAutocompletion: true,
           enableLiveAutocompletion: true,
@@ -104,7 +108,11 @@ function CustomCssEditor({ value, onChange, expanded }: { value: string; onChang
           languageTools.addCompleter(cssValueCompleter);
           window.cssValueCompleterRegistered = true;
         }
-        editor.on("change", () => onChange(editor.getValue()));
+        editor.on("change", () => {
+          const nextValue = editor.getValue();
+          valueRef.current = nextValue;
+          onChange(nextValue);
+        });
       } catch (error) {
         console.error("Failed to initialize CSS editor", error);
       }
@@ -120,14 +128,43 @@ function CustomCssEditor({ value, onChange, expanded }: { value: string; onChang
 
   useEffect(() => {
     const editor = editorRef.current;
-    if (editor && editor.getValue() !== value) editor.setValue(value, -1);
+    const container = containerRef.current;
+    if (!editor || !container || editor.getValue() === value) return;
+
+    // Do not replace the document while the user is typing; setValue resets
+    // Ace's cursor and selection and can overwrite a newer local edit.
+    if (container.contains(document.activeElement)) return;
+    editor.setValue(value, -1);
   }, [value]);
 
   useEffect(() => {
-    editorRef.current?.resize();
+    const container = containerRef.current;
+    if (!container) return;
+
+    const resizeEditor = () => {
+      const parent = container.parentElement;
+      const width = parent?.clientWidth ?? container.clientWidth;
+      const height = expanded ? parent?.clientHeight ?? container.clientHeight : 0;
+      if (layoutSizeRef.current.width === width && layoutSizeRef.current.height === height) return;
+      layoutSizeRef.current = { width, height };
+
+      if (expanded && container.parentElement) {
+        container.style.height = `${height}px`;
+        editorRef.current?.resize(true);
+        container.style.height = `${height}px`;
+      } else {
+        container.style.removeProperty("height");
+        editorRef.current?.resize(true);
+      }
+    };
+
+    resizeEditor();
+    const observer = new ResizeObserver(resizeEditor);
+    observer.observe(container.parentElement ?? container);
+    return () => observer.disconnect();
   }, [expanded]);
 
-  return <div ref={containerRef} className={`w-full ${expanded ? "h-full" : "h-48"}`} aria-label="Custom CSS/LESS editor" />;
+  return <div ref={containerRef} className="relative w-full" aria-label="Custom CSS/LESS editor" />;
 }
 
 function TsAccordion({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
@@ -301,6 +338,7 @@ export function TechnicalSettingPage({
   const [enableLogging, setEnableLogging] = useState(true);
   const [logLevel, setLogLevel] = useState("info");
   const [strictMode, setStrictMode] = useState(true);
+  const [buildSettings, setBuildSettings] = useState<CourseTechnicalSettings["build"]>({});
   const [customCss, setCustomCss] = useState("");
   const [cssExpanded, setCssExpanded] = useState(false);
 
@@ -380,6 +418,7 @@ export function TechnicalSettingPage({
         setLogLevel(uiLevel);
 
         const strict = config.build?.strictMode ?? true;
+        setBuildSettings(config.build ?? {});
         setStrictMode(strict);
 
         const customCssValue = style || "";
@@ -436,7 +475,9 @@ export function TechnicalSettingPage({
           _console: true,
         };
       }
-      if (strictMode !== originalValues.strictMode) changedFields.build = { strictMode };
+      if (strictMode !== originalValues.strictMode) {
+        changedFields.build = { ...buildSettings, strictMode };
+      }
 
       await Promise.all([
         updateCourseTechnicalSettings(configId, changedFields),
@@ -448,6 +489,7 @@ export function TechnicalSettingPage({
         smallBp, mediumBp, largeBp, xlBp,
         optimizedScroll, sourceMaps, enableLogging, logLevel, customCss, strictMode,
       });
+      setBuildSettings((current) => ({ ...current, strictMode }));
       setToast({ type: "success", message: "Changes saved successfully" });
       if (navTarget) onNavigationRequest?.(navTarget);
     } catch (err) {
