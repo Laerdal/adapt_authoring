@@ -23,7 +23,7 @@ export function InfoIcon({
 
   return (
     <span
-      className={`relative inline-flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-full border border-[#cbd5e1] bg-white text-[#64748b] group ${hint ? 'cursor-help' : 'cursor-default'} ${className}`}
+      className={`relative inline-flex h-[16px] w-[16px] shrink-0 items-center justify-center text-[#64748b] group ${hint ? 'cursor-help' : 'cursor-default'} ${className}`}
       tabIndex={hint ? 0 : undefined}
       aria-label={hint ? `More information about ${label}` : undefined}
       aria-describedby={hint ? tooltipId : undefined}
