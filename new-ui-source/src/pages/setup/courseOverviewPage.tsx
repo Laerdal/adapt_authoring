@@ -741,7 +741,7 @@ export function CourseOverviewPage({
               value={tagInput}
               onChange={(e) => setTagInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddTag(); } }}
-              placeholder="Add tags to your course by entering one or more words, separated with  a comma"
+              placeholder="Add tags to your course and press Enter"
               disabled={loading}
               style={{ ...inputBase, flex: 1 }}
               onFocus={focusIn}

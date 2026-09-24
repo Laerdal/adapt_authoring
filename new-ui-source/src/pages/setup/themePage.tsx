@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { saveThemeForCourse, saveThemeVariables, getThemePresets, saveThemePreset, applyThemePreset, getThemePresetParentTheme, renameThemePreset, deleteThemePreset, type ThemePreset } from "../../api/adaptAuthoring";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
+import InfoIcon, { InfoFieldLabel } from "../../components/common/InfoIcon";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
@@ -1004,6 +1005,7 @@ const ON_SCREEN_CLASS_OPTIONS = [
 function LifeListField({
   title,
   description,
+  titleHint,
   items,
   errors,
   onAdd,
@@ -1014,6 +1016,7 @@ function LifeListField({
 }: {
   title: string;
   description: string;
+  titleHint?: string;
   items: Array<LifeSpriteSheet | LifeSingleIcon>;
   errors: LifeListItemErrors[];
   onAdd: () => void;
@@ -1025,7 +1028,11 @@ function LifeListField({
   return (
     <div className="space-y-3">
       <div>
-        <p className="text-xs font-semibold text-[#111827] mb-1.5">{title}</p>
+        <InfoFieldLabel
+          label={title}
+          hint={titleHint}
+          className="mb-1.5"
+        />
         <p className="text-xs text-[#6b7280] leading-relaxed">{description}</p>
       </div>
       <div className="space-y-3">
@@ -2164,7 +2171,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <h2 className="text-base font-semibold text-[var(--life-base-black)]">
             Select Theme <span className="text-red-500">*</span>
           </h2>
-          <p className="text-sm text-[var(--life-neutral-300)] mt-0.5">Choose a theme for your course.</p>
+          <p className="text-sm text-[var(--life-neutral-300)] mt-0.5"> Select the base theme for your course </p>
         </div>
       </div>
 
@@ -2298,6 +2305,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                   <LifeListField
                     title="Custom Icons: Sprite Sheets"
                     description="Add a reference to an external sprite sheet with icons that can be used in the course."
+                    titleHint="Add a reference to an external sprite sheet with icons that can be used in the course."
                     items={lifeCourseConfig._svgSpriteSheets}
                     errors={lifeCourseConfigErrors._svgSpriteSheets}
                     idLabel="Icon Set Name"
@@ -2329,6 +2337,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                   <LifeListField
                     title="Custom Icons: Single Icons"
                     description="Add a reference to an external individual icon that can be used in the course."
+                    titleHint="Add a reference to an external individual icon that can be used in the course."
                     items={lifeCourseConfig._singleIcons}
                     errors={lifeCourseConfigErrors._singleIcons}
                     idLabel="Icon Id"
@@ -2434,7 +2443,13 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     </svg>
                   )}
                 </div>
-                <span className="text-xs text-[#111827] leading-normal">Display marking for not-final attempts</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-[#111827] leading-normal">Display marking for not-final attempts</span>
+                  <InfoIcon
+                    label="Display marking for not-final attempts"
+                    hint="Non-final question attempts are marked the same way as final attempts. Applies to all question components except H5P and Laerdal Drag and Drop"
+                  />
+                </div>
               </div>
 
               <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCheckUnanswered(!checkUnanswered)}>
@@ -2458,7 +2473,13 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     </svg>
                   )}
                 </div>
-                <span className="text-xs text-[#111827] leading-normal">Display marking for unanswered correct responses</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-[#111827] leading-normal">Display marking for unanswered responses</span>
+                  <InfoIcon
+                    label="Display marking for unanswered responses"
+                    hint="Shows or hides markings for partially correct answers according to the “Show Marking” setting under the article-level Assessment settings."
+                  />
+                </div>
               </div>
 
               <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCheckHideFeedback(!checkHideFeedback)}>
@@ -2482,7 +2503,13 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     </svg>
                   )}
                 </div>
-                <span className="text-xs text-[#111827] leading-normal">Hide feedback on first attempt on assessments</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-[#111827] leading-normal">Hide feedback on first attempt on assessments</span>
+                  <InfoIcon
+                    label="Hide feedback on first attempt on assessments"
+                    hint="Controls whether feedback is hidden on the first attempt in assessment courses."
+                  />
+                </div>
               </div>
 
               <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCheckHidePartial(!checkHidePartial)}>
@@ -2506,7 +2533,13 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     </svg>
                   )}
                 </div>
-                <span className="text-xs text-[#111827] leading-normal">Hide partially correct feedback on the question and result topic</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs text-[#111827] leading-normal">Hide partially correct feedback on the question and result topic</span>
+                  <InfoIcon
+                    label="Hide partially correct feedback on the question and result topic"
+                    hint="Controls whether feedback for partially correct answers is hidden on the question and results pages in assessments."
+                  />
+                </div>
               </div>
             </div>
           </ThemeAccordion>
@@ -2678,16 +2711,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Left column: Breadcrumb + Accordions */}
             <div className="space-y-4">
-              <div className="text-xs text-[#6b7280]">
-                <span className="font-semibold">Theme</span>
-                {activeCustomAccordion && (
-                  <>
-                    <span className="mx-1.5">/</span>
-                    <span className="font-semibold">{CUSTOM_ACCORDION_DEFS.find(a => a.id === activeCustomAccordion)?.label}</span>
-                  </>
-                )}
-              </div>
-
               <div className="space-y-2">
                 {CUSTOM_ACCORDION_DEFS.map((acc) => {
                   const isOpen = activeCustomAccordion === acc.id;
