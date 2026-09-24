@@ -51,7 +51,7 @@ export function InfoIcon({
         <span
           id={tooltipId}
           role="tooltip"
-          className={`pointer-events-none absolute left-0 bottom-full z-20 mb-1.5 w-max max-w-[240px] rounded-[8px] bg-[#215369] px-3 py-1 text-[11px] font-medium text-[#ffffff] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 ${tooltipClassName}`}
+          className={`pointer-events-none absolute left-0 bottom-full z-[9999] mb-1.5 w-max max-w-[240px] rounded-[8px] bg-[#215369] px-3 py-1 text-[11px] font-medium text-[#ffffff] opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 ${tooltipClassName}`}
         >
           {hint}
         </span>
@@ -76,15 +76,18 @@ export function InfoFieldLabel({
   tooltipClassName = "",
 }: InfoFieldLabelProps) {
   return (
-    <span className={`relative z-100 text-xs font-semibold text-[#374151] flex items-center gap-1 ${className}`}>
-      {label}
+    <div className={`relative z-10 flex min-w-0 items-start gap-1 text-xs font-semibold text-[#374151] ${className}`}>
+      <span className="min-w-0 flex-1 break-words leading-snug">
+        {label}
+      </span>
       <InfoIcon
         label={label}
         hint={hint}
+        className="mt-[1px]"
         iconClassName={iconClassName}
         tooltipClassName={tooltipClassName}
       />
-    </span>
+    </div>
   );
 }
 

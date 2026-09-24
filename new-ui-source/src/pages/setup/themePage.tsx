@@ -193,7 +193,7 @@ function FontSelect({ label, value, onChange }: { label: string; value: string; 
 function Accordion({ title, icon, children, defaultOpen = false }: { title: string; icon: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border border-[#e5e7eb] rounded-xl overflow-hidden">
+    <div className="border border-[#e5e7eb] rounded-xl overflow-visible">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -2228,7 +2228,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           {CUSTOM_ACCORDION_DEFS.map((acc) => {
             const isOpen = activeCustomAccordion === acc.id;
             return (
-              <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-hidden">
+              <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-visible">
                 <button
                   onClick={() => setActiveCustomAccordion(isOpen ? null : acc.id)}
                   className={`w-full flex items-center justify-between px-4 py-3 transition-colors border-b border-[#e5e7eb] ${isOpen ? 'bg-[#f9fafb]' : 'bg-white hover:bg-[#f9fafb]'}`}
@@ -2765,7 +2765,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
             {VANILLA_ACCORDION_DEFS.map((acc) => {
               const isOpen = activeVanillaAccordion === acc.id;
               return (
-                <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-hidden">
+                <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-visible">
                   <button
                     onClick={() => setActiveVanillaAccordion(isOpen ? null : acc.id)}
                     className={`w-full flex items-center justify-between px-4 py-3 transition-colors border-b border-[#e5e7eb] ${isOpen ? 'bg-[#f9fafb]' : 'bg-white hover:bg-[#f9fafb]'}`}
@@ -2846,7 +2846,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                   const sectionHint = getSchemaText(getSchemaField(selectedThemeSchema, acc.id), 'help');
                   const sectionSchema = getSchemaField(selectedThemeSchema, acc.id);
                   return (
-                    <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-hidden">
+                    <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-visible">
                       <button
                         onClick={() => setActiveCustomAccordion(isOpen ? null : acc.id)}
                         className={`w-full flex items-center justify-between px-4 py-3 transition-colors ${isOpen ? 'bg-[#f9fafb]' : 'bg-white hover:bg-[#f9fafb]'}`}
@@ -3187,7 +3187,7 @@ function ThemeAccordion({
   hint?: string;
 }) {
   return (
-    <div className="border border-[#e5e7eb] rounded-lg overflow-hidden">
+    <div className="border border-[#e5e7eb] rounded-lg overflow-visible">
       <button
         onClick={onToggle}
         className="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-[var(--life-neutral-100)] transition-colors border-b border-[var(--life-neutral-200)]"
