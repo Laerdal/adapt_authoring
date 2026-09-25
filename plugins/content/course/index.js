@@ -441,6 +441,7 @@ function duplicate(data, cb) {
 
       // New course name
       doc.title = 'Copy of ' + doc.title;
+      doc.displayTitle = doc.title;
 
       // Set the current user's ID as the creator
       doc.createdBy = user._id;

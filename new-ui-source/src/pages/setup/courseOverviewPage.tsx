@@ -7,6 +7,7 @@ import {
   updateCourse,
   type UserSummary,
 } from "../../api/adaptAuthoring";
+import { usePageLoader } from "../../hooks";
 import type { AssetPickerRequest } from "../../types/assetPicker";
 import { BasicRichTextEditor, isEditorEmpty } from "../../components/common";
 import { isSafeLanguageCode } from "../../api/adaptAuthoring";
@@ -116,12 +117,15 @@ export function CourseOverviewPage({
   const [activeEmailSuggestionIndex, setActiveEmailSuggestionIndex] = useState(-1);
   const [emailInputFocused, setEmailInputFocused] = useState(false);
   const emailSearchRequestIdRef = useRef(0);
+  const emailInputRef = useRef<HTMLInputElement | null>(null);
   const [showAuthoringBanner, setShowAuthoringBanner] = useState(true);
 
   // Remount key for the Body rich-text editor. Bumping this forces the
   // uncontrolled contentEditable surface to re-initialize its innerHTML
   // (used after bootstrap load and on discard).
   const [bodyEditorKey, setBodyEditorKey] = useState(0);
+
+  usePageLoader(loading);
 
   function serializeCollaborators(list: Collaborator[]) {
     return [...list]
@@ -476,6 +480,11 @@ export function CourseOverviewPage({
   }
 
   function handleEmailInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Backspace" && !emailInput.trim() && collaborators.length > 0) {
+      e.preventDefault();
+      handleRemoveCollaborator(collaborators[collaborators.length - 1].userId);
+      return;
+    }
     if (e.key === "ArrowDown") {
       if (!showEmailSuggestions || emailSuggestions.length === 0) return;
       e.preventDefault();
@@ -871,31 +880,106 @@ export function CourseOverviewPage({
         {/* Email input for specific sharing */}
         {shareMode === "specific" && (
           <div style={{ marginBottom: 14 }}>
-            <div style={{ position: "relative", display: "flex", gap: 8, marginBottom: emailError ? 6 : 0 }}>
-              <input
-                type="email"
-                value={emailInput}
-                onChange={(e) => {
-                  setEmailInput(e.target.value);
-                  setEmailError(null);
-                  if (!showEmailSuggestions) setShowEmailSuggestions(true);
+            <div style={{ position: "relative", marginBottom: emailError ? 6 : 0 }}>
+              <div
+                role="group"
+                aria-label="Share with users"
+                onMouseDown={(event) => {
+                  if (event.target instanceof HTMLButtonElement) return;
+                  event.preventDefault();
+                  emailInputRef.current?.focus();
                 }}
-                onKeyDown={handleEmailInputKeyDown}
-                placeholder="colleague@laerdal.com"
-                style={inputBase}
-                onFocus={(e) => {
-                  focusIn(e);
-                  setEmailInputFocused(true);
-                  if (emailSuggestions.length > 0) setShowEmailSuggestions(true);
+                style={{
+                  ...inputBase,
+                  minHeight: 44,
+                  height: "auto",
+                  padding: "7px 10px",
+                  display: "flex",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 8,
+                  borderColor: emailInputFocused ? "var(--life-primary-500)" : "var(--life-neutral-400)",
                 }}
-                onBlur={(e) => {
-                  focusOut(e);
-                  setEmailInputFocused(false);
-                  window.setTimeout(() => setShowEmailSuggestions(false), 120);
-                }}
-              />
+              >
+                {collaborators.map(({ userId, email }) => (
+                  <span
+                    key={userId}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 8,
+                      maxWidth: "100%",
+                      padding: "5px 10px",
+                      borderRadius: 6,
+                      background: "#15d28e",
+                      color: "#ffffff",
+                      fontFamily: '"Lato", sans-serif',
+                      fontSize: 13,
+                      fontWeight: 700,
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{email}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveCollaborator(userId)}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        cursor: "pointer",
+                        color: "inherit",
+                        lineHeight: 1,
+                        padding: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        opacity: 0.92,
+                      }}
+                      aria-label={`Remove collaborator ${email}`}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                        <path d="M9 3L3 9M3 3l6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  </span>
+                ))}
+                <input
+                  ref={emailInputRef}
+                  type="email"
+                  value={emailInput}
+                  onChange={(e) => {
+                    setEmailInput(e.target.value);
+                    setEmailError(null);
+                    if (!showEmailSuggestions) setShowEmailSuggestions(true);
+                  }}
+                  onKeyDown={handleEmailInputKeyDown}
+                  placeholder={collaborators.length === 0 ? "colleague@laerdal.com" : ""}
+                  style={{
+                    flex: 1,
+                    minWidth: 180,
+                    height: 28,
+                    border: "none",
+                    outline: "none",
+                    background: "transparent",
+                    padding: 0,
+                    margin: "2px 4px",
+                    fontFamily: '"Lato", sans-serif',
+                    fontSize: 14,
+                    color: "var(--life-base-black)",
+                  }}
+                  onFocus={() => {
+                    setEmailInputFocused(true);
+                    if (emailSuggestions.length > 0) setShowEmailSuggestions(true);
+                  }}
+                  onBlur={() => {
+                    setEmailInputFocused(false);
+                    window.setTimeout(() => setShowEmailSuggestions(false), 120);
+                  }}
+                />
+              </div>
               {showEmailSuggestions && (emailSuggestions.length > 0 || emailSearching) && (
-                <div role="listbox" aria-label="User suggestions"
+                <div
+                  role="listbox"
+                  aria-label="User suggestions"
                   style={{
                     position: "absolute",
                     top: "calc(100% + 6px)",
@@ -958,33 +1042,6 @@ export function CourseOverviewPage({
                 {emailError}
               </div>
             )}
-          </div>
-        )}
-
-        {/* Collaborator list */}
-        {shareMode === "specific" && collaborators.length > 0 && (
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {collaborators.map(({ userId, email }) => {
-              const initials = email.slice(0, 2).toUpperCase();
-              return (
-                <div key={userId} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 8, border: "1px solid var(--life-neutral-200)", background: "var(--life-neutral-020)" }}>
-                  <div style={{ width: 36, height: 36, borderRadius: "50%", background: "var(--life-primary-500)", color: "#ffffff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: '"Lato", sans-serif', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>
-                    {initials}
-                  </div>
-                  <span style={{ flex: 1, fontFamily: '"Lato", sans-serif', fontSize: 14, color: "var(--life-base-black)" }}>{email}</span>
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveCollaborator(userId)}
-                    style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--life-neutral-400)", display: "flex", alignItems: "center", padding: 4 }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = "var(--life-critical-500)")}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = "var(--life-neutral-400)")}
-                    aria-label={`Remove ${email}`}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M11 3L3 11M3 3l8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-                  </button>
-                </div>
-              );
-            })}
           </div>
         )}
       </div>

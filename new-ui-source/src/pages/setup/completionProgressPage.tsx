@@ -541,7 +541,7 @@ function CompletionRulesContent({
         {cfg.assessmentCompletionEnabled && (
           <div className="px-4 py-4 flex flex-col gap-4">
             <CpCheckbox
-              label="Percentage based"
+              label="Choose whether the pass mark uses a percentage or raw score"
               checked={cfg.assessmentIsPercentageBased}
               onChange={(v) => set("assessmentIsPercentageBased", v)}
             />
@@ -620,13 +620,13 @@ function CompletionFeedbackContent({
         {cfg.completionNotifierEnabled && (
           <div className="px-4 py-4 flex flex-col gap-4">
             <CpTextInput
-              label="Text for message first line"
+              label="First line message for the completion notifier"
               value={cfg.notifierLine1}
               onChange={(v) => set("notifierLine1", v)}
               placeholder="e.g. Congratulations!"
             />
             <CpTextInput
-              label="Text for message second line"
+              label="Second line message for the completion notifier"
               value={cfg.notifierLine2}
               onChange={(v) => set("notifierLine2", v)}
               placeholder="e.g. You have completed this course."
@@ -747,12 +747,12 @@ function ProgressBarStylePicker({
     {
       value: "continuous",
       label: "Continuous bar",
-      description: "A single bar spanning the full width beneath the navigation bar.",
+      description: "A single bar spanning the full width beneath the navigation bar. (Laerdal Page Level Progress)",
     },
     {
       value: "compact",
       label: "Compact indicator",
-      description: "A small pill-shaped progress indicator inside the navigation bar.",
+      description: "A small pill-shaped progress indicator inside the navigation bar. (Page Level Progress)",
     },
   ];
   return (

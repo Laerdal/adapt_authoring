@@ -60,6 +60,7 @@ export function loadCKEditor5In(targetWindow: Window): Promise<void> {
         style.id = "adapt-authoring-ckeditor-fit-style";
         style.textContent = `
           .ck.ck-editor { display: block !important; width: 100% !important; max-width: 100% !important; }
+          .ck-sticky-panel, .ck-sticky-panel__content { position: static !important; top: auto !important; width: 100% !important; }
           .ck.ck-editor__main, .ck.ck-editor__editable, .ck.ck-content {
             display: block !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box !important;
           }

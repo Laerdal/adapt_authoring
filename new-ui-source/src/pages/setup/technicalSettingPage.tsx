@@ -7,6 +7,7 @@ import {
   updateCourseTechnicalSettings,
   type CourseTechnicalSettings,
 } from "../../api/adaptAuthoring";
+import { usePageLoader } from "../../hooks";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 import { CheckboxIndicator } from "../../components/common/Checkbox";
@@ -326,6 +327,7 @@ export function TechnicalSettingPage({
   };
 
   const [isLoading, setIsLoading] = useState(true);
+  usePageLoader(isLoading);
   const [configId, setConfigId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);

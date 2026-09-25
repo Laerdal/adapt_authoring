@@ -1,5 +1,6 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { getTemplates, deleteTemplate, updateTemplate, type TemplateScope } from '@/api/adaptAuthoring'
+import { usePageLoader } from '@/hooks'
 import AiAssistant from '@/components/common/AiAssistant'
 import ConfirmDialog from '@/components/common/ConfirmDialog'
 
@@ -49,10 +50,29 @@ const TYPE_COLORS: Record<TemplateType, { bg: string; text: string }> = {
 
 export default function TemplateManagementPage() {
   const [templates, setTemplates] = useState<Template[]>([])
+  const [loading, setLoading] = useState(true)
   const [scope, setScope] = useState<TemplateScope>('mine')
+  const templateRequestIdRef = useRef(0)
 
-  const loadTemplates = () => { getTemplates(scope).then(setTemplates).catch(() => setTemplates([])) }
-  useEffect(() => { loadTemplates() }, [scope])
+  usePageLoader(loading)
+
+  const loadTemplates = useCallback(async () => {
+    const requestId = ++templateRequestIdRef.current
+    setLoading(true)
+    try {
+      const rows = await getTemplates(scope)
+      if (templateRequestIdRef.current !== requestId) return
+      setTemplates(rows)
+    } catch {
+      if (templateRequestIdRef.current !== requestId) return
+      setTemplates([])
+    } finally {
+      if (templateRequestIdRef.current === requestId) {
+        setLoading(false)
+      }
+    }
+  }, [scope])
+  useEffect(() => { void loadTemplates() }, [loadTemplates])
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'All' | TemplateType>('All')
   const [page, setPage] = useState(1)

@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { getUsers, setUserRole, deleteUser } from "@/api/adaptAuthoring";
+import { usePageLoader } from "@/hooks";
 import AiAssistant from "@/components/common/AiAssistant";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 
@@ -55,8 +56,17 @@ function isCompleteEmail(value: string): boolean {
 
 export default function UserManagementPage() {
   const [users, setUsers]             = useState<User[]>([]);
+  const [loading, setLoading]         = useState(true);
 
-  const loadUsers = () => { getUsers().then(setUsers).catch(() => setUsers([])); };
+  usePageLoader(loading);
+
+  const loadUsers = () => {
+    setLoading(true);
+    getUsers()
+      .then(setUsers)
+      .catch(() => setUsers([]))
+      .finally(() => setLoading(false));
+  };
   useEffect(() => { loadUsers(); }, []);
   const [search, setSearch]           = useState("");
   const [searchError, setSearchError] = useState("");
@@ -231,6 +241,7 @@ export default function UserManagementPage() {
               type="button"
               aria-pressed={roleFilter === option}
               onClick={() => {
+                setRoleFilter(option);
                 setPage(1);
               }}
               className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
@@ -245,35 +256,16 @@ export default function UserManagementPage() {
         </div>
 
         {/* Active filter chips */}
-        {(search || roleFilter !== "All") && (
+        {search && !searchError && (
           <div className="flex items-center gap-2 flex-wrap">
-            {search && !searchError && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#f3f4f6] text-xs text-[#374151] font-medium">
-                Email: <span className="text-[#2d6fa8]">"{search}"</span>
-                <button type="button" onClick={clearSearch} aria-label="Remove email filter" className="text-[#9ca3af] hover:text-[#374151] ml-0.5">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              </span>
-            )}
-            {roleFilter !== "All" && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#dbeeff] text-xs text-[#2d6fa8] font-medium">
-                Role: {roleFilter}
-                <button type="button" onClick={() => { setRoleFilter("All"); setPage(1); }} aria-label="Remove role filter" className="text-[#2d6fa8] hover:text-[#1e4d73] ml-0.5">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => { clearSearch(); setRoleFilter("All"); setPage(1); }}
-              className="text-xs text-[#9ca3af] hover:text-[#374151] underline underline-offset-2 transition-colors"
-            >
-              Clear all
-            </button>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#f3f4f6] text-xs text-[#374151] font-medium">
+              Email: <span className="text-[#2d6fa8]">"{search}"</span>
+              <button type="button" onClick={clearSearch} aria-label="Remove email filter" className="text-[#9ca3af] hover:text-[#374151] ml-0.5">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </span>
           </div>
         )}
 
@@ -440,17 +432,6 @@ export default function UserManagementPage() {
                               <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
                             </svg>
                             Share all courses
-                          </button>
-                          <div className="border-t border-[#f3f4f6] my-1" />
-                          <button
-                            type="button"
-                            onClick={() => handleActionMenu(user.id, "delete")}
-                            className="w-full text-left px-3 py-2 text-sm text-[#ef4444] hover:bg-[#fef2f2] flex items-center gap-2.5"
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-                            </svg>
-                            Delete user
                           </button>
                         </div>
                       )}

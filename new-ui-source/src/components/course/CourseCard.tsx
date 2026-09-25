@@ -4,6 +4,7 @@ import ImageCropper from "@/components/common/ImageCropper";
 import AssetPickerModal from "@/components/common/AssetPickerModal";
 import TagOverflowList from "@/components/common/TagOverflowList";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import ErrorDialog from "@/components/common/ErrorDialog";
 
 interface CourseCardProps {
   id: number;
@@ -38,6 +39,7 @@ export default function CourseCard({
   const [editHeroAssetId, setEditHeroAssetId] = useState<string | null>(heroAssetId);
   const [editTags, setEditTags]             = useState<string[]>(tags);
   const [tagInput, setTagInput]             = useState("");
+  const [tagError, setTagError]             = useState<string | null>(null);
   const [cropSrc, setCropSrc]               = useState<string | null>(null);
   const [assetPickerOpen, setAssetPickerOpen] = useState(false);
   const menuRef                             = useRef<HTMLDivElement>(null);
@@ -45,7 +47,18 @@ export default function CourseCard({
 
   function addTag() {
     const t = tagInput.trim();
-    if (!t || editTags.includes(t)) { setTagInput(""); return; }
+    if (!t) {
+      setTagError(null);
+      return;
+    }
+
+    if (editTags.includes(t)) {
+      setTagError(`Tag "${t}" already exists.`);
+      setTagInput("");
+      return;
+    }
+
+    setTagError(null);
     setEditTags((prev) => [...prev, t]);
     setTagInput("");
   }
@@ -65,6 +78,7 @@ export default function CourseCard({
     setEditHeroAssetId(heroAssetId);
     setEditTags(tags);
     setTagInput("");
+    setTagError(null);
     setCropSrc(null);
     setModalOpen(true);
   }
@@ -339,10 +353,15 @@ export default function CourseCard({
       {/* ── EDIT MODAL ── */}
       {modalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-          onClick={(e) => { if (e.target === e.currentTarget && !cropSrc) setModalOpen(false); }}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !cropSrc) {
+              setModalOpen(false);
+              setTagError(null);
+            }
+          }}
         >
-          <div className={`bg-white rounded-2xl shadow-xl flex flex-col overflow-hidden ${cropSrc ? "w-full max-w-xl" : "w-full max-w-md"}`}>
+          <div className={`bg-white rounded-2xl shadow-xl flex flex-col min-h-0 ${cropSrc ? "w-full max-w-xl max-h-[calc(100vh-2rem)] overflow-y-auto" : "w-full max-w-md max-h-[calc(100vh-2rem)] overflow-hidden"}`}>
             <div className="flex items-center justify-between px-5 py-4 border-b border-[#e5e7eb] shrink-0">
               <h2 className="font-semibold text-[#111827] text-base">
                 {cropSrc ? "Crop & Adjust Image" : "Edit Course Details"}
@@ -358,7 +377,7 @@ export default function CourseCard({
 
             {/* ── Crop view ── */}
             {cropSrc ? (
-              <div className="px-5 py-5">
+              <div className="px-5 py-5 overflow-y-auto">
                 <ImageCropper
                   src={cropSrc}
                   aspectRatio={16 / 9}
@@ -368,7 +387,7 @@ export default function CourseCard({
               </div>
             ) : (
             <>
-            <div className="px-5 py-5 flex flex-col gap-4 overflow-y-auto">
+            <div className="px-5 py-5 flex flex-col gap-4 overflow-y-auto min-h-0">
               <div>
                 <label className="block text-sm font-medium text-[#374151] mb-2">Cover Image</label>
                 {/* Preview + actions row when image exists */}
@@ -454,7 +473,11 @@ export default function CourseCard({
                   <input
                     type="text"
                     value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
+                    aria-invalid={Boolean(tagError)}
+                    onChange={(e) => {
+                      setTagInput(e.target.value);
+                      if (tagError) setTagError(null);
+                    }}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
                     placeholder="Add a tag and press Enter"
                     className="flex-1 px-3 py-2 text-sm border border-[#d1d5db] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent text-[#111827]"
@@ -493,6 +516,13 @@ export default function CourseCard({
         note="This action cannot be undone. The course and all its content will be permanently deleted."
         onCancel={() => setDeleteOpen(false)}
         onConfirm={() => { setDeleteOpen(false); onDelete(); }}
+      />
+
+      <ErrorDialog
+        open={Boolean(tagError)}
+        title="Tag already added"
+        message={tagError ?? ""}
+        onClose={() => setTagError(null)}
       />
 
       {/* ── ASSET PICKER MODAL ── */}

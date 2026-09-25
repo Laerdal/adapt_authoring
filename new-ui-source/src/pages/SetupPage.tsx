@@ -10,6 +10,7 @@ import CommonCourseTopBarRow from "../components/course/CommonCourseTopBarRow";
 import { getCourseBootstrapData, publishCoursePackage } from "../api/adaptAuthoring";
 import { useCourseStructure } from "../hooks/useCourseStructure";
 import { STRUCTURE_LABELS } from "../types/structure";
+import { BasicRichTextEditor } from "../components/common";
 import { CourseOverviewPage } from "./setup/courseOverviewPage";
 import SelectThemePage from "./setup/themePage";
 import { MenuPage } from "./setup/menuPage";
@@ -31,6 +32,8 @@ import PublishCourseDialog, { type PublishCoursePhase } from "../components/publ
 import ExportDialog from "../components/common/ExportDialog";
 import ErrorDialog from "../components/common/ErrorDialog";
 import { AssetManagementWorkspace } from "./AssetManagementPage";
+import { PageTransitionBoundary, usePageTransition } from "../context/PageTransitionContext";
+import { usePageLoader } from "../hooks";
 import type { AssetPickerRequest, AssetPickerResult } from "../types/assetPicker";
 
 const ICON_BASE = "/new/assets/icons";
@@ -261,6 +264,8 @@ function CourseStructurePanel({
     moveNode,
   } = useCourseStructure(courseId, courseTitle);
   const [dismissedStructureError, setDismissedStructureError] = useState<Error | null>(null);
+
+  usePageLoader(loading);
 
   // Edits are staged locally and saved only on demand — confirm before leaving
   // with unsaved changes (mirrors Technical Settings / Navigation).
@@ -1437,12 +1442,11 @@ function MenuFieldLabel({ children, required }: { children: React.ReactNode; req
   );
 }
 
-/* -- Rich text editor with formatting toolbar -- */
 const FONT_SIZE_OPTIONS = [
-  { label: "Small",    value: "12px" },
-  { label: "Default",  value: "14px" },
-  { label: "Large",    value: "18px" },
-  { label: "X-Large",  value: "24px" },
+  { label: "Small", value: "12px" },
+  { label: "Default", value: "14px" },
+  { label: "Large", value: "18px" },
+  { label: "X-Large", value: "24px" },
   { label: "2X-Large", value: "32px" },
 ];
 
@@ -1467,91 +1471,11 @@ function RichTextEditor({
   color: string;
   onColorChange: (v: string) => void;
 }) {
-  const editorRef = useRef<HTMLDivElement>(null);
-  const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set());
-
-  // Set innerHTML only on mount - never re-set during typing (avoids cursor reset / reversed text)
-  const initRef = useCallback((node: HTMLDivElement | null) => {
-    if (node) {
-      node.innerHTML = html;
-      (editorRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
-    }
-  // intentionally empty deps - run once on mount only
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const syncFormats = useCallback(() => {
-    const formats = new Set<string>();
-    if (document.queryCommandState("bold"))          formats.add("bold");
-    if (document.queryCommandState("italic"))        formats.add("italic");
-    if (document.queryCommandState("underline"))     formats.add("underline");
-    if (document.queryCommandState("strikeThrough")) formats.add("strikeThrough");
-    setActiveFormats(formats);
-  }, []);
-
-  const emit = useCallback(() => {
-    if (editorRef.current) onChange(editorRef.current.innerHTML);
-  }, [onChange]);
-
-  const applyFormat = useCallback((cmd: string) => {
-    editorRef.current?.focus();
-    document.execCommand(cmd, false);
-    syncFormats();
-    emit();
-  }, [emit, syncFormats]);
-
-  const handleInput = useCallback(() => { emit(); syncFormats(); }, [emit, syncFormats]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (!multiline && e.key === "Enter") { e.preventDefault(); return; }
-    if (e.key === "b" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); applyFormat("bold"); }
-    if (e.key === "i" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); applyFormat("italic"); }
-    if (e.key === "u" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); applyFormat("underline"); }
-  }, [multiline, applyFormat]);
-
-  const FORMAT_BUTTONS: { cmd: string; title: string; icon: React.ReactNode }[] = [
-    {
-      cmd: "bold", title: "Bold (Ctrl+B)",
-      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/></svg>,
-    },
-    {
-      cmd: "italic", title: "Italic (Ctrl+I)",
-      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></svg>,
-    },
-    {
-      cmd: "underline", title: "Underline (Ctrl+U)",
-      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg>,
-    },
-    {
-      cmd: "strikeThrough", title: "Strikethrough",
-      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17.3 12H6.7"/><path d="M10 7.5C10 6.1 11.1 5 12.5 5c1 0 1.9.6 2.3 1.5"/><path d="M6 16.5C6 17.9 7.1 19 8.5 19h5.5a3 3 0 0 0 0-6H6"/></svg>,
-    },
-  ];
-
   return (
     <div className="flex flex-col gap-1.5">
       <MenuFieldLabel>{label}</MenuFieldLabel>
       <div className="border border-[#d1d5db] rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-[#2d6fa8] focus-within:border-transparent">
-
-        {/* -- toolbar -- */}
-        <div className="flex items-center flex-wrap gap-0.5 px-2 py-1.5 border-b border-[#e5e7eb] bg-[#f9fafb]">
-
-          {/* bold / italic / underline / strikethrough */}
-          {FORMAT_BUTTONS.map(({ cmd, title, icon }) => (
-            <button
-              key={cmd}
-              type="button"
-              title={title}
-              onMouseDown={(e) => { e.preventDefault(); applyFormat(cmd); }}
-              className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${activeFormats.has(cmd) ? "bg-[#2d6fa8] text-white" : "text-[#6b7280] hover:bg-[#e5e7eb] hover:text-[#374151]"}`}
-            >
-              {icon}
-            </button>
-          ))}
-
-          <div className="w-px h-4 bg-[#e5e7eb] mx-1 shrink-0" />
-
-          {/* font size dropdown - directly controls the cfg field, no execCommand */}
+        <div className="flex items-center flex-wrap gap-1.5 px-2 py-1.5 border-b border-[#e5e7eb] bg-[#f9fafb]">
           <div className="relative">
             <select
               value={fontSize}
@@ -1566,21 +1490,20 @@ function RichTextEditor({
               ))}
             </select>
             <svg className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="6 9 12 15 18 9"/>
+              <polyline points="6 9 12 15 18 9" />
             </svg>
           </div>
 
           <div className="w-px h-4 bg-[#e5e7eb] mx-1 shrink-0" />
 
-          {/* text color - directly controls the cfg field, anchored label for correct picker position */}
           <label
             title="Text color"
             className="relative w-7 h-7 flex flex-col items-center justify-center gap-0.5 rounded hover:bg-[#e5e7eb] transition-colors cursor-pointer"
             onMouseDown={(e) => e.preventDefault()}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="4 20 8.5 8 12 17 15.5 8 20 20"/>
-              <line x1="6.5" y1="15" x2="17.5" y2="15"/>
+              <polyline points="4 20 8.5 8 12 17 15.5 8 20 20" />
+              <line x1="6.5" y1="15" x2="17.5" y2="15" />
             </svg>
             <span className="w-5 h-1 rounded-full block" style={{ backgroundColor: color }} />
             <input
@@ -1591,24 +1514,15 @@ function RichTextEditor({
               onChange={(e) => onColorChange(e.target.value)}
             />
           </label>
-
         </div>
 
-        {/* -- editable area - uncontrolled, innerHTML set once on mount -- */}
-        <div
-          ref={initRef}
-          contentEditable
-          suppressContentEditableWarning
-          dir="ltr"
-          lang="en"
-          onInput={handleInput}
-          onKeyDown={handleKeyDown}
-          onMouseUp={syncFormats}
-          onKeyUp={syncFormats}
-          onFocus={syncFormats}
-          data-placeholder={placeholder}
-          className={`px-3 py-2.5 outline-none bg-white text-[#374151] empty:before:content-[attr(data-placeholder)] empty:before:text-[#9ca3af] ${multiline ? "min-h-[80px]" : "min-h-[38px]"}`}
-          style={{ wordBreak: "break-word", direction: "ltr", unicodeBidi: "plaintext", textAlign: "left", fontSize }}
+        <BasicRichTextEditor
+          html={html}
+          onChange={onChange}
+          placeholder={placeholder}
+          minHeight={multiline ? 80 : 38}
+          ariaLabel={label}
+          fontSize={fontSize}
         />
       </div>
     </div>
@@ -2740,6 +2654,7 @@ function CourseCreationCenterContent() {
   const contentScrollRef = useRef<HTMLElement | null>(null);
   const deferredNavigationActionRef = useRef<(() => void) | null>(null);
   const [assetPickerRequest, setAssetPickerRequest] = useState<SetupAssetPickerRequest | null>(null);
+  const { beginTransition } = usePageTransition();
 
   // Tracks requested navigation when on a panel with unsaved changes
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
@@ -2885,10 +2800,15 @@ function CourseCreationCenterContent() {
       return;
     }
 
+    if (target === activeNav) {
+      return;
+    }
+
     if (target === "export-pdf") {
       setExportPopup(null);
     }
 
+    beginTransition();
     setActiveNav(target);
   }
 
@@ -3219,7 +3139,9 @@ function CourseCreationCenterContent() {
 
         {/* -- Right content panel -- */}
         <main ref={contentScrollRef} className={`flex-1 min-h-0 min-w-0 bg-[#f7f9fb] ${fullCanvasPanels.has(activeNav) || activeNav === "storyboarding" || activeNav === "translation" ? "flex flex-col overflow-hidden" : "overflow-y-auto px-8 py-8"}`}>
-          {renderPanel()}
+          <PageTransitionBoundary key={activeNav}>
+            {renderPanel()}
+          </PageTransitionBoundary>
         </main>
       </div>
 

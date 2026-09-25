@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { enforceMaxComponentsPerBlock, pruneEmptyContainers, type GenTopic, type GenComponent, type ContentNode } from './storyboardGeneration';
+import {
+  enforceMaxComponentsPerBlock,
+  pruneEmptyContainers,
+  validateStoryboardHierarchy,
+  type GenTopic,
+  type GenComponent,
+  type ContentNode,
+} from './storyboardGeneration';
 
 function makeComponent(n: number): GenComponent {
   return { componentKey: 'text', title: `Comp ${n}`, body: '' };
@@ -114,5 +121,31 @@ describe('pruneEmptyContainers', () => {
     pruneEmptyContainers(tree);
     expect(tree.length).toBe(1);
     expect(tree[0].sections[0].groups[0].components.length).toBe(1);
+  });
+});
+
+describe('validateStoryboardHierarchy', () => {
+  it('accepts a valid Topic → Section → Content Group → Component flow', () => {
+    const doc = [
+      { id: 't1', type: 'heading', props: { level: 1 }, content: [{ text: 'Topic' }] },
+      { id: 's1', type: 'heading', props: { level: 2 }, content: [{ text: 'Section' }] },
+      { id: 'g1', type: 'heading', props: { level: 3 }, content: [{ text: 'Group' }] },
+      { id: 'c1', type: 'heading', props: { level: 4 }, content: [{ text: 'Component' }] },
+    ];
+
+    expect(validateStoryboardHierarchy(doc)).toEqual([]);
+  });
+
+  it('reports invalid jumps and missing parents in the hierarchy', () => {
+    const doc = [
+      { id: 's1', type: 'heading', props: { level: 2 }, content: [{ text: 'Section without Topic' }] },
+      { id: 'g1', type: 'heading', props: { level: 3 }, content: [{ text: 'Group without Section' }] },
+      { id: 'c1', type: 'heading', props: { level: 4 }, content: [{ text: 'Component without Group' }] },
+    ];
+
+    const issues = validateStoryboardHierarchy(doc);
+    expect(issues.some((issue) => issue.includes('H2'))).toBe(true);
+    expect(issues.some((issue) => issue.includes('H3'))).toBe(true);
+    expect(issues.some((issue) => issue.includes('H4'))).toBe(true);
   });
 });

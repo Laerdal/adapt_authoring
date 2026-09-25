@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import CommonCourseTopBarRow from "../components/course/CommonCourseTopBarRow";
 import { ensureCoursePreview, ensurePreviewEditEnabledForCourse, getCourseBootstrapData, publishCoursePackage, seedMissingCourseDefaults } from "../api/adaptAuthoring";
 import { getUserRole, useAuth } from "../context/AuthContext";
+import { usePageLoader } from "../hooks";
 import { UnsavedChangesModal } from "./setup/unsavedChangesModal";
 import ExportMenu, { ExportStatusPopup } from "../components/importExport/Export";
 import { runExportSourceAction } from "../helpers/importExportHelper";
@@ -70,6 +71,9 @@ export default function CoursePreviewPage() {
   const [exportPopup, setExportPopup] = useState<{ status: "processing" | "success" | "error"; message: string } | null>(null);
   const [publishDialogPhase, setPublishDialogPhase] = useState<PublishCoursePhase | null>(null);
   const [publishResult, setPublishResult] = useState<{ zipName?: string; downloadUrl?: string; message?: string }>({});
+  const pageLoading = !!id && (!defaultsReady || previewState === "preparing");
+
+  usePageLoader(pageLoading);
 
   useEffect(() => {
     if (!exportPopup || (exportPopup.status !== "success" && exportPopup.status !== "error")) return;

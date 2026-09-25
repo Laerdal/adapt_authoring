@@ -12,6 +12,8 @@ import { resolveCommentAnchor } from '../commentAnchor';
 import { safePreviewSrc } from '../mediaMapping';
 import { createReactBlockSpec } from '@blocknote/react';
 import AssetPickerModal from '@/components/common/AssetPickerModal';
+import { BasicRichTextEditor } from '@/components/common';
+import { sanitizeEditorHtml } from '@/components/common/BasicRichTextEditor';
 import { CheckboxIndicator } from '@/components/common/Checkbox';
 import SamaritanIcon from '../SamaritanIcon';
 import {
@@ -424,9 +426,10 @@ export const assessmentBlock = createReactBlockSpec(
       //   • The question Body is rendered as its own paragraph only when it
       //     isn't already the header text — the same sentence never shows twice.
       const questionText = (model.question || '').trim();
+      const questionPlain = questionText.replace(/<[^>]*>/g, '').trim();
       const blockTitle = (title || '').trim();
-      const headerText = blockTitle || questionText || 'Untitled question';
-      const showQuestionParagraph = !!questionText && questionText !== headerText;
+      const headerText = blockTitle || questionPlain || 'Untitled question';
+      const showQuestionParagraph = !!questionPlain && questionPlain !== headerText;
 
       if (collapsed) {
         return (
@@ -443,7 +446,10 @@ export const assessmentBlock = createReactBlockSpec(
               </span>
             </div>
             {showQuestionParagraph && (
-              <p className="mb-2 whitespace-pre-wrap text-sm text-foreground">{questionText}</p>
+              <div
+                className="mb-2 text-sm text-foreground"
+                dangerouslySetInnerHTML={{ __html: sanitizeEditorHtml(questionText) }}
+              />
             )}
 
             {/* MCQ / graphic MCQ / checklist — option list with correct/incorrect glyph + per-option feedback */}
@@ -605,8 +611,16 @@ export const assessmentBlock = createReactBlockSpec(
           {/* Body */}
           <label className="block">
             <span className={labelCls}>Body</span>
-            <textarea value={model.question} placeholder="Type the question here" onKeyDown={stop} rows={2} onChange={(e) => update({ ...model, question: e.target.value })} className={`${inputCls} resize-y`} />
+            <BasicRichTextEditor
+              html={model.question}
+              onChange={(html) => update({ ...model, question: html })}
+              placeholder="Type the question here"
+              minHeight={90}
+              ariaLabel="Question body"
+              resetKey={block.id}
+            />
           </label>
+          
 
           <Body kind={kind} data={model} update={update} />
           <FeedbackGroup fb={fb} set={(f) => update({ ...model, feedback: f })} />
