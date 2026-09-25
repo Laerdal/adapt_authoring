@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback, useRef } from "react";
-import { saveThemeForCourse, saveThemeVariables, getThemePresets, saveThemePreset, applyThemePreset, getThemePresetParentTheme, renameThemePreset, deleteThemePreset, type ThemePreset } from "../../api/adaptAuthoring";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { saveThemeForCourse, saveThemeVariables, getThemePresets, saveThemePreset, applyThemePreset, getThemePresetParentTheme, renameThemePreset, deleteThemePreset, getThemeTypeVariablesSchemaByLabel, type ThemePreset } from "../../api/adaptAuthoring";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import InfoIcon, { InfoFieldLabel } from "../../components/common/InfoIcon";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
@@ -193,7 +193,7 @@ function FontSelect({ label, value, onChange }: { label: string; value: string; 
 function Accordion({ title, icon, children, defaultOpen = false }: { title: string; icon: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border border-[#e5e7eb] rounded-xl overflow-hidden bg-white">
+    <div className="border border-[#e5e7eb] rounded-xl overflow-visible bg-white">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -664,6 +664,74 @@ const CUSTOM_ACCORDION_DEFS: CustomSectionDef[] = [
   },
 ];
 
+function getSchemaText(schema: Record<string, unknown> | null | undefined, key: string): string | undefined {
+  const value = schema?.[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function getSchemaSections(
+  schema: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | null | undefined {
+  const variables = schema?.variables;
+  return variables && typeof variables === 'object' && !Array.isArray(variables)
+    ? variables as Record<string, unknown>
+    : schema;
+}
+
+function getSchemaField(
+  sections: Record<string, unknown> | null | undefined,
+  sectionId: string,
+  fieldKey?: string,
+): Record<string, unknown> | undefined {
+  const section = sections?.[sectionId] as Record<string, unknown> | undefined;
+  if (!section) return undefined;
+  if (!fieldKey) return section;
+  const properties = section.properties as Record<string, unknown> | undefined;
+  const field = properties?.[fieldKey] as Record<string, unknown> | undefined;
+  return field;
+}
+
+function getSchemaNestedFieldText(
+  fieldSchema: Record<string, unknown> | null | undefined,
+  nestedKey: string,
+  textKey: string,
+): string | undefined {
+  const nestedFields = fieldSchema?.properties as Record<string, unknown> | undefined;
+  const nestedField = nestedFields?.[nestedKey] as Record<string, unknown> | undefined;
+  return getSchemaText(nestedField, textKey);
+}
+
+function getSchemaArrayItemField(
+  fieldSchema: Record<string, unknown> | null | undefined,
+  nestedKey: string,
+): Record<string, unknown> | undefined {
+  const items = fieldSchema?.items as Record<string, unknown> | undefined;
+  const nestedFields = items?.properties as Record<string, unknown> | undefined;
+  return nestedFields?.[nestedKey] as Record<string, unknown> | undefined;
+}
+
+function getSchemaArrayItemFieldText(
+  fieldSchema: Record<string, unknown> | null | undefined,
+  nestedKey: string,
+  textKey: string,
+): string | undefined {
+  return getSchemaText(getSchemaArrayItemField(fieldSchema, nestedKey), textKey);
+}
+
+function getThemeComponentSectionSchema(
+  schema: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | undefined {
+  return getSchemaField(schema, '_componentConfig') ?? getSchemaField(schema, '_components');
+}
+
+function getSchemaPropertyField(
+  sectionSchema: Record<string, unknown> | null | undefined,
+  fieldKey: string,
+): Record<string, unknown> | undefined {
+  const properties = sectionSchema?.properties as Record<string, unknown> | undefined;
+  return properties?.[fieldKey] as Record<string, unknown> | undefined;
+}
+
 const CUSTOM_FIELD_DEFAULTS: Record<string, string> = {
   '_global::_primaryBrandColor': '#2e7fa1',
   '_global::_secondaryBrandColor': '#25837e',
@@ -1005,7 +1073,6 @@ const ON_SCREEN_CLASS_OPTIONS = [
 function LifeListField({
   title,
   description,
-  titleHint,
   items,
   errors,
   onAdd,
@@ -1013,10 +1080,12 @@ function LifeListField({
   onChange,
   idLabel,
   idKey,
+  idHint,
+  sourceLabel,
+  sourceHint,
 }: {
   title: string;
   description: string;
-  titleHint?: string;
   items: Array<LifeSpriteSheet | LifeSingleIcon>;
   errors: LifeListItemErrors[];
   onAdd: () => void;
@@ -1024,13 +1093,15 @@ function LifeListField({
   onChange: (index: number, key: string, value: string) => void;
   idLabel: string;
   idKey: '_spriteSheetId' | 'iconId';
+  idHint?: string;
+  sourceLabel: string;
+  sourceHint?: string;
 }) {
   return (
     <div className="space-y-3">
       <div>
         <InfoFieldLabel
           label={title}
-          hint={titleHint}
           className="mb-1.5"
         />
         <p className="text-xs text-[#6b7280] leading-relaxed">{description}</p>
@@ -1044,7 +1115,11 @@ function LifeListField({
           <div key={`${idKey}-${index}`} className="border border-[#e5e7eb] rounded-lg p-3 space-y-3 bg-[#fafafa]">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <p className="text-xs font-semibold text-[#111827] mb-2">{idLabel}</p>
+                <InfoFieldLabel
+                  label={idLabel}
+                  hint={idHint}
+                  className="mb-2"
+                />
                 <input
                   type="text"
                   value={idKey === '_spriteSheetId' ? (item as LifeSpriteSheet)._spriteSheetId : (item as LifeSingleIcon).iconId}
@@ -1055,7 +1130,11 @@ function LifeListField({
                 {idError && <p className="mt-1 text-xs text-[#ef4444]">{idError}</p>}
               </div>
               <div>
-                <p className="text-xs font-semibold text-[#111827] mb-2">External Source</p>
+                <InfoFieldLabel
+                  label={sourceLabel}
+                  hint={sourceHint}
+                  className="mb-2"
+                />
                 <input
                   type="text"
                   value={item.src}
@@ -1331,6 +1410,49 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   const [vanillaColors, setVanillaColors] = useState<Record<string, string>>({});
   const [activeCustomAccordion, setActiveCustomAccordion] = useState<string | null>('_global');
   const [customSettings, setCustomSettings] = useState<Record<string, string>>(CUSTOM_FIELD_DEFAULTS);
+  const [selectedThemeSchema, setSelectedThemeSchema] = useState<Record<string, unknown> | undefined>(undefined);
+  const isLifeTheme = selected === 'life';
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!selected) {
+      setSelectedThemeSchema(undefined);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const themeLabelMap: Record<string, string> = {
+      life: 'LIFE Theme',
+      vanilla: 'Vanilla Theme',
+      custom: 'Custom Theme',
+    };
+    const themeLabel = themeLabelMap[selected];
+    if (!themeLabel) {
+      setSelectedThemeSchema(undefined);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void getThemeTypeVariablesSchemaByLabel(themeLabel)
+      .then((schema) => {
+        if (!cancelled) setSelectedThemeSchema(schema ?? undefined);
+      })
+      .catch((error) => {
+        console.warn('Failed to load theme type schema', error);
+        if (!cancelled) setSelectedThemeSchema(undefined);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selected]);
+
+  const selectedThemeComponentSchema = useMemo(
+    () => getThemeComponentSectionSchema(selectedThemeSchema),
+    [selectedThemeSchema],
+  );
 
   const clearLifeCourseValidation = useCallback(() => {
     setLifeCourseConfigErrors(DEFAULT_LIFE_COURSE_CONFIG_ERRORS);
@@ -1814,9 +1936,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   }, [hydrateThemeVariablesIntoEditors, presets, selectedPresetId]);
 
   // Color Picker Component
-  const ColorPickerField = ({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) => (
+  const ColorPickerField = ({ label, hint, value, onChange }: { label: string; hint?: string; value: string; onChange: (v: string) => void }) => (
     <div>
-      <p className="text-xs font-bold text-[#111827] mb-2">{label}</p>
+      <InfoFieldLabel label={label} hint={hint} className="mb-2" />
       <div className="flex gap-2 items-center">
         <label className="w-8 h-8 rounded border border-[#d1d5db] cursor-pointer flex-shrink-0 block overflow-hidden relative">
           <span className="block w-full h-full" style={{ backgroundColor: value }} />
@@ -1828,9 +1950,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   );
 
   // Font Dropdown Component
-  const FontDropdownField = ({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) => (
+  const FontDropdownField = ({ label, hint, value, onChange }: { label: string; hint?: string; value: string; onChange: (v: string) => void }) => (
     <div>
-      <p className="text-xs font-bold text-[#111827] mb-2">{label}</p>
+      <InfoFieldLabel label={label} hint={hint} className="mb-2" />
       <select value={value} onChange={e => onChange(e.target.value)} className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:border-[var(--life-primary-500)] outline-none">
         {FONT_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
       </select>
@@ -2111,7 +2233,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           {CUSTOM_ACCORDION_DEFS.map((acc) => {
             const isOpen = activeCustomAccordion === acc.id;
             return (
-              <div key={acc.id} className="border border-[#e5e7eb] rounded-xl overflow-hidden bg-white">
+              <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-visible bg-white">
                 <button
                   onClick={() => setActiveCustomAccordion(isOpen ? null : acc.id)}
                   className="group w-full flex items-center justify-between gap-3 px-5 py-4 !h-[56px] text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
@@ -2301,21 +2423,27 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         {/* Configuration: Course - LIFE and Custom */}
         {selected !== "vanilla" && (
           <ThemeAccordion
-            label="Configuration: Course"
-            isOpen={activeAccordion === "Configuration: Course"}
-            onToggle={() => setActiveAccordion(activeAccordion === "Configuration: Course" ? null : "Configuration: Course")}
+            label={getSchemaText(getSchemaField(selectedThemeSchema, '_course'), 'title') ?? 'Configuration: Course'}
+            hint={getSchemaText(getSchemaField(selectedThemeSchema, '_course'), 'help')}
+            isOpen={isLifeTheme || activeAccordion === "Configuration: Course"}
+            onToggle={() => {
+              if (isLifeTheme) return;
+              setActiveAccordion(activeAccordion === "Configuration: Course" ? null : "Configuration: Course");
+            }}
           >
             <div className="space-y-6">
               {selected === 'life' || selected === 'custom' ? (
                 <>
                   <LifeListField
-                    title="Custom Icons: Sprite Sheets"
-                    description="Add a reference to an external sprite sheet with icons that can be used in the course."
-                    titleHint="Add a reference to an external sprite sheet with icons that can be used in the course."
+                    title={getSchemaText(getSchemaField(selectedThemeSchema, '_course', '_svgSpriteSheets'), 'title') ?? 'Custom Icons: Sprite Sheets'}
+                    description={getSchemaText(getSchemaField(selectedThemeSchema, '_course', '_svgSpriteSheets'), 'help') ?? 'Add a reference to an external sprite sheet with icons that can be used in the course.'}
                     items={lifeCourseConfig._svgSpriteSheets}
                     errors={lifeCourseConfigErrors._svgSpriteSheets}
-                    idLabel="Icon Set Name"
+                    idLabel={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_svgSpriteSheets'), '_spriteSheetId', 'title') ?? 'Icon Set Name'}
+                    idHint={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_svgSpriteSheets'), '_spriteSheetId', 'help')}
                     idKey="_spriteSheetId"
+                    sourceLabel={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_svgSpriteSheets'), 'src', 'title') ?? 'External Source'}
+                    sourceHint={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_svgSpriteSheets'), 'src', 'help')}
                     onAdd={() => {
                       clearLifeCourseValidation();
                       setLifeCourseConfig((prev) => ({
@@ -2341,13 +2469,15 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     }}
                   />
                   <LifeListField
-                    title="Custom Icons: Single Icons"
-                    description="Add a reference to an external individual icon that can be used in the course."
-                    titleHint="Add a reference to an external individual icon that can be used in the course."
+                    title={getSchemaText(getSchemaField(selectedThemeSchema, '_course', '_singleIcons'), 'title') ?? 'Custom Icons: Single Icons'}
+                    description={getSchemaText(getSchemaField(selectedThemeSchema, '_course', '_singleIcons'), 'help') ?? 'Add a reference to an external individual icon that can be used in the course.'}
                     items={lifeCourseConfig._singleIcons}
                     errors={lifeCourseConfigErrors._singleIcons}
-                    idLabel="Icon Id"
+                    idLabel={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_singleIcons'), 'iconId', 'title') ?? 'Icon Id'}
+                    idHint={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_singleIcons'), 'iconId', 'help')}
                     idKey="iconId"
+                    sourceLabel={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_singleIcons'), 'src', 'title') ?? 'External Source'}
+                    sourceHint={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_singleIcons'), 'src', 'help')}
                     onAdd={() => {
                       clearLifeCourseValidation();
                       setLifeCourseConfig((prev) => ({
@@ -2381,13 +2511,21 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         {/* Configuration: Content Groups - LIFE and Custom */}
         {selected !== "vanilla" && (
           <ThemeAccordion
-            label="Configuration: Content Groups"
-            isOpen={activeAccordion === "Configuration: Content Groups"}
-            onToggle={() => setActiveAccordion(activeAccordion === "Configuration: Content Groups" ? null : "Configuration: Content Groups")}
+            label={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks'), 'title') ?? 'Configuration: Content Groups'}
+            hint={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks'), 'help')}
+            isOpen={isLifeTheme || activeAccordion === "Configuration: Content Groups"}
+            onToggle={() => {
+              if (isLifeTheme) return;
+              setActiveAccordion(activeAccordion === "Configuration: Content Groups" ? null : "Configuration: Content Groups");
+            }}
           >
             <div className="space-y-5">
               <div>
-                <p className="text-xs font-semibold text-[#111827] mb-2">Spacing top</p>
+                <InfoFieldLabel
+                  label={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks', '_paddingTop'), 'title') ?? 'Spacing top'}
+                  hint={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks', '_paddingTop'), 'help')}
+                  className="mb-2"
+                />
                 <select
                   value={lifeBlocksConfig._paddingTop}
                   onChange={(e) => setLifeBlocksConfig((prev) => ({ ...prev, _paddingTop: e.target.value }))}
@@ -2402,7 +2540,11 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                 </select>
               </div>
               <div>
-                <p className="text-xs font-semibold text-[#111827] mb-2">Spacing bottom</p>
+                <InfoFieldLabel
+                  label={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks', '_paddingBottom'), 'title') ?? 'Spacing bottom'}
+                  hint={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks', '_paddingBottom'), 'help')}
+                  className="mb-2"
+                />
                 <select
                   value={lifeBlocksConfig._paddingBottom}
                   onChange={(e) => setLifeBlocksConfig((prev) => ({ ...prev, _paddingBottom: e.target.value }))}
@@ -2423,11 +2565,17 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         {/* Configuration: Components - LIFE and Custom only */}
         {selected !== "vanilla" && (
           <ThemeAccordion
-            label="Configuration: Components"
-            isOpen={activeAccordion === "Configuration: Components"}
-            onToggle={() => setActiveAccordion(activeAccordion === "Configuration: Components" ? null : "Configuration: Components")}
+            label={getSchemaText(selectedThemeComponentSchema, 'title') ?? 'Configuration: Components'}
+            isOpen={isLifeTheme || activeAccordion === "Configuration: Components"}
+            onToggle={() => {
+              if (isLifeTheme) return;
+              setActiveAccordion(activeAccordion === "Configuration: Components" ? null : "Configuration: Components");
+            }}
           >
             <div className="space-y-5">
+              <p className="text-xs text-[#6b7280] leading-relaxed">
+                {getSchemaText(selectedThemeComponentSchema, 'help') ?? 'Component-level behavior and feedback configuration.'}
+              </p>
               <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCheckNotFinal(!checkNotFinal)}>
                 <div 
                   style={{
@@ -2449,13 +2597,11 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     </svg>
                   )}
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-[#111827] leading-normal">Display marking for not-final attempts</span>
-                  <InfoIcon
-                    label="Display marking for not-final attempts"
-                    hint="Non-final question attempts are marked the same way as final attempts. Applies to all question components except H5P and Laerdal Drag and Drop"
-                  />
-                </div>
+                <InfoFieldLabel
+                  label={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_canShowFinalMarking'), 'title') ?? 'Display marking for not-final attempts'}
+                  hint={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_canShowFinalMarking'), 'help')}
+                  className="leading-normal"
+                />
               </div>
 
               <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCheckUnanswered(!checkUnanswered)}>
@@ -2479,13 +2625,11 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     </svg>
                   )}
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-[#111827] leading-normal">Display marking for unanswered responses</span>
-                  <InfoIcon
-                    label="Display marking for unanswered responses"
-                    hint="Shows or hides markings for partially correct answers according to the “Show Marking” setting under the article-level Assessment settings."
-                  />
-                </div>
+                <InfoFieldLabel
+                  label={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_hidePartiallyDisplayMarking'), 'title') ?? 'Display marking for unanswered correct responses'}
+                  hint={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_hidePartiallyDisplayMarking'), 'help')}
+                  className="leading-normal"
+                />
               </div>
 
               <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCheckHideFeedback(!checkHideFeedback)}>
@@ -2509,13 +2653,11 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     </svg>
                   )}
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-[#111827] leading-normal">Hide feedback on first attempt on assessments</span>
-                  <InfoIcon
-                    label="Hide feedback on first attempt on assessments"
-                    hint="Controls whether feedback is hidden on the first attempt in assessment courses."
-                  />
-                </div>
+                <InfoFieldLabel
+                  label={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_hideFeedbackFirstAttempt'), 'title') ?? 'Hide feedback on first attempt on assessments'}
+                  hint={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_hideFeedbackFirstAttempt'), 'help')}
+                  className="leading-normal"
+                />
               </div>
 
               <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCheckHidePartial(!checkHidePartial)}>
@@ -2539,13 +2681,11 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     </svg>
                   )}
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-[#111827] leading-normal">Hide partially correct feedback on the question and result topic</span>
-                  <InfoIcon
-                    label="Hide partially correct feedback on the question and result topic"
-                    hint="Controls whether feedback for partially correct answers is hidden on the question and results pages in assessments."
-                  />
-                </div>
+                <InfoFieldLabel
+                  label={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_hidePartiallyFeedback'), 'title') ?? 'Hide partially correct feedback on the question and result page'}
+                  hint={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_hidePartiallyFeedback'), 'help')}
+                  className="leading-normal"
+                />
               </div>
             </div>
           </ThemeAccordion>
@@ -2641,13 +2781,19 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <div className="space-y-2">
             {VANILLA_ACCORDION_DEFS.map((acc) => {
               const isOpen = activeVanillaAccordion === acc.id;
+              const sectionSchema = getSchemaField(selectedThemeSchema, acc.id);
+              const sectionLabel = getSchemaText(sectionSchema, 'title') ?? acc.label;
+              const sectionHint = getSchemaText(sectionSchema, 'help');
               return (
-                <div key={acc.id} className="border border-[#e5e7eb] rounded-xl overflow-hidden bg-white">
+                <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-visible bg-white">
                   <button
                     onClick={() => setActiveVanillaAccordion(isOpen ? null : acc.id)}
                     className="group w-full flex items-center justify-between gap-3 px-5 py-4 !h-[56px] text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
                   >
-                    <span className="text-sm font-bold text-current">{acc.label}</span>
+                    <span className="flex items-center gap-1.5 text-sm font-bold text-current">
+                      {sectionLabel}
+                      {sectionHint && <InfoIcon label={sectionLabel} hint={sectionHint} />}
+                    </span>
                     <svg
                       className="shrink-0 ml-auto text-current"
                       width="18"
@@ -2667,9 +2813,16 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                           const key = `${acc.id}::${field.key}`;
                           const colorVal = vanillaColors[key] ?? '';
                           const isEmpty = !colorVal;
+                          const fieldSchema = getSchemaField(selectedThemeSchema, acc.id, field.key);
+                          const fieldLabel = getSchemaText(fieldSchema, 'title') ?? field.label;
+                          const fieldHint = getSchemaText(fieldSchema, 'help');
                           return (
                             <div key={field.key}>
-                              <p className="text-xs text-[#111827] mb-2 leading-snug">{field.label}</p>
+                              <InfoFieldLabel
+                                label={fieldLabel}
+                                hint={fieldHint}
+                                className="mb-2 text-[#111827]"
+                              />
                               <label
                                 style={{
                                   display: 'block',
@@ -2722,13 +2875,18 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
               <div className="space-y-2">
                 {CUSTOM_ACCORDION_DEFS.map((acc) => {
                   const isOpen = activeCustomAccordion === acc.id;
+                  const sectionHint = getSchemaText(getSchemaField(selectedThemeSchema, acc.id), 'help');
+                  const sectionSchema = getSchemaField(selectedThemeSchema, acc.id);
                   return (
-                    <div key={acc.id} className="border border-[#e5e7eb] rounded-xl overflow-hidden bg-white">
+                    <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-visible bg-white">
                       <button
                         onClick={() => setActiveCustomAccordion(isOpen ? null : acc.id)}
                         className="group w-full flex items-center justify-between gap-3 px-5 py-4 !h-[56px] text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
                       >
-                        <span className="text-sm font-bold text-current">{acc.label}</span>
+                        <span className="flex items-center gap-1.5 text-sm font-bold text-curren">
+                          {getSchemaText(sectionSchema, 'title') ?? acc.label}
+                          <InfoIcon label={getSchemaText(sectionSchema, 'title') ?? acc.label} hint={sectionHint} />
+                        </span>
                         <svg
                           className="shrink-0 ml-auto text-current"
                           width="18"
@@ -2747,6 +2905,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                             {acc.fields.map((field) => {
                               const key = `${acc.id}::${field.key}`;
                               const value = customSettings[key] ?? CUSTOM_FIELD_DEFAULTS[key] ?? '';
+                              const hint = getSchemaNestedFieldText(sectionSchema, field.key, 'help');
+                              const fieldLabel = getSchemaText(getSchemaField(selectedThemeSchema, acc.id, field.key), 'title') ?? field.label;
 
                               if (field.inputType === 'select') {
                                 return (
@@ -2754,7 +2914,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                                     key={field.key}
                                     className={acc.id === '_global' && field.key === 'page-heading-font-size' ? 'col-span-2' : ''}
                                   >
-                                    <p className="text-xs font-bold text-[#111827] mb-2">{field.label}</p>
+                                    <InfoFieldLabel label={fieldLabel} hint={hint} className="mb-2" />
                                     <select
                                       value={value}
                                       onChange={(e) => setCustomSettingWithDependencies(key, e.target.value)}
@@ -2772,7 +2932,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                               return (
                                 <ColorPickerField
                                   key={field.key}
-                                  label={field.label}
+                                  label={fieldLabel}
+                                  hint={hint}
                                   value={value || '#ffffff'}
                                   onChange={(nextValue) => setCustomSettingWithDependencies(key, nextValue)}
                                 />
@@ -3052,20 +3213,25 @@ function ThemeAccordion({
   label,
   children,
   isOpen,
-  onToggle
+  onToggle,
+  hint
 }: {
   label: string;
   children: React.ReactNode;
   isOpen: boolean;
   onToggle: () => void;
+  hint?: string;
 }) {
   return (
-    <div className="border border-[#e5e7eb] rounded-xl overflow-hidden bg-white">
+    <div className="border border-[#e5e7eb] rounded-lg overflow-visible bg-white">
       <button
         onClick={onToggle}
         className="group w-full flex items-center justify-between gap-3 px-5 py-4 !h-[56px] text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
       >
-        <span className="text-sm font-bold text-current">{label}</span>
+        <span className="flex items-center gap-1.5 text-sm font-bold text-current">
+          {label}
+          {hint && <InfoIcon label={label} hint={hint} />}
+        </span>
         <svg
           className="shrink-0 ml-auto text-current"
           width="18"

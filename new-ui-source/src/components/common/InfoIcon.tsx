@@ -21,24 +21,22 @@ export function InfoIcon({
 }: InfoIconProps) {
   const tooltipId = React.useId();
 
-  if (!hint) return null;
-
   return (
     <span
-      className={`relative inline-flex group ${className}`}
-      tabIndex={0}
-      aria-label={`More information about ${label}`}
-      aria-describedby={tooltipId}
-      onClick={stopPropagation}
-      onMouseDown={stopPropagation}
+      className={`relative inline-flex h-[16px] w-[16px] shrink-0 items-center justify-center text-[#64748b] group ${hint ? 'cursor-help' : 'cursor-default'} ${className}`}
+      aria-label={hint ? `More information about ${label}` : undefined}
+      aria-describedby={hint ? tooltipId : undefined}
+      aria-hidden={hint ? undefined : true}
+      onClick={hint ? stopPropagation : undefined}
+      onMouseDown={hint ? stopPropagation : undefined}
     >
       <svg
-        width="13"
-        height="13"
+        width="12"
+        height="12"
         viewBox="0 0 24 24"
         fill="none"
-        stroke="#9ca3af"
-        strokeWidth="2"
+        stroke="currentColor"
+        strokeWidth="2.2"
         strokeLinecap="round"
         strokeLinejoin="round"
         aria-hidden="true"
@@ -48,13 +46,15 @@ export function InfoIcon({
         <line x1="12" y1="8" x2="12" y2="12" />
         <line x1="12" y1="16" x2="12.01" y2="16" />
       </svg>
-      <span
-        id={tooltipId}
-        role="tooltip"
-        className={`pointer-events-none absolute left-0 bottom-full z-20 mb-1.5 w-max max-w-[240px] rounded-[8px] bg-[#215369] px-3 py-1 text-[11px] font-medium text-[#ffffff] opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 ${tooltipClassName}`}
-      >
-        {hint}
-      </span>
+      {hint && (
+        <span
+          id={tooltipId}
+          role="tooltip"
+          className={`pointer-events-none absolute left-0 bottom-full z-[9999] mb-1.5 w-max max-w-[240px] rounded-[8px] bg-[#215369] px-3 py-1 text-[11px] font-medium text-[#ffffff] opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 ${tooltipClassName}`}
+        >
+          {hint}
+        </span>
+      )}
     </span>
   );
 }
@@ -74,18 +74,23 @@ export function InfoFieldLabel({
   iconClassName = "",
   tooltipClassName = "",
 }: InfoFieldLabelProps) {
+  const hasHint = typeof hint === "string" && hint.trim().length > 0;
+
   return (
-    <span className={`text-xs font-semibold text-[#374151] flex items-center gap-1 ${className}`}>
-      {label}
-      {hint && (
-        <InfoIcon
-          label={label}
-          hint={hint}
-          iconClassName={iconClassName}
-          tooltipClassName={tooltipClassName}
-        />
-      )}
-    </span>
+    <div className={`relative z-10 min-w-0 text-xs font-semibold text-[#374151] ${className}`}>
+      <span className="leading-snug">
+        {label}
+        {hasHint && (
+          <InfoIcon
+            label={label}
+            hint={hint}
+            className="ml-1 inline-flex align-middle translate-y-[-1px]"
+            iconClassName={iconClassName}
+            tooltipClassName={tooltipClassName}
+          />
+        )}
+      </span>
+    </div>
   );
 }
 

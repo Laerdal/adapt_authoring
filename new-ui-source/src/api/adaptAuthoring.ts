@@ -538,6 +538,7 @@ interface EnginePluginType {
   name?: string;
   displayName?: string;
   theme?: string;
+  properties?: Record<string, unknown>;
 }
 
 interface EngineCourseDetails {
@@ -664,9 +665,47 @@ function resolveBestPluginOption(options: EnginePluginType[], label: string, kin
   return best?.option ?? null;
 }
 
+let themeTypesPromise: Promise<EnginePluginType[]> | null = null;
+
 async function getThemeTypes(): Promise<EnginePluginType[]> {
-  const rows = await apiClient.get<EnginePluginType[]>("/api/themetype");
-  return Array.isArray(rows) ? rows : [];
+  if (!themeTypesPromise) {
+    themeTypesPromise = apiClient.get<EnginePluginType[]>("/api/themetype")
+      .then((rows) => Array.isArray(rows) ? rows : [])
+      .catch((error) => {
+        themeTypesPromise = null;
+        throw error;
+      });
+  }
+
+  return themeTypesPromise;
+}
+
+function getThemeTypeVariablesSchema(plugin: EnginePluginType | null | undefined): Record<string, unknown> | null {
+  const properties = plugin?.properties;
+  if (!properties || typeof properties !== 'object' || Array.isArray(properties)) {
+    return null;
+  }
+
+  const variables = (properties as Record<string, unknown>).variables;
+  if (!variables || typeof variables !== 'object' || Array.isArray(variables)) {
+    return null;
+  }
+
+  return variables as Record<string, unknown>;
+}
+
+export async function getThemeTypeVariablesSchemaByName(pluginName: string): Promise<Record<string, unknown> | null> {
+  const rows = await getThemeTypes();
+  const match = rows.find((row) => row.name === pluginName);
+  return getThemeTypeVariablesSchema(match);
+}
+
+export async function getThemeTypeVariablesSchemaByLabel(label: string): Promise<Record<string, unknown> | null> {
+  const rows = await getThemeTypes();
+  const match = resolveBestPluginOption(rows, label, "theme");
+  if (!match) return null;
+
+  return getThemeTypeVariablesSchema(match);
 }
 
 async function getMenuTypes(): Promise<EnginePluginType[]> {
