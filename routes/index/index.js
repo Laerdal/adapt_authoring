@@ -15,7 +15,10 @@ server.set('view engine', 'hbs');
 // Classic (legacy Backbone) UI. Was the bare "/" - moved to make way for the
 // new UI, which now owns "/" (see routes/new/index.js's redirect). Publicly
 // loadable pre-login, same posture root always had.
-permissions.ignoreRoute(/^\/classic\/?$/);
+// permissions.shouldIgnore() tests this against req.url, which includes the
+// query string (e.g. "/classic/?embed=translation") - the trailing "?.*"
+// absorbs that, matching the convention used by the other ignoreRoute calls.
+permissions.ignoreRoute(/^\/classic\/?(\?.*)?$/);
 
 server.get('/classic', async function (req, res, next) {
   const dateStamp = new Date();

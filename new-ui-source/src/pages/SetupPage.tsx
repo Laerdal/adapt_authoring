@@ -2676,7 +2676,14 @@ function LegacyTranslationPanel({ courseId }: { courseId: string }) {
     <div className="h-full min-h-0 w-full overflow-hidden">
       <iframe
         title="Translation"
-        src={`/?embed=translation#/translation/${encodeURIComponent(courseId)}`}
+        // The translation module is a classic-UI-only Backbone plugin (Origin
+        // events, hash router) - it only exists at /classic now that / serves
+        // the new UI. No trailing slash: the classic index page's assets
+        // (css/adapt.css, require.js, core/app.js, ...) are all relative URLs
+        // resolved against the page's own path, and are only served at the
+        // site root - a trailing slash makes the browser treat "classic" as
+        // a directory and 404 on /classic/css/adapt.css etc.
+        src={`/classic?embed=translation#/translation/${encodeURIComponent(courseId)}`}
         className="w-full h-full border-0"
       />
     </div>
