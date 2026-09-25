@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { logout } from "@/api/adaptAuthoring";
+import { redirectToLogin } from "@/utils/authRedirect";
 
 function getInitials(firstName?: string, lastName?: string, email?: string) {
   const initials = [firstName?.trim()[0], lastName?.trim()[0]].filter(Boolean).join("").toUpperCase();
@@ -35,7 +36,11 @@ export default function ProfileMenu() {
     try {
       await logout();
     } finally {
-      window.location.assign("/");
+      // Straight to the real login target (SSO or /classic) in one hop -
+      // reloading "/" first and letting AuthContext redirect a second time
+      // fires two navigations back to back, which Chrome's flood-protection
+      // throttles, leaving the page looking stuck instead of redirecting.
+      redirectToLogin();
     }
   }
 
