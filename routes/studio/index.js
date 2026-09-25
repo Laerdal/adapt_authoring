@@ -243,13 +243,16 @@ const DATA_FILES = {
 // Was a 3-second blind TTL - every course view/edit re-assembled the whole
 // course from Mongo at least every 3s regardless of whether anything actually
 // changed, which is what made Studio/preview noticeably heavier than the
-// classic UI's build-once-and-reuse preview. Freshness is now guaranteed by
-// invalidateLiveCache() below (fired on every real content write, from ANY
-// source - the classic UI, the new-UI editor, or Quick Edit - since they all
-// funnel through the same contentmanager), so this TTL is just a generous
-// safety net against an entry never getting invalidated, not the mechanism
-// staleness actually relies on.
-const LIVE_TTL_MS = 10 * 60 * 1000;
+// classic UI's build-once-and-reuse preview. Freshness is now primarily
+// guaranteed by invalidateLiveCache() below, fired on every write that goes
+// through contentmanager's create/update/destroy hooks. That's NOT every
+// write, though - plugins/content/course/index.js's referenceId() (used by
+// course duplication) writes straight to the collections and only fires the
+// hooks manually as a follow-up step; any other write path that bypasses
+// contentmanager the same way would miss invalidation entirely. Kept short
+// (not the old 3s, but nowhere near 10 minutes) as a safety net against a
+// bypass like that, not as the mechanism staleness normally relies on.
+const LIVE_TTL_MS = 30 * 1000;
 const liveCache = new Map();     // key -> { at, data }
 const liveInflight = new Map();  // key -> [callback]
 

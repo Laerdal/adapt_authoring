@@ -605,6 +605,18 @@ async function referenceId(courseId, cb) {
     // Update the configObject with the new footer custom id
     await updateContentObject(db, configObject);
 
+    // The updates above write straight to the collections, bypassing
+    // contentmanager's create/update/destroy hooks - so Studio's live-preview
+    // cache (which invalidates on those hooks) is never told this course
+    // changed. Fire the 'post' hooks manually so the cache doesn't serve
+    // stale data for this course until its TTL expires.
+    await new Promise((resolve) => {
+      origin().contentmanager.processContentHooks('update', 'course', {}, { when: 'post' }, (hookError) => {
+        if (hookError) console.error('Error invalidating Studio live cache after reference ID processing:', hookError);
+        resolve();
+      });
+    });
+
   } catch (error) {
     console.error('Error during reference ID processing:', error);
   } finally {
