@@ -33,6 +33,7 @@ import PublishCourseDialog, { type PublishCoursePhase } from "../../components/p
 import PageEditorTopBar from "./pageEditorTopBar";
 import PageEditorNavigation from "./pageEditorNavigation";
 import { useNavigate } from "react-router-dom";
+import { usePageLoader } from "@/hooks";
 import { apiClient } from "../../api/client";
 import {
   buildSchemaDefaults,
@@ -3425,6 +3426,7 @@ export default function CourseEditor({
   const [themeSettingsSchemaByLevel, setThemeSettingsSchemaByLevel] = useState<Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>> | null>(null);
   const [menuSettingsSchemaByLevel, setMenuSettingsSchemaByLevel] = useState<Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>> | null>(null);
   const [componentExtensionSchemas, setComponentExtensionSchemas] = useState<Record<string, Record<string, ExtensionFieldSchema>>>({});
+  usePageLoader(isLoadingStructure);
   const [extensionTypeOptions, setExtensionTypeOptions] = useState<ExtensionTypeOption[]>([]);
   const [navFooterCourseButtons, setNavFooterCourseButtons] = useState<Record<NavFooterButtonKey, NavFooterButton> | null>(null);
   const [courseAssetMappings, setCourseAssetMappings] = useState<Record<string, string>>({});

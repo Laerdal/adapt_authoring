@@ -4,6 +4,7 @@ import { CourseCard } from '@/components/course'
 import AiAssistant from '@/components/common/AiAssistant'
 import PermissionDeniedModal from '@/components/common/PermissionDeniedModal'
 import { useAuth, isSuperAdmin, canManageCourses } from '@/context/AuthContext'
+import { usePageLoader } from '@/hooks'
 import { createCourse, deleteCourse, duplicateCourse, fetchDashboardCourses, fetchDashboardTags, getAuthoringMenuOptions, getAuthoringThemeOptions, updateCourse, type CourseSort } from '@/api/adaptAuthoring'
 import ImportCourseModal from '@/components/importExport/Import'
 
@@ -106,6 +107,8 @@ export default function HomePage() {
   const loadingMoreRef = useRef(false)
   const [hasMore, setHasMore] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
+
+  usePageLoader(isLoadingCourses)
 
   // Full tag universe for the filter dropdown (from the autocomplete endpoint,
   // not the loaded course slice) + a title→id map to filter courses by tag id.

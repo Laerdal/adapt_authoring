@@ -6,6 +6,7 @@ import {
   saveAccessibilityConfig,
   type GlobalsObject,
 } from "../../api/adaptAuthoring";
+import { usePageLoader } from "../../hooks";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 import { CheckboxIndicator } from "../../components/common/Checkbox";
@@ -354,6 +355,7 @@ export function AccessibilityPage({
   const [savedOptionsText, setSavedOptionsText] = useState("{}");
   const [configId, setConfigId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  usePageLoader(loading);
   // Set when the initial load fails. Saving is blocked while true so a failed load
   // can never overwrite stored settings with defaults/empty (data loss).
   const [loadError, setLoadError] = useState(false);

@@ -10,6 +10,7 @@ import {
   type CoursePageOption,
   type NavFooterButtonKey,
 } from "../../api/adaptAuthoring";
+import { usePageLoader } from "../../hooks";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
@@ -279,6 +280,7 @@ export function NavigationPage({
   const [savedSnapshot, setSavedSnapshot] = useState<NavigationSettings>(defaultNavigationSettings());
   const [pages, setPages] = useState<CoursePageOption[]>([]);
   const [loading, setLoading] = useState(true);
+  usePageLoader(loading);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [assetPickerOpen, setAssetPickerOpen] = useState(false);

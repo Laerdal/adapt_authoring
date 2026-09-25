@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { getUsers, setUserRole, deleteUser } from "@/api/adaptAuthoring";
+import { usePageLoader } from "@/hooks";
 import AiAssistant from "@/components/common/AiAssistant";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 
@@ -55,8 +56,17 @@ function isCompleteEmail(value: string): boolean {
 
 export default function UserManagementPage() {
   const [users, setUsers]             = useState<User[]>([]);
+  const [loading, setLoading]         = useState(true);
 
-  const loadUsers = () => { getUsers().then(setUsers).catch(() => setUsers([])); };
+  usePageLoader(loading);
+
+  const loadUsers = () => {
+    setLoading(true);
+    getUsers()
+      .then(setUsers)
+      .catch(() => setUsers([]))
+      .finally(() => setLoading(false));
+  };
   useEffect(() => { loadUsers(); }, []);
   const [search, setSearch]           = useState("");
   const [searchError, setSearchError] = useState("");
