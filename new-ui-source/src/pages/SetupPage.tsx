@@ -33,6 +33,7 @@ import ExportDialog from "../components/common/ExportDialog";
 import ErrorDialog from "../components/common/ErrorDialog";
 import { AssetManagementWorkspace } from "./AssetManagementPage";
 import { PageTransitionBoundary, usePageTransition } from "../context/PageTransitionContext";
+import { usePageLoader } from "../hooks";
 import type { AssetPickerRequest, AssetPickerResult } from "../types/assetPicker";
 
 const ICON_BASE = "/new/assets/icons";
@@ -263,6 +264,8 @@ function CourseStructurePanel({
     moveNode,
   } = useCourseStructure(courseId, courseTitle);
   const [dismissedStructureError, setDismissedStructureError] = useState<Error | null>(null);
+
+  usePageLoader(loading);
 
   // Edits are staged locally and saved only on demand — confirm before leaving
   // with unsaved changes (mirrors Technical Settings / Navigation).
