@@ -4,6 +4,7 @@ import ImageCropper from "@/components/common/ImageCropper";
 import AssetPickerModal from "@/components/common/AssetPickerModal";
 import TagOverflowList from "@/components/common/TagOverflowList";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import ErrorDialog from "@/components/common/ErrorDialog";
 
 interface CourseCardProps {
   id: number;
@@ -473,7 +474,6 @@ export default function CourseCard({
                     type="text"
                     value={tagInput}
                     aria-invalid={Boolean(tagError)}
-                    aria-describedby={tagError ? "course-tag-error" : undefined}
                     onChange={(e) => {
                       setTagInput(e.target.value);
                       if (tagError) setTagError(null);
@@ -491,11 +491,6 @@ export default function CourseCard({
                     Add
                   </button>
                 </div>
-                {tagError && (
-                  <p id="course-tag-error" role="alert" aria-live="assertive" className="mt-2 text-xs text-[#ef4444]">
-                    {tagError}
-                  </p>
-                )}
               </div>
             </div>
 
@@ -521,6 +516,13 @@ export default function CourseCard({
         note="This action cannot be undone. The course and all its content will be permanently deleted."
         onCancel={() => setDeleteOpen(false)}
         onConfirm={() => { setDeleteOpen(false); onDelete(); }}
+      />
+
+      <ErrorDialog
+        open={Boolean(tagError)}
+        title="Tag already added"
+        message={tagError ?? ""}
+        onClose={() => setTagError(null)}
       />
 
       {/* ── ASSET PICKER MODAL ── */}
