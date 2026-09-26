@@ -685,17 +685,23 @@ function ResumeBookmarkingContent({
   set: <K extends keyof CompletionProgressSettings>(k: K, v: CompletionProgressSettings[K]) => void;
   bookmarkingSchema?: SetupSchemaNode | null;
 }) {
+  const effectiveBookmarkingSchema =
+    getSchemaNode(bookmarkingSchema, "pluginLocations", "course", "_bookmarking")
+    ?? getSchemaNode(bookmarkingSchema, "course", "_bookmarking")
+    ?? getSchemaNode(bookmarkingSchema, "_bookmarking")
+    ?? bookmarkingSchema;
+
   return (
     <>
       <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
         <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
-          <CpToggle label={getSchemaLabel(getSchemaNode(bookmarkingSchema, "_isEnabled"), "Enable Bookmarking")} hint={getSchemaHint(getSchemaNode(bookmarkingSchema, "_isEnabled"))} checked={cfg.bookmarkingEnabled} onChange={(v) => set("bookmarkingEnabled", v)} />
+          <CpToggle label={getSchemaLabel(getSchemaNode(effectiveBookmarkingSchema, "_isEnabled"), "Enable Bookmarking")} hint={getSchemaHint(getSchemaNode(effectiveBookmarkingSchema, "_isEnabled"))} checked={cfg.bookmarkingEnabled} onChange={(v) => set("bookmarkingEnabled", v)} />
         </div>
         {cfg.bookmarkingEnabled && (
           <div className="px-4 py-4 flex flex-col gap-4">
             <CpSelect<BookmarkLocation>
-              label={getSchemaLabel(getSchemaNode(bookmarkingSchema, "_level"), "Bookmarking is done at")}
-              hint={getSchemaHint(getSchemaNode(bookmarkingSchema, "_level"))}
+              label={getSchemaLabel(getSchemaNode(effectiveBookmarkingSchema, "_level"), "Bookmarking is done at")}
+              hint={getSchemaHint(getSchemaNode(effectiveBookmarkingSchema, "_level"))}
               value={cfg.bookmarkingLevel}
               onChange={(v) => set("bookmarkingLevel", v)}
               options={[
@@ -707,8 +713,8 @@ function ResumeBookmarkingContent({
             <CpInfoNote>Bookmarking done at component level will be the most accurate.</CpInfoNote>
 
             <CpSelect<BookmarkReturn>
-              label={getSchemaLabel(getSchemaNode(bookmarkingSchema, "_location"), "Bookmarking location – learner is taken back to")}
-              hint={getSchemaHint(getSchemaNode(bookmarkingSchema, "_location")) ?? "Location: where the learner is returned on re-entry"}
+              label={getSchemaLabel(getSchemaNode(effectiveBookmarkingSchema, "_location"), "Bookmarking location – learner is taken back to")}
+              hint={getSchemaHint(getSchemaNode(effectiveBookmarkingSchema, "_location")) ?? "Location: where the learner is returned on re-entry"}
               value={cfg.bookmarkingReturn}
               onChange={(v) => set("bookmarkingReturn", v)}
               options={[
@@ -722,42 +728,42 @@ function ResumeBookmarkingContent({
 
             <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] p-3 flex flex-col gap-3">
               <CpCheckbox
-                label={getSchemaLabel(getSchemaNode(bookmarkingSchema, "_showPrompt"), "Show prompt")}
-                hint={getSchemaHint(getSchemaNode(bookmarkingSchema, "_showPrompt"))}
+                label={getSchemaLabel(getSchemaNode(effectiveBookmarkingSchema, "_showPrompt"), "Show prompt")}
+                hint={getSchemaHint(getSchemaNode(effectiveBookmarkingSchema, "_showPrompt"))}
                 checked={cfg.bookmarkingShowPrompt}
                 onChange={(v) => set("bookmarkingShowPrompt", v)}
               />
               <CpCheckbox
-                label={getSchemaLabel(getSchemaNode(bookmarkingSchema, "_autoRestore"), "Auto restore")}
-                hint={getSchemaHint(getSchemaNode(bookmarkingSchema, "_autoRestore"))}
+                label={getSchemaLabel(getSchemaNode(effectiveBookmarkingSchema, "_autoRestore"), "Auto restore")}
+                hint={getSchemaHint(getSchemaNode(effectiveBookmarkingSchema, "_autoRestore"))}
                 checked={cfg.bookmarkingAutoRestore}
                 onChange={(v) => set("bookmarkingAutoRestore", v)}
               />
               <CpTextInput
-                label={getSchemaLabel(getSchemaNode(bookmarkingSchema, "title"), "Prompt title")}
-                hint={getSchemaHint(getSchemaNode(bookmarkingSchema, "title"))}
+                label={getSchemaLabel(getSchemaNode(effectiveBookmarkingSchema, "title"), "Prompt title")}
+                hint={getSchemaHint(getSchemaNode(effectiveBookmarkingSchema, "title"))}
                 value={cfg.bookmarkingPromptTitle}
                 onChange={(v) => set("bookmarkingPromptTitle", v)}
                 placeholder="Bookmarking"
               />
               <CpTextInput
-                label={getSchemaLabel(getSchemaNode(bookmarkingSchema, "body"), "Prompt message")}
-                hint={getSchemaHint(getSchemaNode(bookmarkingSchema, "body"))}
+                label={getSchemaLabel(getSchemaNode(effectiveBookmarkingSchema, "body"), "Prompt message")}
+                hint={getSchemaHint(getSchemaNode(effectiveBookmarkingSchema, "body"))}
                 value={cfg.bookmarkingPromptMessage}
                 onChange={(v) => set("bookmarkingPromptMessage", v)}
                 placeholder="Would you like to continue where you left off?"
               />
               <div className="grid grid-cols-2 gap-3">
                 <CpTextInput
-                  label={getSchemaLabel(getSchemaNode(bookmarkingSchema, "_buttons", "yes"), "Yes")}
-                  hint={getSchemaHint(getSchemaNode(bookmarkingSchema, "_buttons", "yes"))}
+                  label={getSchemaLabel(getSchemaNode(effectiveBookmarkingSchema, "_buttons", "yes"), "Yes")}
+                  hint={getSchemaHint(getSchemaNode(effectiveBookmarkingSchema, "_buttons", "yes"))}
                   value={cfg.bookmarkingPromptYes}
                   onChange={(v) => set("bookmarkingPromptYes", v)}
                   placeholder="Yes"
                 />
                 <CpTextInput
-                  label={getSchemaLabel(getSchemaNode(bookmarkingSchema, "_buttons", "no"), "No")}
-                  hint={getSchemaHint(getSchemaNode(bookmarkingSchema, "_buttons", "no"))}
+                  label={getSchemaLabel(getSchemaNode(effectiveBookmarkingSchema, "_buttons", "no"), "No")}
+                  hint={getSchemaHint(getSchemaNode(effectiveBookmarkingSchema, "_buttons", "no"))}
                   value={cfg.bookmarkingPromptNo}
                   onChange={(v) => set("bookmarkingPromptNo", v)}
                   placeholder="No"
