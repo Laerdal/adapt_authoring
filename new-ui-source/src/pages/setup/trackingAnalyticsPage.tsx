@@ -179,11 +179,13 @@ function AccordionCard({
 function PluginRadio({
   id,
   label,
+  hint,
   selected,
   onSelect,
 }: {
   id: string;
   label: string;
+  hint?: string;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -202,7 +204,7 @@ function PluginRadio({
         {selected && <span className="w-2 h-2 rounded-full bg-[#2d6fa8]" />}
       </span>
       <span>
-        <span className="block text-sm font-semibold text-[#111827]">{label}</span>
+        <span className="block text-sm font-semibold text-[#111827]">{label}{hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
       </span>
     </button>
   );
@@ -1072,6 +1074,13 @@ export function TrackingAnalyticsPage({
   const savedSnapshotJson = useMemo(() => JSON.stringify(savedSnapshot), [savedSnapshot]);
   const hasChanges = currentSnapshotJson !== savedSnapshotJson;
 
+  const spoorConfigSchema = getSchemaNode(spoorSchema, "pluginLocations", "config", "_spoor") ?? spoorSchema;
+  const xapiConfigSchema = getSchemaNode(xapiSchema, "pluginLocations", "config", "_xapi") ?? xapiSchema;
+  const hyperConfigSchema = getSchemaNode(hyperSchema, "pluginLocations", "config", "_hyper") ?? hyperSchema;
+  const uesConfigSchema = getSchemaNode(uesSchema, "pluginLocations", "config", "_uesAnalytics") ?? uesSchema;
+  const googleConfigSchema = getSchemaNode(googleSchema, "pluginLocations", "config", "_googleAnalytics") ?? googleSchema;
+  const hotjarConfigSchema = getSchemaNode(hotjarSchema, "pluginLocations", "config", "_hotjarAnalytics") ?? hotjarSchema;
+
   const { showConfirmModal, consumePendingNavigation, clearPendingNavigation } = useUnsavedChangesNavigationGuard({
     hasChanges,
     pendingNavigation,
@@ -1231,28 +1240,28 @@ export function TrackingAnalyticsPage({
           icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></svg>}
         >
           <div role="radiogroup" aria-label="Tracking plugin" className="flex flex-col gap-1.5">
-            <PluginRadio id="scorm" label="SCORM" selected={trackingPlugin === "scorm"} onSelect={() => handleTrackingPluginChange("scorm")} />
-            <PluginRadio id="xapi" label="xAPI" selected={trackingPlugin === "xapi"} onSelect={() => handleTrackingPluginChange("xapi")} />
-            <PluginRadio id="hyperbridge" label="HyperBridge" selected={trackingPlugin === "hyperbridge"} onSelect={() => handleTrackingPluginChange("hyperbridge")} />
+            <PluginRadio id="scorm" label="SCORM" hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_isEnabled"))} selected={trackingPlugin === "scorm"} onSelect={() => handleTrackingPluginChange("scorm")} />
+            <PluginRadio id="xapi" label="xAPI" hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_isEnabled"))} selected={trackingPlugin === "xapi"} onSelect={() => handleTrackingPluginChange("xapi")} />
+            <PluginRadio id="hyperbridge" label="HyperBridge" hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_isEnabled"))} selected={trackingPlugin === "hyperbridge"} onSelect={() => handleTrackingPluginChange("hyperbridge")} />
           </div>
 
           {trackingPlugin === "scorm" && (
             <div className="mt-4 flex flex-col gap-4">
-              <SectionLabel hint={getSchemaHint(spoorSchema)}>{getSchemaLabel(spoorSchema, "SCORM (SPOOR) Settings")}</SectionLabel>
+              <SectionLabel hint={getSchemaHint(spoorConfigSchema)}>{getSchemaLabel(spoorConfigSchema, "SCORM (SPOOR) Settings")}</SectionLabel>
               <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb]">
                 <SubSectionLabel>Tracking</SubSectionLabel>
-                <CheckboxRow checked={scorm.shouldStoreResponses} onChange={(v) => setScorm((prev) => ({ ...prev, shouldStoreResponses: v }))} label={getSchemaLabel(getSchemaNode(spoorSchema, "_tracking", "_shouldStoreResponses"), "Store question state")} hint={getSchemaHint(getSchemaNode(spoorSchema, "_tracking", "_shouldStoreResponses"))} />
-                <CheckboxRow checked={scorm.shouldStoreAttempts} onChange={(v) => setScorm((prev) => ({ ...prev, shouldStoreAttempts: v }))} label={getSchemaLabel(getSchemaNode(spoorSchema, "_tracking", "_shouldStoreAttempts"), "Store question attempt states")} hint={getSchemaHint(getSchemaNode(spoorSchema, "_tracking", "_shouldStoreAttempts"))} />
-                <CheckboxRow checked={scorm.shouldRecordInteractions} onChange={(v) => setScorm((prev) => ({ ...prev, shouldRecordInteractions: v }))} label={getSchemaLabel(getSchemaNode(spoorSchema, "_tracking", "_shouldRecordInteractions"), "Record interactions")} hint={getSchemaHint(getSchemaNode(spoorSchema, "_tracking", "_shouldRecordInteractions"))} />
-                <CheckboxRow checked={scorm.shouldRecordObjectives} onChange={(v) => setScorm((prev) => ({ ...prev, shouldRecordObjectives: v }))} label={getSchemaLabel(getSchemaNode(spoorSchema, "_tracking", "_shouldRecordObjectives"), "Record objectives")} hint={getSchemaHint(getSchemaNode(spoorSchema, "_tracking", "_shouldRecordObjectives"))} />
-                <CheckboxRow checked={scorm.shouldCompress} onChange={(v) => setScorm((prev) => ({ ...prev, shouldCompress: v }))} label={getSchemaLabel(getSchemaNode(spoorSchema, "_tracking", "_shouldCompress"), "Should compress data")} hint={getSchemaHint(getSchemaNode(spoorSchema, "_tracking", "_shouldCompress"))} />
+                <CheckboxRow checked={scorm.shouldStoreResponses} onChange={(v) => setScorm((prev) => ({ ...prev, shouldStoreResponses: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldStoreResponses"), "Store question state")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldStoreResponses"))} />
+                <CheckboxRow checked={scorm.shouldStoreAttempts} onChange={(v) => setScorm((prev) => ({ ...prev, shouldStoreAttempts: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldStoreAttempts"), "Store question attempt states")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldStoreAttempts"))} />
+                <CheckboxRow checked={scorm.shouldRecordInteractions} onChange={(v) => setScorm((prev) => ({ ...prev, shouldRecordInteractions: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldRecordInteractions"), "Record interactions")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldRecordInteractions"))} />
+                <CheckboxRow checked={scorm.shouldRecordObjectives} onChange={(v) => setScorm((prev) => ({ ...prev, shouldRecordObjectives: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldRecordObjectives"), "Record objectives")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldRecordObjectives"))} />
+                <CheckboxRow checked={scorm.shouldCompress} onChange={(v) => setScorm((prev) => ({ ...prev, shouldCompress: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldCompress"), "Should compress data")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldCompress"))} />
               </div>
 
               <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
                 <SubSectionLabel>Reporting</SubSectionLabel>
                 <SelectField
-                  label={getSchemaLabel(getSchemaNode(spoorSchema, "_reporting", "_onTrackingCriteriaMet"), "Tracking success status")}
-                  hint={getSchemaHint(getSchemaNode(spoorSchema, "_reporting", "_onTrackingCriteriaMet"))}
+                  label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_reporting", "_onTrackingCriteriaMet"), "Tracking success status")}
+                  hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_reporting", "_onTrackingCriteriaMet"))}
                   value={scorm.onTrackingCriteriaMet}
                   onChange={(value) => setScorm((prev) => ({ ...prev, onTrackingCriteriaMet: value }))}
                   options={[
@@ -1263,8 +1272,8 @@ export function TrackingAnalyticsPage({
                   ]}
                 />
                 <SelectField
-                  label={getSchemaLabel(getSchemaNode(spoorSchema, "_reporting", "_onAssessmentFailure"), "Assessment failure status")}
-                  hint={getSchemaHint(getSchemaNode(spoorSchema, "_reporting", "_onAssessmentFailure"))}
+                  label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_reporting", "_onAssessmentFailure"), "Assessment failure status")}
+                  hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_reporting", "_onAssessmentFailure"))}
                   value={scorm.onAssessmentFailure}
                   onChange={(value) => setScorm((prev) => ({ ...prev, onAssessmentFailure: value }))}
                   options={[
@@ -1276,12 +1285,12 @@ export function TrackingAnalyticsPage({
                 <CheckboxRow
                   checked={scorm.resetStatusWhenLanguageChanged}
                   onChange={(v) => setScorm((prev) => ({ ...prev, resetStatusWhenLanguageChanged: v }))}
-                  label={getSchemaLabel(getSchemaNode(spoorSchema, "_reporting", "_resetStatusOnLanguageChange"), "Reset status when language changed?")}
-                  hint={getSchemaHint(getSchemaNode(spoorSchema, "_reporting", "_resetStatusOnLanguageChange"))}
+                  label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_reporting", "_resetStatusOnLanguageChange"), "Reset status when language changed?")}
+                  hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_reporting", "_resetStatusOnLanguageChange"))}
                 />
               </div>
 
-              <SectionLabel hint={getSchemaHint(getSchemaNode(spoorSchema, "_advancedSettings"))}>Advanced Settings</SectionLabel>
+              <SectionLabel hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings"))}>Advanced Settings</SectionLabel>
               <SelectField
                 label={getSchemaLabel(getSchemaNode(spoorSchema, "_advancedSettings", "_scormVersion"), "SCORM version")}
                 hint={getSchemaHint(getSchemaNode(spoorSchema, "_advancedSettings", "_scormVersion"))}
@@ -1339,15 +1348,16 @@ export function TrackingAnalyticsPage({
 
           {trackingPlugin === "xapi" && (
             <div className="mt-4 flex flex-col gap-3">
-              <SectionLabel hint={getSchemaHint(xapiSchema)}>{getSchemaLabel(xapiSchema, "xAPI Settings")}</SectionLabel>
-              <SelectField label="Specification" value={xapi.specification} onChange={(value) => setXapi((prev) => ({ ...prev, specification: value }))} options={[{ value: "xAPI", label: "xAPI" }, { value: "cmi5", label: "cmi5" }]} />
-              <TextField label="Activity ID" value={xapi.activityID} onChange={(value) => setXapi((prev) => ({ ...prev, activityID: value }))} placeholder="https://your-course-url" />
-              <TextField label="Assignable Unit (AU) ID" value={xapi.auID} onChange={(value) => setXapi((prev) => ({ ...prev, auID: value }))} />
-              <TextField label="LRS Endpoint" value={xapi.endpoint} onChange={(value) => setXapi((prev) => ({ ...prev, endpoint: value }))} placeholder="https://lrs.example.com/xapi" />
-              <TextField label="LRS User / Key" value={xapi.user} onChange={(value) => setXapi((prev) => ({ ...prev, user: value }))} />
-              <TextField label="LRS Password / Secret" type="password" value={xapi.password} onChange={(value) => setXapi((prev) => ({ ...prev, password: value }))} />
+              <SectionLabel hint={getSchemaHint(xapiConfigSchema)}>{getSchemaLabel(xapiConfigSchema, "xAPI Settings")}</SectionLabel>
+              <SelectField label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_specification"), "Specification")} hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_specification"))} value={xapi.specification} onChange={(value) => setXapi((prev) => ({ ...prev, specification: value }))} options={[{ value: "xAPI", label: "xAPI" }, { value: "cmi5", label: "cmi5" }]} />
+              <TextField label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_activityID"), "Activity ID")} hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_activityID"))} value={xapi.activityID} onChange={(value) => setXapi((prev) => ({ ...prev, activityID: value }))} placeholder="https://your-course-url" />
+              <TextField label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_auID"), "Assignable Unit (AU) ID")} hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_auID"))} value={xapi.auID} onChange={(value) => setXapi((prev) => ({ ...prev, auID: value }))} />
+              <TextField label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_endpoint"), "LRS Endpoint")} hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_endpoint"))} value={xapi.endpoint} onChange={(value) => setXapi((prev) => ({ ...prev, endpoint: value }))} placeholder="https://lrs.example.com/xapi" />
+              <TextField label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_user"), "LRS User / Key")} hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_user"))} value={xapi.user} onChange={(value) => setXapi((prev) => ({ ...prev, user: value }))} />
+              <TextField label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_password"), "LRS Password / Secret")} hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_password"))} type="password" value={xapi.password} onChange={(value) => setXapi((prev) => ({ ...prev, password: value }))} />
               <SelectField
-                label="Verb language"
+                label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_lang"), "Verb language")}
+                hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_lang"))}
                 value={xapi.lang}
                 onChange={(value) => setXapi((prev) => ({ ...prev, lang: value }))}
                 options={[
@@ -1357,10 +1367,10 @@ export function TrackingAnalyticsPage({
                   { value: "es-ES", label: "es-ES" },
                 ]}
               />
-              <TextField label="Component blacklist" value={xapi.componentBlacklist} onChange={(value) => setXapi((prev) => ({ ...prev, componentBlacklist: value }))} placeholder="blank,graphic" />
-              <CheckboxRow checked={xapi.generateIds} onChange={(v) => setXapi((prev) => ({ ...prev, generateIds: v }))} label="Auto-generate ID for statements" />
-              <CheckboxRow checked={xapi.shouldTrackState} onChange={(v) => setXapi((prev) => ({ ...prev, shouldTrackState: v }))} label="Track state" />
-              <CheckboxRow checked={xapi.shouldUseRegistration} onChange={(v) => setXapi((prev) => ({ ...prev, shouldUseRegistration: v }))} label="Use registration" />
+              <TextField label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_componentBlacklist"), "Component blacklist")} hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_componentBlacklist"))} value={xapi.componentBlacklist} onChange={(value) => setXapi((prev) => ({ ...prev, componentBlacklist: value }))} placeholder="blank,graphic" />
+              <CheckboxRow checked={xapi.generateIds} onChange={(v) => setXapi((prev) => ({ ...prev, generateIds: v }))} label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_generateIds"), "Auto-generate ID for statements")} hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_generateIds"))} />
+              <CheckboxRow checked={xapi.shouldTrackState} onChange={(v) => setXapi((prev) => ({ ...prev, shouldTrackState: v }))} label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_shouldTrackState"), "Track state")} hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_shouldTrackState"))} />
+              <CheckboxRow checked={xapi.shouldUseRegistration} onChange={(v) => setXapi((prev) => ({ ...prev, shouldUseRegistration: v }))} label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_shouldUseRegistration"), "Use registration")} hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_shouldUseRegistration"))} />
 
               <SectionLabel>Core Events</SectionLabel>
               <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
@@ -1390,7 +1400,8 @@ export function TrackingAnalyticsPage({
               </div>
 
               <SelectField
-                label="LRS connection failure behaviour"
+                label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_lrsFailureBehaviour"), "LRS connection failure behaviour")}
+                hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_lrsFailureBehaviour"))}
                 value={xapi.lrsFailureBehaviour}
                 onChange={(value) => setXapi((prev) => ({ ...prev, lrsFailureBehaviour: value }))}
                 options={[
@@ -1403,12 +1414,12 @@ export function TrackingAnalyticsPage({
 
           {trackingPlugin === "hyperbridge" && (
             <div className="mt-4 flex flex-col gap-4">
-              <SectionLabel hint={getSchemaHint(hyperSchema)}>{getSchemaLabel(hyperSchema, "HyperBridge Settings")}</SectionLabel>
+              <SectionLabel hint={getSchemaHint(hyperConfigSchema)}>{getSchemaLabel(hyperConfigSchema, "HyperBridge Settings")}</SectionLabel>
               <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
                 <SubSectionLabel>Tracking</SubSectionLabel>
-                <CheckboxRow checked={hyper.shouldStoreResponses} onChange={(v) => setHyper((prev) => ({ ...prev, shouldStoreResponses: v }))} label="Store question state" />
-                <CheckboxRow checked={hyper.shouldStoreAttempts} onChange={(v) => setHyper((prev) => ({ ...prev, shouldStoreAttempts: v }))} label="Store question attempt states" />
-                <CheckboxRow checked={hyper.shouldCompress} onChange={(v) => setHyper((prev) => ({ ...prev, shouldCompress: v }))} label="Should compress data" />
+                <CheckboxRow checked={hyper.shouldStoreResponses} onChange={(v) => setHyper((prev) => ({ ...prev, shouldStoreResponses: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_tracking", "_shouldStoreResponses"), "Store question state")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_tracking", "_shouldStoreResponses"))} />
+                <CheckboxRow checked={hyper.shouldStoreAttempts} onChange={(v) => setHyper((prev) => ({ ...prev, shouldStoreAttempts: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_tracking", "_shouldStoreAttempts"), "Store question attempt states")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_tracking", "_shouldStoreAttempts"))} />
+                <CheckboxRow checked={hyper.shouldCompress} onChange={(v) => setHyper((prev) => ({ ...prev, shouldCompress: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_tracking", "_shouldCompress"), "Should compress data")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_tracking", "_shouldCompress"))} />
               </div>
 
               <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
@@ -1497,18 +1508,18 @@ export function TrackingAnalyticsPage({
           icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>}
         >
           <div className="flex flex-col gap-1.5">
-            <PluginRadio id="ues" label="Unified Event System Analytics" selected={analyticsPlugin === "ues"} onSelect={() => analyticsPlugin === "ues" ? (setAnalyticsPlugin(null), setUes(p => ({ ...p, isEnabled: false }))) : handleAnalyticsPluginChange("ues")} />
-            <PluginRadio id="google" label="Google Analytics" selected={analyticsPlugin === "google"} onSelect={() => analyticsPlugin === "google" ? (setAnalyticsPlugin(null), setGoogle(p => ({ ...p, isEnabled: false }))) : handleAnalyticsPluginChange("google")} />
-            <PluginRadio id="hotjar" label="Hotjar Analytics" selected={analyticsPlugin === "hotjar"} onSelect={() => analyticsPlugin === "hotjar" ? (setAnalyticsPlugin(null), setHotjar(p => ({ ...p, isEnabled: false }))) : handleAnalyticsPluginChange("hotjar")} />
+            <PluginRadio id="ues" label="Unified Event System Analytics" hint={getSchemaHint(getSchemaNode(uesConfigSchema, "_isEnabled"))} selected={analyticsPlugin === "ues"} onSelect={() => analyticsPlugin === "ues" ? (setAnalyticsPlugin(null), setUes(p => ({ ...p, isEnabled: false }))) : handleAnalyticsPluginChange("ues")} />
+            <PluginRadio id="google" label="Google Analytics" hint={getSchemaHint(getSchemaNode(googleConfigSchema, "_isEnabled"))} selected={analyticsPlugin === "google"} onSelect={() => analyticsPlugin === "google" ? (setAnalyticsPlugin(null), setGoogle(p => ({ ...p, isEnabled: false }))) : handleAnalyticsPluginChange("google")} />
+            <PluginRadio id="hotjar" label="Hotjar Analytics" hint={getSchemaHint(getSchemaNode(hotjarConfigSchema, "_isEnabled"))} selected={analyticsPlugin === "hotjar"} onSelect={() => analyticsPlugin === "hotjar" ? (setAnalyticsPlugin(null), setHotjar(p => ({ ...p, isEnabled: false }))) : handleAnalyticsPluginChange("hotjar")} />
           </div>
 
           {analyticsPlugin === "ues" && (
             <div className="mt-4 flex flex-col gap-4">
-              <SectionLabel hint={getSchemaHint(uesSchema)}>{getSchemaLabel(uesSchema, "UES Settings")}</SectionLabel>
-              <CheckboxRow checked={ues.isDebugMode} onChange={(v) => setUes((prev) => ({ ...prev, isDebugMode: v }))} label={getSchemaLabel(getSchemaNode(uesSchema, "_isDebugMode"), "Enable debug mode")} hint={getSchemaHint(getSchemaNode(uesSchema, "_isDebugMode"))} />
-              <TextField label={getSchemaLabel(getSchemaNode(uesSchema, "_projectTag"), "Project tag")} hint={getSchemaHint(getSchemaNode(uesSchema, "_projectTag"))} value={ues.projectTag} onChange={(value) => setUes((prev) => ({ ...prev, projectTag: value }))} />
-              <TextField label={getSchemaLabel(getSchemaNode(uesSchema, "_portfolio"), "Portfolio")} hint={getSchemaHint(getSchemaNode(uesSchema, "_portfolio"))} value={ues.portfolio} onChange={(value) => setUes((prev) => ({ ...prev, portfolio: value }))} />
-              <TextField label={getSchemaLabel(getSchemaNode(uesSchema, "_resourceLinkId"), "Resource link ID")} hint={getSchemaHint(getSchemaNode(uesSchema, "_resourceLinkId"))} value={ues.resourceLinkId} onChange={(value) => setUes((prev) => ({ ...prev, resourceLinkId: value }))} />
+              <SectionLabel hint={getSchemaHint(uesConfigSchema)}>{getSchemaLabel(uesConfigSchema, "UES Settings")}</SectionLabel>
+              <CheckboxRow checked={ues.isDebugMode} onChange={(v) => setUes((prev) => ({ ...prev, isDebugMode: v }))} label={getSchemaLabel(getSchemaNode(uesConfigSchema, "_isDebugMode"), "Enable debug mode")} hint={getSchemaHint(getSchemaNode(uesConfigSchema, "_isDebugMode"))} />
+              <TextField label={getSchemaLabel(getSchemaNode(uesConfigSchema, "_projectTag"), "Project tag")} hint={getSchemaHint(getSchemaNode(uesConfigSchema, "_projectTag"))} value={ues.projectTag} onChange={(value) => setUes((prev) => ({ ...prev, projectTag: value }))} />
+              <TextField label={getSchemaLabel(getSchemaNode(uesConfigSchema, "_portfolio"), "Portfolio")} hint={getSchemaHint(getSchemaNode(uesConfigSchema, "_portfolio"))} value={ues.portfolio} onChange={(value) => setUes((prev) => ({ ...prev, portfolio: value }))} />
+              <TextField label={getSchemaLabel(getSchemaNode(uesConfigSchema, "_resourceLinkId"), "Resource link ID")} hint={getSchemaHint(getSchemaNode(uesConfigSchema, "_resourceLinkId"))} value={ues.resourceLinkId} onChange={(value) => setUes((prev) => ({ ...prev, resourceLinkId: value }))} />
               <DeploymentListField
                 label="Standard"
                 type="standard"
@@ -1530,10 +1541,10 @@ export function TrackingAnalyticsPage({
 
           {analyticsPlugin === "google" && (
             <div className="mt-4 flex flex-col gap-3">
-              <SectionLabel hint={getSchemaHint(googleSchema)}>{getSchemaLabel(googleSchema, "Google Analytics Settings")}</SectionLabel>
+              <SectionLabel hint={getSchemaHint(googleConfigSchema)}>{getSchemaLabel(googleConfigSchema, "Google Analytics Settings")}</SectionLabel>
               <TextField
-                label={getSchemaLabel(getSchemaNode(googleSchema, "_trackingId"), "Measurement ID")}
-                hint={getSchemaHint(getSchemaNode(googleSchema, "_trackingId"))}
+                label={getSchemaLabel(getSchemaNode(googleConfigSchema, "_trackingId"), "Measurement ID")}
+                hint={getSchemaHint(getSchemaNode(googleConfigSchema, "_trackingId"))}
                 value={google.trackingId}
                 onChange={(value) => setGoogle((prev) => ({ ...prev, trackingId: value }))}
                 placeholder="G-XXXXXXXXXX"
@@ -1544,10 +1555,10 @@ export function TrackingAnalyticsPage({
 
           {analyticsPlugin === "hotjar" && (
             <div className="mt-4 flex flex-col gap-3">
-              <SectionLabel hint={getSchemaHint(hotjarSchema)}>{getSchemaLabel(hotjarSchema, "Hotjar Settings")}</SectionLabel>
+              <SectionLabel hint={getSchemaHint(hotjarConfigSchema)}>{getSchemaLabel(hotjarConfigSchema, "Hotjar Settings")}</SectionLabel>
               <TextField
-                label={getSchemaLabel(getSchemaNode(hotjarSchema, "_siteId"), "Site ID")}
-                hint={getSchemaHint(getSchemaNode(hotjarSchema, "_siteId"))}
+                label={getSchemaLabel(getSchemaNode(hotjarConfigSchema, "_siteId"), "Site ID")}
+                hint={getSchemaHint(getSchemaNode(hotjarConfigSchema, "_siteId"))}
                 value={hotjar.siteId}
                 onChange={(value) => setHotjar((prev) => ({ ...prev, siteId: value }))}
                 placeholder="1234567"
