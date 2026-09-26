@@ -949,7 +949,7 @@ function ProgressIndicatorsContent({
           <div className="px-4 py-4 flex flex-col gap-4">
             <div className="grid grid-cols-2 gap-4">
               <CpTextInput
-                label={getSchemaLabel(getSchemaNode(progressionSchema, "_progressionLabel"), "Progress indicator text")}
+                label={getSchemaLabel(getSchemaNode(progressionSchema, "_progressionLabel"), "Progression Indicator text")}
                 hint={getSchemaHint(getSchemaNode(progressionSchema, "_progressionLabel"))}
                 value={cfg.progressIndicatorText}
                 onChange={(v) => set("progressIndicatorText", v)}
@@ -965,7 +965,7 @@ function ProgressIndicatorsContent({
             </div>
             <div className="grid grid-cols-2 gap-4">
               <CpSelect<ProgressType>
-                label={getSchemaLabel(getSchemaNode(progressionSchema, "_progressionType"), "Progress Type")}
+                label={getSchemaLabel(getSchemaNode(progressionSchema, "_progressionType"), "Progression Type")}
                 hint={getSchemaHint(getSchemaNode(progressionSchema, "_progressionType"))}
                 value={cfg.progressType}
                 onChange={(v) => set("progressType", v)}
