@@ -5,6 +5,7 @@ import colorLabelIconSvgRaw from "../../../public/assets/icons/color-label-icon.
 import AddComponentDrawer from "../../components/course/AddComponentDrawer";
 import AddTemplateDrawer from "../../components/course/AddTemplateDrawer";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
+import InfoIcon from "../../components/common/InfoIcon";
 import RichTextEditor from "../../components/common/RichTextEditor";
 import AiAssistPopover from "../../components/storyboard/AiAssistPopover";
 import {
@@ -764,6 +765,7 @@ function BehaviourField({
   conditionalContext?: ConditionalContext;
 }) {
   const label = fieldSchema.legend || fieldSchema.title || formatBehaviourFieldName(fieldName);
+  const hint = typeof fieldSchema.help === "string" && fieldSchema.help.trim().length ? fieldSchema.help : undefined;
   const isRequired = isBehaviourFieldRequired(fieldSchema);
   const type = fieldSchema.type;
   const inputTypeStr = typeof fieldSchema.inputType === "string" ? fieldSchema.inputType : undefined;
@@ -821,7 +823,7 @@ function BehaviourField({
     if (hasEnabledToggle) {
       return (
         <TopicEnabledNestedAccordion
-          title={<>{label}{isRequired && <span className="text-[#dc2626] ml-0.5">*</span>}</>}
+          title={<span className="inline-flex items-center gap-1.5">{label}{hint ? <InfoIcon label={label} hint={hint} /> : null}{isRequired && <span className="text-[#dc2626] ml-0.5">*</span>}</span>}
           enabled={objectValue._isEnabled !== false}
           onEnabledChange={(enabled) => onChange(`${path}._isEnabled`, enabled)}
         >
@@ -830,7 +832,7 @@ function BehaviourField({
       );
     }
     return (
-      <TopicNestedAccordion title={<>{label}{isRequired && <span className="text-[#dc2626] ml-0.5">*</span>}</>}>
+      <TopicNestedAccordion title={<span className="inline-flex items-center gap-1.5">{label}{hint ? <InfoIcon label={label} hint={hint} /> : null}{isRequired && <span className="text-[#dc2626] ml-0.5">*</span>}</span>}>
         {fields}
       </TopicNestedAccordion>
     );
@@ -861,7 +863,7 @@ function BehaviourField({
 
     return (
       <div className="flex flex-col gap-2">
-        <TopicFieldLabel required={isRequired}>{label}</TopicFieldLabel>
+        <TopicFieldLabel required={isRequired} hint={hint}>{label}</TopicFieldLabel>
         {items.map((item, index) => {
           const isOpen = openItemIndex === index;
           const itemTitle = pickBehaviourItemTitle(item, itemSchema, index);
@@ -936,6 +938,7 @@ function BehaviourField({
                   })() : (
                     <TopicTextInput
                       label="Value"
+                      hint={hint}
                       value={typeof item === "string" ? item : item === undefined || item === null ? "" : String(item)}
                       onChange={(v) => onChange(`${path}[${index}]`, v)}
                     />
@@ -974,13 +977,14 @@ function BehaviourField({
   }
 
   if (type === "boolean") {
-    return <TopicCheckbox label={label} required={isRequired} checked={!!value} onChange={(checked) => onChange(path, checked)} />;
+    return <TopicCheckbox label={label} hint={hint} required={isRequired} checked={!!value} onChange={(checked) => onChange(path, checked)} />;
   }
 
   if (inputTypeStr === "ColourPicker") {
     return (
       <TopicColorField
         label={label}
+        hint={hint}
         value={asString(value)}
         onChange={(v) => onChange(path, v)}
         paletteRows={fieldSchema.extra?.palette ?? LIFE_PALETTE_ROWS}
@@ -992,6 +996,7 @@ function BehaviourField({
     return (
       <TopicRadioGroup
         label={label}
+        hint={hint}
         required={isRequired}
         value={value !== undefined && value !== null ? String(value) : ""}
         onChange={(v) => onChange(path, v)}
@@ -1004,6 +1009,7 @@ function BehaviourField({
     return (
       <TopicSelect
         label={label}
+        hint={hint}
         required={isRequired}
         value={value !== undefined && value !== null ? String(value) : ""}
         onChange={(v) => onChange(path, v)}
@@ -1016,6 +1022,7 @@ function BehaviourField({
     return (
       <TopicTextInput
         label={label}
+        hint={hint}
         required={isRequired}
         type="number"
         value={value !== undefined && value !== null ? String(value) : ""}
@@ -1029,6 +1036,7 @@ function BehaviourField({
     return (
       <div className="flex flex-col gap-1.5">
         <TopicFieldLabel required={isRequired}>{label}</TopicFieldLabel>
+        {hint ? <div className="-mt-1"><span className="inline-flex items-center gap-1.5 text-[11px] text-[#64748b]">More info<InfoIcon label={label} hint={hint} /></span></div> : null}
         <textarea
           defaultValue={textValue}
           onBlur={(event) => {
@@ -1056,6 +1064,7 @@ function BehaviourField({
     return (
       <div className="flex flex-col gap-1.5">
         <TopicFieldLabel required={isRequired}>{label}</TopicFieldLabel>
+        {hint ? <div className="-mt-1"><span className="inline-flex items-center gap-1.5 text-[11px] text-[#64748b]">More info<InfoIcon label={label} hint={hint} /></span></div> : null}
         <RichTextEditor value={asString(value)} onChange={(html) => onChange(path, html)} />
       </div>
     );
@@ -1064,6 +1073,7 @@ function BehaviourField({
   return (
     <TopicTextInput
       label={label}
+      hint={hint}
       required={isRequired}
       value={typeof value === "string" ? value : value === undefined || value === null ? "" : String(value)}
       onChange={(v) => onChange(path, v)}
@@ -1350,7 +1360,7 @@ function ExtensionListItem({
               <polyline points="9 18 15 12 9 6" />
             </svg>
           )}
-          <span title={displayName} className="truncate text-[12px] font-semibold text-[var(--life-base-black)]">{displayName}</span>
+          <span title={displayName} className="truncate text-[12px] font-semibold text-[var(--life-base-black)] inline-flex items-center gap-1.5">{displayName}{typeof fieldSchema?.help === "string" && fieldSchema.help.trim().length ? <InfoIcon label={displayName} hint={fieldSchema.help} /> : null}</span>
         </button>
         {inheritanceTag === "overridden" && (
           <span title="Overridden" className="shrink-0 px-1 py-0.5 rounded-full text-[9px] leading-none font-semibold bg-[#f3e8ff] text-[#7c3aed]">Overridden</span>
@@ -1892,10 +1902,11 @@ function TopicEnabledNestedAccordion({
   );
 }
 
-function TopicFieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
+function TopicFieldLabel({ children, required, hint }: { children: React.ReactNode; required?: boolean; hint?: string }) {
   return (
-    <span className="text-[11px] font-semibold text-[#374151]">
+    <span className="text-[11px] font-semibold text-[#374151] inline-flex items-center gap-1.5">
       {children}
+      {hint ? <InfoIcon label={typeof children === "string" ? children : "field"} hint={hint} /> : null}
       {required && <span className="text-[#dc2626] ml-0.5">*</span>}
     </span>
   );
@@ -1903,6 +1914,7 @@ function TopicFieldLabel({ children, required }: { children: React.ReactNode; re
 
 function TopicTextInput({
   label,
+  hint,
   value,
   onChange,
   placeholder,
@@ -1911,6 +1923,7 @@ function TopicTextInput({
   required = false,
 }: {
   label: string;
+  hint?: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
@@ -1920,7 +1933,7 @@ function TopicTextInput({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <TopicFieldLabel required={required}>{label}</TopicFieldLabel>
+      <TopicFieldLabel required={required} hint={hint}>{label}</TopicFieldLabel>
       <input
         type={type}
         value={value}
@@ -2054,11 +2067,13 @@ function TopicTitleField({
 // group levels).
 function TopicNumberStepper({
   label,
+  hint,
   value,
   onChange,
   min,
 }: {
   label: string;
+  hint?: string;
   value: string;
   onChange: (value: string) => void;
   min?: number;
@@ -2072,7 +2087,7 @@ function TopicNumberStepper({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <TopicFieldLabel>{label}</TopicFieldLabel>
+      <TopicFieldLabel hint={hint}>{label}</TopicFieldLabel>
       <div className="relative">
         <input
           type="number"
@@ -2105,6 +2120,7 @@ function TopicNumberStepper({
 
 function TopicSelect({
   label,
+  hint,
   value,
   onChange,
   options,
@@ -2112,6 +2128,7 @@ function TopicSelect({
   required = false,
 }: {
   label: string;
+  hint?: string;
   value: string;
   onChange: (value: string) => void;
   options: readonly string[];
@@ -2125,7 +2142,7 @@ function TopicSelect({
   const needsBlankOption = !options.includes(value);
   return (
     <div className="flex flex-col gap-1.5">
-      <TopicFieldLabel required={required}>{label}</TopicFieldLabel>
+      <TopicFieldLabel required={required} hint={hint}>{label}</TopicFieldLabel>
       <div className="relative">
         <select
           value={value}
@@ -2147,11 +2164,13 @@ function TopicSelect({
 
 function TopicCheckbox({
   label,
+  hint,
   checked,
   onChange,
   required = false,
 }: {
   label: string;
+  hint?: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
   required?: boolean;
@@ -2166,19 +2185,21 @@ function TopicCheckbox({
         className="sr-only peer"
       />
       <CheckboxIndicator checked={checked} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
-      <span>{label}{required && <span className="text-[#dc2626] ml-0.5">*</span>}</span>
+      <span className="inline-flex items-center gap-1.5">{label}{hint ? <InfoIcon label={label} hint={hint} /> : null}{required && <span className="text-[#dc2626] ml-0.5">*</span>}</span>
     </label>
   );
 }
 
 function TopicRadioGroup({
   label,
+  hint,
   value,
   onChange,
   options,
   required = false,
 }: {
   label: string;
+  hint?: string;
   value: string;
   onChange: (value: string) => void;
   options: BehaviourOptionPair[];
@@ -2187,7 +2208,7 @@ function TopicRadioGroup({
   const groupName = useId();
   return (
     <div className="flex flex-col gap-1.5">
-      <TopicFieldLabel required={required}>{label}</TopicFieldLabel>
+      <TopicFieldLabel required={required} hint={hint}>{label}</TopicFieldLabel>
       <div className="flex flex-col gap-1.5">
         {options.map((option) => (
           <label key={option.value} className="flex items-center gap-1.5 text-[13px] text-[#111827] cursor-pointer">
@@ -2265,11 +2286,13 @@ function hsvToHex(h: number, s: number, v: number): string {
 
 function TopicColorField({
   label,
+  hint,
   value,
   onChange,
   paletteRows = [],
 }: {
   label: string;
+  hint?: string;
   value: string;
   onChange: (value: string) => void;
   paletteRows?: readonly (readonly string[])[];
@@ -2385,7 +2408,7 @@ function TopicColorField({
 
   return (
     <div className="flex flex-col gap-1">
-      <TopicFieldLabel>{label}</TopicFieldLabel>
+      <TopicFieldLabel hint={hint}>{label}</TopicFieldLabel>
       <button
         ref={triggerRef}
         type="button"
