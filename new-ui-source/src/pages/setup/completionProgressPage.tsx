@@ -806,9 +806,6 @@ function ProgressBarStylePicker({
     <div className="flex flex-col gap-2.5">
       <div className="flex items-center gap-1.5">
         <span className="text-xs font-semibold text-[#374151]">Progress Bar Style</span>
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-          <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-        </svg>
       </div>
       <div className="grid grid-cols-2 gap-3">
         {options.map((opt) => {
