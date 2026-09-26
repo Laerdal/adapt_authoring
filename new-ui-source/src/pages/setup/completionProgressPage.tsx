@@ -401,7 +401,7 @@ function CpCheckboxMulti<T extends string>({
   selected,
   onChange,
 }: {
-  options: { value: T; label: string }[];
+  options: { value: T; label: string; hint?: string }[];
   selected: T[];
   onChange: (v: T[]) => void;
 }) {
@@ -435,7 +435,7 @@ function CpCheckboxMulti<T extends string>({
                 </svg>
               )}
             </div>
-            <span className="text-sm text-[#374151] leading-snug">{opt.label}</span>
+            <span className="text-sm text-[#374151] leading-snug">{opt.label}{opt.hint ? <InfoIcon label={opt.label} hint={opt.hint} className="ml-1 inline-flex align-middle" /> : null}</span>
           </label>
         );
       })}
@@ -878,11 +878,51 @@ function ProgressIndicatorsContent({
   cfg,
   set,
   progressionSchema,
+  pageLevelProgressSchema,
+  laerdalPageLevelProgressSchema,
 }: {
   cfg: CompletionProgressSettings;
   set: <K extends keyof CompletionProgressSettings>(k: K, v: CompletionProgressSettings[K]) => void;
   progressionSchema?: SetupSchemaNode | null;
+  pageLevelProgressSchema?: SetupSchemaNode | null;
+  laerdalPageLevelProgressSchema?: SetupSchemaNode | null;
 }) {
+  const progressIndicatorOptions: { value: ProgressIndicator; label: string; hint?: string }[] = [
+    {
+      value: "page-completion",
+      label: "Show topic completion",
+      hint:
+        getSchemaHint(getSchemaNode(laerdalPageLevelProgressSchema, "pluginLocations", "course", "_laerdalPageLevelProgress", "_showPageCompletion"))
+        ?? getSchemaHint(getSchemaNode(pageLevelProgressSchema, "pluginLocations", "course", "_pageLevelProgress", "_showPageCompletion")),
+    },
+    {
+      value: "course-completion",
+      label: "Show course completion indicator",
+      hint:
+        getSchemaHint(getSchemaNode(laerdalPageLevelProgressSchema, "pluginLocations", "course", "_laerdalPageLevelProgress", "_isCompletionIndicatorEnabled"))
+        ?? getSchemaHint(getSchemaNode(pageLevelProgressSchema, "pluginLocations", "course", "_pageLevelProgress", "_isCompletionIndicatorEnabled")),
+    },
+    {
+      value: "nav-bar",
+      label: "Show progress in the navigation bar",
+      hint:
+        getSchemaHint(getSchemaNode(laerdalPageLevelProgressSchema, "pluginLocations", "course", "_laerdalPageLevelProgress", "_isShownInNavigationBar"))
+        ?? getSchemaHint(getSchemaNode(pageLevelProgressSchema, "pluginLocations", "course", "_pageLevelProgress", "_isShownInNavigationBar")),
+    },
+    {
+      value: "all-content-objects",
+      label: "Display all content objects and the current topic components",
+      hint: getSchemaHint(getSchemaNode(pageLevelProgressSchema, "pluginLocations", "course", "_pageLevelProgress", "_showAtCourseLevel")),
+    },
+    {
+      value: "course-level-nav-btn",
+      label: "Use course-level progress on navigation button",
+      hint:
+        getSchemaHint(getSchemaNode(laerdalPageLevelProgressSchema, "pluginLocations", "course", "_laerdalPageLevelProgress", "_useCourseProgressInNavigationButton"))
+        ?? getSchemaHint(getSchemaNode(pageLevelProgressSchema, "pluginLocations", "course", "_pageLevelProgress", "_useCourseProgressInNavigationButton")),
+    },
+  ];
+
   return (
     <>
       <ProgressBarStylePicker
@@ -893,7 +933,7 @@ function ProgressIndicatorsContent({
         <CpCheckboxMulti<ProgressIndicator>
           selected={cfg.progressIndicators}
           onChange={(v) => set("progressIndicators", v)}
-          options={PROGRESS_INDICATOR_OPTIONS}
+          options={progressIndicatorOptions}
         />
       </CpInnerCard>
       <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
@@ -1325,7 +1365,7 @@ export function CompletionProgressPage({
           <ResumeBookmarkingContent cfg={cfg} set={set} bookmarkingSchema={bookmarkingSchema} />
         </CpAccordion>
         <CpAccordion {...acc("progressIndicators")} title={getSchemaLabel(progressionSchema, "Progress Indicators")} hint={getSchemaHint(progressionSchema) ?? getSchemaHint(pageLevelProgressSchema) ?? getSchemaHint(laerdalPageLevelProgressSchema)}>
-          <ProgressIndicatorsContent cfg={cfg} set={set} progressionSchema={progressionSchema} />
+          <ProgressIndicatorsContent cfg={cfg} set={set} progressionSchema={progressionSchema} pageLevelProgressSchema={pageLevelProgressSchema} laerdalPageLevelProgressSchema={laerdalPageLevelProgressSchema} />
         </CpAccordion>
         <CpAccordion {...acc("timeEstimate")} title={getSchemaLabel(estimatedTimeSchema, "Time Estimate")} hint={getSchemaHint(estimatedTimeSchema)}>
           <TimeEstimateContent cfg={cfg} set={set} estimatedTimeSchema={estimatedTimeSchema} />
