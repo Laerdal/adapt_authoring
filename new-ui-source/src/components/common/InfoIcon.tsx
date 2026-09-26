@@ -1,4 +1,5 @@
 import React from "react";
+import { createPortal } from "react-dom";
 
 function stopPropagation(event: React.SyntheticEvent) {
   event.stopPropagation();
@@ -20,42 +21,109 @@ export function InfoIcon({
   tooltipClassName = "",
 }: InfoIconProps) {
   const tooltipId = React.useId();
+  const triggerRef = React.useRef<HTMLSpanElement | null>(null);
+  const tooltipRef = React.useRef<HTMLSpanElement | null>(null);
+  const [isOpen, setIsOpen] = React.useState(false);
+  const [tooltipStyle, setTooltipStyle] = React.useState<React.CSSProperties>({
+    position: "fixed",
+    left: 0,
+    top: 0,
+    opacity: 0,
+  });
+
+  const hasHint = typeof hint === "string" && hint.trim().length > 0;
+
+  const updateTooltipPosition = React.useCallback(() => {
+    const trigger = triggerRef.current;
+    const tooltip = tooltipRef.current;
+    if (!trigger || !tooltip || !hasHint) return;
+
+    const viewportMargin = 8;
+    const gap = 6;
+    const triggerRect = trigger.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+
+    const maxLeft = Math.max(viewportMargin, window.innerWidth - tooltipRect.width - viewportMargin);
+    const left = Math.min(Math.max(triggerRect.left, viewportMargin), maxLeft);
+
+    const preferredTop = triggerRect.top - tooltipRect.height - gap;
+    const top = preferredTop >= viewportMargin
+      ? preferredTop
+      : Math.min(
+          window.innerHeight - tooltipRect.height - viewportMargin,
+          triggerRect.bottom + gap,
+        );
+
+    setTooltipStyle({
+      position: "fixed",
+      left,
+      top,
+      opacity: 1,
+    });
+  }, [hasHint]);
+
+  React.useLayoutEffect(() => {
+    if (!isOpen || !hasHint) return;
+
+    updateTooltipPosition();
+
+    const handleReposition = () => updateTooltipPosition();
+    window.addEventListener("resize", handleReposition);
+    window.addEventListener("scroll", handleReposition, true);
+
+    return () => {
+      window.removeEventListener("resize", handleReposition);
+      window.removeEventListener("scroll", handleReposition, true);
+    };
+  }, [hasHint, isOpen, updateTooltipPosition]);
 
   return (
-    <span
-      className={`relative inline-flex h-[16px] w-[16px] shrink-0 items-center justify-center text-[#64748b] group ${hint ? 'cursor-help' : 'cursor-default'} ${className}`}
-      aria-label={hint ? `More information about ${label}` : undefined}
-      aria-describedby={hint ? tooltipId : undefined}
-      aria-hidden={hint ? undefined : true}
-      onClick={hint ? stopPropagation : undefined}
-      onMouseDown={hint ? stopPropagation : undefined}
-    >
-      <svg
-        width="12"
-        height="12"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden="true"
-        className={iconClassName}
+    <>
+      <span
+        ref={triggerRef}
+        className={`relative inline-flex h-[16px] w-[16px] shrink-0 items-center justify-center text-[#64748b] ${hasHint ? "cursor-help" : "cursor-default"} ${className}`}
+        aria-label={hasHint ? `More information about ${label}` : undefined}
+        aria-describedby={hasHint ? tooltipId : undefined}
+        aria-hidden={hasHint ? undefined : true}
+        onClick={hasHint ? stopPropagation : undefined}
+        onMouseDown={hasHint ? stopPropagation : undefined}
+        onMouseEnter={hasHint ? () => setIsOpen(true) : undefined}
+        onMouseLeave={hasHint ? () => setIsOpen(false) : undefined}
+        onFocus={hasHint ? () => setIsOpen(true) : undefined}
+        onBlur={hasHint ? () => setIsOpen(false) : undefined}
       >
-        <circle cx="12" cy="12" r="10" />
-        <line x1="12" y1="8" x2="12" y2="12" />
-        <line x1="12" y1="16" x2="12.01" y2="16" />
-      </svg>
-      {hint && (
-        <span
-          id={tooltipId}
-          role="tooltip"
-          className={`pointer-events-none absolute left-0 bottom-full z-[9999] mb-1.5 w-max max-w-[240px] rounded-[8px] bg-[#215369] px-3 py-1 text-[11px] font-medium text-[#ffffff] opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 ${tooltipClassName}`}
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+          className={iconClassName}
         >
-          {hint}
-        </span>
-      )}
-    </span>
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+      </span>
+      {hasHint && isOpen && typeof document !== "undefined"
+        ? createPortal(
+            <span
+              ref={tooltipRef}
+              id={tooltipId}
+              role="tooltip"
+              className={`pointer-events-none z-[9999] w-max max-w-[240px] rounded-[8px] bg-[#215369] px-3 py-1 text-[11px] font-medium text-[#ffffff] shadow-lg ${tooltipClassName}`}
+              style={tooltipStyle}
+            >
+              {hint}
+            </span>,
+            document.body,
+          )
+        : null}
+    </>
   );
 }
 
