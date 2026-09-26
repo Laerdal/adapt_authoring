@@ -582,9 +582,9 @@ export function CourseOverviewPage({
     const hint = getSchemaHint(schemaNode);
 
     return (
-      <div style={{ marginBottom: 6 }}>
-        <InfoFieldLabel label={displayLabel} hint={hint} className="text-[#374151]" />
-        {options?.required ? <span style={{ color: "var(--life-critical-500)", fontWeight: 400, marginLeft: 4 }}>*</span> : null}
+      <div style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 4, flexWrap: "nowrap" }}>
+        <InfoFieldLabel label={displayLabel} hint={hint} className="text-[#374151] !mb-0" />
+        {options?.required ? <span style={{ color: "var(--life-critical-500)", fontWeight: 400, lineHeight: 1 }}>*</span> : null}
       </div>
     );
   }
