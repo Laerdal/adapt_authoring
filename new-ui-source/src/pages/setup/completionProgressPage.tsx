@@ -22,6 +22,15 @@ import {
   type CourseEstimatedTimeSettings,
   type CourseTechnicalSettings,
 } from "../../api/adaptAuthoring";
+import { InfoFieldLabel, InfoIcon } from "../../components/common/InfoIcon";
+import {
+  getConfigRootSchema,
+  getExtensionSchema,
+  getSchemaHint,
+  getSchemaLabel,
+  getSchemaNode,
+  type SetupSchemaNode,
+} from "../../helpers/setupInfoSchema";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 /* ─────────────────────────────────────────────────────────────
@@ -222,10 +231,12 @@ function CpCheckbox({
   checked,
   onChange,
   label,
+  hint,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   label: string;
+  hint?: string;
 }) {
   return (
     <label className="flex items-start gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-[#f9fafb] group">
@@ -243,7 +254,7 @@ function CpCheckbox({
           </svg>
         )}
       </div>
-      <span className="text-sm text-[#374151] leading-snug">{label}</span>
+      <span className="text-sm text-[#374151] leading-snug">{label}{hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
     </label>
   );
 }
@@ -262,7 +273,7 @@ function CpSelect<T extends string>({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-semibold text-[#374151]">{label}</span>
+      <InfoFieldLabel label={label} hint={hint} className="text-[#374151]" />
       {hint && <p className="text-[11px] text-[var(--life-neutral-300)] leading-snug">{hint}</p>}
       <div className="relative">
         <select
@@ -304,7 +315,7 @@ function CpTextInput({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-semibold text-[#374151]">{label}</span>
+      <InfoFieldLabel label={label} hint={hint} className="text-[#374151]" />
       {hint && <p className="text-[11px] text-[var(--life-neutral-300)] leading-snug">{hint}</p>}
       <input
         type={type}
@@ -318,16 +329,18 @@ function CpTextInput({
 }
 function CpToggle({
   label,
+  hint,
   checked,
   onChange,
 }: {
   label: string;
+  hint?: string;
   checked: boolean;
   onChange: (v: boolean) => void;
 }) {
   return (
     <label className="flex items-center justify-between gap-4 py-1 cursor-pointer">
-      <span className="text-sm font-semibold text-[var(--life-base-black)] leading-snug">{label}</span>
+      <span className="text-sm font-semibold text-[var(--life-base-black)] leading-snug">{label}{hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
       <button
         type="button"
         role="switch"
@@ -441,12 +454,14 @@ function CpInfoNote({ children }: { children: React.ReactNode }) {
 ───────────────────────────────────────────────────────────── */
 function CpAccordion({
   title,
+  hint,
   subtitle,
   open,
   onToggle,
   children,
 }: {
   title: string;
+  hint?: string;
   subtitle?: string;
   open: boolean;
   onToggle: () => void;
@@ -461,7 +476,7 @@ function CpAccordion({
         className="group w-full flex items-center justify-between gap-3 px-5 py-4 text-left bg-white text-[#111827] transition-colors hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] disabled:bg-[#f7f7f7] disabled:text-[#b7b7b7]"
       >
         <div className="min-w-0">
-          <h3 className="text-sm font-bold text-current">{title}</h3>
+          <h3 className="text-sm font-bold text-current flex items-center gap-1.5">{title}{hint ? <InfoIcon label={title} hint={hint} /> : null}</h3>
           {subtitle && <p className="text-xs text-[#6b7280] mt-0.5 leading-snug group-hover:text-[#0f5f75]">{subtitle}</p>}
         </div>
         <svg
@@ -511,9 +526,15 @@ function CpInnerCard({
 function CompletionRulesContent({
   cfg,
   set,
+  configSchema,
+  assessmentSchema,
+  adaptiveContentSchema,
 }: {
   cfg: CompletionProgressSettings;
   set: <K extends keyof CompletionProgressSettings>(k: K, v: CompletionProgressSettings[K]) => void;
+  configSchema?: SetupSchemaNode | null;
+  assessmentSchema?: SetupSchemaNode | null;
+  adaptiveContentSchema?: SetupSchemaNode | null;
 }) {
   return (
     <>
@@ -533,7 +554,8 @@ function CompletionRulesContent({
       <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
         <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
           <CpToggle
-            label="Enable Assessment Completion"
+            label={getSchemaLabel(getSchemaNode(assessmentSchema, "_isEnabled"), "Enable Assessment Completion")}
+            hint={getSchemaHint(getSchemaNode(assessmentSchema, "_isEnabled"))}
             checked={cfg.assessmentCompletionEnabled}
             onChange={(v) => set("assessmentCompletionEnabled", v)}
           />
@@ -541,20 +563,23 @@ function CompletionRulesContent({
         {cfg.assessmentCompletionEnabled && (
           <div className="px-4 py-4 flex flex-col gap-4">
             <CpCheckbox
-              label="Choose whether the pass mark uses a percentage or raw score"
+              label={getSchemaLabel(getSchemaNode(assessmentSchema, "_isPercentageBased"), "Choose whether the pass mark uses a percentage or raw score")}
+              hint={getSchemaHint(getSchemaNode(assessmentSchema, "_isPercentageBased"))}
               checked={cfg.assessmentIsPercentageBased}
               onChange={(v) => set("assessmentIsPercentageBased", v)}
             />
             <div className="grid grid-cols-2 gap-3">
               <CpTextInput
-                label="Pass mark"
+                label={getSchemaLabel(getSchemaNode(assessmentSchema, "_scoreToPass"), "Pass mark")}
+                hint={getSchemaHint(getSchemaNode(assessmentSchema, "_scoreToPass"))}
                 type="number"
                 value={String(cfg.assessmentScoreToPass)}
                 onChange={(v) => set("assessmentScoreToPass", Number(v) || 0)}
                 placeholder="60"
               />
               <CpTextInput
-                label="Correct pass mark"
+                label={getSchemaLabel(getSchemaNode(assessmentSchema, "_correctToPass"), "Correct pass mark")}
+                hint={getSchemaHint(getSchemaNode(assessmentSchema, "_correctToPass"))}
                 type="number"
                 value={String(cfg.assessmentCorrectToPass)}
                 onChange={(v) => set("assessmentCorrectToPass", Number(v) || 0)}
@@ -568,7 +593,8 @@ function CompletionRulesContent({
       <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
         <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
           <CpToggle
-            label="Enable Adaptive Content"
+            label={getSchemaLabel(getSchemaNode(adaptiveContentSchema, "_isEnabled"), "Enable Adaptive Content")}
+            hint={getSchemaHint(getSchemaNode(adaptiveContentSchema, "_isEnabled"))}
             checked={cfg.adaptiveContentEnabled}
             onChange={(v) => set("adaptiveContentEnabled", v)}
           />
@@ -576,20 +602,21 @@ function CompletionRulesContent({
         {cfg.adaptiveContentEnabled && (
           <div className="px-4 py-4 flex flex-col gap-4">
             <CpCheckbox
-              label="Record score to LMS"
+              label={getSchemaLabel(getSchemaNode(adaptiveContentSchema, "_shouldSubmitScore"), "Record score to LMS")}
+              hint={getSchemaHint(getSchemaNode(adaptiveContentSchema, "_shouldSubmitScore"))}
               checked={cfg.adaptiveContentShouldSubmitScore}
               onChange={(v) => set("adaptiveContentShouldSubmitScore", v)}
             />
             <CpTextInput
-              label="Name of the diagnostic assessment"
-              hint="The diagnostic assessment tests the learner's knowledge. If all questions related to a topic are answered correctly, that topic is hidden from the course."
+              label={getSchemaLabel(getSchemaNode(adaptiveContentSchema, "_diagnosticAssessmentId"), "Name of the diagnostic assessment")}
+              hint={getSchemaHint(getSchemaNode(adaptiveContentSchema, "_diagnosticAssessmentId")) ?? "The diagnostic assessment tests the learner's knowledge. If all questions related to a topic are answered correctly, that topic is hidden from the course."}
               value={cfg.adaptiveContentDiagnosticAssessmentId}
               onChange={(v) => set("adaptiveContentDiagnosticAssessmentId", v)}
               placeholder="diagnostic"
             />
             <CpTextInput
-              label="Name of the final assessment (if used)"
-              hint="If the course has a final assessment, specify its assessment ID here."
+              label={getSchemaLabel(getSchemaNode(adaptiveContentSchema, "_finalAssessmentId"), "Name of the final assessment (if used)")}
+              hint={getSchemaHint(getSchemaNode(adaptiveContentSchema, "_finalAssessmentId")) ?? "If the course has a final assessment, specify its assessment ID here."}
               value={cfg.adaptiveContentFinalAssessmentId}
               onChange={(v) => set("adaptiveContentFinalAssessmentId", v)}
               placeholder="final"
@@ -603,16 +630,19 @@ function CompletionRulesContent({
 function CompletionFeedbackContent({
   cfg,
   set,
+  completionNotifierSchema,
 }: {
   cfg: CompletionProgressSettings;
   set: <K extends keyof CompletionProgressSettings>(k: K, v: CompletionProgressSettings[K]) => void;
+  completionNotifierSchema?: SetupSchemaNode | null;
 }) {
   return (
     <>
       <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
         <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
           <CpToggle
-            label="Enable Completion Notifier"
+            label={getSchemaLabel(getSchemaNode(completionNotifierSchema, "_isEnabled"), "Enable Completion Notifier")}
+            hint={getSchemaHint(getSchemaNode(completionNotifierSchema, "_isEnabled"))}
             checked={cfg.completionNotifierEnabled}
             onChange={(v) => set("completionNotifierEnabled", v)}
           />
@@ -620,20 +650,22 @@ function CompletionFeedbackContent({
         {cfg.completionNotifierEnabled && (
           <div className="px-4 py-4 flex flex-col gap-4">
             <CpTextInput
-              label="First line message for the completion notifier"
+              label={getSchemaLabel(getSchemaNode(completionNotifierSchema, "_message", "line1"), "First line message for the completion notifier")}
+              hint={getSchemaHint(getSchemaNode(completionNotifierSchema, "_message", "line1"))}
               value={cfg.notifierLine1}
               onChange={(v) => set("notifierLine1", v)}
               placeholder="e.g. Congratulations!"
             />
             <CpTextInput
-              label="Second line message for the completion notifier"
+              label={getSchemaLabel(getSchemaNode(completionNotifierSchema, "_message", "line2"), "Second line message for the completion notifier")}
+              hint={getSchemaHint(getSchemaNode(completionNotifierSchema, "_message", "line2"))}
               value={cfg.notifierLine2}
               onChange={(v) => set("notifierLine2", v)}
               placeholder="e.g. You have completed this course."
             />
             <CpTextInput
-              label="Close button aria label"
-              hint="Accessible label announced by screen readers for the close button"
+              label={getSchemaLabel(getSchemaNode(completionNotifierSchema, "_ariaLabel"), "Close button aria label")}
+              hint={getSchemaHint(getSchemaNode(completionNotifierSchema, "_ariaLabel")) ?? "Accessible label announced by screen readers for the close button"}
               value={cfg.notifierAriaLabel}
               onChange={(v) => set("notifierAriaLabel", v)}
               placeholder="e.g. Close completion message"
@@ -647,20 +679,23 @@ function CompletionFeedbackContent({
 function ResumeBookmarkingContent({
   cfg,
   set,
+  bookmarkingSchema,
 }: {
   cfg: CompletionProgressSettings;
   set: <K extends keyof CompletionProgressSettings>(k: K, v: CompletionProgressSettings[K]) => void;
+  bookmarkingSchema?: SetupSchemaNode | null;
 }) {
   return (
     <>
       <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
         <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
-          <CpToggle label="Enable Bookmarking" checked={cfg.bookmarkingEnabled} onChange={(v) => set("bookmarkingEnabled", v)} />
+          <CpToggle label={getSchemaLabel(getSchemaNode(bookmarkingSchema, "_isEnabled"), "Enable Bookmarking")} hint={getSchemaHint(getSchemaNode(bookmarkingSchema, "_isEnabled"))} checked={cfg.bookmarkingEnabled} onChange={(v) => set("bookmarkingEnabled", v)} />
         </div>
         {cfg.bookmarkingEnabled && (
           <div className="px-4 py-4 flex flex-col gap-4">
             <CpSelect<BookmarkLocation>
-              label="Bookmarking is done at"
+              label={getSchemaLabel(getSchemaNode(bookmarkingSchema, "_level"), "Bookmarking is done at")}
+              hint={getSchemaHint(getSchemaNode(bookmarkingSchema, "_level"))}
               value={cfg.bookmarkingLevel}
               onChange={(v) => set("bookmarkingLevel", v)}
               options={[
@@ -672,8 +707,8 @@ function ResumeBookmarkingContent({
             <CpInfoNote>Bookmarking done at component level will be the most accurate.</CpInfoNote>
 
             <CpSelect<BookmarkReturn>
-              label="Bookmarking location – learner is taken back to"
-              hint="Location: where the learner is returned on re-entry"
+              label={getSchemaLabel(getSchemaNode(bookmarkingSchema, "_location"), "Bookmarking location – learner is taken back to")}
+              hint={getSchemaHint(getSchemaNode(bookmarkingSchema, "_location")) ?? "Location: where the learner is returned on re-entry"}
               value={cfg.bookmarkingReturn}
               onChange={(v) => set("bookmarkingReturn", v)}
               options={[
@@ -687,36 +722,42 @@ function ResumeBookmarkingContent({
 
             <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] p-3 flex flex-col gap-3">
               <CpCheckbox
-                label="Show prompt"
+                label={getSchemaLabel(getSchemaNode(bookmarkingSchema, "_showPrompt"), "Show prompt")}
+                hint={getSchemaHint(getSchemaNode(bookmarkingSchema, "_showPrompt"))}
                 checked={cfg.bookmarkingShowPrompt}
                 onChange={(v) => set("bookmarkingShowPrompt", v)}
               />
               <CpCheckbox
-                label="Auto restore"
+                label={getSchemaLabel(getSchemaNode(bookmarkingSchema, "_autoRestore"), "Auto restore")}
+                hint={getSchemaHint(getSchemaNode(bookmarkingSchema, "_autoRestore"))}
                 checked={cfg.bookmarkingAutoRestore}
                 onChange={(v) => set("bookmarkingAutoRestore", v)}
               />
               <CpTextInput
-                label="Prompt title"
+                label={getSchemaLabel(getSchemaNode(bookmarkingSchema, "title"), "Prompt title")}
+                hint={getSchemaHint(getSchemaNode(bookmarkingSchema, "title"))}
                 value={cfg.bookmarkingPromptTitle}
                 onChange={(v) => set("bookmarkingPromptTitle", v)}
                 placeholder="Bookmarking"
               />
               <CpTextInput
-                label="Prompt message"
+                label={getSchemaLabel(getSchemaNode(bookmarkingSchema, "body"), "Prompt message")}
+                hint={getSchemaHint(getSchemaNode(bookmarkingSchema, "body"))}
                 value={cfg.bookmarkingPromptMessage}
                 onChange={(v) => set("bookmarkingPromptMessage", v)}
                 placeholder="Would you like to continue where you left off?"
               />
               <div className="grid grid-cols-2 gap-3">
                 <CpTextInput
-                  label="Yes"
+                  label={getSchemaLabel(getSchemaNode(bookmarkingSchema, "_buttons", "yes"), "Yes")}
+                  hint={getSchemaHint(getSchemaNode(bookmarkingSchema, "_buttons", "yes"))}
                   value={cfg.bookmarkingPromptYes}
                   onChange={(v) => set("bookmarkingPromptYes", v)}
                   placeholder="Yes"
                 />
                 <CpTextInput
-                  label="No"
+                  label={getSchemaLabel(getSchemaNode(bookmarkingSchema, "_buttons", "no"), "No")}
+                  hint={getSchemaHint(getSchemaNode(bookmarkingSchema, "_buttons", "no"))}
                   value={cfg.bookmarkingPromptNo}
                   onChange={(v) => set("bookmarkingPromptNo", v)}
                   placeholder="No"
@@ -833,9 +874,11 @@ function ProgressBarStylePicker({
 function ProgressIndicatorsContent({
   cfg,
   set,
+  progressionSchema,
 }: {
   cfg: CompletionProgressSettings;
   set: <K extends keyof CompletionProgressSettings>(k: K, v: CompletionProgressSettings[K]) => void;
+  progressionSchema?: SetupSchemaNode | null;
 }) {
   return (
     <>
@@ -853,7 +896,8 @@ function ProgressIndicatorsContent({
       <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
         <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
           <CpToggle
-            label="Enable Progression Indicator"
+            label={getSchemaLabel(getSchemaNode(progressionSchema, "_isEnabled"), "Enable Progression Indicator")}
+            hint={getSchemaHint(getSchemaNode(progressionSchema, "_isEnabled"))}
             checked={cfg.progressIndicatorEnabled}
             onChange={(v) => set("progressIndicatorEnabled", v)}
           />
@@ -862,13 +906,15 @@ function ProgressIndicatorsContent({
           <div className="px-4 py-4 flex flex-col gap-4">
             <div className="grid grid-cols-2 gap-4">
               <CpTextInput
-                label="Progress indicator text"
+                label={getSchemaLabel(getSchemaNode(progressionSchema, "_progressionLabel"), "Progress indicator text")}
+                hint={getSchemaHint(getSchemaNode(progressionSchema, "_progressionLabel"))}
                 value={cfg.progressIndicatorText}
                 onChange={(v) => set("progressIndicatorText", v)}
                 placeholder="Topic Progress"
               />
               <CpTextInput
-                label="Aria label"
+                label={getSchemaLabel(getSchemaNode(progressionSchema, "_progressionAriaLabel"), "Aria label")}
+                hint={getSchemaHint(getSchemaNode(progressionSchema, "_progressionAriaLabel"))}
                 value={cfg.progressIndicatorAriaLabel}
                 onChange={(v) => set("progressIndicatorAriaLabel", v)}
                 placeholder="Topic progress. {{percentageComplete}}%. Open topic sections."
@@ -876,7 +922,8 @@ function ProgressIndicatorsContent({
             </div>
             <div className="grid grid-cols-2 gap-4">
               <CpSelect<ProgressType>
-                label="Progress Type"
+                label={getSchemaLabel(getSchemaNode(progressionSchema, "_progressionType"), "Progress Type")}
+                hint={getSchemaHint(getSchemaNode(progressionSchema, "_progressionType"))}
                 value={cfg.progressType}
                 onChange={(v) => set("progressType", v)}
                 options={[
@@ -885,7 +932,8 @@ function ProgressIndicatorsContent({
                 ]}
               />
               <CpSelect<ProgressFormat>
-                label="Progression Format"
+                label={getSchemaLabel(getSchemaNode(progressionSchema, "_progressionFormat"), "Progression Format")}
+                hint={getSchemaHint(getSchemaNode(progressionSchema, "_progressionFormat"))}
                 value={cfg.progressFormat}
                 onChange={(v) => set("progressFormat", v)}
                 options={[
@@ -904,15 +952,17 @@ function ProgressIndicatorsContent({
 function TimeEstimateContent({
   cfg,
   set,
+  estimatedTimeSchema,
 }: {
   cfg: CompletionProgressSettings;
   set: <K extends keyof CompletionProgressSettings>(k: K, v: CompletionProgressSettings[K]) => void;
+  estimatedTimeSchema?: SetupSchemaNode | null;
 }) {
   return (
     <>
       <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
         <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
-          <CpToggle label="Enable Time Estimate" checked={cfg.timeEnabled} onChange={(v) => set("timeEnabled", v)} />
+          <CpToggle label={getSchemaLabel(getSchemaNode(estimatedTimeSchema, "_isEnabled"), "Enable Time Estimate")} hint={getSchemaHint(getSchemaNode(estimatedTimeSchema, "_isEnabled"))} checked={cfg.timeEnabled} onChange={(v) => set("timeEnabled", v)} />
         </div>
         {cfg.timeEnabled && (
           <div className="px-4 py-4 flex flex-col gap-4">
@@ -959,6 +1009,15 @@ export function CompletionProgressPage({
     _ariaLabel: DEFAULT_SETTINGS.notifierAriaLabel,
   });
   const [loadErrorMessage, setLoadErrorMessage] = useState<string | null>(null);
+  const [configSchema, setConfigSchema] = useState<SetupSchemaNode | null>(null);
+  const [bookmarkingSchema, setBookmarkingSchema] = useState<SetupSchemaNode | null>(null);
+  const [assessmentSchema, setAssessmentSchema] = useState<SetupSchemaNode | null>(null);
+  const [adaptiveContentSchema, setAdaptiveContentSchema] = useState<SetupSchemaNode | null>(null);
+  const [estimatedTimeSchema, setEstimatedTimeSchema] = useState<SetupSchemaNode | null>(null);
+  const [completionNotifierSchema, setCompletionNotifierSchema] = useState<SetupSchemaNode | null>(null);
+  const [progressionSchema, setProgressionSchema] = useState<SetupSchemaNode | null>(null);
+  const [pageLevelProgressSchema, setPageLevelProgressSchema] = useState<SetupSchemaNode | null>(null);
+  const [laerdalPageLevelProgressSchema, setLaerdalPageLevelProgressSchema] = useState<SetupSchemaNode | null>(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   type Section = "completionRules" | "completionFeedback" | "resumeBookmarking" | "progressIndicators" | "timeEstimate";
@@ -1088,6 +1147,44 @@ export function CompletionProgressPage({
     };
   }, [courseId]);
   useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      getConfigRootSchema(),
+      getExtensionSchema("adapt-contrib-bookmarking"),
+      getExtensionSchema("adapt-contrib-assessment"),
+      getExtensionSchema("adapt-adaptiveContent"),
+      getExtensionSchema("adapt-estimated-time"),
+      getExtensionSchema("adapt-completion-notifier"),
+      getExtensionSchema("adapt-progression-indicator"),
+      getExtensionSchema("adapt-contrib-pageLevelProgress"),
+      getExtensionSchema("adapt-laerdal-pageLevelProgress"),
+    ]).then(([
+      nextConfigSchema,
+      nextBookmarkingSchema,
+      nextAssessmentSchema,
+      nextAdaptiveContentSchema,
+      nextEstimatedTimeSchema,
+      nextCompletionNotifierSchema,
+      nextProgressionSchema,
+      nextPageLevelProgressSchema,
+      nextLaerdalPageLevelProgressSchema,
+    ]) => {
+      if (cancelled) return;
+      setConfigSchema(nextConfigSchema);
+      setBookmarkingSchema(nextBookmarkingSchema);
+      setAssessmentSchema(nextAssessmentSchema);
+      setAdaptiveContentSchema(nextAdaptiveContentSchema);
+      setEstimatedTimeSchema(nextEstimatedTimeSchema);
+      setCompletionNotifierSchema(nextCompletionNotifierSchema);
+      setProgressionSchema(nextProgressionSchema);
+      setPageLevelProgressSchema(nextPageLevelProgressSchema);
+      setLaerdalPageLevelProgressSchema(nextLaerdalPageLevelProgressSchema);
+    }).catch(() => {
+      if (cancelled) return;
+    });
+    return () => { cancelled = true; };
+  }, []);
+  useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 3500);
     return () => clearTimeout(t);
@@ -1215,20 +1312,20 @@ export function CompletionProgressPage({
       </div>
       <div className="flex-1 overflow-y-auto min-h-0">
       <div className="max-w-3xl px-6 py-6 flex flex-col gap-2">
-        <CpAccordion {...acc("completionRules")} title="Completion Rules">
-          <CompletionRulesContent cfg={cfg} set={set} />
+        <CpAccordion {...acc("completionRules")} title={getSchemaLabel(getSchemaNode(configSchema, "_completionCriteria"), "Completion Rules")} hint={getSchemaHint(getSchemaNode(configSchema, "_completionCriteria"))}>
+          <CompletionRulesContent cfg={cfg} set={set} configSchema={configSchema} assessmentSchema={assessmentSchema} adaptiveContentSchema={adaptiveContentSchema} />
         </CpAccordion>
-        <CpAccordion {...acc("completionFeedback")} title="Completion Feedback">
-          <CompletionFeedbackContent cfg={cfg} set={set} />
+        <CpAccordion {...acc("completionFeedback")} title={getSchemaLabel(completionNotifierSchema, "Completion Feedback")} hint={getSchemaHint(completionNotifierSchema)}>
+          <CompletionFeedbackContent cfg={cfg} set={set} completionNotifierSchema={completionNotifierSchema} />
         </CpAccordion>
-        <CpAccordion {...acc("resumeBookmarking")} title="Resume &amp; Bookmarking">
-          <ResumeBookmarkingContent cfg={cfg} set={set} />
+        <CpAccordion {...acc("resumeBookmarking")} title={getSchemaLabel(bookmarkingSchema, "Resume & Bookmarking")} hint={getSchemaHint(bookmarkingSchema)}>
+          <ResumeBookmarkingContent cfg={cfg} set={set} bookmarkingSchema={bookmarkingSchema} />
         </CpAccordion>
-        <CpAccordion {...acc("progressIndicators")} title="Progress Indicators">
-          <ProgressIndicatorsContent cfg={cfg} set={set} />
+        <CpAccordion {...acc("progressIndicators")} title={getSchemaLabel(progressionSchema, "Progress Indicators")} hint={getSchemaHint(progressionSchema) ?? getSchemaHint(pageLevelProgressSchema) ?? getSchemaHint(laerdalPageLevelProgressSchema)}>
+          <ProgressIndicatorsContent cfg={cfg} set={set} progressionSchema={progressionSchema} />
         </CpAccordion>
-        <CpAccordion {...acc("timeEstimate")} title="Time Estimate">
-          <TimeEstimateContent cfg={cfg} set={set} />
+        <CpAccordion {...acc("timeEstimate")} title={getSchemaLabel(estimatedTimeSchema, "Time Estimate")} hint={getSchemaHint(estimatedTimeSchema)}>
+          <TimeEstimateContent cfg={cfg} set={set} estimatedTimeSchema={estimatedTimeSchema} />
         </CpAccordion>
 
         <div className="flex items-start gap-2.5 rounded-lg bg-[#fff7ed] border border-[#fed7aa] px-4 py-3 mt-2">

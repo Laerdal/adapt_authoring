@@ -10,9 +10,17 @@ import {
   type CourseMenuSettings,
   updateCourseMenuSettings,
 } from "../../api/adaptAuthoring";
+import InfoIcon, { InfoFieldLabel } from "../../components/common/InfoIcon";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
 import AssetSelectionField, { toRenderableAssetUrl } from "../../components/common/AssetSelectionField";
 import { CheckboxIndicator } from "../../components/common/Checkbox";
+import {
+  getAppliedCourseMenuSettingsSchema,
+  getSchemaHint,
+  getSchemaLabel,
+  getSchemaNode,
+  type SetupSchemaNode,
+} from "../../helpers/setupInfoSchema";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
@@ -359,10 +367,10 @@ function mapMenuNameToStyle(menuName?: string): MenuStyle | null {
   return null;
 }
 
-function SectionHeader({ label, required }: { label: string; required?: boolean }) {
+function SectionHeader({ label, hint, required }: { label: string; hint?: string; required?: boolean }) {
   return (
     <div className="text-[13px] font-bold text-[var(--life-base-black)] mb-3">
-      {label}
+      <span className="inline-flex items-center gap-1.5">{label}{hint ? <InfoIcon label={label} hint={hint} /> : null}</span>
       {required ? <span className="text-[var(--life-critical-500)] ml-0.5">*</span> : null}
     </div>
   );
@@ -370,11 +378,13 @@ function SectionHeader({ label, required }: { label: string; required?: boolean 
 
 function MenuDropdown({
   label,
+  hint,
   value,
   options,
   onChange,
 }: {
   label: string;
+  hint?: string;
   value: string;
   options: string[];
   onChange: (v: string) => void;
@@ -418,7 +428,7 @@ function MenuDropdown({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-sm font-semibold text-[#374151]">{label}</label>
+      <InfoFieldLabel label={label} hint={hint} className="text-[#374151]" />
       <div className="relative">
         <button
           ref={btnRef}
@@ -506,12 +516,14 @@ function MenuDropdown({
 function MenuCheckbox({
   id,
   label,
+  hint,
   description,
   checked,
   onChange,
 }: {
   id: string;
   label: string;
+  hint?: string;
   description?: string;
   checked: boolean;
   onChange: (v: boolean) => void;
@@ -528,7 +540,7 @@ function MenuCheckbox({
       />
       <CheckboxIndicator checked={checked} className="mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
       <div className="flex flex-col gap-0.5">
-        <span className="text-sm font-semibold text-[#374151]">{label}</span>
+        <span className="text-sm font-semibold text-[#374151]">{label}{hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
         {description ? <span className="text-[13px] text-[var(--life-neutral-300)]">{description}</span> : null}
       </div>
     </label>
@@ -597,12 +609,14 @@ function ExternalAssetModal({
 function MenuAccordion({
   title,
   subtitle,
+  hint,
   open,
   onToggle,
   children,
 }: {
   title: string;
   subtitle?: string;
+  hint?: string;
   open: boolean;
   onToggle: () => void;
   children?: React.ReactNode;
@@ -615,7 +629,7 @@ function MenuAccordion({
         className="group w-full flex items-center justify-between gap-3 px-5 py-4 text-left cursor-pointer bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
       >
         <div>
-          <div className="text-sm font-bold text-current">{title}</div>
+          <div className="text-sm font-bold text-current flex items-center gap-1.5">{title}{hint ? <InfoIcon label={title} hint={hint} /> : null}</div>
           {subtitle ? <div className="text-[13px] text-[#6b7280] mt-[4px] leading-[1.45] group-hover:text-[#0f5f75]">{subtitle}</div> : null}
         </div>
         <span className="shrink-0 ml-auto text-current">
@@ -1035,6 +1049,7 @@ export function MenuPage({
 }) {
   const [assetPickerTarget, setAssetPickerTarget] = useState<AssetTarget | null>(null);
   const [externalAssetTarget, setExternalAssetTarget] = useState<AssetTarget | null>(null);
+  const [menuSchema, setMenuSchema] = useState<SetupSchemaNode | null>(null);
   const [activeCourseMenuSettings, setActiveCourseMenuSettings] = useState<CourseMenuSettings>({});
   const [courseAssetMappings, setCourseAssetMappings] = useState<Record<string, string>>({});
   const [assetLinkIdMap, setAssetLinkIdMap] = useState<Record<string, string>>({});
@@ -1108,6 +1123,32 @@ export function MenuPage({
       cancelled = true;
     };
   }, [courseId, initialMenuName]);
+
+  useEffect(() => {
+    const selectedMenuLabel = mapMenuStyleToLabel(config.menuStyle);
+    if (!selectedMenuLabel) {
+      setMenuSchema(null);
+      return;
+    }
+    let cancelled = false;
+    getAppliedCourseMenuSettingsSchema(selectedMenuLabel)
+      .then((schema) => {
+        if (!cancelled) setMenuSchema(schema);
+      })
+      .catch(() => {
+        if (!cancelled) setMenuSchema(null);
+      });
+    return () => { cancelled = true; };
+  }, [config.menuStyle]);
+
+  const menuGraphicSchema = getSchemaNode(menuSchema, "_graphic");
+  const menuHeaderSchema = getSchemaNode(menuSchema, "_menuHeader");
+  const menuTextAlignmentSchema = getSchemaNode(menuHeaderSchema, "_textAlignment");
+  const menuHeaderBgSchema = getSchemaNode(menuHeaderSchema, "_backgroundImage");
+  const menuHeaderMinSchema = getSchemaNode(menuHeaderSchema, "_minimumHeights");
+  const menuHeaderBgStylesSchema = getSchemaNode(menuHeaderSchema, "_backgroundStyles");
+  const menuBackgroundSchema = getSchemaNode(menuSchema, "_backgroundImage");
+  const menuBackgroundStylesSchema = getSchemaNode(menuSchema, "_backgroundStyles");
 
   const hasChanges = JSON.stringify(config) !== JSON.stringify(savedConfig);
 
@@ -1273,9 +1314,9 @@ export function MenuPage({
           <div className="mb-2">
             <div className="text-[13px] font-bold text-[var(--life-base-black)] mb-4">Menu Configuration</div>
 
-            <MenuAccordion title="Menu logo image" subtitle="Shown in the menu header. Recommended 240 × 80 px." open={openAcc === "logo"} onToggle={() => setOpenAcc((p) => (p === "logo" ? "" : "logo"))}>
+            <MenuAccordion title={getSchemaLabel(menuGraphicSchema, "Menu logo image")} hint={getSchemaHint(menuGraphicSchema)} subtitle="Shown in the menu header. Recommended 240 × 80 px." open={openAcc === "logo"} onToggle={() => setOpenAcc((p) => (p === "logo" ? "" : "logo"))}>
               <AssetPickerCard
-                label="Menu logo image"
+                label={getSchemaLabel(getSchemaNode(menuGraphicSchema, "_src"), "Menu logo image")}
                 value={config.logoSrc}
                 resolveUrl={resolveAssetPreviewUrl}
                 onPickAsset={() => setAssetPickerTarget({ scope: "logo" })}
@@ -1284,7 +1325,7 @@ export function MenuPage({
                 showLabel={false}
               />
               <div>
-                <label className="text-[13px] text-[var(--life-base-black)] mb-2 block">Alternative text</label>
+                <InfoFieldLabel label={getSchemaLabel(getSchemaNode(menuGraphicSchema, "alt"), "Alternative text")} hint={getSchemaHint(getSchemaNode(menuGraphicSchema, "alt"))} className="text-[var(--life-base-black)] mb-2" />
                 <input
                   type="text"
                   value={config.logoAltText}
@@ -1295,28 +1336,28 @@ export function MenuPage({
               </div>
             </MenuAccordion>
 
-            <MenuAccordion title="Menu text alignment" subtitle="Applies to menu title, body copy, and instruction text." open={openAcc === "alignment"} onToggle={() => setOpenAcc((p) => (p === "alignment" ? "" : "alignment"))}>
+            <MenuAccordion title={getSchemaLabel(menuTextAlignmentSchema, "Menu text alignment")} hint={getSchemaHint(menuTextAlignmentSchema)} subtitle="Applies to menu title, body copy, and instruction text." open={openAcc === "alignment"} onToggle={() => setOpenAcc((p) => (p === "alignment" ? "" : "alignment"))}>
               <div>
-                <label className="text-[13px] text-[var(--life-base-black)] mb-2 block">Title alignment</label>
+                <InfoFieldLabel label={getSchemaLabel(getSchemaNode(menuTextAlignmentSchema, "_title"), "Title alignment")} hint={getSchemaHint(getSchemaNode(menuTextAlignmentSchema, "_title"))} className="text-[var(--life-base-black)] mb-2" />
                 <AlignButtons value={config.titleAlign} onChange={(v) => set("titleAlign", v)} />
               </div>
               <div>
-                <label className="text-[13px] text-[var(--life-base-black)] mb-2 block">Subtitle alignment</label>
+                <InfoFieldLabel label={getSchemaLabel(getSchemaNode(menuTextAlignmentSchema, "_subtitle"), "Subtitle alignment")} hint={getSchemaHint(getSchemaNode(menuTextAlignmentSchema, "_subtitle"))} className="text-[var(--life-base-black)] mb-2" />
                 <AlignButtons value={config.subtitleAlign} onChange={(v) => set("subtitleAlign", v)} />
               </div>
               <div>
-                <label className="text-[13px] text-[var(--life-base-black)] mb-2 block">Body alignment</label>
+                <InfoFieldLabel label={getSchemaLabel(getSchemaNode(menuTextAlignmentSchema, "_body"), "Body alignment")} hint={getSchemaHint(getSchemaNode(menuTextAlignmentSchema, "_body"))} className="text-[var(--life-base-black)] mb-2" />
                 <AlignButtons value={config.bodyAlign} onChange={(v) => set("bodyAlign", v)} />
               </div>
               <div>
-                <label className="text-[13px] text-[var(--life-base-black)] mb-2 block">Instruction alignment</label>
+                <InfoFieldLabel label={getSchemaLabel(getSchemaNode(menuTextAlignmentSchema, "_instruction"), "Instruction alignment")} hint={getSchemaHint(getSchemaNode(menuTextAlignmentSchema, "_instruction"))} className="text-[var(--life-base-black)] mb-2" />
                 <AlignButtons value={config.instructionAlign} onChange={(v) => set("instructionAlign", v)} />
               </div>
             </MenuAccordion>
 
-            <MenuAccordion title="Menu header image" subtitle="Optional banner shown above or below the menu title." open={openAcc === "header"} onToggle={() => setOpenAcc((p) => (p === "header" ? "" : "header"))}>
+            <MenuAccordion title={getSchemaLabel(menuHeaderBgSchema, "Menu header image")} hint={getSchemaHint(menuHeaderBgSchema)} subtitle="Optional banner shown above or below the menu title." open={openAcc === "header"} onToggle={() => setOpenAcc((p) => (p === "header" ? "" : "header"))}>
               <div>
-                <label className="text-[13px] text-[var(--life-base-black)] mb-2 block">Position</label>
+                <InfoFieldLabel label={getSchemaLabel(getSchemaNode(menuHeaderSchema, "_displayAboveHeader"), "Position")} hint={getSchemaHint(getSchemaNode(menuHeaderSchema, "_displayAboveHeader"))} className="text-[var(--life-base-black)] mb-2" />
                 <div className="grid grid-cols-2 border border-[var(--life-neutral-200)] rounded-lg overflow-hidden">
                   {(["above", "below"] as HeaderPosition[]).map((pos, i) => (
                     <button
@@ -1335,7 +1376,7 @@ export function MenuPage({
               <AssetPickerCard label="_medium" value={config.headerImageSrc.medium} resolveUrl={resolveAssetPreviewUrl} onPickAsset={() => setAssetPickerTarget({ scope: "headerImage", bp: "medium" })} onPickExternal={() => setExternalAssetTarget({ scope: "headerImage", bp: "medium" })} onClear={() => applyAssetValue({ scope: "headerImage", bp: "medium" }, "")} />
               <AssetPickerCard label="_small" value={config.headerImageSrc.small} resolveUrl={resolveAssetPreviewUrl} onPickAsset={() => setAssetPickerTarget({ scope: "headerImage", bp: "small" })} onPickExternal={() => setExternalAssetTarget({ scope: "headerImage", bp: "small" })} onClear={() => applyAssetValue({ scope: "headerImage", bp: "small" }, "")} />
               <div className="flex flex-col gap-3">
-                <div className="text-[13px] font-bold text-[var(--life-base-black)]">Menu header minimum height</div>
+                <div className="text-[13px] font-bold text-[var(--life-base-black)] inline-flex items-center gap-1.5">{getSchemaLabel(menuHeaderMinSchema, "Menu header minimum height")}{getSchemaHint(menuHeaderMinSchema) ? <InfoIcon label="Menu header minimum height" hint={getSchemaHint(menuHeaderMinSchema)} /> : null}</div>
                 {(["xlarge", "large", "medium", "small"] as BreakpointKey[]).map((bp) => (
                   <div key={bp} className="flex flex-col gap-1.5">
                     <div className="flex items-center justify-between">
@@ -1358,36 +1399,37 @@ export function MenuPage({
                 ))}
               </div>
               <div className="border border-[var(--life-neutral-200)] rounded-lg p-4 flex flex-col gap-3">
-                <div className="text-[13px] font-bold text-[var(--life-base-black)] underline">Menu header image styles</div>
-                <MenuDropdown label="Set if/how the background image repeats" value={config.headerRepeat} options={BG_REPEAT_OPTIONS} onChange={(v) => set("headerRepeat", v as BgRepeat)} />
-                <MenuDropdown label="Set the size of the background image" value={config.headerSize} options={BG_SIZE_OPTIONS} onChange={(v) => set("headerSize", v as BgSize)} />
-                <MenuDropdown label="Set the position of the background image" value={config.headerBgPosition} options={BG_POSITION_OPTIONS} onChange={(v) => set("headerBgPosition", v as BgPosition)} />
+                <div className="text-[13px] font-bold text-[var(--life-base-black)] underline inline-flex items-center gap-1.5">Menu header image styles{getSchemaHint(menuHeaderBgStylesSchema) ? <InfoIcon label="Menu header image styles" hint={getSchemaHint(menuHeaderBgStylesSchema)} /> : null}</div>
+                <MenuDropdown label={getSchemaLabel(getSchemaNode(menuHeaderBgStylesSchema, "_backgroundRepeat"), "Set if/how the background image repeats")} hint={getSchemaHint(getSchemaNode(menuHeaderBgStylesSchema, "_backgroundRepeat"))} value={config.headerRepeat} options={BG_REPEAT_OPTIONS} onChange={(v) => set("headerRepeat", v as BgRepeat)} />
+                <MenuDropdown label={getSchemaLabel(getSchemaNode(menuHeaderBgStylesSchema, "_backgroundSize"), "Set the size of the background image")} hint={getSchemaHint(getSchemaNode(menuHeaderBgStylesSchema, "_backgroundSize"))} value={config.headerSize} options={BG_SIZE_OPTIONS} onChange={(v) => set("headerSize", v as BgSize)} />
+                <MenuDropdown label={getSchemaLabel(getSchemaNode(menuHeaderBgStylesSchema, "_backgroundPosition"), "Set the position of the background image")} hint={getSchemaHint(getSchemaNode(menuHeaderBgStylesSchema, "_backgroundPosition"))} value={config.headerBgPosition} options={BG_POSITION_OPTIONS} onChange={(v) => set("headerBgPosition", v as BgPosition)} />
               </div>
             </MenuAccordion>
 
-            <MenuAccordion title="Menu background image" subtitle="Optional background behind the menu." open={openAcc === "background"} onToggle={() => setOpenAcc((p) => (p === "background" ? "" : "background"))}>
+            <MenuAccordion title={getSchemaLabel(menuBackgroundSchema, "Menu background image")} hint={getSchemaHint(menuBackgroundSchema)} subtitle="Optional background behind the menu." open={openAcc === "background"} onToggle={() => setOpenAcc((p) => (p === "background" ? "" : "background"))}>
               <AssetPickerCard label="_xlarge" value={config.bgImageSrc.xlarge} resolveUrl={resolveAssetPreviewUrl} onPickAsset={() => setAssetPickerTarget({ scope: "backgroundImage", bp: "xlarge" })} onPickExternal={() => setExternalAssetTarget({ scope: "backgroundImage", bp: "xlarge" })} onClear={() => applyAssetValue({ scope: "backgroundImage", bp: "xlarge" }, "")} />
               <AssetPickerCard label="_large" value={config.bgImageSrc.large} resolveUrl={resolveAssetPreviewUrl} onPickAsset={() => setAssetPickerTarget({ scope: "backgroundImage", bp: "large" })} onPickExternal={() => setExternalAssetTarget({ scope: "backgroundImage", bp: "large" })} onClear={() => applyAssetValue({ scope: "backgroundImage", bp: "large" }, "")} />
               <AssetPickerCard label="_medium" value={config.bgImageSrc.medium} resolveUrl={resolveAssetPreviewUrl} onPickAsset={() => setAssetPickerTarget({ scope: "backgroundImage", bp: "medium" })} onPickExternal={() => setExternalAssetTarget({ scope: "backgroundImage", bp: "medium" })} onClear={() => applyAssetValue({ scope: "backgroundImage", bp: "medium" }, "")} />
               <AssetPickerCard label="_small" value={config.bgImageSrc.small} resolveUrl={resolveAssetPreviewUrl} onPickAsset={() => setAssetPickerTarget({ scope: "backgroundImage", bp: "small" })} onPickExternal={() => setExternalAssetTarget({ scope: "backgroundImage", bp: "small" })} onClear={() => applyAssetValue({ scope: "backgroundImage", bp: "small" }, "")} />
               <div className="border border-[var(--life-neutral-200)] rounded-lg p-4 flex flex-col gap-3">
-                <div className="text-[13px] font-bold text-[var(--life-base-black)] underline">Menu background image styles</div>
-                <MenuDropdown label="Set if/how the background image repeats" value={config.bgRepeat} options={BG_REPEAT_OPTIONS} onChange={(v) => set("bgRepeat", v as BgRepeat)} />
-                <MenuDropdown label="Set the size of the background image" value={config.bgSize} options={BG_SIZE_OPTIONS} onChange={(v) => set("bgSize", v as BgSize)} />
-                <MenuDropdown label="Set the position of the background image" value={config.bgPosition} options={BG_POSITION_OPTIONS} onChange={(v) => set("bgPosition", v as BgPosition)} />
+                <div className="text-[13px] font-bold text-[var(--life-base-black)] underline inline-flex items-center gap-1.5">Menu background image styles{getSchemaHint(menuBackgroundStylesSchema) ? <InfoIcon label="Menu background image styles" hint={getSchemaHint(menuBackgroundStylesSchema)} /> : null}</div>
+                <MenuDropdown label={getSchemaLabel(getSchemaNode(menuBackgroundStylesSchema, "_backgroundRepeat"), "Set if/how the background image repeats")} hint={getSchemaHint(getSchemaNode(menuBackgroundStylesSchema, "_backgroundRepeat"))} value={config.bgRepeat} options={BG_REPEAT_OPTIONS} onChange={(v) => set("bgRepeat", v as BgRepeat)} />
+                <MenuDropdown label={getSchemaLabel(getSchemaNode(menuBackgroundStylesSchema, "_backgroundSize"), "Set the size of the background image")} hint={getSchemaHint(getSchemaNode(menuBackgroundStylesSchema, "_backgroundSize"))} value={config.bgSize} options={BG_SIZE_OPTIONS} onChange={(v) => set("bgSize", v as BgSize)} />
+                <MenuDropdown label={getSchemaLabel(getSchemaNode(menuBackgroundStylesSchema, "_backgroundPosition"), "Set the position of the background image")} hint={getSchemaHint(getSchemaNode(menuBackgroundStylesSchema, "_backgroundPosition"))} value={config.bgPosition} options={BG_POSITION_OPTIONS} onChange={(v) => set("bgPosition", v as BgPosition)} />
               </div>
             </MenuAccordion>
 
-            <MenuAccordion title="Behavior" open={openAcc === "behavior"} onToggle={() => setOpenAcc((p) => (p === "behavior" ? "" : "behavior"))}>
+            <MenuAccordion title={getSchemaLabel(menuSchema, "Behavior")} hint={getSchemaHint(menuSchema)} open={openAcc === "behavior"} onToggle={() => setOpenAcc((p) => (p === "behavior" ? "" : "behavior"))}>
               <MenuCheckbox
                 id="menu-skip-submenu"
-                label="Skip submenu view"
+                label={getSchemaLabel(getSchemaNode(menuSchema, "_skipSubmenuView"), "Skip submenu view")}
+                hint={getSchemaHint(getSchemaNode(menuSchema, "_skipSubmenuView"))}
                 description="When enabled, learners jump straight from the main menu into the first available topic."
                 checked={config.skipSubmenu}
                 onChange={(v) => set("skipSubmenu", v)}
               />
               <div>
-                <label className="text-[13px] text-[var(--life-base-black)] mb-2 block">Locked notification text</label>
+                <InfoFieldLabel label={getSchemaLabel(getSchemaNode(menuSchema, "lockedNotification"), "Locked notification text")} hint={getSchemaHint(getSchemaNode(menuSchema, "lockedNotification"))} className="text-[var(--life-base-black)] mb-2" />
                 <input
                   type="text"
                   value={config.lockedText}

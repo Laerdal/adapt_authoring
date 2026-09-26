@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
 import EditorMaskIcon from "../../components/editor/EditorMaskIcon";
+import InfoIcon, { InfoFieldLabel } from "../../components/common/InfoIcon";
 import {
   getNavigationSettings,
   saveNavigationSettings,
@@ -10,6 +11,14 @@ import {
   type CoursePageOption,
   type NavFooterButtonKey,
 } from "../../api/adaptAuthoring";
+import {
+  getConfigRootSchema,
+  getCourseRootSchema,
+  getSchemaHint,
+  getSchemaLabel,
+  getSchemaNode,
+  type SetupSchemaNode,
+} from "../../helpers/setupInfoSchema";
 import { usePageLoader } from "../../hooks";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
@@ -19,11 +28,13 @@ function CheckboxRow({
   checked,
   onChange,
   label,
+  hint,
   disabled = false,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   label: string;
+  hint?: string;
   disabled?: boolean;
 }) {
   return (
@@ -40,7 +51,10 @@ function CheckboxRow({
           </svg>
         )}
       </div>
-      <span className="text-sm text-[#374151] leading-snug">{label}</span>
+      <span className="text-sm text-[#374151] leading-snug">
+        {label}
+        {hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}
+      </span>
     </label>
   );
 }
@@ -49,16 +63,21 @@ function ToggleSwitch({
   checked,
   onChange,
   label,
+  hint,
   disabled = false,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   label: string;
+  hint?: string;
   disabled?: boolean;
 }) {
   return (
     <div className={`flex items-center justify-between gap-3 py-2 ${disabled ? "opacity-40" : ""}`}>
-      <span className="text-sm text-[#374151] leading-snug">{label}</span>
+      <span className="text-sm text-[#374151] leading-snug">
+        {label}
+        {hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}
+      </span>
       <button
         type="button"
         role="switch"
@@ -88,12 +107,14 @@ function ToggleSwitch({
 function NavAccordion({
   title,
   subtitle,
+  hint,
   open,
   onToggle,
   children,
 }: {
   title: string;
   subtitle?: string;
+  hint?: string;
   open: boolean;
   onToggle: () => void;
   children: React.ReactNode;
@@ -107,7 +128,7 @@ function NavAccordion({
         className="group w-full flex items-center justify-between gap-3 px-5 py-4 text-left bg-white text-[#111827] transition-colors hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] disabled:bg-[#f7f7f7] disabled:text-[#b7b7b7]"
       >
         <div className="min-w-0">
-          <h3 className="text-sm font-bold text-current">{title}</h3>
+          <h3 className="text-sm font-bold text-current flex items-center gap-1.5">{title}{hint ? <InfoIcon label={title} hint={hint} /> : null}</h3>
           {subtitle && <p className="text-xs text-[#6b7280] mt-0.5 leading-snug group-hover:text-[#0f5f75]">{subtitle}</p>}
         </div>
         <svg
@@ -125,12 +146,14 @@ function NavAccordion({
 // Styled <select> with chevron + optional help text (matches the Menu Lock control).
 function NavSelect<T extends string>({
   label,
+  hint,
   value,
   onChange,
   options,
   help,
 }: {
   label: string;
+  hint?: string;
   value: T;
   onChange: (v: T) => void;
   options: { value: T; label: string }[];
@@ -138,7 +161,7 @@ function NavSelect<T extends string>({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-semibold text-[#374151]">{label}</span>
+      <InfoFieldLabel label={label} hint={hint} />
       <div className="relative">
         <select
           value={value}
@@ -161,18 +184,20 @@ function NavSelect<T extends string>({
 
 function NavTextInput({
   label,
+  hint,
   value,
   onChange,
   placeholder,
 }: {
   label: string;
+  hint?: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-semibold text-[#374151]">{label}</span>
+      <InfoFieldLabel label={label} hint={hint} />
       <input
         type="text"
         value={value}
@@ -220,6 +245,7 @@ function FooterButtonRow({
   onChange,
   icon,
   label,
+  hint,
   value,
   onTextChange,
 }: {
@@ -227,6 +253,7 @@ function FooterButtonRow({
   onChange: (v: boolean) => void;
   icon: React.ReactNode;
   label: string;
+  hint?: string;
   value: string;
   onTextChange: (v: string) => void;
 }) {
@@ -260,8 +287,13 @@ function FooterButtonRow({
         onChange={(e) => onTextChange(e.target.value)}
         className="flex-1 min-w-0 px-0 py-1 text-sm bg-transparent text-[#374151] border-0 outline-none shadow-none"
       />
+      {hint ? <InfoIcon label={label} hint={hint} className="ml-1" /> : null}
     </div>
   );
+}
+
+function firstDefinedSchemaNode(...nodes: Array<SetupSchemaNode | undefined | null>): SetupSchemaNode | undefined {
+  return nodes.find((node) => node && Object.keys(node).length > 0) ?? undefined;
 }
 
 export function NavigationPage({
@@ -285,6 +317,8 @@ export function NavigationPage({
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [assetPickerOpen, setAssetPickerOpen] = useState(false);
   const [externalOpen, setExternalOpen] = useState(false);
+  const [courseSchema, setCourseSchema] = useState<SetupSchemaNode | null>(null);
+  const [configSchema, setConfigSchema] = useState<SetupSchemaNode | null>(null);
   // Single-open accordion: only one section expanded at a time; all collapsed on load.
   const [openSection, setOpenSection] = useState<string>("");
   const acc = (id: string) => ({
@@ -314,6 +348,40 @@ export function NavigationPage({
     })();
     return () => { cancelled = true; };
   }, [courseId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void Promise.all([getCourseRootSchema(), getConfigRootSchema()])
+      .then(([nextCourseSchema, nextConfigSchema]) => {
+        if (cancelled) return;
+        setCourseSchema(nextCourseSchema);
+        setConfigSchema(nextConfigSchema);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCourseSchema(null);
+        setConfigSchema(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const startSchema = getSchemaNode(courseSchema, "_start");
+  const navigationSchema = getSchemaNode(courseSchema, "_navigation");
+  const courseMenuSchema = firstDefinedSchemaNode(
+    getSchemaNode(configSchema, "_extensions", "_courseMenu"),
+  );
+  const headerLogoSchema = firstDefinedSchemaNode(
+    getSchemaNode(courseSchema, "_extensions", "_topbarLogos"),
+    getSchemaNode(configSchema, "_extensions", "_topbarLogos"),
+  );
+  const navigationFooterSchema = firstDefinedSchemaNode(
+    getSchemaNode(courseSchema, "_extensions", "_navigationFooter"),
+    getSchemaNode(configSchema, "_extensions", "_navigationFooter"),
+  );
 
   // ── State updaters (settings is deeply nested; keep mutations narrow) ──
   const setStart = (p: Partial<NavigationSettings["start"]>) =>
@@ -437,12 +505,12 @@ export function NavigationPage({
           ) : (
             <>
               {/* ── Start settings ── */}
-              <NavAccordion {...acc("start")} title="Start settings" subtitle="Choose which page(s) learners land on when they open the course.">
-                <ToggleSwitch checked={s.start._isEnabled} onChange={(v) => setStart({ _isEnabled: v })} label="Enable start settings" />
+              <NavAccordion {...acc("start")} title={getSchemaLabel(startSchema, "Start settings")} hint={getSchemaHint(startSchema)} subtitle="Choose which page(s) learners land on when they open the course.">
+                <ToggleSwitch checked={s.start._isEnabled} onChange={(v) => setStart({ _isEnabled: v })} label={getSchemaLabel(getSchemaNode(startSchema, "_isEnabled"), "Enable start settings")} hint={getSchemaHint(getSchemaNode(startSchema, "_isEnabled"))} />
 
                 {s.start._isEnabled && (
                   <div className="flex flex-col gap-3">
-                    <span className="text-xs font-semibold text-[#374151]">Start list</span>
+                    <InfoFieldLabel label={getSchemaLabel(getSchemaNode(startSchema, "_startIds"), "Start list")} hint={getSchemaHint(getSchemaNode(startSchema, "_startIds"))} />
                     {s.start._startIds.length === 0 && (
                       <p className="text-[11px] text-[var(--life-neutral-300)]">No start pages added yet.</p>
                     )}
@@ -451,7 +519,8 @@ export function NavigationPage({
                         <div className="flex items-end gap-2">
                           <div className="flex-1">
                             <NavSelect
-                              label="Start page"
+                              label={getSchemaLabel(getSchemaNode(startSchema, "_startIds", "_id"), "Start page")}
+                              hint={getSchemaHint(getSchemaNode(startSchema, "_startIds", "_id"))}
                               value={item._id}
                               onChange={(v) => setStartId(i, { _id: v })}
                               options={pageOptions}
@@ -468,8 +537,8 @@ export function NavigationPage({
                             </svg>
                           </button>
                         </div>
-                        <CheckboxRow checked={item._skipIfComplete} onChange={(v) => setStartId(i, { _skipIfComplete: v })} label="Skip if complete?" />
-                        <NavTextInput label="Classes" value={item._className} onChange={(v) => setStartId(i, { _className: v })} placeholder="Optional class matcher" />
+                        <CheckboxRow checked={item._skipIfComplete} onChange={(v) => setStartId(i, { _skipIfComplete: v })} label={getSchemaLabel(getSchemaNode(startSchema, "_startIds", "_skipIfComplete"), "Skip if complete?")} hint={getSchemaHint(getSchemaNode(startSchema, "_startIds", "_skipIfComplete"))} />
+                        <NavTextInput label={getSchemaLabel(getSchemaNode(startSchema, "_startIds", "_className"), "Classes")} hint={getSchemaHint(getSchemaNode(startSchema, "_startIds", "_className"))} value={item._className} onChange={(v) => setStartId(i, { _className: v })} placeholder="Optional class matcher" />
                       </div>
                     ))}
                     <div>
@@ -490,16 +559,17 @@ export function NavigationPage({
                       )}
                     </div>
 
-                    <CheckboxRow checked={s.start._force} onChange={(v) => setStart({ _force: v })} label="Force routing" />
-                    <CheckboxRow checked={s.start._isMenuDisabled} onChange={(v) => setStart({ _isMenuDisabled: v })} label="Disable menu" />
+                    <CheckboxRow checked={s.start._force} onChange={(v) => setStart({ _force: v })} label={getSchemaLabel(getSchemaNode(startSchema, "_force"), "Force routing")} hint={getSchemaHint(getSchemaNode(startSchema, "_force"))} />
+                    <CheckboxRow checked={s.start._isMenuDisabled} onChange={(v) => setStart({ _isMenuDisabled: v })} label={getSchemaLabel(getSchemaNode(startSchema, "_isMenuDisabled"), "Disable menu")} hint={getSchemaHint(getSchemaNode(startSchema, "_isMenuDisabled"))} />
                   </div>
                 )}
               </NavAccordion>
 
               {/* ── Menu Lock Settings ── */}
-              <NavAccordion {...acc("menuLock")} title="Menu Lock Settings" subtitle="Restrict how learners can move between menu items.">
+              <NavAccordion {...acc("menuLock")} title={getSchemaLabel(getSchemaNode(courseSchema, "_lockType"), "Menu Lock Settings")} hint={getSchemaHint(getSchemaNode(courseSchema, "_lockType"))} subtitle="Restrict how learners can move between menu items.">
                 <NavSelect
-                  label="Menu Lock"
+                  label={getSchemaLabel(getSchemaNode(courseSchema, "_lockType"), "Menu Lock")}
+                  hint={getSchemaHint(getSchemaNode(courseSchema, "_lockType"))}
                   value={s.lockType}
                   onChange={(v) => setS((prev) => ({ ...prev, lockType: v }))}
                   options={MENU_LOCK_OPTIONS}
@@ -507,25 +577,26 @@ export function NavigationPage({
               </NavAccordion>
 
               {/* ── Course menu ── */}
-              <NavAccordion {...acc("courseMenu")} title="Course menu" subtitle="Controls whether the top bar exposes the course menu.">
-                <ToggleSwitch checked={s.courseMenu.enabled} onChange={(v) => setCourseMenu({ enabled: v })} label="Enable Course Menu" />
+              <NavAccordion {...acc("courseMenu")} title={getSchemaLabel(courseMenuSchema, "Course menu")} hint={getSchemaHint(courseMenuSchema)} subtitle="Controls whether the top bar exposes the course menu.">
+                <ToggleSwitch checked={s.courseMenu.enabled} onChange={(v) => setCourseMenu({ enabled: v })} label={getSchemaLabel(getSchemaNode(courseMenuSchema, "_isEnabled"), "Enable Course Menu")} hint={getSchemaHint(getSchemaNode(courseMenuSchema, "_isEnabled"))} />
                 <div className="ml-7">
                   <CheckboxRow
                     checked={s.courseMenu.includeSubmenuInNavigation}
                     onChange={(v) => setCourseMenu({ includeSubmenuInNavigation: v })}
-                    label="Include Submenu in Navigation"
+                    label={getSchemaLabel(getSchemaNode(courseMenuSchema, "_includeSubmenuInNavigation"), "Include Submenu in Navigation")}
+                    hint={getSchemaHint(getSchemaNode(courseMenuSchema, "_includeSubmenuInNavigation"))}
                     disabled={!s.courseMenu.enabled}
                   />
                 </div>
               </NavAccordion>
 
               {/* ── Header logo ── */}
-              <NavAccordion {...acc("headerLogo")} title="Header logo" subtitle="Show a logo in the top navigation bar.">
-                <ToggleSwitch checked={s.headerLogo.enabled} onChange={(v) => setHeaderLogo({ enabled: v })} label="Enable Header Logo" />
+              <NavAccordion {...acc("headerLogo")} title={getSchemaLabel(headerLogoSchema, "Header logo")} hint={getSchemaHint(headerLogoSchema)} subtitle="Show a logo in the top navigation bar.">
+                <ToggleSwitch checked={s.headerLogo.enabled} onChange={(v) => setHeaderLogo({ enabled: v })} label={getSchemaLabel(getSchemaNode(headerLogoSchema, "_isEnabled"), "Enable Header Logo")} hint={getSchemaHint(getSchemaNode(headerLogoSchema, "_isEnabled"))} />
 
                 {s.headerLogo.enabled && (
                   <div className="flex flex-col gap-3">
-                    <span className="text-xs font-semibold text-[#374151]">Logo</span>
+                    <InfoFieldLabel label={getSchemaLabel(getSchemaNode(headerLogoSchema, "_items"), "Logo")} hint={getSchemaHint(getSchemaNode(headerLogoSchema, "_items"))} />
 
                     {s.headerLogo.src ? (
                       <div className="flex items-center gap-3 p-3 border border-[#e5e7eb] rounded-lg bg-white">
@@ -575,7 +646,8 @@ export function NavigationPage({
 
                     {externalOpen && !s.headerLogo.src && (
                       <NavTextInput
-                        label="External asset URL"
+                        label={getSchemaLabel(getSchemaNode(headerLogoSchema, "_items", "src"), "External asset URL")}
+                        hint={getSchemaHint(getSchemaNode(headerLogoSchema, "_items", "src"))}
                         value={s.headerLogo.src}
                         onChange={(v) => setHeaderLogo({ src: v })}
                         placeholder="https://example.com/logo.png"
@@ -589,7 +661,8 @@ export function NavigationPage({
                     </div>
 
                     <NavTextInput
-                      label="Tooltip"
+                      label={getSchemaLabel(getSchemaNode(headerLogoSchema, "_items", "tooltip"), "Tooltip")}
+                      hint={getSchemaHint(getSchemaNode(headerLogoSchema, "_items", "tooltip"))}
                       value={s.headerLogo.tooltip}
                       onChange={(v) => setHeaderLogo({ tooltip: v })}
                       placeholder="e.g. Return to course home"
@@ -599,14 +672,16 @@ export function NavigationPage({
               </NavAccordion>
 
               {/* ── Navigation settings (core nav bar) ── */}
-              <NavAccordion {...acc("navigation")} title="Navigation settings" subtitle="Placement of the primary navigation bar and its labels.">
+              <NavAccordion {...acc("navigation")} title={getSchemaLabel(navigationSchema, "Navigation settings")} hint={getSchemaHint(navigationSchema)} subtitle="Placement of the primary navigation bar and its labels.">
                 <CheckboxRow
                   checked={s.navigation.isDefaultNavigationDisabled}
                   onChange={(v) => setNav({ isDefaultNavigationDisabled: v })}
-                  label="Disable default navigation bar?"
+                  label={getSchemaLabel(getSchemaNode(navigationSchema, "_isDefaultNavigationDisabled"), "Disable default navigation bar?")}
+                  hint={getSchemaHint(getSchemaNode(navigationSchema, "_isDefaultNavigationDisabled"))}
                 />
                 <NavSelect
-                  label="Navigation alignment"
+                  label={getSchemaLabel(getSchemaNode(navigationSchema, "_navigationAlignment"), "Navigation alignment")}
+                  hint={getSchemaHint(getSchemaNode(navigationSchema, "_navigationAlignment"))}
                   value={s.navigation.navigationAlignment}
                   onChange={(v) => setNav({ navigationAlignment: v })}
                   options={[
@@ -618,15 +693,18 @@ export function NavigationPage({
                 <CheckboxRow
                   checked={s.navigation.isBottomOnTouchDevices}
                   onChange={(v) => setNav({ isBottomOnTouchDevices: v })}
-                  label="Is bottom on touch devices?"
+                  label={getSchemaLabel(getSchemaNode(navigationSchema, "_isBottomOnTouchDevices"), "Is bottom on touch devices?")}
+                  hint={getSchemaHint(getSchemaNode(navigationSchema, "_isBottomOnTouchDevices"))}
                 />
                 <CheckboxRow
                   checked={s.navigation.showLabel}
                   onChange={(v) => setNav({ showLabel: v })}
-                  label="Show navigation button labels"
+                  label={getSchemaLabel(getSchemaNode(navigationSchema, "_showLabel"), "Show navigation button labels")}
+                  hint={getSchemaHint(getSchemaNode(navigationSchema, "_showLabel"))}
                 />
                 <NavSelect
-                  label="Show label at this breakpoint and higher"
+                  label={getSchemaLabel(getSchemaNode(navigationSchema, "_showLabelAtWidth"), "Show label at this breakpoint and higher")}
+                  hint={getSchemaHint(getSchemaNode(navigationSchema, "_showLabelAtWidth"))}
                   value={s.navigation.showLabelAtWidth}
                   onChange={(v) => setNav({ showLabelAtWidth: v })}
                   options={[
@@ -638,7 +716,8 @@ export function NavigationPage({
                   help="When the user's browser window is at least this wide, the labels will be shown. Options refer to the standard Adapt breakpoints. The 'any' option will show the label at any size."
                 />
                 <NavSelect
-                  label="Label position"
+                  label={getSchemaLabel(getSchemaNode(navigationSchema, "_labelPosition"), "Label position")}
+                  hint={getSchemaHint(getSchemaNode(navigationSchema, "_labelPosition"))}
                   value={s.navigation.labelPosition}
                   onChange={(v) => setNav({ labelPosition: v })}
                   options={[
@@ -655,14 +734,15 @@ export function NavigationPage({
               {/* ── Navigation Footer (extension) ── */}
               <NavAccordion
                 {...acc("navFooter")}
-                title="Navigation Footer"
+                title={getSchemaLabel(navigationFooterSchema, "Navigation Footer")}
+                hint={getSchemaHint(navigationFooterSchema)}
                 subtitle="Configure the footer navigation buttons shown on each page."
               >
-                <ToggleSwitch checked={s.navFooter.enabled} onChange={(v) => setNavFooter({ enabled: v })} label="Enable Navigation Footer" />
+                <ToggleSwitch checked={s.navFooter.enabled} onChange={(v) => setNavFooter({ enabled: v })} label={getSchemaLabel(getSchemaNode(navigationFooterSchema, "_isEnabled"), "Enable Navigation Footer")} hint={getSchemaHint(getSchemaNode(navigationFooterSchema, "_isEnabled"))} />
 
                 {s.navFooter.enabled && (
                   <div className="flex flex-col gap-3">
-                    <NavTextInput label="Footer text" value={s.navFooter.footerText} onChange={(v) => setNavFooter({ footerText: v })} placeholder="Footer text" />
+                    <NavTextInput label={getSchemaLabel(getSchemaNode(navigationFooterSchema, "_footerText", "text"), "Footer text")} hint={getSchemaHint(getSchemaNode(navigationFooterSchema, "_footerText", "text"))} value={s.navFooter.footerText} onChange={(v) => setNavFooter({ footerText: v })} placeholder="Footer text" />
                     <p className="text-[11px] text-[var(--life-neutral-300)] leading-snug">
                       Navigation Footer settings at the course level; can be overridden at the topic/page level, if required.
                     </p>
@@ -674,7 +754,8 @@ export function NavigationPage({
                           checked={s.navFooter.buttons[key]._isEnabled}
                           onChange={(v) => setFooterButton(key, { _isEnabled: v })}
                           icon={icon}
-                          label={label}
+                          label={getSchemaLabel(getSchemaNode(navigationFooterSchema, "_buttons", key), label)}
+                          hint={getSchemaHint(getSchemaNode(navigationFooterSchema, "_buttons", key))}
                           value={s.navFooter.buttons[key].btnText}
                           onTextChange={(v) => setFooterButton(key, { btnText: v })}
                         />
