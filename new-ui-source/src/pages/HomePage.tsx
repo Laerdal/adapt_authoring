@@ -682,7 +682,7 @@ export default function HomePage() {
           ) : (
             <div className={
               view === 'grid'
-                ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5'
+                ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[repeat(auto-fit,minmax(max(280px,calc((100%_-_5rem)/5)),1fr))] gap-4 md:gap-5'
                 : 'flex flex-col gap-2'
             }>
               {displayed.map((course) => (
