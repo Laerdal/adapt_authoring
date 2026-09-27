@@ -1189,8 +1189,8 @@ export function AssetManagementWorkspace({
       </div>
 
       {/* ── Content ── */}
-      <div className="flex-1 px-6 md:px-8 pb-6 overflow-y-auto">
-        <div className={`grid items-start gap-6 ${pickerMode ? "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px]" : "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px]"}`}>
+      <div className="flex-1 overflow-auto px-6 pb-6 md:px-8">
+        <div className="grid min-w-[640px] grid-cols-[minmax(0,1fr)_280px] items-start gap-6 md:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_340px]">
           <div className="min-w-0">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
