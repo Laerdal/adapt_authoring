@@ -66,6 +66,7 @@ const newModule = (sortOrder: number): SModule => ({
   title: "New Module",
   sortOrder,
   modules: [],
+  // topics: [],
   topics: [newTopic(1)], // a module must contain at least one topic
 });
 // Next sortOrder for a container's direct children (menus + pages share one list).
