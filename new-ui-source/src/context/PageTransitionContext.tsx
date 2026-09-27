@@ -70,7 +70,7 @@ export function PageTransitionProvider({ children }: { children: ReactNode }) {
     currentTransitionId,
   }), [beginTransition, settleTransition, setTrackedLoading, currentTransitionId])
 
-  const visible = activeLoaderCount > 0
+  const visible = activeLoaderCount > 0 || currentTransitionId !== null
 
   return (
     <PageTransitionContext.Provider value={value}>

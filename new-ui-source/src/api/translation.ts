@@ -191,7 +191,7 @@ export async function getLeatsPrompt(): Promise<string> {
 export async function startLeatsTranslation(courseId: string, language: string, includeExternalAssetLinks: boolean, customPrompt?: string): Promise<{ jobId: string; status: string }> {
   const params = new URLSearchParams();
   params.set("target_language", language);
-  params.set("include_external_assetLinks", includeExternalAssetLinks ? "true" : "false");
+  params.set("include_external_assets", includeExternalAssetLinks ? "true" : "false");
   return postJson<{ jobId: string; status: string }>(`/api/translation/leats/translate/${encodeURIComponent(courseId)}?${params.toString()}`, customPrompt ? { customPrompt } : {});
 }
 
@@ -206,7 +206,7 @@ export async function getSmartlingDetails(projectId: string): Promise<SmartlingP
 export async function startSmartlingUpload(courseId: string, projectId: string, targetLanguage: string, includeExternalAssetLinks: boolean): Promise<unknown> {
   const params = new URLSearchParams();
   params.set("target_language", targetLanguage);
-  params.set("include_external_assetLinks", includeExternalAssetLinks ? "true" : "false");
+  params.set("include_external_assets", includeExternalAssetLinks ? "true" : "false");
   return getJson<unknown>(`/api/translation/smartling/upload/${encodeURIComponent(projectId)}/${encodeURIComponent(courseId)}?${params.toString()}`);
 }
 
@@ -220,11 +220,18 @@ export async function getMediaLocateDetails(courseId: string): Promise<MediaLoca
   return getJson<MediaLocateDetails>(`/api/translation/medialocate/details?${params.toString()}`);
 }
 
-export async function startMediaLocateUpload(courseId: string, targetLanguage: string, includeExternalAssets: boolean, projectName?: string): Promise<{ trackingCode: string; projectName: string; targetLang: string }> {
+export async function startMediaLocateUpload(
+  courseId: string,
+  targetLanguage: string,
+  includeExternalAssets: boolean,
+  projectName?: string,
+  projectDescription?: string,
+): Promise<{ trackingCode: string; projectName: string; targetLang: string }> {
   const params = new URLSearchParams();
   params.set("target_language", targetLanguage);
   params.set("include_external_assets", includeExternalAssets ? "true" : "false");
   if (projectName) params.set("project_name", projectName);
+  if (projectDescription) params.set("project_description", projectDescription);
   return getJson<{ trackingCode: string; projectName: string; targetLang: string }>(`/api/translation/medialocate/upload/${encodeURIComponent(courseId)}?${params.toString()}`);
 }
 

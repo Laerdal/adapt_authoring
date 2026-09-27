@@ -387,6 +387,7 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
   const [mediaLocateDetails, setMediaLocateDetails] = useState<MediaLocateDetails | null>(null);
   const [mediaLocateLanguage, setMediaLocateLanguage] = useState("en-US");
   const [mediaLocateProjectName, setMediaLocateProjectName] = useState("");
+  const [mediaLocateDescription, setMediaLocateDescription] = useState("");
   const [mediaLocateTrackingCode, setMediaLocateTrackingCode] = useState("");
   const [mediaLocateLocale, setMediaLocateLocale] = useState("en-US");
   const [mediaLocateBusy, setMediaLocateBusy] = useState(false);
@@ -447,14 +448,24 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
     setSmartlingLocaleToDownload(previewLanguage);
     setMediaLocateLanguage(previewLanguage);
     setMediaLocateLocale(previewLanguage);
-    setLeatsLanguage(() => {
-      if (!leatsConfig?.languages.length) {
+    setTranslationTargetLanguage(previewLanguage);
+  }, [previewLanguage]);
+
+  useEffect(() => {
+    if (!leatsConfig?.languages.length) {
+      setLeatsLanguage(previewLanguage);
+      return;
+    }
+
+    const hasPreviewLanguage = leatsConfig.languages.some((language) => language.locales === previewLanguage);
+    setLeatsLanguage((current) => {
+      if (hasPreviewLanguage) {
         return previewLanguage;
       }
-      const hasPreviewLanguage = leatsConfig.languages.some((language) => language.locales === previewLanguage);
-      return hasPreviewLanguage ? previewLanguage : leatsConfig.languages[0].locales;
+      return current && leatsConfig.languages.some((language) => language.locales === current)
+        ? current
+        : leatsConfig.languages[0].locales;
     });
-    setTranslationTargetLanguage(previewLanguage);
   }, [leatsConfig, previewLanguage]);
 
   useEffect(() => {
@@ -696,7 +707,13 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
     setMediaLocateError(null);
     setMediaLocateMessage(null);
     try {
-      const result = await startMediaLocateUpload(courseId, mediaLocateLanguage, xliffIncludeExternalAssets, mediaLocateProjectName.trim() || undefined);
+      const result = await startMediaLocateUpload(
+        courseId,
+        mediaLocateLanguage,
+        xliffIncludeExternalAssets,
+        mediaLocateProjectName.trim() || undefined,
+        mediaLocateDescription.trim() || undefined,
+      );
       setMediaLocateTrackingCode(result.trackingCode);
       setMediaLocateMessage(`MediaLocate submission started. Tracking code: ${result.trackingCode}`);
       setTranslationMethod("MediaLocate");
@@ -794,18 +811,27 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
           setLeatsJob(status);
           setTranslationGlobalCount(status.globalReused || 0);
           setTranslationCourseCount(status.totalStrings || 0);
-          if (status.status === "completed" || status.status === "failed") {
+
+          if (status.status === "failed") {
+            setLeatsError(status.error || "AI translation failed.");
+            setLeatsMessage("AI translation failed. Review the error details and retry with a different prompt or locale.");
             if (leatsPollerRef.current) {
               window.clearInterval(leatsPollerRef.current);
               leatsPollerRef.current = null;
             }
-            if (status.status === "completed") {
-              setTranslationUploaded(true);
-              setTranslationMethod("LEATS");
-              setTranslationTargetLanguage(status.targetLanguage || leatsLanguage);
-              setTranslationCourseResultId(status.newCourseId || null);
-              setLeatsMessage("Translation complete. Click Next to review it.");
+            return;
+          }
+
+          if (status.status === "completed") {
+            if (leatsPollerRef.current) {
+              window.clearInterval(leatsPollerRef.current);
+              leatsPollerRef.current = null;
             }
+            setTranslationUploaded(true);
+            setTranslationMethod("LEATS");
+            setTranslationTargetLanguage(status.targetLanguage || leatsLanguage);
+            setTranslationCourseResultId(status.newCourseId || null);
+            setLeatsMessage("Translation complete. Click Next to review it.");
           }
         } catch (pollError) {
           setLeatsError(pollError instanceof Error ? pollError.message : "Failed to poll AI translation status.");
@@ -1132,7 +1158,7 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
                           <section className="rounded-[16px] border border-[#e1e7ef] bg-white px-5 py-6 shadow-[0_1px_2px_rgba(16,24,40,0.03)]">
                             <h4 className="text-[20px] font-semibold tracking-tight text-[#152332]">MediaLocate Config</h4>
                             <div className="mt-8 space-y-5">
-                              <SectionField label="Environment">
+                              <SectionField label="Target language">
                                 <select value={mediaLocateLanguage} onChange={(event) => setMediaLocateLanguage(event.target.value)} className="h-14 w-full rounded-xl border border-[#d8e1ea] bg-white px-4 text-[16px] outline-none focus:border-[#2fa4d6]">
                                   {TRANSLATION_LOCALES.map((locale) => <option key={locale.locales} value={locale.locales}>{locale.description}</option>)}
                                 </select>
@@ -1141,12 +1167,12 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
                                 <input value={mediaLocateProjectName} onChange={(event) => setMediaLocateProjectName(event.target.value)} placeholder="Optional project name" className="h-14 w-full rounded-xl border border-[#d8e1ea] bg-white px-4 text-[16px] outline-none focus:border-[#2fa4d6]" />
                               </SectionField>
                               <SectionField label="Project Description">
-                                <textarea value={mediaLocateMessage || ""} onChange={(event) => setMediaLocateMessage(event.target.value)} rows={5} className="w-full rounded-xl border border-[#d8e1ea] bg-white px-4 py-3 text-[16px] outline-none focus:border-[#2fa4d6]" />
+                                <textarea value={mediaLocateDescription} onChange={(event) => setMediaLocateDescription(event.target.value)} rows={5} className="w-full rounded-xl border border-[#d8e1ea] bg-white px-4 py-3 text-[16px] outline-none focus:border-[#2fa4d6]" />
                               </SectionField>
-                              <SectionField label="MTD GUID (Test)">
+                              <SectionField label="Tracking code">
                                 <input value={mediaLocateTrackingCode} onChange={(event) => setMediaLocateTrackingCode(event.target.value)} placeholder="Tracking code" className="h-14 w-full rounded-xl border border-[#d8e1ea] bg-white px-4 text-[16px] outline-none focus:border-[#2fa4d6]" />
                               </SectionField>
-                              <SectionField label="MTD GUID (Production)">
+                              <SectionField label="Locale">
                                 <input value={mediaLocateLocale} onChange={(event) => setMediaLocateLocale(event.target.value)} placeholder="Locale" className="h-14 w-full rounded-xl border border-[#d8e1ea] bg-white px-4 text-[16px] outline-none focus:border-[#2fa4d6]" />
                               </SectionField>
                               <div className="flex flex-wrap gap-3">
