@@ -1189,8 +1189,8 @@ export function AssetManagementWorkspace({
       </div>
 
       {/* ── Content ── */}
-      <div className="flex-1 overflow-auto px-6 pb-6 md:px-8">
-        <div className="grid min-w-[640px] grid-cols-[minmax(0,1fr)_280px] items-start gap-6 md:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="flex-1 overflow-x-hidden overflow-y-auto px-4 pb-4 sm:px-6 sm:pb-6 md:px-8">
+        <div className="grid grid-cols-[minmax(0,1fr)_168px] items-start gap-3 sm:grid-cols-[minmax(0,1fr)_220px] sm:gap-4 md:grid-cols-[minmax(0,1fr)_280px] md:gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
           <div className="min-w-0">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
@@ -1203,7 +1203,7 @@ export function AssetManagementWorkspace({
             <p className="text-xs text-[#9ca3af] mt-1">Try adjusting your search or filter, or upload a new asset.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-4">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(170px,1fr))] md:gap-4 xl:grid-cols-[repeat(auto-fill,minmax(230px,1fr))]">
             {filtered.map((a) => <AssetCardItem key={a.id} asset={a} onEdit={handleEditAsset} onDelete={handleDeleteAsset} clickable onActivate={handleAssetActivate} hideActions={hideActions} selected={selectedAssetId === a.backendId} />)}
           </div>
         )}
