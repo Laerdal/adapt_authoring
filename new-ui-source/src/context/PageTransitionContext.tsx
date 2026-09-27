@@ -33,9 +33,7 @@ function PageTransitionOverlay({ visible }: { visible: boolean }) {
 
 export function PageTransitionProvider({ children }: { children: ReactNode }) {
   const transitionSequenceRef = useRef(0)
-  const activeLoadersRef = useRef(new Set<string>())
   const [currentTransitionId, setCurrentTransitionId] = useState<number | null>(null)
-  const [activeLoaderCount, setActiveLoaderCount] = useState(0)
 
   const beginTransition = useCallback(() => {
     const nextTransitionId = ++transitionSequenceRef.current
@@ -47,20 +45,9 @@ export function PageTransitionProvider({ children }: { children: ReactNode }) {
     setCurrentTransitionId((currentTransition) => (currentTransition === transitionId ? null : currentTransition))
   }, [])
 
-  const setTrackedLoading = useCallback((loaderId: string, loading: boolean) => {
-    const activeLoaders = activeLoadersRef.current
-    const isTracked = activeLoaders.has(loaderId)
-
-    if (loading && !isTracked) {
-      activeLoaders.add(loaderId)
-      setActiveLoaderCount(activeLoaders.size)
-      return
-    }
-
-    if (!loading && isTracked) {
-      activeLoaders.delete(loaderId)
-      setActiveLoaderCount(activeLoaders.size)
-    }
+  const setTrackedLoading = useCallback(() => {
+    // Prevent every local component loader from turning into a full-page blocker.
+    // Route transitions remain responsible for the global loader.
   }, [])
 
   const value = useMemo<PageTransitionContextValue>(() => ({
@@ -70,7 +57,7 @@ export function PageTransitionProvider({ children }: { children: ReactNode }) {
     currentTransitionId,
   }), [beginTransition, settleTransition, setTrackedLoading, currentTransitionId])
 
-  const visible = activeLoaderCount > 0 || currentTransitionId !== null
+  const visible = currentTransitionId !== null
 
   return (
     <PageTransitionContext.Provider value={value}>
@@ -108,12 +95,12 @@ export function usePageTransitionLoading(loading: boolean) {
       return
     }
 
-    const rafId = window.requestAnimationFrame(() => {
+    const timeoutId = window.setTimeout(() => {
       settleTransition(currentTransitionId)
       settledTransitionIdRef.current = currentTransitionId
-    })
+    }, 120)
 
-    return () => window.cancelAnimationFrame(rafId)
+    return () => window.clearTimeout(timeoutId)
   }, [currentTransitionId, loading, settleTransition])
 }
 
