@@ -4957,37 +4957,96 @@ interface EngineAsset {
   };
 }
 
-export async function getAssets(includeDeleted = false): Promise<DashboardAsset[]> {
-  const res = await apiClient.get<EngineAsset[] | { assets?: EngineAsset[] }>("/api/asset/query");
-  const docs = (Array.isArray(res) ? res : res?.assets ?? [])
-    .filter((asset) => includeDeleted || asset?._isDeleted !== true)
-    .slice()
-    .sort((left, right) => {
-    const leftTs = left.createdAt ? new Date(left.createdAt).getTime() : 0;
-    const rightTs = right.createdAt ? new Date(right.createdAt).getTime() : 0;
-    return rightTs - leftTs;
-  });
-  return docs.map((a, i) => {
-    const format = coerceFormat(a.mimeType, a.assetType);
-    return {
-      id: i + 1,
-      backendId: a._id,
-      title: a.title || "Untitled",
-      description: a.description || "",
-      size: fmtSize(a.size),
-      format,
-      tags: Array.isArray(a.tags)
-        ? a.tags.map((t) => (typeof t === "string" ? t : t?.title ?? "")).filter((s): s is string => !!s && !OBJECT_ID.test(s))
-        : [],
-      uploadedAt: fmtDate(a.createdAt),
-      thumbnail: format === "image" ? `/api/asset/serve/${a._id}` : undefined,
-      filename: a.filename,
-      path: a.path,
-      mimeType: a.mimeType,
-      isDeleted: !!a._isDeleted,
-      metadata: a.metadata,
-    };
-  });
+const DEFAULT_ASSET_PAGE_SIZE = 30;
+const MAX_ASSET_PAGE_SIZE = 100;
+
+export interface AssetQueryOptions {
+  includeDeleted?: boolean;
+  skip?: number;
+  limit?: number;
+  search?: string;
+  format?: AssetFormat | "All";
+  tagIds?: string[];
+}
+
+export interface AssetPage {
+  items: DashboardAsset[];
+  hasMore: boolean;
+}
+
+function mapEngineAsset(a: EngineAsset, id: number): DashboardAsset {
+  const format = coerceFormat(a.mimeType, a.assetType);
+  return {
+    id,
+    backendId: a._id,
+    title: a.title || "Untitled",
+    description: a.description || "",
+    size: fmtSize(a.size),
+    format,
+    tags: Array.isArray(a.tags)
+      ? a.tags.map((t) => (typeof t === "string" ? t : t?.title ?? "")).filter((s): s is string => !!s && !OBJECT_ID.test(s))
+      : [],
+    uploadedAt: fmtDate(a.createdAt),
+    thumbnail: format === "image" ? `/api/asset/serve/${a._id}` : undefined,
+    filename: a.filename,
+    path: a.path,
+    mimeType: a.mimeType,
+    isDeleted: !!a._isDeleted,
+    metadata: a.metadata,
+  };
+}
+
+// Paged, server-filtered asset query (was: fetch every asset in the tenant, filter/sort
+// client-side). Text search matches title/filename as plain strings so the backend's
+// query builder (lib/assetmanager.js queryAssets) routes them into its OR bucket; format
+// and tags are sent as regex/operator OBJECTS specifically so they land in its AND bucket
+// instead of joining that OR group — mixing the two would silently turn "text AND format"
+// into "text OR format". Deleted-asset filtering stays client-side per page: the server's
+// _isDeleted handling coerces any value to an exact true/false match, which doesn't cleanly
+// express "active, including legacy docs with the field unset".
+export async function getAssets(options: AssetQueryOptions = {}): Promise<AssetPage> {
+  const {
+    includeDeleted = false,
+    skip = 0,
+    limit = DEFAULT_ASSET_PAGE_SIZE,
+    search,
+    format,
+    tagIds,
+  } = options;
+  const cappedLimit = Math.min(limit, MAX_ASSET_PAGE_SIZE);
+
+  const params = new URLSearchParams();
+  const text = search?.trim();
+  if (text) {
+    params.append("search[title]", text);
+    params.append("search[filename]", text);
+  }
+  if (format && format !== "All") {
+    if (format === "other") {
+      params.append("search[mimeType][$not][$regex]", "image|audio|video");
+      params.append("search[mimeType][$not][$options]", "i");
+    } else {
+      params.append("search[mimeType][$regex]", format);
+      params.append("search[mimeType][$options]", "i");
+    }
+  }
+  if (tagIds && tagIds.length) {
+    tagIds.forEach((id) => params.append("search[tags][$all][]", id));
+  }
+  params.append("operators[skip]", String(skip));
+  params.append("operators[limit]", String(cappedLimit + 1));
+  params.append("operators[sort][createdAt]", "-1");
+
+  const res = await apiClient.get<EngineAsset[] | { assets?: EngineAsset[] }>(`/api/asset/query?${params}`);
+  const docs = Array.isArray(res) ? res : res?.assets ?? [];
+  const hasMore = docs.length > cappedLimit;
+  const rawPage = hasMore ? docs.slice(0, cappedLimit) : docs;
+  const active = rawPage.filter((asset) => includeDeleted || asset?._isDeleted !== true);
+
+  return {
+    items: active.map((a, i) => mapEngineAsset(a, skip + i + 1)),
+    hasMore,
+  };
 }
 
 export function trashAsset(backendId: string): Promise<unknown> {
