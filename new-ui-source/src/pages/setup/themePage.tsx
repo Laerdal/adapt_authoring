@@ -2973,7 +2973,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       />
 
       {/* Floating "Unsaved changes" bar — only while the form is dirty */}
-      {hasChanges && (
+      {hasChanges && !showConfirmModal && (
         <div data-unsaved-changes-bar="true" className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-3 rounded-xl bg-white border border-[var(--life-warning-100)] shadow-lg animate-fade-in-down">
           <span className="flex items-center gap-2 text-sm text-[#374151]">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-warning-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
