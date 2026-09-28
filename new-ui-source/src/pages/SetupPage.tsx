@@ -451,8 +451,8 @@ function CourseStructurePanel({
         </div>
       )}
 
-      {!loading && dirty && (
-        <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-4 rounded-xl border border-[var(--life-warning-100)] bg-white px-4 py-3 shadow-lg animate-fade-in-down">
+      {!loading && dirty && !showConfirmModal && (
+        <div data-unsaved-changes-bar="true" className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-4 rounded-xl border border-[var(--life-warning-100)] bg-white px-4 py-3 shadow-lg animate-fade-in-down">
           <span className="flex items-center gap-2 text-sm text-[#374151]">
             <svg
               width="16"
