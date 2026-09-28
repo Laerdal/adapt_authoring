@@ -71,9 +71,8 @@ export default function CoursePreviewPage() {
   const [exportPopup, setExportPopup] = useState<{ status: "processing" | "success" | "error"; message: string } | null>(null);
   const [publishDialogPhase, setPublishDialogPhase] = useState<PublishCoursePhase | null>(null);
   const [publishResult, setPublishResult] = useState<{ zipName?: string; downloadUrl?: string; message?: string }>({});
-  const pageLoading = !!id && (!defaultsReady || previewState === "preparing");
 
-  usePageLoader(pageLoading);
+  usePageLoader(false);
 
   useEffect(() => {
     if (!exportPopup || (exportPopup.status !== "success" && exportPopup.status !== "error")) return;
@@ -93,26 +92,28 @@ export default function CoursePreviewPage() {
         setCourseDescription(data.description || "");
         setThemeName(data.themeName || "");
         setMenuName(data.menuName || "");
+        setDefaultsReady(true);
       } catch {
         if (cancelled) return;
         setCourseTitle("Untitled Course");
         setCourseDescription("");
         setThemeName("");
         setMenuName("");
+        setDefaultsReady(true);
       }
     })();
 
     // Heal older courses (or courses freshly created via the minimal
     // POST /api/courses flow) whose top-level fields the Adapt runtime
     // dereferences — `_buttons`, `_globals`, `themeVariables._components`, … —
-    // are absent or empty. Idempotent + non-blocking on failure.
-    (async () => {
+    // are absent or empty. This is intentionally best-effort and intentionally
+    // does not block preview rendering because the preview can start before the
+    // schema defaults finish patching the course document.
+    void (async () => {
       try {
         await seedMissingCourseDefaults(id);
       } catch {
         /* seeding is best-effort */
-      } finally {
-        if (!cancelled) setDefaultsReady(true);
       }
     })();
 
@@ -130,6 +131,9 @@ export default function CoursePreviewPage() {
   const [retrying, setRetrying] = useState(false);
   const [previewErrorMessage, setPreviewErrorMessage] = useState("");
   const [previewErrorDialogDismissed, setPreviewErrorDialogDismissed] = useState(false);
+  const pageLoading = !!id && previewState === "preparing" && !previewErrorMessage;
+
+  usePageLoader(pageLoading);
 
   useEffect(() => {
     const tenantId = user?._tenantId;
