@@ -21,6 +21,7 @@ const fsx = require('fs-extra');
 
 const configuration = require('../../lib/configuration');
 const Constants = require('../../lib/outputmanager').Constants;
+const database = require('../../lib/database');
 const helpers = require('../../lib/helpers');
 const installHelpers = require('../../lib/installHelpers');
 const logger = require('../../lib/logger');
@@ -455,7 +456,37 @@ server.get('/studio/:tenant/:course/*', (req, res, next) => {
 
   function sendStatic(file) {
     res.sendFile(file, { root: buildRoot() }, error => {
-      if (error) res.status(error.status || 404).end();
+      if (!error) return;
+      // Course assets only land in the build folder during a real grunt build,
+      // but course JSON is served LIVE — so an asset picked since the last build
+      // is referenced by the page while its file is still missing here. Fall
+      // back to the asset record the course already links, keeping the preview
+      // in step with the editor without forcing a rebuild.
+      serveLiveCourseAsset(file, () => res.status(error.status || 404).end());
+    });
+  }
+
+  // `course/<lang>/assets/<filename>` is what writeCourseAssets rewrites
+  // `course/assets/<filename>` to, and sendLiveData applies the same rewrite.
+  function serveLiveCourseAsset(file, onUnavailable) {
+    const match = String(file).replace(/\\/g, '/').match(/(?:^|\/)course\/[^/]+\/assets\/([^/?#]+)$/i);
+    if (!match) return onUnavailable();
+
+    let filename;
+    try {
+      filename = decodeURIComponent(match[1]);
+    } catch (e) {
+      filename = match[1];
+    }
+
+    database.getDatabase(function (dbError, db) {
+      if (dbError) return onUnavailable();
+      db.retrieve('courseasset', { _courseId: courseId, _fieldName: filename }, function (findError, records) {
+        if (findError || !records || !records.length) return onUnavailable();
+        const assetId = records[0]._assetId;
+        if (!assetId) return onUnavailable();
+        res.redirect(302, '/api/asset/serve/' + assetId);
+      });
     });
   }
 
