@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import colorLabelIconSvgRaw from "../../../public/assets/icons/color-label-icon.svg?raw";
 import templateIconSvgRaw from "../../../public/assets/icons/template-icon.svg?raw";
@@ -50,6 +50,7 @@ import {
   getCourseAssetMappings,
   getCourseAssetIdMap,
   getCourseBootstrapData,
+  getCourseExtensions,
   getCourseStructure,
   getExtensionSchemasByLevel,
   getExtensionTypeOptions,
@@ -376,7 +377,7 @@ const COMPONENT_BEHAVIOUR_EXCLUDED_FIELDS = new Set([
   "_id", "__v", "_type", "_component", "_componentType", "_componentTypeDisplayName",
   "_layout", "_parentId", "_courseId", "_sortOrder", "createdAt", "updatedAt",
   "_contentType", "_enabledExtensions",
-  "title", "displayTitle", "body", "description",
+  "title", "displayTitle", "body", "description", "instruction",
   "_classes", "_htmlClasses",
   "_isOptional", "_isAvailable", "_isHidden", "_isVisible",
   "requirecompletionof", "requireCompletionOf", "_requireCompletionOf", "_isResetOnRevisit",
@@ -774,6 +775,7 @@ function BehaviourField({
   onChange,
   assetContext,
   conditionalContext,
+  getArrayItemDefaults,
 }: {
   path: string;
   fieldName: string;
@@ -782,6 +784,7 @@ function BehaviourField({
   onChange: (path: string, value: unknown) => void;
   assetContext?: BehaviourAssetContext;
   conditionalContext?: ConditionalContext;
+  getArrayItemDefaults?: (path: string, itemSchema: BehaviourFieldSchema | undefined) => Record<string, unknown>;
 }) {
   const label = fieldSchema.legend || fieldSchema.title || formatBehaviourFieldName(fieldName);
   const isRequired = isBehaviourFieldRequired(fieldSchema);
@@ -864,7 +867,8 @@ function BehaviourField({
     const canAddMore = typeof fieldSchema.maxItems !== "number" || items.length < fieldSchema.maxItems;
 
     const handleAddItem = () => {
-      onChange(path, [...items, isObjectItems ? {} : ""]);
+      const itemDefaults = isObjectItems ? getArrayItemDefaults?.(path, itemSchema) ?? {} : "";
+      onChange(path, [...items, itemDefaults]);
       setOpenItemIndex(items.length);
     };
     const handleCopyItem = (index: number) => {
@@ -951,6 +955,7 @@ function BehaviourField({
                           onChange={onChange}
                           assetContext={assetContext}
                           conditionalContext={itemContext}
+                          getArrayItemDefaults={getArrayItemDefaults}
                         />
                       );
                     });
@@ -1122,6 +1127,7 @@ type ExtensionsAccordionBodyProps = {
   customFieldRenderer?: ExtensionFieldRenderer;
   getInheritanceTag?: (key: string) => ExtensionInheritanceTag;
   assetContext?: BehaviourAssetContext;
+  getArrayItemDefaults?: (extensionKey: string, path: string, itemSchema: BehaviourFieldSchema | undefined) => Record<string, unknown>;
 };
 
 const ALL_COMPONENT_LEVEL_EXTENSION_NAMES = new Set([
@@ -1324,6 +1330,7 @@ function ExtensionListItem({
   customFieldRenderer,
   inheritanceTag,
   assetContext,
+  getArrayItemDefaults,
 }: {
   itemKey: string;
   fieldSchema: ExtensionFieldSchema | undefined;
@@ -1335,6 +1342,7 @@ function ExtensionListItem({
   customFieldRenderer?: ExtensionFieldRenderer;
   inheritanceTag?: ExtensionInheritanceTag;
   assetContext?: BehaviourAssetContext;
+  getArrayItemDefaults?: (path: string, itemSchema: BehaviourFieldSchema | undefined) => Record<string, unknown>;
 }) {
   const [open, setOpen] = useState(false);
   const enableControl = detectExtensionEnableControl(fieldSchema);
@@ -1421,6 +1429,7 @@ function ExtensionListItem({
                   onClear: (path) => assetContext.onClear(path, itemKey),
                 }}
                 conditionalContext={extensionContext}
+                getArrayItemDefaults={getArrayItemDefaults}
               />
             );
           })}
@@ -1442,6 +1451,7 @@ function ExtensionsAccordionBody({
   customFieldRenderer,
   getInheritanceTag,
   assetContext,
+  getArrayItemDefaults,
 }: ExtensionsAccordionBodyProps) {
   const visibleExtensionNames = new Set(extensionTypeOptions.map((option) => option.name));
   const addedProgressExtensionName = Object.entries(schemasForLevel).find(([key, schema]) => (
@@ -1508,6 +1518,7 @@ function ExtensionsAccordionBody({
                 onEnableControlChange={(control, value) => handleEnableControlChange(key, control, value)}
                 onRemove={() => handleRemove(key)}
                 onFieldChange={(path, value) => handleFieldChange(key, path, value)}
+                getArrayItemDefaults={getArrayItemDefaults ? (path, itemSchema) => getArrayItemDefaults(key, path, itemSchema) : undefined}
               />
             ))}
           </div>
@@ -1575,6 +1586,13 @@ const CANVAS_LEVEL_LABELS: Record<"topic" | "section" | "group" | "component", s
   group: "Content Group",
   component: "Component",
 };
+
+function getCanvasDeleteMessage(level: keyof typeof CANVAS_LEVEL_LABELS): ReactNode {
+  if (level === "component") return <>Are you sure you want to delete the component.<br />This action cannot be undone.</>;
+  if (level === "section") return <>Are you sure you want to delete this section?<br />This will remove any content groups and components inside this section.</>;
+  if (level === "group") return <>Are you sure you want to delete this content group?<br />This will remove any components inside this section.</>;
+  return <>Are you sure you want to delete this topic?<br />You will lose all the contents of this topic</>;
+}
 
 // Same real asset the right panel's "Save as template" button uses.
 const LEVEL_ACTION_SAVE_TEMPLATE_ICON_SVG = templateIconSvgRaw
@@ -2939,11 +2957,6 @@ function mapStructureToPages(
     }>;
   }) => {
     const topicSubtitle = topic.subtitle || "";
-    // The page template renders `pageBody` INSTEAD of `body` when it is set
-    // (contentobject schema), so the editor must show — and later write back
-    // to — whichever one the page actually displays.
-    const usesPageBodyOverride = !!(topic.pageBody && topic.pageBody.trim());
-    const topicBody = usesPageBodyOverride ? topic.pageBody || "" : topic.body || "";
     const topicInstruction = topic.instruction || "";
 
     pages.push({
@@ -2951,8 +2964,8 @@ function mapStructureToPages(
       title: topic.title || "Untitled Topic",
       description: topic.description || "",
       subtitle: topicSubtitle,
-      body: topicBody,
-      usesPageBodyOverride,
+      body: topic.body || "",
+      pageBody: topic.pageBody || "",
       instruction: topicInstruction,
       colorLabel: topic.colorLabel || "",
       graphic: {
@@ -3210,8 +3223,8 @@ export interface ContentPageData {
   description: string;
   subtitle: string;
   body: string;
-  // True when `body` above is really the page's `pageBody` override.
-  usesPageBodyOverride: boolean;
+  // contentobject.pageBody — shown on the page view instead of `body` when set.
+  pageBody: string;
   instruction: string;
   colorLabel: string;
   graphic: TopicGraphicSettings;
@@ -3426,6 +3439,29 @@ export default function CourseEditor({
   useEffect(() => {
     contentPagesRef.current = contentPages;
   }, [contentPages]);
+
+  // Which field the canvas body editor is bound to, latched per page for the
+  // whole editing session. Recomputing it per keystroke would silently switch
+  // targets the moment a pageBody override is emptied, so clearing an override
+  // would then overwrite `body` with the same edit.
+  const topicBodyTargetRef = useRef<{ pageId: string; target: "body" | "pageBody" } | null>(null);
+  const resolveTopicBodyTarget = useCallback((pageId: string): "body" | "pageBody" => {
+    const latched = topicBodyTargetRef.current;
+    if (latched?.pageId === pageId) return latched.target;
+    const page = contentPagesRef.current.find((candidate) => candidate.id === pageId);
+    const target: "body" | "pageBody" = page?.pageBody.trim() ? "pageBody" : "body";
+    topicBodyTargetRef.current = { pageId, target };
+    return target;
+  }, [courseId]);
+  const readTopicCanvasBody = useCallback(
+    (page: ContentPageData) => (resolveTopicBodyTarget(page.id) === "pageBody" ? page.pageBody : page.body),
+    [resolveTopicBodyTarget]
+  );
+  const topicCanvasBodyPatch = useCallback(
+    (pageId: string, html: string): Partial<ContentPageData> =>
+      resolveTopicBodyTarget(pageId) === "pageBody" ? { pageBody: html } : { body: html },
+    [resolveTopicBodyTarget]
+  );
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [selectedSubPageId, setSelectedSubPageId] = useState<string | null>(null);
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
@@ -3458,6 +3494,10 @@ export default function CourseEditor({
     pageId: string;
     articleId: string | null;
   } | null>(null);
+  const [topicClipboardEntry, setTopicClipboardEntry] = useState<{
+    clipboardId: string;
+    sourceTitle: string;
+  } | null>(null);
   // handlePreviewFrameLoad's onClick closure is only re-created when the
   // iframe itself reloads, so it never sees fresh clipboardEntry state from
   // a later render — read the latest value via this ref instead.
@@ -3487,6 +3527,7 @@ export default function CourseEditor({
   const [openComponentAccordions, setOpenComponentAccordions] = useState<Record<string, boolean>>(DEFAULT_COMPONENT_ACCORDIONS);
   const [componentBehaviourSchemas, setComponentBehaviourSchemas] = useState<Record<string, Record<string, unknown>>>({});
   const [extensionSchemasByLevel, setExtensionSchemasByLevel] = useState<Record<ExtensionSchemaLevel, Record<string, ExtensionFieldSchema>> | null>(null);
+  const [courseExtensions, setCourseExtensions] = useState<Record<string, unknown>>({});
   const [themeSettingsSchemaByLevel, setThemeSettingsSchemaByLevel] = useState<Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>> | null>(null);
   const [menuSettingsSchemaByLevel, setMenuSettingsSchemaByLevel] = useState<Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>> | null>(null);
   const [componentExtensionSchemas, setComponentExtensionSchemas] = useState<Record<string, Record<string, ExtensionFieldSchema>>>({});
@@ -3553,6 +3594,10 @@ export default function CourseEditor({
   // component's stale values.
   const previousBehaviourTextValuesRef = useRef<{ componentId: string | null; values: Record<string, string> }>({
     componentId: null,
+    values: {},
+  });
+  const previousExtensionTextValuesRef = useRef<{ ownerKey: string | null; values: Record<string, string> }>({
+    ownerKey: null,
     values: {},
   });
   // Previous Behaviour ASSET-field resolved URLs for the currently selected
@@ -3674,7 +3719,7 @@ export default function CourseEditor({
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
     setIsResizingRightPanel(true);
-  }, []);
+  }, [courseId]);
 
   useEffect(() => {
     if (!isResizingRightPanel) return;
@@ -3791,6 +3836,7 @@ export default function CourseEditor({
       setContentPages(pages);
       setSavedContentPages(cloneContentPages(pages));
       setDirtyNodeKeys({});
+      topicBodyTargetRef.current = null;
       setPendingExtensionDisableNames(new Set());
       setMenuPageCreated(pages.length > 0);
       setMenuSelected(false);
@@ -3886,15 +3932,16 @@ export default function CourseEditor({
     return () => clearTimeout(timer);
   }, [editorToast]);
 
-  // Extensions accordion data (Topic/Section/Content Group/Component): fixed,
-  // course-independent lookups — fetched once and reused for every level/item.
+  // Extensions accordion data (Topic/Section/Content Group/Component) plus
+  // raw course-level values used when seeding new component buttons.
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([getExtensionSchemasByLevel(), getExtensionTypeOptions()])
-      .then(([schemasByLevel, typeOptions]) => {
+    void Promise.all([getExtensionSchemasByLevel(), getExtensionTypeOptions(), getCourseExtensions(courseId)])
+      .then(([schemasByLevel, typeOptions, extensions]) => {
         if (cancelled) return;
         setExtensionSchemasByLevel(schemasByLevel);
         setExtensionTypeOptions(typeOptions);
+        setCourseExtensions(extensions);
       })
       .catch((err) => {
         console.warn("Failed to load extension schemas", err);
@@ -3911,7 +3958,7 @@ export default function CourseEditor({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [courseId]);
 
   useEffect(() => {
     void loadStructureFromDatabase(
@@ -4345,6 +4392,12 @@ export default function CourseEditor({
     const style = doc.createElement("style");
     style.id = "adapt-authoring-preview-bridge-style";
     style.textContent = `
+      /* In the editor canvas, media playback belongs in the Behaviour panel. */
+      .mejs__container,
+      .mejs__container * {
+        pointer-events: none !important;
+      }
+
       /* Ported directly from Quick Edit's own CSS
          (adapt-preview-edit/less/page.less .editable / .page__header-inner.editable /
          .article__header-inner.editable / .block__header-inner.editable /
@@ -5725,6 +5778,36 @@ export default function CourseEditor({
     }
     inlineEditorSyncRetryCountRef.current = 0;
 
+    const restoreCompiledComponentInstruction = (element: HTMLElement) => {
+      if (element.getAttribute("data-preview-edit-field") !== "instruction") return;
+      const componentId = element.getAttribute("data-preview-component-id");
+      const pageId = element.getAttribute("data-preview-page-id");
+      const articleId = element.getAttribute("data-preview-article-id");
+      const blockId = element.getAttribute("data-preview-block-id");
+      if (!componentId || !pageId || !articleId || !blockId) return;
+
+      const page = contentPagesRef.current.find((candidate) => candidate.id === pageId);
+      const article = page?.articles.find((candidate) => candidate.id === articleId);
+      const block = article?.blocks.find((candidate) => candidate.id === blockId);
+      const component = block?.components.find((candidate) => candidate.id === componentId);
+      const template = component?.settings.properties && typeof component.settings.properties.instruction === "string"
+        ? component.settings.properties.instruction
+        : component?.settings.instruction || "";
+      const handlebars = (doc.defaultView as Window & { Handlebars?: { compile: (source: string) => (context: unknown) => string } }).Handlebars;
+      if (!handlebars?.compile || !template) return;
+
+      const properties = asRecord(component?.settings.properties);
+      const context = {
+        ...properties,
+        _isRadio: properties._isRadio ?? properties._selectable === 1,
+      };
+      try {
+        element.innerHTML = handlebars.compile(template)(context);
+      } catch {
+        element.textContent = template;
+      }
+    };
+
     const clearEditable = () => {
       // Only tear down an injected placeholder (title/subtitle/body/
       // instruction container the real template didn't render because the
@@ -5772,6 +5855,8 @@ export default function CourseEditor({
         if (element.classList.contains("ck-editor__editable")) return;
         const isInjected = element.getAttribute("data-preview-injected") === "true";
         const isEmpty = (element.textContent || "").trim().length === 0;
+
+        restoreCompiledComponentInstruction(element);
 
         // On deselect, a title that was shown DIMMED (because "Display title
         // in preview" is off) goes back to fully hidden — matching real
@@ -5956,7 +6041,12 @@ export default function CourseEditor({
         // from outside the focused editor. While it has focus, its unsaved
         // document remains authoritative until the blur/teardown commit.
         if (!existing.editor.ui.focusTracker.isFocused && existing.editor.getData() !== options.value) {
-          existing.editor.setData(options.value || "");
+          existing.editor.__applyingExternalValue = true;
+          try {
+            existing.editor.setData(options.value || "");
+          } finally {
+            existing.editor.__applyingExternalValue = false;
+          }
         }
         element.style.display = "none";
         element.classList.remove("adapt-authoring-preview-inline-empty");
@@ -6019,9 +6109,18 @@ export default function CourseEditor({
               }
             };
             editor.model.document.on("change:data", () => {
+              if (editor.__applyingExternalValue) {
+                lastCommittedHtml = editor.getData();
+                return;
+              }
               if (options.ownerKey) {
                 setDirtyNodeKeys((prev) => (prev[options.ownerKey] ? prev : { ...prev, [options.ownerKey]: true }));
               }
+              // Commit per keystroke, not just on blur, so the right panel's
+              // own editor for the same field stays in step while typing.
+              // The setData sync above is focus-guarded, so this can't echo
+              // back into the editor being typed in.
+              commit();
             });
             // CKEditor's focus tracker covers both its editable surface and
             // toolbar, so this commits only after focus leaves the editor.
@@ -6105,7 +6204,7 @@ export default function CourseEditor({
               : `topic:${options.pageId}`;
         const onCommit = (html: string) => {
           if (options.level === "topic") {
-            updatePageData(options.pageId, { body: html });
+            updatePageData(options.pageId, topicCanvasBodyPatch(options.pageId, html));
           } else if (options.level === "section" && options.articleId) {
             updateArticle(options.pageId, options.articleId, { description: html });
           } else if (options.level === "group" && options.articleId && options.blockId) {
@@ -6697,7 +6796,7 @@ export default function CourseEditor({
           innerSelector: ".page__subtitle-inner", innerClassName: "page__subtitle-inner",
         },
         {
-          key: "body", kind: "pair", visible: true, value: selectedPage.body || "",
+          key: "body", kind: "pair", visible: true, value: readTopicCanvasBody(selectedPage),
           containerSelector: ".page__body", containerClassName: "page__body",
           innerSelector: ".page__body-inner", innerClassName: "page__body-inner",
         },
@@ -6739,7 +6838,7 @@ export default function CourseEditor({
           level: "topic",
           field: "body",
           placeholder: "Add topic body",
-          value: selectedPage.body || "",
+          value: readTopicCanvasBody(selectedPage),
           pageId: selectedPage.id,
         });
       }
@@ -7076,6 +7175,33 @@ export default function CourseEditor({
       return false;
     };
 
+    const syncExtensionText = (
+      host: Element | null,
+      extensions: Record<string, unknown>,
+      schemas: Record<string, ExtensionFieldSchema>,
+      ownerKey: string
+    ) => {
+      const extensionTextPaths = Object.entries(schemas).flatMap(([extensionKey, extensionSchema]) =>
+        collectBehaviourTextPaths(
+          (extensionSchema.properties ?? {}) as Record<string, BehaviourFieldSchema>,
+          asRecord(extensions[extensionKey]),
+          extensionKey
+        )
+      ).filter(({ path }) => !path.startsWith("_additionalMaterial._items["));
+      const previousValues = previousExtensionTextValuesRef.current.ownerKey === ownerKey
+        ? previousExtensionTextValuesRef.current.values
+        : {};
+      const nextValues: Record<string, string> = {};
+      extensionTextPaths.forEach(({ path, value }) => {
+        nextValues[path] = value;
+        const previousValue = previousValues[path];
+        if (host && previousValue !== undefined && previousValue !== value) {
+          replaceTextInHost(host, previousValue, value);
+        }
+      });
+      previousExtensionTextValuesRef.current = { ownerKey, values: nextValues };
+    };
+
     const pageBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(pageBackgroundImage));
     const headerBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(headerBackgroundImage));
     const themeHeaderGraphicUrl = resolveAssetForPreview(asString(headerGraphic._src));
@@ -7086,6 +7212,7 @@ export default function CourseEditor({
 
     applyBackgroundStyles(pageInner, pageBackgroundUrl, pageBackgroundStyles);
     applyBackgroundStyles(pageHeader, headerBackgroundUrl, headerBackgroundStyles);
+    syncExtensionText(pageNode, selectedPage.extensions, extensionSchemasByLevel?.contentobject ?? {}, `page:${selectedPage.id}`);
 
     const mergedTopicClasses = [
       asString(selectedPage.classes),
@@ -7156,6 +7283,7 @@ export default function CourseEditor({
       const articleHeaderNode =
         (articleNode?.querySelector(".article__header") as HTMLElement | null) ?? articleInner;
       const articleThemeSettings = getActiveThemeSettings(selectedArticle.themeSettings, "article");
+      syncExtensionText(articleNode, selectedArticle.extensions, extensionSchemasByLevel?.article ?? {}, `article:${selectedArticle.id}`);
       const articleBackgroundImage = asRecord(articleThemeSettings._backgroundImage) as TopicResponsiveAssetMap;
       const articleBackgroundStyles = asRecord(articleThemeSettings._backgroundStyles);
       const articleBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(articleBackgroundImage));
@@ -7197,6 +7325,7 @@ export default function CourseEditor({
         (blockNode?.querySelector(".block__header-inner") as HTMLElement | null) ??
         blockNode;
       const blockThemeSettings = getActiveThemeSettings(selectedBlock.themeSettings, "block");
+      syncExtensionText(blockNode, selectedBlock.extensions, extensionSchemasByLevel?.block ?? {}, `block:${selectedBlock.id}`);
       const blockBackgroundImage = asRecord(blockThemeSettings._backgroundImage) as TopicResponsiveAssetMap;
       const blockBackgroundStyles = asRecord(blockThemeSettings._backgroundStyles);
       const blockBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(blockBackgroundImage));
@@ -7277,6 +7406,12 @@ export default function CourseEditor({
         (componentNode?.querySelector(".component__inner") as HTMLElement | null) ??
         componentNode;
       const componentThemeSettings = getActiveThemeSettings(selectedComponent.themeSettings, "component");
+      syncExtensionText(
+        componentNode,
+        selectedComponent.extensions,
+        componentExtensionSchemas[(selectedComponent.settings.componentKey || "").toLowerCase()] ?? {},
+        `component:${selectedComponent.id}`
+      );
       const componentBackgroundImage = asRecord(componentThemeSettings._backgroundImage) as TopicResponsiveAssetMap;
       const componentBackgroundStyles = asRecord(componentThemeSettings._backgroundStyles);
       const componentBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(componentBackgroundImage));
@@ -7403,12 +7538,20 @@ export default function CourseEditor({
           behaviourSchema,
           asRecord(selectedComponent.settings.properties)
         );
+        const extensionTextPaths = Object.entries(componentExtensionSchemas[behaviourComponentKey] ?? {}).flatMap(([extensionKey, extensionSchema]) =>
+          collectBehaviourTextPaths(
+            (extensionSchema.properties ?? {}) as Record<string, BehaviourFieldSchema>,
+            asRecord(asRecord(selectedComponent.extensions)[extensionKey]),
+            extensionKey
+          )
+        ).filter(({ path }) => !path.startsWith("_additionalMaterial._items["));
+        const allBehaviourTextPaths = [...behaviourTextPaths, ...extensionTextPaths];
         const previousTextValues =
           previousBehaviourTextValuesRef.current.componentId === selectedComponent.id
             ? previousBehaviourTextValuesRef.current.values
             : {};
         const nextTextValues: Record<string, string> = {};
-        behaviourTextPaths.forEach(({ path, value }) => {
+        allBehaviourTextPaths.forEach(({ path, value }) => {
           nextTextValues[path] = value;
           const previousValue = previousTextValues[path];
           if (componentInner && previousValue !== undefined && previousValue !== value) {
@@ -7416,6 +7559,17 @@ export default function CourseEditor({
           }
         });
         previousBehaviourTextValuesRef.current = { componentId: selectedComponent.id, values: nextTextValues };
+
+        const additionalMaterialItems = asRecord(asRecord(selectedComponent.extensions)._additionalMaterial)._items;
+        if (componentInner && Array.isArray(additionalMaterialItems)) {
+          const buttonTextNodes = componentInner.querySelectorAll<HTMLElement>(".additional-material-btn__text");
+          additionalMaterialItems.forEach((item, index) => {
+            const text = asString(asRecord(item)._btnText);
+            if (buttonTextNodes[index] && buttonTextNodes[index].textContent !== text) {
+              buttonTextNodes[index].textContent = text;
+            }
+          });
+        }
       }
     }
 
@@ -7459,7 +7613,7 @@ export default function CourseEditor({
         "menu-graphic"
       );
     }
-  }, [contentPages, resolveTopicAssetPreviewUrl, selectedArticleId, selectedBlockId, selectedComponentId, selectedPageId]);
+  }, [componentExtensionSchemas, contentPages, extensionSchemasByLevel, resolveTopicAssetPreviewUrl, selectedArticleId, selectedBlockId, selectedComponentId, selectedPageId]);
 
   // Live-syncs the Navigation Footer's resolved button state (enabled + text)
   // straight into the preview iframe's real course chrome — so editing
@@ -8191,6 +8345,15 @@ export default function CourseEditor({
       const target = getEventElement(event.target);
       if (!target) return;
 
+      // MediaElement's player surface is interactive in the published
+      // framework, but canvas clicks should select its component instead.
+      // Stop player click handlers here; continue through normal selection
+      // below so the component's Behaviour accordion is still opened.
+      if (target.closest("video, audio, .mejs__container")) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+
       // A component's items (and the rest of its interactive body) render
       // inside `.component__widget`, and their settings live in the
       // Behaviour accordion — so any click in there surfaces that section.
@@ -8361,7 +8524,7 @@ export default function CourseEditor({
 
         const desc = doc.createElement("p");
         desc.className = "adapt-authoring-color-label-popover-desc";
-        desc.innerHTML = "The colours are <strong>only</strong> applied in the authoring tool and will <strong>not</strong> affect the generated course.";
+        desc.innerHTML = "The colours are <b>only</b> applied in the authoring tool and will <b>not affect the generated course</b>. The settings are synced with all users in the authoring tool.";
         popover.appendChild(desc);
 
         const grid = doc.createElement("div");
@@ -8905,7 +9068,7 @@ export default function CourseEditor({
       if (level === "topic") {
         if (resolvedField === "title" && !isBlankTitleValue(value)) updatePageData(pageId, { title: value });
         if (resolvedField === "subtitle") updatePageData(pageId, { subtitle: value });
-        if (resolvedField === "body") updatePageData(pageId, { body: value });
+        if (resolvedField === "body") updatePageData(pageId, topicCanvasBodyPatch(pageId, value));
         if (resolvedField === "instruction") updatePageData(pageId, { instruction: value });
         return;
       }
@@ -8952,6 +9115,32 @@ export default function CourseEditor({
           });
         }
       }
+    };
+
+    const onPaste = (event: ClipboardEvent) => {
+      const origin = event.target as Element | null;
+      const target = origin?.closest("[data-preview-edit-enabled='true']") as HTMLElement | null;
+      if (!target) return;
+      // Body fields are CKEditor surfaces and retain their own rich paste
+      // behavior; inline title/subtitle/instruction fields must keep the
+      // styling already applied by the course template.
+      if (target.getAttribute("data-preview-edit-field") === "body") return;
+
+      const text = event.clipboardData?.getData("text/plain") ?? "";
+      event.preventDefault();
+      event.stopPropagation();
+      const selection = doc.defaultView?.getSelection();
+      if (!selection || !selection.rangeCount) return;
+      const range = selection.getRangeAt(0);
+      if (!target.contains(range.commonAncestorContainer)) return;
+      range.deleteContents();
+      const textNode = doc.createTextNode(text);
+      range.insertNode(textNode);
+      range.setStartAfter(textNode);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      target.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
     };
 
     const onFocusIn = (event: FocusEvent) => {
@@ -9057,7 +9246,7 @@ export default function CourseEditor({
           return;
         }
         if (resolvedField === "body") {
-          updatePageData(pageId, { body: normalizedValue });
+          updatePageData(pageId, topicCanvasBodyPatch(pageId, normalizedValue));
           return;
         }
         if (resolvedField === "instruction") {
@@ -9140,6 +9329,7 @@ export default function CourseEditor({
     doc.addEventListener("mouseout", onMouseOut);
     doc.addEventListener("click", onClick, true);
     doc.addEventListener("focusin", onFocusIn, true);
+    doc.addEventListener("paste", onPaste, true);
     doc.addEventListener("input", onInput, true);
     doc.addEventListener("focusout", onFocusOut, true);
 
@@ -9241,6 +9431,7 @@ export default function CourseEditor({
       doc.removeEventListener("mouseout", onMouseOut);
       doc.removeEventListener("click", onClick, true);
       doc.removeEventListener("focusin", onFocusIn, true);
+      doc.removeEventListener("paste", onPaste, true);
       doc.removeEventListener("input", onInput, true);
       doc.removeEventListener("focusout", onFocusOut, true);
     };
@@ -9508,6 +9699,12 @@ export default function CourseEditor({
   ) {
     const container = rightPanelScrollRef.current;
     const topBefore = container && triggerEl ? triggerEl.getBoundingClientRect().top : null;
+
+    // The canvas body editor only writes back on blur, so flush it before the
+    // General panel mounts its own editor from `page.body`.
+    if (id === "general") {
+      canvasBodyEditorsRef.current.forEach((entry) => entry.commit());
+    }
 
     setOpenTopicAccordions((prev) => ({
       general: false,
@@ -10704,12 +10901,30 @@ export default function CourseEditor({
   async function handleCopyTopicNode(pageId: string) {
     try {
       const sourceTitle = contentPagesRef.current.find((item) => item.id === pageId)?.title;
-      const newId = await copyStructureNodeViaClipboard("topic", pageId, courseId, courseId, contentPagesRef.current.length + 1);
-      await loadStructureFromDatabase({ pageId: newId });
-      setEditorToast({ type: "success", message: `"${sourceTitle || "Topic"}" copied` });
+      const clipboardId = await copyStructureNodeToClipboard("topic", pageId, courseId);
+      setTopicClipboardEntry({ clipboardId, sourceTitle: sourceTitle || "Topic" });
     } catch (error) {
       console.error("Failed to copy topic", error);
       setEditorToast({ type: "error", message: "Could not copy topic" });
+    }
+  }
+
+  async function handlePasteTopicFromClipboard() {
+    const entry = topicClipboardEntry;
+    if (!entry) return;
+    setTopicClipboardEntry(null);
+    try {
+      const newId = await pasteStructureNodeFromClipboard(
+        entry.clipboardId,
+        courseId,
+        courseId,
+        contentPagesRef.current.length + 1
+      );
+      await loadStructureFromDatabase({ pageId: newId });
+      setEditorToast({ type: "success", message: `"${entry.sourceTitle}" pasted` });
+    } catch (error) {
+      console.error("Failed to paste topic", error);
+      setEditorToast({ type: "error", message: "Could not paste topic" });
     }
   }
 
@@ -10927,7 +11142,10 @@ export default function CourseEditor({
       if (!id) return;
       if (level === "topic") {
         const page = pages.find((candidate) => candidate.id === id);
-        if (page) page.body = html;
+        if (page) {
+          if (resolveTopicBodyTarget(page.id) === "pageBody") page.pageBody = html;
+          else page.body = html;
+        }
       } else if (level === "article") {
         for (const page of pages) {
           const article = page.articles.find((candidate) => candidate.id === id);
@@ -11025,11 +11243,8 @@ export default function CourseEditor({
             title: page.title,
             subtitle: page.subtitle,
             _subtitle: page.subtitle,
-            // Write back to whichever field the page actually renders, so an
-            // existing pageBody override is never bypassed (leaving the editor
-            // and the preview showing different text) and a new one is never
-            // created where the page only ever had `body`.
-            ...(page.usesPageBodyOverride ? { pageBody: page.body } : { body: page.body }),
+            body: page.body,
+            pageBody: page.pageBody,
             instruction: page.instruction,
             linkText: page.linkText,
             duration: page.duration,
@@ -11223,6 +11438,7 @@ export default function CourseEditor({
       setContentPages(pages);
       setSavedContentPages(cloneContentPages(pages));
       setDirtyNodeKeys({});
+      topicBodyTargetRef.current = null;
       setPreviewRefreshToken((current) => current + 1);
       return true;
     } catch (error) {
@@ -11236,6 +11452,7 @@ export default function CourseEditor({
   function discardDraftChanges() {
     setContentPages(cloneContentPages(savedContentPages));
     setDirtyNodeKeys({});
+    topicBodyTargetRef.current = null;
     setPendingExtensionDisableNames(new Set());
     setPreviewRefreshToken((current) => current + 1);
   }
@@ -11609,6 +11826,24 @@ export default function CourseEditor({
       )
     );
   }
+
+  const additionalMaterialItemDefaults = useCallback(
+    (extensionKey: string, path: string): Record<string, unknown> => {
+      if (extensionKey !== "_additionalMaterial" || path !== "_items") return {};
+      const schema = Object.values(extensionSchemasByLevel?.course ?? {}).find(
+        (candidate) => candidate.name === "adapt-additional-material"
+      );
+      const schemaDefaults = asRecord(buildSchemaDefaults(schema?.properties as Record<string, unknown> | undefined));
+      const schemaButton = asRecord(schemaDefaults._button);
+      const additionalMaterial = asRecord(courseExtensions._additionalMaterial);
+      const courseButton = asRecord(additionalMaterial._button);
+      return {
+        _btnText: asString(courseButton.text) || asString(schemaButton.text) || "Additional Material",
+        _btnType: asString(courseButton._btnType) || asString(schemaButton._btnType) || "primary",
+      };
+    },
+    [courseExtensions, extensionSchemasByLevel]
+  );
 
   const courseData: Course = useMemo(() => ({
     id: "editor-course",
@@ -12020,6 +12255,16 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                               checked={!!page.showDisplayTitleInPreview}
                               onChange={(checked) => updatePageData(page.id, { showDisplayTitleInPreview: checked })}
                             />
+                            <div className="flex flex-col gap-1.5">
+                              <TopicFieldLabel>Body</TopicFieldLabel>
+                              {/* Keyed per topic: RichTextEditor only reads `value` when it mounts. */}
+                              <RichTextEditor
+                                key={`topic-body-${page.id}`}
+                                value={page.body}
+                                syncExternalValue
+                                onChange={(html) => updatePageData(page.id, { body: html })}
+                              />
+                            </div>
                             <button
                               type="button"
                               onClick={() => handleOpenSaveAsTemplate("topic", page.id)}
@@ -12857,6 +13102,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                       countExtensionApplicableLevels(key)
                                     )
                                   }
+                                  getArrayItemDefaults={additionalMaterialItemDefaults}
                                 />
                               </TopicAccordion>
 
@@ -13118,15 +13364,22 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
           <ConfirmDialog
             open
             title={`Delete ${CANVAS_LEVEL_LABELS[canvasDeleteTarget.level]}`}
-            message={
-              <>
-                Are you sure you want to delete <span className="font-medium text-[#111827]">"{canvasDeleteTarget.name}"</span>? This action cannot be undone.
-              </>
-            }
+            message={getCanvasDeleteMessage(canvasDeleteTarget.level)}
             onCancel={() => setCanvasDeleteTarget(null)}
             onConfirm={() => void confirmCanvasDelete()}
           />
         )}
+
+        <ConfirmDialog
+          open={!!topicClipboardEntry}
+          title="Reuse copied topic"
+          message="Are you sure you want to paste it?"
+          variant="success"
+          confirmLabel="Paste"
+          cancelLabel="Cancel"
+          onCancel={() => setTopicClipboardEntry(null)}
+          onConfirm={() => void handlePasteTopicFromClipboard()}
+        />
 
         {publishDialogPhase && (
           <PublishCourseDialog

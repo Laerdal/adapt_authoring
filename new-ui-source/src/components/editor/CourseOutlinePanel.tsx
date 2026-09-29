@@ -466,6 +466,14 @@ export default function CourseOutlinePanel({
     return "Component";
   }
 
+  function deleteMessage(level: DeleteTarget["level"]): ReactNode {
+    if (level === "module") return <>Are you sure you want to delete this module?<br />You will lose all the contents of this module.</>;
+    if (level === "component") return <>Are you sure you want to delete the component.<br />This action cannot be undone.</>;
+    if (level === "section") return <>Are you sure you want to delete this section?<br />This will remove any content groups and components inside this section.</>;
+    if (level === "group") return <>Are you sure you want to delete this content group?<br />This will remove any components inside this section.</>;
+    return <>Are you sure you want to delete this topic?<br />You will lose all the contents of this topic</>;
+  }
+
   const allKnownPageIds = useMemo(() => {
     const ids = new Set<string>();
     if (!courseStructure) return ids;
@@ -513,17 +521,6 @@ export default function CourseOutlinePanel({
               name: page.title || "Untitled",
               pageId: page.id,
             });
-          }}
-          menuOpen={activeAddKey === getTargetKey({ level: "topic", pageId: page.id, moduleId })}
-          onAddStartFresh={() => runAddAction({ level: "topic", pageId: page.id, moduleId })}
-          onAddTemplate={() => {
-            const target: AddMenuTarget = { level: "topic", pageId: page.id, moduleId };
-            if (onUseTemplate && target.pageId) {
-              onUseTemplate({ level: "topic", pageId: target.pageId, moduleId: target.moduleId });
-              setActiveAddMenu(null);
-              return;
-            }
-            runAddAction(target);
           }}
           addLabel="topic"
           toggleLabel="topic"
@@ -844,11 +841,7 @@ export default function CourseOutlinePanel({
         <ConfirmDialog
           open
           title={`Delete ${deleteLabel(deleteTarget.level)}`}
-          message={
-            <>
-              Are you sure you want to delete <span className="font-medium text-[#111827]">"{deleteTarget.name}"</span>? This action cannot be undone.
-            </>
-          }
+          message={deleteMessage(deleteTarget.level)}
           onCancel={() => setDeleteTarget(null)}
           onConfirm={confirmDelete}
         />

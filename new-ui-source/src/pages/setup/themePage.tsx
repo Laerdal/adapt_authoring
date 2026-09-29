@@ -3199,7 +3199,7 @@ function ManagePresetsModal({
       <ConfirmDialog
         open
         title="Delete Preset"
-        message={<>Are you sure you want to delete <span className="font-medium text-[#111827]">"{confirmDeleteTarget.displayName}"</span>?</>}
+        message="Are you sure you want to delete this preset?"
         note="This will affect any existing courses using this preset."
         onCancel={() => setConfirmDeleteTarget(null)}
         onConfirm={() => confirmDelete(confirmDeleteTarget)}

@@ -2949,9 +2949,10 @@ function CourseCreationCenterContent() {
         onOpenCourseSettings={() => handleNavigation("overview")}
         onOpenStoryboard={() => handleNavigation("storyboarding")}
         onOpenEditor={() => requestGuardedAction(() => openEditor())}
-        onOpenPreview={(startFromCurrentPage) => requestGuardedAction(() => openPreview(startFromCurrentPage))}
+        onOpenPreview={() => requestGuardedAction(() => openPreview(false))}
         previewDisabled={!courseId}
         editorDisabled={!courseId}
+        previewMode="button"
       />
 
       {/* -- Second Row Header -- */}

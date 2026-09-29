@@ -149,11 +149,23 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
     const isDropInto = dropTarget?.rowId === p.id && dropTarget.mode === 'into';
     const isDropBefore = dropTarget?.rowId === p.id && dropTarget.mode === 'before';
 
+    const deleteMessage = p.level === 'module'
+      ? <>Are you sure you want to delete this module?<br />You will lose all the contents of this module.</>
+      : p.level === 'topic'
+        ? <>Are you sure you want to delete this topic?<br />You will lose all the contents of this topic</>
+        : p.level === 'section'
+          ? <>Are you sure you want to delete this section?<br />This will remove any content groups and components inside this section.</>
+          : p.level === 'contentGroup'
+            ? <>Are you sure you want to delete this content group?<br />This will remove any components inside this section.</>
+            : <>Are you sure you want to delete the component.<br />This action cannot be undone.</>;
+
     if (deleteId === p.id) {
       return (
         <div className="px-2 py-2 rounded-lg bg-[#fef2f2] border border-[#fecaca] text-sm">
           <div className="flex items-center gap-2">
-            <span className="flex-1 text-[#991b1b] font-medium truncate">Delete “{p.title}”?</span>
+            <span className="flex-1 text-[#991b1b] font-medium">
+              {deleteMessage}
+            </span>
             <button type="button" onClick={() => setDeleteId(null)} className="px-2 py-1 text-xs rounded text-[#6b7280] hover:bg-[#f3f4f6]">Cancel</button>
             <button type="button" onClick={() => { setDeleteId(null); props.onRemove(p.level, p.id); }} className="px-2 py-1 text-xs rounded bg-[#dc2626] text-white hover:bg-[#b91c1c] font-medium">Delete</button>
           </div>
