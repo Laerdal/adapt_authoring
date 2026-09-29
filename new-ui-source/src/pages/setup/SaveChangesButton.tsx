@@ -19,7 +19,25 @@ export function SaveChangesButton({ dirty, saving, onClick, className, portalTar
       return;
     }
 
-    setPortalTarget(document.getElementById(portalTargetId));
+    const updatePortalTarget = () => {
+      const nextTarget = document.getElementById(portalTargetId);
+      setPortalTarget((currentTarget) => (currentTarget === nextTarget ? currentTarget : nextTarget));
+    };
+
+    updatePortalTarget();
+
+    const observer = new MutationObserver(() => {
+      updatePortalTarget();
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+
+    return () => {
+      observer.disconnect();
+    };
   }, [portalTargetId]);
 
   const button = (
