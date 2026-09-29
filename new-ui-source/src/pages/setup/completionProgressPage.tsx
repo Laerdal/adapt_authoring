@@ -536,6 +536,13 @@ function CompletionRulesContent({
   assessmentSchema?: SetupSchemaNode | null;
   adaptiveContentSchema?: SetupSchemaNode | null;
 }) {
+  const completionRuleHints = {
+    "all-content": getSchemaHint(getSchemaNode(configSchema, "_completionCriteria", "_requireContentCompleted")),
+    assessment: getSchemaHint(getSchemaNode(configSchema, "_completionCriteria", "_requireAssessmentCompleted")),
+    "submit-every-attempt": getSchemaHint(getSchemaNode(configSchema, "_completionCriteria", "_submitOnEveryAssessmentAttempt")),
+    "submit-score": getSchemaHint(getSchemaNode(configSchema, "_completionCriteria", "_shouldSubmitScore")),
+  } satisfies Record<CourseCompletionRule, string | undefined>;
+
   return (
     <>
       <CpInnerCard title="Course Completion" subtitle="Complete course when:">
@@ -543,10 +550,10 @@ function CompletionRulesContent({
           selected={cfg.courseCompletionRules}
           onChange={(v) => set("courseCompletionRules", normalizeCourseCompletionRules(v))}
           options={[
-            { value: "all-content",           label: "All content in the course must be completed" },
-            { value: "assessment",             label: "The assessment must be completed" },
-            { value: "submit-every-attempt",   label: "Submit completion on every assessment attempt" },
-            { value: "submit-score",           label: "Submit score to LMS" },
+            { value: "all-content", label: "All content in the course must be completed", hint: completionRuleHints["all-content"] },
+            { value: "assessment", label: "The assessment must be completed", hint: completionRuleHints.assessment },
+            { value: "submit-every-attempt", label: "Submit completion on every assessment attempt", hint: completionRuleHints["submit-every-attempt"] },
+            { value: "submit-score", label: "Submit score to LMS", hint: completionRuleHints["submit-score"] },
           ]}
         />
       </CpInnerCard>
