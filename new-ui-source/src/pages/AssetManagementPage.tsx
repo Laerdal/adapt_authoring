@@ -413,7 +413,7 @@ function AssetPreviewPanel({
 
   if (!asset) {
     return (
-      <aside className="xl:sticky xl:top-0 xl:self-start">
+      <aside className="sticky top-0 self-start">
         <div className="rounded-[24px] border border-[#e5edf5] bg-white/90 p-6 text-center shadow-[0_16px_40px_rgba(15,23,42,0.06)] backdrop-blur">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#eef6fd] text-[#2d6fa8]">
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -446,7 +446,7 @@ function AssetPreviewPanel({
   }
 
   return (
-    <aside className="xl:sticky xl:top-0 xl:self-start xl:h-[calc(100vh-10rem)]">
+    <aside className="sticky top-0 self-start h-[calc(100vh-10rem)]">
       <div className="flex h-full flex-col overflow-hidden rounded-[24px] border border-[#e5edf5] bg-white shadow-[0_16px_40px_rgba(15,23,42,0.08)]">
         <div className="border-b border-[#edf2f7] bg-[linear-gradient(135deg,#f6fbff_0%,#eef5fb_100%)] px-5 py-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#2d6fa8]">Asset Preview</p>
