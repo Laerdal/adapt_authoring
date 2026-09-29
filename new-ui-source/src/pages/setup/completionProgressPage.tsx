@@ -273,7 +273,7 @@ function CpSelect<T extends string>({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <InfoFieldLabel label={label} hint={hint} className="text-[#374151]" />
+      <InfoFieldLabel label={label} hint={hint} description={hint} className="text-[#374151]" />
       {hint && <p className="text-[11px] text-[var(--life-neutral-300)] leading-snug">{hint}</p>}
       <div className="relative">
         <select
@@ -315,7 +315,7 @@ function CpTextInput({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <InfoFieldLabel label={label} hint={hint} className="text-[#374151]" />
+      <InfoFieldLabel label={label} hint={hint} description={hint} className="text-[#374151]" />
       {hint && <p className="text-[11px] text-[var(--life-neutral-300)] leading-snug">{hint}</p>}
       <input
         type={type}
@@ -793,9 +793,11 @@ const PROGRESS_INDICATOR_OPTIONS: { value: ProgressIndicator; label: string }[] 
 function ProgressBarStylePicker({
   value,
   onChange,
+  hint,
 }: {
   value: "continuous" | "compact" | "";
   onChange: (v: "continuous" | "compact" | "") => void;
+  hint?: string;
 }) {
   const options: { value: "continuous" | "compact"; label: string; description: string }[] = [
     {
@@ -812,7 +814,7 @@ function ProgressBarStylePicker({
   return (
     <div className="flex flex-col gap-2.5">
       <div className="flex items-center gap-1.5">
-        <span className="text-xs font-semibold text-[#374151]">Progress Bar Style</span>
+        <InfoFieldLabel label="Progress Bar Style" hint={hint} className="text-[#374151]" />
       </div>
       <div className="grid grid-cols-2 gap-3">
         {options.map((opt) => {
@@ -935,6 +937,7 @@ function ProgressIndicatorsContent({
       <ProgressBarStylePicker
         value={cfg.progressBarStyle}
         onChange={(v) => set("progressBarStyle", v)}
+        hint={getSchemaHint(pageLevelProgressSchema) ?? getSchemaHint(laerdalPageLevelProgressSchema) ?? getSchemaHint(progressionSchema)}
       />
       <CpInnerCard title="Show progress indicators" subtitle="Select all that apply">
         <CpCheckboxMulti<ProgressIndicator>
@@ -1016,10 +1019,34 @@ function TimeEstimateContent({
         </div>
         {cfg.timeEnabled && (
           <div className="px-4 py-4 flex flex-col gap-4">
-            <CpTextInput label="Icon class" value={cfg.timeIconClass} onChange={(v) => set("timeIconClass", v)} placeholder="icon-time" />
-            <CpTextInput label="Text before duration" value={cfg.timeTextBefore} onChange={(v) => set("timeTextBefore", v)} placeholder="Remaining time to complete module:" />
-            <CpTextInput label="Text after duration" value={cfg.timeTextAfter} onChange={(v) => set("timeTextAfter", v)} placeholder="minutes" />
-            <CpTextInput label="Text shown when module is completed" value={cfg.timeTextCompleted} onChange={(v) => set("timeTextCompleted", v)} placeholder="Module completed." />
+            <CpTextInput
+              label={getSchemaLabel(getSchemaNode(estimatedTimeSchema, "iconClass"), "Icon class")}
+              hint={getSchemaHint(getSchemaNode(estimatedTimeSchema, "iconClass"))}
+              value={cfg.timeIconClass}
+              onChange={(v) => set("timeIconClass", v)}
+              placeholder="icon-time"
+            />
+            <CpTextInput
+              label={getSchemaLabel(getSchemaNode(estimatedTimeSchema, "textBefore"), "Text before duration")}
+              hint={getSchemaHint(getSchemaNode(estimatedTimeSchema, "textBefore"))}
+              value={cfg.timeTextBefore}
+              onChange={(v) => set("timeTextBefore", v)}
+              placeholder="Remaining time to complete module:"
+            />
+            <CpTextInput
+              label={getSchemaLabel(getSchemaNode(estimatedTimeSchema, "textAfter"), "Text after duration")}
+              hint={getSchemaHint(getSchemaNode(estimatedTimeSchema, "textAfter"))}
+              value={cfg.timeTextAfter}
+              onChange={(v) => set("timeTextAfter", v)}
+              placeholder="minutes"
+            />
+            <CpTextInput
+              label={getSchemaLabel(getSchemaNode(estimatedTimeSchema, "moduleCompleted"), "Text shown when module is completed")}
+              hint={getSchemaHint(getSchemaNode(estimatedTimeSchema, "moduleCompleted"))}
+              value={cfg.timeTextCompleted}
+              onChange={(v) => set("timeTextCompleted", v)}
+              placeholder="Module completed."
+            />
           </div>
         )}
       </div>
