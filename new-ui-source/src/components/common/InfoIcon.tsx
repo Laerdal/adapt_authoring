@@ -128,9 +128,38 @@ export function InfoIcon({
   );
 }
 
+interface FieldInfoIconOptions {
+  hint?: string;
+  help?: React.ReactNode;
+  description?: React.ReactNode;
+}
+
+export function shouldRenderFieldInfoIcon({ hint, help, description }: FieldInfoIconOptions): boolean {
+  const trimmedHint = typeof hint === "string" ? hint.trim() : "";
+  if (!trimmedHint) {
+    return false;
+  }
+
+  const hasInlineHelp = help !== undefined && help !== null && (
+    typeof help === "string"
+      ? help.trim().length > 0
+      : true
+  );
+
+  const hasInlineDescription = description !== undefined && description !== null && (
+    typeof description === "string"
+      ? description.trim().length > 0
+      : true
+  );
+
+  return !hasInlineHelp && !hasInlineDescription;
+}
+
 interface InfoFieldLabelProps {
   label: string;
   hint?: string;
+  help?: React.ReactNode;
+  description?: React.ReactNode;
   className?: string;
   iconClassName?: string;
   tooltipClassName?: string;
@@ -139,11 +168,13 @@ interface InfoFieldLabelProps {
 export function InfoFieldLabel({
   label,
   hint,
+  help,
+  description,
   className = "",
   iconClassName = "",
   tooltipClassName = "",
 }: InfoFieldLabelProps) {
-  const hasHint = typeof hint === "string" && hint.trim().length > 0;
+  const hasHint = shouldRenderFieldInfoIcon({ hint, help, description });
 
   return (
     <div className={`relative z-10 min-w-0 text-xs font-semibold text-[#374151] ${className}`}>

@@ -161,7 +161,7 @@ function NavSelect<T extends string>({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <InfoFieldLabel label={label} hint={hint} />
+      <InfoFieldLabel label={label} hint={hint} help={help} />
       <div className="relative">
         <select
           value={value}

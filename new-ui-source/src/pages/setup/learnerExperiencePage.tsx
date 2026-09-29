@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import InfoIcon, { InfoFieldLabel } from "../../components/common/InfoIcon";
+import InfoIcon, { InfoFieldLabel, shouldRenderFieldInfoIcon } from "../../components/common/InfoIcon";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
 import RichTextEditor from "../../components/common/RichTextEditor";
 import {
@@ -129,11 +129,13 @@ function LrToggle({
   help?: React.ReactNode;
   hint?: string;
 }) {
+  const showInfoIcon = shouldRenderFieldInfoIcon({ hint, help });
+
   if (align === "right") {
     return (
       <div>
         <div className="flex items-center justify-between gap-3 py-2">
-          <span className="text-sm font-semibold text-[var(--life-base-black)] leading-snug">{label}{hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
+          <span className="text-sm font-semibold text-[var(--life-base-black)] leading-snug">{label}{showInfoIcon ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
           <button
             type="button"
             role="switch"
@@ -162,7 +164,7 @@ function LrToggle({
         >
           <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-150 ${checked ? "translate-x-4" : ""}`} />
         </button>
-        <span className="text-sm text-[#374151]">{label}{hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
+        <span className="text-sm text-[#374151]">{label}{showInfoIcon ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
       </label>
       {help}
     </div>
@@ -172,7 +174,7 @@ function LrToggle({
 function LrField({ label, hint, help, children }: { label: string; hint?: string; help?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <InfoFieldLabel label={label} hint={hint} className="text-[#374151]" />
+      <InfoFieldLabel label={label} hint={hint} help={help} className="text-[#374151]" />
       {help}
       {children}
     </div>
