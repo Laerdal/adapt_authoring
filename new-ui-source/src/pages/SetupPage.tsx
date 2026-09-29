@@ -306,7 +306,7 @@ function CourseStructurePanel({
         </div>
 
         <div className="ml-auto flex items-center gap-3 shrink-0">
-          <SaveChangesButton dirty={dirty} saving={saving} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+          <SaveChangesButton dirty={dirty} saving={saving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
 
           {/* View mode toggle */}
           <div className="flex items-center border border-[#e5e7eb] rounded-lg overflow-hidden shrink-0">

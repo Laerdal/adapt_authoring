@@ -1236,7 +1236,7 @@ export function TrackingAnalyticsPage({
             <p className="text-sm text-[#6b7280] mt-0.5">Configure LMS tracking standards and analytics integrations for this course.</p>
           </div>
           <div className="ml-auto">
-            <SaveChangesButton dirty={hasChanges} saving={isSaving} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+            <SaveChangesButton dirty={hasChanges} saving={isSaving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
           </div>
         </div>
 

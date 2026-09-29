@@ -1391,7 +1391,7 @@ export function CompletionProgressPage({
           </p>
         </div>
         <div className="ml-auto">
-          <SaveChangesButton dirty={dirty} saving={saving} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+          <SaveChangesButton dirty={dirty} saving={saving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
         </div>
       </div>
       <div className="flex-1 overflow-y-auto min-h-0">

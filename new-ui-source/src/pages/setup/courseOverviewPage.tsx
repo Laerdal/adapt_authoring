@@ -615,7 +615,7 @@ export function CourseOverviewPage({
           </p>
         </div>
         <div className="ml-auto">
-          <SaveChangesButton dirty={isDirty} saving={saving} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+          <SaveChangesButton dirty={isDirty} saving={saving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
         </div>
       </div>
 

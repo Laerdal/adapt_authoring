@@ -5,12 +5,13 @@ import { Loader2, Save } from "lucide-react";
 interface SaveChangesButtonProps {
   dirty: boolean;
   saving: boolean;
+  disabled?: boolean;
   onClick: () => void;
   className?: string;
   portalTargetId?: string;
 }
 
-export function SaveChangesButton({ dirty, saving, onClick, className, portalTargetId }: SaveChangesButtonProps) {
+export function SaveChangesButton({ dirty, saving, disabled = false, onClick, className, portalTargetId }: SaveChangesButtonProps) {
   const [portalTarget, setPortalTarget] = useState<HTMLElement | null>(null);
 
   useEffect(() => {
@@ -44,7 +45,7 @@ export function SaveChangesButton({ dirty, saving, onClick, className, portalTar
     <button
       type="button"
       onClick={onClick}
-      disabled={!dirty || saving}
+      disabled={!dirty || saving || disabled}
       className={
         className ??
         "inline-flex items-center gap-2 rounded-lg border border-[#d1d5db] bg-white px-4 py-2 text-sm font-semibold text-[#111827] transition-colors cursor-pointer hover:bg-[#f9fafb] disabled:cursor-not-allowed disabled:opacity-50"

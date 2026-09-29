@@ -1112,7 +1112,7 @@ export function LearnerExperiencePanel({
           <p className="text-sm text-[#6b7280] mt-0.5">Configure what learners see and can access throughout the course.</p>
         </div>
         <div className="ml-auto">
-          <SaveChangesButton dirty={hasChanges} saving={lnSaving} onClick={() => void handleLnSave()} portalTargetId="setup-save-button-slot" />
+          <SaveChangesButton dirty={hasChanges} saving={lnSaving} disabled={!courseId} onClick={() => void handleLnSave()} portalTargetId="setup-save-button-slot" />
         </div>
       </div>
 

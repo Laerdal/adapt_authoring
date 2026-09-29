@@ -617,7 +617,7 @@ export function CdnDeploymentPage({
       <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-start gap-4">
         <div>
           <h2 className="text-xl font-bold text-[var(--life-base-black)]">CDN Deployment</h2>
-          <p className="text-sm text-[#6b7280] mt-0.5">Configure CDN targets and deploy this course to the storage container.</p>
+          <SaveChangesButton dirty={dirty} saving={saving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
           {cdnCliVersion && (
             <p className="text-xs text-[#9ca3af] mt-2">NPM <span className="font-mono">cdndeploy</span> version: {cdnCliVersion}</p>
           )}

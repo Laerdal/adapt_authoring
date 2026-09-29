@@ -1297,7 +1297,7 @@ export function MenuPage({
             <p className="text-sm text-[#6b7280] mt-0.5 mb-0">Configure how learners will navigate your course.</p>
           </div>
           <div className="ml-auto">
-            <SaveChangesButton dirty={hasChanges} saving={isSaving} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+              <SaveChangesButton dirty={hasChanges} saving={isSaving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
           </div>
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto">

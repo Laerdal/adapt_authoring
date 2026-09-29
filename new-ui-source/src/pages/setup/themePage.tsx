@@ -2297,7 +2297,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <p className="text-sm text-[#6b7280] mt-0.5 mb-0">Choose and configure the visual theme for your course.</p>
         </div>
         <div className="ml-auto">
-          <SaveChangesButton dirty={hasChanges} saving={saving} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+          <SaveChangesButton dirty={hasChanges} saving={saving} disabled={!courseId || !selected} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
         </div>
       </div>
       <div className="flex-1 overflow-y-auto min-h-0">

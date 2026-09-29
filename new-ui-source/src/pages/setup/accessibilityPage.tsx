@@ -635,7 +635,7 @@ export function AccessibilityPage({
           </p>
         </div>
         <div className="ml-auto">
-          <SaveChangesButton dirty={dirty} saving={saving} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+          <SaveChangesButton dirty={dirty} saving={saving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
         </div>
       </div>
 

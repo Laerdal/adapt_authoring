@@ -495,7 +495,7 @@ export function NavigationPage({
           <p className="text-sm text-[#6b7280] mt-0.5">Configure the navigation bar, start behavior, and header/footer for your course.</p>
         </div>
         <div className="ml-auto">
-          <SaveChangesButton dirty={dirty} saving={saving} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+          <SaveChangesButton dirty={dirty} saving={saving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
         </div>
       </div>
 
