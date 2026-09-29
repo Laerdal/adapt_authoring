@@ -522,6 +522,17 @@ export default function CourseOutlinePanel({
               pageId: page.id,
             });
           }}
+          menuOpen={activeAddKey === getTargetKey({ level: "topic", pageId: page.id, moduleId })}
+          onAddStartFresh={() => runAddAction({ level: "topic", pageId: page.id, moduleId })}
+          onAddTemplate={() => {
+            const target: AddMenuTarget = { level: "topic", pageId: page.id, moduleId };
+            if (onUseTemplate) {
+              onUseTemplate({ level: "topic", pageId: page.id, moduleId });
+              setActiveAddMenu(null);
+              return;
+            }
+            runAddAction(target);
+          }}
           addLabel="topic"
           toggleLabel="topic"
         />

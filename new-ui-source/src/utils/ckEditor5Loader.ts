@@ -235,7 +235,11 @@ export function loadCKEditor5In(targetWindow: Window): Promise<void> {
                   return;
                 }
                 Array.from(node.attributes).forEach((attribute) => {
-                  if (!allowedAttributes.has(attribute.name.toLowerCase())) node.removeAttribute(attribute.name);
+                  const name = attribute.name.toLowerCase();
+                  const value = attribute.value.trim();
+                  if (!allowedAttributes.has(name) || (name === 'href' && /^(javascript:|vbscript:|data:text\\/html)/i.test(value))) {
+                    node.removeAttribute(attribute.name);
+                  }
                 });
               });
               data.content = editor.data.processor.toView(template.innerHTML);

@@ -10043,12 +10043,14 @@ export default function CourseEditor({
     );
   }
 
-  async function deleteArticle(pageId: string, articleId: string) {
+  async function deleteArticle(pageId: string, articleId: string): Promise<boolean> {
     try {
       await deleteStructureNode("section", articleId);
       await loadStructureFromDatabase({ pageId });
+      return true;
     } catch (error) {
       console.error("Failed to delete section", error);
+      return false;
     }
   }
 
@@ -10756,12 +10758,14 @@ export default function CourseEditor({
     applyTopicAssetSelection(pageId, target, "");
   }
 
-  async function deletePage(pageId: string) {
+  async function deletePage(pageId: string): Promise<boolean> {
     try {
       await deleteStructureNode("topic", pageId);
       await loadStructureFromDatabase();
+      return true;
     } catch (error) {
       console.error("Failed to delete topic", error);
+      return false;
     }
   }
 
@@ -10834,12 +10838,14 @@ export default function CourseEditor({
     setDirtyNodeKeys((prev) => ({ ...prev, [`contentGroup:${blockId}`]: true }));
   }
 
-  async function deleteBlock(pageId: string, articleId: string, blockId: string) {
+  async function deleteBlock(pageId: string, articleId: string, blockId: string): Promise<boolean> {
     try {
       await deleteStructureNode("contentGroup", blockId);
       await loadStructureFromDatabase({ pageId, articleId });
+      return true;
     } catch (error) {
       console.error("Failed to delete content group", error);
+      return false;
     }
   }
 
@@ -10956,15 +10962,20 @@ export default function CourseEditor({
     setCanvasDeleteTarget(null);
     if (!target) return;
     const { level, pageId, articleId, blockId, componentId } = target;
+    let deleted = false;
     if (level === "topic") {
-      await deletePage(pageId);
+      deleted = await deletePage(pageId);
     } else if (level === "section" && articleId) {
-      await deleteArticle(pageId, articleId);
+      deleted = await deleteArticle(pageId, articleId);
     } else if (level === "group" && articleId && blockId) {
-      await deleteBlock(pageId, articleId, blockId);
+      deleted = await deleteBlock(pageId, articleId, blockId);
     } else if (level === "component" && articleId && blockId && componentId) {
-      await deleteComponent(pageId, articleId, blockId, componentId);
+      deleted = await deleteComponent(pageId, articleId, blockId, componentId);
     } else {
+      return;
+    }
+    if (!deleted) {
+      setEditorToast({ type: "error", message: `Could not delete "${target.name}"` });
       return;
     }
     setEditorToast({ type: "success", message: `"${target.name}" deleted` });
@@ -11611,7 +11622,7 @@ export default function CourseEditor({
     runWithEditorExitGuard(() => navigate(previewUrl));
   }
 
-  async function deleteComponent(pageId: string, articleId: string, blockId: string, componentId: string) {
+  async function deleteComponent(pageId: string, articleId: string, blockId: string, componentId: string): Promise<boolean> {
     try {
       const targetPage = contentPages.find((p) => p.id === pageId);
       const targetArticle = targetPage?.articles.find((a) => a.id === articleId);
@@ -11625,8 +11636,10 @@ export default function CourseEditor({
       }
 
       await loadStructureFromDatabase({ pageId, articleId, blockId });
+      return true;
     } catch (error) {
       console.error("Failed to delete component", error);
+      return false;
     }
   }
 
