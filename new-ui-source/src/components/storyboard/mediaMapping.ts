@@ -131,14 +131,23 @@ export function mergeProperties(target: Record<string, unknown>, fields: Record<
 export const LAERDAL_MEDIA_COMPONENT = "laerdal-media";
 
 function emptyMediaObject(): Record<string, unknown> {
-  return { mp4: "", ogv: "", webm: "", mp3: "", source: "", type: "", poster: "" };
+  return { mp4: "", ogv: "", webm: "", mp3: "", source: "", type: "", poster: "", cc: [] };
+}
+
+export function normalizeLaerdalMedia(media?: Record<string, unknown>): Record<string, unknown> {
+  const source = media && typeof media === "object" && !Array.isArray(media) ? media : {};
+  return {
+    ...emptyMediaObject(),
+    ...source,
+    cc: Array.isArray(source.cc) ? source.cc : [],
+  };
 }
 
 // Image card → `laerdal-media` `_media` patch: the image is the poster (the only
 // image asset field on the media component).
 export function buildImageAsMedia(image?: ImageData): { _media: Record<string, unknown>; title?: string } {
   const link = image?.link || "";
-  return { _media: { ...emptyMediaObject(), poster: link } };
+  return { _media: { ...normalizeLaerdalMedia(), poster: link } };
 }
 
 // Image card → `_graphic` patch (legacy adapt-contrib-graphic fallback).
@@ -147,21 +156,58 @@ export function buildGraphicField(image?: ImageData): { _graphic: Record<string,
   return { _graphic: { large: link, small: link, alt: image?.alt || "" } };
 }
 
+function buildTranscriptTrack(media?: MediaData): Record<string, unknown> | null {
+  const transcriptSource = media?.transcriptSource?.trim() || "";
+  const transcriptText = media?.transcriptText?.trim() || "";
+  if (!transcriptSource && !transcriptText) return null;
+
+  const track: Record<string, unknown> = { _srcType: "transcript" };
+  if (transcriptSource) {
+    track._srcAssetTranscript = {
+      src: transcriptSource,
+      inlineTranscriptTitle: "Transcript",
+    };
+  }
+  if (transcriptText) {
+    track._transcriptInline = {
+      inlineTranscriptTitle: "Transcript",
+      inlineTranscriptBody: transcriptText,
+    };
+  }
+  return track;
+}
+
+function buildNamedTrack(
+  type: "captions" | "descriptions" | "chapters",
+  src: string
+): Record<string, unknown> | null {
+  const trimmed = src.trim();
+  if (!trimmed) return null;
+
+  const fieldName =
+    type === "captions"
+      ? "_srcTypeCaption"
+      : type === "descriptions"
+        ? "_srcTypeDescriptions"
+        : "_srcTypeChapters";
+
+  return {
+    _srcType: type,
+    [fieldName]: {
+      label: "",
+      srclang: "",
+      src: trimmed,
+    },
+  };
+}
+
 // Video/audio card → `_media` patch. A DAM file goes into mp4 (video) / mp3
 // (audio); an external URL goes into `source` (+ `type` for YouTube/Vimeo).
 export function buildMediaField(kind: "video" | "audio", media?: MediaData): { _media: Record<string, unknown> } {
   const asset = media?.asset;
   const link = asset?.link || "";
   const external = !!asset?.external || (!!link && !isCourseAssetLink(link));
-  const _media: Record<string, unknown> = {
-    mp4: "",
-    ogv: "",
-    webm: "",
-    mp3: "",
-    source: "",
-    type: "",
-    poster: media?.poster?.link || "",
-  };
+  const _media: Record<string, unknown> = normalizeLaerdalMedia({ poster: media?.poster?.link || "" });
   if (link) {
     if (external) {
       _media.source = link;
@@ -172,6 +218,13 @@ export function buildMediaField(kind: "video" | "audio", media?: MediaData): { _
       _media.mp4 = link;
     }
   }
+  const cc = [
+    buildTranscriptTrack(media),
+    buildNamedTrack("captions", media?.captionsSource || ""),
+    buildNamedTrack("descriptions", media?.descriptionsSource || ""),
+    buildNamedTrack("chapters", media?.chaptersSource || ""),
+  ].filter((track): track is Record<string, unknown> => !!track);
+  _media.cc = cc;
   return { _media };
 }
 
@@ -190,6 +243,12 @@ interface MediaShape {
   source?: string;
   type?: string;
   poster?: string;
+  cc?: Array<Record<string, unknown>>;
+}
+
+function trackSrc(track: unknown, key: string): string {
+  const obj = track && typeof track === "object" ? (track as Record<string, unknown>) : {};
+  return typeof obj[key] === "string" ? (obj[key] as string) : "";
 }
 
 export function imageFromGraphic(graphic: GraphicShape | undefined, idByFilename: Record<string, string>): ImageData {
@@ -241,6 +300,35 @@ export function mediaFromComponent(
   }
   if (m.poster) {
     data.poster = { link: m.poster, url: resolveAssetUrl(m.poster, idByFilename) };
+  }
+  const tracks = Array.isArray(m.cc) ? m.cc : [];
+  for (const rawTrack of tracks) {
+    const track = rawTrack && typeof rawTrack === "object" ? (rawTrack as Record<string, unknown>) : {};
+    const type = String(track._srcType || "").toLowerCase();
+    if (type === "transcript") {
+      const transcriptAsset =
+        track._srcAssetTranscript && typeof track._srcAssetTranscript === "object"
+          ? (track._srcAssetTranscript as Record<string, unknown>)
+          : {};
+      const transcriptInline =
+        track._transcriptInline && typeof track._transcriptInline === "object"
+          ? (track._transcriptInline as Record<string, unknown>)
+          : {};
+      data.transcriptSource = trackSrc(transcriptAsset, "src");
+      data.transcriptText = trackSrc(transcriptInline, "inlineTranscriptBody");
+      continue;
+    }
+    if (type === "captions") {
+      data.captionsSource = trackSrc(track._srcTypeCaption, "src");
+      continue;
+    }
+    if (type === "descriptions") {
+      data.descriptionsSource = trackSrc(track._srcTypeDescriptions, "src");
+      continue;
+    }
+    if (type === "chapters") {
+      data.chaptersSource = trackSrc(track._srcTypeChapters, "src");
+    }
   }
   return { kind: isAudio ? "audio" : "video", data };
 }

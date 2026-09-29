@@ -142,15 +142,24 @@ export interface McqOption {
   /** Answer-specific feedback shown when this option is selected. */
   feedback?: string;
 }
+export interface MatchOption {
+  text: string;
+  correct: boolean;
+}
 export interface MatchPair {
   prompt: string;
-  answer: string;
+  options: MatchOption[];
 }
 export interface SliderConfig {
   min: number;
   max: number;
   step: number;
   correct: number;
+}
+export interface TextInputConfig {
+  prefix: string;
+  suffix: string;
+  placeholder: string;
 }
 /** Whole-question feedback (maps to Adapt `_feedback`). */
 export interface AssessmentFeedback {
@@ -164,22 +173,36 @@ export interface AssessmentFeedback {
 export interface AssessmentData {
   question: string;
   showTitle?: boolean;
+  instruction?: string;
   options?: McqOption[]; // mcq, gmcq, checklist
   pairs?: MatchPair[]; // matching
   items?: string[]; // reorder — array order is the correct order
   answers?: string[]; // textInput — acceptable answers
+  textInput?: TextInputConfig; // textInput — one field, many acceptable answers
   slider?: SliderConfig; // slider
   feedback?: AssessmentFeedback; // whole-question feedback (all kinds)
   /** checklist only: how many items the learner may select (1 → single-choice). */
   selectable?: number;
+  /** sentenceOrdering only: whether the items are shuffled for the learner. */
+  shuffle?: boolean;
 }
 
 export function emptyFeedback(): AssessmentFeedback {
   return { correct: '', incorrect: '', incorrectNotFinal: '', partlyCorrectFinal: '', partlyCorrectNotFinal: '' };
 }
 
+const FOOTER_BY_KIND: Record<AssessmentKind, string> = {
+  mcq: 'Select one option and then select Submit.',
+  gmcq: 'Select one option and then select Submit.',
+  matching: 'Match each item to its correct pair and then select Submit.',
+  reorder: 'Place the items in the correct order and then select Submit.',
+  textInput: 'Type your answer and then select Submit.',
+  slider: 'Move the slider to your answer and then select Submit.',
+  checklist: 'Tick the items that apply and then select Submit.',
+};
+
 export function defaultAssessmentData(kind: AssessmentKind): AssessmentData {
-  const base = { showTitle: true, feedback: emptyFeedback() };
+  const base = { showTitle: true, instruction: FOOTER_BY_KIND[kind], feedback: emptyFeedback() };
   switch (kind) {
     case 'mcq':
     case 'gmcq':
@@ -206,11 +229,20 @@ export function defaultAssessmentData(kind: AssessmentKind): AssessmentData {
         ],
       };
     case 'matching':
-      return { ...base, question: '', pairs: [{ prompt: '', answer: '' }] };
+      return {
+        ...base,
+        question: '',
+        pairs: [{ prompt: '', options: [{ text: '', correct: true }, { text: '', correct: false }] }],
+      };
     case 'reorder':
-      return { ...base, question: '', items: ['', ''] };
+      return { ...base, question: '', items: ['', ''], shuffle: false };
     case 'textInput':
-      return { ...base, question: '', answers: [''] };
+      return {
+        ...base,
+        question: '',
+        answers: [''],
+        textInput: { prefix: '', suffix: '', placeholder: '' },
+      };
     case 'slider':
       return { ...base, question: '', slider: { min: 0, max: 10, step: 1, correct: 5 } };
     default:
@@ -239,6 +271,7 @@ export function validateAssessment(kind: AssessmentKind, data: AssessmentData, b
       const filled = opts.filter((o) => o.text.trim());
       if (filled.length < 2) issues.push('Add at least two answer options.');
       if (!filled.some((o) => o.correct)) issues.push('Mark at least one option correct.');
+      if (opts.some((o) => !o.text.trim())) issues.push('Every answer option needs text.');
       break;
     }
     case 'checklist': {
@@ -247,24 +280,38 @@ export function validateAssessment(kind: AssessmentKind, data: AssessmentData, b
       if (filled.length < 2) issues.push('Add at least two checklist items.');
       const correctCount = filled.filter((o) => o.correct).length;
       if (correctCount < 1) issues.push('Mark at least one item correct.');
+      if (opts.some((o) => !o.text.trim())) issues.push('Every checklist item needs text.');
       const selectable = Math.max(1, Number(data.selectable ?? 1));
       if (selectable > filled.length) issues.push('"Selectable" cannot exceed the number of items.');
       if (correctCount > selectable) issues.push('More correct items than the "Selectable" limit — raise the limit or unmark items.');
       break;
     }
     case 'matching': {
-      const pairs = (data.pairs ?? []).filter((p) => p.prompt.trim() && p.answer.trim());
-      if (pairs.length < 1) issues.push('Add at least one complete prompt/answer pair.');
+      const pairs = data.pairs ?? [];
+      const completePairs = pairs.filter((pair) => {
+        const options = pair.options?.filter((option) => option.text.trim()) ?? [];
+        return pair.prompt.trim() && options.length >= 2 && options.some((option) => option.correct);
+      });
+      if (completePairs.length < 1) issues.push('Add at least one complete matching item with two or more options.');
+      if (pairs.some((pair) => !pair.prompt.trim())) issues.push('Every matching item needs prompt text.');
+      if (pairs.some((pair) => (pair.options?.filter((option) => option.text.trim()).length ?? 0) < 2)) {
+        issues.push('Every matching item needs at least two options.');
+      }
+      if (pairs.some((pair) => !(pair.options ?? []).some((option) => option.correct))) {
+        issues.push('Each matching item needs one correct option.');
+      }
       break;
     }
     case 'reorder': {
       const items = (data.items ?? []).filter((i) => i.trim());
       if (items.length < 2) issues.push('Add at least two items to reorder.');
+      if ((data.items ?? []).some((item) => !item.trim())) issues.push('Every sentence reordering item needs text.');
       break;
     }
     case 'textInput': {
       const answers = (data.answers ?? []).filter((a) => a.trim());
       if (answers.length < 1) issues.push('Add at least one acceptable answer.');
+      if ((data.answers ?? []).some((answer) => !answer.trim())) issues.push('Remove blank acceptable answers.');
       break;
     }
     case 'slider': {
@@ -301,6 +348,10 @@ export function buildAssessmentFields(kind: AssessmentKind, data: AssessmentData
       feedback: o.feedback ?? '',
       ...(o.image ? { _graphic: { src: o.image, large: o.image, small: o.image, alt: o.text || '', attribution: '' } } : {}),
     }));
+    patch._canShowModelAnswer = true;
+    patch._canShowFeedback = true;
+    patch._canShowMarking = true;
+    patch._recordInteraction = true;
   } else if (kind === 'checklist') {
     // adapt-laerdal-checklist: `_items[].{ text, altText, _shouldBeSelected,
     // feedback }` + top-level `_selectable`.
@@ -311,16 +362,38 @@ export function buildAssessmentFields(kind: AssessmentKind, data: AssessmentData
       feedback: o.feedback ?? '',
     }));
     patch._selectable = Math.max(1, Number(data.selectable ?? 1));
+    patch._canShowModelAnswer = true;
+    patch._canShowFeedback = true;
+    patch._canShowMarking = true;
+    patch._recordInteraction = true;
   } else if (kind === 'matching') {
     patch._items = (data.pairs ?? []).map((p) => ({
       text: p.prompt,
-      _options: [{ text: p.answer, _isCorrect: true }],
+      _options: (p.options ?? []).map((option) => ({ text: option.text, _isCorrect: !!option.correct, _score: 0 })),
     }));
+    patch._canShowModelAnswer = true;
+    patch._canShowFeedback = true;
+    patch._canShowMarking = true;
+    patch._recordInteraction = true;
   } else if (kind === 'reorder') {
     // adapt-laerdal-sentenceOrdering: `_items[].{ sentence, position }`.
     patch._items = (data.items ?? []).map((t, i) => ({ sentence: t, position: i + 1 }));
+    patch._isRandom = !!data.shuffle;
+    patch._canShowModelAnswer = true;
+    patch._canShowFeedback = true;
+    patch._canShowMarking = true;
+    patch._recordInteraction = true;
   } else if (kind === 'textInput') {
-    patch._items = (data.answers ?? []).map((a) => ({ _answers: [a] }));
+    patch._items = [{
+      _answers: (data.answers ?? []).filter((answer) => answer.trim()),
+      prefix: data.textInput?.prefix ?? '',
+      suffix: data.textInput?.suffix ?? '',
+      placeholder: data.textInput?.placeholder ?? '',
+    }];
+    patch._canShowModelAnswer = true;
+    patch._canShowFeedback = true;
+    patch._canShowMarking = true;
+    patch._recordInteraction = true;
   } else if (kind === 'slider') {
     const s = data.slider;
     if (s) {
@@ -329,6 +402,10 @@ export function buildAssessmentFields(kind: AssessmentKind, data: AssessmentData
       patch._scaleStep = s.step;
       patch._correctAnswer = s.correct;
     }
+    patch._canShowModelAnswer = true;
+    patch._canShowFeedback = true;
+    patch._canShowMarking = true;
+    patch._recordInteraction = true;
   }
   return patch;
 }
@@ -339,7 +416,8 @@ export function buildAssessmentFields(kind: AssessmentKind, data: AssessmentData
 export function parseAssessmentData(
   kind: AssessmentKind,
   props: Record<string, unknown>,
-  question: string
+  question: string,
+  instruction = ''
 ): AssessmentData {
   const p = props || {};
   const fb = (p._feedback as Record<string, unknown>) || {};
@@ -353,7 +431,7 @@ export function parseAssessmentData(
     partlyCorrectNotFinal: String(part.notFinal ?? ''),
   };
   const items = Array.isArray(p._items) ? (p._items as Array<Record<string, unknown>>) : [];
-  const data: AssessmentData = { question, showTitle: true, feedback };
+  const data: AssessmentData = { question, showTitle: true, instruction, feedback };
 
   if (kind === 'mcq' || kind === 'gmcq') {
     data.options = items.map((it) => {
@@ -385,18 +463,26 @@ export function parseAssessmentData(
   } else if (kind === 'matching') {
     data.pairs = items.map((it) => {
       const opts = Array.isArray(it._options) ? (it._options as Array<Record<string, unknown>>) : [];
-      return { prompt: String(it.text ?? ''), answer: String(opts[0]?.text ?? '') };
+      return {
+        prompt: String(it.text ?? ''),
+        options: opts.map((opt) => ({ text: String(opt.text ?? ''), correct: !!opt._isCorrect })),
+      };
     });
   } else if (kind === 'reorder') {
     data.items = items
       .slice()
       .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0))
       .map((it) => String(it.sentence ?? it.text ?? ''));
+    data.shuffle = !!p._isRandom;
   } else if (kind === 'textInput') {
-    data.answers = items.map((it) => {
-      const ans = Array.isArray(it._answers) ? (it._answers as unknown[]) : [];
-      return String(ans[0] ?? '');
-    });
+    const first = items[0] ?? {};
+    const ans = Array.isArray(first._answers) ? (first._answers as unknown[]) : [];
+    data.answers = ans.map((value) => String(value ?? '')).filter(Boolean);
+    data.textInput = {
+      prefix: String(first.prefix ?? ''),
+      suffix: String(first.suffix ?? ''),
+      placeholder: String(first.placeholder ?? ''),
+    };
   } else if (kind === 'slider') {
     data.slider = {
       min: Number(p._scaleStart ?? 0),

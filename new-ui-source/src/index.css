@@ -609,6 +609,18 @@ html, body {
   background: var(--life-color-bg-surface-hover);
 }
 
+.sb-storyboard-focus-target {
+  border-radius: 12px;
+  outline: 2px solid color-mix(in oklab, var(--life-primary-500) 70%, white);
+  outline-offset: 6px;
+  background: color-mix(in oklab, var(--life-primary-500) 6%, transparent);
+  transition: outline-color 0.18s ease, background 0.18s ease;
+}
+
+.bn-side-menu > :not([data-test="dragHandle"]) {
+  display: none !important;
+}
+
 /* Storyboard card — comment threads, activity rows, generation results. */
 .sb-card {
   background: var(--life-color-bg-surface-default);

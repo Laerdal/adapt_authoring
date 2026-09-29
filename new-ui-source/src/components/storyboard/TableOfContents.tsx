@@ -73,7 +73,7 @@ function TocItem({
           H{node.level}
         </span>
         <span
-          className="min-w-0 flex-1 truncate"
+          className="min-w-0 flex-1 break-words py-0.5 leading-snug"
           title={node.text || 'Untitled'}
           onClick={() => onNavigate(node.id)}
         >

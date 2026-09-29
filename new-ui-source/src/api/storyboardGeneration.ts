@@ -105,7 +105,9 @@ export interface GenComponent {
   existingId?: string;
   componentKey: string;
   title: string;
+  displayTitle?: string;
   body?: string;
+  instruction?: string;
   // Media components: the `_graphic`/`_media` patch + the chosen asset, so
   // generation writes the asset fields and links the courseasset for publish.
   mediaPatch?: Record<string, unknown>;
@@ -569,12 +571,15 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
       const isMcqShaped = kind === "mcq" || kind === "gmcq";
       const resolvedTitle = blockTitle || (isMcqShaped ? "Check your understanding" : questionText || "Question");
       const bodyText = isMcqShaped ? questionText : questionText && questionText !== resolvedTitle ? questionText : "";
+      const showTitle = data.showTitle !== false;
       comp = {
         sourceBlockId: id,
         existingId,
         componentKey: kind,
         title: resolvedTitle,
+        displayTitle: showTitle ? resolvedTitle : "",
         body: bodyText,
+        instruction: data.instruction || '',
         assessmentPatch: buildAssessmentFields(kind, data),
         assessmentData: data,
       };
@@ -998,8 +1003,9 @@ export async function generateStoryboardCourse(
           if (compId) {
             // Existing node: always keep title/body; only write plugin fields
             // when the kind resolves to an installed component.
-            const upd: Record<string, unknown> = { title: c.title, displayTitle: c.title, _parentId: grpId, _sortOrder: cSort, _layout: layout };
+            const upd: Record<string, unknown> = { title: c.title, displayTitle: c.displayTitle ?? c.title, _parentId: grpId, _sortOrder: cSort, _layout: layout };
             if (bodyHtml !== undefined) upd.body = bodyHtml;
+            if (c.instruction !== undefined) upd.instruction = c.instruction;
             // Seed from what's actually live on the document BEFORE merging —
             // mergeProperties merges onto `upd.properties` if already present,
             // so this preserves any property the storyboard doesn't model
@@ -1021,8 +1027,9 @@ export async function generateStoryboardCourse(
               continue;
             }
             compId = await createComponent(courseId, grpId, resolvedType.type, cSort, layout);
-            const upd: Record<string, unknown> = { title: c.title, displayTitle: c.title, _layout: layout };
+            const upd: Record<string, unknown> = { title: c.title, displayTitle: c.displayTitle ?? c.title, _layout: layout };
             if (bodyHtml !== undefined) upd.body = bodyHtml;
+            if (c.instruction !== undefined) upd.instruction = c.instruction;
             if (c.mediaPatch) mergeProperties(upd, c.mediaPatch);
             if (c.assessmentPatch) mergeProperties(upd, c.assessmentPatch);
             await put("component", compId, upd);
