@@ -1292,23 +1292,24 @@ export function TrackingAnalyticsPage({
 
               <SectionLabel hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings"))}>Advanced Settings</SectionLabel>
               <SelectField
-                label={getSchemaLabel(getSchemaNode(spoorSchema, "_advancedSettings", "_scormVersion"), "SCORM version")}
-                hint={getSchemaHint(getSchemaNode(spoorSchema, "_advancedSettings", "_scormVersion"))}
+                label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_scormVersion"), "SCORM version")}
+                hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_scormVersion"))}
                 value={scorm.scormVersion}
                 onChange={(value) => setScorm((prev) => ({ ...prev, scormVersion: value }))}
                 options={[{ value: "1.2", label: "SCORM 1.2" }, { value: "2004", label: "SCORM 2004" }]}
               />
-              <CheckboxRow checked={scorm.showDebugWindow} onChange={(v) => setScorm((prev) => ({ ...prev, showDebugWindow: v }))} label={getSchemaLabel(getSchemaNode(spoorSchema, "_advancedSettings", "_showDebugWindow"), "SCORM debug window")} hint={getSchemaHint(getSchemaNode(spoorSchema, "_advancedSettings", "_showDebugWindow"))} />
-              <CheckboxRow checked={scorm.commitOnStatusChange} onChange={(v) => setScorm((prev) => ({ ...prev, commitOnStatusChange: v }))} label={getSchemaLabel(getSchemaNode(spoorSchema, "_advancedSettings", "_commitOnStatusChange"), "Commit data on status change")} hint={getSchemaHint(getSchemaNode(spoorSchema, "_advancedSettings", "_commitOnStatusChange"))} />
-              <CheckboxRow checked={scorm.commitOnAnyChange} onChange={(v) => setScorm((prev) => ({ ...prev, commitOnAnyChange: v }))} label={getSchemaLabel(getSchemaNode(spoorSchema, "_advancedSettings", "_commitOnAnyChange"), "Commit data on any change")} hint={getSchemaHint(getSchemaNode(spoorSchema, "_advancedSettings", "_commitOnAnyChange"))} />
-              <TextField label={getSchemaLabel(getSchemaNode(spoorSchema, "_advancedSettings", "_timedCommitFrequency"), "Frequency (mins) of automatic commits")} hint={getSchemaHint(getSchemaNode(spoorSchema, "_advancedSettings", "_timedCommitFrequency"))} type="number" value={scorm.timedCommitFrequency} onChange={(value) => setScorm((prev) => ({ ...prev, timedCommitFrequency: value }))} />
-              <TextField label={getSchemaLabel(getSchemaNode(spoorSchema, "_advancedSettings", "_maxCommitRetries"), "Maximum number of commit retries")} hint={getSchemaHint(getSchemaNode(spoorSchema, "_advancedSettings", "_maxCommitRetries"))} type="number" value={scorm.maxCommitRetries} onChange={(value) => setScorm((prev) => ({ ...prev, maxCommitRetries: value }))} />
-              <TextField label={getSchemaLabel(getSchemaNode(spoorSchema, "_advancedSettings", "_commitRetryDelay"), "Commit retry delay")} hint={getSchemaHint(getSchemaNode(spoorSchema, "_advancedSettings", "_commitRetryDelay"))} type="number" value={scorm.commitRetryDelay} onChange={(value) => setScorm((prev) => ({ ...prev, commitRetryDelay: value }))} />
-              <CheckboxRow checked={scorm.suppressLmsErrors} onChange={(v) => setScorm((prev) => ({ ...prev, suppressLmsErrors: v }))} label={getSchemaLabel(getSchemaNode(spoorSchema, "_advancedSettings", "_suppressErrors"), "Suppress LMS errors")} hint={getSchemaHint(getSchemaNode(spoorSchema, "_advancedSettings", "_suppressErrors"))} />
-              <CheckboxRow checked={scorm.commitOnVisibilityChangeHidden} onChange={(v) => setScorm((prev) => ({ ...prev, commitOnVisibilityChangeHidden: v }))} label={getSchemaLabel(getSchemaNode(spoorSchema, "_advancedSettings", "_commitOnVisibilityChangeHidden"), "Commit on visibility change hidden")} hint={getSchemaHint(getSchemaNode(spoorSchema, "_advancedSettings", "_commitOnVisibilityChangeHidden"))} />
-              <TextField label={getSchemaLabel(getSchemaNode(spoorSchema, "_advancedSettings", "_manifestIdentifier"), "Manifest identifier")} hint={getSchemaHint(getSchemaNode(spoorSchema, "_advancedSettings", "_manifestIdentifier"))} value={scorm.manifestIdentifier} onChange={(value) => setScorm((prev) => ({ ...prev, manifestIdentifier: value }))} placeholder="adapt_manifest" />
+              <CheckboxRow checked={scorm.showDebugWindow} onChange={(v) => setScorm((prev) => ({ ...prev, showDebugWindow: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_showDebugWindow"), "SCORM debug window")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_showDebugWindow"))} />
+              <CheckboxRow checked={scorm.commitOnStatusChange} onChange={(v) => setScorm((prev) => ({ ...prev, commitOnStatusChange: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_commitOnStatusChange"), "Commit data on status change")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_commitOnStatusChange"))} />
+              <CheckboxRow checked={scorm.commitOnAnyChange} onChange={(v) => setScorm((prev) => ({ ...prev, commitOnAnyChange: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_commitOnAnyChange"), "Commit data on any change")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_commitOnAnyChange"))} />
+              <TextField label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_timedCommitFrequency"), "Frequency (mins) of automatic commits")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_timedCommitFrequency"))} type="number" value={scorm.timedCommitFrequency} onChange={(value) => setScorm((prev) => ({ ...prev, timedCommitFrequency: value }))} />
+              <TextField label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_maxCommitRetries"), "Maximum number of commit retries")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_maxCommitRetries"))} type="number" value={scorm.maxCommitRetries} onChange={(value) => setScorm((prev) => ({ ...prev, maxCommitRetries: value }))} />
+              <TextField label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_commitRetryDelay"), "Commit retry delay")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_commitRetryDelay"))} type="number" value={scorm.commitRetryDelay} onChange={(value) => setScorm((prev) => ({ ...prev, commitRetryDelay: value }))} />
+              <CheckboxRow checked={scorm.suppressLmsErrors} onChange={(v) => setScorm((prev) => ({ ...prev, suppressLmsErrors: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_suppressErrors"), "Suppress LMS errors")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_suppressErrors"))} />
+              <CheckboxRow checked={scorm.commitOnVisibilityChangeHidden} onChange={(v) => setScorm((prev) => ({ ...prev, commitOnVisibilityChangeHidden: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_commitOnVisibilityChangeHidden"), "Commit on visibility change hidden")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_commitOnVisibilityChangeHidden"))} />
+              <TextField label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_manifestIdentifier"), "Manifest identifier")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_manifestIdentifier"))} value={scorm.manifestIdentifier} onChange={(value) => setScorm((prev) => ({ ...prev, manifestIdentifier: value }))} placeholder="adapt_manifest" />
               <SelectField
-                label="Exit state if incomplete"
+                label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_exitStateIfIncomplete"), "Exit state if incomplete")}
+                hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_exitStateIfIncomplete"))}
                 value={scorm.exitStateIncomplete}
                 onChange={(value) => setScorm((prev) => ({ ...prev, exitStateIncomplete: value }))}
                 options={[
@@ -1319,7 +1320,8 @@ export function TrackingAnalyticsPage({
                 ]}
               />
               <SelectField
-                label="Exit state if complete"
+                label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_exitStateIfComplete"), "Exit state if complete")}
+                hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_exitStateIfComplete"))}
                 value={scorm.exitStateComplete}
                 onChange={(value) => setScorm((prev) => ({ ...prev, exitStateComplete: value }))}
                 options={[
@@ -1329,8 +1331,8 @@ export function TrackingAnalyticsPage({
                   { value: "", label: "'' (empty string)" },
                 ]}
               />
-              <CheckboxRow checked={scorm.completedWhenFailed} onChange={(v) => setScorm((prev) => ({ ...prev, completedWhenFailed: v }))} label="Completed when failed" />
-              <TextField label="Override value for maximum character limit on fill-in type answers" type="number" value={scorm.fillInCharacterLimit} onChange={(value) => setScorm((prev) => ({ ...prev, fillInCharacterLimit: value }))} />
+              <CheckboxRow checked={scorm.completedWhenFailed} onChange={(v) => setScorm((prev) => ({ ...prev, completedWhenFailed: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_setCompletedWhenFailed"), "Completed when failed")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_setCompletedWhenFailed"))} />
+              <TextField label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_maxCharLimitOverride"), "Override value for maximum character limit on fill-in type answers")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_maxCharLimitOverride"))} type="number" value={scorm.fillInCharacterLimit} onChange={(value) => setScorm((prev) => ({ ...prev, fillInCharacterLimit: value }))} />
 
               <SectionLabel hint={getSchemaHint(getSchemaNode(spoorSchema, "_advancedSettings", "_connectionTest"))}>Connection Test</SectionLabel>
               <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
@@ -1340,9 +1342,9 @@ export function TrackingAnalyticsPage({
                 <TextField label={getSchemaLabel(getSchemaNode(spoorSchema, "_advancedSettings", "_connectionTest", "_silentRetryDelay"), "Silent Retry Delay")} hint={getSchemaHint(getSchemaNode(spoorSchema, "_advancedSettings", "_connectionTest", "_silentRetryDelay"))} type="number" value={scorm.silentRetryDelay} onChange={(value) => setScorm((prev) => ({ ...prev, silentRetryDelay: value }))} />
               </div>
 
-              <CheckboxRow checked={scorm.uniqueInteractionIds} onChange={(v) => setScorm((prev) => ({ ...prev, uniqueInteractionIds: v }))} label="Unique Interaction Ids" />
-              <CheckboxRow checked={scorm.showResetButton} onChange={(v) => setScorm((prev) => ({ ...prev, showResetButton: v }))} label="Show reset button (scorm_test_harness.html only)" />
-              <CheckboxRow checked={scorm.persistCookieData} onChange={(v) => setScorm((prev) => ({ ...prev, persistCookieData: v }))} label="Persist cookie data (scorm_test_harness.html only)" />
+              <CheckboxRow checked={scorm.uniqueInteractionIds} onChange={(v) => setScorm((prev) => ({ ...prev, uniqueInteractionIds: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_uniqueInteractionIds"), "Unique Interaction Ids")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_uniqueInteractionIds"))} />
+              <CheckboxRow checked={scorm.showResetButton} onChange={(v) => setScorm((prev) => ({ ...prev, showResetButton: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_showCookieLmsResetButton"), "Show reset button (scorm_test_harness.html only)")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_showCookieLmsResetButton"))} />
+              <CheckboxRow checked={scorm.persistCookieData} onChange={(v) => setScorm((prev) => ({ ...prev, persistCookieData: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_shouldPersistCookieLMSData"), "Persist cookie data (scorm_test_harness.html only)")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_shouldPersistCookieLMSData"))} />
             </div>
           )}
 
@@ -1425,7 +1427,8 @@ export function TrackingAnalyticsPage({
               <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
                 <SubSectionLabel>Reporting</SubSectionLabel>
                 <SelectField
-                  label="Tracking success status"
+                  label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_reporting", "_onTrackingCriteriaMet"), "Tracking success status")}
+                  hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_reporting", "_onTrackingCriteriaMet"))}
                   value={hyper.onTrackingCriteriaMet}
                   onChange={(value) => setHyper((prev) => ({ ...prev, onTrackingCriteriaMet: value }))}
                   options={[
@@ -1436,7 +1439,8 @@ export function TrackingAnalyticsPage({
                   ]}
                 />
                 <SelectField
-                  label="Assessment failure status"
+                  label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_reporting", "_onAssessmentFailure"), "Assessment failure status")}
+                  hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_reporting", "_onAssessmentFailure"))}
                   value={hyper.onAssessmentFailure}
                   onChange={(value) => setHyper((prev) => ({ ...prev, onAssessmentFailure: value }))}
                   options={[
@@ -1448,23 +1452,25 @@ export function TrackingAnalyticsPage({
                 <CheckboxRow
                   checked={hyper.resetStatusWhenLanguageChanged}
                   onChange={(v) => setHyper((prev) => ({ ...prev, resetStatusWhenLanguageChanged: v }))}
-                  label="Reset status when language changed?"
+                  label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_reporting", "_resetStatusOnLanguageChange"), "Reset status when language changed?")}
+                  hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_reporting", "_resetStatusOnLanguageChange"))}
                 />
               </div>
 
-              <SectionLabel>Advanced Settings</SectionLabel>
-              <CheckboxRow checked={hyper.commitOnStatusChange} onChange={(v) => setHyper((prev) => ({ ...prev, commitOnStatusChange: v }))} label="Commit data on status change" />
-              <CheckboxRow checked={hyper.showSuspendDataPopup} onChange={(v) => setHyper((prev) => ({ ...prev, showSuspendDataPopup: v }))} label="Suspend data popup" />
-              <CheckboxRow checked={hyper.commitOnAnyChange} onChange={(v) => setHyper((prev) => ({ ...prev, commitOnAnyChange: v }))} label="Commit data on any change" />
-              <CheckboxRow checked={hyper.commitOnAssessmentResult} onChange={(v) => setHyper((prev) => ({ ...prev, commitOnAssessmentResult: v }))} label="Commit data on assessment results" />
-              <TextField label="Frequency (mins) of automatic commits" type="number" value={hyper.timedCommitFrequency} onChange={(value) => setHyper((prev) => ({ ...prev, timedCommitFrequency: value }))} />
-              <TextField label="Maximum number of commit retries" type="number" value={hyper.maxCommitRetries} onChange={(value) => setHyper((prev) => ({ ...prev, maxCommitRetries: value }))} />
-              <TextField label="Commit retry delay" type="number" value={hyper.commitRetryDelay} onChange={(value) => setHyper((prev) => ({ ...prev, commitRetryDelay: value }))} />
-              <CheckboxRow checked={hyper.suppressLmsErrors} onChange={(v) => setHyper((prev) => ({ ...prev, suppressLmsErrors: v }))} label="Suppress LMS errors" />
-              <CheckboxRow checked={hyper.commitOnVisibilityChangeHidden} onChange={(v) => setHyper((prev) => ({ ...prev, commitOnVisibilityChangeHidden: v }))} label="Commit on visibility change hidden" />
-              <TextField label="Manifest identifier" value={hyper.manifestIdentifier} onChange={(value) => setHyper((prev) => ({ ...prev, manifestIdentifier: value }))} placeholder="adapt_manifest" />
+              <SectionLabel hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings"))}>Advanced Settings</SectionLabel>
+              <CheckboxRow checked={hyper.commitOnStatusChange} onChange={(v) => setHyper((prev) => ({ ...prev, commitOnStatusChange: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_commitOnStatusChange"), "Commit data on status change")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_commitOnStatusChange"))} />
+              <CheckboxRow checked={hyper.showSuspendDataPopup} onChange={(v) => setHyper((prev) => ({ ...prev, showSuspendDataPopup: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_showSuspendDataPopup"), "Suspend data popup")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_showSuspendDataPopup"))} />
+              <CheckboxRow checked={hyper.commitOnAnyChange} onChange={(v) => setHyper((prev) => ({ ...prev, commitOnAnyChange: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_commitOnAnyChange"), "Commit data on any change")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_commitOnAnyChange"))} />
+              <CheckboxRow checked={hyper.commitOnAssessmentResult} onChange={(v) => setHyper((prev) => ({ ...prev, commitOnAssessmentResult: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_commitOnAssessmentResult"), "Commit data on assessment results")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_commitOnAssessmentResult"))} />
+              <TextField label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_timedCommitFrequency"), "Frequency (mins) of automatic commits")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_timedCommitFrequency"))} type="number" value={hyper.timedCommitFrequency} onChange={(value) => setHyper((prev) => ({ ...prev, timedCommitFrequency: value }))} />
+              <TextField label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_maxCommitRetries"), "Maximum number of commit retries")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_maxCommitRetries"))} type="number" value={hyper.maxCommitRetries} onChange={(value) => setHyper((prev) => ({ ...prev, maxCommitRetries: value }))} />
+              <TextField label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_commitRetryDelay"), "Commit retry delay")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_commitRetryDelay"))} type="number" value={hyper.commitRetryDelay} onChange={(value) => setHyper((prev) => ({ ...prev, commitRetryDelay: value }))} />
+              <CheckboxRow checked={hyper.suppressLmsErrors} onChange={(v) => setHyper((prev) => ({ ...prev, suppressLmsErrors: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_suppressErrors"), "Suppress LMS errors")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_suppressErrors"))} />
+              <CheckboxRow checked={hyper.commitOnVisibilityChangeHidden} onChange={(v) => setHyper((prev) => ({ ...prev, commitOnVisibilityChangeHidden: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_commitOnVisibilityChangeHidden"), "Commit on visibility change hidden")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_commitOnVisibilityChangeHidden"))} />
+              <TextField label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_manifestIdentifier"), "Manifest identifier")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_manifestIdentifier"))} value={hyper.manifestIdentifier} onChange={(value) => setHyper((prev) => ({ ...prev, manifestIdentifier: value }))} placeholder="adapt_manifest" />
               <SelectField
-                label="Exit state if incomplete"
+                label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_exitStateIfIncomplete"), "Exit state if incomplete")}
+                hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_exitStateIfIncomplete"))}
                 value={hyper.exitStateIncomplete}
                 onChange={(value) => setHyper((prev) => ({ ...prev, exitStateIncomplete: value }))}
                 options={[
@@ -1475,7 +1481,8 @@ export function TrackingAnalyticsPage({
                 ]}
               />
               <SelectField
-                label="Exit state if complete"
+                label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_exitStateIfComplete"), "Exit state if complete")}
+                hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_exitStateIfComplete"))}
                 value={hyper.exitStateComplete}
                 onChange={(value) => setHyper((prev) => ({ ...prev, exitStateComplete: value }))}
                 options={[
@@ -1485,17 +1492,17 @@ export function TrackingAnalyticsPage({
                   { value: "", label: "'' (empty string)" },
                 ]}
               />
-              <TextField label="Override value for maximum character limit on fill-in type answers" type="number" value={hyper.fillInCharacterLimit} onChange={(value) => setHyper((prev) => ({ ...prev, fillInCharacterLimit: value }))} />
+              <TextField label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_maxCharLimitOverride"), "Override value for maximum character limit on fill-in type answers")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_maxCharLimitOverride"))} type="number" value={hyper.fillInCharacterLimit} onChange={(value) => setHyper((prev) => ({ ...prev, fillInCharacterLimit: value }))} />
 
-              <SectionLabel>Connection Test</SectionLabel>
+              <SectionLabel hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest"))}>Connection Test</SectionLabel>
               <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
-                <CheckboxRow checked={hyper.connectionTestEnabled} onChange={(v) => setHyper((prev) => ({ ...prev, connectionTestEnabled: v }))} label="Is Enabled" />
-                <CheckboxRow checked={hyper.connectionTestOnSetValue} onChange={(v) => setHyper((prev) => ({ ...prev, connectionTestOnSetValue: v }))} label="Test on set value" />
-                <TextField label="Silent Retry Limit" type="number" value={hyper.silentRetryLimit} onChange={(value) => setHyper((prev) => ({ ...prev, silentRetryLimit: value }))} />
-                <TextField label="Silent Retry Delay" type="number" value={hyper.silentRetryDelay} onChange={(value) => setHyper((prev) => ({ ...prev, silentRetryDelay: value }))} />
+                <CheckboxRow checked={hyper.connectionTestEnabled} onChange={(v) => setHyper((prev) => ({ ...prev, connectionTestEnabled: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest", "_isEnabled"), "Is Enabled")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest", "_isEnabled"))} />
+                <CheckboxRow checked={hyper.connectionTestOnSetValue} onChange={(v) => setHyper((prev) => ({ ...prev, connectionTestOnSetValue: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest", "_testOnSetValue"), "Test on set value")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest", "_testOnSetValue"))} />
+                <TextField label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest", "_silentRetryLimit"), "Silent Retry Limit")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest", "_silentRetryLimit"))} type="number" value={hyper.silentRetryLimit} onChange={(value) => setHyper((prev) => ({ ...prev, silentRetryLimit: value }))} />
+                <TextField label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest", "_silentRetryDelay"), "Silent Retry Delay")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest", "_silentRetryDelay"))} type="number" value={hyper.silentRetryDelay} onChange={(value) => setHyper((prev) => ({ ...prev, silentRetryDelay: value }))} />
               </div>
 
-              <CheckboxRow checked={hyper.uniqueInteractionIds} onChange={(v) => setHyper((prev) => ({ ...prev, uniqueInteractionIds: v }))} label="Unique Interaction Ids" />
+              <CheckboxRow checked={hyper.uniqueInteractionIds} onChange={(v) => setHyper((prev) => ({ ...prev, uniqueInteractionIds: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_uniqueInteractionIds"), "Unique Interaction Ids")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_uniqueInteractionIds"))} />
             </div>
           )}
         </AccordionCard>
