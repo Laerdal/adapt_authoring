@@ -541,6 +541,15 @@ interface EnginePluginType {
   properties?: Record<string, unknown>;
 }
 
+interface EngineExtensionType {
+  _id: string;
+  name?: string;
+  displayName?: string;
+  version?: string;
+  targetAttribute?: string;
+  properties?: Record<string, unknown>;
+}
+
 interface EngineCourseDetails {
   _id: string;
   title?: string;
@@ -3475,6 +3484,21 @@ async function fetchMergedComponentSchema(
   }
 }
 
+export async function getMergedContentSchema(schemaKey: string): Promise<Record<string, unknown> | null> {
+  const key = (schemaKey || "").trim();
+  if (!key) return null;
+
+  try {
+    if (!mergedSchemaCache) {
+      mergedSchemaCache = await apiClient.get("/api/content/schema");
+    }
+    const entry = mergedSchemaCache?.[key];
+    return entry && typeof entry === "object" ? (entry as Record<string, unknown>) : null;
+  } catch {
+    return null;
+  }
+}
+
 function hasOwnRecordKey(value: unknown, key: string): boolean {
   return !!value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, key);
 }
@@ -3554,10 +3578,24 @@ export interface ExtensionTypeOption {
 }
 
 let extensionTypeOptionsCache: ExtensionTypeOption[] | null = null;
+let extensionTypeRowsPromise: Promise<EngineExtensionType[]> | null = null;
+
+async function getExtensionTypeRows(): Promise<EngineExtensionType[]> {
+  if (!extensionTypeRowsPromise) {
+    extensionTypeRowsPromise = apiClient.get<EngineExtensionType[]>("/api/extensiontype")
+      .then((rows) => Array.isArray(rows) ? rows : [])
+      .catch((error) => {
+        extensionTypeRowsPromise = null;
+        throw error;
+      });
+  }
+
+  return extensionTypeRowsPromise;
+}
 
 export async function getExtensionTypeOptions(): Promise<ExtensionTypeOption[]> {
   if (!extensionTypeOptionsCache) {
-    const rows = await apiClient.get<Array<Partial<ExtensionTypeOption>>>("/api/extensiontype");
+    const rows = await getExtensionTypeRows();
     extensionTypeOptionsCache = (Array.isArray(rows) ? rows : [])
       .filter((row) => row && row.name)
       .map((row) => ({
@@ -3568,6 +3606,25 @@ export async function getExtensionTypeOptions(): Promise<ExtensionTypeOption[]> 
       }));
   }
   return extensionTypeOptionsCache;
+}
+
+export async function getExtensionTypeSchemaByName(extensionName: string): Promise<Record<string, unknown> | null> {
+  const normalizedTarget = normalize(extensionName);
+  if (!normalizedTarget) return null;
+
+  const rows = await getExtensionTypeRows();
+  const match = rows.find((row) => {
+    const candidates = [row.name, row.displayName, row.targetAttribute]
+      .map((value) => normalize(value))
+      .filter(Boolean);
+    return candidates.includes(normalizedTarget);
+  });
+
+  if (!match?.properties || typeof match.properties !== "object" || Array.isArray(match.properties)) {
+    return null;
+  }
+
+  return match.properties;
 }
 
 // Enables an extension type for a course (POST /api/extension/enable/:courseId),

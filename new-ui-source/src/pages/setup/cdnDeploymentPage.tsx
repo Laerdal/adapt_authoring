@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { API_BASE_URL } from "../../utils/constants";
+import InfoIcon, { InfoFieldLabel } from "../../components/common/InfoIcon";
 import {
   getCdnDeploymentSettings,
   saveCdnDeploymentSettings,
@@ -14,6 +15,13 @@ import {
   type CdnDeploymentSettings,
   type CdnLinkEntry,
 } from "../../api/adaptAuthoring";
+import {
+  getConfigRootSchema,
+  getSchemaHint,
+  getSchemaLabel,
+  getSchemaNode,
+  type SetupSchemaNode,
+} from "../../helpers/setupInfoSchema";
 import { usePageLoader } from "../../hooks";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
@@ -64,11 +72,13 @@ function Toast({ toast, onDismiss }: { toast: { type: "success" | "error"; messa
 function Section({
   title,
   icon,
+  hint,
   defaultOpen = true,
   children,
 }: {
   title: string;
   icon: React.ReactNode;
+  hint?: string;
   defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
@@ -83,7 +93,7 @@ function Section({
       >
         <div className="flex items-center gap-2.5">
           <span className="text-[#6b7280]">{icon}</span>
-          <h3 className="text-sm font-bold text-current">{title}</h3>
+          <h3 className="text-sm font-bold text-current flex items-center gap-1.5">{title}{hint ? <InfoIcon label={title} hint={hint} /> : null}</h3>
         </div>
         <svg
           className="shrink-0 ml-auto text-current"
@@ -113,12 +123,12 @@ function validateCdnId(v: string, fieldLabel: string): string | undefined {
   return undefined;
 }
 
-function ToggleSwitch({ checked, onChange, label, disabled = false, ariaLabel }: { checked: boolean; onChange: (v: boolean) => void; label: React.ReactNode; disabled?: boolean; ariaLabel?: string }) {
+function ToggleSwitch({ checked, onChange, label, hint, disabled = false, ariaLabel }: { checked: boolean; onChange: (v: boolean) => void; label: React.ReactNode; hint?: string; disabled?: boolean; ariaLabel?: string }) {
   const labelId = React.useId();
   const stringLabel = typeof label === "string" ? label : undefined;
   return (
     <div className={`flex items-center justify-between gap-3 py-1 ${disabled ? "opacity-40" : ""}`}>
-      <span id={labelId} className="text-sm font-semibold text-[var(--life-base-black)] leading-snug">{label}</span>
+      <span id={labelId} className="text-sm font-semibold text-[var(--life-base-black)] leading-snug">{label}{hint ? <InfoIcon label={stringLabel ?? "setting"} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
       <button
         type="button"
         role="switch"
@@ -142,7 +152,7 @@ function TextField({
 }: { label: string; hint?: string; value: string; onChange: (v: string) => void; placeholder?: string; error?: string; maxLength?: number; sanitize?: (v: string) => string }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-sm font-semibold text-[var(--life-base-black)] leading-snug">{label}</span>
+      <InfoFieldLabel label={label} hint={hint} className="text-[var(--life-base-black)]" />
       <input
         type="text"
         value={value}
@@ -166,7 +176,7 @@ function SelectField({
 }: { label: string; hint?: string; value: string; onChange: (v: string) => void; options: readonly string[] }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-sm font-semibold text-[var(--life-base-black)] leading-snug">{label}</span>
+      <InfoFieldLabel label={label} hint={hint} className="text-[var(--life-base-black)]" />
       <div className="relative">
         <select
           value={value}
@@ -308,6 +318,7 @@ export function CdnDeploymentPage({
   const [loading, setLoading] = useState(true);
   usePageLoader(loading);
   const [cfg, setCfg] = useState<CdnDeploymentSettings | null>(null);
+  const [configSchema, setConfigSchema] = useState<SetupSchemaNode | null>(null);
   const [savedSnapshot, setSavedSnapshot] = useState<CdnDeploymentSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [cdnCliVersion, setCdnCliVersion] = useState("");
@@ -380,6 +391,18 @@ export function CdnDeploymentPage({
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getConfigRootSchema()
+      .then((nextConfigSchema) => {
+        if (!cancelled) setConfigSchema(nextConfigSchema);
+      })
+      .catch(() => {
+        if (!cancelled) setConfigSchema(null);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   // The CLI version string is a display-only footnote ("NPM cdndeploy
   // version: …") backed by a `cdndeploy -version` subprocess spawn, which can
@@ -613,6 +636,9 @@ export function CdnDeploymentPage({
   const canTrigger =
     !!cfg?.isEnabled && !!cfg.cdnid && !!cfg.groupid && !!cfg.courseid && !!cfg.version && !building && !identityMatchesDefault && !hasIdentityErrors;
 
+  const cdnSchema = getSchemaNode(configSchema, "_extensions", "_cdnConfig");
+  const courseDeploymentSchema = getSchemaNode(cdnSchema, "_courseDeployment");
+
   return (
     <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
       {/* Header */}
@@ -634,27 +660,28 @@ export function CdnDeploymentPage({
             <>
               {/* CDN Config */}
               <Section
-                title="CDN Config"
+                title={getSchemaLabel(cdnSchema, "CDN Config")}
+                hint={getSchemaHint(cdnSchema)}
                 icon={
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" />
                   </svg>
                 }
               >
-                <ToggleSwitch checked={cfg.isEnabled} onChange={(v) => set({ isEnabled: v })} label="Enable CDN settings" />
+                <ToggleSwitch checked={cfg.isEnabled} onChange={(v) => set({ isEnabled: v })} label={getSchemaLabel(getSchemaNode(cdnSchema, "_isEnabled"), "Enable CDN settings")} hint={getSchemaHint(getSchemaNode(cdnSchema, "_isEnabled"))} />
 
                 {cfg.isEnabled && (
                   <div className="flex flex-col gap-3 mt-1">
                     <SelectField
-                      label="CDN Storage Container"
-                      hint="Which CDN server should the course be deployed to? Only live courses should be deployed to prod, and the rest should point to the dev environment."
+                      label={getSchemaLabel(getSchemaNode(courseDeploymentSchema, "cdnid"), "CDN Storage Container")}
+                      hint={getSchemaHint(getSchemaNode(courseDeploymentSchema, "cdnid")) ?? "Which CDN server should the course be deployed to? Only live courses should be deployed to prod, and the rest should point to the dev environment."}
                       value={cfg.cdnid}
                       onChange={(v) => set({ cdnid: v })}
                       options={CDN_STORAGE_CONTAINERS}
                     />
                     <TextField
-                      label="Project"
-                      hint="Which project does this course belong to? Set the project ID with 30 characters or fewer and no special characters allowed."
+                      label={getSchemaLabel(getSchemaNode(courseDeploymentSchema, "groupid"), "Project")}
+                      hint={getSchemaHint(getSchemaNode(courseDeploymentSchema, "groupid")) ?? "Which project does this course belong to? Set the project ID with 30 characters or fewer and no special characters allowed."}
                       value={cfg.groupid}
                       onChange={(v) => set({ groupid: v })}
                       maxLength={CDN_ID_MAX_LENGTH}
@@ -662,8 +689,8 @@ export function CdnDeploymentPage({
                       error={groupidError}
                     />
                     <TextField
-                      label="Course Id"
-                      hint="Set the course ID with 30 characters or fewer and no special characters allowed."
+                      label={getSchemaLabel(getSchemaNode(courseDeploymentSchema, "courseid"), "Course Id")}
+                      hint={getSchemaHint(getSchemaNode(courseDeploymentSchema, "courseid")) ?? "Set the course ID with 30 characters or fewer and no special characters allowed."}
                       value={cfg.courseid}
                       onChange={(v) => set({ courseid: v })}
                       maxLength={CDN_ID_MAX_LENGTH}
@@ -671,14 +698,14 @@ export function CdnDeploymentPage({
                       error={courseidError}
                     />
                     <TextField
-                      label="Version"
-                      hint="Sets the version"
+                      label={getSchemaLabel(getSchemaNode(courseDeploymentSchema, "version"), "Version")}
+                      hint={getSchemaHint(getSchemaNode(courseDeploymentSchema, "version")) ?? "Sets the version"}
                       value={cfg.version}
                       onChange={(v) => set({ version: v })}
                     />
                     <TextField
-                      label="Build Trigger Comment"
-                      hint="Update the build trigger information"
+                      label={getSchemaLabel(getSchemaNode(courseDeploymentSchema, "buildTriggerComment"), "Build Trigger Comment")}
+                      hint={getSchemaHint(getSchemaNode(courseDeploymentSchema, "buildTriggerComment")) ?? "Update the build trigger information"}
                       value={cfg.buildTriggerComment}
                       onChange={(v) => set({ buildTriggerComment: v })}
                     />
