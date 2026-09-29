@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
 import colorLabelIconSvgRaw from "../../../public/assets/icons/color-label-icon.svg?raw";
+import templateIconSvgRaw from "../../../public/assets/icons/template-icon.svg?raw";
 import AddComponentDrawer from "../../components/course/AddComponentDrawer";
 import AddTemplateDrawer from "../../components/course/AddTemplateDrawer";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
@@ -23,7 +24,7 @@ import {
   insertAiResultIntoEditor,
   replaceAiResultInEditor,
 } from "../../utils/ckEditorSamaritan";
-import TopicAssetField, { toRenderableAssetUrl } from "../../components/common/AssetSelectionField";
+import TopicAssetField, { detectAssetPreviewKind, toRenderableAssetUrl } from "../../components/common/AssetSelectionField";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import ErrorDialog from "../../components/common/ErrorDialog";
 import { CheckboxIndicator } from "../../components/common/Checkbox";
@@ -48,7 +49,9 @@ import {
   getComponentBehaviourSchema,
   getComponentExtensionSchema,
   getCourseAssetMappings,
+  getCourseAssetIdMap,
   getCourseBootstrapData,
+  getCourseExtensions,
   getCourseStructure,
   getExtensionSchemasByLevel,
   getExtensionTypeOptions,
@@ -377,7 +380,7 @@ const COMPONENT_BEHAVIOUR_EXCLUDED_FIELDS = new Set([
   "_id", "__v", "_type", "_component", "_componentType", "_componentTypeDisplayName",
   "_layout", "_parentId", "_courseId", "_sortOrder", "createdAt", "updatedAt",
   "_contentType", "_enabledExtensions",
-  "title", "displayTitle", "body", "description",
+  "title", "displayTitle", "body", "description", "instruction",
   "_classes", "_htmlClasses",
   "_isOptional", "_isAvailable", "_isHidden", "_isVisible",
   "requirecompletionof", "requireCompletionOf", "_requireCompletionOf", "_isResetOnRevisit",
@@ -712,6 +715,24 @@ function getBehaviourAssetType(fieldName: string, fieldSchema: BehaviourFieldSch
   return undefined;
 }
 
+// The framework ships media with preload="none" and no poster, so the canvas
+// shows an empty box (just the play control) until playback actually starts.
+// Loading metadata is enough for the browser to paint the first frame.
+function primePreviewMediaFrames(doc: Document) {
+  doc.querySelectorAll<HTMLMediaElement>("video, audio").forEach((element) => {
+    if (element.getAttribute("data-preview-media-primed") === "true") return;
+    if (element instanceof HTMLVideoElement && element.poster) return;
+    if (element.readyState > 0 || !element.paused || element.currentTime > 0) return;
+    element.setAttribute("data-preview-media-primed", "true");
+    element.setAttribute("preload", "metadata");
+    try {
+      element.load();
+    } catch {
+      // Media element already detached from its document.
+    }
+  });
+}
+
 function resolveTopicAssetPickerType(target: TopicAssetTarget): AssetKind | undefined {
   switch (target.scope) {
     case "componentProperty":
@@ -757,6 +778,7 @@ function BehaviourField({
   onChange,
   assetContext,
   conditionalContext,
+  getArrayItemDefaults,
 }: {
   path: string;
   fieldName: string;
@@ -765,6 +787,7 @@ function BehaviourField({
   onChange: (path: string, value: unknown) => void;
   assetContext?: BehaviourAssetContext;
   conditionalContext?: ConditionalContext;
+  getArrayItemDefaults?: (path: string, itemSchema: BehaviourFieldSchema | undefined) => Record<string, unknown>;
 }) {
   const label = fieldSchema.legend || fieldSchema.title || formatBehaviourFieldName(fieldName);
   const hint = typeof fieldSchema.help === "string" && fieldSchema.help.trim().length ? fieldSchema.help : undefined;
@@ -796,6 +819,7 @@ function BehaviourField({
         {hasAssetSrc && assetContext && (
           <TopicAssetField
             resolveAssetPreviewUrl={assetContext.resolveAssetPreviewUrl}
+            assetType={getBehaviourAssetType(fieldName, fieldSchema)}
             label={label}
             required={isRequired}
             value={asString(objectValue.src)}
@@ -847,7 +871,8 @@ function BehaviourField({
     const canAddMore = typeof fieldSchema.maxItems !== "number" || items.length < fieldSchema.maxItems;
 
     const handleAddItem = () => {
-      onChange(path, [...items, isObjectItems ? {} : ""]);
+      const itemDefaults = isObjectItems ? getArrayItemDefaults?.(path, itemSchema) ?? {} : "";
+      onChange(path, [...items, itemDefaults]);
       setOpenItemIndex(items.length);
     };
     const handleCopyItem = (index: number) => {
@@ -934,6 +959,7 @@ function BehaviourField({
                           onChange={onChange}
                           assetContext={assetContext}
                           conditionalContext={itemContext}
+                          getArrayItemDefaults={getArrayItemDefaults}
                         />
                       );
                     });
@@ -968,6 +994,7 @@ function BehaviourField({
     return (
       <TopicAssetField
         resolveAssetPreviewUrl={assetContext.resolveAssetPreviewUrl}
+        assetType={getBehaviourAssetType(fieldName, fieldSchema)}
         label={label}
         required={isRequired}
         value={stringValue}
@@ -1112,6 +1139,7 @@ type ExtensionsAccordionBodyProps = {
   customFieldRenderer?: ExtensionFieldRenderer;
   getInheritanceTag?: (key: string) => ExtensionInheritanceTag;
   assetContext?: BehaviourAssetContext;
+  getArrayItemDefaults?: (extensionKey: string, path: string, itemSchema: BehaviourFieldSchema | undefined) => Record<string, unknown>;
 };
 
 const ALL_COMPONENT_LEVEL_EXTENSION_NAMES = new Set([
@@ -1314,6 +1342,7 @@ function ExtensionListItem({
   customFieldRenderer,
   inheritanceTag,
   assetContext,
+  getArrayItemDefaults,
 }: {
   itemKey: string;
   fieldSchema: ExtensionFieldSchema | undefined;
@@ -1325,6 +1354,7 @@ function ExtensionListItem({
   customFieldRenderer?: ExtensionFieldRenderer;
   inheritanceTag?: ExtensionInheritanceTag;
   assetContext?: BehaviourAssetContext;
+  getArrayItemDefaults?: (path: string, itemSchema: BehaviourFieldSchema | undefined) => Record<string, unknown>;
 }) {
   const [open, setOpen] = useState(false);
   const enableControl = detectExtensionEnableControl(fieldSchema);
@@ -1411,6 +1441,7 @@ function ExtensionListItem({
                   onClear: (path) => assetContext.onClear(path, itemKey),
                 }}
                 conditionalContext={extensionContext}
+                getArrayItemDefaults={getArrayItemDefaults}
               />
             );
           })}
@@ -1432,6 +1463,7 @@ function ExtensionsAccordionBody({
   customFieldRenderer,
   getInheritanceTag,
   assetContext,
+  getArrayItemDefaults,
 }: ExtensionsAccordionBodyProps) {
   const visibleExtensionNames = new Set(extensionTypeOptions.map((option) => option.name));
   const addedProgressExtensionName = Object.entries(schemasForLevel).find(([key, schema]) => (
@@ -1498,6 +1530,7 @@ function ExtensionsAccordionBody({
                 onEnableControlChange={(control, value) => handleEnableControlChange(key, control, value)}
                 onRemove={() => handleRemove(key)}
                 onFieldChange={(path, value) => handleFieldChange(key, path, value)}
+                getArrayItemDefaults={getArrayItemDefaults ? (path, itemSchema) => getArrayItemDefaults(key, path, itemSchema) : undefined}
               />
             ))}
           </div>
@@ -1555,6 +1588,29 @@ const NAV_FOOTER_BUTTON_ORDER = ["_home", "_up", "_previous", "_next", "_close",
 const LEVEL_ACTION_COPY_ICON_SVG =
   '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
 const LEVEL_ACTION_COLOR_LABEL_ICON_SVG = colorLabelIconSvgRaw.replace(/stroke="#[0-9a-fA-F]{3,6}"/g, 'stroke="currentColor"');
+// Matches the structure panel's own delete affordance.
+const LEVEL_ACTION_DELETE_ICON_SVG =
+  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>';
+
+const CANVAS_LEVEL_LABELS: Record<"topic" | "section" | "group" | "component", string> = {
+  topic: "Topic",
+  section: "Section",
+  group: "Content Group",
+  component: "Component",
+};
+
+function getCanvasDeleteMessage(level: keyof typeof CANVAS_LEVEL_LABELS): ReactNode {
+  if (level === "component") return <>Are you sure you want to delete the component.<br />This action cannot be undone.</>;
+  if (level === "section") return <>Are you sure you want to delete this section?<br />This will remove any content groups and components inside this section.</>;
+  if (level === "group") return <>Are you sure you want to delete this content group?<br />This will remove any components inside this section.</>;
+  return <>Are you sure you want to delete this topic?<br />You will lose all the contents of this topic</>;
+}
+
+// Same real asset the right panel's "Save as template" button uses.
+const LEVEL_ACTION_SAVE_TEMPLATE_ICON_SVG = templateIconSvgRaw
+  .replace(/stroke="#[0-9a-fA-F]{3,6}"/g, 'stroke="currentColor"')
+  .replace(/width="14"/, 'width="15"')
+  .replace(/height="14"/, 'height="15"');
 
 // Old tool's real palette (frontend/src/core/less/colourLabels.less) —
 // _colorLabel schema field stores one of these literal "colorlabel-N"
@@ -2928,11 +2984,6 @@ function mapStructureToPages(
     }>;
   }) => {
     const topicSubtitle = topic.subtitle || "";
-    // The page template renders `pageBody` INSTEAD of `body` when it is set
-    // (contentobject schema), so the editor must show — and later write back
-    // to — whichever one the page actually displays.
-    const usesPageBodyOverride = !!(topic.pageBody && topic.pageBody.trim());
-    const topicBody = usesPageBodyOverride ? topic.pageBody || "" : topic.body || "";
     const topicInstruction = topic.instruction || "";
 
     pages.push({
@@ -2940,8 +2991,8 @@ function mapStructureToPages(
       title: topic.title || "Untitled Topic",
       description: topic.description || "",
       subtitle: topicSubtitle,
-      body: topicBody,
-      usesPageBodyOverride,
+      body: topic.body || "",
+      pageBody: topic.pageBody || "",
       instruction: topicInstruction,
       colorLabel: topic.colorLabel || "",
       graphic: {
@@ -3199,8 +3250,8 @@ export interface ContentPageData {
   description: string;
   subtitle: string;
   body: string;
-  // True when `body` above is really the page's `pageBody` override.
-  usesPageBodyOverride: boolean;
+  // contentobject.pageBody — shown on the page view instead of `body` when set.
+  pageBody: string;
   instruction: string;
   colorLabel: string;
   graphic: TopicGraphicSettings;
@@ -3279,6 +3330,21 @@ const DEFAULT_COMPONENT_ACCORDIONS: Record<string, boolean> = {
   theme: false,
   advanced: false,
 };
+
+// Every component template renders its interactive body — the items of an
+// items-array component included — inside `.component__widget`, while the
+// title/body/instruction that General owns sit outside it. Keying off that
+// one shared wrapper is what makes the Behaviour-on-widget-click rule work
+// for all components rather than per-component class lists.
+const PREVIEW_COMPONENT_WIDGET_SELECTOR = ".component__widget";
+
+// Room the hover/selection outline needs outside a level's box: its
+// `outline-offset: 2px` plus the 1px line itself, rounded up.
+const PREVIEW_OUTLINE_RING_PX = 4;
+
+const ALL_COMPONENT_ACCORDIONS_CLOSED: Record<string, boolean> = Object.fromEntries(
+  Object.keys(DEFAULT_COMPONENT_ACCORDIONS).map((key) => [key, false])
+);
 
 // Matches the legacy Authoring Tool's dynamic "Save {level} template" popup
 // title/placeholders — only the naming differs (Topic vs. its old "Page").
@@ -3400,6 +3466,29 @@ export default function CourseEditor({
   useEffect(() => {
     contentPagesRef.current = contentPages;
   }, [contentPages]);
+
+  // Which field the canvas body editor is bound to, latched per page for the
+  // whole editing session. Recomputing it per keystroke would silently switch
+  // targets the moment a pageBody override is emptied, so clearing an override
+  // would then overwrite `body` with the same edit.
+  const topicBodyTargetRef = useRef<{ pageId: string; target: "body" | "pageBody" } | null>(null);
+  const resolveTopicBodyTarget = useCallback((pageId: string): "body" | "pageBody" => {
+    const latched = topicBodyTargetRef.current;
+    if (latched?.pageId === pageId) return latched.target;
+    const page = contentPagesRef.current.find((candidate) => candidate.id === pageId);
+    const target: "body" | "pageBody" = page?.pageBody.trim() ? "pageBody" : "body";
+    topicBodyTargetRef.current = { pageId, target };
+    return target;
+  }, [courseId]);
+  const readTopicCanvasBody = useCallback(
+    (page: ContentPageData) => (resolveTopicBodyTarget(page.id) === "pageBody" ? page.pageBody : page.body),
+    [resolveTopicBodyTarget]
+  );
+  const topicCanvasBodyPatch = useCallback(
+    (pageId: string, html: string): Partial<ContentPageData> =>
+      resolveTopicBodyTarget(pageId) === "pageBody" ? { pageBody: html } : { body: html },
+    [resolveTopicBodyTarget]
+  );
   const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
   const [selectedSubPageId, setSelectedSubPageId] = useState<string | null>(null);
   const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
@@ -3410,6 +3499,17 @@ export default function CourseEditor({
   const [dirtyNodeKeys, setDirtyNodeKeys] = useState<Record<string, true>>({});
   const [isSavingSelection, setIsSavingSelection] = useState(false);
   const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
+  const [editorToast, setEditorToast] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
+  const [isPointerOverCanvas, setIsPointerOverCanvas] = useState(false);
+  const isPointerOverCanvasRef = useRef(false);
+  const pointerLeaveTimerRef = useRef<number | null>(null);
+  const [canvasDeleteTarget, setCanvasDeleteTarget] = useState<{    level: "topic" | "section" | "group" | "component";
+    pageId: string;
+    articleId: string | null;
+    blockId: string | null;
+    componentId: string | null;
+    name: string;
+  } | null>(null);
   // Canvas Copy (Section/Content Group) — old-tool parity (editorView.js
   // addToClipboard): a server-side clipboard-copy has been made, and the
   // canvas is showing "Paste" zones at EVERY sibling gap (before the first,
@@ -3420,6 +3520,10 @@ export default function CourseEditor({
     structureLevel: "section" | "contentGroup";
     pageId: string;
     articleId: string | null;
+  } | null>(null);
+  const [topicClipboardEntry, setTopicClipboardEntry] = useState<{
+    clipboardId: string;
+    sourceTitle: string;
   } | null>(null);
   // handlePreviewFrameLoad's onClick closure is only re-created when the
   // iframe itself reloads, so it never sees fresh clipboardEntry state from
@@ -3450,6 +3554,7 @@ export default function CourseEditor({
   const [openComponentAccordions, setOpenComponentAccordions] = useState<Record<string, boolean>>(DEFAULT_COMPONENT_ACCORDIONS);
   const [componentBehaviourSchemas, setComponentBehaviourSchemas] = useState<Record<string, Record<string, unknown>>>({});
   const [extensionSchemasByLevel, setExtensionSchemasByLevel] = useState<Record<ExtensionSchemaLevel, Record<string, ExtensionFieldSchema>> | null>(null);
+  const [courseExtensions, setCourseExtensions] = useState<Record<string, unknown>>({});
   const [themeSettingsSchemaByLevel, setThemeSettingsSchemaByLevel] = useState<Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>> | null>(null);
   const [menuSettingsSchemaByLevel, setMenuSettingsSchemaByLevel] = useState<Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>> | null>(null);
   const [contentSchemaByLevel, setContentSchemaByLevel] = useState<{
@@ -3469,7 +3574,13 @@ export default function CourseEditor({
   const [navFooterCourseButtons, setNavFooterCourseButtons] = useState<Record<NavFooterButtonKey, NavFooterButton> | null>(null);
   const [courseAssetMappings, setCourseAssetMappings] = useState<Record<string, string>>({});
   const [assetLinkIdMap, setAssetLinkIdMap] = useState<Record<string, string>>({});
+  // Read-only superset of the above: EVERY courseasset link in the course,
+  // including the component-scoped ones an import creates. Kept separate
+  // because courseAssetMappings also drives course-level link cleanup, which
+  // must not see component-owned links.
+  const [contentAssetIdMap, setContentAssetIdMap] = useState<Record<string, string>>({});
   const liveSelectionRef = useRef({
+    hasCanvasSelection,
     menuSelected,
     selectedPageId,
     selectedArticleId,
@@ -3477,6 +3588,7 @@ export default function CourseEditor({
     selectedComponentId,
   });
   liveSelectionRef.current = {
+    hasCanvasSelection,
     menuSelected,
     selectedPageId,
     selectedArticleId,
@@ -3520,6 +3632,10 @@ export default function CourseEditor({
   // component's stale values.
   const previousBehaviourTextValuesRef = useRef<{ componentId: string | null; values: Record<string, string> }>({
     componentId: null,
+    values: {},
+  });
+  const previousExtensionTextValuesRef = useRef<{ ownerKey: string | null; values: Record<string, string> }>({
+    ownerKey: null,
     values: {},
   });
   // Previous Behaviour ASSET-field resolved URLs for the currently selected
@@ -3641,7 +3757,7 @@ export default function CourseEditor({
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
     setIsResizingRightPanel(true);
-  }, []);
+  }, [courseId]);
 
   useEffect(() => {
     if (!isResizingRightPanel) return;
@@ -3714,6 +3830,7 @@ export default function CourseEditor({
       if (isCurrentRequest()) {
         setCourseAssetMappings({});
         setAssetLinkIdMap({});
+        setContentAssetIdMap({});
         setIsLoadingStructure(false);
       }
       return;
@@ -3725,9 +3842,10 @@ export default function CourseEditor({
     }
 
     try {
-      const [structure, courseAssets] = await Promise.all([
+      const [structure, courseAssets, contentAssets] = await Promise.all([
         getCourseStructure(courseId, courseTitle),
         getCourseAssetMappings(courseId),
+        getCourseAssetIdMap(courseId),
       ]);
       if (!isCurrentRequest()) return;
 
@@ -3737,6 +3855,7 @@ export default function CourseEditor({
       });
       setCourseAssetMappings(courseAssets || {});
       setAssetLinkIdMap(nextAssetLinkMap);
+      setContentAssetIdMap(contentAssets || {});
 
       setCourseStructure(structure);
       const pages = mapStructureToPages(structure);
@@ -3755,6 +3874,7 @@ export default function CourseEditor({
       setContentPages(pages);
       setSavedContentPages(cloneContentPages(pages));
       setDirtyNodeKeys({});
+      topicBodyTargetRef.current = null;
       setPendingExtensionDisableNames(new Set());
       setMenuPageCreated(pages.length > 0);
       setMenuSelected(false);
@@ -3793,6 +3913,7 @@ export default function CourseEditor({
       setRightPanelOpen(false);
       setCourseAssetMappings({});
       setAssetLinkIdMap({});
+      setContentAssetIdMap({});
       setStructureLoadError(
         error instanceof Error ? error.message : "Failed to load course structure"
       );
@@ -3822,7 +3943,10 @@ export default function CourseEditor({
       courseAssetMappings[fieldName] ||
       courseAssetMappings[decodedFieldName] ||
       courseAssetMappings[encodedFieldName] ||
-      buildCourseAssetLinkCandidates(src).map((candidate) => assetLinkIdMap[candidate]).find(Boolean);
+      buildCourseAssetLinkCandidates(src).map((candidate) => assetLinkIdMap[candidate]).find(Boolean) ||
+      contentAssetIdMap[fieldName] ||
+      contentAssetIdMap[decodedFieldName] ||
+      contentAssetIdMap[encodedFieldName];
     if (assetId) return `/api/asset/serve/${assetId}`;
 
     const embeddedAssetId = extractAssetIdFromCourseAssetPath(src);
@@ -3830,7 +3954,7 @@ export default function CourseEditor({
 
     // Fallback for pre-existing assets when mappings are missing or stale.
     return `/${encodeURI(normalized)}`;
-  }, [assetLinkIdMap, courseAssetMappings]);
+  }, [assetLinkIdMap, contentAssetIdMap, courseAssetMappings]);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -3840,15 +3964,22 @@ export default function CourseEditor({
     };
   }, []);
 
-  // Extensions accordion data (Topic/Section/Content Group/Component): fixed,
-  // course-independent lookups — fetched once and reused for every level/item.
+  useEffect(() => {
+    if (!editorToast) return;
+    const timer = setTimeout(() => setEditorToast(null), 3500);
+    return () => clearTimeout(timer);
+  }, [editorToast]);
+
+  // Extensions accordion data (Topic/Section/Content Group/Component) plus
+  // raw course-level values used when seeding new component buttons.
   useEffect(() => {
     let cancelled = false;
-    void Promise.all([getExtensionSchemasByLevel(), getExtensionTypeOptions()])
-      .then(([schemasByLevel, typeOptions]) => {
+    void Promise.all([getExtensionSchemasByLevel(), getExtensionTypeOptions(), getCourseExtensions(courseId)])
+      .then(([schemasByLevel, typeOptions, extensions]) => {
         if (cancelled) return;
         setExtensionSchemasByLevel(schemasByLevel);
         setExtensionTypeOptions(typeOptions);
+        setCourseExtensions(extensions);
       })
       .catch((err) => {
         console.warn("Failed to load extension schemas", err);
@@ -3878,7 +4009,7 @@ export default function CourseEditor({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [courseId]);
 
   useEffect(() => {
     void loadStructureFromDatabase(
@@ -4296,14 +4427,28 @@ export default function CourseEditor({
     // while actively selecting or hovering something, so a fully
     // deselected, un-hovered canvas renders as a pristine normal preview
     // with none of that extra space, per explicit user request.
+    // Keyed on the pointer merely BEING in the canvas, never on which level
+    // is hovered: these rules resize headers, so tying them to the hovered
+    // level made hover change the layout, which moved the element out from
+    // under a stationary cursor, which changed the hovered level — a
+    // mouseover/mouseout oscillation (measured: 23 flips in one slow sweep).
     doc.documentElement.classList.toggle(
       "adapt-authoring-editing-active",
-      hasCanvasSelection || !!previewHoverState.level
+      hasCanvasSelection || isPointerOverCanvas
     );
+    // Selection only (not hover) — drives the disabled look on the theme's
+    // own nav/footer, which cannot be edited from here.
+    doc.documentElement.classList.toggle("adapt-authoring-selection-active", hasCanvasSelection);
 
     const style = doc.createElement("style");
     style.id = "adapt-authoring-preview-bridge-style";
     style.textContent = `
+      /* In the editor canvas, media playback belongs in the Behaviour panel. */
+      .mejs__container,
+      .mejs__container * {
+        pointer-events: none !important;
+      }
+
       /* Ported directly from Quick Edit's own CSS
          (adapt-preview-edit/less/page.less .editable / .page__header-inner.editable /
          .article__header-inner.editable / .block__header-inner.editable /
@@ -4367,10 +4512,26 @@ export default function CourseEditor({
          (block__inner's 16px padding minus the -8px pull-back on
          .block__header-inner and .component__container), so all four levels
          share one left/right alignment and every outline has room. */
+      /* Topic sits flush against the theme's 56px fixed nav bar (opaque
+         white, z-index 80), which painted over its outline's top edge —
+         the reported "chopped top border". 8px top margin clears it,
+         matching the inset Article already uses. */
       .adapt-authoring-editing-active .page__header-inner {
+        margin-top: 8px !important;
         margin-left: 8px !important;
         margin-right: 8px !important;
         padding: 0.5rem !important;
+      }
+
+      /* Selecting a node calls scrollIntoView({block:"start"}), which parks
+         it flush under that same fixed nav and re-hides the outline's top
+         edge. scroll-margin only shifts where scrolling stops — it adds no
+         layout box, so it cannot shift anything visually. */
+      .page, .menu,
+      .page__header, .page__header-inner,
+      .article__header-inner, .block__header-inner, .component__inner,
+      .laerdal-h5p__container {
+        scroll-margin-top: 64px;
       }
 
       .adapt-authoring-editing-active .article__header-inner {
@@ -4393,21 +4554,15 @@ export default function CourseEditor({
         padding: 0.5rem !important;
       }
 
-      /* Permanent (not hover/active-conditional) vertical gutter around
-        every real Section/Content Group element while editing.
-         Two problems this solves at once: (1) a hover/selection dashed box
-         can never visually touch/merge with the next sibling's box, since
-         there's always real space between the underlying elements
-         themselves, not just around whichever one currently has a border;
-         (2) when a Section/Content Group has no rendered header at all
-         (title hidden from preview), its child would otherwise sit flush
-         against it with zero surface to point at \u2014 this margin creates
-         that missing surface, so the mouse can resolve to the Section/
-         Content Group level instead of always drilling straight to the
-         Component underneath. Mirrors Quick Edit's own always-on editing
-         spacing (.editable { margin: 20px auto } in page.less). */
-      .adapt-authoring-editing-active .article,
-      .adapt-authoring-editing-active .block {
+      /* Vertical gutter for a Section/Content Group that renders NO header
+         of its own. Hover now resolves through headers only, so a level
+         that has one needs no gutter at all — its header box is already
+         held apart from its neighbours by the theme's own spacing, and the
+         gutter was only ever adding dead space between levels. A headerless
+         level still needs it: with nothing to point at, this margin is its
+         only hover surface, exactly as before. */
+      .adapt-authoring-editing-active .article:not(:has(> .article__inner > .article__header)),
+      .adapt-authoring-editing-active .block:not(:has(> .block__inner > .block__header)) {
         margin-top: 10px !important;
         margin-bottom: 10px !important;
       }
@@ -4554,6 +4709,14 @@ export default function CourseEditor({
         color: #9ca3af;
       }
 
+      /* Same muted placeholder treatment for an empty body, which is a
+         CKEditor instance rather than a plain contenteditable. */
+      .ck.ck-editor__editable .ck-placeholder::before,
+      .ck.ck-editor__editable.ck-placeholder::before {
+        color: #9ca3af;
+        opacity: 1;
+      }
+
       .adapt-authoring-preview-title-hidden {
         display: none !important;
       }
@@ -4693,6 +4856,17 @@ export default function CourseEditor({
         cursor: default !important;
       }
 
+      /* While a level is selected these are visibly out of play — clicking
+         them clears the selection and explains why (see the chrome-click
+         notice in the canvas click handler). */
+      .adapt-authoring-selection-active .navigation-footer,
+      .adapt-authoring-selection-active .nav,
+      .adapt-authoring-selection-active .navigation {
+        opacity: 0.45 !important;
+        filter: grayscale(1) !important;
+        transition: opacity 0.15s, filter 0.15s;
+      }
+
       /* Merged swap-positions control (syncSwapPositionsControls) — a single
          always-visible plain-text affordance (no button chrome) replacing
          the old tool's per-component move-left/move-right arrows. It lives
@@ -4785,6 +4959,11 @@ export default function CourseEditor({
       .adapt-authoring-level-action-btn:hover {
         background: var(--life-primary-100, #dbeafe);
         color: #111827;
+      }
+
+      .adapt-authoring-level-action-btn--danger:hover {
+        background: #fef2f2;
+        color: #ef4444;
       }
 
       /* Hover-only preview (level not actually SELECTED yet) — icons show
@@ -5195,6 +5374,28 @@ export default function CourseEditor({
         copyBtn.remove();
       }
 
+      let templateBtn = actions.querySelector<HTMLButtonElement>("[data-preview-save-template-btn]");
+      if (!templateBtn) {
+        templateBtn = doc.createElement("button");
+        templateBtn.type = "button";
+        templateBtn.setAttribute("data-preview-save-template-btn", "true");
+        templateBtn.className = "adapt-authoring-level-action-btn";
+        templateBtn.innerHTML = LEVEL_ACTION_SAVE_TEMPLATE_ICON_SVG;
+        actions.appendChild(templateBtn);
+      }
+      templateBtn.title = `Save ${toBadgeLabel(level)} as template`;
+
+      let deleteBtn = actions.querySelector<HTMLButtonElement>("[data-preview-delete-node-btn]");
+      if (!deleteBtn) {
+        deleteBtn = doc.createElement("button");
+        deleteBtn.type = "button";
+        deleteBtn.setAttribute("data-preview-delete-node-btn", "true");
+        deleteBtn.className = "adapt-authoring-level-action-btn adapt-authoring-level-action-btn--danger";
+        deleteBtn.innerHTML = LEVEL_ACTION_DELETE_ICON_SVG;
+        actions.appendChild(deleteBtn);
+      }
+      deleteBtn.title = `Delete ${toBadgeLabel(level)}`;
+
       return actions;
     };
 
@@ -5492,6 +5693,11 @@ export default function CourseEditor({
     const insetReference = (doc.querySelector(".component__container") ??
       doc.querySelector(".block__header-inner")) as HTMLElement | null;
     if (insetContainer && insetReference) {
+      // Measure against the theme's own padding, never against whatever this
+      // same block added on a previous run.
+      insetContainer.style.removeProperty("padding-left");
+      insetContainer.style.removeProperty("padding-right");
+
       const containerRect = insetContainer.getBoundingClientRect();
       const refRect = insetReference.getBoundingClientRect();
       const leftInset = Math.max(0, Math.round(refRect.left - containerRect.left));
@@ -5501,6 +5707,31 @@ export default function CourseEditor({
         el.style.setProperty("margin-left", `${leftInset}px`, "important");
         el.style.setProperty("margin-right", `${rightInset}px`, "important");
       });
+
+      // At some iframe widths (notably once a side panel is collapsed) the
+      // theme lays the content column out flush against the canvas edge, so
+      // the hover/selection outline — drawn OUTSIDE the box — gets clipped on
+      // that side. Pad the shared container by only the few missing pixels:
+      // every level moves by the same amount, so their alignment is kept, and
+      // a theme that already leaves room is left untouched.
+      const ringRoom = PREVIEW_OUTLINE_RING_PX;
+      const levelBoxes = Array.from(
+        doc.querySelectorAll(".page__header-inner, .article__header-inner, .block__header-inner, .component__inner")
+      ).map((node) => node.getBoundingClientRect());
+      if (levelBoxes.length) {
+        const viewportWidth = doc.documentElement.clientWidth;
+        const leftMost = Math.min(...levelBoxes.map((r) => r.left));
+        const rightMost = Math.max(...levelBoxes.map((r) => r.right));
+        const deficitLeft = Math.max(0, Math.ceil(ringRoom - leftMost));
+        const deficitRight = Math.max(0, Math.ceil(ringRoom - (viewportWidth - rightMost)));
+        const containerStyle = getComputedStyle(insetContainer);
+        if (deficitLeft > 0) {
+          insetContainer.style.setProperty("padding-left", `${(parseFloat(containerStyle.paddingLeft) || 0) + deficitLeft}px`, "important");
+        }
+        if (deficitRight > 0) {
+          insetContainer.style.setProperty("padding-right", `${(parseFloat(containerStyle.paddingRight) || 0) + deficitRight}px`, "important");
+        }
+      }
     }
 
     // Reserve space for extension UI that paints below a fixed top nav's own box.
@@ -5526,6 +5757,7 @@ export default function CourseEditor({
     }
   }, [
     hasCanvasSelection,
+    isPointerOverCanvas,
     menuSelected,
     previewHoverState.articleId,
     previewHoverState.blockId,
@@ -5597,6 +5829,36 @@ export default function CourseEditor({
     }
     inlineEditorSyncRetryCountRef.current = 0;
 
+    const restoreCompiledComponentInstruction = (element: HTMLElement) => {
+      if (element.getAttribute("data-preview-edit-field") !== "instruction") return;
+      const componentId = element.getAttribute("data-preview-component-id");
+      const pageId = element.getAttribute("data-preview-page-id");
+      const articleId = element.getAttribute("data-preview-article-id");
+      const blockId = element.getAttribute("data-preview-block-id");
+      if (!componentId || !pageId || !articleId || !blockId) return;
+
+      const page = contentPagesRef.current.find((candidate) => candidate.id === pageId);
+      const article = page?.articles.find((candidate) => candidate.id === articleId);
+      const block = article?.blocks.find((candidate) => candidate.id === blockId);
+      const component = block?.components.find((candidate) => candidate.id === componentId);
+      const template = component?.settings.properties && typeof component.settings.properties.instruction === "string"
+        ? component.settings.properties.instruction
+        : component?.settings.instruction || "";
+      const handlebars = (doc.defaultView as Window & { Handlebars?: { compile: (source: string) => (context: unknown) => string } }).Handlebars;
+      if (!handlebars?.compile || !template) return;
+
+      const properties = asRecord(component?.settings.properties);
+      const context = {
+        ...properties,
+        _isRadio: properties._isRadio ?? properties._selectable === 1,
+      };
+      try {
+        element.innerHTML = handlebars.compile(template)(context);
+      } catch {
+        element.textContent = template;
+      }
+    };
+
     const clearEditable = () => {
       // Only tear down an injected placeholder (title/subtitle/body/
       // instruction container the real template didn't render because the
@@ -5644,6 +5906,8 @@ export default function CourseEditor({
         if (element.classList.contains("ck-editor__editable")) return;
         const isInjected = element.getAttribute("data-preview-injected") === "true";
         const isEmpty = (element.textContent || "").trim().length === 0;
+
+        restoreCompiledComponentInstruction(element);
 
         // On deselect, a title that was shown DIMMED (because "Display title
         // in preview" is off) goes back to fully hidden — matching real
@@ -5806,7 +6070,7 @@ export default function CourseEditor({
     // source element and reused while typing. Like Quick Edit, it does not
     // update React state on `change:data`: the existing focus-out handler is
     // the soft-save boundary, avoiding a selection-effect rerun per key.
-    const ensureCanvasBodyEditor = (element: HTMLElement, options: { value: string; ownerKey: string; onCommit: (html: string) => void }) => {
+    const ensureCanvasBodyEditor = (element: HTMLElement, options: { value: string; ownerKey: string; placeholder?: string; onCommit: (html: string) => void }) => {
       // Lazily reclaim editors whose source node was torn down by the
       // framework SPA's own re-render (e.g. navigated to a different page
       // inside the same iframe document) — never done on a fixed timer/every
@@ -5828,7 +6092,12 @@ export default function CourseEditor({
         // from outside the focused editor. While it has focus, its unsaved
         // document remains authoritative until the blur/teardown commit.
         if (!existing.editor.ui.focusTracker.isFocused && existing.editor.getData() !== options.value) {
-          existing.editor.setData(options.value || "");
+          existing.editor.__applyingExternalValue = true;
+          try {
+            existing.editor.setData(options.value || "");
+          } finally {
+            existing.editor.__applyingExternalValue = false;
+          }
         }
         element.style.display = "none";
         element.classList.remove("adapt-authoring-preview-inline-empty");
@@ -5859,6 +6128,11 @@ export default function CourseEditor({
             // needed when this is no longer the selected level.
             updateSourceElementOnDestroy: true,
             initialData: options.value || "",
+            // CKEditor owns the empty-body case itself: it renders this as
+            // `.ck-placeholder` INSIDE the editable and clears it on the
+            // first keystroke, matching how the plain-text instruction
+            // field's `data-placeholder` behaves.
+            placeholder: options.placeholder || "",
             samaritanOnClick: (editor: any) => {
               setCanvasSamaritanTarget({
                 editor,
@@ -5886,9 +6160,18 @@ export default function CourseEditor({
               }
             };
             editor.model.document.on("change:data", () => {
+              if (editor.__applyingExternalValue) {
+                lastCommittedHtml = editor.getData();
+                return;
+              }
               if (options.ownerKey) {
                 setDirtyNodeKeys((prev) => (prev[options.ownerKey] ? prev : { ...prev, [options.ownerKey]: true }));
               }
+              // Commit per keystroke, not just on blur, so the right panel's
+              // own editor for the same field stays in step while typing.
+              // The setData sync above is focus-guarded, so this can't echo
+              // back into the editor being typed in.
+              commit();
             });
             // CKEditor's focus tracker covers both its editable surface and
             // toolbar, so this commits only after focus leaves the editor.
@@ -5972,7 +6255,7 @@ export default function CourseEditor({
               : `topic:${options.pageId}`;
         const onCommit = (html: string) => {
           if (options.level === "topic") {
-            updatePageData(options.pageId, { body: html });
+            updatePageData(options.pageId, topicCanvasBodyPatch(options.pageId, html));
           } else if (options.level === "section" && options.articleId) {
             updateArticle(options.pageId, options.articleId, { description: html });
           } else if (options.level === "group" && options.articleId && options.blockId) {
@@ -5983,7 +6266,7 @@ export default function CourseEditor({
             });
           }
         };
-        ensureCanvasBodyEditor(element, { value: options.value, ownerKey, onCommit });
+        ensureCanvasBodyEditor(element, { value: options.value, ownerKey, placeholder: options.placeholder, onCommit });
       }
 
       if (options.field === "title") {
@@ -6564,7 +6847,7 @@ export default function CourseEditor({
           innerSelector: ".page__subtitle-inner", innerClassName: "page__subtitle-inner",
         },
         {
-          key: "body", kind: "pair", visible: true, value: selectedPage.body || "",
+          key: "body", kind: "pair", visible: true, value: readTopicCanvasBody(selectedPage),
           containerSelector: ".page__body", containerClassName: "page__body",
           innerSelector: ".page__body-inner", innerClassName: "page__body-inner",
         },
@@ -6606,7 +6889,7 @@ export default function CourseEditor({
           level: "topic",
           field: "body",
           placeholder: "Add topic body",
-          value: selectedPage.body || "",
+          value: readTopicCanvasBody(selectedPage),
           pageId: selectedPage.id,
         });
       }
@@ -6859,6 +7142,66 @@ export default function CourseEditor({
       image.style.removeProperty("display");
     };
 
+    // Video/audio fields render as <video>/<audio> (often with a nested
+    // <source>), which the <img>-only path above can never reach.
+    const upsertPreviewMedia = (
+      host: HTMLElement | null,
+      kind: "video" | "audio",
+      src: string,
+      key: string,
+      previousSrc: string | undefined,
+      itemIndex: number | null
+    ) => {
+      if (!host) return;
+
+      const hasSrc = (element: HTMLMediaElement, candidate: string) =>
+        element.getAttribute("src") === candidate ||
+        Array.from(element.querySelectorAll("source")).some((source) => source.getAttribute("src") === candidate);
+
+      const existing = Array.from(host.querySelectorAll<HTMLMediaElement>(kind));
+      let element =
+        host.querySelector<HTMLMediaElement>(`${kind}[data-preview-asset-key="${key}"]`) ??
+        (previousSrc ? existing.find((candidate) => hasSrc(candidate, previousSrc)) ?? null : null) ??
+        (itemIndex !== null ? existing[itemIndex] ?? null : existing[0] ?? null);
+
+      if (!element && src) {
+        const wrapper = doc.createElement("div");
+        wrapper.className = "adapt-authoring-preview-injected-asset";
+        wrapper.setAttribute("data-preview-injected", "true");
+        element = doc.createElement(kind) as HTMLMediaElement;
+        element.setAttribute("data-preview-injected", "true");
+        element.setAttribute("data-preview-asset-key", key);
+        element.setAttribute("controls", "");
+        element.setAttribute("preload", "metadata");
+        element.style.maxWidth = "100%";
+        wrapper.appendChild(element);
+        host.appendChild(wrapper);
+      }
+
+      if (!element) return;
+
+      if (!src) {
+        if (element.getAttribute("data-preview-injected") === "true") {
+          element.parentElement?.remove();
+        } else {
+          element.removeAttribute("src");
+          element.style.display = "none";
+        }
+        return;
+      }
+
+      element.querySelectorAll("source").forEach((source) => source.setAttribute("src", src));
+      element.setAttribute("src", src);
+      element.style.removeProperty("display");
+      // Without an explicit reload the element keeps playing/showing the
+      // previously decoded file even though its src attribute changed.
+      try {
+        element.load();
+      } catch {
+        // Media element already detached from its document.
+      }
+    };
+
     // Component-specific Behaviour text fields (an MCQ item's label, a
     // Graphic's alt text, ...) have no canonical class the way
     // title/body/instruction do, so there's no fixed selector to patch.
@@ -6883,6 +7226,33 @@ export default function CourseEditor({
       return false;
     };
 
+    const syncExtensionText = (
+      host: Element | null,
+      extensions: Record<string, unknown>,
+      schemas: Record<string, ExtensionFieldSchema>,
+      ownerKey: string
+    ) => {
+      const extensionTextPaths = Object.entries(schemas).flatMap(([extensionKey, extensionSchema]) =>
+        collectBehaviourTextPaths(
+          (extensionSchema.properties ?? {}) as Record<string, BehaviourFieldSchema>,
+          asRecord(extensions[extensionKey]),
+          extensionKey
+        )
+      ).filter(({ path }) => !path.startsWith("_additionalMaterial._items["));
+      const previousValues = previousExtensionTextValuesRef.current.ownerKey === ownerKey
+        ? previousExtensionTextValuesRef.current.values
+        : {};
+      const nextValues: Record<string, string> = {};
+      extensionTextPaths.forEach(({ path, value }) => {
+        nextValues[path] = value;
+        const previousValue = previousValues[path];
+        if (host && previousValue !== undefined && previousValue !== value) {
+          replaceTextInHost(host, previousValue, value);
+        }
+      });
+      previousExtensionTextValuesRef.current = { ownerKey, values: nextValues };
+    };
+
     const pageBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(pageBackgroundImage));
     const headerBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(headerBackgroundImage));
     const themeHeaderGraphicUrl = resolveAssetForPreview(asString(headerGraphic._src));
@@ -6893,6 +7263,7 @@ export default function CourseEditor({
 
     applyBackgroundStyles(pageInner, pageBackgroundUrl, pageBackgroundStyles);
     applyBackgroundStyles(pageHeader, headerBackgroundUrl, headerBackgroundStyles);
+    syncExtensionText(pageNode, selectedPage.extensions, extensionSchemasByLevel?.contentobject ?? {}, `page:${selectedPage.id}`);
 
     const mergedTopicClasses = [
       asString(selectedPage.classes),
@@ -6963,6 +7334,7 @@ export default function CourseEditor({
       const articleHeaderNode =
         (articleNode?.querySelector(".article__header") as HTMLElement | null) ?? articleInner;
       const articleThemeSettings = getActiveThemeSettings(selectedArticle.themeSettings, "article");
+      syncExtensionText(articleNode, selectedArticle.extensions, extensionSchemasByLevel?.article ?? {}, `article:${selectedArticle.id}`);
       const articleBackgroundImage = asRecord(articleThemeSettings._backgroundImage) as TopicResponsiveAssetMap;
       const articleBackgroundStyles = asRecord(articleThemeSettings._backgroundStyles);
       const articleBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(articleBackgroundImage));
@@ -7004,6 +7376,7 @@ export default function CourseEditor({
         (blockNode?.querySelector(".block__header-inner") as HTMLElement | null) ??
         blockNode;
       const blockThemeSettings = getActiveThemeSettings(selectedBlock.themeSettings, "block");
+      syncExtensionText(blockNode, selectedBlock.extensions, extensionSchemasByLevel?.block ?? {}, `block:${selectedBlock.id}`);
       const blockBackgroundImage = asRecord(blockThemeSettings._backgroundImage) as TopicResponsiveAssetMap;
       const blockBackgroundStyles = asRecord(blockThemeSettings._backgroundStyles);
       const blockBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(blockBackgroundImage));
@@ -7084,6 +7457,12 @@ export default function CourseEditor({
         (componentNode?.querySelector(".component__inner") as HTMLElement | null) ??
         componentNode;
       const componentThemeSettings = getActiveThemeSettings(selectedComponent.themeSettings, "component");
+      syncExtensionText(
+        componentNode,
+        selectedComponent.extensions,
+        componentExtensionSchemas[(selectedComponent.settings.componentKey || "").toLowerCase()] ?? {},
+        `component:${selectedComponent.id}`
+      );
       const componentBackgroundImage = asRecord(componentThemeSettings._backgroundImage) as TopicResponsiveAssetMap;
       const componentBackgroundStyles = asRecord(componentThemeSettings._backgroundStyles);
       const componentBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(componentBackgroundImage));
@@ -7147,6 +7526,16 @@ export default function CourseEditor({
           nextAssetValues[path] = resolvedUrl;
 
           const previousUrl = previousAssetValues[path];
+          const itemIndexMatch = path.match(/\[(\d+)\]/);
+          const itemIndex = itemIndexMatch ? Number(itemIndexMatch[1]) : null;
+          const assetKey = `behaviour-asset-${path}`;
+          const kind = detectAssetPreviewKind(value);
+
+          if (kind === "video" || kind === "audio") {
+            upsertPreviewMedia(componentInner, kind, resolvedUrl, assetKey, previousUrl, itemIndex);
+            return;
+          }
+
           // Diff against THIS field's own previous src first — a generic
           // class selector (".component__widget img") matches every item's
           // image alike, so querySelector's first match would always land
@@ -7175,8 +7564,6 @@ export default function CourseEditor({
           // field never had an image before) — fall back to the generic
           // selector, index-aware so at least the Nth item is targeted
           // instead of always the first.
-          const itemIndexMatch = path.match(/\[(\d+)\]/);
-          const assetKey = `behaviour-asset-${path}`;
           upsertPreviewImage(
             componentInner,
             [
@@ -7187,7 +7574,7 @@ export default function CourseEditor({
             resolvedUrl,
             "",
             assetKey,
-            itemIndexMatch ? Number(itemIndexMatch[1]) : null
+            itemIndex
           );
         });
         previousBehaviourAssetValuesRef.current = { componentId: selectedComponent.id, values: nextAssetValues };
@@ -7202,12 +7589,20 @@ export default function CourseEditor({
           behaviourSchema,
           asRecord(selectedComponent.settings.properties)
         );
+        const extensionTextPaths = Object.entries(componentExtensionSchemas[behaviourComponentKey] ?? {}).flatMap(([extensionKey, extensionSchema]) =>
+          collectBehaviourTextPaths(
+            (extensionSchema.properties ?? {}) as Record<string, BehaviourFieldSchema>,
+            asRecord(asRecord(selectedComponent.extensions)[extensionKey]),
+            extensionKey
+          )
+        ).filter(({ path }) => !path.startsWith("_additionalMaterial._items["));
+        const allBehaviourTextPaths = [...behaviourTextPaths, ...extensionTextPaths];
         const previousTextValues =
           previousBehaviourTextValuesRef.current.componentId === selectedComponent.id
             ? previousBehaviourTextValuesRef.current.values
             : {};
         const nextTextValues: Record<string, string> = {};
-        behaviourTextPaths.forEach(({ path, value }) => {
+        allBehaviourTextPaths.forEach(({ path, value }) => {
           nextTextValues[path] = value;
           const previousValue = previousTextValues[path];
           if (componentInner && previousValue !== undefined && previousValue !== value) {
@@ -7215,6 +7610,17 @@ export default function CourseEditor({
           }
         });
         previousBehaviourTextValuesRef.current = { componentId: selectedComponent.id, values: nextTextValues };
+
+        const additionalMaterialItems = asRecord(asRecord(selectedComponent.extensions)._additionalMaterial)._items;
+        if (componentInner && Array.isArray(additionalMaterialItems)) {
+          const buttonTextNodes = componentInner.querySelectorAll<HTMLElement>(".additional-material-btn__text");
+          additionalMaterialItems.forEach((item, index) => {
+            const text = asString(asRecord(item)._btnText);
+            if (buttonTextNodes[index] && buttonTextNodes[index].textContent !== text) {
+              buttonTextNodes[index].textContent = text;
+            }
+          });
+        }
       }
     }
 
@@ -7258,7 +7664,7 @@ export default function CourseEditor({
         "menu-graphic"
       );
     }
-  }, [contentPages, resolveTopicAssetPreviewUrl, selectedArticleId, selectedBlockId, selectedComponentId, selectedPageId]);
+  }, [componentExtensionSchemas, contentPages, extensionSchemasByLevel, resolveTopicAssetPreviewUrl, selectedArticleId, selectedBlockId, selectedComponentId, selectedPageId]);
 
   // Live-syncs the Navigation Footer's resolved button state (enabled + text)
   // straight into the preview iframe's real course chrome — so editing
@@ -7770,19 +8176,36 @@ export default function CourseEditor({
       const blockId = target?.closest(".block")?.getAttribute("data-adapt-id") ?? null;
       const componentId = target?.closest(".component")?.getAttribute("data-adapt-id") ?? null;
 
+      const noHover: PreviewHoverState = { pageId: null, articleId: null, blockId: null, componentId: null, level: null };
+
+      // Topic/Section/Content Group are hoverable ONLY through their own
+      // header. Their remaining area is mostly empty padding wrapped around
+      // a child level, so treating it as a hover target made the cursor
+      // flip between two levels while crossing that blank space.
+      // A level with no header element at all (headless, before a prior
+      // selection has injected a synthetic one) keeps its old behaviour —
+      // that padding is then its only hover surface.
+      if (level === "topic" || level === "section" || level === "group") {
+        const rootSelector = level === "topic" ? ".page" : level === "section" ? ".article" : ".block";
+        const headerSelector =
+          level === "topic"
+            ? ".page__header, .page__header-inner"
+            : level === "section"
+              ? ".article__header, .article__header-inner"
+              : ".block__header, .block__header-inner";
+        const root = target?.closest(rootSelector);
+        if (root?.querySelector(headerSelector) && !target?.closest(headerSelector)) {
+          return noHover;
+        }
+      }
+
       // The component-container gap is never a Content Group target. For a
       // normal block, blank block padding is also neutral; a headless block
       // is different because that padding is its only hover surface before
       // the synthetic header has been created by a prior selection.
       if (level === "group" && target?.closest(".block__inner")) {
         if (target.closest(".component__container")) {
-          return { pageId: null, articleId: null, blockId: null, componentId: null, level: null };
-        }
-
-        const block = target.closest(".block");
-        const hasBlockHeader = !!block?.querySelector(".block__header, .block__header-inner");
-        if (hasBlockHeader && !target.closest(".block__header, .block__header-inner, .component")) {
-          return { pageId: null, articleId: null, blockId: null, componentId: null, level: null };
+          return noHover;
         }
       }
 
@@ -7793,7 +8216,7 @@ export default function CourseEditor({
           header?.getAttribute("data-preview-injected") === "true" ||
           header?.closest(".block__header")?.getAttribute("data-preview-injected") === "true";
         if (isHeadlessSelectedParent) {
-          return { pageId: null, articleId: null, blockId: null, componentId: null, level: null };
+          return noHover;
         }
       }
 
@@ -7906,6 +8329,14 @@ export default function CourseEditor({
     };
 
     const onMouseOver = (event: Event) => {
+      if (pointerLeaveTimerRef.current !== null) {
+        window.clearTimeout(pointerLeaveTimerRef.current);
+        pointerLeaveTimerRef.current = null;
+      }
+      if (!isPointerOverCanvasRef.current) {
+        isPointerOverCanvasRef.current = true;
+        setIsPointerOverCanvas(true);
+      }
       const target = getEventElement(event.target);
       const swapBtn = target?.closest("[data-preview-swap-positions-btn]") as HTMLElement | null;
       if (swapBtn) {
@@ -7947,12 +8378,46 @@ export default function CourseEditor({
       }
       const relatedTarget = event.relatedTarget as Node | null;
       if (relatedTarget && doc.contains(relatedTarget)) return;
+      // A null relatedTarget also fires for momentary blips that are NOT a
+      // real exit (crossing the canvas scrollbar, sub-pixel gaps between
+      // nodes). Settling first keeps those from toggling the editing layout,
+      // which is what the cursor is sitting on.
+      if (isPointerOverCanvasRef.current && pointerLeaveTimerRef.current === null) {
+        pointerLeaveTimerRef.current = window.setTimeout(() => {
+          pointerLeaveTimerRef.current = null;
+          isPointerOverCanvasRef.current = false;
+          setIsPointerOverCanvas(false);
+        }, 200);
+      }
       queueHoverState({ pageId: null, articleId: null, blockId: null, componentId: null, level: null });
     };
 
     const onClick = (event: Event) => {
       const target = getEventElement(event.target);
       if (!target) return;
+
+      // MediaElement's player surface is interactive in the published
+      // framework, but canvas clicks should select its component instead.
+      // Stop player click handlers here; continue through normal selection
+      // below so the component's Behaviour accordion is still opened.
+      if (target.closest("video, audio, .mejs__container")) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+
+      // A component's items (and the rest of its interactive body) render
+      // inside `.component__widget`, and their settings live in the
+      // Behaviour accordion — so any click in there surfaces that section.
+      // Returning `prev` unchanged when it is already open makes repeat
+      // clicks a no-op rather than a re-render.
+      const openBehaviourForWidgetClick = () => {
+        const componentEl = target.closest(".component");
+        const widgetEl = target.closest(PREVIEW_COMPONENT_WIDGET_SELECTOR);
+        if (!componentEl || !widgetEl || !componentEl.contains(widgetEl)) return;
+        setOpenComponentAccordions((prev) =>
+          prev.behaviour ? prev : { ...ALL_COMPONENT_ACCORDIONS_CLOSED, behaviour: true }
+        );
+      };
 
       // Paste dialogs live inside the preview iframe document. Keep every
       // click inside the dialog out of canvas selection/outside-click logic;
@@ -8029,6 +8494,56 @@ export default function CourseEditor({
         return;
       }
 
+      // Save as template icon (all levels — see ensureLevelActionIcons).
+      const saveTemplateBtn = target.closest("[data-preview-save-template-btn]") as HTMLElement | null;
+      if (saveTemplateBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const actionsEl = saveTemplateBtn.closest("[data-preview-level-actions]") as HTMLElement | null;
+        if (actionsEl?.getAttribute("data-preview-actions-selected") !== "true") return;
+        const level = actionsEl?.getAttribute("data-preview-action-level") as
+          | "topic" | "section" | "group" | "component" | null;
+        const pageId = actionsEl?.getAttribute("data-preview-action-page-id");
+        const articleId = actionsEl?.getAttribute("data-preview-action-article-id") ?? null;
+        const blockId = actionsEl?.getAttribute("data-preview-action-block-id") ?? null;
+        const componentId = actionsEl?.getAttribute("data-preview-action-component-id") ?? null;
+        const objectId = level === "topic"
+          ? pageId
+          : level === "section"
+            ? articleId
+            : level === "group"
+              ? blockId
+              : componentId;
+        if (!level || !objectId) return;
+        handleOpenSaveAsTemplate(level, objectId);
+        return;
+      }
+
+      // Delete icon (all levels — see ensureLevelActionIcons).
+      const deleteNodeBtn = target.closest("[data-preview-delete-node-btn]") as HTMLElement | null;
+      if (deleteNodeBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const actionsEl = deleteNodeBtn.closest("[data-preview-level-actions]") as HTMLElement | null;
+        if (actionsEl?.getAttribute("data-preview-actions-selected") !== "true") return;
+        const level = actionsEl?.getAttribute("data-preview-action-level") as
+          | "topic" | "section" | "group" | "component" | null;
+        const pageId = actionsEl?.getAttribute("data-preview-action-page-id");
+        const articleId = actionsEl?.getAttribute("data-preview-action-article-id") ?? null;
+        const blockId = actionsEl?.getAttribute("data-preview-action-block-id") ?? null;
+        const componentId = actionsEl?.getAttribute("data-preview-action-component-id") ?? null;
+        if (!level || !pageId) return;
+        setCanvasDeleteTarget({
+          level,
+          pageId,
+          articleId,
+          blockId,
+          componentId,
+          name: getCanvasNodeTitle(level, pageId, articleId, blockId, componentId),
+        });
+        return;
+      }
+
       // Color Label icon (section/group/component) — opens the Colour Label
       // popover anchored to the button; a swatch just marks the pending
       // selection (see the popover-swatch branch below) — Reset/Cancel/Apply
@@ -8060,7 +8575,7 @@ export default function CourseEditor({
 
         const desc = doc.createElement("p");
         desc.className = "adapt-authoring-color-label-popover-desc";
-        desc.innerHTML = "The colours are <strong>only</strong> applied in the authoring tool and will <strong>not</strong> affect the generated course.";
+        desc.innerHTML = "The colours are <b>only</b> applied in the authoring tool and will <b>not affect the generated course</b>. The settings are synced with all users in the authoring tool.";
         popover.appendChild(desc);
 
         const grid = doc.createElement("div");
@@ -8234,6 +8749,11 @@ export default function CourseEditor({
           event.preventDefault();
           event.stopPropagation();
           siblingEditableField.focus();
+          // This branch returns before the selection logic below, so the
+          // widget rule has to be applied here too — an MCQ/Checklist item
+          // row IS the input, so without this a question's options would be
+          // the one widget that never opened Behaviour.
+          openBehaviourForWidgetClick();
           return;
         }
       }
@@ -8244,6 +8764,26 @@ export default function CourseEditor({
       if (!clickedSelectableRegion) {
         event.preventDefault();
         event.stopPropagation();
+        // The theme's own nav/footer is pointer-events:none here, so the click
+        // never targets it — hit-test its box instead to explain why nothing
+        // happened, rather than silently clearing the selection.
+        const pointer = event as MouseEvent;
+        const overCourseChrome = [".nav", ".navigation", ".navigation-footer"].some((selector) =>
+          Array.from(doc.querySelectorAll(selector)).some((el) => {
+            const rect = el.getBoundingClientRect();
+            if (!rect.width || !rect.height) return false;
+            return (
+              pointer.clientX >= rect.left && pointer.clientX <= rect.right &&
+              pointer.clientY >= rect.top && pointer.clientY <= rect.bottom
+            );
+          })
+        );
+        if (overCourseChrome) {
+          setEditorToast({
+            type: "info",
+            message: "This element is not accessible in the editor. Preview the course to use it.",
+          });
+        }
         clearCanvasSelection();
         return;
       }
@@ -8253,6 +8793,15 @@ export default function CourseEditor({
       const articleId = target.closest(".article")?.getAttribute("data-adapt-id");
       const pageId = target.closest(".page")?.getAttribute("data-adapt-id");
       const isMenu = !!target.closest(".menu[data-adapt-id]");
+
+      // Item-level settings are rendered inside the Behaviour accordion, so
+      // a click landing in the component's widget (where its items render)
+      // opens that section instead of General. Scoped to the widget of THIS
+      // component so a nested one can never be mistaken for it.
+      const componentEl = componentId ? target.closest(".component") : null;
+      const widgetEl = componentEl ? target.closest(PREVIEW_COMPONENT_WIDGET_SELECTOR) : null;
+      const isComponentWidgetTarget = !!(widgetEl && componentEl?.contains(widgetEl));
+      const componentPreferredAccordion = isComponentWidgetTarget ? "behaviour" : "general";
 
       if (!isMenu && !pageId && !articleId && !blockId && !componentId) {
         return;
@@ -8375,7 +8924,15 @@ export default function CourseEditor({
       // here used to discard that context. A genuinely different deepest
       // selection retains the existing fresh-selection behaviour below.
       const currentSelection = liveSelectionRef.current;
-      const isSameCanvasSelection = componentId && blockId && articleId && pageId
+      // clearCanvasSelection (click outside) keeps selectedPageId — it also
+      // tracks which page the canvas is showing — and only drops
+      // hasCanvasSelection. Without that flag here, the next click on that
+      // page's header still looked like a repeat click on an already
+      // selected node and was swallowed, so the topic could not be
+      // reselected at all until some other level was selected first.
+      const isSameCanvasSelection = !currentSelection.hasCanvasSelection
+        ? false
+        : componentId && blockId && articleId && pageId
         ? currentSelection.selectedComponentId === componentId && currentSelection.selectedBlockId === blockId && currentSelection.selectedArticleId === articleId && currentSelection.selectedPageId === pageId
         : blockId && articleId && pageId
           ? currentSelection.selectedBlockId === blockId && currentSelection.selectedArticleId === articleId && currentSelection.selectedPageId === pageId && !currentSelection.selectedComponentId
@@ -8385,7 +8942,7 @@ export default function CourseEditor({
               ? currentSelection.selectedPageId === pageId && !currentSelection.selectedArticleId && !currentSelection.selectedBlockId && !currentSelection.selectedComponentId && !currentSelection.menuSelected
               : false;
       if (target.closest("[data-preview-edit-field]") && !isSameCanvasSelection) {
-        if (componentId) setOpenComponentAccordions((prev) => ({ ...prev, general: true }));
+        if (componentId) setOpenComponentAccordions((prev) => ({ ...prev, [componentPreferredAccordion]: true }));
         else if (blockId) setOpenBlockAccordions((prev) => ({ ...prev, general: true }));
         else if (articleId) setOpenSectionAccordions((prev) => ({ ...prev, general: true }));
         else if (pageId) setOpenTopicAccordions((prev) => ({ ...prev, general: true }));
@@ -8396,10 +8953,16 @@ export default function CourseEditor({
       // already selected node, there is no selection work to do at all;
       // returning here keeps right-panel accordions stable and lets the
       // target's own native editing behavior proceed unmodified.
-      if (isSameCanvasSelection) return;
+      if (isSameCanvasSelection) {
+        // Moving between widget areas of the ALREADY-selected component still
+        // has to surface Behaviour. Returning `prev` untouched when it is
+        // already open keeps this a no-op re-render-wise.
+        if (isComponentWidgetTarget) openBehaviourForWidgetClick();
+        return;
+      }
 
       if (componentId && blockId && articleId && pageId) {
-        handleSelectComponent(pageId, articleId, blockId, componentId, "preview");
+        handleSelectComponent(pageId, articleId, blockId, componentId, "preview", componentPreferredAccordion);
         return;
       }
 
@@ -8556,7 +9119,7 @@ export default function CourseEditor({
       if (level === "topic") {
         if (resolvedField === "title" && !isBlankTitleValue(value)) updatePageData(pageId, { title: value });
         if (resolvedField === "subtitle") updatePageData(pageId, { subtitle: value });
-        if (resolvedField === "body") updatePageData(pageId, { body: value });
+        if (resolvedField === "body") updatePageData(pageId, topicCanvasBodyPatch(pageId, value));
         if (resolvedField === "instruction") updatePageData(pageId, { instruction: value });
         return;
       }
@@ -8603,6 +9166,32 @@ export default function CourseEditor({
           });
         }
       }
+    };
+
+    const onPaste = (event: ClipboardEvent) => {
+      const origin = event.target as Element | null;
+      const target = origin?.closest("[data-preview-edit-enabled='true']") as HTMLElement | null;
+      if (!target) return;
+      // Body fields are CKEditor surfaces and retain their own rich paste
+      // behavior; inline title/subtitle/instruction fields must keep the
+      // styling already applied by the course template.
+      if (target.getAttribute("data-preview-edit-field") === "body") return;
+
+      const text = event.clipboardData?.getData("text/plain") ?? "";
+      event.preventDefault();
+      event.stopPropagation();
+      const selection = doc.defaultView?.getSelection();
+      if (!selection || !selection.rangeCount) return;
+      const range = selection.getRangeAt(0);
+      if (!target.contains(range.commonAncestorContainer)) return;
+      range.deleteContents();
+      const textNode = doc.createTextNode(text);
+      range.insertNode(textNode);
+      range.setStartAfter(textNode);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      target.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
     };
 
     const onFocusIn = (event: FocusEvent) => {
@@ -8708,7 +9297,7 @@ export default function CourseEditor({
           return;
         }
         if (resolvedField === "body") {
-          updatePageData(pageId, { body: normalizedValue });
+          updatePageData(pageId, topicCanvasBodyPatch(pageId, normalizedValue));
           return;
         }
         if (resolvedField === "instruction") {
@@ -8791,6 +9380,7 @@ export default function CourseEditor({
     doc.addEventListener("mouseout", onMouseOut);
     doc.addEventListener("click", onClick, true);
     doc.addEventListener("focusin", onFocusIn, true);
+    doc.addEventListener("paste", onPaste, true);
     doc.addEventListener("input", onInput, true);
     doc.addEventListener("focusout", onFocusOut, true);
 
@@ -8800,6 +9390,7 @@ export default function CourseEditor({
     syncNavigationFooterPreview();
     syncSwapPositionsControls();
     syncPasteZones();
+    primePreviewMediaFrames(doc);
     if (!pendingLeftPanelScrollTargetRef.current && !menuSelected) {
       pendingLeftPanelScrollTargetRef.current = selectedComponentId
         ? { level: "component", id: selectedComponentId }
@@ -8849,6 +9440,7 @@ export default function CourseEditor({
         swapObserverRafId = null;
         syncSwapPositionsControlsRef.current();
         syncPreviewScrollFromLeftPanelRef.current();
+        primePreviewMediaFrames(doc);
       });
     });
     swapPositionsObserver.observe(doc.body, { childList: true, subtree: true });
@@ -8890,6 +9482,7 @@ export default function CourseEditor({
       doc.removeEventListener("mouseout", onMouseOut);
       doc.removeEventListener("click", onClick, true);
       doc.removeEventListener("focusin", onFocusIn, true);
+      doc.removeEventListener("paste", onPaste, true);
       doc.removeEventListener("input", onInput, true);
       doc.removeEventListener("focusout", onFocusOut, true);
     };
@@ -9158,6 +9751,12 @@ export default function CourseEditor({
     const container = rightPanelScrollRef.current;
     const topBefore = container && triggerEl ? triggerEl.getBoundingClientRect().top : null;
 
+    // The canvas body editor only writes back on blur, so flush it before the
+    // General panel mounts its own editor from `page.body`.
+    if (id === "general") {
+      canvasBodyEditorsRef.current.forEach((entry) => entry.commit());
+    }
+
     setOpenTopicAccordions((prev) => ({
       general: false,
       availability: false,
@@ -9336,8 +9935,10 @@ export default function CourseEditor({
 
       const { topicId } = await seedDefaultModule(courseId, parentId, "New Module", childCount + 1);
       await loadStructureFromDatabase({ pageId: topicId });
+      setEditorToast({ type: "success", message: `"New Module" added` });
     } catch (error) {
       console.error("Failed to add module", error);
+      setEditorToast({ type: "error", message: "Could not add module" });
     }
   }
 
@@ -9370,8 +9971,10 @@ export default function CourseEditor({
 
       const newPageId = await seedDefaultTopic(courseId, parentId, NEW_TOPIC_TITLE, siblingCount + 1);
       await loadStructureFromDatabase({ pageId: newPageId });
+      setEditorToast({ type: "success", message: `"${NEW_TOPIC_TITLE}" added` });
     } catch (error) {
       console.error("Failed to add topic", error);
+      setEditorToast({ type: "error", message: "Could not add topic" });
     }
   }
 
@@ -9380,8 +9983,10 @@ export default function CourseEditor({
       const page = contentPages.find((item) => item.id === pageId);
       const newArticleId = await seedDefaultSection(courseId, pageId, NEW_SECTION_TITLE, (page?.articles.length ?? 0) + 1);
       await loadStructureFromDatabase({ pageId, articleId: newArticleId });
+      setEditorToast({ type: "success", message: `"${NEW_SECTION_TITLE}" added` });
     } catch (error) {
       console.error("Failed to add section", error);
+      setEditorToast({ type: "error", message: "Could not add section" });
     }
   }
 
@@ -9438,12 +10043,14 @@ export default function CourseEditor({
     );
   }
 
-  async function deleteArticle(pageId: string, articleId: string) {
+  async function deleteArticle(pageId: string, articleId: string): Promise<boolean> {
     try {
       await deleteStructureNode("section", articleId);
       await loadStructureFromDatabase({ pageId });
+      return true;
     } catch (error) {
       console.error("Failed to delete section", error);
+      return false;
     }
   }
 
@@ -10151,12 +10758,14 @@ export default function CourseEditor({
     applyTopicAssetSelection(pageId, target, "");
   }
 
-  async function deletePage(pageId: string) {
+  async function deletePage(pageId: string): Promise<boolean> {
     try {
       await deleteStructureNode("topic", pageId);
       await loadStructureFromDatabase();
+      return true;
     } catch (error) {
       console.error("Failed to delete topic", error);
+      return false;
     }
   }
 
@@ -10185,6 +10794,7 @@ export default function CourseEditor({
         shareWithUsers: data.shareWithUsers,
       });
       setSaveTemplateTarget(null);
+      setEditorToast({ type: "success", message: `"${data.title}" saved as template` });
     } catch (error) {
       console.error("Failed to save template", error);
       setSaveTemplateError(error instanceof Error ? error.message : "Failed to save template.");
@@ -10198,8 +10808,10 @@ export default function CourseEditor({
       const article = contentPages.find((item) => item.id === pageId)?.articles.find((item) => item.id === articleId);
       const newBlockId = await seedDefaultContentGroup(courseId, articleId, NEW_CONTENT_GROUP_TITLE, (article?.blocks.length ?? 0) + 1);
       await loadStructureFromDatabase({ pageId, articleId, blockId: newBlockId });
+      setEditorToast({ type: "success", message: `"${NEW_CONTENT_GROUP_TITLE}" added` });
     } catch (error) {
       console.error("Failed to add content group", error);
+      setEditorToast({ type: "error", message: "Could not add content group" });
     }
   }
 
@@ -10226,12 +10838,14 @@ export default function CourseEditor({
     setDirtyNodeKeys((prev) => ({ ...prev, [`contentGroup:${blockId}`]: true }));
   }
 
-  async function deleteBlock(pageId: string, articleId: string, blockId: string) {
+  async function deleteBlock(pageId: string, articleId: string, blockId: string): Promise<boolean> {
     try {
       await deleteStructureNode("contentGroup", blockId);
       await loadStructureFromDatabase({ pageId, articleId });
+      return true;
     } catch (error) {
       console.error("Failed to delete content group", error);
+      return false;
     }
   }
 
@@ -10257,8 +10871,10 @@ export default function CourseEditor({
         layout
       );
       await loadStructureFromDatabase({ pageId, articleId, blockId, componentId: newComponentId });
+      setEditorToast({ type: "success", message: `"${componentType.displayName || componentType.component}" added` });
     } catch (error) {
       console.error("Failed to add component", error);
+      setEditorToast({ type: "error", message: "Could not add component" });
     }
   }
 
@@ -10325,15 +10941,76 @@ export default function CourseEditor({
       });
   }
 
+  function getCanvasNodeTitle(
+    level: "topic" | "section" | "group" | "component",
+    pageId: string,
+    articleId: string | null,
+    blockId: string | null,
+    componentId: string | null
+  ): string {
+    const page = contentPagesRef.current.find((item) => item.id === pageId);
+    if (level === "topic") return page?.title || "Untitled";
+    const article = articleId ? page?.articles.find((item) => item.id === articleId) : undefined;
+    if (level === "section") return article?.title || "Untitled";
+    const block = blockId ? article?.blocks.find((item) => item.id === blockId) : undefined;
+    if (level === "group") return block?.title || "Untitled";
+    return (componentId ? block?.components.find((item) => item.id === componentId)?.settings.title : "") || "Untitled";
+  }
+
+  async function confirmCanvasDelete() {
+    const target = canvasDeleteTarget;
+    setCanvasDeleteTarget(null);
+    if (!target) return;
+    const { level, pageId, articleId, blockId, componentId } = target;
+    let deleted = false;
+    if (level === "topic") {
+      deleted = await deletePage(pageId);
+    } else if (level === "section" && articleId) {
+      deleted = await deleteArticle(pageId, articleId);
+    } else if (level === "group" && articleId && blockId) {
+      deleted = await deleteBlock(pageId, articleId, blockId);
+    } else if (level === "component" && articleId && blockId && componentId) {
+      deleted = await deleteComponent(pageId, articleId, blockId, componentId);
+    } else {
+      return;
+    }
+    if (!deleted) {
+      setEditorToast({ type: "error", message: `Could not delete "${target.name}"` });
+      return;
+    }
+    setEditorToast({ type: "success", message: `"${target.name}" deleted` });
+  }
+
   // Old-tool parity (editorOriginView.js onCopy -> editorView.js
   // addToClipboard): Topic pastes immediately at the end of the page list
   // (no separate paste-zone step, per explicit user instruction).
   async function handleCopyTopicNode(pageId: string) {
     try {
-      const newId = await copyStructureNodeViaClipboard("topic", pageId, courseId, courseId, contentPagesRef.current.length + 1);
-      await loadStructureFromDatabase({ pageId: newId });
+      const sourceTitle = contentPagesRef.current.find((item) => item.id === pageId)?.title;
+      const clipboardId = await copyStructureNodeToClipboard("topic", pageId, courseId);
+      setTopicClipboardEntry({ clipboardId, sourceTitle: sourceTitle || "Topic" });
     } catch (error) {
       console.error("Failed to copy topic", error);
+      setEditorToast({ type: "error", message: "Could not copy topic" });
+    }
+  }
+
+  async function handlePasteTopicFromClipboard() {
+    const entry = topicClipboardEntry;
+    if (!entry) return;
+    setTopicClipboardEntry(null);
+    try {
+      const newId = await pasteStructureNodeFromClipboard(
+        entry.clipboardId,
+        courseId,
+        courseId,
+        contentPagesRef.current.length + 1
+      );
+      await loadStructureFromDatabase({ pageId: newId });
+      setEditorToast({ type: "success", message: `"${entry.sourceTitle}" pasted` });
+    } catch (error) {
+      console.error("Failed to paste topic", error);
+      setEditorToast({ type: "error", message: "Could not paste topic" });
     }
   }
 
@@ -10377,8 +11054,13 @@ export default function CourseEditor({
       } else {
         await loadStructureFromDatabase({ pageId: entry.pageId, articleId: entry.articleId, blockId: newId });
       }
+      setEditorToast({
+        type: "success",
+        message: entry.structureLevel === "section" ? "Section copied" : "Content group copied",
+      });
     } catch (error) {
       console.error("Failed to paste", error);
+      setEditorToast({ type: "error", message: "Could not paste copy" });
     }
   }
 
@@ -10546,7 +11228,10 @@ export default function CourseEditor({
       if (!id) return;
       if (level === "topic") {
         const page = pages.find((candidate) => candidate.id === id);
-        if (page) page.body = html;
+        if (page) {
+          if (resolveTopicBodyTarget(page.id) === "pageBody") page.pageBody = html;
+          else page.body = html;
+        }
       } else if (level === "article") {
         for (const page of pages) {
           const article = page.articles.find((candidate) => candidate.id === id);
@@ -10644,11 +11329,8 @@ export default function CourseEditor({
             title: page.title,
             subtitle: page.subtitle,
             _subtitle: page.subtitle,
-            // Write back to whichever field the page actually renders, so an
-            // existing pageBody override is never bypassed (leaving the editor
-            // and the preview showing different text) and a new one is never
-            // created where the page only ever had `body`.
-            ...(page.usesPageBodyOverride ? { pageBody: page.body } : { body: page.body }),
+            body: page.body,
+            pageBody: page.pageBody,
             instruction: page.instruction,
             linkText: page.linkText,
             duration: page.duration,
@@ -10823,6 +11505,7 @@ export default function CourseEditor({
 
       setCourseAssetMappings(refreshedMappings);
       setAssetLinkIdMap((prev) => ({ ...prev, ...refreshedAssetLinkMap }));
+      void getCourseAssetIdMap(courseId).then((map) => setContentAssetIdMap(map || {}));
 
       // Extensions confirmed for removal this session: actually disable them
       // for the course now (the single server call that cascades the removal
@@ -10841,6 +11524,7 @@ export default function CourseEditor({
       setContentPages(pages);
       setSavedContentPages(cloneContentPages(pages));
       setDirtyNodeKeys({});
+      topicBodyTargetRef.current = null;
       setPreviewRefreshToken((current) => current + 1);
       return true;
     } catch (error) {
@@ -10854,6 +11538,7 @@ export default function CourseEditor({
   function discardDraftChanges() {
     setContentPages(cloneContentPages(savedContentPages));
     setDirtyNodeKeys({});
+    topicBodyTargetRef.current = null;
     setPendingExtensionDisableNames(new Set());
     setPreviewRefreshToken((current) => current + 1);
   }
@@ -10872,6 +11557,17 @@ export default function CourseEditor({
 
   function runWithEditorExitGuard(action: () => void) {
     if (hasUnsavedChanges) {
+      requestUnsavedChangesGuard(action);
+      return;
+    }
+    action();
+  }
+
+  // Moving to another topic tears the canvas down and rebuilds it for the new
+  // page, so any edit that only lives in a canvas editor (committed on blur,
+  // not per keystroke) would be dropped without warning.
+  function runWithPageChangeGuard(nextPageId: string | null, action: () => void) {
+    if (hasUnsavedChanges && selectedPageId && nextPageId !== selectedPageId) {
       requestUnsavedChangesGuard(action);
       return;
     }
@@ -10926,7 +11622,7 @@ export default function CourseEditor({
     runWithEditorExitGuard(() => navigate(previewUrl));
   }
 
-  async function deleteComponent(pageId: string, articleId: string, blockId: string, componentId: string) {
+  async function deleteComponent(pageId: string, articleId: string, blockId: string, componentId: string): Promise<boolean> {
     try {
       const targetPage = contentPages.find((p) => p.id === pageId);
       const targetArticle = targetPage?.articles.find((a) => a.id === articleId);
@@ -10940,8 +11636,10 @@ export default function CourseEditor({
       }
 
       await loadStructureFromDatabase({ pageId, articleId, blockId });
+      return true;
     } catch (error) {
       console.error("Failed to delete component", error);
+      return false;
     }
   }
 
@@ -10950,7 +11648,8 @@ export default function CourseEditor({
     articleId: string,
     blockId: string,
     componentId: string,
-    source: SelectionSource = "internal"
+    source: SelectionSource = "internal",
+    preferredAccordion: "general" | "behaviour" = "general"
   ) {
     const isSameSelection =
       selectedComponentId === componentId &&
@@ -10965,7 +11664,17 @@ export default function CourseEditor({
     setRightPanelOpen(true);
     setRightPanelType("component");
     if (!isSameSelection) {
-      setOpenComponentAccordions(DEFAULT_COMPONENT_ACCORDIONS);
+      // Written in ONE state update (not General first, then Behaviour) so
+      // the panel never renders an intermediate open section.
+      setOpenComponentAccordions(
+        preferredAccordion === "general"
+          ? DEFAULT_COMPONENT_ACCORDIONS
+          : { ...ALL_COMPONENT_ACCORDIONS_CLOSED, [preferredAccordion]: true }
+      );
+    } else if (preferredAccordion === "behaviour") {
+      setOpenComponentAccordions((prev) =>
+        prev.behaviour ? prev : { ...ALL_COMPONENT_ACCORDIONS_CLOSED, behaviour: true }
+      );
     }
     if (source === "leftPanel") {
       queuePreviewScrollFromLeftPanel({ level: "component", id: componentId });
@@ -11206,6 +11915,24 @@ export default function CourseEditor({
     );
   }
 
+  const additionalMaterialItemDefaults = useCallback(
+    (extensionKey: string, path: string): Record<string, unknown> => {
+      if (extensionKey !== "_additionalMaterial" || path !== "_items") return {};
+      const schema = Object.values(extensionSchemasByLevel?.course ?? {}).find(
+        (candidate) => candidate.name === "adapt-additional-material"
+      );
+      const schemaDefaults = asRecord(buildSchemaDefaults(schema?.properties as Record<string, unknown> | undefined));
+      const schemaButton = asRecord(schemaDefaults._button);
+      const additionalMaterial = asRecord(courseExtensions._additionalMaterial);
+      const courseButton = asRecord(additionalMaterial._button);
+      return {
+        _btnText: asString(courseButton.text) || asString(schemaButton.text) || "Additional Material",
+        _btnType: asString(courseButton._btnType) || asString(schemaButton._btnType) || "primary",
+      };
+    },
+    [courseExtensions, extensionSchemasByLevel]
+  );
+
   const courseData: Course = useMemo(() => ({
     id: "editor-course",
     title: courseTitle,
@@ -11278,12 +12005,12 @@ export default function CourseEditor({
           selectedArticleId={selectedArticleId}
           selectedBlockId={selectedBlockId}
           selectedComponentId={selectedComponentId}
-          onMenuSelect={() => handleMenuSelect("leftPanel")}
-          onPageSelect={(pageId) => handlePageSelect(pageId, "leftPanel")}
-          onSubPageSelect={(pageId, subPageId) => handleSubPageSelect(pageId, subPageId, "leftPanel")}
-          onArticleSelect={(pageId, articleId) => handleArticleSelect(pageId, articleId, "leftPanel")}
-          onBlockSelect={(pageId, articleId, blockId) => handleBlockSelect(pageId, articleId, blockId, "leftPanel")}
-          onComponentSelect={(pageId, articleId, blockId, componentId) => handleSelectComponent(pageId, articleId, blockId, componentId, "leftPanel")}
+          onMenuSelect={() => runWithPageChangeGuard(null, () => handleMenuSelect("leftPanel"))}
+          onPageSelect={(pageId) => runWithPageChangeGuard(pageId, () => handlePageSelect(pageId, "leftPanel"))}
+          onSubPageSelect={(pageId, subPageId) => runWithPageChangeGuard(pageId, () => handleSubPageSelect(pageId, subPageId, "leftPanel"))}
+          onArticleSelect={(pageId, articleId) => runWithPageChangeGuard(pageId, () => handleArticleSelect(pageId, articleId, "leftPanel"))}
+          onBlockSelect={(pageId, articleId, blockId) => runWithPageChangeGuard(pageId, () => handleBlockSelect(pageId, articleId, blockId, "leftPanel"))}
+          onComponentSelect={(pageId, articleId, blockId, componentId) => runWithPageChangeGuard(pageId, () => handleSelectComponent(pageId, articleId, blockId, componentId, "leftPanel"))}
           onAddModule={() => {
             void handleAddModule();
           }}
@@ -11405,7 +12132,7 @@ export default function CourseEditor({
                   course={courseData}
                   onNodeClick={(pageId: string) => {
                     if (pageId !== 'menu') {
-                      handlePageSelect(pageId);
+                      runWithPageChangeGuard(pageId, () => handlePageSelect(pageId));
                       setShowStructureMap(false);
                       return;
                     }
@@ -11440,7 +12167,7 @@ export default function CourseEditor({
             {rightPanelOpen ? (
               <aside
                 ref={rightPanelContainerRef}
-                className="fixed md:relative inset-y-0 right-0 z-40 md:z-auto h-full w-[min(300px,100vw)] md:w-[var(--properties-panel-width)] min-w-0 bg-white border-l border-[#d8dee6] overflow-hidden shrink-0"
+                className="fixed md:relative inset-y-0 right-0 z-40 md:z-auto h-full w-[min(300px,100vw)] md:w-[var(--properties-panel-width)] min-w-0 bg-white border-l border-[#d8dee6] overflow-hidden shrink-0 flex flex-col"
                 style={{ "--properties-panel-width": `${rightPanelWidth}px` } as CSSProperties}
               >
                 <div
@@ -11470,7 +12197,19 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                 >
                   <span className={`h-12 w-1 rounded-full transition-colors ${isResizingRightPanel ? "bg-[#2e7fa1]" : "bg-[#94a3b8] group-hover:bg-[#2e7fa1] group-focus-visible:bg-[#2e7fa1]"}`} />
                 </div>
-                <div ref={rightPanelScrollRef} className="h-full overflow-y-auto overflow-x-hidden">
+                <button
+                  type="button"
+                  onClick={() => setRightPanelOpen(false)}
+                  className="w-full h-[56px] shrink-0 border-b border-[#d8dee6] bg-white px-3.5 flex items-center gap-2 text-[#3b4753]"
+                  aria-label="Collapse properties"
+                  title="Collapse properties"
+                >
+                  <span className="w-8 h-8 rounded-[6px] flex items-center justify-center hover:bg-[#f2f5f8] transition-colors">
+                    <MaskIcon file="panel-toggle-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current -scale-x-100" />
+                  </span>
+                  <span className="text-xs tracking-[0.08em] font-semibold uppercase">Properties</span>
+                </button>
+                <div ref={rightPanelScrollRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
                 {(() => {
                 const page = selectedPageId ? contentPages.find((p) => p.id === selectedPageId) : undefined;
                 const article = page && selectedArticleId ? page.articles.find((a) => a.id === selectedArticleId) : undefined;
@@ -11503,6 +12242,19 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                       : "bg-white text-[#9aa7b2] opacity-40 cursor-not-allowed"
                   }`;
 
+                // Same tooltip treatment as InfoIcon. Rendered as a SIBLING of
+                // the row, not a child — the blocked row is opacity-40 and would
+                // fade the tooltip with it.
+                const rowTooltip = (active: boolean) =>
+                  active ? null : (
+                    <span
+                      role="tooltip"
+                      className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 z-[70] w-max max-w-[220px] rounded-[8px] bg-[#215369] px-3 py-1 text-[11px] font-medium text-[#ffffff] opacity-0 shadow-lg transition-opacity group-hover:opacity-100"
+                    >
+                      Use left/middle panel to change selection
+                    </span>
+                  );
+
                 const iconColorClass = (
                   active: boolean,
                   level: "topic" | "section" | "contentGroup" | "component"
@@ -11510,19 +12262,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
 
                 return (
                   <>
-                    <button
-                      type="button"
-                      onClick={() => setRightPanelOpen(false)}
-                      className="w-full h-[56px] shrink-0 border-b border-[#d8dee6] bg-white px-3.5 flex items-center gap-2 text-[#3b4753]"
-                      aria-label="Collapse properties"
-                      title="Collapse properties"
-                    >
-                      <span className="w-8 h-8 rounded-[6px] flex items-center justify-center hover:bg-[#f2f5f8] transition-colors">
-                        <MaskIcon file="chevron-right.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-                      </span>
-                      <span className="text-xs tracking-[0.08em] font-semibold uppercase">Properties</span>
-                    </button>
-
+                    <div className="relative group">
                     <button type="button" className={rowClass(activeLevel === "page")}>
                       <span className="flex items-center gap-2 text-[13px] font-semibold flex-1">
                         <span className="w-6 h-6 rounded-[4px] flex items-center justify-center shrink-0">
@@ -11539,6 +12279,8 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                         className={`block w-[13px] h-[13px] shrink-0 bg-current transition-transform ${activeLevel === "page" ? "rotate-90" : ""}`}
                       />
                     </button>
+                    {rowTooltip(activeLevel === "page")}
+                    </div>
                     {activeLevel === "page" && page && (() => {
                       const themeSettings = getActiveThemeSettingsWithDefaults(page.themeSettings, "contentobject");
                       const pageBackgroundImage = asRecord(themeSettings._backgroundImage);
@@ -11603,6 +12345,16 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                               checked={!!page.showDisplayTitleInPreview}
                               onChange={(checked) => updatePageData(page.id, { showDisplayTitleInPreview: checked })}
                             />
+                            <div className="flex flex-col gap-1.5">
+                              <TopicFieldLabel>Body</TopicFieldLabel>
+                              {/* Keyed per topic: RichTextEditor only reads `value` when it mounts. */}
+                              <RichTextEditor
+                                key={`topic-body-${page.id}`}
+                                value={page.body}
+                                syncExternalValue
+                                onChange={(html) => updatePageData(page.id, { body: html })}
+                              />
+                            </div>
                             <button
                               type="button"
                               onClick={() => handleOpenSaveAsTemplate("topic", page.id)}
@@ -11850,6 +12602,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                       );
                     })()}
 
+                    <div className="relative group">
                     <button type="button" className={rowClass(activeLevel === "article")}>
                       <span className="flex items-center gap-2 text-[13px] font-semibold flex-1">
                         <span className="w-6 h-6 rounded-[4px] flex items-center justify-center shrink-0">
@@ -11866,6 +12619,8 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                         className={`block w-[13px] h-[13px] shrink-0 bg-current transition-transform ${activeLevel === "article" ? "rotate-90" : ""}`}
                       />
                     </button>
+                    {rowTooltip(activeLevel === "article")}
+                    </div>
                     {activeLevel === "article" && article && (
                       <div className="px-4 py-4 border-b border-[#e6ebf0] space-y-2">
                         {(() => {
@@ -12058,6 +12813,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                       </div>
                     )}
 
+                    <div className="relative group">
                     <button type="button" className={rowClass(activeLevel === "block")}>
                       <span className="flex items-center gap-2 text-[13px] font-semibold flex-1">
                         <span className="w-6 h-6 rounded-[4px] flex items-center justify-center shrink-0">
@@ -12074,6 +12830,8 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                         className={`block w-[13px] h-[13px] shrink-0 bg-current transition-transform ${activeLevel === "block" ? "rotate-90" : ""}`}
                       />
                     </button>
+                    {rowTooltip(activeLevel === "block")}
+                    </div>
                     {activeLevel === "block" && block && (
                       <div className="px-4 py-4 border-b border-[#e6ebf0] space-y-2">
                         {(() => {
@@ -12292,6 +13050,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                       </div>
                     )}
 
+                    <div className="relative group">
                     <button type="button" className={rowClass(activeLevel === "component")}>
                       <span className="flex items-center gap-2 text-[13px] font-semibold flex-1">
                         <span className="w-6 h-6 rounded-[4px] flex items-center justify-center shrink-0">
@@ -12308,6 +13067,8 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                         className={`block w-[13px] h-[13px] shrink-0 bg-current transition-transform ${activeLevel === "component" ? "rotate-90" : ""}`}
                       />
                     </button>
+                    {rowTooltip(activeLevel === "component")}
+                    </div>
                     {activeLevel === "component" && (
                       <div className="px-4 py-4 border-b border-[#e6ebf0]">
                         {component && page && article && block ? (() => {
@@ -12453,6 +13214,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                       countExtensionApplicableLevels(key)
                                     )
                                   }
+                                  getArrayItemDefaults={additionalMaterialItemDefaults}
                                 />
                               </TopicAccordion>
 
@@ -12530,7 +13292,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                     aria-label="Expand properties"
                     title="Expand properties"
                   >
-                    <MaskIcon file="chevron-right.svg" className="block w-[14px] h-[14px] shrink-0 bg-current rotate-180" />
+                    <MaskIcon file="panel-toggle-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current -scale-x-100" />
                   </button>
                 </div>
               </aside>
@@ -12644,6 +13406,47 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
           message="You have unsaved changes. Save before leaving this page?"
         />
 
+        {/* Success / info / error toast — same treatment as the Course Settings pages. */}
+        {editorToast && (
+          <div className="fixed top-4 right-4 z-[60] pointer-events-none">
+            <div
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium border pointer-events-auto animate-fade-in-down min-w-[260px] max-w-sm ${
+                editorToast.type === "success"
+                  ? "bg-[var(--life-positive-050)] border-[var(--life-positive-100)] text-[var(--life-positive-500)]"
+                  : editorToast.type === "info"
+                    ? "bg-[var(--life-primary-020)] border-[var(--life-primary-100)] text-[var(--life-primary-500)]"
+                    : "bg-[var(--life-critical-050)] border-[var(--life-critical-100)] text-[var(--life-critical-500)]"
+              }`}
+              role="status"
+            >
+              {editorToast.type === "success" ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-positive-500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              ) : editorToast.type === "info" ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-primary-500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                  <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-critical-500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                  <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              )}
+              <span className="flex-1">{editorToast.message}</span>
+              <button
+                type="button"
+                onClick={() => setEditorToast(null)}
+                className="opacity-60 hover:opacity-100 transition-opacity ml-1"
+                aria-label="Dismiss"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
+
         <ErrorDialog
           open={!!structureLoadError && dismissedStructureLoadError !== structureLoadError}
           title="Error"
@@ -12670,6 +13473,27 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
           message="Removing it will remove the extension from this course. Do you still want to proceed?"
           onCancel={() => setExtensionRemovalTarget(null)}
           onConfirm={confirmRemoveExtension}
+        />
+
+        {canvasDeleteTarget && (
+          <ConfirmDialog
+            open
+            title={`Delete ${CANVAS_LEVEL_LABELS[canvasDeleteTarget.level]}`}
+            message={getCanvasDeleteMessage(canvasDeleteTarget.level)}
+            onCancel={() => setCanvasDeleteTarget(null)}
+            onConfirm={() => void confirmCanvasDelete()}
+          />
+        )}
+
+        <ConfirmDialog
+          open={!!topicClipboardEntry}
+          title="Reuse copied topic"
+          message="Are you sure you want to paste it?"
+          variant="success"
+          confirmLabel="Paste"
+          cancelLabel="Cancel"
+          onCancel={() => setTopicClipboardEntry(null)}
+          onConfirm={() => void handlePasteTopicFromClipboard()}
         />
 
         {publishDialogPhase && (

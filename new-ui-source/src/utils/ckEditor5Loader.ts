@@ -64,6 +64,20 @@ export function loadCKEditor5In(targetWindow: Window): Promise<void> {
           .ck.ck-editor__main, .ck.ck-editor__editable, .ck.ck-content {
             display: block !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box !important;
           }
+          .ck.ck-editor__editable:not(.ck-source-editing-area), .ck.ck-source-editing-area {
+            min-height: 120px !important;
+            max-height: min(420px, calc(100vh - 64px)) !important;
+            overflow-y: auto !important;
+            scrollbar-gutter: stable;
+            scrollbar-color: #4b5563 #d1d5db;
+            scrollbar-width: auto;
+          }
+          .ck.ck-editor__editable::-webkit-scrollbar, .ck.ck-source-editing-area::-webkit-scrollbar { width: 14px; }
+          .ck.ck-editor__editable::-webkit-scrollbar-track, .ck.ck-source-editing-area::-webkit-scrollbar-track { background: #d1d5db; border-left: 1px solid #9ca3af; }
+          .ck.ck-editor__editable::-webkit-scrollbar-thumb, .ck.ck-source-editing-area::-webkit-scrollbar-thumb { background: #4b5563; border: 2px solid #d1d5db; border-radius: 6px; }
+          .ck.ck-editor__editable::-webkit-scrollbar-thumb:hover, .ck.ck-source-editing-area::-webkit-scrollbar-thumb:hover { background: #1f2937; }
+          .ck.ck-editor:has(.ck-source-editing-area) .ck-editor__editable { display: none !important; }
+          .ck.ck-editor:has(.ck-source-editing-area) .ck-source-editing-area { display: block !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; }
           :root { --ckeditor-toolbar-bg: #F2F2F2; }
           .ck.ck-toolbar { width: 100% !important; box-sizing: border-box !important; background-color: var(--ckeditor-toolbar-bg) !important; flex-wrap: wrap !important; row-gap: 2px; }
           .ck.ck-toolbar__items { flex-wrap: wrap !important; }
@@ -161,17 +175,35 @@ export function loadCKEditor5In(targetWindow: Window): Promise<void> {
               overlay.setAttribute('data-adapt-authoring-paste-dialog', 'true');
               overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;padding:20px;';
               const dialog = document.createElement('div');
-              dialog.style.cssText = 'width:min(680px,100%);background:#fff;border:1px solid #d1d5db;border-radius:6px;box-shadow:0 12px 30px rgba(0,0,0,.2);padding:16px;font-family:Arial,sans-serif;';
+              dialog.style.cssText = 'width:min(680px,100%);max-height:calc(100vh - 40px);overflow:hidden;display:flex;flex-direction:column;background:#fff;border:1px solid #d1d5db;border-radius:6px;box-shadow:0 12px 30px rgba(0,0,0,.2);padding:16px;font-family:Arial,sans-serif;';
               const title = document.createElement('h2'); title.textContent = xmlOnly ? 'Paste XML' : 'Paste with formatting'; title.style.cssText = 'margin:0 0 10px;font-size:16px;color:#1f2937;';
               const input = document.createElement(xmlOnly ? 'textarea' : 'div');
               input.setAttribute('aria-label', xmlOnly ? 'XML content' : 'Formatted content');
               if (!xmlOnly) input.contentEditable = 'true';
-              input.style.cssText = 'display:block;width:100%;min-height:180px;box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:10px;font-size:14px;overflow:auto;outline:none !important;box-shadow:none !important;';
+              input.style.cssText = 'display:block;width:100%;min-height:180px;max-height:calc(100vh - 180px);box-sizing:border-box;border:1px solid #d1d5db;border-radius:4px;padding:10px;font-size:14px;overflow:auto;outline:none !important;box-shadow:none !important;';
               const actions = document.createElement('div'); actions.style.cssText = 'display:flex;justify-content:flex-end;gap:8px;margin-top:12px;';
               const cancel = document.createElement('button'); cancel.type = 'button'; cancel.textContent = 'Cancel';
               const apply = document.createElement('button'); apply.type = 'button'; apply.textContent = 'Insert'; apply.style.cssText = 'background:#2e7fa1;color:#fff;border:0;border-radius:4px;padding:6px 14px;';
               cancel.onclick = () => overlay.remove();
-              apply.onclick = () => { const raw = xmlOnly ? input.value : input.innerHTML; const escaped = raw.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); const value = xmlOnly ? '<pre>' + escaped + '</pre>' : raw; editor.model.change(() => editor.model.insertContent(editor.data.toModel(editor.data.processor.toView(value)), editor.model.document.selection)); overlay.remove(); };
+              const normalizeFormattedHtml = (source) => {
+                const template = document.createElement('template');
+                template.innerHTML = source;
+                template.content.querySelectorAll('script,style,meta,link').forEach((node) => node.remove());
+                template.content.querySelectorAll('*').forEach((node) => {
+                  const isHeading = node.getAttribute('role') === 'heading' || node.hasAttribute('aria-level');
+                  if (isHeading) {
+                    const heading = document.createElement('h3');
+                    heading.innerHTML = node.innerHTML;
+                    node.replaceWith(heading);
+                  }
+                });
+                template.content.querySelectorAll('ul > div, ol > div').forEach((wrapper) => {
+                  while (wrapper.firstChild) wrapper.parentElement?.insertBefore(wrapper.firstChild, wrapper);
+                  wrapper.remove();
+                });
+                return template.innerHTML;
+              };
+              apply.onclick = () => { const raw = xmlOnly ? input.value : input.innerHTML; const formatted = !xmlOnly && raw.includes('&lt;') && raw.includes('&gt;') ? (() => { const decoder = document.createElement('textarea'); decoder.innerHTML = raw; return decoder.value; })() : raw; const escaped = raw.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); const value = xmlOnly ? '<pre>' + escaped + '</pre>' : normalizeFormattedHtml(formatted); editor.model.change(() => editor.model.insertContent(editor.data.toModel(editor.data.processor.toView(value)), editor.model.document.selection)); overlay.remove(); };
               actions.append(cancel, apply); dialog.append(title, input, actions); overlay.append(dialog); document.body.append(overlay); input.focus();
             };
             const legacyXmlIcon = '<svg version="1.1" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 115.28 122.88" style="enable-background:new 0 0 115.28 122.88; width: 50px; height: auto;" xml:space="preserve"><style type="text/css">.st0{fill-rule:evenodd;clip-rule:evenodd;}</style><g><path class="st0" d="M25.38,57h64.88V37.34H69.59c-2.17,0-5.19-1.17-6.62-2.6c-1.43-1.43-2.3-4.01-2.3-6.17V7.64l0,0H8.15 c-0.18,0-.32,0.09-.41,0.18C7.59,7.92,7.55,8.05,7.55,8.24v106.45c0,.14.09.32.18.41c.09.14.28.18.41.18c22.78,0,58.09,0,81.51,0c.18,0,.17-.09.27-.18c.14-.09.33-.28.33-.41v-11.16H25.38c-4.14,0-7.56-3.4-7.56-7.56V64.55C17.82,60.4,21.22,57,25.38,57L25.38,57z M29.98,68.76h7.76l4.03,7l3.92-7h7.66l-7.07,11.02l7.74,11.73h-7.91l-4.47-7.31l-4.5,7.31h-7.85l7.85-11.86L29.98,68.76L29.98,68.76z M55.72,68.76H65l3.53,13.85l3.54-13.85h9.23v22.76h-5.75V74.17l-4.44,17.35H65.9l-4.43-17.35v17.35h-5.75V68.76L55.72,68.76z M85.31,68.76h7.03v17.16h11v5.59H85.31V68.76L85.31,68.76z M97.79,57h9.93c4.16,0,7.56,3.41,7.56,7.56v31.42c0,4.15-3.41,7.56-7.56,7.56h-9.93v13.55c0,1.61-.65,3.04-1.7,4.1c-1.06,1.06-2.49,1.7-4.1,1.7c-29.44,0-56.59,0-86.18,0c-1.61,0-3.04-.64-4.1-1.7c-1.06-1.06-1.7-2.49-1.7-4.1V5.85c0-1.61.65-3.04,1.7-4.1C2.77.69,4.2.05,5.81.05h58.72C64.66,0,64.8,0,64.94,0c.64,0,1.29.28,1.75.69h.09c.09.05.14.09.23.18l29.99,30.36c.51.51.88,1.2.88,1.98c0,.23-.05.41-.09.65V57L97.79,57z M67.52,27.97V8.94l21.43,21.7H70.19c-.74,0-1.38-.32-1.89-.78C67.84,29.4,67.52,28.71,67.52,27.97L67.52,27.97z"/></g></svg>';
@@ -186,9 +218,39 @@ export function loadCKEditor5In(targetWindow: Window): Promise<void> {
           }
         }
 
+        class BasicClipboardPastePlugin extends Plugin {
+          init() {
+            const editor = this.editor;
+            const allowedTags = new Set(['P', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'DEL', 'UL', 'OL', 'LI', 'A', 'TABLE', 'THEAD', 'TBODY', 'TFOOT', 'TR', 'TD', 'TH', 'FIGURE', 'BLOCKQUOTE', 'PRE', 'CODE', 'SUB', 'SUP']);
+            const allowedAttributes = new Set(['href', 'target', 'rel', 'colspan', 'rowspan', 'scope']);
+            editor.editing.view.document.on('clipboardInput', (_event, data) => {
+              const html = data.dataTransfer?.getData('text/html');
+              if (!html) return;
+              const template = document.createElement('template');
+              template.innerHTML = html;
+              template.content.querySelectorAll('script,style,meta,link,img,video,audio,iframe').forEach((node) => node.remove());
+              template.content.querySelectorAll('*').forEach((node) => {
+                if (!allowedTags.has(node.tagName)) {
+                  node.replaceWith(...Array.from(node.childNodes));
+                  return;
+                }
+                Array.from(node.attributes).forEach((attribute) => {
+                  const name = attribute.name.toLowerCase();
+                  const value = attribute.value.trim();
+                  if (!allowedAttributes.has(name) || (name === 'href' && /^(javascript:|vbscript:|data:text\\/html)/i.test(value))) {
+                    node.removeAttribute(attribute.name);
+                  }
+                });
+              });
+              data.content = editor.data.processor.toView(template.innerHTML);
+            });
+          }
+        }
+
         window.CKEDITOR = ClassicEditor;
         window.CKEDITOR.SamaritanPlugin = SamaritanPlugin;
         window.CKEDITOR.PasteToolsPlugin = PasteToolsPlugin;
+        window.CKEDITOR.BasicClipboardPastePlugin = BasicClipboardPastePlugin;
         window.CKEDITOR.pluginsConfig = [
           Alignment, Autoformat, AutoLink, Autosave, BalloonToolbar, BlockQuote,
           BlockToolbar, Bold, Clipboard, Code, Essentials, FindAndReplace,
@@ -201,7 +263,7 @@ export function loadCKEditor5In(targetWindow: Window): Promise<void> {
           SpecialCharactersLatin, SpecialCharactersMathematical, SpecialCharactersText,
           Strikethrough, Subscript, Superscript, TextTransformation,
           Table, TableCaption, TableCellProperties, TableProperties, TableToolbar,
-          Underline, Undo
+          Underline, Undo, BasicClipboardPastePlugin
         ];
         window.CKEDITOR.instances = window.CKEDITOR.instances || [];
         window.CKEDITOR_LOADED = true;
@@ -285,7 +347,6 @@ export const CKEDITOR_FULL_TOOLBAR_ITEMS = [
   "sourceEditing", "showBlocks", "|",
   "undo", "redo", "|",
   "findAndReplace", "selectAll", "|",
-  "heading", "|",
   "insertTable", "|",
   "numberedList", "bulletedList", "|",
   "blockQuote", "|",
@@ -302,7 +363,6 @@ export const CKEDITOR_FULL_TOOLBAR_ITEMS = [
 
 export const CKEDITOR_HEADING_CONFIG = {
   options: [
-    { model: "paragraph", title: "Paragraph", class: "ck-heading_paragraph" },
     ...[1, 2, 3, 4, 5, 6].map((level) => ({
       model: `heading${level}`,
       view: `h${level}`,

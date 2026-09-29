@@ -477,7 +477,7 @@ export default function PluginManagementPage() {
         <ConfirmDialog
           open
           title="Delete plugin"
-          message={<>Are you sure you want to delete <span className="font-medium text-[#111827]">"{deleteTarget.name}"</span>?</>}
+          message="Are you sure you want to delete this plugin?"
           confirmLabel="Delete"
           cancelLabel="Cancel"
           onCancel={() => setDeleteTarget(null)}

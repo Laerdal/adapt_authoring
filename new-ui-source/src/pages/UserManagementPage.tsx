@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { getUsers, setUserRole, deleteUser } from "@/api/adaptAuthoring";
 import { usePageLoader } from "@/hooks";
+import { useAuth } from "@/context/AuthContext";
 import AiAssistant from "@/components/common/AiAssistant";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 
@@ -55,6 +56,7 @@ function isCompleteEmail(value: string): boolean {
 }
 
 export default function UserManagementPage() {
+  const { user: currentUser } = useAuth();
   const [users, setUsers]             = useState<User[]>([]);
   const [loading, setLoading]         = useState(true);
 
@@ -301,15 +303,15 @@ export default function UserManagementPage() {
                   <th
                     key={key}
                     onClick={() => handleSort(key)}
-                    className="group px-4 py-3 text-left text-xs font-semibold text-[#374151] uppercase tracking-wide cursor-pointer select-none whitespace-nowrap hover:text-[#2d6fa8] transition-colors"
+                    className={`group px-4 py-3 text-xs font-semibold text-[#374151] uppercase tracking-wide cursor-pointer select-none whitespace-nowrap hover:text-[#2d6fa8] transition-colors ${key === "email" ? "text-left" : "text-center"}`}
                   >
-                    <span className="inline-flex items-center gap-1">
+                    <span className={`inline-flex items-center gap-1 ${key === "email" ? "" : "justify-center w-full"}`}>
                       {label}
                       <SortIcon col={key} />
                     </span>
                   </th>
                 ))}
-                <th className="px-4 py-3 text-right text-xs font-semibold text-[#374151] uppercase tracking-wide whitespace-nowrap">Actions</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-[#374151] uppercase tracking-wide whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -317,27 +319,36 @@ export default function UserManagementPage() {
                 <tr>
                   <td colSpan={6} className="px-4 py-16 text-center text-sm text-[#9ca3af]">No users found</td>
                 </tr>
-              ) : paginated.map((user) => (
-                <tr key={user.id} className="border-b border-[#f3f4f6] hover:bg-[#fafafa] transition-colors group/row">
+              ) : paginated.map((user) => {
+                const isCurrentUser = user.email.toLowerCase() === currentUser?.email.toLowerCase();
+
+                return (
+                <tr key={user.id} className={`border-b border-[#f3f4f6] hover:bg-[#fafafa] transition-colors group/row ${isCurrentUser ? "font-bold" : ""}`}>
                   {/* Email */}
-                  <td className="px-4 py-3 text-[#111827] font-medium">{user.email}</td>
+                  <td className={`px-4 py-3 text-[#111827] ${isCurrentUser ? "font-bold" : "font-normal"}`}>{user.email}</td>
 
                   {/* Tenant */}
-                  <td className="px-4 py-3 text-[#6b7280]">{user.tenant}</td>
+                  <td className={`px-4 py-3 text-center ${isCurrentUser ? "font-bold text-[#111827]" : "text-[#6b7280]"}`}>{user.tenant}</td>
 
                   {/* Role — click to change */}
-                  <td className="px-4 py-3 relative">
-                    <button
-                      type="button"
-                      onClick={() => setRoleMenuTarget(roleMenuTarget === user.id ? null : user.id)}
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${ROLE_COLORS[user.role]} hover:opacity-80 transition-opacity`}
-                    >
-                      {user.role}
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M6 9l6 6 6-6" />
-                      </svg>
-                    </button>
-                    {roleMenuTarget === user.id && (
+                  <td className="px-4 py-3 text-center relative">
+                    {isCurrentUser ? (
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${ROLE_COLORS[user.role]}`}>
+                        {user.role}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setRoleMenuTarget(roleMenuTarget === user.id ? null : user.id)}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${ROLE_COLORS[user.role]} hover:opacity-80 transition-opacity`}
+                      >
+                        {user.role}
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M6 9l6 6 6-6" />
+                        </svg>
+                      </button>
+                    )}
+                    {!isCurrentUser && roleMenuTarget === user.id && (
                       <div className="absolute left-3 top-full mt-1 w-44 bg-white border border-[#e5e7eb] rounded-lg shadow-xl z-30 py-1">
                         <p className="px-3 py-1.5 text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">Change role</p>
                         {ROLES.map((r) => (
@@ -360,18 +371,21 @@ export default function UserManagementPage() {
                   </td>
 
                   {/* Failed logins */}
-                  <td className="px-4 py-3">
-                    <span className={`font-medium ${user.failedLogins >= 5 ? "text-[#ef4444]" : user.failedLogins >= 1 ? "text-[#f59e0b]" : "text-[#6b7280]"}`}>
+                  <td className="px-4 py-3 text-center">
+                    <span className={`${isCurrentUser ? "font-bold text-[#111827]" : `font-medium ${user.failedLogins >= 5 ? "text-[#ef4444]" : user.failedLogins >= 1 ? "text-[#f59e0b]" : "text-[#6b7280]"}`}`}>
                       {user.failedLogins}
                     </span>
                   </td>
 
                   {/* Last access */}
-                  <td className="px-4 py-3 text-[#6b7280] tabular-nums">{user.lastAccess}</td>
+                  <td className={`px-4 py-3 text-center tabular-nums ${isCurrentUser ? "font-bold text-[#111827]" : "text-[#6b7280]"}`}>{user.lastAccess}</td>
 
                   {/* Actions */}
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1 relative">
+                  <td className="px-4 py-3 text-center">
+                    {isCurrentUser ? (
+                      <span className="block text-center text-xs text-[#111827] font-bold leading-snug w-40 mx-auto">Please log in as another admin for full access.</span>
+                    ) : (
+                    <div className="flex items-center justify-center gap-1 relative">
                       {/* Delete */}
                       <button
                         type="button"
@@ -436,9 +450,11 @@ export default function UserManagementPage() {
                         </div>
                       )}
                     </div>
+                    )}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
 

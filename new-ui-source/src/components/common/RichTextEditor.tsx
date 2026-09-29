@@ -34,17 +34,22 @@ export default function RichTextEditor({
   placeholder,
   courseContext,
   disabled,
+  syncExternalValue = false,
 }: {
   value: string;
   onChange: (html: string) => void;
   placeholder?: string;
   courseContext?: string;
   disabled?: boolean;
+  // Pull in `value` changes made elsewhere (e.g. the same field edited on the
+  // page editor canvas) instead of staying the sole source of truth.
+  syncExternalValue?: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<any>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const applyingExternalValueRef = useRef(false);
   const [ready, setReady] = useState(false);
   const [samaritanOpen, setSamaritanOpen] = useState(false);
   const [samaritanSeedText, setSamaritanSeedText] = useState("");
@@ -78,6 +83,7 @@ export default function RichTextEditor({
           return;
         }
         editor.model.document.on("change:data", () => {
+          if (applyingExternalValueRef.current) return;
           onChangeRef.current(editor.getData());
         });
         editorRef.current = editor;
@@ -104,6 +110,19 @@ export default function RichTextEditor({
       editorRef.current.isReadOnly = !!disabled;
     }
   }, [disabled]);
+
+  useEffect(() => {
+    if (!syncExternalValue || !ready) return;
+    const editor = editorRef.current;
+    if (!editor || editor.ui.focusTracker.isFocused) return;
+    if (editor.getData() === (value || "")) return;
+    applyingExternalValueRef.current = true;
+    try {
+      editor.setData(value || "");
+    } finally {
+      applyingExternalValueRef.current = false;
+    }
+  }, [ready, syncExternalValue, value]);
 
   // Insert keeps the rest of the field and drops the result at the caret;
   // Replace swaps the selection (or the whole field when nothing is

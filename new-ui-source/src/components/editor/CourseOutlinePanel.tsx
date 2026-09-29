@@ -131,6 +131,7 @@ function TreeRow({
 }) {
   return (
     <div
+      data-outline-selected={selected ? "true" : undefined}
       className={`w-full min-h-9 flex items-center gap-[6px] text-left border-l-[3px] transition-colors group relative ${
         selected
           ? "bg-[var(--life-primary-100)] border-[var(--life-primary-500)]"
@@ -365,6 +366,7 @@ export default function CourseOutlinePanel({
   onUseTemplate,
 }: CourseOutlinePanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const treeScrollRef = useRef<HTMLDivElement>(null);
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({});
   const [expandedTopics, setExpandedTopics] = useState<Record<string, boolean>>({});
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
@@ -382,6 +384,34 @@ export default function CourseOutlinePanel({
     document.addEventListener("mousedown", handleOutsideClick);
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
+
+  // A newly added/copied node becomes the selection while the tree may have
+  // grown past the viewport, leaving its marker off-screen. Deferred a frame so
+  // the row exists before it is measured.
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      const container = treeScrollRef.current;
+      const row = container?.querySelector<HTMLElement>('[data-outline-selected="true"]');
+      if (!container || !row) return;
+
+      const containerRect = container.getBoundingClientRect();
+      const rowRect = row.getBoundingClientRect();
+      const margin = 8;
+      // Already fully visible — never fight a scroll position the user chose.
+      if (rowRect.top >= containerRect.top + margin && rowRect.bottom <= containerRect.bottom - margin) return;
+
+      row.scrollIntoView({ block: "nearest", inline: "nearest" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [
+    selectedPageId,
+    selectedSubPageId,
+    selectedArticleId,
+    selectedBlockId,
+    selectedComponentId,
+    contentPages,
+    courseStructure,
+  ]);
 
   const activeAddKey = useMemo(() => {
     if (!activeAddMenu) return null;
@@ -436,6 +466,14 @@ export default function CourseOutlinePanel({
     return "Component";
   }
 
+  function deleteMessage(level: DeleteTarget["level"]): ReactNode {
+    if (level === "module") return <>Are you sure you want to delete this module?<br />You will lose all the contents of this module.</>;
+    if (level === "component") return <>Are you sure you want to delete the component.<br />This action cannot be undone.</>;
+    if (level === "section") return <>Are you sure you want to delete this section?<br />This will remove any content groups and components inside this section.</>;
+    if (level === "group") return <>Are you sure you want to delete this content group?<br />This will remove any components inside this section.</>;
+    return <>Are you sure you want to delete this topic?<br />You will lose all the contents of this topic</>;
+  }
+
   const allKnownPageIds = useMemo(() => {
     const ids = new Set<string>();
     if (!courseStructure) return ids;
@@ -488,8 +526,8 @@ export default function CourseOutlinePanel({
           onAddStartFresh={() => runAddAction({ level: "topic", pageId: page.id, moduleId })}
           onAddTemplate={() => {
             const target: AddMenuTarget = { level: "topic", pageId: page.id, moduleId };
-            if (onUseTemplate && target.pageId) {
-              onUseTemplate({ level: "topic", pageId: target.pageId, moduleId: target.moduleId });
+            if (onUseTemplate) {
+              onUseTemplate({ level: "topic", pageId: page.id, moduleId });
               setActiveAddMenu(null);
               return;
             }
@@ -783,12 +821,12 @@ export default function CourseOutlinePanel({
             aria-label="Collapse structure"
             title="Collapse structure"
           >
-            <MaskIcon file="back-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+            <MaskIcon file="panel-toggle-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current" />
           </button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto overflow-x-hidden py-3">
+      <div ref={treeScrollRef} className="flex-1 overflow-y-auto overflow-x-hidden py-3">
         {courseStructure ? (
           <>
             {mergedChildren(courseStructure.modules, courseStructure.topics).map((child) => {
@@ -814,11 +852,7 @@ export default function CourseOutlinePanel({
         <ConfirmDialog
           open
           title={`Delete ${deleteLabel(deleteTarget.level)}`}
-          message={
-            <>
-              Are you sure you want to delete <span className="font-medium text-[#111827]">"{deleteTarget.name}"</span>? This action cannot be undone.
-            </>
-          }
+          message={deleteMessage(deleteTarget.level)}
           onCancel={() => setDeleteTarget(null)}
           onConfirm={confirmDelete}
         />

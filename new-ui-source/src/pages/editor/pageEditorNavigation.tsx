@@ -155,7 +155,7 @@ export default function PageEditorNavigation({
               aria-label="Expand structure"
               title="Expand structure"
             >
-              <MaskIcon file="chevron-right.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+              <MaskIcon file="panel-toggle-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current" />
             </button>
           </div>
         </aside>
