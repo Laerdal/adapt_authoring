@@ -7,6 +7,7 @@ import {
 } from "../../api/adaptAuthoring";
 import { usePageLoader } from "../../hooks";
 import { SaveChangesButton } from "./SaveChangesButton";
+import { SaveStatusToast } from "./SaveStatusToast";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 import { CheckboxIndicator } from "../../components/common/Checkbox";
@@ -976,6 +977,7 @@ export function TrackingAnalyticsPage({
   const [isSaving, setIsSaving] = useState(false);
   const [savedSnapshot, setSavedSnapshot] = useState<TrackingAnalyticsPageSnapshot>(DEFAULT_SNAPSHOT);
   const [sourceSettings, setSourceSettings] = useState<TrackingAnalyticsSettings>(defaultTrackingAnalyticsSettings());
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const [scorm, setScorm] = useState<TrackingAnalyticsPageSnapshot["scorm"]>(DEFAULT_SCORM_STATE);
 
@@ -1145,6 +1147,7 @@ export function TrackingAnalyticsPage({
       await saveTrackingAnalyticsSettings(courseId, nextSettings);
       setSourceSettings(nextSettings);
       setSavedSnapshot(currentSnapshot);
+      setSaveSuccess(true);
       const navTarget = consumePendingNavigation();
       if (navTarget) onNavigationRequest?.(navTarget);
     } catch (error) {
@@ -1162,6 +1165,7 @@ export function TrackingAnalyticsPage({
 
   return (
     <>
+      <SaveStatusToast toast={saveSuccess ? { type: "success", message: "Changes saved successfully" } : null} onDismiss={() => setSaveSuccess(false)} />
       <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
         <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-center gap-4">
           <div>

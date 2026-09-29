@@ -3,6 +3,7 @@ import { saveThemeForCourse, saveThemeVariables, getThemePresets, saveThemePrese
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import InfoIcon, { InfoFieldLabel } from "../../components/common/InfoIcon";
 import { SaveChangesButton } from "./SaveChangesButton";
+import { SaveStatusToast } from "./SaveStatusToast";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
@@ -2289,6 +2290,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   return (
     // <div className="max-w-3xl w-full px-6 py-6">
     <div className="flex flex-col h-full w-full bg-[#f7f9fb] font-[var(--font-family-primary)]">
+      <SaveStatusToast toast={saveSuccess ? { type: "success", message: "Changes saved successfully" } : null} onDismiss={() => setSaveSuccess(false)} />
       <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-center gap-4">
         <div>
           <h2 className="text-xl font-bold text-[var(--life-base-black)] m-0">Theme</h2>

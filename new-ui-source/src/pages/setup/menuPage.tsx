@@ -14,6 +14,7 @@ import AssetPickerModal from "../../components/common/AssetPickerModal";
 import AssetSelectionField, { toRenderableAssetUrl } from "../../components/common/AssetSelectionField";
 import { CheckboxIndicator } from "../../components/common/Checkbox";
 import { SaveChangesButton } from "./SaveChangesButton";
+import { SaveStatusToast } from "./SaveStatusToast";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
@@ -1049,6 +1050,7 @@ export function MenuPage({
   });
   const [openAcc, setOpenAcc] = useState("behavior");
   const [isSaving, setIsSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   useEffect(() => {
     const fallbackStyle = mapMenuNameToStyle(initialMenuName);
@@ -1228,6 +1230,7 @@ export function MenuPage({
 
       setActiveCourseMenuSettings(payload);
       setSavedConfig(config);
+      setSaveSuccess(true);
       const navTarget = consumePendingNavigation();
       if (navTarget) onNavigationRequest?.(navTarget);
     } catch (err) {
@@ -1245,6 +1248,7 @@ export function MenuPage({
 
   return (
     <>
+      <SaveStatusToast toast={saveSuccess ? { type: "success", message: "Changes saved successfully" } : null} onDismiss={() => setSaveSuccess(false)} />
       <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
         <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-center gap-4">
           <div>

@@ -13,6 +13,7 @@ import { STRUCTURE_LABELS } from "../types/structure";
 import { BasicRichTextEditor } from "../components/common";
 import { CourseOverviewPage } from "./setup/courseOverviewPage";
 import { SaveChangesButton } from "./setup/SaveChangesButton";
+import { SaveStatusToast } from "./setup/SaveStatusToast";
 import SelectThemePage from "./setup/themePage";
 import { MenuPage } from "./setup/menuPage";
 import { NavigationPage } from "./setup/navigationPage";
@@ -244,6 +245,7 @@ function CourseStructurePanel({
   // Content-group id whose Add Component drawer is open (null = closed).
   const [addComponentBlockId, setAddComponentBlockId] = useState<string | null>(null);
   const [hintDismissed, setHintDismissed] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const {
     state,
     loading,
@@ -279,6 +281,7 @@ function CourseStructurePanel({
   async function handleConfirmSave() {
     const ok = await save();
     if (!ok) return; // save failed — stay put, show the error
+    setSaveSuccess(true);
     const target = consumePendingNavigation();
     if (target) onNavigationRequest?.(target);
   }
@@ -290,6 +293,7 @@ function CourseStructurePanel({
 
   return (
     <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
+      <SaveStatusToast toast={saveSuccess ? { type: "success", message: "Changes saved successfully" } : null} onDismiss={() => setSaveSuccess(false)} />
       <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-start gap-4">
         <div>
           <h2 className="text-xl font-bold text-[#111827]">Course Structure</h2>

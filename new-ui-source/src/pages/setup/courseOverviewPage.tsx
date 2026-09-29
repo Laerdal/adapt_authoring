@@ -12,6 +12,7 @@ import type { AssetPickerRequest } from "../../types/assetPicker";
 import { BasicRichTextEditor, isEditorEmpty } from "../../components/common";
 import { isSafeLanguageCode } from "../../api/adaptAuthoring";
 import { SaveChangesButton } from "./SaveChangesButton";
+import { SaveStatusToast } from "./SaveStatusToast";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
@@ -557,6 +558,7 @@ export function CourseOverviewPage({
         unicodeBidi: "plaintext",
       }}
     >
+      <SaveStatusToast toast={saveSuccess && !isDirty ? { type: "success", message: "Changes saved successfully" } : null} onDismiss={() => setSaveSuccess(false)} />
 
       {/* ── Header ───────────────────────────────────────────────── */}
       <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-center gap-4">
@@ -582,12 +584,6 @@ export function CourseOverviewPage({
           {saveError}
         </div>
       )}
-      {saveSuccess && !isDirty && (
-        <div style={{ marginBottom: 20, padding: "10px 14px", borderRadius: 8, background: "var(--life-positive-050)", border: "1px solid var(--life-positive-400)", fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-positive-500)" }}>
-          Changes saved successfully.
-        </div>
-      )}
-
       {/* ── Fields ───────────────────────────────────────────────── */}
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
