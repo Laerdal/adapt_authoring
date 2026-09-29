@@ -22,7 +22,6 @@ const database = require('../../lib/database');
 
 const configuration = require('../../lib/configuration');
 const Constants = require('../../lib/outputmanager').Constants;
-const database = require('../../lib/database');
 const helpers = require('../../lib/helpers');
 const installHelpers = require('../../lib/installHelpers');
 const logger = require('../../lib/logger');
@@ -487,18 +486,19 @@ server.get('/studio/:tenant/:course/*', (req, res, next) => {
       const filename = requestedCourseAssetFilename(file);
       if (!filename) return res.status(error.status || 404).end();
       findCourseAssetId(courseId, filename, (lookupErr, assetId) => {
-        if (lookupErr || !assetId) {
-          if (lookupErr) logger.log('warn', `Studio: asset fallback lookup failed for ${courseId}/${filename}: ${lookupErr.message}`);
-          return res.status(error.status || 404).end();
+        if (assetId) {
+          return res.redirect(`/api/asset/serve/${assetId}`);
         }
-        res.redirect(`/api/asset/serve/${assetId}`);
-        
+
+        if (lookupErr) logger.log('warn', `Studio: asset fallback lookup failed for ${courseId}/${filename}: ${lookupErr.message}`);
+
       // Course assets only land in the build folder during a real grunt build,
       // but course JSON is served LIVE — so an asset picked since the last build
       // is referenced by the page while its file is still missing here. Fall
       // back to the asset record the course already links, keeping the preview
       // in step with the editor without forcing a rebuild.
-      serveLiveCourseAsset(file, () => res.status(error.status || 404).end());
+        serveLiveCourseAsset(file, () => res.status(error.status || 404).end());
+      });
     });
   }
 
