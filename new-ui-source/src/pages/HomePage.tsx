@@ -568,7 +568,7 @@ export default function HomePage() {
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => { setSortOpen((o) => !o) }}
+                  onClick={() => { setSortOpen((o) => !o); setTagFilterOpen(false) }}
                   className="flex items-center gap-1.5 px-3 py-2.5 text-sm text-[#374151] bg-white border border-[#e5e7eb] rounded-lg hover:bg-[#f9fafb] transition-colors whitespace-nowrap"
                 >
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
