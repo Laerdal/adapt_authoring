@@ -825,7 +825,7 @@ function MenuPreview({ cfg, resolveUrl }: { cfg: MenuPageConfig; resolveUrl?: (v
   }, [cfg.menuStyle]);
 
   const titleAlignClass = cfg.titleAlign === "center" ? "text-center items-center" : cfg.titleAlign === "right" ? "text-right items-end" : "text-left items-start";
-  const subtitleAlignClass = titleAlignClass;
+  const subtitleAlignClass = cfg.subtitleAlign === "center" ? "text-center items-center" : cfg.subtitleAlign === "right" ? "text-right items-end" : "text-left items-start";
   const logoAlignClass = "items-center";
   const headerHeight = Math.max(14, Math.min(56, Math.floor((Number(cfg.headerMinHeight.xlarge || "32") || 32) / 3)));
   const headerPreviewImage = resolveUrl ? resolveUrl(cfg.headerImageSrc.xlarge) : toRenderableAssetUrl(cfg.headerImageSrc.xlarge);
