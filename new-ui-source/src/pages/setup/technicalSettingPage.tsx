@@ -7,10 +7,19 @@ import {
   updateCourseTechnicalSettings,
   type CourseTechnicalSettings,
 } from "../../api/adaptAuthoring";
+import InfoIcon, { InfoFieldLabel } from "../../components/common/InfoIcon";
 import { usePageLoader } from "../../hooks";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 import { CheckboxIndicator } from "../../components/common/Checkbox";
+import {
+  getConfigRootSchema,
+  getCourseRootSchema,
+  getSchemaHint,
+  getSchemaLabel,
+  getSchemaNode,
+  type SetupSchemaNode,
+} from "../../helpers/setupInfoSchema";
 
 const LOG_LEVEL_OPTIONS = ["debug", "info", "warn", "error", "fatal"];
 
@@ -170,7 +179,7 @@ function CustomCssEditor({ value, onChange, expanded }: { value: string; onChang
 
 type TechnicalAccordion = "display" | "assistive" | "runtime";
 
-function TsAccordion({ title, open, onToggle, children }: { title: string; open: boolean; onToggle: () => void; children: React.ReactNode }) {
+function TsAccordion({ title, hint, open, onToggle, children }: { title: string; hint?: string; open: boolean; onToggle: () => void; children: React.ReactNode }) {
   return (
     <div className="border border-[#e5e7eb] rounded-xl overflow-hidden bg-white">
       <button
@@ -178,7 +187,7 @@ function TsAccordion({ title, open, onToggle, children }: { title: string; open:
         onClick={onToggle}
         className="group w-full flex items-center justify-between gap-3 px-5 py-4 text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors cursor-pointer"
       >
-        <span className="text-sm font-semibold text-current">{title}</span>
+        <span className="text-sm font-semibold text-current flex items-center gap-1.5">{title}{hint ? <InfoIcon label={title} hint={hint} /> : null}</span>
         <svg
           width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
           strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
@@ -192,8 +201,8 @@ function TsAccordion({ title, open, onToggle, children }: { title: string; open:
   );
 }
 
-function TsDropdown({ label, value, options, onChange }: {
-  label: string; value: string; options: string[]; onChange: (v: string) => void;
+function TsDropdown({ label, hint, value, options, onChange }: {
+  label: string; hint?: string; value: string; options: string[]; onChange: (v: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -234,7 +243,7 @@ function TsDropdown({ label, value, options, onChange }: {
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label className="text-sm font-semibold text-[#374151]">{label}</label>
+      <InfoFieldLabel label={label} hint={hint} className="text-[#374151]" />
       <div className="relative">
         <button
           ref={btnRef}
@@ -279,7 +288,7 @@ function TsDropdown({ label, value, options, onChange }: {
   );
 }
 
-function TsCheckbox({ id, label, description, checked, onChange }: { id: string; label: string; description?: string; checked: boolean; onChange: (v: boolean) => void }) {
+function TsCheckbox({ id, label, hint, description, checked, onChange }: { id: string; label: string; hint?: string; description?: string; checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <label htmlFor={id} className="flex items-start gap-3 cursor-pointer select-none group">
       <input
@@ -292,7 +301,7 @@ function TsCheckbox({ id, label, description, checked, onChange }: { id: string;
       />
       <CheckboxIndicator checked={checked} className="mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
       <div className="flex flex-col gap-0.5">
-        <span className="text-sm font-semibold text-[#374151]">{label}</span>
+        <span className="text-sm font-semibold text-[#374151]">{label}{hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
         {description && <span className="text-[13px] text-[var(--life-neutral-300)]">{description}</span>}
       </div>
     </label>
@@ -328,6 +337,8 @@ export function TechnicalSettingPage({
 
   const [isLoading, setIsLoading] = useState(true);
   usePageLoader(isLoading);
+  const [configSchema, setConfigSchema] = useState<SetupSchemaNode | null>(null);
+  const [courseSchema, setCourseSchema] = useState<SetupSchemaNode | null>(null);
   const [configId, setConfigId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -457,6 +468,22 @@ export function TechnicalSettingPage({
 
     loadSettings();
   }, [courseId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([getConfigRootSchema(), getCourseRootSchema()])
+      .then(([nextConfigSchema, nextCourseSchema]) => {
+        if (cancelled) return;
+        setConfigSchema(nextConfigSchema);
+        setCourseSchema(nextCourseSchema);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setConfigSchema(null);
+        setCourseSchema(null);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleSave = async () => {
     console.log("[TechnicalSettings] handleSave called — courseId:", courseId, "configId:", configId);
@@ -607,7 +634,7 @@ export function TechnicalSettingPage({
       ) : (
         <>
           <div className="flex flex-col gap-4">
-            <TsAccordion title="Display & Responsiveness" open={openAccordion === "display"} onToggle={() => setOpenAccordion((current) => current === "display" ? "" : "display")}>
+            <TsAccordion title="Display & Responsiveness" hint={getSchemaHint(getSchemaNode(configSchema, "screenSize"))} open={openAccordion === "display"} onToggle={() => setOpenAccordion((current) => current === "display" ? "" : "display")}>
               <div className="flex flex-col gap-3">
                 <div>
                   <p className="text-[13px] font-bold text-[var(--life-base-black)]">Screen Size</p>
@@ -615,67 +642,70 @@ export function TechnicalSettingPage({
                 </div>
                 <div className="flex flex-col gap-2">
                   <div className="flex flex-col gap-1">
-                    <label className="text-[13px] font-normal text-[var(--life-base-black)]">Small</label>
+                    <InfoFieldLabel label={getSchemaLabel(getSchemaNode(configSchema, "screenSize", "small"), "Small")} hint={getSchemaHint(getSchemaNode(configSchema, "screenSize", "small"))} className="text-[var(--life-base-black)] font-normal" />
                     <input type="number" value={smallBp} onChange={(e) => setSmallBp(Number(e.target.value))} placeholder="0" className="w-full text-sm text-[#374151] border border-[#d1d5db] rounded-[8px] px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent" style={{ borderRadius: 8 }} />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-[13px] font-normal text-[var(--life-base-black)]">Medium</label>
+                    <InfoFieldLabel label={getSchemaLabel(getSchemaNode(configSchema, "screenSize", "medium"), "Medium")} hint={getSchemaHint(getSchemaNode(configSchema, "screenSize", "medium"))} className="text-[var(--life-base-black)] font-normal" />
                     <input type="number" value={mediumBp} onChange={(e) => setMediumBp(Number(e.target.value))} placeholder="720" className="w-full text-sm text-[#374151] border border-[#d1d5db] rounded-[8px] px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent" style={{ borderRadius: 8 }} />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-[13px] font-normal text-[var(--life-base-black)]">Large</label>
+                    <InfoFieldLabel label={getSchemaLabel(getSchemaNode(configSchema, "screenSize", "large"), "Large")} hint={getSchemaHint(getSchemaNode(configSchema, "screenSize", "large"))} className="text-[var(--life-base-black)] font-normal" />
                     <input type="number" value={largeBp} onChange={(e) => setLargeBp(Number(e.target.value))} placeholder="960" className="w-full text-sm text-[#374151] border border-[#d1d5db] rounded-[8px] px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent" style={{ borderRadius: 8 }} />
                   </div>
                   <div className="flex flex-col gap-1">
-                    <label className="text-[13px] font-normal text-[var(--life-base-black)]">Extra Large</label>
+                    <InfoFieldLabel label={getSchemaLabel(getSchemaNode(configSchema, "screenSize", "xlarge"), "Extra Large")} hint={getSchemaHint(getSchemaNode(configSchema, "screenSize", "xlarge"))} className="text-[var(--life-base-black)] font-normal" />
                     <input type="number" value={xlBp} onChange={(e) => setXlBp(Number(e.target.value))} placeholder="1280" className="w-full text-sm text-[#374151] border border-[#d1d5db] rounded-[8px] px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent" style={{ borderRadius: 8 }} />
                   </div>
                 </div>
               </div>
             </TsAccordion>
 
-            <TsAccordion title="Assistive & Embedded Experience" open={openAccordion === "assistive"} onToggle={() => setOpenAccordion((current) => current === "assistive" ? "" : "assistive")}>
+            <TsAccordion title="Assistive & Embedded Experience" hint={getSchemaHint(getSchemaNode(configSchema, "_scrollingContainer"))} open={openAccordion === "assistive"} onToggle={() => setOpenAccordion((current) => current === "assistive" ? "" : "assistive")}>
               <p className="text-[13px] text-[var(--life-neutral-300)] mb-[6px]">Control how your course behaves in assistive and embedded environments (LMS iframes, WebViews).</p>
               <div className="flex flex-col gap-4">
-                <TsCheckbox id="ts-opt-scroll" label="Enable optimized scroll for iFrames" description="Improves scroll behavior when the course is embedded inside an iframe." checked={optimizedScroll} onChange={setOptimizedScroll} />
-                <TsCheckbox id="ts-src-maps" label="Generate source maps" description="Ships source maps with the build so devtools can trace runtime issues." checked={sourceMaps} onChange={setSourceMaps} />
+                <TsCheckbox id="ts-opt-scroll" label={getSchemaLabel(getSchemaNode(configSchema, "_scrollingContainer", "_isEnabled"), "Enable optimized scroll for iFrames")} hint={getSchemaHint(getSchemaNode(configSchema, "_scrollingContainer", "_isEnabled"))} description="Improves scroll behavior when the course is embedded inside an iframe." checked={optimizedScroll} onChange={setOptimizedScroll} />
+                <TsCheckbox id="ts-src-maps" label={getSchemaLabel(getSchemaNode(configSchema, "_generateSourcemap"), "Generate source maps")} hint={getSchemaHint(getSchemaNode(configSchema, "_generateSourcemap"))} description="Ships source maps with the build so devtools can trace runtime issues." checked={sourceMaps} onChange={setSourceMaps} />
               </div>
             </TsAccordion>
 
-            <TsAccordion title="Runtime Behavior" open={openAccordion === "runtime"} onToggle={() => setOpenAccordion((current) => current === "runtime" ? "" : "runtime")}>
+            <TsAccordion title="Runtime Behavior" hint={getSchemaHint(getSchemaNode(configSchema, "_logging"))} open={openAccordion === "runtime"} onToggle={() => setOpenAccordion((current) => current === "runtime" ? "" : "runtime")}>
               <p className="text-[13px] text-[var(--life-neutral-300)] mb-[6px]">Configure how your course operates when run.</p>
               <div className="flex flex-col gap-4">
                 <div className="flex flex-col gap-3">
                   <TsCheckbox
                     id="ts-logging"
-                    label="Enable logging"
+                    label={getSchemaLabel(getSchemaNode(configSchema, "_logging", "_isEnabled"), "Enable logging")}
+                    hint={getSchemaHint(getSchemaNode(configSchema, "_logging", "_isEnabled"))}
                     description="Emit runtime logs to the browser console for debugging. Enforces strict browser behaviour. Not recommended for legacy IE / Edge."
                     checked={enableLogging}
                     onChange={setEnableLogging}
                   />
                   <div className="pl-7">
-                    <TsDropdown label="Log Level" value={logLevel} options={LOG_LEVEL_OPTIONS} onChange={setLogLevel} />
+                    <TsDropdown label={getSchemaLabel(getSchemaNode(configSchema, "_logging", "_level"), "Log Level")} hint={getSchemaHint(getSchemaNode(configSchema, "_logging", "_level"))} value={logLevel} options={LOG_LEVEL_OPTIONS} onChange={setLogLevel} />
                   </div>
                   <div className="flex flex-col gap-3">
                     <TsCheckbox
                       id="ts-log-console"
-                      label="Log to browser console?"
+                      label={getSchemaLabel(getSchemaNode(configSchema, "_logging", "_console"), "Log to browser console?")}
+                      hint={getSchemaHint(getSchemaNode(configSchema, "_logging", "_console"))}
                       description="Writes runtime logging messages to the browser console."
                       checked={logToConsole}
                       onChange={setLogToConsole}
                     />
                     <TsCheckbox
                       id="ts-warn-first"
-                      label="Show only first deprecated and removed warnings?"
+                      label={getSchemaLabel(getSchemaNode(configSchema, "_logging", "_warnFirstOnly"), "Show only first deprecated and removed warnings?")}
+                      hint={getSchemaHint(getSchemaNode(configSchema, "_logging", "_warnFirstOnly"))}
                       description="Limits deprecated and removed warnings to the first occurrence of each warning."
                       checked={warnFirstOnly}
                       onChange={setWarnFirstOnly}
                     />
                   </div>
                 </div>
-                <TsCheckbox id="ts-strict" label="Use strict mode?" checked={strictMode} onChange={setStrictMode} />
+                <TsCheckbox id="ts-strict" label={getSchemaLabel(getSchemaNode(configSchema, "build", "strictMode"), "Use strict mode?")} hint={getSchemaHint(getSchemaNode(configSchema, "build", "strictMode"))} checked={strictMode} onChange={setStrictMode} />
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-semibold text-[#374151]">Supported browsers override</label>
+                  <InfoFieldLabel label={getSchemaLabel(getSchemaNode(configSchema, "build", "targets"), "Supported browsers override")} hint={getSchemaHint(getSchemaNode(configSchema, "build", "targets"))} className="text-[#374151]" />
                   <p className="text-[13px] text-[var(--life-neutral-300)] mt-[4px] mb-[4px]">Override the browser targets used when the course is built.</p>
                   <input
                     type="text"
@@ -691,7 +721,7 @@ export function TechnicalSettingPage({
             {cssExpanded && <div className="fixed inset-0 z-40 bg-[rgba(26,26,26,0.5)]" aria-hidden="true" />}
             <div className={`border border-[var(--life-neutral-200)] rounded-lg bg-white overflow-hidden shadow-[0px_2px_4px_0px_rgba(0,0,0,0.15)] ${cssExpanded ? "fixed inset-8 z-50 flex flex-col" : ""}`}>
               <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--life-neutral-200)] bg-[var(--life-neutral-020)] shrink-0">
-                <span className="text-sm font-semibold text-[#111827]">Custom CSS/LESS</span>
+                <span className="text-sm font-semibold text-[#111827] flex items-center gap-1.5">{getSchemaLabel(getSchemaNode(courseSchema, "customStyle"), "Custom CSS/LESS")}{getSchemaHint(getSchemaNode(courseSchema, "customStyle")) ? <InfoIcon label="Custom CSS/LESS" hint={getSchemaHint(getSchemaNode(courseSchema, "customStyle"))} /> : null}</span>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"

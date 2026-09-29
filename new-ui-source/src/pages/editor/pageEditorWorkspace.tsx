@@ -6,6 +6,7 @@ import templateIconSvgRaw from "../../../public/assets/icons/template-icon.svg?r
 import AddComponentDrawer from "../../components/course/AddComponentDrawer";
 import AddTemplateDrawer from "../../components/course/AddTemplateDrawer";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
+import InfoIcon from "../../components/common/InfoIcon";
 import RichTextEditor from "../../components/common/RichTextEditor";
 import AiAssistPopover from "../../components/storyboard/AiAssistPopover";
 import {
@@ -54,6 +55,7 @@ import {
   getCourseStructure,
   getExtensionSchemasByLevel,
   getExtensionTypeOptions,
+  getMergedContentSchema,
   getNavigationSettings,
   getThemeSettingsSchemaByLevel,
   getMenuSettingsSchemaByLevel,
@@ -93,6 +95,7 @@ import {
   NEW_TOPIC_TITLE,
 } from "../../constants/structureDefaults";
 import { useAuth } from "../../context/AuthContext";
+import { getSchemaHint, getSchemaLabel, getSchemaNode } from "../../helpers/setupInfoSchema";
 
 interface PreviewBuildResponse {
   success?: boolean;
@@ -787,6 +790,7 @@ function BehaviourField({
   getArrayItemDefaults?: (path: string, itemSchema: BehaviourFieldSchema | undefined) => Record<string, unknown>;
 }) {
   const label = fieldSchema.legend || fieldSchema.title || formatBehaviourFieldName(fieldName);
+  const hint = typeof fieldSchema.help === "string" && fieldSchema.help.trim().length ? fieldSchema.help : undefined;
   const isRequired = isBehaviourFieldRequired(fieldSchema);
   const type = fieldSchema.type;
   const inputTypeStr = typeof fieldSchema.inputType === "string" ? fieldSchema.inputType : undefined;
@@ -845,7 +849,7 @@ function BehaviourField({
     if (hasEnabledToggle) {
       return (
         <TopicEnabledNestedAccordion
-          title={<>{label}{isRequired && <span className="text-[#dc2626] ml-0.5">*</span>}</>}
+          title={<span className="inline-flex items-center gap-1.5">{label}{hint ? <InfoIcon label={label} hint={hint} /> : null}{isRequired && <span className="text-[#dc2626] ml-0.5">*</span>}</span>}
           enabled={objectValue._isEnabled !== false}
           onEnabledChange={(enabled) => onChange(`${path}._isEnabled`, enabled)}
         >
@@ -854,7 +858,7 @@ function BehaviourField({
       );
     }
     return (
-      <TopicNestedAccordion title={<>{label}{isRequired && <span className="text-[#dc2626] ml-0.5">*</span>}</>}>
+      <TopicNestedAccordion title={<span className="inline-flex items-center gap-1.5">{label}{hint ? <InfoIcon label={label} hint={hint} /> : null}{isRequired && <span className="text-[#dc2626] ml-0.5">*</span>}</span>}>
         {fields}
       </TopicNestedAccordion>
     );
@@ -886,7 +890,7 @@ function BehaviourField({
 
     return (
       <div className="flex flex-col gap-2">
-        <TopicFieldLabel required={isRequired}>{label}</TopicFieldLabel>
+        <TopicFieldLabel required={isRequired} hint={hint}>{label}</TopicFieldLabel>
         {items.map((item, index) => {
           const isOpen = openItemIndex === index;
           const itemTitle = pickBehaviourItemTitle(item, itemSchema, index);
@@ -962,6 +966,7 @@ function BehaviourField({
                   })() : (
                     <TopicTextInput
                       label="Value"
+                      hint={hint}
                       value={typeof item === "string" ? item : item === undefined || item === null ? "" : String(item)}
                       onChange={(v) => onChange(`${path}[${index}]`, v)}
                     />
@@ -1001,13 +1006,14 @@ function BehaviourField({
   }
 
   if (type === "boolean") {
-    return <TopicCheckbox label={label} required={isRequired} checked={!!value} onChange={(checked) => onChange(path, checked)} />;
+    return <TopicCheckbox label={label} hint={hint} required={isRequired} checked={!!value} onChange={(checked) => onChange(path, checked)} />;
   }
 
   if (inputTypeStr === "ColourPicker") {
     return (
       <TopicColorField
         label={label}
+        hint={hint}
         value={asString(value)}
         onChange={(v) => onChange(path, v)}
         paletteRows={fieldSchema.extra?.palette ?? LIFE_PALETTE_ROWS}
@@ -1019,6 +1025,7 @@ function BehaviourField({
     return (
       <TopicRadioGroup
         label={label}
+        hint={hint}
         required={isRequired}
         value={value !== undefined && value !== null ? String(value) : ""}
         onChange={(v) => onChange(path, v)}
@@ -1031,6 +1038,7 @@ function BehaviourField({
     return (
       <TopicSelect
         label={label}
+        hint={hint}
         required={isRequired}
         value={value !== undefined && value !== null ? String(value) : ""}
         onChange={(v) => onChange(path, v)}
@@ -1043,6 +1051,7 @@ function BehaviourField({
     return (
       <TopicTextInput
         label={label}
+        hint={hint}
         required={isRequired}
         type="number"
         value={value !== undefined && value !== null ? String(value) : ""}
@@ -1056,6 +1065,7 @@ function BehaviourField({
     return (
       <div className="flex flex-col gap-1.5">
         <TopicFieldLabel required={isRequired}>{label}</TopicFieldLabel>
+        {hint ? <div className="-mt-1"><span className="inline-flex items-center gap-1.5 text-[11px] text-[#64748b]">More info<InfoIcon label={label} hint={hint} /></span></div> : null}
         <textarea
           defaultValue={textValue}
           onBlur={(event) => {
@@ -1083,6 +1093,7 @@ function BehaviourField({
     return (
       <div className="flex flex-col gap-1.5">
         <TopicFieldLabel required={isRequired}>{label}</TopicFieldLabel>
+        {hint ? <div className="-mt-1"><span className="inline-flex items-center gap-1.5 text-[11px] text-[#64748b]">More info<InfoIcon label={label} hint={hint} /></span></div> : null}
         <RichTextEditor value={asString(value)} onChange={(html) => onChange(path, html)} />
       </div>
     );
@@ -1091,6 +1102,7 @@ function BehaviourField({
   return (
     <TopicTextInput
       label={label}
+      hint={hint}
       required={isRequired}
       value={typeof value === "string" ? value : value === undefined || value === null ? "" : String(value)}
       onChange={(v) => onChange(path, v)}
@@ -1380,7 +1392,7 @@ function ExtensionListItem({
               <polyline points="9 18 15 12 9 6" />
             </svg>
           )}
-          <span title={displayName} className="truncate text-[12px] font-semibold text-[var(--life-base-black)]">{displayName}</span>
+          <span title={displayName} className="truncate text-[12px] font-semibold text-[var(--life-base-black)] inline-flex items-center gap-1.5">{displayName}{typeof fieldSchema?.help === "string" && fieldSchema.help.trim().length ? <InfoIcon label={displayName} hint={fieldSchema.help} /> : null}</span>
         </button>
         {inheritanceTag === "overridden" && (
           <span title="Overridden" className="shrink-0 px-1 py-0.5 rounded-full text-[9px] leading-none font-semibold bg-[#f3e8ff] text-[#7c3aed]">Overridden</span>
@@ -1948,10 +1960,11 @@ function TopicEnabledNestedAccordion({
   );
 }
 
-function TopicFieldLabel({ children, required }: { children: React.ReactNode; required?: boolean }) {
+function TopicFieldLabel({ children, required, hint }: { children: React.ReactNode; required?: boolean; hint?: string }) {
   return (
-    <span className="text-[11px] font-semibold text-[#374151]">
+    <span className="text-[11px] font-semibold text-[#374151] inline-flex items-center gap-1.5">
       {children}
+      {hint ? <InfoIcon label={typeof children === "string" ? children : "field"} hint={hint} /> : null}
       {required && <span className="text-[#dc2626] ml-0.5">*</span>}
     </span>
   );
@@ -1959,6 +1972,7 @@ function TopicFieldLabel({ children, required }: { children: React.ReactNode; re
 
 function TopicTextInput({
   label,
+  hint,
   value,
   onChange,
   placeholder,
@@ -1967,6 +1981,7 @@ function TopicTextInput({
   required = false,
 }: {
   label: string;
+  hint?: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
@@ -1976,7 +1991,7 @@ function TopicTextInput({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <TopicFieldLabel required={required}>{label}</TopicFieldLabel>
+      <TopicFieldLabel required={required} hint={hint}>{label}</TopicFieldLabel>
       <input
         type={type}
         value={value}
@@ -2021,12 +2036,14 @@ function TopicTitleField({
   value,
   onChange,
   onDraftChange,
+  hint,
 }: {
   value: string;
   onChange: (value: string) => void;
   // Fires on every keystroke, including blank ones that onChange skips —
   // lets the canvas mirror the panel's literal text (blank included) live.
   onDraftChange?: (value: string) => void;
+  hint?: string;
 }) {
   const [draft, setDraft] = useState(value);
   const [showWarning, setShowWarning] = useState(false);
@@ -2060,7 +2077,7 @@ function TopicTitleField({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <TopicFieldLabel>Title</TopicFieldLabel>
+      <TopicFieldLabel hint={hint}>Title</TopicFieldLabel>
       <input
         type="text"
         value={draft}
@@ -2110,11 +2127,13 @@ function TopicTitleField({
 // group levels).
 function TopicNumberStepper({
   label,
+  hint,
   value,
   onChange,
   min,
 }: {
   label: string;
+  hint?: string;
   value: string;
   onChange: (value: string) => void;
   min?: number;
@@ -2128,7 +2147,7 @@ function TopicNumberStepper({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <TopicFieldLabel>{label}</TopicFieldLabel>
+      <TopicFieldLabel hint={hint}>{label}</TopicFieldLabel>
       <div className="relative">
         <input
           type="number"
@@ -2161,6 +2180,7 @@ function TopicNumberStepper({
 
 function TopicSelect({
   label,
+  hint,
   value,
   onChange,
   options,
@@ -2168,6 +2188,7 @@ function TopicSelect({
   required = false,
 }: {
   label: string;
+  hint?: string;
   value: string;
   onChange: (value: string) => void;
   options: readonly string[];
@@ -2181,7 +2202,7 @@ function TopicSelect({
   const needsBlankOption = !options.includes(value);
   return (
     <div className="flex flex-col gap-1.5">
-      <TopicFieldLabel required={required}>{label}</TopicFieldLabel>
+      <TopicFieldLabel required={required} hint={hint}>{label}</TopicFieldLabel>
       <div className="relative">
         <select
           value={value}
@@ -2203,11 +2224,13 @@ function TopicSelect({
 
 function TopicCheckbox({
   label,
+  hint,
   checked,
   onChange,
   required = false,
 }: {
   label: string;
+  hint?: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
   required?: boolean;
@@ -2222,19 +2245,21 @@ function TopicCheckbox({
         className="sr-only peer"
       />
       <CheckboxIndicator checked={checked} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
-      <span>{label}{required && <span className="text-[#dc2626] ml-0.5">*</span>}</span>
+      <span className="inline-flex items-center gap-1.5">{label}{hint ? <InfoIcon label={label} hint={hint} /> : null}{required && <span className="text-[#dc2626] ml-0.5">*</span>}</span>
     </label>
   );
 }
 
 function TopicRadioGroup({
   label,
+  hint,
   value,
   onChange,
   options,
   required = false,
 }: {
   label: string;
+  hint?: string;
   value: string;
   onChange: (value: string) => void;
   options: BehaviourOptionPair[];
@@ -2243,7 +2268,7 @@ function TopicRadioGroup({
   const groupName = useId();
   return (
     <div className="flex flex-col gap-1.5">
-      <TopicFieldLabel required={required}>{label}</TopicFieldLabel>
+      <TopicFieldLabel required={required} hint={hint}>{label}</TopicFieldLabel>
       <div className="flex flex-col gap-1.5">
         {options.map((option) => (
           <label key={option.value} className="flex items-center gap-1.5 text-[13px] text-[#111827] cursor-pointer">
@@ -2321,11 +2346,13 @@ function hsvToHex(h: number, s: number, v: number): string {
 
 function TopicColorField({
   label,
+  hint,
   value,
   onChange,
   paletteRows = [],
 }: {
   label: string;
+  hint?: string;
   value: string;
   onChange: (value: string) => void;
   paletteRows?: readonly (readonly string[])[];
@@ -2441,7 +2468,7 @@ function TopicColorField({
 
   return (
     <div className="flex flex-col gap-1">
-      <TopicFieldLabel>{label}</TopicFieldLabel>
+      <TopicFieldLabel hint={hint}>{label}</TopicFieldLabel>
       <button
         ref={triggerRef}
         type="button"
@@ -3530,6 +3557,17 @@ export default function CourseEditor({
   const [courseExtensions, setCourseExtensions] = useState<Record<string, unknown>>({});
   const [themeSettingsSchemaByLevel, setThemeSettingsSchemaByLevel] = useState<Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>> | null>(null);
   const [menuSettingsSchemaByLevel, setMenuSettingsSchemaByLevel] = useState<Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>> | null>(null);
+  const [contentSchemaByLevel, setContentSchemaByLevel] = useState<{
+    contentobject: Record<string, unknown> | null;
+    article: Record<string, unknown> | null;
+    block: Record<string, unknown> | null;
+    component: Record<string, unknown> | null;
+  }>({
+    contentobject: null,
+    article: null,
+    block: null,
+    component: null,
+  });
   const [componentExtensionSchemas, setComponentExtensionSchemas] = useState<Record<string, Record<string, ExtensionFieldSchema>>>({});
   usePageLoader(isLoadingStructure);
   const [extensionTypeOptions, setExtensionTypeOptions] = useState<ExtensionTypeOption[]>([]);
@@ -3954,6 +3992,19 @@ export default function CourseEditor({
       })
       .catch((err) => {
         console.warn("Failed to load theme/menu settings schemas", err);
+      });
+    void Promise.all([
+      getMergedContentSchema("contentobject"),
+      getMergedContentSchema("article"),
+      getMergedContentSchema("block"),
+      getMergedContentSchema("component"),
+    ])
+      .then(([contentobject, article, block, component]) => {
+        if (cancelled) return;
+        setContentSchemaByLevel({ contentobject, article, block, component });
+      })
+      .catch((err) => {
+        console.warn("Failed to load content schemas", err);
       });
     return () => {
       cancelled = true;
@@ -10159,6 +10210,30 @@ export default function CourseEditor({
     return Object.prototype.hasOwnProperty.call(fields, fieldKey);
   }
 
+  type EditorContentSchemaLevel = "contentobject" | "article" | "block" | "component";
+
+  function getContentFieldSchema(level: EditorContentSchemaLevel, ...path: string[]) {
+    return getSchemaNode(contentSchemaByLevel[level], ...path);
+  }
+
+  function getContentFieldSchemaWithAliases(level: EditorContentSchemaLevel, ...candidatePaths: string[][]) {
+    for (const path of candidatePaths) {
+      const node = getContentFieldSchema(level, ...path);
+      if (node) return node;
+    }
+    return undefined;
+  }
+
+  function getThemeFieldSchema(level: ExtensionSchemaLevel, ...path: string[]) {
+    const fields = findAppliedPluginSchemaFields(themeSettingsSchemaByLevel?.[level], courseTheme);
+    return getSchemaNode(fields, ...path);
+  }
+
+  function getMenuFieldSchema(level: ExtensionSchemaLevel, ...path: string[]) {
+    const fields = findAppliedPluginSchemaFields(menuSettingsSchemaByLevel?.[level], courseMenu);
+    return getSchemaNode(fields, ...path);
+  }
+
   function resolveThemeSettingsKey(settings: Record<string, unknown>, level?: ExtensionSchemaLevel) {
     // Authoritative source first: the schema entry whose `.name` matches the
     // currently applied theme carries its OWN real key (e.g. "_life-v2"),
@@ -12246,12 +12321,14 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                               <p className="text-xs text-[#6b7280]">Unique identifier for this topic. Click to copy.</p>
                             </div>
                             <TopicTitleField
+                                  hint={getSchemaHint(getContentFieldSchema("contentobject", "title"))}
                               value={canvasTitleLiveOverride ?? page.title}
                               onChange={(value) => updatePageData(page.id, { title: value })}
                               onDraftChange={(value) => writeLiveTitleDraftToCanvas("topic", { pageId: page.id }, value)}
                             />
                             <TopicCheckbox
                               label="Display title in preview"
+                                  hint={getSchemaHint(getContentFieldSchema("contentobject", "displayTitle"))}
                               checked={!!page.showDisplayTitleInPreview}
                               onChange={(checked) => updatePageData(page.id, { showDisplayTitleInPreview: checked })}
                             />
@@ -12276,14 +12353,14 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                           </TopicAccordion>
 
                           <TopicAccordion title="Availability & Progression" open={!!openTopicAccordions.availability} onToggle={(triggerEl) => toggleTopicAccordion("availability", triggerEl)}>
-                            <TopicCheckbox label="Is this optional?" checked={!!page.isOptional} onChange={(checked) => updatePageData(page.id, { isOptional: checked })} />
-                            <TopicCheckbox label="Is this available?" checked={!!page.isAvailable} onChange={(checked) => updatePageData(page.id, { isAvailable: checked })} />
-                            <TopicCheckbox label="Is this hidden?" checked={!!page.isHidden} onChange={(checked) => updatePageData(page.id, { isHidden: checked })} />
-                            <TopicCheckbox label="Is this visible?" checked={!!page.isVisible} onChange={(checked) => updatePageData(page.id, { isVisible: checked })} />
-                            <TopicTextInput label="Duration" value={page.duration} onChange={(value) => updatePageData(page.id, { duration: value })} />
-                            <TopicTextInput label="Button link text" value={page.linkText} onChange={(value) => updatePageData(page.id, { linkText: value })} />
-                            <TopicSelect label="Menu lock type" value={page.lockType} onChange={(value) => updatePageData(page.id, { lockType: value })} options={LOCK_TYPE_OPTIONS} emptyOptionLabel="" />
-                            <TopicNumberStepper label="Require completion of" min={-1} value={page.requireCompletionOf} onChange={(value) => updatePageData(page.id, { requireCompletionOf: value })} />
+                            <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("contentobject", "_isOptional"), "Is this optional?")} hint={getSchemaHint(getContentFieldSchema("contentobject", "_isOptional"))} checked={!!page.isOptional} onChange={(checked) => updatePageData(page.id, { isOptional: checked })} />
+                            <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("contentobject", "_isAvailable"), "Is this available?")} hint={getSchemaHint(getContentFieldSchema("contentobject", "_isAvailable"))} checked={!!page.isAvailable} onChange={(checked) => updatePageData(page.id, { isAvailable: checked })} />
+                            <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("contentobject", "_isHidden"), "Is this hidden?")} hint={getSchemaHint(getContentFieldSchema("contentobject", "_isHidden"))} checked={!!page.isHidden} onChange={(checked) => updatePageData(page.id, { isHidden: checked })} />
+                            <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("contentobject", "_isVisible"), "Is this visible?")} hint={getSchemaHint(getContentFieldSchema("contentobject", "_isVisible"))} checked={!!page.isVisible} onChange={(checked) => updatePageData(page.id, { isVisible: checked })} />
+                            <TopicTextInput label={getSchemaLabel(getContentFieldSchema("contentobject", "duration"), "Duration")} hint={getSchemaHint(getContentFieldSchema("contentobject", "duration"))} value={page.duration} onChange={(value) => updatePageData(page.id, { duration: value })} />
+                            <TopicTextInput label={getSchemaLabel(getContentFieldSchema("contentobject", "linkText"), "Button link text")} hint={getSchemaHint(getContentFieldSchema("contentobject", "linkText"))} value={page.linkText} onChange={(value) => updatePageData(page.id, { linkText: value })} />
+                            <TopicSelect label={getSchemaLabel(getContentFieldSchema("contentobject", "_lockType"), "Menu lock type")} hint={getSchemaHint(getContentFieldSchema("contentobject", "_lockType"))} value={page.lockType} onChange={(value) => updatePageData(page.id, { lockType: value })} options={LOCK_TYPE_OPTIONS} emptyOptionLabel="" />
+                            <TopicNumberStepper label={getSchemaLabel(getContentFieldSchemaWithAliases("contentobject", ["_requireCompletionOf"], ["requireCompletionOf"], ["requirecompletionof"]), "Require completion of")} hint={getSchemaHint(getContentFieldSchemaWithAliases("contentobject", ["_requireCompletionOf"], ["requireCompletionOf"], ["requirecompletionof"]))} min={-1} value={page.requireCompletionOf} onChange={(value) => updatePageData(page.id, { requireCompletionOf: value })} />
                             <TopicTextInput
                               label="Locked by"
                               value={page.lockedBy.join(", ")}
@@ -12295,11 +12372,12 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
 
                           <TopicAccordion title="Accessibility" open={!!openTopicAccordions.accessibility} onToggle={(triggerEl) => toggleTopicAccordion("accessibility", triggerEl)}>
                             <TopicCheckbox
-                              label="Enable accessibility completion description"
+                              label={getSchemaLabel(getContentFieldSchema("contentobject", "_isA11yCompletionDescriptionEnabled"), "Enable accessibility completion description")}
+                              hint={getSchemaHint(getContentFieldSchema("contentobject", "_isA11yCompletionDescriptionEnabled"))}
                               checked={page.isA11yCompletionDescriptionEnabled}
                               onChange={(checked) => updatePageData(page.id, { isA11yCompletionDescriptionEnabled: checked })}
                             />
-                            <TopicNumberStepper label="ARIA level" min={0} value={page.ariaLevel} onChange={(value) => updatePageData(page.id, { ariaLevel: value })} />
+                            <TopicNumberStepper label={getSchemaLabel(getContentFieldSchema("contentobject", "_ariaLevel"), "ARIA level")} hint={getSchemaHint(getContentFieldSchema("contentobject", "_ariaLevel"))} min={0} value={page.ariaLevel} onChange={(value) => updatePageData(page.id, { ariaLevel: value })} />
                           </TopicAccordion>
 
                           <TopicAccordion title="Extensions" open={!!openTopicAccordions.extensions} onToggle={(triggerEl) => toggleTopicAccordion("extensions", triggerEl)}>
@@ -12411,9 +12489,9 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                             )}
 
                             <TopicNestedAccordion title="Text alignment">
-                              <TopicSelect label="Title alignment" value={asString(pageHeaderTextAlignment._title)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _textAlignment: { ...asRecord(asRecord(current._pageHeader)._textAlignment), _title: value } } }))} options={TEXT_ALIGN_OPTIONS} />
-                              <TopicSelect label="Body alignment" value={asString(pageHeaderTextAlignment._body)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _textAlignment: { ...asRecord(asRecord(current._pageHeader)._textAlignment), _body: value } } }))} options={TEXT_ALIGN_OPTIONS} />
-                              <TopicSelect label="Instruction alignment" value={asString(pageHeaderTextAlignment._instruction)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _textAlignment: { ...asRecord(asRecord(current._pageHeader)._textAlignment), _instruction: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                              <TopicSelect label={getSchemaLabel(getThemeFieldSchema("contentobject", "_pageHeader", "_textAlignment", "_title"), "Title alignment")} hint={getSchemaHint(getThemeFieldSchema("contentobject", "_pageHeader", "_textAlignment", "_title"))} value={asString(pageHeaderTextAlignment._title)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _textAlignment: { ...asRecord(asRecord(current._pageHeader)._textAlignment), _title: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                              <TopicSelect label={getSchemaLabel(getThemeFieldSchema("contentobject", "_pageHeader", "_textAlignment", "_body"), "Body alignment")} hint={getSchemaHint(getThemeFieldSchema("contentobject", "_pageHeader", "_textAlignment", "_body"))} value={asString(pageHeaderTextAlignment._body)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _textAlignment: { ...asRecord(asRecord(current._pageHeader)._textAlignment), _body: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                              <TopicSelect label={getSchemaLabel(getThemeFieldSchema("contentobject", "_pageHeader", "_textAlignment", "_instruction"), "Instruction alignment")} hint={getSchemaHint(getThemeFieldSchema("contentobject", "_pageHeader", "_textAlignment", "_instruction"))} value={asString(pageHeaderTextAlignment._instruction)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _textAlignment: { ...asRecord(asRecord(current._pageHeader)._textAlignment), _instruction: value } } }))} options={TEXT_ALIGN_OPTIONS} />
                             </TopicNestedAccordion>
 
                             <TopicNestedAccordion title="Topic header background image">
@@ -12437,7 +12515,8 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                             </TopicNestedAccordion>
                             <TopicNestedAccordion title="On-screen classes">
                               <TopicCheckbox
-                                label="Enabled?"
+                                label={getSchemaLabel(getContentFieldSchema("contentobject", "_onScreen", "_isEnabled"), "Enabled?")}
+                                hint={getSchemaHint(getContentFieldSchema("contentobject", "_onScreen", "_isEnabled"))}
                                 checked={asBoolean(page.onScreen?._isEnabled)}
                                 onChange={(checked) => updatePageData(page.id, {
                                   onScreen: {
@@ -12447,7 +12526,8 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                 })}
                               />
                               <TopicSelect
-                                label="Classes"
+                                label={getSchemaLabel(getContentFieldSchema("contentobject", "_onScreen", "_classes"), "Classes")}
+                                hint={getSchemaHint(getContentFieldSchema("contentobject", "_onScreen", "_classes"))}
                                 value={asString(page.onScreen?._classes)}
                                 onChange={(value) => updatePageData(page.id, {
                                   onScreen: {
@@ -12459,7 +12539,8 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                 emptyOptionLabel=""
                               />
                               <TopicTextInput
-                                label="Percent in view"
+                                label={getSchemaLabel(getContentFieldSchema("contentobject", "_onScreen", "_percentInviewVertical"), "Percent in view")}
+                                hint={getSchemaHint(getContentFieldSchema("contentobject", "_onScreen", "_percentInviewVertical"))}
                                 type="number"
                                 value={String(asNumberOrEmpty(page.onScreen?._percentInviewVertical))}
                                 onChange={(value) => updatePageData(page.id, {
@@ -12474,7 +12555,8 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
 
                           <TopicAccordion title="Menu Appearance" open={!!openTopicAccordions.menu} onToggle={(triggerEl) => toggleTopicAccordion("menu", triggerEl)}>
                             <TopicCheckbox
-                              label="Enable as menu group?"
+                              label={getSchemaLabel(getMenuFieldSchema("contentobject", "_renderAsGroup"), "Enable as menu group?")}
+                              hint={getSchemaHint(getMenuFieldSchema("contentobject", "_renderAsGroup"))}
                               checked={asBoolean(menuSettings._renderAsGroup)}
                               onChange={(checked) => updatePageMenuSettings(page.id, (current) => ({ ...current, _renderAsGroup: checked }))}
                             />
@@ -12494,8 +12576,8 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                           </TopicAccordion>
 
                           <TopicAccordion title="Advanced Settings" open={!!openTopicAccordions.advanced} onToggle={(triggerEl) => toggleTopicAccordion("advanced", triggerEl)}>
-                            <TopicTextInput label="Topic classes" value={page.classes} onChange={(value) => updatePageData(page.id, { classes: value })} />
-                            <TopicTextInput label="HTML classes" value={page.htmlClasses} onChange={(value) => updatePageData(page.id, { htmlClasses: value })} />
+                            <TopicTextInput label={getSchemaLabel(getContentFieldSchema("contentobject", "_classes"), "Topic classes")} hint={getSchemaHint(getContentFieldSchema("contentobject", "_classes"))} value={page.classes} onChange={(value) => updatePageData(page.id, { classes: value })} />
+                            <TopicTextInput label={getSchemaLabel(getContentFieldSchema("contentobject", "_htmlClasses"), "HTML classes")} hint={getSchemaHint(getContentFieldSchema("contentobject", "_htmlClasses"))} value={page.htmlClasses} onChange={(value) => updatePageData(page.id, { htmlClasses: value })} />
                             <TopicNestedAccordion title="Responsive classes">
                               <TopicTextInput label="_xlarge" value={asString(responsiveClasses._xlarge)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _xlarge: value } }))} />
                               <TopicTextInput label="_large" value={asString(responsiveClasses._large)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _large: value } }))} />
@@ -12570,12 +12652,14 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                   <p className="text-xs text-[#6b7280]">Unique identifier for this section. Click to copy.</p>
                                 </div>
                                 <TopicTitleField
+                                  hint={getSchemaHint(getContentFieldSchema("article", "title"))}
                                   value={canvasTitleLiveOverride ?? article.title}
                                   onChange={(value) => updateArticle(page!.id, article.id, { title: value })}
                                   onDraftChange={(value) => writeLiveTitleDraftToCanvas("section", { pageId: page!.id, articleId: article.id }, value)}
                                 />
                                 <TopicCheckbox
                                   label="Display title in preview"
+                                  hint={getSchemaHint(getContentFieldSchema("article", "displayTitle"))}
                                   checked={!!article.showDisplayTitleInPreview}
                                   onChange={(checked) => updateArticle(page!.id, article.id, { showDisplayTitleInPreview: checked })}
                                 />
@@ -12590,20 +12674,21 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                               </TopicAccordion>
 
                               <TopicAccordion title="Availability & Progression" open={!!openSectionAccordions.availability} onToggle={(triggerEl) => toggleSectionAccordion("availability", triggerEl)}>
-                                <TopicCheckbox label="Is this optional?" checked={!!article.isOptional} onChange={(checked) => updateArticle(page!.id, article.id, { isOptional: checked })} />
-                                <TopicCheckbox label="Is this available?" checked={!!article.isAvailable} onChange={(checked) => updateArticle(page!.id, article.id, { isAvailable: checked })} />
-                                <TopicCheckbox label="Is this hidden?" checked={!!article.isHidden} onChange={(checked) => updateArticle(page!.id, article.id, { isHidden: checked })} />
-                                <TopicCheckbox label="Is this visible?" checked={!!article.isVisible} onChange={(checked) => updateArticle(page!.id, article.id, { isVisible: checked })} />
-                                <TopicNumberStepper label="Require completion of" min={-1} value={article.requireCompletionOf} onChange={(value) => updateArticle(page!.id, article.id, { requireCompletionOf: value })} />
+                                <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("article", "_isOptional"), "Is this optional?")} hint={getSchemaHint(getContentFieldSchema("article", "_isOptional"))} checked={!!article.isOptional} onChange={(checked) => updateArticle(page!.id, article.id, { isOptional: checked })} />
+                                <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("article", "_isAvailable"), "Is this available?")} hint={getSchemaHint(getContentFieldSchema("article", "_isAvailable"))} checked={!!article.isAvailable} onChange={(checked) => updateArticle(page!.id, article.id, { isAvailable: checked })} />
+                                <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("article", "_isHidden"), "Is this hidden?")} hint={getSchemaHint(getContentFieldSchema("article", "_isHidden"))} checked={!!article.isHidden} onChange={(checked) => updateArticle(page!.id, article.id, { isHidden: checked })} />
+                                <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("article", "_isVisible"), "Is this visible?")} hint={getSchemaHint(getContentFieldSchema("article", "_isVisible"))} checked={!!article.isVisible} onChange={(checked) => updateArticle(page!.id, article.id, { isVisible: checked })} />
+                                <TopicNumberStepper label={getSchemaLabel(getContentFieldSchemaWithAliases("article", ["_requireCompletionOf"], ["requireCompletionOf"], ["requirecompletionof"]), "Require completion of")} hint={getSchemaHint(getContentFieldSchemaWithAliases("article", ["_requireCompletionOf"], ["requireCompletionOf"], ["requirecompletionof"]))} min={-1} value={article.requireCompletionOf} onChange={(value) => updateArticle(page!.id, article.id, { requireCompletionOf: value })} />
                               </TopicAccordion>
 
                               <TopicAccordion title="Accessibility" open={!!openSectionAccordions.accessibility} onToggle={(triggerEl) => toggleSectionAccordion("accessibility", triggerEl)}>
                                 <TopicCheckbox
-                                  label="Enable accessibility completion description"
+                                  label={getSchemaLabel(getContentFieldSchema("article", "_isA11yCompletionDescriptionEnabled"), "Enable accessibility completion description")}
+                                  hint={getSchemaHint(getContentFieldSchema("article", "_isA11yCompletionDescriptionEnabled"))}
                                   checked={article.isA11yCompletionDescriptionEnabled}
                                   onChange={(checked) => updateArticle(page!.id, article.id, { isA11yCompletionDescriptionEnabled: checked })}
                                 />
-                                <TopicNumberStepper label="ARIA level" min={0} value={article.ariaLevel} onChange={(value) => updateArticle(page!.id, article.id, { ariaLevel: value })} />
+                                <TopicNumberStepper label={getSchemaLabel(getContentFieldSchema("article", "_ariaLevel"), "ARIA level")} hint={getSchemaHint(getContentFieldSchema("article", "_ariaLevel"))} min={0} value={article.ariaLevel} onChange={(value) => updateArticle(page!.id, article.id, { ariaLevel: value })} />
                               </TopicAccordion>
 
                               <TopicAccordion title="Extensions" open={!!openSectionAccordions.extensions} onToggle={(triggerEl) => toggleSectionAccordion("extensions", triggerEl)}>
@@ -12628,9 +12713,9 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
 
                               <TopicAccordion title="Theme settings" open={!!openSectionAccordions.theme} onToggle={(triggerEl) => toggleSectionAccordion("theme", triggerEl)}>
                                 <TopicNestedAccordion title="Text alignment">
-                                  <TopicSelect label="Title alignment" value={asString(articleTextAlignment._title)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _title: value } }))} options={TEXT_ALIGN_OPTIONS} />
-                                  <TopicSelect label="Body alignment" value={asString(articleTextAlignment._body)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _body: value } }))} options={TEXT_ALIGN_OPTIONS} />
-                                  <TopicSelect label="Instruction alignment" value={asString(articleTextAlignment._instruction)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _instruction: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                  <TopicSelect label={getSchemaLabel(getThemeFieldSchema("article", "_textAlignment", "_title"), "Title alignment")} hint={getSchemaHint(getThemeFieldSchema("article", "_textAlignment", "_title"))} value={asString(articleTextAlignment._title)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _title: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                  <TopicSelect label={getSchemaLabel(getThemeFieldSchema("article", "_textAlignment", "_body"), "Body alignment")} hint={getSchemaHint(getThemeFieldSchema("article", "_textAlignment", "_body"))} value={asString(articleTextAlignment._body)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _body: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                  <TopicSelect label={getSchemaLabel(getThemeFieldSchema("article", "_textAlignment", "_instruction"), "Instruction alignment")} hint={getSchemaHint(getThemeFieldSchema("article", "_textAlignment", "_instruction"))} value={asString(articleTextAlignment._instruction)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _instruction: value } }))} options={TEXT_ALIGN_OPTIONS} />
                                 </TopicNestedAccordion>
                                 <TopicNestedAccordion title="Section background image">
                                   <div className="flex flex-col gap-1.5">
@@ -12677,19 +12762,22 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                 )}
                                 <TopicNestedAccordion title="On-screen classes">
                                   <TopicCheckbox
-                                    label="Enabled?"
+                                    label={getSchemaLabel(getContentFieldSchema("article", "_onScreen", "_isEnabled"), "Enabled?")}
+                                    hint={getSchemaHint(getContentFieldSchema("article", "_onScreen", "_isEnabled"))}
                                     checked={asBoolean(article.onScreen?._isEnabled)}
                                     onChange={(checked) => updateArticle(page!.id, article.id, { onScreen: { ...(article.onScreen ?? {}), _isEnabled: checked } })}
                                   />
                                   <TopicSelect
-                                    label="Classes"
+                                    label={getSchemaLabel(getContentFieldSchema("article", "_onScreen", "_classes"), "Classes")}
+                                    hint={getSchemaHint(getContentFieldSchema("article", "_onScreen", "_classes"))}
                                     value={asString(article.onScreen?._classes)}
                                     onChange={(value) => updateArticle(page!.id, article.id, { onScreen: { ...(article.onScreen ?? {}), _classes: value } })}
                                     options={ONSCREEN_CLASS_OPTIONS}
                                     emptyOptionLabel=""
                                   />
                                   <TopicTextInput
-                                    label="Percent in view"
+                                    label={getSchemaLabel(getContentFieldSchema("article", "_onScreen", "_percentInviewVertical"), "Percent in view")}
+                                    hint={getSchemaHint(getContentFieldSchema("article", "_onScreen", "_percentInviewVertical"))}
                                     type="number"
                                     value={String(asNumberOrEmpty(article.onScreen?._percentInviewVertical))}
                                     onChange={(value) => updateArticle(page!.id, article.id, { onScreen: { ...(article.onScreen ?? {}), _percentInviewVertical: parseNumberishInput(value) } })}
@@ -12698,7 +12786,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                               </TopicAccordion>
 
                               <TopicAccordion title="Advanced Settings" open={!!openSectionAccordions.advanced} onToggle={(triggerEl) => toggleSectionAccordion("advanced", triggerEl)}>
-                                <TopicTextInput label="Section class" value={article.classes} onChange={(value) => updateArticle(page!.id, article.id, { classes: value })} />
+                                <TopicTextInput label={getSchemaLabel(getContentFieldSchema("article", "_classes"), "Section class")} hint={getSchemaHint(getContentFieldSchema("article", "_classes"))} value={article.classes} onChange={(value) => updateArticle(page!.id, article.id, { classes: value })} />
                                 <TopicNestedAccordion title="Responsive classes">
                                   <TopicTextInput label="_xlarge" value={asString(articleResponsiveClasses._xlarge)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _xlarge: value } }))} />
                                   <TopicTextInput label="_large" value={asString(articleResponsiveClasses._large)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _large: value } }))} />
@@ -12776,12 +12864,14 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                   <p className="text-xs text-[#6b7280]">Unique identifier for this content group. Click to copy.</p>
                                 </div>
                                 <TopicTitleField
+                                  hint={getSchemaHint(getContentFieldSchema("block", "title"))}
                                   value={canvasTitleLiveOverride ?? block.title}
                                   onChange={(value) => updateBlock(page!.id, article!.id, block.id, { title: value })}
                                   onDraftChange={(value) => writeLiveTitleDraftToCanvas("group", { pageId: page!.id, articleId: article!.id, blockId: block.id }, value)}
                                 />
                                 <TopicCheckbox
                                   label="Display title in preview"
+                                  hint={getSchemaHint(getContentFieldSchema("block", "displayTitle"))}
                                   checked={!!block.showDisplayTitleInPreview}
                                   onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { showDisplayTitleInPreview: checked })}
                                 />
@@ -12796,20 +12886,21 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                               </TopicAccordion>
 
                               <TopicAccordion title="Availability & Progression" open={!!openBlockAccordions.availability} onToggle={(triggerEl) => toggleBlockAccordion("availability", triggerEl)}>
-                                <TopicCheckbox label="Is this optional?" checked={!!block.isOptional} onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { isOptional: checked })} />
-                                <TopicCheckbox label="Is this available?" checked={!!block.isAvailable} onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { isAvailable: checked })} />
-                                <TopicCheckbox label="Is this hidden?" checked={!!block.isHidden} onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { isHidden: checked })} />
-                                <TopicCheckbox label="Is this visible?" checked={!!block.isVisible} onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { isVisible: checked })} />
-                                <TopicNumberStepper label="Require completion of" min={-1} value={block.requireCompletionOf} onChange={(value) => updateBlock(page!.id, article!.id, block.id, { requireCompletionOf: value })} />
+                                <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("block", "_isOptional"), "Is this optional?")} hint={getSchemaHint(getContentFieldSchema("block", "_isOptional"))} checked={!!block.isOptional} onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { isOptional: checked })} />
+                                <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("block", "_isAvailable"), "Is this available?")} hint={getSchemaHint(getContentFieldSchema("block", "_isAvailable"))} checked={!!block.isAvailable} onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { isAvailable: checked })} />
+                                <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("block", "_isHidden"), "Is this hidden?")} hint={getSchemaHint(getContentFieldSchema("block", "_isHidden"))} checked={!!block.isHidden} onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { isHidden: checked })} />
+                                <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("block", "_isVisible"), "Is this visible?")} hint={getSchemaHint(getContentFieldSchema("block", "_isVisible"))} checked={!!block.isVisible} onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { isVisible: checked })} />
+                                <TopicNumberStepper label={getSchemaLabel(getContentFieldSchemaWithAliases("block", ["_requireCompletionOf"], ["requireCompletionOf"], ["requirecompletionof"]), "Require completion of")} hint={getSchemaHint(getContentFieldSchemaWithAliases("block", ["_requireCompletionOf"], ["requireCompletionOf"], ["requirecompletionof"]))} min={-1} value={block.requireCompletionOf} onChange={(value) => updateBlock(page!.id, article!.id, block.id, { requireCompletionOf: value })} />
                               </TopicAccordion>
 
                               <TopicAccordion title="Accessibility" open={!!openBlockAccordions.accessibility} onToggle={(triggerEl) => toggleBlockAccordion("accessibility", triggerEl)}>
                                 <TopicCheckbox
-                                  label="Enable accessibility completion description"
+                                  label={getSchemaLabel(getContentFieldSchema("block", "_isA11yCompletionDescriptionEnabled"), "Enable accessibility completion description")}
+                                  hint={getSchemaHint(getContentFieldSchema("block", "_isA11yCompletionDescriptionEnabled"))}
                                   checked={block.isA11yCompletionDescriptionEnabled}
                                   onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { isA11yCompletionDescriptionEnabled: checked })}
                                 />
-                                <TopicNumberStepper label="ARIA level" min={0} value={block.ariaLevel} onChange={(value) => updateBlock(page!.id, article!.id, block.id, { ariaLevel: value })} />
+                                <TopicNumberStepper label={getSchemaLabel(getContentFieldSchema("block", "_ariaLevel"), "ARIA level")} hint={getSchemaHint(getContentFieldSchema("block", "_ariaLevel"))} min={0} value={block.ariaLevel} onChange={(value) => updateBlock(page!.id, article!.id, block.id, { ariaLevel: value })} />
                               </TopicAccordion>
 
                               <TopicAccordion title="Extensions" open={!!openBlockAccordions.extensions} onToggle={(triggerEl) => toggleBlockAccordion("extensions", triggerEl)}>
@@ -12834,9 +12925,9 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
 
                               <TopicAccordion title="Theme settings" open={!!openBlockAccordions.theme} onToggle={(triggerEl) => toggleBlockAccordion("theme", triggerEl)}>
                                 <TopicNestedAccordion title="Text alignment">
-                                  <TopicSelect label="Title alignment" value={asString(asRecord(blockThemeSettings._textAlignment)._title)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _title: value } }))} options={TEXT_ALIGN_OPTIONS} />
-                                  <TopicSelect label="Body alignment" value={asString(asRecord(blockThemeSettings._textAlignment)._body)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _body: value } }))} options={TEXT_ALIGN_OPTIONS} />
-                                  <TopicSelect label="Instruction alignment" value={asString(asRecord(blockThemeSettings._textAlignment)._instruction)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _instruction: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                  <TopicSelect label={getSchemaLabel(getThemeFieldSchema("block", "_textAlignment", "_title"), "Title alignment")} hint={getSchemaHint(getThemeFieldSchema("block", "_textAlignment", "_title"))} value={asString(asRecord(blockThemeSettings._textAlignment)._title)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _title: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                  <TopicSelect label={getSchemaLabel(getThemeFieldSchema("block", "_textAlignment", "_body"), "Body alignment")} hint={getSchemaHint(getThemeFieldSchema("block", "_textAlignment", "_body"))} value={asString(asRecord(blockThemeSettings._textAlignment)._body)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _body: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                  <TopicSelect label={getSchemaLabel(getThemeFieldSchema("block", "_textAlignment", "_instruction"), "Instruction alignment")} hint={getSchemaHint(getThemeFieldSchema("block", "_textAlignment", "_instruction"))} value={asString(asRecord(blockThemeSettings._textAlignment)._instruction)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _instruction: value } }))} options={TEXT_ALIGN_OPTIONS} />
                                 </TopicNestedAccordion>
                                 <TopicNestedAccordion title="Content Group background image">
                                   <div className="flex flex-col gap-1.5">
@@ -12888,7 +12979,8 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                   <TopicTextInput label="_small" type="number" value={String(asNumberOrEmpty(blockMinimumHeights._small))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _minimumHeights: { ...asRecord(current._minimumHeights), _small: parseNumberishInput(value) } }))} />
                                 </TopicNestedAccordion>
                                 <TopicCheckbox
-                                  label="Divider content group?"
+                                  label={getSchemaLabel(getThemeFieldSchema("block", "_isDividerBlock"), "Divider content group?")}
+                                  hint={getSchemaHint(getThemeFieldSchema("block", "_isDividerBlock"))}
                                   checked={asBoolean(blockThemeSettings._isDividerBlock)}
                                   onChange={(checked) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _isDividerBlock: checked }))}
                                 />
@@ -12901,25 +12993,28 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                     <TopicColorField label="Header colour" value={asString(blockColours["block-header-color"])} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColors: { ...asRecord(current._blockColors), "block-header-color": value } }))} paletteRows={FONT_HEADER_COLOUR_PALETTE_ROWS} />
                                   </TopicNestedAccordion>
                                 )}
-                                <TopicSelect label="Spacing top" value={asString(blockThemeSettings._paddingTop)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _paddingTop: value }))} options={SPACING_OPTIONS} emptyOptionLabel="Default" />
-                                <TopicSelect label="Spacing bottom" value={asString(blockThemeSettings._paddingBottom)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _paddingBottom: value }))} options={SPACING_OPTIONS} emptyOptionLabel="Default" />
-                                <TopicSelect label="Set the vertical alignment of the child component(s)" value={asString(blockThemeSettings._componentVerticalAlignment)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _componentVerticalAlignment: value }))} options={VERTICAL_ALIGN_OPTIONS} emptyOptionLabel="" />
-                                <TopicSelect label="Set the horizontal alignment of the child component(s)" value={asString(blockThemeSettings._componentHorizontalAlignment)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _componentHorizontalAlignment: value }))} options={HORIZONTAL_ALIGN_OPTIONS} emptyOptionLabel="" />
+                                <TopicSelect label={getSchemaLabel(getThemeFieldSchema("block", "_paddingTop"), "Spacing top")} hint={getSchemaHint(getThemeFieldSchema("block", "_paddingTop"))} value={asString(blockThemeSettings._paddingTop)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _paddingTop: value }))} options={SPACING_OPTIONS} emptyOptionLabel="Default" />
+                                <TopicSelect label={getSchemaLabel(getThemeFieldSchema("block", "_paddingBottom"), "Spacing bottom")} hint={getSchemaHint(getThemeFieldSchema("block", "_paddingBottom"))} value={asString(blockThemeSettings._paddingBottom)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _paddingBottom: value }))} options={SPACING_OPTIONS} emptyOptionLabel="Default" />
+                                <TopicSelect label={getSchemaLabel(getThemeFieldSchema("block", "_componentVerticalAlignment"), "Set the vertical alignment of the child component(s)")} hint={getSchemaHint(getThemeFieldSchema("block", "_componentVerticalAlignment"))} value={asString(blockThemeSettings._componentVerticalAlignment)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _componentVerticalAlignment: value }))} options={VERTICAL_ALIGN_OPTIONS} emptyOptionLabel="" />
+                                <TopicSelect label={getSchemaLabel(getThemeFieldSchema("block", "_componentHorizontalAlignment"), "Set the horizontal alignment of the child component(s)")} hint={getSchemaHint(getThemeFieldSchema("block", "_componentHorizontalAlignment"))} value={asString(blockThemeSettings._componentHorizontalAlignment)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _componentHorizontalAlignment: value }))} options={HORIZONTAL_ALIGN_OPTIONS} emptyOptionLabel="" />
                                 <TopicNestedAccordion title="On-screen classes">
                                   <TopicCheckbox
-                                    label="Enabled?"
+                                    label={getSchemaLabel(getContentFieldSchema("block", "_onScreen", "_isEnabled"), "Enabled?")}
+                                    hint={getSchemaHint(getContentFieldSchema("block", "_onScreen", "_isEnabled"))}
                                     checked={asBoolean(block.onScreen?._isEnabled)}
                                     onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { onScreen: { ...(block.onScreen ?? {}), _isEnabled: checked } })}
                                   />
                                   <TopicSelect
-                                    label="Classes"
+                                    label={getSchemaLabel(getContentFieldSchema("block", "_onScreen", "_classes"), "Classes")}
+                                    hint={getSchemaHint(getContentFieldSchema("block", "_onScreen", "_classes"))}
                                     value={asString(block.onScreen?._classes)}
                                     onChange={(value) => updateBlock(page!.id, article!.id, block.id, { onScreen: { ...(block.onScreen ?? {}), _classes: value } })}
                                     options={ONSCREEN_CLASS_OPTIONS}
                                     emptyOptionLabel=""
                                   />
                                   <TopicTextInput
-                                    label="Percent in view"
+                                    label={getSchemaLabel(getContentFieldSchema("block", "_onScreen", "_percentInviewVertical"), "Percent in view")}
+                                    hint={getSchemaHint(getContentFieldSchema("block", "_onScreen", "_percentInviewVertical"))}
                                     type="number"
                                     value={String(asNumberOrEmpty(block.onScreen?._percentInviewVertical))}
                                     onChange={(value) => updateBlock(page!.id, article!.id, block.id, { onScreen: { ...(block.onScreen ?? {}), _percentInviewVertical: parseNumberishInput(value) } })}
@@ -12928,7 +13023,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                               </TopicAccordion>
 
                               <TopicAccordion title="Advanced Settings" open={!!openBlockAccordions.advanced} onToggle={(triggerEl) => toggleBlockAccordion("advanced", triggerEl)}>
-                                <TopicTextInput label="Content group class" value={block.classes} onChange={(value) => updateBlock(page!.id, article!.id, block.id, { classes: value })} />
+                                <TopicTextInput label={getSchemaLabel(getContentFieldSchema("block", "_classes"), "Content group class")} hint={getSchemaHint(getContentFieldSchema("block", "_classes"))} value={block.classes} onChange={(value) => updateBlock(page!.id, article!.id, block.id, { classes: value })} />
                                 <TopicNestedAccordion title="Responsive classes">
                                   <TopicTextInput label="_xlarge" value={asString(blockResponsiveClasses._xlarge)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _xlarge: value } }))} />
                                   <TopicTextInput label="_large" value={asString(blockResponsiveClasses._large)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _large: value } }))} />
@@ -13001,12 +13096,14 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                   <p className="text-xs text-[#6b7280]">Unique identifier for this component. Click to copy.</p>
                                 </div>
                                 <TopicTitleField
+                                  hint={getSchemaHint(getContentFieldSchema("component", "title"))}
                                   value={canvasTitleLiveOverride ?? component.settings.title ?? ""}
                                   onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { settings: { ...component.settings, title: value } })}
                                   onDraftChange={(value) => writeLiveTitleDraftToCanvas("component", { pageId: page.id, articleId: article.id, blockId: block.id, componentId: component.id }, value)}
                                 />
                                 <TopicCheckbox
                                   label="Display title in preview"
+                                  hint={getSchemaHint(getContentFieldSchema("component", "displayTitle"))}
                                   checked={!!component.showDisplayTitleInPreview}
                                   onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { showDisplayTitleInPreview: checked })}
                                 />
@@ -13063,12 +13160,13 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                               </TopicAccordion>
 
                               <TopicAccordion title="Availability & Progression" open={!!openComponentAccordions.availability} onToggle={(triggerEl) => toggleComponentAccordion("availability", triggerEl)}>
-                                <TopicCheckbox label="Is this optional?" checked={!!component.isOptional} onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { isOptional: checked })} />
-                                <TopicCheckbox label="Is this available?" checked={!!component.isAvailable} onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { isAvailable: checked })} />
-                                <TopicCheckbox label="Is this hidden?" checked={!!component.isHidden} onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { isHidden: checked })} />
-                                <TopicCheckbox label="Is this visible?" checked={!!component.isVisible} onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { isVisible: checked })} />
+                                <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("component", "_isOptional"), "Is this optional?")} hint={getSchemaHint(getContentFieldSchema("component", "_isOptional"))} checked={!!component.isOptional} onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { isOptional: checked })} />
+                                <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("component", "_isAvailable"), "Is this available?")} hint={getSchemaHint(getContentFieldSchema("component", "_isAvailable"))} checked={!!component.isAvailable} onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { isAvailable: checked })} />
+                                <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("component", "_isHidden"), "Is this hidden?")} hint={getSchemaHint(getContentFieldSchema("component", "_isHidden"))} checked={!!component.isHidden} onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { isHidden: checked })} />
+                                <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("component", "_isVisible"), "Is this visible?")} hint={getSchemaHint(getContentFieldSchema("component", "_isVisible"))} checked={!!component.isVisible} onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { isVisible: checked })} />
                                 <TopicSelect
-                                  label="Reset when revisited?"
+                                  label={getSchemaLabel(getContentFieldSchemaWithAliases("component", ["_isResetOnRevisit"], ["isResetOnRevisit"]), "Reset when revisited?")}
+                                  hint={getSchemaHint(getContentFieldSchemaWithAliases("component", ["_isResetOnRevisit"], ["isResetOnRevisit"]))}
                                   value={component.isResetOnRevisit || "false"}
                                   onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { isResetOnRevisit: value })}
                                   options={RESET_ON_REVISIT_OPTIONS}
@@ -13077,11 +13175,12 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
 
                               <TopicAccordion title="Accessibility" open={!!openComponentAccordions.accessibility} onToggle={(triggerEl) => toggleComponentAccordion("accessibility", triggerEl)}>
                                 <TopicCheckbox
-                                  label="Enable accessibility completion description"
+                                  label={getSchemaLabel(getContentFieldSchema("component", "_isA11yCompletionDescriptionEnabled"), "Enable accessibility completion description")}
+                                  hint={getSchemaHint(getContentFieldSchema("component", "_isA11yCompletionDescriptionEnabled"))}
                                   checked={component.isA11yCompletionDescriptionEnabled}
                                   onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { isA11yCompletionDescriptionEnabled: checked })}
                                 />
-                                <TopicNumberStepper label="ARIA level" min={0} value={component.ariaLevel} onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { ariaLevel: value })} />
+                                <TopicNumberStepper label={getSchemaLabel(getContentFieldSchema("component", "_ariaLevel"), "ARIA level")} hint={getSchemaHint(getContentFieldSchema("component", "_ariaLevel"))} min={0} value={component.ariaLevel} onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { ariaLevel: value })} />
                               </TopicAccordion>
 
                               <TopicAccordion title="Extensions" open={!!openComponentAccordions.extensions} onToggle={(triggerEl) => toggleComponentAccordion("extensions", triggerEl)}>
@@ -13108,9 +13207,9 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
 
                               <TopicAccordion title="Theme settings" open={!!openComponentAccordions.theme} onToggle={(triggerEl) => toggleComponentAccordion("theme", triggerEl)}>
                                 <TopicNestedAccordion title="Text alignment">
-                                  <TopicSelect label="Title alignment" value={asString(componentTextAlignment._title)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _title: value } }))} options={TEXT_ALIGN_OPTIONS} />
-                                  <TopicSelect label="Body alignment" value={asString(componentTextAlignment._body)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _body: value } }))} options={TEXT_ALIGN_OPTIONS} />
-                                  <TopicSelect label="Instruction alignment" value={asString(componentTextAlignment._instruction)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _instruction: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                  <TopicSelect label={getSchemaLabel(getThemeFieldSchema("component", "_textAlignment", "_title"), "Title alignment")} hint={getSchemaHint(getThemeFieldSchema("component", "_textAlignment", "_title"))} value={asString(componentTextAlignment._title)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _title: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                  <TopicSelect label={getSchemaLabel(getThemeFieldSchema("component", "_textAlignment", "_body"), "Body alignment")} hint={getSchemaHint(getThemeFieldSchema("component", "_textAlignment", "_body"))} value={asString(componentTextAlignment._body)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _body: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                  <TopicSelect label={getSchemaLabel(getThemeFieldSchema("component", "_textAlignment", "_instruction"), "Instruction alignment")} hint={getSchemaHint(getThemeFieldSchema("component", "_textAlignment", "_instruction"))} value={asString(componentTextAlignment._instruction)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _instruction: value } }))} options={TEXT_ALIGN_OPTIONS} />
                                 </TopicNestedAccordion>
                                 {/* Only themes whose schema declares _componentColors at component
                                     level support this (e.g. Vanilla has no component colour overrides). */}
@@ -13123,19 +13222,22 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                 )}
                                 <TopicNestedAccordion title="On-screen classes">
                                   <TopicCheckbox
-                                    label="Enabled?"
+                                    label={getSchemaLabel(getContentFieldSchema("component", "_onScreen", "_isEnabled"), "Enabled?")}
+                                    hint={getSchemaHint(getContentFieldSchema("component", "_onScreen", "_isEnabled"))}
                                     checked={asBoolean(component.onScreen?._isEnabled)}
                                     onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { onScreen: { ...(component.onScreen ?? {}), _isEnabled: checked } })}
                                   />
                                   <TopicSelect
-                                    label="Classes"
+                                    label={getSchemaLabel(getContentFieldSchema("component", "_onScreen", "_classes"), "Classes")}
+                                    hint={getSchemaHint(getContentFieldSchema("component", "_onScreen", "_classes"))}
                                     value={asString(component.onScreen?._classes)}
                                     onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { onScreen: { ...(component.onScreen ?? {}), _classes: value } })}
                                     options={ONSCREEN_CLASS_OPTIONS}
                                     emptyOptionLabel=""
                                   />
                                   <TopicTextInput
-                                    label="Percent in view"
+                                    label={getSchemaLabel(getContentFieldSchema("component", "_onScreen", "_percentInviewVertical"), "Percent in view")}
+                                    hint={getSchemaHint(getContentFieldSchema("component", "_onScreen", "_percentInviewVertical"))}
                                     type="number"
                                     value={String(asNumberOrEmpty(component.onScreen?._percentInviewVertical))}
                                     onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { onScreen: { ...(component.onScreen ?? {}), _percentInviewVertical: parseNumberishInput(value) } })}
@@ -13144,7 +13246,7 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                               </TopicAccordion>
 
                               <TopicAccordion title="Advanced Settings" open={!!openComponentAccordions.advanced} onToggle={(triggerEl) => toggleComponentAccordion("advanced", triggerEl)}>
-                                <TopicTextInput label="Component class" value={component.classes} onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { classes: value })} />
+                                <TopicTextInput label={getSchemaLabel(getContentFieldSchema("component", "_classes"), "Component class")} hint={getSchemaHint(getContentFieldSchema("component", "_classes"))} value={component.classes} onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { classes: value })} />
                                 {/* No installed theme declares _responsiveClasses at component
                                     level (unlike topic/section/content group, which all do). */}
                                 {isThemeFieldSupported("component", "_responsiveClasses") && (
