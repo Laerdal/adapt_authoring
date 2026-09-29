@@ -17,12 +17,14 @@ import { Loader2, PanelLeftOpen, PanelRightOpen } from 'lucide-react';
 import { usePageLoader } from '@/hooks';
 import type {
   ActiveBlockInfo,
+  AssessmentData,
   StoryboardDocument,
   StoryboardEditorHandle,
   StoryboardHeading,
   StoryboardInsertKind,
   StoryboardSummary,
 } from '@/types/storyboard';
+import { isAssessmentKind, validateAssessment } from '@/types/storyboard';
 import { useStoryboard } from '@/hooks/useStoryboard';
 import { useStoryboardReview } from '@/hooks/useStoryboardReview';
 import {
@@ -68,6 +70,32 @@ const EMPTY_SUMMARY: StoryboardSummary = {
   hasVisual: false,
   hasAssessment: false,
 };
+
+function collectStoryboardValidationIssues(doc: unknown[]): string[] {
+  const issues = [...validateStoryboardHierarchy(doc)];
+  for (const raw of Array.isArray(doc) ? doc : []) {
+    const block = raw as {
+      type?: string;
+      props?: { kind?: string; title?: string; data?: string };
+    };
+    if (block.type !== 'sbAssessment') continue;
+    const kind = block.props?.kind || '';
+    if (!isAssessmentKind(kind)) continue;
+    let data: AssessmentData = { question: '' };
+    try {
+      data = block.props?.data ? (JSON.parse(block.props.data) as AssessmentData) : { question: '' };
+    } catch {
+      data = { question: '' };
+    }
+    const title = (block.props?.title || '').trim();
+    const assessmentIssues = validateAssessment(kind, data, title);
+    if (assessmentIssues.length) {
+      const label = title || data.question?.replace(/<[^>]*>/g, '').trim() || kind.toUpperCase();
+      issues.push(`${label}: ${assessmentIssues.join(' ')}`);
+    }
+  }
+  return issues;
+}
 
 function triggerDownload(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -344,6 +372,11 @@ export default function StoryboardWorkspace({
 
   const handleSave = async () => {
     const doc = editorRef.current?.getDocument() as unknown[] | undefined;
+    const validationIssues = collectStoryboardValidationIssues(doc ?? []);
+    if (validationIssues.length) {
+      flash(`Save blocked — ${validationIssues.slice(0, 3).join(' ')}`);
+      return;
+    }
     try {
       let msg = 'Storyboard saved.';
       if (courseId && doc) {
@@ -573,11 +606,16 @@ export default function StoryboardWorkspace({
       flash('No course to generate into.');
       return;
     }
+    const doc = (editorRef.current?.getDocument() as unknown[]) ?? [];
+    const validationIssues = collectStoryboardValidationIssues(doc);
+    if (validationIssues.length) {
+      flash(`Generation blocked — ${validationIssues.slice(0, 3).join(' ')}`);
+      return;
+    }
     setGenOpen(true);
     setGenResult(null);
     setGenPlan(null);
     try {
-      const doc = (editorRef.current?.getDocument() as unknown[]) ?? [];
       setGenPlan(await planStoryboardGeneration(courseId, doc, generatedMap.current));
     } catch (e) {
       setGenPlan({
@@ -672,6 +710,7 @@ export default function StoryboardWorkspace({
           <button
             type="button"
             aria-label="Show contents"
+            title="Expand contents"
             onClick={() => setShowContents(true)}
             className="grid w-9 shrink-0 place-items-start border-r pt-3 text-muted-foreground hover:bg-muted"
           >
@@ -758,6 +797,7 @@ export default function StoryboardWorkspace({
           <button
             type="button"
             aria-label="Show review center"
+            title="Expand review center"
             onClick={() => setShowReview(true)}
             className="grid w-9 shrink-0 place-items-start border-l pt-3 text-muted-foreground hover:bg-muted"
           >
