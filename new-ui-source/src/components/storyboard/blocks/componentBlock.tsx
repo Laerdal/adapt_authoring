@@ -956,11 +956,6 @@ export const componentBlock = createReactBlockSpec(
     // mousedown stopEvent handling.
     meta: { selectable: false },
     render: ({ block, editor }) => {
-      console.log('[DEBUG] componentBlock render:', {
-        'block.props': block.props,
-        'block.props.kind': block.props.kind,
-        'kind after defaults': (COMPONENT_KINDS.includes(block.props.kind as ComponentKind) ? block.props.kind : 'text'),
-      });
       const kind = (COMPONENT_KINDS.includes(block.props.kind as ComponentKind) ? block.props.kind : 'text') as ComponentKind;
       const meta = META[kind];
       console.log('[DEBUG] Resolved meta:', { kind, metaBadge: meta.badge, hasIcon: !!meta.Icon });

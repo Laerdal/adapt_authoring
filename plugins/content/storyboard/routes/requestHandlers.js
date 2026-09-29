@@ -102,8 +102,12 @@ async function createStoryboard(req, res) {
 
 async function getStoryboardByCourse(req, res) {
   try {
+    const { userId } = userCtx(req);
     const results = await db.retrieve('storyboard', { _courseId: req.params.courseId });
     const rec = Array.isArray(results) && results.length ? results[0] : null;
+    if (rec && !hasStoryboardAccess(rec, userId)) {
+      return res.status(403).json({ error: 'You do not have permission to access this storyboard' });
+    }
     return res.status(200).json(rec ? serializeStoryboard(rec) : null);
   } catch (error) {
     return fail(res, error, 'Failed to retrieve storyboard by course');
@@ -550,11 +554,15 @@ async function handleAi(req, res) {
 
 async function exportWord(req, res) {
   try {
+    const { userId } = userCtx(req);
     const results = await db.retrieve('storyboard', { _id: req.params.id });
     if (!Array.isArray(results) || !results.length) {
       return res.status(404).json({ error: 'Storyboard not found' });
     }
     const rec = toPlain(results[0]);
+    if (!hasStoryboardAccess(rec, userId)) {
+      return res.status(403).json({ error: 'You do not have permission to export this storyboard' });
+    }
     // Prefer the course title (passed by the client) so the document heading
     // and filename match the course, not the internal storyboard record title.
     const docTitle = (req.query && req.query.title) || rec.title || 'Storyboard';
@@ -582,11 +590,15 @@ async function exportWord(req, res) {
 
 async function exportPdf(req, res) {
   try {
+    const { userId } = userCtx(req);
     const results = await db.retrieve('storyboard', { _id: req.params.id });
     if (!Array.isArray(results) || !results.length) {
       return res.status(404).json({ error: 'Storyboard not found' });
     }
     const rec = toPlain(results[0]);
+    if (!hasStoryboardAccess(rec, userId)) {
+      return res.status(403).json({ error: 'You do not have permission to export this storyboard' });
+    }
     const docTitle = (req.query && req.query.title) || rec.title || 'Storyboard';
     const blocks = safeParse(rec.documentJson, []);
     const { userId, tenantId } = userCtx(req);

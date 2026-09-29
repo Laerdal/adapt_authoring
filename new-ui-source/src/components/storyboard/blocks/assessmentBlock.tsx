@@ -697,7 +697,7 @@ export const assessmentBlock = createReactBlockSpec(
             <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               {LABELS[kind]}
             </span>
-            <input value={title} placeholder={`${LABELS[kind]} title *`} onKeyDown={stop} onChange={(e) => setTitle(e.target.value)} className="min-w-0 flex-1 border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground" />
+            <input value={title} placeholder={`${LABELS[kind]} title`} onKeyDown={stop} onChange={(e) => setTitle(e.target.value)} className="min-w-0 flex-1 border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground" />
             <HeaderBtn onClick={() => update({ ...model, showTitle: !model.showTitle })} active={model.showTitle} title="Show the title to learners">
               <Check className="h-3 w-3" /> Show title
             </HeaderBtn>

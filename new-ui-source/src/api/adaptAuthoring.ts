@@ -3087,7 +3087,6 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
         }
       };
       const rawItems = Array.isArray(props._items) ? (props._items as Array<Record<string, unknown>>) : [];
-      console.log('[DEBUG] laerdalForm read-back:', { componentId: comp._id, rawItemsCount: rawItems.length });
       const fields = rawItems.map((it) => ({
         control: controlFor(String(it._inputType || "text"), it.options),
         label: String(it._label || ""),
@@ -3463,7 +3462,6 @@ export async function saveStoryboardToCourse(
             .replace(/[^a-z0-9]+/g, "-")
             .replace(/^-+|-+$/g, "") || `field-${index + 1}`;
         const fields = Array.isArray(parsed.fields) ? parsed.fields : [];
-        console.log('[DEBUG saveStoryboardToCourse laerdalForm] Saving fields:', fields);
         mergeProperties(patch, {
           _items: fields.map((field, index) => {
             const control = field?.control || "";
