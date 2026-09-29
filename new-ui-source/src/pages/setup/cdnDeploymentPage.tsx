@@ -16,6 +16,7 @@ import {
 } from "../../api/adaptAuthoring";
 import { usePageLoader } from "../../hooks";
 import { SaveChangesButton } from "./SaveChangesButton";
+import { SaveStatusToast } from "./SaveStatusToast";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 import { CheckboxIndicator } from "../../components/common/Checkbox";
@@ -27,36 +28,6 @@ function Spinner({ className = "" }: { className?: string }) {
     <svg className={`animate-spin ${className}`} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 12a9 9 0 1 1-6.219-8.56" />
     </svg>
-  );
-}
-
-function Toast({ toast, onDismiss }: { toast: { type: "success" | "error"; message: string }; onDismiss: () => void }) {
-  return (
-    <div className="fixed top-4 right-4 z-[60] pointer-events-none">
-      <div
-        className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium border pointer-events-auto animate-fade-in-down min-w-[260px] max-w-sm ${
-          toast.type === "success"
-            ? "bg-[var(--life-positive-050)] border-[var(--life-positive-100)] text-[var(--life-positive-500)]"
-            : "bg-[var(--life-critical-050)] border-[var(--life-critical-100)] text-[var(--life-critical-500)]"
-        }`}
-      >
-        {toast.type === "success" ? (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-positive-500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-        ) : (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-critical-500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-          </svg>
-        )}
-        <span className="flex-1">{toast.message}</span>
-        <button type="button" onClick={onDismiss} className="opacity-60 hover:opacity-100 transition-opacity ml-1" aria-label="Dismiss">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-      </div>
-    </div>
   );
 }
 
@@ -912,7 +883,7 @@ export function CdnDeploymentPage({
         </div>
       </div>
 
-      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
+      <SaveStatusToast toast={toast} onDismiss={() => setToast(null)} autoHideMs={3500} />
 
       <UnsavedChangesModal
         isOpen={showConfirmModal}

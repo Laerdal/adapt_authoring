@@ -279,11 +279,15 @@ function CourseStructurePanel({
     });
 
   async function handleConfirmSave() {
-    const ok = await save();
+    const ok = await handleSave();
     if (!ok) return; // save failed — stay put, show the error
-    setSaveSuccess(true);
     const target = consumePendingNavigation();
     if (target) onNavigationRequest?.(target);
+  }
+  async function handleSave() {
+    const ok = await save();
+    if (ok) setSaveSuccess(true);
+    return ok;
   }
   function handleConfirmDiscard() {
     discard();
@@ -301,7 +305,7 @@ function CourseStructurePanel({
         </div>
 
         <div className="ml-auto flex items-center gap-3 shrink-0">
-          <SaveChangesButton dirty={dirty} saving={saving} onClick={() => void save()} portalTargetId="setup-save-button-slot" />
+          <SaveChangesButton dirty={dirty} saving={saving} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
 
           {/* View mode toggle */}
           <div className="flex items-center border border-[#e5e7eb] rounded-lg overflow-hidden shrink-0">
