@@ -265,7 +265,7 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
 
   function AddLink({ label, onClick }: { label: string; onClick: () => void }) {
     return (
-      <button type="button" onClick={onClick} aria-label={label} className="flex items-center gap-1.5 text-xs text-[#9ca3af] hover:text-[#2d6fa8] px-2 py-1 rounded hover:bg-[#f0f7ff] transition-colors">
+      <button type="button" onClick={onClick} aria-label={label} className="flex items-center gap-1.5 text-xs  hover:text-[#2d6fa8] px-2 py-1 rounded hover:bg-[#f0f7ff] transition-colors">
         <Plus size={11} />
         {label}
       </button>

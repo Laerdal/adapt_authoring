@@ -9,10 +9,18 @@ import {
 } from "../../api/adaptAuthoring";
 import { usePageLoader } from "../../hooks";
 import type { AssetPickerRequest } from "../../types/assetPicker";
-import { BasicRichTextEditor, isEditorEmpty } from "../../components/common";
+import { BasicRichTextEditor, isEditorEmpty, InfoFieldLabel } from "../../components/common";
 import { isSafeLanguageCode } from "../../api/adaptAuthoring";
 import { SaveChangesButton } from "./SaveChangesButton";
 import { SaveStatusToast } from "./SaveStatusToast";
+import {
+  getConfigRootSchema,
+  getCourseRootSchema,
+  getSchemaHint,
+  getSchemaLabel,
+  getSchemaNode,
+  type SetupSchemaNode,
+} from "../../helpers/setupInfoSchema";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
@@ -121,6 +129,8 @@ export function CourseOverviewPage({
   const emailSearchRequestIdRef = useRef(0);
   const emailInputRef = useRef<HTMLInputElement | null>(null);
   const [showAuthoringBanner, setShowAuthoringBanner] = useState(true);
+  const [courseSchema, setCourseSchema] = useState<SetupSchemaNode | null>(null);
+  const [configSchema, setConfigSchema] = useState<SetupSchemaNode | null>(null);
 
   // Remount key for the Body rich-text editor. Bumping this forces the
   // uncontrolled contentEditable surface to re-initialize its innerHTML
@@ -208,6 +218,26 @@ export function CourseOverviewPage({
       cancelled = true;
     };
   }, [courseId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void Promise.all([getCourseRootSchema(), getConfigRootSchema()])
+      .then(([nextCourseSchema, nextConfigSchema]) => {
+        if (cancelled) return;
+        setCourseSchema(nextCourseSchema);
+        setConfigSchema(nextConfigSchema);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCourseSchema(null);
+        setConfigSchema(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function markDirty() {
     setSaveSuccess(false);
@@ -547,6 +577,20 @@ export function CourseOverviewPage({
     e.currentTarget.style.borderColor = "var(--life-neutral-400)"; // #949494
   }
 
+  function renderFieldLabel(label: string, schemaPath: string[], options?: { required?: boolean; schemaRoot?: SetupSchemaNode | null }) {
+    const schemaRoot = options?.schemaRoot ?? courseSchema;
+    const schemaNode = getSchemaNode(schemaRoot, ...schemaPath);
+    const displayLabel = getSchemaLabel(schemaNode, label);
+    const hint = getSchemaHint(schemaNode);
+
+    return (
+      <div style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 4, flexWrap: "nowrap" }}>
+        <InfoFieldLabel label={displayLabel} hint={hint} className="text-[#374151] !mb-0" />
+        {options?.required ? <span style={{ color: "var(--life-critical-500)", fontWeight: 400, lineHeight: 1 }}>*</span> : null}
+      </div>
+    );
+  }
+
   return (
     <div
       className="flex flex-col h-full w-full bg-[#f7f9fb]"
@@ -589,9 +633,7 @@ export function CourseOverviewPage({
 
         {/* Title */}
         <div>
-          <label style={labelStyle}>
-            Title <span style={{ color: "var(--life-critical-500)", fontWeight: 400 }}>*</span>
-          </label>
+          {renderFieldLabel("Title", ["title"], { required: true })}
           <input
             value={formTitle}
             onChange={(e) => { setFormTitle(e.target.value); markDirty(); }}
@@ -605,7 +647,7 @@ export function CourseOverviewPage({
 
         {/* Sub-Title */}
         <div>
-          <label style={labelStyle}>Subtitle</label>
+          {renderFieldLabel("Subtitle", ["subtitle"])}
           <input
             value={formSubtitle}
             onChange={(e) => { setFormSubtitle(e.target.value); markDirty(); }}
@@ -620,7 +662,7 @@ export function CourseOverviewPage({
 
         {/* Description */}
         <div>
-          <label style={labelStyle}>Description</label>
+          {renderFieldLabel("Description", ["description"])}
           <textarea
             rows={4}
             value={formDesc}
@@ -635,7 +677,7 @@ export function CourseOverviewPage({
 
           {/* Body */}
         <div>
-          <label style={labelStyle}>Body</label>
+          {renderFieldLabel("Body", ["body"])}
           <BasicRichTextEditor
             key={bodyEditorKey}
             html={formBody}
@@ -648,7 +690,7 @@ export function CourseOverviewPage({
 
         {/* Instructions */}
         <div>
-          <label style={labelStyle}>Instructions</label>
+          {renderFieldLabel("Instructions", ["instruction"])}
           <textarea
             rows={4}
             value={formInstruction}
@@ -663,7 +705,7 @@ export function CourseOverviewPage({
 
         {/* Course Image */}
         <div>
-          <label style={labelStyle}>Course Image</label>
+          {renderFieldLabel("Course Image", ["heroImage"])}
           <div
             role="button"
             tabIndex={0}
@@ -749,7 +791,7 @@ export function CourseOverviewPage({
 
         {/* Tags */}
         <div>
-          <label style={labelStyle}>Tags</label>
+          {renderFieldLabel("Tags", ["tags"])}
           <div style={{ display: "flex", gap: 8, marginBottom: tags.length > 0 ? 10 : 0 }}>
             <input
               value={tagInput}
@@ -788,7 +830,7 @@ export function CourseOverviewPage({
 
         {/* Default Language */}
         <div>
-          <label style={labelStyle}>Default Language</label>
+          {renderFieldLabel("Default Language", ["_defaultLanguage"], { schemaRoot: configSchema })}
           <div style={{ position: "relative" }}>
             <select
               value={selectedLanguageOption}

@@ -5,6 +5,14 @@ import {
   saveTrackingAnalyticsSettings,
   type TrackingAnalyticsSettings,
 } from "../../api/adaptAuthoring";
+import InfoIcon, { InfoFieldLabel } from "../../components/common/InfoIcon";
+import {
+  getExtensionSchema,
+  getSchemaHint,
+  getSchemaLabel,
+  getSchemaNode,
+  type SetupSchemaNode,
+} from "../../helpers/setupInfoSchema";
 import { usePageLoader } from "../../hooks";
 import { SaveChangesButton } from "./SaveChangesButton";
 import { SaveStatusToast } from "./SaveStatusToast";
@@ -16,10 +24,12 @@ function CheckboxRow({
   checked,
   onChange,
   label,
+  hint,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   label: string;
+  hint?: string;
 }) {
   return (
     <label className="flex items-start gap-3 py-2 px-2 rounded-lg cursor-pointer select-none group hover:bg-[#f9fafb]">
@@ -31,25 +41,27 @@ function CheckboxRow({
         className="sr-only peer"
       />
       <CheckboxIndicator checked={checked} className="mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
-      <span className="text-sm text-[#374151] leading-snug">{label}</span>
+      <span className="text-sm text-[#374151] leading-snug">{label}{hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
     </label>
   );
 }
 
 function SelectField({
   label,
+  hint,
   value,
   options,
   onChange,
 }: {
   label: string;
+  hint?: string;
   value: string;
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-semibold text-[#374151]">{label}</span>
+      <InfoFieldLabel label={label} hint={hint} className="text-[#374151]" />
       <div className="relative">
         <select
           value={value}
@@ -71,6 +83,7 @@ function SelectField({
 
 function TextField({
   label,
+  hint,
   value,
   onChange,
   placeholder,
@@ -78,6 +91,7 @@ function TextField({
   error,
 }: {
   label: string;
+  hint?: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
@@ -86,7 +100,7 @@ function TextField({
 }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-xs font-semibold text-[#374151]">{label}</span>
+      <InfoFieldLabel label={label} hint={hint} className="text-[#374151]" />
       <input
         aria-label={label}
         aria-invalid={!!error}
@@ -103,8 +117,8 @@ function TextField({
   );
 }
 
-function SectionLabel({ children }: { children: ReactNode }) {
-  return <p className="text-xs font-semibold uppercase tracking-wider text-[#9ca3af] mb-2 mt-1">{children}</p>;
+function SectionLabel({ children, hint }: { children: ReactNode; hint?: string }) {
+  return <p className="text-xs font-semibold uppercase tracking-wider text-[#9ca3af] mb-2 mt-1 inline-flex items-center gap-1.5">{children}{hint ? <InfoIcon label={typeof children === "string" ? children : "section"} hint={hint} /> : null}</p>;
 }
 
 function SubSectionLabel({ children }: { children: ReactNode }) {
@@ -121,12 +135,14 @@ function SubSectionLabel({ children }: { children: ReactNode }) {
 function AccordionCard({
   title,
   icon,
+  hint,
   open,
   onToggle,
   children,
 }: {
   title: string;
   icon: ReactNode;
+  hint?: string;
   open: boolean;
   onToggle: () => void;
   children: ReactNode;
@@ -141,7 +157,7 @@ function AccordionCard({
       >
         <div className="flex items-center gap-2.5">
           <span className="text-current">{icon}</span>
-          <span className="text-sm font-semibold text-current">{title}</span>
+          <span className="text-sm font-semibold text-current flex items-center gap-1.5">{title}{hint ? <InfoIcon label={title} hint={hint} /> : null}</span>
         </div>
         <svg
           width="16"
@@ -165,11 +181,13 @@ function AccordionCard({
 function PluginRadio({
   id,
   label,
+  hint,
   selected,
   onSelect,
 }: {
   id: string;
   label: string;
+  hint?: string;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -188,7 +206,7 @@ function PluginRadio({
         {selected && <span className="w-2 h-2 rounded-full bg-[#2d6fa8]" />}
       </span>
       <span>
-        <span className="block text-sm font-semibold text-[#111827]">{label}</span>
+        <span className="block text-sm font-semibold text-[#111827]">{label}{hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
       </span>
     </button>
   );
@@ -978,6 +996,12 @@ export function TrackingAnalyticsPage({
   const [savedSnapshot, setSavedSnapshot] = useState<TrackingAnalyticsPageSnapshot>(DEFAULT_SNAPSHOT);
   const [sourceSettings, setSourceSettings] = useState<TrackingAnalyticsSettings>(defaultTrackingAnalyticsSettings());
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [spoorSchema, setSpoorSchema] = useState<SetupSchemaNode | null>(null);
+  const [xapiSchema, setXapiSchema] = useState<SetupSchemaNode | null>(null);
+  const [hyperSchema, setHyperSchema] = useState<SetupSchemaNode | null>(null);
+  const [uesSchema, setUesSchema] = useState<SetupSchemaNode | null>(null);
+  const [googleSchema, setGoogleSchema] = useState<SetupSchemaNode | null>(null);
+  const [hotjarSchema, setHotjarSchema] = useState<SetupSchemaNode | null>(null);
 
   const [scorm, setScorm] = useState<TrackingAnalyticsPageSnapshot["scorm"]>(DEFAULT_SCORM_STATE);
 
@@ -1052,6 +1076,13 @@ export function TrackingAnalyticsPage({
   const currentSnapshotJson = useMemo(() => JSON.stringify(currentSnapshot), [currentSnapshot]);
   const savedSnapshotJson = useMemo(() => JSON.stringify(savedSnapshot), [savedSnapshot]);
   const hasChanges = currentSnapshotJson !== savedSnapshotJson;
+
+  const spoorConfigSchema = getSchemaNode(spoorSchema, "pluginLocations", "config", "_spoor") ?? spoorSchema;
+  const xapiConfigSchema = getSchemaNode(xapiSchema, "pluginLocations", "config", "_xapi") ?? xapiSchema;
+  const hyperConfigSchema = getSchemaNode(hyperSchema, "pluginLocations", "config", "_hyper") ?? hyperSchema;
+  const uesConfigSchema = getSchemaNode(uesSchema, "pluginLocations", "config", "_uesAnalytics") ?? uesSchema;
+  const googleConfigSchema = getSchemaNode(googleSchema, "pluginLocations", "config", "_googleAnalytics") ?? googleSchema;
+  const hotjarConfigSchema = getSchemaNode(hotjarSchema, "pluginLocations", "config", "_hotjarAnalytics") ?? hotjarSchema;
 
   const { showConfirmModal, consumePendingNavigation, clearPendingNavigation } = useUnsavedChangesNavigationGuard({
     hasChanges,
@@ -1133,6 +1164,38 @@ export function TrackingAnalyticsPage({
     };
   }, [courseId]);
 
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      getExtensionSchema("adapt-contrib-spoor"),
+      getExtensionSchema("adapt-contrib-xapi"),
+      getExtensionSchema("adapt-hyper-bridge"),
+      getExtensionSchema("adapt-ues-analytics"),
+      getExtensionSchema("adapt-googleAnalytics"),
+      getExtensionSchema("adapt-hotjarAnalytics"),
+    ]).then(([
+      nextSpoorSchema,
+      nextXapiSchema,
+      nextHyperSchema,
+      nextUesSchema,
+      nextGoogleSchema,
+      nextHotjarSchema,
+    ]) => {
+      if (cancelled) return;
+      setSpoorSchema(nextSpoorSchema);
+      setXapiSchema(nextXapiSchema);
+      setHyperSchema(nextHyperSchema);
+      setUesSchema(nextUesSchema);
+      setGoogleSchema(nextGoogleSchema);
+      setHotjarSchema(nextHotjarSchema);
+    }).catch(() => {
+      if (cancelled) return;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const handleSave = async () => {
     if (!courseId) return;
     setHasAttemptedSave(true);
@@ -1181,32 +1244,34 @@ export function TrackingAnalyticsPage({
         <div className="max-w-2xl px-6 py-6 pb-24 flex flex-col gap-4">
         <AccordionCard
           title="Tracking"
+          hint={getSchemaHint(spoorSchema) ?? getSchemaHint(xapiSchema) ?? getSchemaHint(hyperSchema)}
           open={openAccordion === "tracking"}
           onToggle={() => toggleAccordion("tracking")}
           icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" /></svg>}
         >
           <div role="radiogroup" aria-label="Tracking plugin" className="flex flex-col gap-1.5">
-            <PluginRadio id="scorm" label="SCORM" selected={trackingPlugin === "scorm"} onSelect={() => handleTrackingPluginChange("scorm")} />
-            <PluginRadio id="xapi" label="xAPI" selected={trackingPlugin === "xapi"} onSelect={() => handleTrackingPluginChange("xapi")} />
-            <PluginRadio id="hyperbridge" label="HyperBridge" selected={trackingPlugin === "hyperbridge"} onSelect={() => handleTrackingPluginChange("hyperbridge")} />
+            <PluginRadio id="scorm" label="SCORM" hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_isEnabled"))} selected={trackingPlugin === "scorm"} onSelect={() => handleTrackingPluginChange("scorm")} />
+            <PluginRadio id="xapi" label="xAPI" hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_isEnabled"))} selected={trackingPlugin === "xapi"} onSelect={() => handleTrackingPluginChange("xapi")} />
+            <PluginRadio id="hyperbridge" label="HyperBridge" hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_isEnabled"))} selected={trackingPlugin === "hyperbridge"} onSelect={() => handleTrackingPluginChange("hyperbridge")} />
           </div>
 
           {trackingPlugin === "scorm" && (
             <div className="mt-4 flex flex-col gap-4">
-              <SectionLabel>SCORM (SPOOR) Settings</SectionLabel>
+              <SectionLabel hint={getSchemaHint(spoorConfigSchema)}>{getSchemaLabel(spoorConfigSchema, "SCORM (SPOOR) Settings")}</SectionLabel>
               <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb]">
                 <SubSectionLabel>Tracking</SubSectionLabel>
-                <CheckboxRow checked={scorm.shouldStoreResponses} onChange={(v) => setScorm((prev) => ({ ...prev, shouldStoreResponses: v }))} label="Store question state" />
-                <CheckboxRow checked={scorm.shouldStoreAttempts} onChange={(v) => setScorm((prev) => ({ ...prev, shouldStoreAttempts: v }))} label="Store question attempt states" />
-                <CheckboxRow checked={scorm.shouldRecordInteractions} onChange={(v) => setScorm((prev) => ({ ...prev, shouldRecordInteractions: v }))} label="Record interactions" />
-                <CheckboxRow checked={scorm.shouldRecordObjectives} onChange={(v) => setScorm((prev) => ({ ...prev, shouldRecordObjectives: v }))} label="Record objectives" />
-                <CheckboxRow checked={scorm.shouldCompress} onChange={(v) => setScorm((prev) => ({ ...prev, shouldCompress: v }))} label="Should compress data" />
+                <CheckboxRow checked={scorm.shouldStoreResponses} onChange={(v) => setScorm((prev) => ({ ...prev, shouldStoreResponses: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldStoreResponses"), "Store question state")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldStoreResponses"))} />
+                <CheckboxRow checked={scorm.shouldStoreAttempts} onChange={(v) => setScorm((prev) => ({ ...prev, shouldStoreAttempts: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldStoreAttempts"), "Store question attempt states")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldStoreAttempts"))} />
+                <CheckboxRow checked={scorm.shouldRecordInteractions} onChange={(v) => setScorm((prev) => ({ ...prev, shouldRecordInteractions: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldRecordInteractions"), "Record interactions")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldRecordInteractions"))} />
+                <CheckboxRow checked={scorm.shouldRecordObjectives} onChange={(v) => setScorm((prev) => ({ ...prev, shouldRecordObjectives: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldRecordObjectives"), "Record objectives")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldRecordObjectives"))} />
+                <CheckboxRow checked={scorm.shouldCompress} onChange={(v) => setScorm((prev) => ({ ...prev, shouldCompress: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldCompress"), "Should compress data")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_tracking", "_shouldCompress"))} />
               </div>
 
               <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
                 <SubSectionLabel>Reporting</SubSectionLabel>
                 <SelectField
-                  label="Tracking success status"
+                  label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_reporting", "_onTrackingCriteriaMet"), "Tracking success status")}
+                  hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_reporting", "_onTrackingCriteriaMet"))}
                   value={scorm.onTrackingCriteriaMet}
                   onChange={(value) => setScorm((prev) => ({ ...prev, onTrackingCriteriaMet: value }))}
                   options={[
@@ -1217,7 +1282,8 @@ export function TrackingAnalyticsPage({
                   ]}
                 />
                 <SelectField
-                  label="Assessment failure status"
+                  label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_reporting", "_onAssessmentFailure"), "Assessment failure status")}
+                  hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_reporting", "_onAssessmentFailure"))}
                   value={scorm.onAssessmentFailure}
                   onChange={(value) => setScorm((prev) => ({ ...prev, onAssessmentFailure: value }))}
                   options={[
@@ -1229,28 +1295,31 @@ export function TrackingAnalyticsPage({
                 <CheckboxRow
                   checked={scorm.resetStatusWhenLanguageChanged}
                   onChange={(v) => setScorm((prev) => ({ ...prev, resetStatusWhenLanguageChanged: v }))}
-                  label="Reset status when language changed?"
+                  label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_reporting", "_resetStatusOnLanguageChange"), "Reset status when language changed?")}
+                  hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_reporting", "_resetStatusOnLanguageChange"))}
                 />
               </div>
 
-              <SectionLabel>Advanced Settings</SectionLabel>
+              <SectionLabel hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings"))}>Advanced Settings</SectionLabel>
               <SelectField
-                label="SCORM version"
+                label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_scormVersion"), "SCORM version")}
+                hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_scormVersion"))}
                 value={scorm.scormVersion}
                 onChange={(value) => setScorm((prev) => ({ ...prev, scormVersion: value }))}
                 options={[{ value: "1.2", label: "SCORM 1.2" }, { value: "2004", label: "SCORM 2004" }]}
               />
-              <CheckboxRow checked={scorm.showDebugWindow} onChange={(v) => setScorm((prev) => ({ ...prev, showDebugWindow: v }))} label="SCORM debug window" />
-              <CheckboxRow checked={scorm.commitOnStatusChange} onChange={(v) => setScorm((prev) => ({ ...prev, commitOnStatusChange: v }))} label="Commit data on status change" />
-              <CheckboxRow checked={scorm.commitOnAnyChange} onChange={(v) => setScorm((prev) => ({ ...prev, commitOnAnyChange: v }))} label="Commit data on any change" />
-              <TextField label="Frequency (mins) of automatic commits" type="number" value={scorm.timedCommitFrequency} onChange={(value) => setScorm((prev) => ({ ...prev, timedCommitFrequency: value }))} />
-              <TextField label="Maximum number of commit retries" type="number" value={scorm.maxCommitRetries} onChange={(value) => setScorm((prev) => ({ ...prev, maxCommitRetries: value }))} />
-              <TextField label="Commit retry delay" type="number" value={scorm.commitRetryDelay} onChange={(value) => setScorm((prev) => ({ ...prev, commitRetryDelay: value }))} />
-              <CheckboxRow checked={scorm.suppressLmsErrors} onChange={(v) => setScorm((prev) => ({ ...prev, suppressLmsErrors: v }))} label="Suppress LMS errors" />
-              <CheckboxRow checked={scorm.commitOnVisibilityChangeHidden} onChange={(v) => setScorm((prev) => ({ ...prev, commitOnVisibilityChangeHidden: v }))} label="Commit on visibility change hidden" />
-              <TextField label="Manifest identifier" value={scorm.manifestIdentifier} onChange={(value) => setScorm((prev) => ({ ...prev, manifestIdentifier: value }))} placeholder="adapt_manifest" />
+              <CheckboxRow checked={scorm.showDebugWindow} onChange={(v) => setScorm((prev) => ({ ...prev, showDebugWindow: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_showDebugWindow"), "SCORM debug window")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_showDebugWindow"))} />
+              <CheckboxRow checked={scorm.commitOnStatusChange} onChange={(v) => setScorm((prev) => ({ ...prev, commitOnStatusChange: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_commitOnStatusChange"), "Commit data on status change")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_commitOnStatusChange"))} />
+              <CheckboxRow checked={scorm.commitOnAnyChange} onChange={(v) => setScorm((prev) => ({ ...prev, commitOnAnyChange: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_commitOnAnyChange"), "Commit data on any change")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_commitOnAnyChange"))} />
+              <TextField label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_timedCommitFrequency"), "Frequency (mins) of automatic commits")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_timedCommitFrequency"))} type="number" value={scorm.timedCommitFrequency} onChange={(value) => setScorm((prev) => ({ ...prev, timedCommitFrequency: value }))} />
+              <TextField label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_maxCommitRetries"), "Maximum number of commit retries")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_maxCommitRetries"))} type="number" value={scorm.maxCommitRetries} onChange={(value) => setScorm((prev) => ({ ...prev, maxCommitRetries: value }))} />
+              <TextField label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_commitRetryDelay"), "Commit retry delay")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_commitRetryDelay"))} type="number" value={scorm.commitRetryDelay} onChange={(value) => setScorm((prev) => ({ ...prev, commitRetryDelay: value }))} />
+              <CheckboxRow checked={scorm.suppressLmsErrors} onChange={(v) => setScorm((prev) => ({ ...prev, suppressLmsErrors: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_suppressErrors"), "Suppress LMS errors")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_suppressErrors"))} />
+              <CheckboxRow checked={scorm.commitOnVisibilityChangeHidden} onChange={(v) => setScorm((prev) => ({ ...prev, commitOnVisibilityChangeHidden: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_commitOnVisibilityChangeHidden"), "Commit on visibility change hidden")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_commitOnVisibilityChangeHidden"))} />
+              <TextField label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_manifestIdentifier"), "Manifest identifier")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_manifestIdentifier"))} value={scorm.manifestIdentifier} onChange={(value) => setScorm((prev) => ({ ...prev, manifestIdentifier: value }))} placeholder="adapt_manifest" />
               <SelectField
-                label="Exit state if incomplete"
+                label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_exitStateIfIncomplete"), "Exit state if incomplete")}
+                hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_exitStateIfIncomplete"))}
                 value={scorm.exitStateIncomplete}
                 onChange={(value) => setScorm((prev) => ({ ...prev, exitStateIncomplete: value }))}
                 options={[
@@ -1261,7 +1330,8 @@ export function TrackingAnalyticsPage({
                 ]}
               />
               <SelectField
-                label="Exit state if complete"
+                label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_exitStateIfComplete"), "Exit state if complete")}
+                hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_exitStateIfComplete"))}
                 value={scorm.exitStateComplete}
                 onChange={(value) => setScorm((prev) => ({ ...prev, exitStateComplete: value }))}
                 options={[
@@ -1271,34 +1341,35 @@ export function TrackingAnalyticsPage({
                   { value: "", label: "'' (empty string)" },
                 ]}
               />
-              <CheckboxRow checked={scorm.completedWhenFailed} onChange={(v) => setScorm((prev) => ({ ...prev, completedWhenFailed: v }))} label="Completed when failed" />
-              <TextField label="Override value for maximum character limit on fill-in type answers" type="number" value={scorm.fillInCharacterLimit} onChange={(value) => setScorm((prev) => ({ ...prev, fillInCharacterLimit: value }))} />
+              <CheckboxRow checked={scorm.completedWhenFailed} onChange={(v) => setScorm((prev) => ({ ...prev, completedWhenFailed: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_setCompletedWhenFailed"), "Completed when failed")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_setCompletedWhenFailed"))} />
+              <TextField label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_maxCharLimitOverride"), "Override value for maximum character limit on fill-in type answers")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_maxCharLimitOverride"))} type="number" value={scorm.fillInCharacterLimit} onChange={(value) => setScorm((prev) => ({ ...prev, fillInCharacterLimit: value }))} />
 
-              <SectionLabel>Connection Test</SectionLabel>
+              <SectionLabel hint={getSchemaHint(getSchemaNode(spoorSchema, "_advancedSettings", "_connectionTest"))}>Connection Test</SectionLabel>
               <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
-                <CheckboxRow checked={scorm.connectionTestEnabled} onChange={(v) => setScorm((prev) => ({ ...prev, connectionTestEnabled: v }))} label="Is Enabled" />
-                <CheckboxRow checked={scorm.connectionTestOnSetValue} onChange={(v) => setScorm((prev) => ({ ...prev, connectionTestOnSetValue: v }))} label="Test on set value" />
-                <TextField label="Silent Retry Limit" type="number" value={scorm.silentRetryLimit} onChange={(value) => setScorm((prev) => ({ ...prev, silentRetryLimit: value }))} />
-                <TextField label="Silent Retry Delay" type="number" value={scorm.silentRetryDelay} onChange={(value) => setScorm((prev) => ({ ...prev, silentRetryDelay: value }))} />
+                <CheckboxRow checked={scorm.connectionTestEnabled} onChange={(v) => setScorm((prev) => ({ ...prev, connectionTestEnabled: v }))} label={getSchemaLabel(getSchemaNode(spoorSchema, "_advancedSettings", "_connectionTest", "_isEnabled"), "Is Enabled")} hint={getSchemaHint(getSchemaNode(spoorSchema, "_advancedSettings", "_connectionTest", "_isEnabled"))} />
+                <CheckboxRow checked={scorm.connectionTestOnSetValue} onChange={(v) => setScorm((prev) => ({ ...prev, connectionTestOnSetValue: v }))} label={getSchemaLabel(getSchemaNode(spoorSchema, "_advancedSettings", "_connectionTest", "_testOnSetValue"), "Test on set value")} hint={getSchemaHint(getSchemaNode(spoorSchema, "_advancedSettings", "_connectionTest", "_testOnSetValue"))} />
+                <TextField label={getSchemaLabel(getSchemaNode(spoorSchema, "_advancedSettings", "_connectionTest", "_silentRetryLimit"), "Silent Retry Limit")} hint={getSchemaHint(getSchemaNode(spoorSchema, "_advancedSettings", "_connectionTest", "_silentRetryLimit"))} type="number" value={scorm.silentRetryLimit} onChange={(value) => setScorm((prev) => ({ ...prev, silentRetryLimit: value }))} />
+                <TextField label={getSchemaLabel(getSchemaNode(spoorSchema, "_advancedSettings", "_connectionTest", "_silentRetryDelay"), "Silent Retry Delay")} hint={getSchemaHint(getSchemaNode(spoorSchema, "_advancedSettings", "_connectionTest", "_silentRetryDelay"))} type="number" value={scorm.silentRetryDelay} onChange={(value) => setScorm((prev) => ({ ...prev, silentRetryDelay: value }))} />
               </div>
 
-              <CheckboxRow checked={scorm.uniqueInteractionIds} onChange={(v) => setScorm((prev) => ({ ...prev, uniqueInteractionIds: v }))} label="Unique Interaction Ids" />
-              <CheckboxRow checked={scorm.showResetButton} onChange={(v) => setScorm((prev) => ({ ...prev, showResetButton: v }))} label="Show reset button (scorm_test_harness.html only)" />
-              <CheckboxRow checked={scorm.persistCookieData} onChange={(v) => setScorm((prev) => ({ ...prev, persistCookieData: v }))} label="Persist cookie data (scorm_test_harness.html only)" />
+              <CheckboxRow checked={scorm.uniqueInteractionIds} onChange={(v) => setScorm((prev) => ({ ...prev, uniqueInteractionIds: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_uniqueInteractionIds"), "Unique Interaction Ids")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_advancedSettings", "_uniqueInteractionIds"))} />
+              <CheckboxRow checked={scorm.showResetButton} onChange={(v) => setScorm((prev) => ({ ...prev, showResetButton: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_showCookieLmsResetButton"), "Show reset button (scorm_test_harness.html only)")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_showCookieLmsResetButton"))} />
+              <CheckboxRow checked={scorm.persistCookieData} onChange={(v) => setScorm((prev) => ({ ...prev, persistCookieData: v }))} label={getSchemaLabel(getSchemaNode(spoorConfigSchema, "_shouldPersistCookieLMSData"), "Persist cookie data (scorm_test_harness.html only)")} hint={getSchemaHint(getSchemaNode(spoorConfigSchema, "_shouldPersistCookieLMSData"))} />
             </div>
           )}
 
           {trackingPlugin === "xapi" && (
             <div className="mt-4 flex flex-col gap-3">
-              <SectionLabel>xAPI Settings</SectionLabel>
-              <SelectField label="Specification" value={xapi.specification} onChange={(value) => setXapi((prev) => ({ ...prev, specification: value }))} options={[{ value: "xAPI", label: "xAPI" }, { value: "cmi5", label: "cmi5" }]} />
-              <TextField label="Activity ID" value={xapi.activityID} onChange={(value) => setXapi((prev) => ({ ...prev, activityID: value }))} placeholder="https://your-course-url" />
-              <TextField label="Assignable Unit (AU) ID" value={xapi.auID} onChange={(value) => setXapi((prev) => ({ ...prev, auID: value }))} />
-              <TextField label="LRS Endpoint" value={xapi.endpoint} onChange={(value) => setXapi((prev) => ({ ...prev, endpoint: value }))} placeholder="https://lrs.example.com/xapi" />
-              <TextField label="LRS User / Key" value={xapi.user} onChange={(value) => setXapi((prev) => ({ ...prev, user: value }))} />
-              <TextField label="LRS Password / Secret" type="password" value={xapi.password} onChange={(value) => setXapi((prev) => ({ ...prev, password: value }))} />
+              <SectionLabel hint={getSchemaHint(xapiConfigSchema)}>{getSchemaLabel(xapiConfigSchema, "xAPI Settings")}</SectionLabel>
+              <SelectField label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_specification"), "Specification")} hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_specification"))} value={xapi.specification} onChange={(value) => setXapi((prev) => ({ ...prev, specification: value }))} options={[{ value: "xAPI", label: "xAPI" }, { value: "cmi5", label: "cmi5" }]} />
+              <TextField label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_activityID"), "Activity ID")} hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_activityID"))} value={xapi.activityID} onChange={(value) => setXapi((prev) => ({ ...prev, activityID: value }))} placeholder="https://your-course-url" />
+              <TextField label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_auID"), "Assignable Unit (AU) ID")} hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_auID"))} value={xapi.auID} onChange={(value) => setXapi((prev) => ({ ...prev, auID: value }))} />
+              <TextField label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_endpoint"), "LRS Endpoint")} hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_endpoint"))} value={xapi.endpoint} onChange={(value) => setXapi((prev) => ({ ...prev, endpoint: value }))} placeholder="https://lrs.example.com/xapi" />
+              <TextField label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_user"), "LRS User / Key")} hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_user"))} value={xapi.user} onChange={(value) => setXapi((prev) => ({ ...prev, user: value }))} />
+              <TextField label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_password"), "LRS Password / Secret")} hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_password"))} type="password" value={xapi.password} onChange={(value) => setXapi((prev) => ({ ...prev, password: value }))} />
               <SelectField
-                label="Verb language"
+                label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_lang"), "Verb language")}
+                hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_lang"))}
                 value={xapi.lang}
                 onChange={(value) => setXapi((prev) => ({ ...prev, lang: value }))}
                 options={[
@@ -1308,10 +1379,10 @@ export function TrackingAnalyticsPage({
                   { value: "es-ES", label: "es-ES" },
                 ]}
               />
-              <TextField label="Component blacklist" value={xapi.componentBlacklist} onChange={(value) => setXapi((prev) => ({ ...prev, componentBlacklist: value }))} placeholder="blank,graphic" />
-              <CheckboxRow checked={xapi.generateIds} onChange={(v) => setXapi((prev) => ({ ...prev, generateIds: v }))} label="Auto-generate ID for statements" />
-              <CheckboxRow checked={xapi.shouldTrackState} onChange={(v) => setXapi((prev) => ({ ...prev, shouldTrackState: v }))} label="Track state" />
-              <CheckboxRow checked={xapi.shouldUseRegistration} onChange={(v) => setXapi((prev) => ({ ...prev, shouldUseRegistration: v }))} label="Use registration" />
+              <TextField label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_componentBlacklist"), "Component blacklist")} hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_componentBlacklist"))} value={xapi.componentBlacklist} onChange={(value) => setXapi((prev) => ({ ...prev, componentBlacklist: value }))} placeholder="blank,graphic" />
+              <CheckboxRow checked={xapi.generateIds} onChange={(v) => setXapi((prev) => ({ ...prev, generateIds: v }))} label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_generateIds"), "Auto-generate ID for statements")} hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_generateIds"))} />
+              <CheckboxRow checked={xapi.shouldTrackState} onChange={(v) => setXapi((prev) => ({ ...prev, shouldTrackState: v }))} label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_shouldTrackState"), "Track state")} hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_shouldTrackState"))} />
+              <CheckboxRow checked={xapi.shouldUseRegistration} onChange={(v) => setXapi((prev) => ({ ...prev, shouldUseRegistration: v }))} label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_shouldUseRegistration"), "Use registration")} hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_shouldUseRegistration"))} />
 
               <SectionLabel>Core Events</SectionLabel>
               <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
@@ -1341,7 +1412,8 @@ export function TrackingAnalyticsPage({
               </div>
 
               <SelectField
-                label="LRS connection failure behaviour"
+                label={getSchemaLabel(getSchemaNode(xapiConfigSchema, "_lrsFailureBehaviour"), "LRS connection failure behaviour")}
+                hint={getSchemaHint(getSchemaNode(xapiConfigSchema, "_lrsFailureBehaviour"))}
                 value={xapi.lrsFailureBehaviour}
                 onChange={(value) => setXapi((prev) => ({ ...prev, lrsFailureBehaviour: value }))}
                 options={[
@@ -1354,18 +1426,19 @@ export function TrackingAnalyticsPage({
 
           {trackingPlugin === "hyperbridge" && (
             <div className="mt-4 flex flex-col gap-4">
-              <SectionLabel>HyperBridge Settings</SectionLabel>
+              <SectionLabel hint={getSchemaHint(hyperConfigSchema)}>{getSchemaLabel(hyperConfigSchema, "HyperBridge Settings")}</SectionLabel>
               <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
                 <SubSectionLabel>Tracking</SubSectionLabel>
-                <CheckboxRow checked={hyper.shouldStoreResponses} onChange={(v) => setHyper((prev) => ({ ...prev, shouldStoreResponses: v }))} label="Store question state" />
-                <CheckboxRow checked={hyper.shouldStoreAttempts} onChange={(v) => setHyper((prev) => ({ ...prev, shouldStoreAttempts: v }))} label="Store question attempt states" />
-                <CheckboxRow checked={hyper.shouldCompress} onChange={(v) => setHyper((prev) => ({ ...prev, shouldCompress: v }))} label="Should compress data" />
+                <CheckboxRow checked={hyper.shouldStoreResponses} onChange={(v) => setHyper((prev) => ({ ...prev, shouldStoreResponses: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_tracking", "_shouldStoreResponses"), "Store question state")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_tracking", "_shouldStoreResponses"))} />
+                <CheckboxRow checked={hyper.shouldStoreAttempts} onChange={(v) => setHyper((prev) => ({ ...prev, shouldStoreAttempts: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_tracking", "_shouldStoreAttempts"), "Store question attempt states")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_tracking", "_shouldStoreAttempts"))} />
+                <CheckboxRow checked={hyper.shouldCompress} onChange={(v) => setHyper((prev) => ({ ...prev, shouldCompress: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_tracking", "_shouldCompress"), "Should compress data")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_tracking", "_shouldCompress"))} />
               </div>
 
               <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
                 <SubSectionLabel>Reporting</SubSectionLabel>
                 <SelectField
-                  label="Tracking success status"
+                  label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_reporting", "_onTrackingCriteriaMet"), "Tracking success status")}
+                  hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_reporting", "_onTrackingCriteriaMet"))}
                   value={hyper.onTrackingCriteriaMet}
                   onChange={(value) => setHyper((prev) => ({ ...prev, onTrackingCriteriaMet: value }))}
                   options={[
@@ -1376,7 +1449,8 @@ export function TrackingAnalyticsPage({
                   ]}
                 />
                 <SelectField
-                  label="Assessment failure status"
+                  label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_reporting", "_onAssessmentFailure"), "Assessment failure status")}
+                  hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_reporting", "_onAssessmentFailure"))}
                   value={hyper.onAssessmentFailure}
                   onChange={(value) => setHyper((prev) => ({ ...prev, onAssessmentFailure: value }))}
                   options={[
@@ -1388,23 +1462,25 @@ export function TrackingAnalyticsPage({
                 <CheckboxRow
                   checked={hyper.resetStatusWhenLanguageChanged}
                   onChange={(v) => setHyper((prev) => ({ ...prev, resetStatusWhenLanguageChanged: v }))}
-                  label="Reset status when language changed?"
+                  label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_reporting", "_resetStatusOnLanguageChange"), "Reset status when language changed?")}
+                  hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_reporting", "_resetStatusOnLanguageChange"))}
                 />
               </div>
 
-              <SectionLabel>Advanced Settings</SectionLabel>
-              <CheckboxRow checked={hyper.commitOnStatusChange} onChange={(v) => setHyper((prev) => ({ ...prev, commitOnStatusChange: v }))} label="Commit data on status change" />
-              <CheckboxRow checked={hyper.showSuspendDataPopup} onChange={(v) => setHyper((prev) => ({ ...prev, showSuspendDataPopup: v }))} label="Suspend data popup" />
-              <CheckboxRow checked={hyper.commitOnAnyChange} onChange={(v) => setHyper((prev) => ({ ...prev, commitOnAnyChange: v }))} label="Commit data on any change" />
-              <CheckboxRow checked={hyper.commitOnAssessmentResult} onChange={(v) => setHyper((prev) => ({ ...prev, commitOnAssessmentResult: v }))} label="Commit data on assessment results" />
-              <TextField label="Frequency (mins) of automatic commits" type="number" value={hyper.timedCommitFrequency} onChange={(value) => setHyper((prev) => ({ ...prev, timedCommitFrequency: value }))} />
-              <TextField label="Maximum number of commit retries" type="number" value={hyper.maxCommitRetries} onChange={(value) => setHyper((prev) => ({ ...prev, maxCommitRetries: value }))} />
-              <TextField label="Commit retry delay" type="number" value={hyper.commitRetryDelay} onChange={(value) => setHyper((prev) => ({ ...prev, commitRetryDelay: value }))} />
-              <CheckboxRow checked={hyper.suppressLmsErrors} onChange={(v) => setHyper((prev) => ({ ...prev, suppressLmsErrors: v }))} label="Suppress LMS errors" />
-              <CheckboxRow checked={hyper.commitOnVisibilityChangeHidden} onChange={(v) => setHyper((prev) => ({ ...prev, commitOnVisibilityChangeHidden: v }))} label="Commit on visibility change hidden" />
-              <TextField label="Manifest identifier" value={hyper.manifestIdentifier} onChange={(value) => setHyper((prev) => ({ ...prev, manifestIdentifier: value }))} placeholder="adapt_manifest" />
+              <SectionLabel hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings"))}>Advanced Settings</SectionLabel>
+              <CheckboxRow checked={hyper.commitOnStatusChange} onChange={(v) => setHyper((prev) => ({ ...prev, commitOnStatusChange: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_commitOnStatusChange"), "Commit data on status change")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_commitOnStatusChange"))} />
+              <CheckboxRow checked={hyper.showSuspendDataPopup} onChange={(v) => setHyper((prev) => ({ ...prev, showSuspendDataPopup: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_showSuspendDataPopup"), "Suspend data popup")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_showSuspendDataPopup"))} />
+              <CheckboxRow checked={hyper.commitOnAnyChange} onChange={(v) => setHyper((prev) => ({ ...prev, commitOnAnyChange: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_commitOnAnyChange"), "Commit data on any change")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_commitOnAnyChange"))} />
+              <CheckboxRow checked={hyper.commitOnAssessmentResult} onChange={(v) => setHyper((prev) => ({ ...prev, commitOnAssessmentResult: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_commitOnAssessmentResult"), "Commit data on assessment results")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_commitOnAssessmentResult"))} />
+              <TextField label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_timedCommitFrequency"), "Frequency (mins) of automatic commits")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_timedCommitFrequency"))} type="number" value={hyper.timedCommitFrequency} onChange={(value) => setHyper((prev) => ({ ...prev, timedCommitFrequency: value }))} />
+              <TextField label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_maxCommitRetries"), "Maximum number of commit retries")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_maxCommitRetries"))} type="number" value={hyper.maxCommitRetries} onChange={(value) => setHyper((prev) => ({ ...prev, maxCommitRetries: value }))} />
+              <TextField label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_commitRetryDelay"), "Commit retry delay")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_commitRetryDelay"))} type="number" value={hyper.commitRetryDelay} onChange={(value) => setHyper((prev) => ({ ...prev, commitRetryDelay: value }))} />
+              <CheckboxRow checked={hyper.suppressLmsErrors} onChange={(v) => setHyper((prev) => ({ ...prev, suppressLmsErrors: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_suppressErrors"), "Suppress LMS errors")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_suppressErrors"))} />
+              <CheckboxRow checked={hyper.commitOnVisibilityChangeHidden} onChange={(v) => setHyper((prev) => ({ ...prev, commitOnVisibilityChangeHidden: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_commitOnVisibilityChangeHidden"), "Commit on visibility change hidden")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_commitOnVisibilityChangeHidden"))} />
+              <TextField label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_manifestIdentifier"), "Manifest identifier")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_manifestIdentifier"))} value={hyper.manifestIdentifier} onChange={(value) => setHyper((prev) => ({ ...prev, manifestIdentifier: value }))} placeholder="adapt_manifest" />
               <SelectField
-                label="Exit state if incomplete"
+                label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_exitStateIfIncomplete"), "Exit state if incomplete")}
+                hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_exitStateIfIncomplete"))}
                 value={hyper.exitStateIncomplete}
                 onChange={(value) => setHyper((prev) => ({ ...prev, exitStateIncomplete: value }))}
                 options={[
@@ -1415,7 +1491,8 @@ export function TrackingAnalyticsPage({
                 ]}
               />
               <SelectField
-                label="Exit state if complete"
+                label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_exitStateIfComplete"), "Exit state if complete")}
+                hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_exitStateIfComplete"))}
                 value={hyper.exitStateComplete}
                 onChange={(value) => setHyper((prev) => ({ ...prev, exitStateComplete: value }))}
                 options={[
@@ -1425,40 +1502,41 @@ export function TrackingAnalyticsPage({
                   { value: "", label: "'' (empty string)" },
                 ]}
               />
-              <TextField label="Override value for maximum character limit on fill-in type answers" type="number" value={hyper.fillInCharacterLimit} onChange={(value) => setHyper((prev) => ({ ...prev, fillInCharacterLimit: value }))} />
+              <TextField label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_maxCharLimitOverride"), "Override value for maximum character limit on fill-in type answers")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_maxCharLimitOverride"))} type="number" value={hyper.fillInCharacterLimit} onChange={(value) => setHyper((prev) => ({ ...prev, fillInCharacterLimit: value }))} />
 
-              <SectionLabel>Connection Test</SectionLabel>
+              <SectionLabel hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest"))}>Connection Test</SectionLabel>
               <div className="ml-4 pl-3 border-l-2 border-[#e5e7eb] flex flex-col gap-3">
-                <CheckboxRow checked={hyper.connectionTestEnabled} onChange={(v) => setHyper((prev) => ({ ...prev, connectionTestEnabled: v }))} label="Is Enabled" />
-                <CheckboxRow checked={hyper.connectionTestOnSetValue} onChange={(v) => setHyper((prev) => ({ ...prev, connectionTestOnSetValue: v }))} label="Test on set value" />
-                <TextField label="Silent Retry Limit" type="number" value={hyper.silentRetryLimit} onChange={(value) => setHyper((prev) => ({ ...prev, silentRetryLimit: value }))} />
-                <TextField label="Silent Retry Delay" type="number" value={hyper.silentRetryDelay} onChange={(value) => setHyper((prev) => ({ ...prev, silentRetryDelay: value }))} />
+                <CheckboxRow checked={hyper.connectionTestEnabled} onChange={(v) => setHyper((prev) => ({ ...prev, connectionTestEnabled: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest", "_isEnabled"), "Is Enabled")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest", "_isEnabled"))} />
+                <CheckboxRow checked={hyper.connectionTestOnSetValue} onChange={(v) => setHyper((prev) => ({ ...prev, connectionTestOnSetValue: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest", "_testOnSetValue"), "Test on set value")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest", "_testOnSetValue"))} />
+                <TextField label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest", "_silentRetryLimit"), "Silent Retry Limit")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest", "_silentRetryLimit"))} type="number" value={hyper.silentRetryLimit} onChange={(value) => setHyper((prev) => ({ ...prev, silentRetryLimit: value }))} />
+                <TextField label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest", "_silentRetryDelay"), "Silent Retry Delay")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_connectionTest", "_silentRetryDelay"))} type="number" value={hyper.silentRetryDelay} onChange={(value) => setHyper((prev) => ({ ...prev, silentRetryDelay: value }))} />
               </div>
 
-              <CheckboxRow checked={hyper.uniqueInteractionIds} onChange={(v) => setHyper((prev) => ({ ...prev, uniqueInteractionIds: v }))} label="Unique Interaction Ids" />
+              <CheckboxRow checked={hyper.uniqueInteractionIds} onChange={(v) => setHyper((prev) => ({ ...prev, uniqueInteractionIds: v }))} label={getSchemaLabel(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_uniqueInteractionIds"), "Unique Interaction Ids")} hint={getSchemaHint(getSchemaNode(hyperConfigSchema, "_advancedSettings", "_uniqueInteractionIds"))} />
             </div>
           )}
         </AccordionCard>
 
         <AccordionCard
           title="Analytics"
+          hint={getSchemaHint(uesSchema) ?? getSchemaHint(googleSchema) ?? getSchemaHint(hotjarSchema)}
           open={openAccordion === "analytics"}
           onToggle={() => toggleAccordion("analytics")}
           icon={<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>}
         >
           <div className="flex flex-col gap-1.5">
-            <PluginRadio id="ues" label="Unified Event System Analytics" selected={analyticsPlugin === "ues"} onSelect={() => analyticsPlugin === "ues" ? (setAnalyticsPlugin(null), setUes(p => ({ ...p, isEnabled: false }))) : handleAnalyticsPluginChange("ues")} />
-            <PluginRadio id="google" label="Google Analytics" selected={analyticsPlugin === "google"} onSelect={() => analyticsPlugin === "google" ? (setAnalyticsPlugin(null), setGoogle(p => ({ ...p, isEnabled: false }))) : handleAnalyticsPluginChange("google")} />
-            <PluginRadio id="hotjar" label="Hotjar Analytics" selected={analyticsPlugin === "hotjar"} onSelect={() => analyticsPlugin === "hotjar" ? (setAnalyticsPlugin(null), setHotjar(p => ({ ...p, isEnabled: false }))) : handleAnalyticsPluginChange("hotjar")} />
+            <PluginRadio id="ues" label="Unified Event System Analytics" hint={getSchemaHint(getSchemaNode(uesConfigSchema, "_isEnabled"))} selected={analyticsPlugin === "ues"} onSelect={() => analyticsPlugin === "ues" ? (setAnalyticsPlugin(null), setUes(p => ({ ...p, isEnabled: false }))) : handleAnalyticsPluginChange("ues")} />
+            <PluginRadio id="google" label="Google Analytics" hint={getSchemaHint(getSchemaNode(googleConfigSchema, "_isEnabled"))} selected={analyticsPlugin === "google"} onSelect={() => analyticsPlugin === "google" ? (setAnalyticsPlugin(null), setGoogle(p => ({ ...p, isEnabled: false }))) : handleAnalyticsPluginChange("google")} />
+            <PluginRadio id="hotjar" label="Hotjar Analytics" hint={getSchemaHint(getSchemaNode(hotjarConfigSchema, "_isEnabled"))} selected={analyticsPlugin === "hotjar"} onSelect={() => analyticsPlugin === "hotjar" ? (setAnalyticsPlugin(null), setHotjar(p => ({ ...p, isEnabled: false }))) : handleAnalyticsPluginChange("hotjar")} />
           </div>
 
           {analyticsPlugin === "ues" && (
             <div className="mt-4 flex flex-col gap-4">
-              <SectionLabel>UES Settings</SectionLabel>
-              <CheckboxRow checked={ues.isDebugMode} onChange={(v) => setUes((prev) => ({ ...prev, isDebugMode: v }))} label="Enable debug mode" />
-              <TextField label="Project tag" value={ues.projectTag} onChange={(value) => setUes((prev) => ({ ...prev, projectTag: value }))} />
-              <TextField label="Portfolio" value={ues.portfolio} onChange={(value) => setUes((prev) => ({ ...prev, portfolio: value }))} />
-              <TextField label="Resource link ID" value={ues.resourceLinkId} onChange={(value) => setUes((prev) => ({ ...prev, resourceLinkId: value }))} />
+              <SectionLabel hint={getSchemaHint(uesConfigSchema)}>{getSchemaLabel(uesConfigSchema, "UES Settings")}</SectionLabel>
+              <CheckboxRow checked={ues.isDebugMode} onChange={(v) => setUes((prev) => ({ ...prev, isDebugMode: v }))} label={getSchemaLabel(getSchemaNode(uesConfigSchema, "_isDebugMode"), "Enable debug mode")} hint={getSchemaHint(getSchemaNode(uesConfigSchema, "_isDebugMode"))} />
+              <TextField label={getSchemaLabel(getSchemaNode(uesConfigSchema, "_projectTag"), "Project tag")} hint={getSchemaHint(getSchemaNode(uesConfigSchema, "_projectTag"))} value={ues.projectTag} onChange={(value) => setUes((prev) => ({ ...prev, projectTag: value }))} />
+              <TextField label={getSchemaLabel(getSchemaNode(uesConfigSchema, "_portfolio"), "Portfolio")} hint={getSchemaHint(getSchemaNode(uesConfigSchema, "_portfolio"))} value={ues.portfolio} onChange={(value) => setUes((prev) => ({ ...prev, portfolio: value }))} />
+              <TextField label={getSchemaLabel(getSchemaNode(uesConfigSchema, "_resourceLinkId"), "Resource link ID")} hint={getSchemaHint(getSchemaNode(uesConfigSchema, "_resourceLinkId"))} value={ues.resourceLinkId} onChange={(value) => setUes((prev) => ({ ...prev, resourceLinkId: value }))} />
               <DeploymentListField
                 label="Standard"
                 type="standard"
@@ -1480,9 +1558,10 @@ export function TrackingAnalyticsPage({
 
           {analyticsPlugin === "google" && (
             <div className="mt-4 flex flex-col gap-3">
-              <SectionLabel>Google Analytics Settings</SectionLabel>
+              <SectionLabel hint={getSchemaHint(googleConfigSchema)}>{getSchemaLabel(googleConfigSchema, "Google Analytics Settings")}</SectionLabel>
               <TextField
-                label="Measurement ID"
+                label={getSchemaLabel(getSchemaNode(googleConfigSchema, "_trackingId"), "Measurement ID")}
+                hint={getSchemaHint(getSchemaNode(googleConfigSchema, "_trackingId"))}
                 value={google.trackingId}
                 onChange={(value) => setGoogle((prev) => ({ ...prev, trackingId: value }))}
                 placeholder="G-XXXXXXXXXX"
@@ -1493,9 +1572,10 @@ export function TrackingAnalyticsPage({
 
           {analyticsPlugin === "hotjar" && (
             <div className="mt-4 flex flex-col gap-3">
-              <SectionLabel>Hotjar Settings</SectionLabel>
+              <SectionLabel hint={getSchemaHint(hotjarConfigSchema)}>{getSchemaLabel(hotjarConfigSchema, "Hotjar Settings")}</SectionLabel>
               <TextField
-                label="Site ID"
+                label={getSchemaLabel(getSchemaNode(hotjarConfigSchema, "_siteId"), "Site ID")}
+                hint={getSchemaHint(getSchemaNode(hotjarConfigSchema, "_siteId"))}
                 value={hotjar.siteId}
                 onChange={(value) => setHotjar((prev) => ({ ...prev, siteId: value }))}
                 placeholder="1234567"

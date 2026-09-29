@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect, useRef, useCallback, useDeferredValue, memo } from "react";
-import { getAssets, getMaxFileUploadSize, trashAsset, restoreAsset, updateAsset, uploadAsset } from "@/api/adaptAuthoring";
+import { useState, useMemo, useEffect, useRef, useCallback, memo } from "react";
+import { getAssets, getMaxFileUploadSize, trashAsset, restoreAsset, updateAsset, uploadAsset, fetchDashboardTags } from "@/api/adaptAuthoring";
 import type { AssetFormat, DashboardAsset } from "@/api/adaptAuthoring";
 import { usePageLoader } from "@/hooks";
 import AiAssistant from "@/components/common/AiAssistant";
@@ -637,22 +637,18 @@ export function AssetManagementWorkspace({
 }: AssetManagementWorkspaceProps) {
   const [assets, setAssets]             = useState<Asset[]>([]);
   const [isLoadingAssets, setIsLoadingAssets] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore]           = useState(false);
+  // Same infinite-scroll shape as the dashboard course list (HomePage.tsx): a skip
+  // cursor and a load generation counter live in refs, not state, so a debounced
+  // search reset can't be clobbered by a slower in-flight page that was already
+  // superseded.
+  const skipRef = useRef(0);
+  const loadGenRef = useRef(0);
+  const loadingMoreRef = useRef(false);
   const fixedPickerFormat = pickerMode && pickerAssetType ? pickerAssetType : null;
 
   usePageLoader(!pickerMode && isLoadingAssets);
-
-  const loadAssets = useCallback(async () => {
-    setIsLoadingAssets(true);
-    try {
-      const rows = await getAssets(!pickerMode);
-      setAssets(rows);
-    } catch {
-      setAssets([]);
-    } finally {
-      setIsLoadingAssets(false);
-    }
-  }, [pickerMode]);
-  useEffect(() => { void loadAssets(); }, [loadAssets]);
   const [search, setSearch]             = useState("");
   const [formatFilter, setFormatFilter] = useState<AssetFormat | "All">(
     fixedPickerFormat && isDirectFormatPickerType(fixedPickerFormat) ? fixedPickerFormat : "All"
@@ -720,22 +716,33 @@ export function AssetManagementWorkspace({
     };
   }, []);
 
-  const deferredSearch = useDeferredValue(search);
-  const availableTags = useMemo(() => {
-    const seen = new Set<string>();
-    const tags: string[] = [];
-    for (const asset of assets) {
-      for (const rawTag of asset.tags) {
-        const tag = rawTag.trim();
-        if (!tag) continue;
-        const key = tag.toLowerCase();
-        if (seen.has(key)) continue;
-        seen.add(key);
-        tags.push(tag);
-      }
-    }
-    return tags.sort((a, b) => a.localeCompare(b));
-  }, [assets]);
+  // Debounce the search box before it drives a server request (was: instant, since
+  // filtering used to happen entirely in-memory over an already-fully-loaded list).
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const handle = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => window.clearTimeout(handle);
+  }, [search]);
+
+  // Tag universe for the filter chips comes from the same tenant-wide tag endpoint the
+  // old UI uses, not from currently-loaded assets — those are now only a page at a time.
+  const [tagsUniverse, setTagsUniverse] = useState<Array<{ title: string; id: string }>>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void fetchDashboardTags().then((rows) => {
+      if (!cancelled) setTagsUniverse(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const availableTags = useMemo(() => tagsUniverse.map((t) => t.title), [tagsUniverse]);
+  const selectedTagIds = useMemo(() => {
+    const idByTitle = new Map(tagsUniverse.map((t) => [t.title.toLowerCase(), t.id]));
+    return selectedTags
+      .map((t) => idByTitle.get(t.trim().toLowerCase()))
+      .filter((id): id is string => !!id);
+  }, [selectedTags, tagsUniverse]);
 
   const visibleTagOptions = useMemo(
     () => availableTags.filter((t) => !tagSearch.trim() || t.toLowerCase().includes(tagSearch.trim().toLowerCase())),
@@ -744,24 +751,76 @@ export function AssetManagementWorkspace({
 
   const effectiveFormatFilter: AssetFormat | "All" =
     fixedPickerFormat && isDirectFormatPickerType(fixedPickerFormat) ? fixedPickerFormat : formatFilter;
+
+  // Search/format(direct)/tags are now applied server-side (see getAssets). The only
+  // filtering left to do here is for composite picker types (media/h5p/other-excluding-
+  // h5p/all) that don't map onto a single server-side format value — see
+  // matchesPickerAssetType. That's a real corner cut: those picker views can display
+  // fewer than a full page of items before "Load more" is needed, since some fetched
+  // items get filtered out client-side after the fact.
+  const needsClientFormatFilter = !!fixedPickerFormat && !isDirectFormatPickerType(fixedPickerFormat);
   const filtered = useMemo(() => {
-    const q = deferredSearch.trim().toLowerCase();
-    return assets.filter((a) => {
-      const matchSearch =
-        q === "" ||
-        a.title.toLowerCase().includes(q) ||
-        a.tags.some((t) => t.toLowerCase().includes(q));
-      const matchFormat = fixedPickerFormat
-        ? matchesPickerAssetType(a, fixedPickerFormat)
-        : effectiveFormatFilter === "All" || a.format === effectiveFormatFilter;
-      const matchTags =
-        selectedTags.length === 0 ||
-        selectedTags.every((tag) =>
-          a.tags.some((assetTag) => assetTag.trim().toLowerCase() === tag.trim().toLowerCase())
-        );
-      return matchSearch && matchFormat && matchTags;
-    });
-  }, [assets, deferredSearch, effectiveFormatFilter, fixedPickerFormat, selectedTags]);
+    if (!needsClientFormatFilter) return assets;
+    return assets.filter((a) => matchesPickerAssetType(a, fixedPickerFormat!));
+  }, [assets, needsClientFormatFilter, fixedPickerFormat]);
+
+  const fetchAssetsPage = useCallback(async (reset: boolean) => {
+    if (!reset) {
+      if (!hasMore || loadingMoreRef.current) return;
+      loadingMoreRef.current = true;
+    }
+    const gen = reset ? ++loadGenRef.current : loadGenRef.current;
+    if (reset) {
+      setIsLoadingAssets(true);
+      skipRef.current = 0;
+    } else {
+      setIsLoadingMore(true);
+    }
+    try {
+      const { items, hasMore: more } = await getAssets({
+        includeDeleted: !pickerMode,
+        skip: skipRef.current,
+        search: debouncedSearch,
+        format: effectiveFormatFilter,
+        tagIds: selectedTagIds,
+      });
+      if (gen !== loadGenRef.current) return; // superseded by a newer reset
+      setAssets((prev) => (reset ? items : [...prev, ...items]));
+      skipRef.current += items.length;
+      setHasMore(more);
+    } catch {
+      if (gen === loadGenRef.current) {
+        if (reset) setAssets([]);
+        setHasMore(false);
+      }
+    } finally {
+      if (gen === loadGenRef.current) {
+        if (reset) setIsLoadingAssets(false); else setIsLoadingMore(false);
+      }
+      if (!reset) loadingMoreRef.current = false;
+    }
+  }, [pickerMode, debouncedSearch, effectiveFormatFilter, selectedTagIds, hasMore]);
+
+  useEffect(() => {
+    void fetchAssetsPage(true);
+    // Reset-and-refetch whenever a filter changes; "load more" (the sentinel below)
+    // is a separate, explicit action and intentionally not a dependency here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedSearch, effectiveFormatFilter, selectedTagIds, pickerMode]);
+
+  // Infinite scroll: pull the next page when the sentinel nears the viewport —
+  // same mechanism as the dashboard course list (HomePage.tsx).
+  const assetSentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = assetSentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) void fetchAssetsPage(false); },
+      { rootMargin: "400px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [fetchAssetsPage]);
 
   const selectedAsset = useMemo(
     () => filtered.find((asset) => asset.backendId === selectedAssetId)
@@ -878,7 +937,7 @@ export function AssetManagementWorkspace({
         clearInterval(progressTimer.current);
         progressTimer.current = null;
       }
-      await loadAssets();
+      await fetchAssetsPage(true);
       setUpload((prev) => ({ ...prev, step: "done", progress: 100, uploadedAssetId: assetId }));
     } catch (error) {
       if (progressTimer.current) {
@@ -950,7 +1009,7 @@ export function AssetManagementWorkspace({
     try {
       await trashAsset(target.backendId);
     } finally {
-      await loadAssets();
+      await fetchAssetsPage(true);
     }
   }
 
@@ -964,7 +1023,7 @@ export function AssetManagementWorkspace({
       await restoreAsset(target.backendId);
       setLastDeletedAsset(null);
       setSelectedAssetId(null);
-      await loadAssets();
+      await fetchAssetsPage(true);
     } catch (error) {
       setRestoreError(getEditErrorMessage(error));
     }
@@ -1205,6 +1264,11 @@ export function AssetManagementWorkspace({
         ) : (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(170px,1fr))] md:gap-4 xl:grid-cols-[repeat(auto-fill,minmax(230px,1fr))]">
             {filtered.map((a) => <AssetCardItem key={a.id} asset={a} onEdit={handleEditAsset} onDelete={handleDeleteAsset} clickable onActivate={handleAssetActivate} hideActions={hideActions} selected={selectedAssetId === a.backendId} />)}
+          </div>
+        )}
+        {hasMore && (
+          <div ref={assetSentinelRef} className="flex justify-center py-8 text-sm text-[#9ca3af]">
+            {isLoadingMore ? "Loading more…" : ""}
           </div>
         )}
           </div>

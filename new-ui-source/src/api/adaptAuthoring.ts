@@ -16,6 +16,7 @@ import {
   LAERDAL_MEDIA_COMPONENT,
   mediaFromComponent,
   mergeProperties,
+  normalizeLaerdalMedia,
   resolveAssetUrl,
   type ImageData,
   type MediaData,
@@ -28,7 +29,7 @@ import {
   storyboardLabel,
 } from "@/components/storyboard/placeholderTitles";
 import { reverseKind, isAssessmentComponentKind } from "./componentMapping";
-import { parseAssessmentData, buildAssessmentFields, type AssessmentKind, type AssessmentData } from "@/types/storyboard";
+import { parseAssessmentData, buildAssessmentFields, emptyFeedback, type AssessmentKind, type AssessmentData } from "@/types/storyboard";
 export {
   TRACKING_ANALYTICS_EXTENSION_NAME_BY_KEY,
   defaultTrackingAnalyticsSettings,
@@ -538,6 +539,15 @@ interface EnginePluginType {
   name?: string;
   displayName?: string;
   theme?: string;
+  properties?: Record<string, unknown>;
+}
+
+interface EngineExtensionType {
+  _id: string;
+  name?: string;
+  displayName?: string;
+  version?: string;
+  targetAttribute?: string;
   properties?: Record<string, unknown>;
 }
 
@@ -2388,6 +2398,7 @@ interface EngineContentNode {
   _type?: string;
   title?: string;
   displayTitle?: string;
+  _componentTypeDisplayName?: string;
   subtitle?: string;
   _subtitle?: string;
   body?: string;
@@ -2466,8 +2477,12 @@ export async function getCourseStructure(
     getContentByCourse("component", courseId),
   ]);
 
-  const label = (n: EngineContentNode): string =>
-    n.title || n.displayTitle || "Untitled";
+  const label = (n: EngineContentNode): string => {
+    if (n._component === LAERDAL_MEDIA_COMPONENT) {
+      return n._componentTypeDisplayName || "Laerdal Media";
+    }
+    return n.title || n.displayTitle || "Untitled";
+  };
   const scalarString = (value: unknown): string => {
     if (typeof value === "string") return value;
     if (typeof value === "number" && Number.isFinite(value)) return String(value);
@@ -2901,6 +2916,9 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
   // asset renders + round-trips); every other component stays as an H4 heading
   // + body paragraph (keeps the text write-back contract intact).
   const emitMediaCard = (comp: EngineContentNode, mediaKind: "image" | "video" | "audio") => {
+    const props = (comp.properties as Record<string, unknown>) || {};
+    const description = stripHtml(comp.body || "");
+    const instruction = comp.instruction || (typeof props.instruction === "string" ? props.instruction : "");
     if (mediaKind === "image") {
       const image = imageFromMediaPoster(propOf(comp, "_media"), assetIdMap);
       out.push({
@@ -2910,7 +2928,7 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
           kind: "image",
           title: label(comp),
           adaptComponent: LAERDAL_MEDIA_COMPONENT,
-          data: JSON.stringify({ showTitle: true, description: "", instruction: "", image }),
+          data: JSON.stringify({ showTitle: true, description, instruction, image }),
         },
       });
       return;
@@ -2923,7 +2941,7 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
         kind: mediaKind,
         title: label(comp),
         adaptComponent: LAERDAL_MEDIA_COMPONENT,
-        data: JSON.stringify({ showTitle: true, description: "", instruction: "", media: data }),
+        data: JSON.stringify({ showTitle: true, description, instruction, media: data }),
       },
     });
   };
@@ -3007,7 +3025,12 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       // (independent of displayTitle) — avoids duplicating displayTitle into
       // the block-title input on reload.
       const blockTitleProp = cleanTitle && cleanTitle !== questionSeed ? cleanTitle : "";
-      const data = parseAssessmentData(sbKind as AssessmentKind, props, questionSeed);
+      const data = parseAssessmentData(
+        sbKind as AssessmentKind,
+        props,
+        questionSeed,
+        comp.instruction || (typeof props.instruction === 'string' ? props.instruction : '')
+      );
       out.push({
         id: comp._id,
         type: "sbAssessment",
@@ -3033,7 +3056,7 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       emitCard(comp, "h5p", {
         showTitle: true,
         description: stripHtml(comp.body || ""),
-        instruction: "",
+        instruction: comp.instruction || (typeof props.instruction === "string" ? props.instruction : ""),
         media,
       });
       return;
@@ -3073,7 +3096,7 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       emitCard(comp, "laerdalForm", {
         showTitle: true,
         description: stripHtml(comp.body || ""),
-        instruction: "",
+        instruction: comp.instruction || (typeof props.instruction === "string" ? props.instruction : ""),
         fields,
       });
       return;
@@ -3245,6 +3268,30 @@ export async function saveStoryboardToCourse(
   let updatedBodies = 0;
   let unmapped = 0;
   const tasks: Promise<unknown>[] = [];
+  let needsTutorExtension = false;
+  let needsAnswerSpecificFeedbackExtension = false;
+
+  for (const component of components) {
+    if (component._component !== LAERDAL_MEDIA_COMPONENT) continue;
+    const properties = (component.properties as Record<string, unknown> | undefined) || {};
+    const rawMedia =
+      (properties._media as Record<string, unknown> | undefined) ||
+      (component._media as Record<string, unknown> | undefined);
+    if (rawMedia && Array.isArray(rawMedia.cc)) continue;
+    const normalizedMedia = normalizeLaerdalMedia(rawMedia);
+    tasks.push(
+      apiClient.put(`/api/content/component/${component._id}`, {
+        properties: {
+          ...properties,
+          _media: normalizedMedia,
+        },
+      })
+    );
+    component.properties = {
+      ...properties,
+      _media: normalizedMedia,
+    };
+  }
 
   for (const raw of doc as StoryboardBlock[]) {
     const id = raw && typeof raw.id === "string" ? raw.id : undefined;
@@ -3295,11 +3342,20 @@ export async function saveStoryboardToCourse(
     if (raw.type === "sbComponent" && info.level === "component") {
       const kind = raw.props?.kind;
       let parsed: {
+        showTitle?: boolean;
         image?: ImageData;
         media?: MediaData;
         description?: string;
         instruction?: string;
         items?: Array<{ title?: string; body?: string; image?: string; imageAssetId?: string }>;
+        fields?: Array<{ control?: string; label?: string; placeholder?: string; mandatory?: boolean }>;
+        result?: {
+          assessmentId?: string;
+          completionBody?: string;
+          retryButton?: string;
+          retryFeedback?: string;
+          bands?: Array<{ score?: number; feedback?: string; allowRetry?: boolean }>;
+        };
       } = {};
       try {
         parsed = raw.props?.data ? JSON.parse(raw.props.data) : {};
@@ -3308,11 +3364,12 @@ export async function saveStoryboardToCourse(
       }
       const patch: Record<string, unknown> = {};
       const nextTitle = (raw.props?.title || "").trim();
+      const showTitle = parsed.showTitle !== false;
       if (nextTitle && nextTitle !== info.title) {
         patch.title = nextTitle;
-        patch.displayTitle = nextTitle;
         updatedTitles += 1;
       }
+      patch.displayTitle = showTitle ? nextTitle : "";
       let assetLink: string | undefined;
       let assetId: string | undefined;
       const isLaerdalMedia = info.component === LAERDAL_MEDIA_COMPONENT;
@@ -3336,11 +3393,16 @@ export async function saveStoryboardToCourse(
         mergeProperties(patch, isLaerdalMedia ? buildImageAsMedia(parsed.image) : buildGraphicField(parsed.image));
         assetLink = parsed.image?.link;
         assetId = parsed.image?.assetId;
+        patch.body = parsed.description || "";
+        patch.instruction = parsed.instruction || "";
       } else if ((kind === "video" || kind === "audio") && (isLaerdalMedia || info.component === "media")) {
         seedProperties();
-        mergeProperties(patch, buildMediaField(kind, parsed.media));
+        const originalMedia = (info.properties?._media as Record<string, unknown> | undefined) || {};
+        mergeProperties(patch, buildMediaField(kind, parsed.media, originalMedia));
         assetLink = parsed.media?.asset?.link;
         assetId = parsed.media?.asset?.assetId;
+        patch.body = parsed.description || "";
+        patch.instruction = parsed.instruction || "";
       } else if (kind === "groupedContent" && isGrouped) {
         // Grouped Content → accordion / narrative `properties._items` with
         // `_graphic.src` (matches the installed schemas). Persist any link
@@ -3359,6 +3421,8 @@ export async function saveStoryboardToCourse(
             return { title: it?.title || "", body, _graphic: { alt: "", src: imgLink, attribution: "" } };
           }),
         });
+        patch.body = parsed.description || "";
+        patch.instruction = parsed.instruction || "";
         // Each item image needs its own courseasset link for publish.
         for (const it of items) {
           const fn = filenameFromLink((it?.image || "").trim());
@@ -3366,6 +3430,82 @@ export async function saveStoryboardToCourse(
             tasks.push(linkContentAsset(courseId, "component", id, info.parentId || "", fn, it.imageAssetId));
           }
         }
+      } else if (kind === "h5p" && info.component === "laerdal-h5p") {
+        seedProperties();
+        const asset = parsed.media?.asset;
+        mergeProperties(patch, {
+          _h5pExternalAsset: asset?.external ? asset.link || asset.url || "" : "",
+          h5pAsset: asset?.external ? "" : asset?.link || "",
+        });
+        assetLink = asset?.link;
+        assetId = asset?.assetId;
+        patch.body = parsed.description || "";
+        patch.instruction = parsed.instruction || "";
+      } else if (kind === "laerdalForm" && info.component === "laerdal-form") {
+        seedProperties();
+        const inputTypeFor = (control: string): string => {
+          switch ((control || "").toLowerCase()) {
+            case "multi-line text":
+              return "textarea";
+            case "number":
+              return "number";
+            case "dropdown":
+            case "checkbox":
+              return "options";
+            default:
+              return "text";
+          }
+        };
+        const slugify = (value: string, index: number) =>
+          (value || `field-${index + 1}`)
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "") || `field-${index + 1}`;
+        const fields = Array.isArray(parsed.fields) ? parsed.fields : [];
+        mergeProperties(patch, {
+          _items: fields.map((field, index) => {
+            const control = field?.control || "";
+            const _inputType = inputTypeFor(control);
+            const item: Record<string, unknown> = {
+              _inputType,
+              _label: field?.label || "",
+              _name: slugify(field?.label || "", index),
+              _isRequired: !!field?.mandatory,
+              _placeholder: field?.placeholder || "",
+            };
+            if (_inputType === "options" && control.toLowerCase() === "checkbox") {
+              item.options = [{ text: field?.placeholder || "Yes", value: "yes" }];
+            }
+            return item;
+          }),
+        });
+        patch.body = parsed.description || "";
+        patch.instruction = parsed.instruction || "";
+      } else if (kind === "assessmentResult" && info.component === "assessmentResults") {
+        seedProperties();
+        const result = parsed.result || {};
+        const bands = Array.isArray(result.bands) ? result.bands : [];
+        mergeProperties(patch, {
+          _assessmentId: (result.assessmentId || "").trim() || undefined,
+          _completionBody: result.completionBody || "",
+          _isVisibleBeforeCompletion: false,
+          _setCompletionOn: "pass",
+          _resetType: "hard",
+          _retry: {
+            button: result.retryButton || "Try again",
+            feedback: result.retryFeedback || "",
+            _routeToAssessment: true,
+          },
+          _bands: bands
+            .slice()
+            .sort((a, b) => (Number(a?.score) || 0) - (Number(b?.score) || 0))
+            .map((band) => ({
+              _score: Math.max(0, Math.min(100, Number(band?.score) || 0)),
+              feedback: band?.feedback || "",
+              feedbackNotFinal: band?.feedback || "",
+              _allowRetry: !!band?.allowRetry,
+            })),
+        });
       } else if (kind === "text" && (info.component === "text" || info.component === "laerdal-text")) {
         // Plain text component — write the edited description back onto
         // `body` (matches the ::body branch's HTML-wrapping convention above)
@@ -3413,12 +3553,27 @@ export async function saveStoryboardToCourse(
         }
         const patch: Record<string, unknown> = {};
         const nextTitle = (raw.props?.title || "").trim();
+        const showTitle = data.showTitle !== false;
         if (nextTitle && nextTitle !== info.title) {
           patch.title = nextTitle;
-          patch.displayTitle = nextTitle;
           updatedTitles += 1;
         }
+        patch.displayTitle = showTitle ? nextTitle : "";
+        patch.body = data.question ? `<p>${escapeHtml(data.question)}</p>` : "";
+        patch.instruction = data.instruction || "";
         const assessmentFields = buildAssessmentFields(kind as AssessmentKind, data);
+        const hasTutorFeedback = Object.values(data.feedback ?? emptyFeedback()).some(
+          (value) => typeof value === "string" && value.trim().length > 0
+        );
+        const hasAnswerSpecificFeedback = Array.isArray(data.options) && data.options.some(
+          (option) => typeof option?.feedback === "string" && option.feedback.trim().length > 0
+        );
+        if (hasTutorFeedback) {
+          needsTutorExtension = true;
+        }
+        if (hasAnswerSpecificFeedback) {
+          needsAnswerSpecificFeedbackExtension = true;
+        }
         if (Object.keys(assessmentFields).length) {
           // Seed from live properties first — same reasoning as the
           // sbComponent branch above (ADAPT-3760 properties-wipe fix).
@@ -3433,8 +3588,51 @@ export async function saveStoryboardToCourse(
     }
   }
 
+  tasks.push(
+    syncQuestionFeedbackExtensions(courseId, {
+      tutor: needsTutorExtension,
+      answerSpecificFeedback: needsAnswerSpecificFeedbackExtension,
+    })
+  );
+
   await Promise.all(tasks);
   return { updatedTitles, updatedBodies, unmapped };
+}
+
+const TUTOR_EXTENSION_NAME = "adapt-contrib-tutor";
+const ANSWER_SPECIFIC_FEEDBACK_EXTENSION_NAME = "adapt-answer-specific-feedback";
+
+async function syncQuestionFeedbackExtensions(
+  courseId: string,
+  requirements: { tutor: boolean; answerSpecificFeedback: boolean }
+): Promise<void> {
+  await seedMissingCourseDefaults(courseId);
+  const config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
+  const desiredStates = [
+    { name: TUTOR_EXTENSION_NAME, shouldEnable: requirements.tutor },
+    { name: ANSWER_SPECIFIC_FEEDBACK_EXTENSION_NAME, shouldEnable: requirements.answerSpecificFeedback },
+  ];
+
+  const toEnable = desiredStates
+    .filter((extension) => extension.shouldEnable && !isExtensionInstalledByName(config, extension.name))
+    .map((extension) => extension.name);
+  const toDisable = desiredStates
+    .filter((extension) => !extension.shouldEnable && isExtensionInstalledByName(config, extension.name))
+    .map((extension) => extension.name);
+
+  if (toEnable.length) {
+    const ids = await resolveExtensionTypeIdsByNames(toEnable);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/enable/${courseId}`, { extensions: ids });
+    }
+  }
+
+  if (toDisable.length) {
+    const ids = await resolveExtensionTypeIdsByNames(toDisable);
+    if (ids.length) {
+      await apiClient.post(`/api/extension/disable/${courseId}`, { extensions: ids });
+    }
+  }
 }
 
 // ── Component types (Add Component drawer) ──────────────────────────────────
@@ -3446,7 +3644,10 @@ export async function getAvailableComponents(): Promise<ComponentTypeOption[]> {
     .filter((c) => c && c.component)
     .map((c) => ({
       component: c.component as string,
-      displayName: c.displayName || (c.component as string),
+      displayName:
+        c.component === LAERDAL_MEDIA_COMPONENT
+          ? "Laerdal Media"
+          : c.displayName || (c.component as string),
       description: c.description || "",
       icon: c.icon || null,
       _id: c._id as string,
@@ -3470,6 +3671,21 @@ async function fetchMergedComponentSchema(
       mergedSchemaCache = await apiClient.get("/api/content/schema");
     }
     return mergedSchemaCache?.[componentKey] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export async function getMergedContentSchema(schemaKey: string): Promise<Record<string, unknown> | null> {
+  const key = (schemaKey || "").trim();
+  if (!key) return null;
+
+  try {
+    if (!mergedSchemaCache) {
+      mergedSchemaCache = await apiClient.get("/api/content/schema");
+    }
+    const entry = mergedSchemaCache?.[key];
+    return entry && typeof entry === "object" ? (entry as Record<string, unknown>) : null;
   } catch {
     return null;
   }
@@ -3554,10 +3770,24 @@ export interface ExtensionTypeOption {
 }
 
 let extensionTypeOptionsCache: ExtensionTypeOption[] | null = null;
+let extensionTypeRowsPromise: Promise<EngineExtensionType[]> | null = null;
+
+async function getExtensionTypeRows(): Promise<EngineExtensionType[]> {
+  if (!extensionTypeRowsPromise) {
+    extensionTypeRowsPromise = apiClient.get<EngineExtensionType[]>("/api/extensiontype")
+      .then((rows) => Array.isArray(rows) ? rows : [])
+      .catch((error) => {
+        extensionTypeRowsPromise = null;
+        throw error;
+      });
+  }
+
+  return extensionTypeRowsPromise;
+}
 
 export async function getExtensionTypeOptions(): Promise<ExtensionTypeOption[]> {
   if (!extensionTypeOptionsCache) {
-    const rows = await apiClient.get<Array<Partial<ExtensionTypeOption>>>("/api/extensiontype");
+    const rows = await getExtensionTypeRows();
     extensionTypeOptionsCache = (Array.isArray(rows) ? rows : [])
       .filter((row) => row && row.name)
       .map((row) => ({
@@ -3568,6 +3798,25 @@ export async function getExtensionTypeOptions(): Promise<ExtensionTypeOption[]> 
       }));
   }
   return extensionTypeOptionsCache;
+}
+
+export async function getExtensionTypeSchemaByName(extensionName: string): Promise<Record<string, unknown> | null> {
+  const normalizedTarget = normalize(extensionName);
+  if (!normalizedTarget) return null;
+
+  const rows = await getExtensionTypeRows();
+  const match = rows.find((row) => {
+    const candidates = [row.name, row.displayName, row.targetAttribute]
+      .map((value) => normalize(value))
+      .filter(Boolean);
+    return candidates.includes(normalizedTarget);
+  });
+
+  if (!match?.properties || typeof match.properties !== "object" || Array.isArray(match.properties)) {
+    return null;
+  }
+
+  return match.properties;
 }
 
 // Enables an extension type for a course (POST /api/extension/enable/:courseId),
@@ -4167,10 +4416,19 @@ export async function createComponent(
     _type: "component",
     _component: componentType.component,
     _componentType: componentType._id,
-    _componentTypeDisplayName: componentType.displayName,
+    _componentTypeDisplayName:
+      componentType.component === LAERDAL_MEDIA_COMPONENT
+        ? "Laerdal Media"
+        : componentType.displayName,
     _layout: layout,
-    title: componentType.displayName,
-    displayTitle: componentType.displayName,
+    title:
+      componentType.component === LAERDAL_MEDIA_COMPONENT
+        ? "Laerdal Media"
+        : componentType.displayName,
+    displayTitle:
+      componentType.component === LAERDAL_MEDIA_COMPONENT
+        ? "Laerdal Media"
+        : componentType.displayName,
     properties: mergedProperties,
     _sortOrder: sortOrder,
   };
@@ -4957,37 +5215,96 @@ interface EngineAsset {
   };
 }
 
-export async function getAssets(includeDeleted = false): Promise<DashboardAsset[]> {
-  const res = await apiClient.get<EngineAsset[] | { assets?: EngineAsset[] }>("/api/asset/query");
-  const docs = (Array.isArray(res) ? res : res?.assets ?? [])
-    .filter((asset) => includeDeleted || asset?._isDeleted !== true)
-    .slice()
-    .sort((left, right) => {
-    const leftTs = left.createdAt ? new Date(left.createdAt).getTime() : 0;
-    const rightTs = right.createdAt ? new Date(right.createdAt).getTime() : 0;
-    return rightTs - leftTs;
-  });
-  return docs.map((a, i) => {
-    const format = coerceFormat(a.mimeType, a.assetType);
-    return {
-      id: i + 1,
-      backendId: a._id,
-      title: a.title || "Untitled",
-      description: a.description || "",
-      size: fmtSize(a.size),
-      format,
-      tags: Array.isArray(a.tags)
-        ? a.tags.map((t) => (typeof t === "string" ? t : t?.title ?? "")).filter((s): s is string => !!s && !OBJECT_ID.test(s))
-        : [],
-      uploadedAt: fmtDate(a.createdAt),
-      thumbnail: format === "image" ? `/api/asset/serve/${a._id}` : undefined,
-      filename: a.filename,
-      path: a.path,
-      mimeType: a.mimeType,
-      isDeleted: !!a._isDeleted,
-      metadata: a.metadata,
-    };
-  });
+const DEFAULT_ASSET_PAGE_SIZE = 30;
+const MAX_ASSET_PAGE_SIZE = 100;
+
+export interface AssetQueryOptions {
+  includeDeleted?: boolean;
+  skip?: number;
+  limit?: number;
+  search?: string;
+  format?: AssetFormat | "All";
+  tagIds?: string[];
+}
+
+export interface AssetPage {
+  items: DashboardAsset[];
+  hasMore: boolean;
+}
+
+function mapEngineAsset(a: EngineAsset, id: number): DashboardAsset {
+  const format = coerceFormat(a.mimeType, a.assetType);
+  return {
+    id,
+    backendId: a._id,
+    title: a.title || "Untitled",
+    description: a.description || "",
+    size: fmtSize(a.size),
+    format,
+    tags: Array.isArray(a.tags)
+      ? a.tags.map((t) => (typeof t === "string" ? t : t?.title ?? "")).filter((s): s is string => !!s && !OBJECT_ID.test(s))
+      : [],
+    uploadedAt: fmtDate(a.createdAt),
+    thumbnail: format === "image" ? `/api/asset/serve/${a._id}` : undefined,
+    filename: a.filename,
+    path: a.path,
+    mimeType: a.mimeType,
+    isDeleted: !!a._isDeleted,
+    metadata: a.metadata,
+  };
+}
+
+// Paged, server-filtered asset query (was: fetch every asset in the tenant, filter/sort
+// client-side). Text search matches title/filename as plain strings so the backend's
+// query builder (lib/assetmanager.js queryAssets) routes them into its OR bucket; format
+// and tags are sent as regex/operator OBJECTS specifically so they land in its AND bucket
+// instead of joining that OR group — mixing the two would silently turn "text AND format"
+// into "text OR format". Deleted-asset filtering stays client-side per page: the server's
+// _isDeleted handling coerces any value to an exact true/false match, which doesn't cleanly
+// express "active, including legacy docs with the field unset".
+export async function getAssets(options: AssetQueryOptions = {}): Promise<AssetPage> {
+  const {
+    includeDeleted = false,
+    skip = 0,
+    limit = DEFAULT_ASSET_PAGE_SIZE,
+    search,
+    format,
+    tagIds,
+  } = options;
+  const cappedLimit = Math.min(limit, MAX_ASSET_PAGE_SIZE);
+
+  const params = new URLSearchParams();
+  const text = search?.trim();
+  if (text) {
+    params.append("search[title]", text);
+    params.append("search[filename]", text);
+  }
+  if (format && format !== "All") {
+    if (format === "other") {
+      params.append("search[mimeType][$not][$regex]", "image|audio|video");
+      params.append("search[mimeType][$not][$options]", "i");
+    } else {
+      params.append("search[mimeType][$regex]", format);
+      params.append("search[mimeType][$options]", "i");
+    }
+  }
+  if (tagIds && tagIds.length) {
+    tagIds.forEach((id) => params.append("search[tags][$all][]", id));
+  }
+  params.append("operators[skip]", String(skip));
+  params.append("operators[limit]", String(cappedLimit + 1));
+  params.append("operators[sort][createdAt]", "-1");
+
+  const res = await apiClient.get<EngineAsset[] | { assets?: EngineAsset[] }>(`/api/asset/query?${params}`);
+  const docs = Array.isArray(res) ? res : res?.assets ?? [];
+  const hasMore = docs.length > cappedLimit;
+  const rawPage = hasMore ? docs.slice(0, cappedLimit) : docs;
+  const active = rawPage.filter((asset) => includeDeleted || asset?._isDeleted !== true);
+
+  return {
+    items: active.map((a, i) => mapEngineAsset(a, skip + i + 1)),
+    hasMore,
+  };
 }
 
 export function trashAsset(backendId: string): Promise<unknown> {

@@ -111,6 +111,21 @@ export default function GenerateDialog({
               <p className="mb-3" style={{ fontSize: 13, color: 'var(--life-color-text-subtle)' }}>
                 This will map your storyboard headings onto the Adapt course structure.
               </p>
+              <div
+                className="mb-3 flex items-start gap-2 p-2.5"
+                style={{
+                  border: '1px solid var(--life-color-border-subtle)',
+                  background: 'var(--life-color-bg-surface-subtle)',
+                  color: 'var(--life-color-text-default)',
+                  borderRadius: 'var(--radius)',
+                  fontSize: 13,
+                }}
+              >
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--life-color-text-warning)' }} />
+                <span>
+                  Some content features require additional configuration in the Editor. Review and complete the required settings in the Editor before generating the course.
+                </span>
+              </div>
               <div className="mb-3 grid grid-cols-4 gap-2">
                 <Stat label="Topics" value={plan.topics} />
                 <Stat label="Sections" value={plan.sections} />

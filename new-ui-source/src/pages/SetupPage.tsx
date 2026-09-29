@@ -21,6 +21,7 @@ import { AccessibilityPage } from "./setup/accessibilityPage";
 import { TechnicalSettingPage } from "./setup/technicalSettingPage";
 import { TrackingAnalyticsPage } from "./setup/trackingAnalyticsPage";
 import { LearnerExperiencePanel } from "./setup/learnerExperiencePage";
+import { TranslationPage } from "./setup/translationPage";
 import { UnsavedChangesModal } from "./setup/unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./setup/useUnsavedChangesNavigationGuard";
 import { CompletionProgressPage } from "./setup/completionProgressPage";
@@ -2532,33 +2533,6 @@ function ComingSoonPanel({ label }: { label: string }) {
   );
 }
 
-function LegacyTranslationPanel({ courseId }: { courseId: string }) {
-  if (!courseId) {
-    return (
-      <div className="rounded-lg border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b]">
-        No course is associated with this setup flow, so translation cannot be opened.
-      </div>
-    );
-  }
-
-  return (
-    <div className="h-full min-h-0 w-full overflow-hidden">
-      <iframe
-        title="Translation"
-        // The translation module is a classic-UI-only Backbone plugin (Origin
-        // events, hash router) - it only exists at /classic now that / serves
-        // the new UI. No trailing slash: the classic index page's assets
-        // (css/adapt.css, require.js, core/app.js, ...) are all relative URLs
-        // resolved against the page's own path, and are only served at the
-        // site root - a trailing slash makes the browser treat "classic" as
-        // a directory and 404 on /classic/css/adapt.css etc.
-        src={`/classic?embed=translation#/translation/${encodeURIComponent(courseId)}`}
-        className="w-full h-full border-0"
-      />
-    </div>
-  );
-}
-
 /* -- Main page -- */
 function CourseCreationCenterContent() {
   const [params] = useSearchParams();
@@ -2802,7 +2776,7 @@ function CourseCreationCenterContent() {
       case "cdn-deployment":
         return <CdnDeploymentPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
       case "translation":
-        return <LegacyTranslationPanel courseId={courseId} />;
+        return <TranslationPage courseId={courseId} courseTitle={title} />;
       case "publish":
         return <PreflightValidatorPage courseId={courseId} onNavigationRequest={setActiveNav} />;
       case "export-pdf":

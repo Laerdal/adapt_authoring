@@ -5,13 +5,14 @@
 // The structured model is stored as JSON in the `data` prop and is generation-
 // ready — options + feedback are written into the Adapt component on Save.
 
-import { useState } from 'react';
-import { RefreshCw, Trash2, Check, Plus, AlertTriangle, MessageSquare, FolderOpen, Image as ImageIcon } from 'lucide-react';
+import React, { useState } from 'react';
+import { RefreshCw, Pencil, Trash2, Check, Plus, AlertTriangle, MessageSquare, FolderOpen, Image as ImageIcon } from 'lucide-react';
 import { storyboardActions } from '../storyboardActions';
 import { resolveCommentAnchor } from '../commentAnchor';
 import { safePreviewSrc } from '../mediaMapping';
 import { createReactBlockSpec } from '@blocknote/react';
 import AssetPickerModal from '@/components/common/AssetPickerModal';
+import ConfirmDialog from '@/components/common/ConfirmDialog';
 import { BasicRichTextEditor } from '@/components/common';
 import { sanitizeEditorHtml } from '@/components/common/BasicRichTextEditor';
 import { CheckboxIndicator } from '@/components/common/Checkbox';
@@ -24,6 +25,7 @@ import {
   type AssessmentData,
   type AssessmentFeedback,
   type AssessmentKind,
+  type MatchOption,
   type MatchPair,
   type McqOption,
 } from '@/types/storyboard';
@@ -52,6 +54,29 @@ const inputCls =
   'w-full rounded border border-border bg-background px-2 py-1 text-sm text-foreground outline-none focus:border-primary';
 const labelCls = 'mb-0.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground';
 const stop = (e: React.KeyboardEvent) => e.stopPropagation();
+
+function plainText(value: string): string {
+  return value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function renderInstructionText(data: AssessmentData, kind: AssessmentKind): string {
+  return (data.instruction || '').trim() || FOOTER[kind];
+}
+
+function renderInstructionHtml(data: AssessmentData, kind: AssessmentKind): React.ReactNode {
+  const html = (data.instruction || '').trim() || FOOTER[kind];
+  // If instruction is HTML (starts with tag), sanitize and render as HTML
+  if (html.trim().startsWith('<')) {
+    return (
+      <span
+        className="text-sm italic text-muted-foreground"
+        dangerouslySetInnerHTML={{ __html: sanitizeEditorHtml(html) }}
+      />
+    );
+  }
+  // Otherwise render as plain text
+  return <span className="text-sm italic text-muted-foreground">{html}</span>;
+}
 
 function parseData(kind: AssessmentKind, raw: string): AssessmentData {
   try {
@@ -85,7 +110,6 @@ function FeedbackGroup({ fb, set }: { fb: AssessmentFeedback; set: (f: Assessmen
       <input value={fb[key]} onKeyDown={stop} onChange={(e) => set({ ...fb, [key]: e.target.value })} className={inputCls} />
     </label>
   );
-  const empty = !Object.values(fb).some((v) => v.trim());
   return (
     <div className="mt-2 rounded border border-border p-2">
       <div className={labelCls}>Feedback</div>
@@ -94,11 +118,6 @@ function FeedbackGroup({ fb, set }: { fb: AssessmentFeedback; set: (f: Assessmen
       {field('incorrectNotFinal', 'Incorrect — not final')}
       {field('partlyCorrectFinal', 'Partly correct — final')}
       {field('partlyCorrectNotFinal', 'Partly correct — not final')}
-      {empty && (
-        <div className="mt-1.5 inline-flex items-center gap-1 text-xs text-[#92400e]">
-          <AlertTriangle className="h-3.5 w-3.5" /> Feedback not configured
-        </div>
-      )}
     </div>
   );
 }
@@ -216,6 +235,26 @@ function OptionsForm({ data, graphic, update }: { data: AssessmentData; graphic:
 function MatchingForm({ data, update }: { data: AssessmentData; update: (n: AssessmentData) => void }) {
   const pairs = data.pairs ?? [];
   const setPairs = (next: MatchPair[]) => update({ ...data, pairs: next });
+  const patchPair = (pairIndex: number, patch: Partial<MatchPair>) => {
+    setPairs(pairs.map((pair, index) => (index === pairIndex ? { ...pair, ...patch } : pair)));
+  };
+  const patchOption = (pairIndex: number, optionIndex: number, patch: Partial<MatchOption>) => {
+    setPairs(
+      pairs.map((pair, index) =>
+        index !== pairIndex
+          ? pair
+          : {
+              ...pair,
+              options: (pair.options ?? []).map((option, idx) => {
+                if (idx !== optionIndex) {
+                  return patch.correct ? { ...option, correct: false } : option;
+                }
+                return { ...option, ...patch, correct: patch.correct ?? option.correct };
+              }),
+            }
+      )
+    );
+  };
   return (
     <div className="mt-2 rounded border border-border p-2">
       <div className={labelCls}>Options &amp; matching options</div>
@@ -229,15 +268,55 @@ function MatchingForm({ data, update }: { data: AssessmentData; update: (n: Asse
           </div>
           <label className="block">
             <span className={labelCls}>Text</span>
-            <input value={p.prompt} onKeyDown={stop} onChange={(e) => setPairs(pairs.map((x, j) => (j === i ? { ...x, prompt: e.target.value } : x)))} className={inputCls} />
+            <input value={p.prompt} onKeyDown={stop} onChange={(e) => patchPair(i, { prompt: e.target.value })} className={inputCls} />
           </label>
-          <label className="mt-1 block">
-            <span className={labelCls}>Matching option</span>
-            <input value={p.answer} placeholder="Correct match for this option" onKeyDown={stop} onChange={(e) => setPairs(pairs.map((x, j) => (j === i ? { ...x, answer: e.target.value } : x)))} className={inputCls} />
-          </label>
+          <div className="mt-1 rounded border border-border p-2">
+            <div className={labelCls}>Matching choices</div>
+            {(p.options ?? []).map((option, optionIndex) => (
+              <div key={optionIndex} className="mb-1 flex items-center gap-2">
+                <label className="flex items-center gap-1.5 text-xs font-medium text-foreground cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={option.correct}
+                    onChange={(e) => patchOption(i, optionIndex, { correct: e.target.checked })}
+                    aria-label="Correct matching choice"
+                    className="sr-only peer"
+                  />
+                  <CheckboxIndicator checked={option.correct} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
+                  Correct
+                </label>
+                <input
+                  value={option.text}
+                  placeholder="Matching option"
+                  onKeyDown={stop}
+                  onChange={(e) => patchOption(i, optionIndex, { text: e.target.value })}
+                  className={inputCls}
+                />
+                <button
+                  type="button"
+                  aria-label="Remove matching option"
+                  onClick={() => patchPair(i, { options: (p.options ?? []).filter((_, idx) => idx !== optionIndex) })}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => patchPair(i, { options: [...(p.options ?? []), { text: '', correct: (p.options ?? []).length === 0 }] })}
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+            >
+              <Plus className="h-3 w-3" /> Add matching option
+            </button>
+          </div>
         </div>
       ))}
-      <button type="button" onClick={() => setPairs([...pairs, { prompt: '', answer: '' }])} className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+      <button
+        type="button"
+        onClick={() => setPairs([...pairs, { prompt: '', options: [{ text: '', correct: true }, { text: '', correct: false }] }])}
+        className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+      >
         <Plus className="h-3 w-3" /> Add option
       </button>
     </div>
@@ -340,9 +419,44 @@ function Body({ kind, data, update }: { kind: AssessmentKind; data: AssessmentDa
     case 'matching':
       return <MatchingForm data={data} update={update} />;
     case 'reorder':
-      return <ListForm values={data.items ?? []} itemLabel="Position" addLabel="Add item" onChange={(n) => update({ ...data, items: n })} />;
-    case 'textInput':
-      return <ListForm values={data.answers ?? []} itemLabel="Answer" addLabel="Add acceptable answer" onChange={(n) => update({ ...data, answers: n })} />;
+      return (
+        <div>
+          <ListForm values={data.items ?? []} itemLabel="Position" addLabel="Add item" onChange={(n) => update({ ...data, items: n })} />
+          <label className="mt-2 flex items-center gap-1.5 text-sm text-foreground cursor-pointer group">
+            <input
+              type="checkbox"
+              checked={!!data.shuffle}
+              onChange={(e) => update({ ...data, shuffle: e.target.checked })}
+              aria-label="Shuffle items"
+              className="sr-only peer"
+            />
+            <CheckboxIndicator checked={!!data.shuffle} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
+            Shuffle items in Preview
+          </label>
+        </div>
+      );
+    case 'textInput': {
+      const config = data.textInput ?? { prefix: '', suffix: '', placeholder: '' };
+      return (
+        <div>
+          <ListForm values={data.answers ?? []} itemLabel="Answer" addLabel="Add acceptable answer" onChange={(n) => update({ ...data, answers: n })} />
+          <div className="mt-2 grid grid-cols-1 gap-2 rounded border border-border p-2 md:grid-cols-3">
+            <label className="block">
+              <span className={labelCls}>Prefix</span>
+              <input value={config.prefix} onKeyDown={stop} onChange={(e) => update({ ...data, textInput: { ...config, prefix: e.target.value } })} className={inputCls} />
+            </label>
+            <label className="block">
+              <span className={labelCls}>Suffix</span>
+              <input value={config.suffix} onKeyDown={stop} onChange={(e) => update({ ...data, textInput: { ...config, suffix: e.target.value } })} className={inputCls} />
+            </label>
+            <label className="block">
+              <span className={labelCls}>Placeholder</span>
+              <input value={config.placeholder} onKeyDown={stop} onChange={(e) => update({ ...data, textInput: { ...config, placeholder: e.target.value } })} className={inputCls} />
+            </label>
+          </div>
+        </div>
+      );
+    }
     case 'slider':
       return <SliderForm data={data} update={update} />;
     default:
@@ -380,6 +494,7 @@ export const assessmentBlock = createReactBlockSpec(
       // questions — a blank question still shows an empty preview until the
       // author explicitly hits Edit.
       const [collapsed, setCollapsed] = useState(true);
+      const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
       const title = block.props.title as string;
       const fb = model.feedback ?? emptyFeedback();
 
@@ -397,7 +512,7 @@ export const assessmentBlock = createReactBlockSpec(
       // AI wiring: Replace overwrites the question, Insert appends to it.
       const openAi = () => {
         storyboardActions.openAi({
-          initialText: model.question || title || LABELS[kind],
+          initialText: plainText(model.question || title || LABELS[kind]),
           onReplace: (text) => update({ ...model, question: text }),
           onInsert: (text) => update({ ...model, question: model.question ? `${model.question}\n\n${text}` : text }),
         });
@@ -416,7 +531,10 @@ export const assessmentBlock = createReactBlockSpec(
       const displayedFeedback = feedbackRows.filter(([k]) => fb[k] && fb[k].trim());
       const displayedOptions = (model.options ?? []).filter((o) => o.text.trim());
       const displayedItems = (model.items ?? []).filter((i) => i && i.trim());
-      const displayedPairs = (model.pairs ?? []).filter((p) => p && (p.prompt || p.answer));
+      const displayedPairs = (model.pairs ?? []).filter((pair) => {
+        const options = pair.options ?? [];
+        return !!pair && (!!pair.prompt || options.some((option) => option.text));
+      });
       const displayedAnswers = (model.answers ?? []).filter((a) => a && a.trim());
 
       // Question Title/Body resolution (PR review — no duplicated text):
@@ -489,11 +607,18 @@ export const assessmentBlock = createReactBlockSpec(
             {kind === 'matching' && displayedPairs.length > 0 && (
               <ul className="mt-2 space-y-1 text-sm">
                 {displayedPairs.map((p, i) => (
-                  <li key={i} className="flex items-baseline gap-2">
-                    <span aria-hidden>•</span>
-                    <span>{p.prompt}</span>
-                    <span className="font-semibold">→</span>
-                    <span className="italic text-muted-foreground">{p.answer}</span>
+                  <li key={i} className="space-y-0.5">
+                    <div className="flex items-baseline gap-2">
+                      <span aria-hidden>•</span>
+                      <span>{p.prompt}</span>
+                    </div>
+                    <ul className="ml-5 list-disc text-muted-foreground">
+                      {(p.options ?? []).filter((option) => option.text.trim()).map((option, optionIndex) => (
+                        <li key={optionIndex} className={option.correct ? 'font-medium text-foreground' : ''}>
+                          {option.text}
+                        </li>
+                      ))}
+                    </ul>
                   </li>
                 ))}
               </ul>
@@ -540,7 +665,7 @@ export const assessmentBlock = createReactBlockSpec(
             )}
 
             {/* Submit instruction */}
-            <p className="mt-3 text-sm italic text-muted-foreground">{FOOTER[kind]}</p>
+            {renderInstructionHtml(model, kind)}
 
             {issues.length > 0 && (
               <div className="mt-2 inline-flex items-center gap-1 text-xs text-[#92400e]" title={issues.join('\n')}>
@@ -552,16 +677,16 @@ export const assessmentBlock = createReactBlockSpec(
               type="button"
               onClick={() => setCollapsed(false)}
               className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-xs text-muted-foreground opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100 focus:opacity-100"
-              title="Edit this question"
+              title="Edit content"
             >
-              <RefreshCw className="h-3 w-3" /> Edit
+              <Pencil className="h-3 w-3" /> Edit
             </button>
           </div>
         );
       }
 
       return (
-        <div className="my-2 rounded-lg border p-3" contentEditable={false}>
+        <div className={`my-2 rounded-lg border p-3 ${issues.length ? 'border-[#f59e0b] bg-[#fffbeb]' : ''}`} contentEditable={false}>
           {/* Header */}
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -587,29 +712,16 @@ export const assessmentBlock = createReactBlockSpec(
             >
               <MessageSquare className="h-3 w-3" /> Comment
             </HeaderBtn>
-            <HeaderBtn onClick={() => editor.removeBlocks([block])} title="Delete question">
+            <HeaderBtn onClick={() => setConfirmDeleteOpen(true)} title="Delete content">
               <Trash2 className="h-3 w-3" /> Delete
             </HeaderBtn>
-            <HeaderBtn onClick={() => setCollapsed(true)} title="Collapse">
+            <HeaderBtn onClick={() => { if (!issues.length) setCollapsed(true); }} title={issues.length ? 'Resolve validation issues before closing' : 'Collapse'}>
               <Check className="h-3 w-3" /> Done
             </HeaderBtn>
           </div>
 
-          {/* Regenerate with AI bar */}
-          <button
-            type="button"
-            onClick={openAi}
-            className="mb-2 flex w-full items-center gap-2 rounded-md border border-dashed px-2 py-1.5 text-left text-xs hover:opacity-90"
-            style={{ borderColor: 'color-mix(in oklab, var(--samaritan) 40%, transparent)', background: 'color-mix(in oklab, var(--samaritan) 6%, transparent)' }}
-          >
-            <span className="inline-flex items-center gap-1 font-medium" style={{ color: 'var(--samaritan)' }}>
-              <SamaritanIcon className="h-3.5 w-3.5" /> Regenerate with AI
-            </span>
-            <span className="text-muted-foreground">Opens Samaritan Assistance to draft or improve this question — review before applying.</span>
-          </button>
-
           {/* Body */}
-          <label className="block">
+          <div className="block">
             <span className={labelCls}>Body</span>
             <BasicRichTextEditor
               html={model.question}
@@ -619,21 +731,50 @@ export const assessmentBlock = createReactBlockSpec(
               ariaLabel="Question body"
               resetKey={block.id}
             />
-          </label>
+          </div>
           
 
           <Body kind={kind} data={model} update={update} />
+
+          <div className="mt-2">
+            <div className="block">
+              <span className={labelCls}>Instruction text</span>
+              <BasicRichTextEditor
+                html={model.instruction || ''}
+                onChange={(html) => update({ ...model, instruction: html })}
+                placeholder={FOOTER[kind]}
+                minHeight={70}
+                ariaLabel="Question instruction"
+                resetKey={`${block.id}-instruction`}
+              />
+            </div>
+          </div>
+
           <FeedbackGroup fb={fb} set={(f) => update({ ...model, feedback: f })} />
 
           {/* Footer + readiness */}
           <div className="mt-2 flex items-center justify-between">
-            <p className="text-sm italic text-muted-foreground">{FOOTER[kind]}</p>
+            <p className="mt-3">{renderInstructionHtml(model, kind)}</p>
             {issues.length > 0 && (
               <span className="inline-flex items-center gap-1 text-xs text-[#92400e]" title={issues.join('\n')}>
                 <AlertTriangle className="h-3.5 w-3.5" /> {issues.length} to fix
               </span>
             )}
           </div>
+
+          <ConfirmDialog
+            open={confirmDeleteOpen}
+            title="Delete this content item?"
+            message="This question will be removed from the storyboard."
+            note="This action cannot be undone from the storyboard."
+            confirmLabel="Delete"
+            cancelLabel="Cancel"
+            onCancel={() => setConfirmDeleteOpen(false)}
+            onConfirm={() => {
+              setConfirmDeleteOpen(false);
+              editor.removeBlocks([block]);
+            }}
+          />
         </div>
       );
     },

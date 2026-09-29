@@ -104,7 +104,8 @@ export default function TemplateManagementPage() {
     if (!target.backendId) return
     try {
       await updateTemplate(target.backendId, { title: name, description })
-    } finally {
+    } catch {
+      // Optimistic update above may be stale if the backend rejected it — resync.
       loadTemplates()
     }
   }
@@ -116,7 +117,8 @@ export default function TemplateManagementPage() {
     setTemplates((prev) => prev.filter((t) => t.id !== target.id))
     try {
       await deleteTemplate(target.backendId)
-    } finally {
+    } catch {
+      // Optimistic removal above may be wrong if the backend rejected it — resync.
       loadTemplates()
     }
   }

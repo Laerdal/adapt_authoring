@@ -108,7 +108,7 @@ export default function HomePage() {
   const [hasMore, setHasMore] = useState(false)
   const [isLoadingMore, setIsLoadingMore] = useState(false)
 
-  usePageLoader(isLoadingCourses)
+  // usePageLoader(isLoadingCourses)
 
   // Full tag universe for the filter dropdown (from the autocomplete endpoint,
   // not the loaded course slice) + a title→id map to filter courses by tag id.

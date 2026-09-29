@@ -499,7 +499,7 @@ async function sbAssessmentToDocxParagraphs(children, props, ctx) {
   const question = data.question ? String(data.question).trim() : '';
   const options = Array.isArray(data.options) ? data.options.filter((o) => o && o.text) : [];
   const items = Array.isArray(data.items) ? data.items.filter(Boolean) : [];
-  const pairs = Array.isArray(data.pairs) ? data.pairs.filter((p) => p && (p.prompt || p.answer)) : [];
+  const pairs = Array.isArray(data.pairs) ? data.pairs.filter((p) => p && (p.prompt || (Array.isArray(p.options) && p.options.length))) : [];
   const answers = Array.isArray(data.answers) ? data.answers.filter(Boolean) : [];
   const fb = data.feedback || {};
 
@@ -591,6 +591,9 @@ async function sbAssessmentToDocxParagraphs(children, props, ctx) {
     }
   } else if (kind === 'matching') {
     for (const p of pairs) {
+      // Get the correct option from options array (if available)
+      const correctOption = Array.isArray(p.options) ? p.options.find((opt) => opt && opt.correct) : null;
+      const answerText = correctOption ? String(correctOption.text || '') : '';
       children.push(
         new Paragraph({
           indent: { left: 360 },
@@ -599,7 +602,7 @@ async function sbAssessmentToDocxParagraphs(children, props, ctx) {
             new TextRun({ text: '• ' }),
             new TextRun({ text: String(p.prompt || '') }),
             new TextRun({ text: '  →  ', bold: true }),
-            new TextRun({ text: String(p.answer || ''), italics: true }),
+            new TextRun({ text: answerText, italics: true }),
           ],
         }),
       );
@@ -886,6 +889,27 @@ function pdfEnsureRoom(doc, minSpace) {
   if (bottom - doc.y < minSpace) doc.addPage();
 }
 
+const PDF_FONT_REGULAR = 'StoryboardPdfRegular';
+const PDF_FONT_BOLD = 'StoryboardPdfBold';
+const PDF_FONT_ITALIC = 'StoryboardPdfItalic';
+
+function registerPdfFonts(doc) {
+  const fs = require('fs');
+  const path = require('path');
+  const fontPath = path.resolve(__dirname, '../../../output/preflight/assets/arial-unicode-ms.ttf');
+  if (fs.existsSync(fontPath)) {
+    doc.registerFont(PDF_FONT_REGULAR, fontPath);
+    doc.registerFont(PDF_FONT_BOLD, fontPath);
+    doc.registerFont(PDF_FONT_ITALIC, fontPath);
+  } else {
+    // Font file missing, register names with PDFKit built-in fonts as fallback
+    doc.registerFont(PDF_FONT_REGULAR, 'Helvetica');
+    doc.registerFont(PDF_FONT_BOLD, 'Helvetica-Bold');
+    doc.registerFont(PDF_FONT_ITALIC, 'Helvetica-Oblique');
+  }
+  return true;
+}
+
 async function pdfWriteComponent(doc, props, ctx) {
   const kind = props.kind || 'text';
   const data = safeParse(props.data, {});
@@ -911,10 +935,10 @@ async function pdfWriteComponent(doc, props, ctx) {
   pdfEnsureRoom(doc, 72);
   doc.moveDown(0.6);
   pdfResetText(doc);
-  doc.font('Helvetica-Bold').fontSize(11).text(`${label}${title ? ' — ' : ''}${title}`);
+  doc.font(PDF_FONT_BOLD).fontSize(11).text(`${label}${title ? ' — ' : ''}${title}`);
   if (description) {
     pdfResetText(doc);
-    doc.font('Helvetica').fontSize(11).text(description, { paragraphGap: 4 });
+    doc.font(PDF_FONT_REGULAR).fontSize(11).text(description, { paragraphGap: 4 });
   }
 
   if (kind === 'image' && hasImage) {
@@ -922,13 +946,13 @@ async function pdfWriteComponent(doc, props, ctx) {
     if (resolved) {
       const drew = pdfDrawImage(doc, resolved);
       if (drew) {
-        if (resolved.alt) doc.font('Helvetica-Oblique').fontSize(9).fillColor('#555').text(resolved.alt);
+        if (resolved.alt) doc.font(PDF_FONT_ITALIC).fontSize(9).fillColor('#555').text(resolved.alt);
         pdfResetText(doc);
       } else {
-        doc.font('Helvetica-Oblique').fontSize(10).text(`[Image — ${(image && image.link) || ''}]`);
+        doc.font(PDF_FONT_ITALIC).fontSize(10).text(`[Image — ${(image && image.link) || ''}]`);
       }
     } else if (image && image.link) {
-      doc.font('Helvetica').fontSize(10).fillColor('#0645AD').text(image.link, { link: image.link, underline: true });
+      doc.font(PDF_FONT_REGULAR).fontSize(10).fillColor('#0645AD').text(image.link, { link: image.link, underline: true });
       pdfResetText(doc);
     }
   }
@@ -941,19 +965,19 @@ async function pdfWriteComponent(doc, props, ctx) {
       const link = String((media.asset && (media.asset.link || media.asset.url)) || '');
       if (link) {
         pdfResetText(doc);
-        doc.font('Helvetica-Bold').fontSize(10).text(`${label} URL:`);
+        doc.font(PDF_FONT_BOLD).fontSize(10).text(`${label} URL:`);
         if (/^https?:\/\//i.test(link)) {
-          doc.font('Helvetica').fillColor('#0645AD').text(link, { link, underline: true, indent: 12 });
+          doc.font(PDF_FONT_REGULAR).fillColor('#0645AD').text(link, { link, underline: true, indent: 12 });
           pdfResetText(doc);
         } else {
-          doc.font('Helvetica').text(link, { indent: 12 });
+          doc.font(PDF_FONT_REGULAR).text(link, { indent: 12 });
         }
       }
     }
     if (media && media.transcriptText) {
       doc.moveDown(0.3);
-      doc.font('Helvetica-Bold').fontSize(10).text('Transcript:');
-      doc.font('Helvetica').fontSize(10).text(String(media.transcriptText));
+      doc.font(PDF_FONT_BOLD).fontSize(10).text('Transcript:');
+      doc.font(PDF_FONT_REGULAR).fontSize(10).text(String(media.transcriptText));
     }
   }
   if (hasGroupItems) {
@@ -963,8 +987,8 @@ async function pdfWriteComponent(doc, props, ctx) {
       const b = String(item.body || '').trim();
       if (!t && !b && !item.image) continue;
       doc.moveDown(0.2);
-      if (t) doc.font('Helvetica-Bold').fontSize(10).text(t);
-      if (b) doc.font('Helvetica').fontSize(10).text(b);
+      if (t) doc.font(PDF_FONT_BOLD).fontSize(10).text(t);
+      if (b) doc.font(PDF_FONT_REGULAR).fontSize(10).text(b);
       if (item.image) {
         // eslint-disable-next-line no-await-in-loop
         const resolved = await resolveForPdf({ link: item.image, assetId: item.imageAssetId }, ctx);
@@ -975,7 +999,7 @@ async function pdfWriteComponent(doc, props, ctx) {
   if (instruction) {
     doc.moveDown(0.3);
     pdfResetText(doc);
-    doc.font('Helvetica-Oblique').fontSize(10).fillColor('#555').text(instruction);
+    doc.font(PDF_FONT_ITALIC).fontSize(10).fillColor('#555').text(instruction);
     pdfResetText(doc);
   }
   doc.moveDown(0.8);
@@ -1013,9 +1037,9 @@ async function pdfWriteAssessment(doc, props, ctx) {
   // own paragraph only when it isn't already the header (no duplication).
   const headerText = title || question;
   const showQuestionParagraph = !!question && question !== headerText;
-  doc.font('Helvetica-Bold').fontSize(11).text(`${kindLabel}${headerText ? ' — ' : ''}${headerText}`);
+  doc.font(PDF_FONT_BOLD).fontSize(11).text(`${kindLabel}${headerText ? ' — ' : ''}${headerText}`);
   if (showQuestionParagraph) {
-    doc.font('Helvetica').fontSize(11);
+    doc.font(PDF_FONT_REGULAR).fontSize(11);
     pdfResetText(doc);
     doc.text(question, { paragraphGap: 3 });
   }
@@ -1023,7 +1047,7 @@ async function pdfWriteAssessment(doc, props, ctx) {
   if (kind === 'mcq' || kind === 'gmcq' || kind === 'checklist') {
     for (const opt of options) {
       pdfResetText(doc);
-      doc.font(opt.correct ? 'Helvetica-Bold' : 'Helvetica').fontSize(11)
+      doc.font(opt.correct ? PDF_FONT_BOLD : PDF_FONT_REGULAR).fontSize(11)
         .text(`${pdfMcqBullet(opt.correct)}${stripHtml(opt.text)}`, { indent: 12 });
       if (kind === 'gmcq' && (opt.image || opt.imageAssetId)) {
         // eslint-disable-next-line no-await-in-loop
@@ -1031,24 +1055,27 @@ async function pdfWriteAssessment(doc, props, ctx) {
         if (resolved) pdfDrawImage(doc, resolved, { maxWidth: 240 });
       }
       const pdfOptFb = stripHtml(opt.feedback);
-      if (pdfOptFb) doc.font('Helvetica-Oblique').fontSize(10).fillColor('#555').text(pdfOptFb, { indent: 24 });
+      if (pdfOptFb) doc.font(PDF_FONT_ITALIC).fontSize(10).fillColor('#555').text(pdfOptFb, { indent: 24 });
       pdfResetText(doc);
     }
     if (kind === 'checklist' && data.selectable) {
       pdfResetText(doc);
-      doc.font('Helvetica-Bold').fontSize(10).text(`Selectable: ${data.selectable}`);
+      doc.font(PDF_FONT_BOLD).fontSize(10).text(`Selectable: ${data.selectable}`);
     }
   } else if (kind === 'matching') {
     for (const p of pairs) {
-      doc.font('Helvetica').fontSize(11).text(`• ${p.prompt || ''}  →  ${p.answer || ''}`, { indent: 12 });
+      // Get the correct option from options array (if available)
+      const correctOption = Array.isArray(p.options) ? p.options.find((opt) => opt && opt.correct) : null;
+      const answerText = correctOption ? String(correctOption.text || '') : '';
+      doc.font(PDF_FONT_REGULAR).fontSize(11).text(`• ${p.prompt || ''}  →  ${answerText}`, { indent: 12 });
     }
   } else if (kind === 'reorder') {
-    items.forEach((it, i) => doc.font('Helvetica').fontSize(11).text(`${i + 1}. ${it}`, { indent: 12 }));
+    items.forEach((it, i) => doc.font(PDF_FONT_REGULAR).fontSize(11).text(`${i + 1}. ${it}`, { indent: 12 }));
   } else if (kind === 'textInput') {
-    for (const ans of answers) doc.font('Helvetica').fontSize(11).text(`• Accepted answer: ${ans}`, { indent: 12 });
+    for (const ans of answers) doc.font(PDF_FONT_REGULAR).fontSize(11).text(`• Accepted answer: ${ans}`, { indent: 12 });
   } else if (kind === 'slider' && data.slider) {
     const s = data.slider;
-    doc.font('Helvetica').fontSize(11).text(
+    doc.font(PDF_FONT_REGULAR).fontSize(11).text(
       `Range: ${s.min ?? 0}–${s.max ?? 10} step ${s.step ?? 1}, correct answer ${s.correct ?? ''}`,
       { indent: 12 },
     );
@@ -1072,15 +1099,15 @@ async function pdfWriteAssessment(doc, props, ctx) {
       // value indented on the next line. Two separate paragraphs is more
       // robust than pdfkit's `continued: true` chain, which can leave the
       // cursor mid-line and cause the next feedback row to overlap.
-      doc.font('Helvetica-Bold').fontSize(10).text(`${lbl}:`);
-      doc.font('Helvetica').fontSize(10).text(value, { indent: 12 });
+      doc.font(PDF_FONT_BOLD).fontSize(10).text(`${lbl}:`);
+      doc.font(PDF_FONT_REGULAR).fontSize(10).text(value, { indent: 12 });
     }
   }
   const footer = ASSESSMENT_FOOTER[kind];
   if (footer) {
     doc.moveDown(0.4);
     pdfResetText(doc);
-    doc.font('Helvetica-Oblique').fontSize(10).fillColor('#555').text(footer);
+    doc.font(PDF_FONT_ITALIC).fontSize(10).fillColor('#555').text(footer);
     pdfResetText(doc);
   }
   doc.moveDown(0.8);
@@ -1107,7 +1134,7 @@ function pdfWriteTable(doc, content) {
     const texts = [];
     for (let c = 0; c < colCount; c++) texts.push(inlineToText(tableCellRuns(cells[c])));
 
-    doc.font('Helvetica').fontSize(fontSize);
+    doc.font(PDF_FONT_REGULAR).fontSize(fontSize);
     const cellHeights = texts.map((t) => doc.heightOfString(t || ' ', { width: colWidth - padding * 2 }));
     const rowHeight = Math.max(fontSize + padding * 2, ...cellHeights.map((h) => h + padding * 2));
 
@@ -1120,7 +1147,7 @@ function pdfWriteTable(doc, content) {
       doc.rect(x, rowY, colWidth, rowHeight).stroke('#999');
       doc
         .fillColor('#111')
-        .font('Helvetica')
+        .font(PDF_FONT_REGULAR)
         .fontSize(fontSize)
         .text(texts[c] || '', x + padding, rowY + padding, { width: colWidth - padding * 2, height: rowHeight - padding * 2 });
       x += colWidth;
@@ -1140,6 +1167,7 @@ async function blocksToPdf(blocks, title, ctx) {
   // collisions when adjacent paragraphs share a font.
   const doc = new PDFDocument({ margin: 56, size: 'A4', autoFirstPage: true, bufferPages: true });
   doc.lineGap(2);
+  registerPdfFonts(doc);
   const chunks = [];
   const done = new Promise((resolve, reject) => {
     doc.on('data', (c) => chunks.push(c));
@@ -1148,7 +1176,7 @@ async function blocksToPdf(blocks, title, ctx) {
   });
 
   if (title && !isPlaceholderTitle(title)) {
-    doc.font('Helvetica-Bold').fontSize(24).fillColor('#111').text(title);
+    doc.font(PDF_FONT_BOLD).fontSize(24).fillColor('#111').text(title);
     doc.moveDown(1.0);
   }
 
@@ -1171,7 +1199,7 @@ async function blocksToPdf(blocks, title, ctx) {
       const roomLeft = doc.page.height - marginB - doc.y;
       if (roomLeft < size * 3) doc.addPage();
       doc.moveDown(0.4);
-      doc.font('Helvetica-Bold').fontSize(size).text(text);
+      doc.font(PDF_FONT_BOLD).fontSize(size).text(text);
       doc.moveDown(0.2);
     } else if (b.type === 'sbAssessment') {
       // eslint-disable-next-line no-await-in-loop
@@ -1181,7 +1209,7 @@ async function blocksToPdf(blocks, title, ctx) {
       await pdfWriteComponent(doc, props, ctx);
     } else if (b.type === 'sbPlaceholder') {
       pdfResetText(doc);
-      doc.font('Helvetica-Bold').fontSize(11).text(`[${props.label || 'Placeholder'}] ${props.title || ''}`);
+      doc.font(PDF_FONT_BOLD).fontSize(11).text(`[${props.label || 'Placeholder'}] ${props.title || ''}`);
       doc.moveDown(0.3);
     } else if (b.type === 'table') {
       pdfWriteTable(doc, b.content);
@@ -1189,12 +1217,12 @@ async function blocksToPdf(blocks, title, ctx) {
       const text = inlineToText(b.content);
       if (text) {
         const prefix = b.type === 'numberedListItem' ? `${++numberedIndex}. ` : '• ';
-        doc.font('Helvetica').fontSize(11).text(`${prefix}${text}`, { indent: 12 });
+        doc.font(PDF_FONT_REGULAR).fontSize(11).text(`${prefix}${text}`, { indent: 12 });
       }
     } else {
       const text = inlineToText(b.content);
       if (text) {
-        doc.font('Helvetica').fontSize(11).text(text);
+        doc.font(PDF_FONT_REGULAR).fontSize(11).text(text);
         doc.moveDown(0.3);
       }
     }
