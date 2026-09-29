@@ -62,6 +62,19 @@ function fail(res, error, message) {
   return res.status(500).json({ error: message });
 }
 
+// Check if user has access to a storyboard (creator or in _shareWithUsers).
+// Converts all IDs to strings for comparison (handles both string and ObjectId).
+function hasStoryboardAccess(storyboard, userId) {
+  if (!storyboard || !userId) return false;
+  // Creator always has access
+  if (storyboard.createdBy && storyboard.createdBy.toString() === userId.toString()) return true;
+  // Check if in _shareWithUsers array
+  if (Array.isArray(storyboard._shareWithUsers)) {
+    return storyboard._shareWithUsers.some((id) => id.toString() === userId.toString());
+  }
+  return false;
+}
+
 // ── Storyboard documents ────────────────────────────────────────────────────
 
 async function createStoryboard(req, res) {
@@ -99,11 +112,17 @@ async function getStoryboardByCourse(req, res) {
 
 async function getStoryboard(req, res) {
   try {
+    const { userId } = userCtx(req);
     const results = await db.retrieve('storyboard', { _id: req.params.id });
     if (!Array.isArray(results) || !results.length) {
       return res.status(404).json({ error: 'Storyboard not found' });
     }
-    return res.status(200).json(serializeStoryboard(results[0]));
+    const storyboard = results[0];
+    // Check access: user must be creator or in _shareWithUsers
+    if (!hasStoryboardAccess(storyboard, userId)) {
+      return res.status(403).json({ error: 'You do not have permission to access this storyboard' });
+    }
+    return res.status(200).json(serializeStoryboard(storyboard));
   } catch (error) {
     return fail(res, error, 'Failed to retrieve storyboard');
   }
@@ -113,6 +132,16 @@ async function updateStoryboard(req, res) {
   try {
     const { userId } = userCtx(req);
     const body = req.body || {};
+    
+    // Check access: user must be creator or in _shareWithUsers
+    const existing = await db.retrieve('storyboard', { _id: req.params.id });
+    if (!Array.isArray(existing) || !existing.length) {
+      return res.status(404).json({ error: 'Storyboard not found' });
+    }
+    if (!hasStoryboardAccess(existing[0], userId)) {
+      return res.status(403).json({ error: 'You do not have permission to edit this storyboard' });
+    }
+    
     const delta = { updatedBy: userId };
     if (typeof body.title === 'string') delta.title = body.title;
     if (STATUSES.includes(body.status)) delta.status = body.status;
@@ -143,6 +172,12 @@ async function setStoryboardStatus(req, res) {
       return res.status(404).json({ error: 'Storyboard not found' });
     }
     const current = toPlain(existing[0]);
+    
+    // Check access: user must be creator or in _shareWithUsers
+    if (!hasStoryboardAccess(current, userId)) {
+      return res.status(403).json({ error: 'You do not have permission to change this storyboard status' });
+    }
+    
     const fromStatus = current.status;
 
     await db.update('storyboard', { _id: req.params.id }, { status, updatedBy: userId });
@@ -215,6 +250,11 @@ async function shareStoryboard(req, res) {
       return res.status(404).json({ error: 'Storyboard not found' });
     }
     const current = toPlain(existing[0]);
+    
+    // Only creator can share
+    if (!current.createdBy || current.createdBy.toString() !== userId.toString()) {
+      return res.status(403).json({ error: 'Only the creator can share this storyboard' });
+    }
 
     await db.update('storyboard', { _id: req.params.id }, { _shareWithUsers: userIds, updatedBy: userId });
     await db.create('storyboardaudit', {
@@ -235,6 +275,18 @@ async function shareStoryboard(req, res) {
 
 async function deleteStoryboard(req, res) {
   try {
+    const { userId } = userCtx(req);
+    
+    // Check access: only creator can delete
+    const existing = await db.retrieve('storyboard', { _id: req.params.id });
+    if (!Array.isArray(existing) || !existing.length) {
+      return res.status(404).json({ error: 'Storyboard not found' });
+    }
+    const current = toPlain(existing[0]);
+    if (!current.createdBy || current.createdBy.toString() !== userId.toString()) {
+      return res.status(403).json({ error: 'Only the creator can delete this storyboard' });
+    }
+    
     await db.destroy('storyboard', { _id: req.params.id });
     return res.status(200).json({ success: true });
   } catch (error) {
@@ -246,6 +298,17 @@ async function deleteStoryboard(req, res) {
 
 async function listComments(req, res) {
   try {
+    const { userId } = userCtx(req);
+    
+    // Check access to storyboard
+    const existing = await db.retrieve('storyboard', { _id: req.params.id });
+    if (!Array.isArray(existing) || !existing.length) {
+      return res.status(404).json({ error: 'Storyboard not found' });
+    }
+    if (!hasStoryboardAccess(existing[0], userId)) {
+      return res.status(403).json({ error: 'You do not have permission to access this storyboard' });
+    }
+    
     const results = (await db.retrieve('storyboardcomment', { _storyboardId: req.params.id })) || [];
     const sorted = results
       .map(toPlain)
@@ -293,6 +356,15 @@ async function addComment(req, res) {
     if (!body.blockId) return res.status(400).json({ error: 'blockId is required' });
     if (!body.body) return res.status(400).json({ error: 'body is required' });
 
+    // Check access to storyboard
+    const existing = await db.retrieve('storyboard', { _id: req.params.id });
+    if (!Array.isArray(existing) || !existing.length) {
+      return res.status(404).json({ error: 'Storyboard not found' });
+    }
+    if (!hasStoryboardAccess(existing[0], userId)) {
+      return res.status(403).json({ error: 'You do not have permission to comment on this storyboard' });
+    }
+
     if (!body._parentCommentId) {
       const check = await findCommentableHeading(req.params.id, body.blockId);
       if (check.error) return res.status(check.status).json({ error: check.error });
@@ -321,6 +393,23 @@ async function updateComment(req, res) {
   try {
     const { userId, tenantId } = userCtx(req);
     const body = req.body || {};
+    
+    // Get the comment and storyboard to verify access
+    const existing = await db.retrieve('storyboardcomment', { _id: req.params.commentId });
+    if (!Array.isArray(existing) || !existing.length) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+    const comment = toPlain(existing[0]);
+    const storyboard = await db.retrieve('storyboard', { _id: comment._storyboardId });
+    if (!Array.isArray(storyboard) || !storyboard.length) {
+      return res.status(404).json({ error: 'Storyboard not found' });
+    }
+    
+    // Check access to storyboard
+    if (!hasStoryboardAccess(storyboard[0], userId)) {
+      return res.status(403).json({ error: 'You do not have permission to update this comment' });
+    }
+    
     const delta = { updatedBy: userId };
     if (typeof body.body === 'string') delta.body = body.body;
     if (typeof body.resolved === 'boolean') delta.resolved = body.resolved;
@@ -344,7 +433,21 @@ async function deleteComment(req, res) {
     // Capture which storyboard this comment belonged to BEFORE deleting it —
     // recomputeStatus needs it, and it's gone once the record is destroyed.
     const existing = await db.retrieve('storyboardcomment', { _id: req.params.commentId });
-    const storyboardId = Array.isArray(existing) && existing.length ? toPlain(existing[0])._storyboardId : undefined;
+    if (!Array.isArray(existing) || !existing.length) {
+      return res.status(404).json({ error: 'Comment not found' });
+    }
+    const comment = toPlain(existing[0]);
+    const storyboardId = comment._storyboardId;
+    
+    // Check access to storyboard
+    const storyboard = await db.retrieve('storyboard', { _id: storyboardId });
+    if (!Array.isArray(storyboard) || !storyboard.length) {
+      return res.status(404).json({ error: 'Storyboard not found' });
+    }
+    if (!hasStoryboardAccess(storyboard[0], userId)) {
+      return res.status(403).json({ error: 'You do not have permission to delete this comment' });
+    }
+    
     await db.destroy('storyboardcomment', { _id: req.params.commentId });
     if (storyboardId) await recomputeStatus(storyboardId, { userId, tenantId });
     return res.status(200).json({ success: true });
@@ -357,6 +460,17 @@ async function deleteComment(req, res) {
 
 async function listAudit(req, res) {
   try {
+    const { userId } = userCtx(req);
+    
+    // Check access to storyboard
+    const existing = await db.retrieve('storyboard', { _id: req.params.id });
+    if (!Array.isArray(existing) || !existing.length) {
+      return res.status(404).json({ error: 'Storyboard not found' });
+    }
+    if (!hasStoryboardAccess(existing[0], userId)) {
+      return res.status(403).json({ error: 'You do not have permission to access this storyboard' });
+    }
+    
     const results = (await db.retrieve('storyboardaudit', { _storyboardId: req.params.id })) || [];
     const sorted = results
       .map(serializeAudit)
@@ -374,6 +488,16 @@ async function addAudit(req, res) {
     if (!AUDIT_EVENTS.includes(body.event)) {
       return res.status(400).json({ error: `event must be one of ${AUDIT_EVENTS.join(', ')}` });
     }
+    
+    // Check access to storyboard
+    const existing = await db.retrieve('storyboard', { _id: req.params.id });
+    if (!Array.isArray(existing) || !existing.length) {
+      return res.status(404).json({ error: 'Storyboard not found' });
+    }
+    if (!hasStoryboardAccess(existing[0], userId)) {
+      return res.status(403).json({ error: 'You do not have permission to audit this storyboard' });
+    }
+    
     const data = {
       _storyboardId: req.params.id,
       _courseId: body._courseId,

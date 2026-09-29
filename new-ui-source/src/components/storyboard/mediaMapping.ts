@@ -166,12 +166,16 @@ function buildTranscriptTrack(media?: MediaData): Record<string, unknown> | null
     track._srcAssetTranscript = {
       src: transcriptSource,
       inlineTranscriptTitle: "Transcript",
+      label: "English",
+      srclang: "en",
     };
   }
   if (transcriptText) {
     track._transcriptInline = {
       inlineTranscriptTitle: "Transcript",
       inlineTranscriptBody: transcriptText,
+      label: "English",
+      srclang: "en",
     };
   }
   return track;
@@ -194,8 +198,8 @@ function buildNamedTrack(
   return {
     _srcType: type,
     [fieldName]: {
-      label: "",
-      srclang: "",
+      label: "English",
+      srclang: "en",
       src: trimmed,
     },
   };
