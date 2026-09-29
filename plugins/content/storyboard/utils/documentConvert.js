@@ -499,7 +499,7 @@ async function sbAssessmentToDocxParagraphs(children, props, ctx) {
   const question = data.question ? String(data.question).trim() : '';
   const options = Array.isArray(data.options) ? data.options.filter((o) => o && o.text) : [];
   const items = Array.isArray(data.items) ? data.items.filter(Boolean) : [];
-  const pairs = Array.isArray(data.pairs) ? data.pairs.filter((p) => p && (p.prompt || p.answer)) : [];
+  const pairs = Array.isArray(data.pairs) ? data.pairs.filter((p) => p && (p.prompt || (Array.isArray(p.options) && p.options.length))) : [];
   const answers = Array.isArray(data.answers) ? data.answers.filter(Boolean) : [];
   const fb = data.feedback || {};
 
@@ -591,6 +591,9 @@ async function sbAssessmentToDocxParagraphs(children, props, ctx) {
     }
   } else if (kind === 'matching') {
     for (const p of pairs) {
+      // Get the correct option from options array (if available)
+      const correctOption = Array.isArray(p.options) ? p.options.find((opt) => opt && opt.correct) : null;
+      const answerText = correctOption ? String(correctOption.text || '') : '';
       children.push(
         new Paragraph({
           indent: { left: 360 },
@@ -599,7 +602,7 @@ async function sbAssessmentToDocxParagraphs(children, props, ctx) {
             new TextRun({ text: '• ' }),
             new TextRun({ text: String(p.prompt || '') }),
             new TextRun({ text: '  →  ', bold: true }),
-            new TextRun({ text: String(p.answer || ''), italics: true }),
+            new TextRun({ text: answerText, italics: true }),
           ],
         }),
       );
@@ -894,10 +897,16 @@ function registerPdfFonts(doc) {
   const fs = require('fs');
   const path = require('path');
   const fontPath = path.resolve(__dirname, '../../../output/preflight/assets/arial-unicode-ms.ttf');
-  if (!fs.existsSync(fontPath)) return false;
-  doc.registerFont(PDF_FONT_REGULAR, fontPath);
-  doc.registerFont(PDF_FONT_BOLD, fontPath);
-  doc.registerFont(PDF_FONT_ITALIC, fontPath);
+  if (fs.existsSync(fontPath)) {
+    doc.registerFont(PDF_FONT_REGULAR, fontPath);
+    doc.registerFont(PDF_FONT_BOLD, fontPath);
+    doc.registerFont(PDF_FONT_ITALIC, fontPath);
+  } else {
+    // Font file missing, register names with PDFKit built-in fonts as fallback
+    doc.registerFont(PDF_FONT_REGULAR, 'Helvetica');
+    doc.registerFont(PDF_FONT_BOLD, 'Helvetica-Bold');
+    doc.registerFont(PDF_FONT_ITALIC, 'Helvetica-Oblique');
+  }
   return true;
 }
 
@@ -1055,7 +1064,10 @@ async function pdfWriteAssessment(doc, props, ctx) {
     }
   } else if (kind === 'matching') {
     for (const p of pairs) {
-      doc.font(PDF_FONT_REGULAR).fontSize(11).text(`• ${p.prompt || ''}  →  ${p.answer || ''}`, { indent: 12 });
+      // Get the correct option from options array (if available)
+      const correctOption = Array.isArray(p.options) ? p.options.find((opt) => opt && opt.correct) : null;
+      const answerText = correctOption ? String(correctOption.text || '') : '';
+      doc.font(PDF_FONT_REGULAR).fontSize(11).text(`• ${p.prompt || ''}  →  ${answerText}`, { indent: 12 });
     }
   } else if (kind === 'reorder') {
     items.forEach((it, i) => doc.font(PDF_FONT_REGULAR).fontSize(11).text(`${i + 1}. ${it}`, { indent: 12 }));

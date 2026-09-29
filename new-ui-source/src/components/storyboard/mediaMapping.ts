@@ -203,7 +203,9 @@ function buildNamedTrack(
 
 // Video/audio card → `_media` patch. A DAM file goes into mp4 (video) / mp3
 // (audio); an external URL goes into `source` (+ `type` for YouTube/Vimeo).
-export function buildMediaField(kind: "video" | "audio", media?: MediaData): { _media: Record<string, unknown> } {
+// Preserves existing cc tracks (multilingual captions/descriptions/chapters)
+// except for types being edited here (transcript, captions, descriptions, chapters).
+export function buildMediaField(kind: "video" | "audio", media?: MediaData, originalMedia?: Record<string, unknown>): { _media: Record<string, unknown> } {
   const asset = media?.asset;
   const link = asset?.link || "";
   const external = !!asset?.external || (!!link && !isCourseAssetLink(link));
@@ -218,13 +220,27 @@ export function buildMediaField(kind: "video" | "audio", media?: MediaData): { _
       _media.mp4 = link;
     }
   }
-  const cc = [
+  
+  // Preserve existing tracks that aren't being edited, then add edited tracks
+  const existingCc = Array.isArray((originalMedia as Record<string, unknown>)?.cc) 
+    ? ((originalMedia as Record<string, unknown>).cc as Array<Record<string, unknown>>)
+    : [];
+  
+  // Keep tracks for types we don't handle (preserve multilingual variants)
+  const handledTypes = new Set(['transcript', 'captions', 'descriptions', 'chapters']);
+  const preservedTracks = existingCc.filter((track) => {
+    const type = String(track._srcType || "").toLowerCase();
+    return !handledTypes.has(type);
+  });
+  
+  const newTracks = [
     buildTranscriptTrack(media),
     buildNamedTrack("captions", media?.captionsSource || ""),
     buildNamedTrack("descriptions", media?.descriptionsSource || ""),
     buildNamedTrack("chapters", media?.chaptersSource || ""),
   ].filter((track): track is Record<string, unknown> => !!track);
-  _media.cc = cc;
+  
+  _media.cc = [...preservedTracks, ...newTracks];
   return { _media };
 }
 

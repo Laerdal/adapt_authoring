@@ -475,9 +475,25 @@ export function parseAssessmentData(
       .map((it) => String(it.sentence ?? it.text ?? ''));
     data.shuffle = !!p._isRandom;
   } else if (kind === 'textInput') {
+    // Handle both new format (single _items[0] with _answers array) and legacy
+    // format (one _items entry per answer). Preserve all acceptable answers.
+    const answers: string[] = [];
+    for (const item of items) {
+      // New format: _answers array in single item
+      if (Array.isArray(item._answers)) {
+        answers.push(...item._answers.map((a) => String(a ?? '').trim()).filter(Boolean));
+      }
+      // Legacy format: each item is an answer
+      else if (item.answer) {
+        answers.push(String(item.answer ?? '').trim());
+      }
+    }
+    // Remove duplicates while preserving order
+    const uniqueAnswers = Array.from(new Set(answers));
+    data.answers = uniqueAnswers;
+    
+    // Get textInput config from first item (both formats store this once)
     const first = items[0] ?? {};
-    const ans = Array.isArray(first._answers) ? (first._answers as unknown[]) : [];
-    data.answers = ans.map((value) => String(value ?? '')).filter(Boolean);
     data.textInput = {
       prefix: String(first.prefix ?? ''),
       suffix: String(first.suffix ?? ''),

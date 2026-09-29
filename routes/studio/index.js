@@ -248,7 +248,7 @@ function findCourseAssetId(courseId, filename, cb) {
         _fieldName: filename,
         _assetId: { $exists: true, $ne: '' }
       },
-      { sort: { _id: -1 }, limit: 1 },
+      { operators: { sort: { _dateCreated: -1 }, limit: 1 } },
       (retrieveErr, docs) => {
         if (retrieveErr) return cb(retrieveErr);
         const assetId = Array.isArray(docs) && docs[0] && docs[0]._assetId ? docs[0]._assetId : null;

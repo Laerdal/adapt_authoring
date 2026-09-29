@@ -5,7 +5,7 @@
 // The structured model is stored as JSON in the `data` prop and is generation-
 // ready — options + feedback are written into the Adapt component on Save.
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { RefreshCw, Pencil, Trash2, Check, Plus, AlertTriangle, MessageSquare, FolderOpen, Image as ImageIcon } from 'lucide-react';
 import { storyboardActions } from '../storyboardActions';
 import { resolveCommentAnchor } from '../commentAnchor';
@@ -61,6 +61,21 @@ function plainText(value: string): string {
 
 function renderInstructionText(data: AssessmentData, kind: AssessmentKind): string {
   return (data.instruction || '').trim() || FOOTER[kind];
+}
+
+function renderInstructionHtml(data: AssessmentData, kind: AssessmentKind): React.ReactNode {
+  const html = (data.instruction || '').trim() || FOOTER[kind];
+  // If instruction is HTML (starts with tag), sanitize and render as HTML
+  if (html.trim().startsWith('<')) {
+    return (
+      <span
+        className="text-sm italic text-muted-foreground"
+        dangerouslySetInnerHTML={{ __html: sanitizeEditorHtml(html) }}
+      />
+    );
+  }
+  // Otherwise render as plain text
+  return <span className="text-sm italic text-muted-foreground">{html}</span>;
 }
 
 function parseData(kind: AssessmentKind, raw: string): AssessmentData {
@@ -650,7 +665,7 @@ export const assessmentBlock = createReactBlockSpec(
             )}
 
             {/* Submit instruction */}
-            <p className="mt-3 text-sm italic text-muted-foreground">{renderInstructionText(model, kind)}</p>
+            {renderInstructionHtml(model, kind)}
 
             {issues.length > 0 && (
               <div className="mt-2 inline-flex items-center gap-1 text-xs text-[#92400e]" title={issues.join('\n')}>
@@ -739,7 +754,7 @@ export const assessmentBlock = createReactBlockSpec(
 
           {/* Footer + readiness */}
           <div className="mt-2 flex items-center justify-between">
-            <p className="text-sm italic text-muted-foreground">{renderInstructionText(model, kind)}</p>
+            <p className="mt-3">{renderInstructionHtml(model, kind)}</p>
             {issues.length > 0 && (
               <span className="inline-flex items-center gap-1 text-xs text-[#92400e]" title={issues.join('\n')}>
                 <AlertTriangle className="h-3.5 w-3.5" /> {issues.length} to fix

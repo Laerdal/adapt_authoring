@@ -2879,20 +2879,6 @@ export interface CourseWriteBackResult {
   unmapped: number;
 }
 
-// Storyboard-specific helper: decode HTML entities in component body content.
-// This ensures body content fetched from the database displays correctly in the
-// storyboard editor, preventing literal HTML tags from appearing in text.
-// The decoded content is then properly parsed by htmlBodyToBlocks into styled
-// BlockNote blocks. This fix is STRICTLY scoped to Storyboard feature only and
-// does not affect Editor Mode or other authoring workflows.
-function decodeStoryboardBodyHtml(html: string): string {
-  if (!html) return html;
-  // Create a temporary element to leverage browser's HTML entity decoding
-  const decoder = document.createElement("textarea");
-  decoder.innerHTML = html;
-  return decoder.value;
-}
-
 // READ: course hierarchy → ordered BlockNote blocks (H1 Topic / H2 Section /
 // H3 Content Group / H4 Component + body paragraph). Modules (menus) are
 // flattened (implicit-single-Module mapping) — their pages emit as topics.
@@ -2922,8 +2908,7 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
   // + body paragraph (keeps the text write-back contract intact).
   const emitMediaCard = (comp: EngineContentNode, mediaKind: "image" | "video" | "audio") => {
     const props = (comp.properties as Record<string, unknown>) || {};
-    // Storyboard-specific: decode HTML entities in body for proper display
-    const description = stripHtml(decodeStoryboardBodyHtml(comp.body || ""));
+    const description = stripHtml(comp.body || "");
     const instruction = comp.instruction || (typeof props.instruction === "string" ? props.instruction : "");
     if (mediaKind === "image") {
       const image = imageFromMediaPoster(propOf(comp, "_media"), assetIdMap);
@@ -2991,16 +2976,14 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
         const link = g.src || g.small || "";
         return {
           title: String(it.title || ""),
-          // Storyboard-specific: decode HTML entities in grouped content body
-          body: stripHtml(decodeStoryboardBodyHtml(String(it.body || ""))),
+          body: stripHtml(String(it.body || "")),
           image: link, // persisted link (course/assets/<file> or external URL)
           imageUrl: resolveAssetUrl(link, assetIdMap), // servable preview
         };
       });
       emitCard(comp, "groupedContent", {
         showTitle: true,
-        // Storyboard-specific: decode HTML entities in description
-        description: stripHtml(decodeStoryboardBodyHtml(comp.body || "")),
+        description: stripHtml(comp.body || ""),
         instruction: comp.instruction || (typeof props.instruction === "string" ? props.instruction : ""),
         items,
       });
@@ -3025,8 +3008,7 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       const rawTitle = ((comp.title as string) || "").trim();
       const cleanDisplayTitle = isGenericOrDefaultTitle(displayTitle) ? "" : displayTitle;
       const cleanTitle = isGenericOrDefaultTitle(rawTitle) ? "" : rawTitle;
-      // Storyboard-specific: decode HTML entities in body for assessment questions
-      const bodyText = stripHtml(decodeStoryboardBodyHtml(comp.body || ""));
+      const bodyText = stripHtml(comp.body || "");
       const questionSeed = isMcqShaped
         ? bodyText || cleanDisplayTitle || cleanTitle
         : cleanDisplayTitle || cleanTitle || bodyText;
@@ -3064,8 +3046,7 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
         : undefined;
       emitCard(comp, "h5p", {
         showTitle: true,
-        // Storyboard-specific: decode HTML entities in description
-        description: stripHtml(decodeStoryboardBodyHtml(comp.body || "")),
+        description: stripHtml(comp.body || ""),
         instruction: comp.instruction || (typeof props.instruction === "string" ? props.instruction : ""),
         media,
       });
@@ -3105,8 +3086,7 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       }));
       emitCard(comp, "laerdalForm", {
         showTitle: true,
-        // Storyboard-specific: decode HTML entities in description
-        description: stripHtml(decodeStoryboardBodyHtml(comp.body || "")),
+        description: stripHtml(comp.body || ""),
         instruction: comp.instruction || (typeof props.instruction === "string" ? props.instruction : ""),
         fields,
       });
@@ -3147,8 +3127,7 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       const compTitle = label(comp);
       emitCard(comp, "text", {
         showTitle: !!compTitle,
-        // Storyboard-specific: decode HTML entities in description
-        description: stripHtml(decodeStoryboardBodyHtml(comp.body || "")),
+        description: stripHtml(comp.body || ""),
         instruction: comp.instruction || (typeof props.instruction === "string" ? props.instruction : ""),
       });
       return;
@@ -3169,9 +3148,7 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
     // "structural create is Phase 4" limit) but round-trip correctly through
     // a full Generate, which re-merges any number of consecutive blocks back
     // into this one component.
-    // Storyboard-specific: decode HTML entities in body content to ensure
-    // proper rendering in the editor (prevents raw HTML tags from displaying).
-    const htmlBlocks = htmlBodyToBlocks(decodeStoryboardBodyHtml(comp.body || ""));
+    const htmlBlocks = htmlBodyToBlocks(comp.body || "");
     htmlBlocks.forEach((b, i) => {
       const id = i === 0 ? `${comp._id}${BODY_SUFFIX}` : `${comp._id}-body-${i}`;
       if (b.kind === "table") {
@@ -3411,7 +3388,8 @@ export async function saveStoryboardToCourse(
         patch.instruction = parsed.instruction || "";
       } else if ((kind === "video" || kind === "audio") && (isLaerdalMedia || info.component === "media")) {
         seedProperties();
-        mergeProperties(patch, buildMediaField(kind, parsed.media));
+        const originalMedia = (info.properties?._media as Record<string, unknown> | undefined) || {};
+        mergeProperties(patch, buildMediaField(kind, parsed.media, originalMedia));
         assetLink = parsed.media?.asset?.link;
         assetId = parsed.media?.asset?.assetId;
         patch.body = parsed.description || "";
