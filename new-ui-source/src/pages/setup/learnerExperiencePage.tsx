@@ -758,6 +758,12 @@ export function LearnerExperiencePanel({
   const [feedbackSchema, setFeedbackSchema] = useState<SetupSchemaNode | null>(null);
   const [aiTutorSchema, setAiTutorSchema] = useState<SetupSchemaNode | null>(null);
 
+  const resourcesFieldsSchema = getSchemaNode(resourcesSchema, "pluginLocations", "course", "_resources");
+  const notesFieldsSchema = getSchemaNode(notesSchema, "pluginLocations", "course", "_courseNotes");
+  const searchFieldsSchema = getSchemaNode(searchSchema, "pluginLocations", "course", "_search");
+  const feedbackFieldsSchema = getSchemaNode(feedbackSchema, "pluginLocations", "config", "_courseFeedback");
+  const aiTutorFieldsSchema = getSchemaNode(aiTutorSchema, "pluginLocations", "config", "_aiTutor");
+
   const setLn = <K extends keyof LearnerNotesState>(k: K, v: LearnerNotesState[K]) =>
     setLnState((prev) => ({ ...prev, [k]: v }));
   const setLs = <K extends keyof LearnerSearchState>(k: K, v: LearnerSearchState[K]) =>
@@ -1129,8 +1135,8 @@ export function LearnerExperiencePanel({
             <LrToggle
               checked={lrState.enabled}
               onChange={(v) => setLr("enabled", v)}
-              label={getSchemaLabel(getSchemaNode(resourcesSchema, "_isEnabled"), "Enable Learning Resources")}
-              hint={getSchemaHint(getSchemaNode(resourcesSchema, "_isEnabled"))}
+              label={getSchemaLabel(getSchemaNode(resourcesFieldsSchema, "_isEnabled"), "Enable Learning Resources")}
+              hint={getSchemaHint(getSchemaNode(resourcesFieldsSchema, "_isEnabled"))}
               align="right"
             />
           </div>
@@ -1138,7 +1144,7 @@ export function LearnerExperiencePanel({
           {lrState.enabled && (
             <>
               {/* Drawer order */}
-              <LrField label={getSchemaLabel(getSchemaNode(resourcesSchema, "_drawerOrder"), "Drawer order")} hint={getSchemaHint(getSchemaNode(resourcesSchema, "_drawerOrder"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(resourcesFieldsSchema, "_drawerOrder"), "Drawer order")} hint={getSchemaHint(getSchemaNode(resourcesFieldsSchema, "_drawerOrder"))}>
                 <input
                   type="number"
                   min={0}
@@ -1149,7 +1155,7 @@ export function LearnerExperiencePanel({
               </LrField>
 
               {/* Section Title */}
-              <LrField label={getSchemaLabel(getSchemaNode(resourcesSchema, "displayTitle"), "Title")} hint={getSchemaHint(getSchemaNode(resourcesSchema, "displayTitle"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(resourcesFieldsSchema, "displayTitle"), "Title")} hint={getSchemaHint(getSchemaNode(resourcesFieldsSchema, "displayTitle"))}>
                 <input
                   type="text"
                   value={lrState.sectionTitle}
@@ -1164,7 +1170,7 @@ export function LearnerExperiencePanel({
               </LrField>
 
               {/* Description */}
-              <LrField label={getSchemaLabel(getSchemaNode(resourcesSchema, "description"), "Description")} hint={getSchemaHint(getSchemaNode(resourcesSchema, "description"))} help={<LrHelp>The description text for the resources button which displays when more than one extension is using the drawer.</LrHelp>}>
+              <LrField label={getSchemaLabel(getSchemaNode(resourcesFieldsSchema, "description"), "Description")} hint={getSchemaHint(getSchemaNode(resourcesFieldsSchema, "description"))} help={<LrHelp>The description text for the resources button which displays when more than one extension is using the drawer.</LrHelp>}>
                 <textarea
                   value={lrState.description}
                   onChange={(e) => setLr("description", e.target.value)}
@@ -1174,7 +1180,7 @@ export function LearnerExperiencePanel({
                 />
               </LrField>
 
-              <LrField label={getSchemaLabel(getSchemaNode(resourcesSchema, "body"), "Body")} hint={getSchemaHint(getSchemaNode(resourcesSchema, "body"))} help={<LrHelp>The body text for the resources which displays at the top of the resources drawer.</LrHelp>}>
+              <LrField label={getSchemaLabel(getSchemaNode(resourcesFieldsSchema, "body"), "Body")} hint={getSchemaHint(getSchemaNode(resourcesFieldsSchema, "body"))} help={<LrHelp>The body text for the resources which displays at the top of the resources drawer.</LrHelp>}>
                 <input
                   type="text"
                   value={lrState.body}
@@ -1184,7 +1190,7 @@ export function LearnerExperiencePanel({
                 />
               </LrField>
 
-              <LrField label={getSchemaLabel(getSchemaNode(resourcesSchema, "instruction"), "Instruction")} hint={getSchemaHint(getSchemaNode(resourcesSchema, "instruction"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(resourcesFieldsSchema, "instruction"), "Instruction")} hint={getSchemaHint(getSchemaNode(resourcesFieldsSchema, "instruction"))}>
                 <input
                   type="text"
                   value={lrState.instruction}
@@ -1197,8 +1203,8 @@ export function LearnerExperiencePanel({
               <LrToggle
                 checked={lrState.enableFilterButton}
                 onChange={(v) => setLr("enableFilterButton", v)}
-                label={getSchemaLabel(getSchemaNode(resourcesSchema, "_enableFilters"), "Enable filter button")}
-                hint={getSchemaHint(getSchemaNode(resourcesSchema, "_enableFilters"))}
+                label={getSchemaLabel(getSchemaNode(resourcesFieldsSchema, "_enableFilters"), "Enable filter button")}
+                hint={getSchemaHint(getSchemaNode(resourcesFieldsSchema, "_enableFilters"))}
                 help={<LrHelp>Turns the filter buttons on and off. Note that the filter buttons will be automatically disabled if all resource items have the same Type value.</LrHelp>}
               />
 
@@ -1302,24 +1308,24 @@ export function LearnerExperiencePanel({
             <LrToggle
               checked={lnState.enabled}
               onChange={(v) => setLn("enabled", v)}
-              label={getSchemaLabel(getSchemaNode(notesSchema, "_isEnabled"), "Enable Notes")}
-              hint={getSchemaHint(getSchemaNode(notesSchema, "_isEnabled"))}
+              label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "_isEnabled"), "Enable Notes")}
+              hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "_isEnabled"))}
               align="right"
             />
           </div>
 
           {lnState.enabled && (
             <>
-              <LrField label={getSchemaLabel(getSchemaNode(notesSchema, "displayTitle"), "Title")} hint={getSchemaHint(getSchemaNode(notesSchema, "displayTitle"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "displayTitle"), "Title")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "displayTitle"))}>
                 <input type="text" value={lnState.title} onChange={(e) => setLn("title", e.target.value)} placeholder="e.g. My Notes" className={LR_INPUT} />
               </LrField>
-              <LrField label={getSchemaLabel(getSchemaNode(notesSchema, "instruction"), "Instruction")} hint={getSchemaHint(getSchemaNode(notesSchema, "instruction"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "instruction"), "Instruction")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "instruction"))}>
                 <input type="text" value={lnState.instruction} onChange={(e) => setLn("instruction", e.target.value)} placeholder="e.g. Write your notes here" className={LR_INPUT} />
               </LrField>
-              <LrField label={getSchemaLabel(getSchemaNode(notesSchema, "placeholder"), "Placeholder")} hint={getSchemaHint(getSchemaNode(notesSchema, "placeholder"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "placeholder"), "Placeholder")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "placeholder"))}>
                 <input type="text" value={lnState.placeholder} onChange={(e) => setLn("placeholder", e.target.value)} placeholder="e.g. Start typing your notes..." className={LR_INPUT} />
               </LrField>
-              <LrField label={getSchemaLabel(getSchemaNode(notesSchema, "errorMessageSearch"), "Search Error Message")} hint={getSchemaHint(getSchemaNode(notesSchema, "errorMessageSearch"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "errorMessageSearch"), "Search Error Message")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "errorMessageSearch"))}>
                 <input
                   type="text"
                   value={lnState.searchErrorMessage}
@@ -1332,7 +1338,7 @@ export function LearnerExperiencePanel({
                 />
                 {lnFieldErrors.searchErrorMessage && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.searchErrorMessage}</p>}
               </LrField>
-              <LrField label={getSchemaLabel(getSchemaNode(notesSchema, "successMessage"), "Success Message")} hint={getSchemaHint(getSchemaNode(notesSchema, "successMessage"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "successMessage"), "Success Message")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "successMessage"))}>
                 <input
                   type="text"
                   value={lnState.successMessage}
@@ -1345,7 +1351,7 @@ export function LearnerExperiencePanel({
                 />
                 {lnFieldErrors.successMessage && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.successMessage}</p>}
               </LrField>
-              <LrField label={getSchemaLabel(getSchemaNode(notesSchema, "errorMessage"), "Error Message")} hint={getSchemaHint(getSchemaNode(notesSchema, "errorMessage"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "errorMessage"), "Error Message")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "errorMessage"))}>
                 <input
                   type="text"
                   value={lnState.errorMessage}
@@ -1358,7 +1364,7 @@ export function LearnerExperiencePanel({
                 />
                 {lnFieldErrors.errorMessage && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.errorMessage}</p>}
               </LrField>
-              <LrField label={getSchemaLabel(getSchemaNode(notesSchema, "newNote"), "Create a New Note")} hint={getSchemaHint(getSchemaNode(notesSchema, "newNote"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "newNote"), "Create a New Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "newNote"))}>
                 <input
                   type="text"
                   value={lnState.createANewNote}
@@ -1371,7 +1377,7 @@ export function LearnerExperiencePanel({
                 />
                 {lnFieldErrors.createANewNote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.createANewNote}</p>}
               </LrField>
-              <LrField label={getSchemaLabel(getSchemaNode(notesSchema, "exportNote"), "Export a Note")} hint={getSchemaHint(getSchemaNode(notesSchema, "exportNote"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "exportNote"), "Export a Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "exportNote"))}>
                 <input
                   type="text"
                   value={lnState.exportANote}
@@ -1384,7 +1390,7 @@ export function LearnerExperiencePanel({
                 />
                 {lnFieldErrors.exportANote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.exportANote}</p>}
               </LrField>
-              <LrField label={getSchemaLabel(getSchemaNode(notesSchema, "saveNote"), "Save Note")} hint={getSchemaHint(getSchemaNode(notesSchema, "saveNote"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "saveNote"), "Save Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "saveNote"))}>
                 <input
                   type="text"
                   value={lnState.saveNote}
@@ -1397,7 +1403,7 @@ export function LearnerExperiencePanel({
                 />
                 {lnFieldErrors.saveNote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.saveNote}</p>}
               </LrField>
-              <LrField label={getSchemaLabel(getSchemaNode(notesSchema, "downloadNote"), "Download a Note")} hint={getSchemaHint(getSchemaNode(notesSchema, "downloadNote"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "downloadNote"), "Download a Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "downloadNote"))}>
                 <input
                   type="text"
                   value={lnState.downloadANote}
@@ -1410,7 +1416,7 @@ export function LearnerExperiencePanel({
                 />
                 {lnFieldErrors.downloadANote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.downloadANote}</p>}
               </LrField>
-              <LrField label={getSchemaLabel(getSchemaNode(notesSchema, "uploadNote"), "Upload a Note")} hint={getSchemaHint(getSchemaNode(notesSchema, "uploadNote"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "uploadNote"), "Upload a Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "uploadNote"))}>
                 <input
                   type="text"
                   value={lnState.uploadANote}
@@ -1423,7 +1429,7 @@ export function LearnerExperiencePanel({
                 />
                 {lnFieldErrors.uploadANote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.uploadANote}</p>}
               </LrField>
-              <LrField label={getSchemaLabel(getSchemaNode(notesSchema, "searchNote"), "Search Note")} hint={getSchemaHint(getSchemaNode(notesSchema, "searchNote"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "searchNote"), "Search Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "searchNote"))}>
                 <input
                   type="text"
                   value={lnState.searchNote}
@@ -1436,7 +1442,7 @@ export function LearnerExperiencePanel({
                 />
                 {lnFieldErrors.searchNote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.searchNote}</p>}
               </LrField>
-              <LrField label={getSchemaLabel(getSchemaNode(notesSchema, "deleteNote"), "Delete Note")} hint={getSchemaHint(getSchemaNode(notesSchema, "deleteNote"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "deleteNote"), "Delete Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "deleteNote"))}>
                 <input
                   type="text"
                   value={lnState.deleteNote}
@@ -1449,7 +1455,7 @@ export function LearnerExperiencePanel({
                 />
                 {lnFieldErrors.deleteNote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.deleteNote}</p>}
               </LrField>
-              <LrField label={getSchemaLabel(getSchemaNode(notesSchema, "cancelNote"), "Cancel")} hint={getSchemaHint(getSchemaNode(notesSchema, "cancelNote"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "cancelNote"), "Cancel")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "cancelNote"))}>
                 <input
                   type="text"
                   value={lnState.cancel}
@@ -1462,7 +1468,7 @@ export function LearnerExperiencePanel({
                 />
                 {lnFieldErrors.cancel && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.cancel}</p>}
               </LrField>
-              <LrField label={getSchemaLabel(getSchemaNode(notesSchema, "editNote"), "Edit Note")} hint={getSchemaHint(getSchemaNode(notesSchema, "editNote"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "editNote"), "Edit Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "editNote"))}>
                 <input
                   type="text"
                   value={lnState.editNote}
@@ -1498,7 +1504,7 @@ export function LearnerExperiencePanel({
             </div>
           )}
           <div className={`pt-3${lsState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
-            <LrToggle checked={lsState.enabled} onChange={(v) => setLs("enabled", v)} label={getSchemaLabel(getSchemaNode(searchSchema, "_isEnabled"), "Enable Search")} hint={getSchemaHint(getSchemaNode(searchSchema, "_isEnabled"))} align="right" />
+            <LrToggle checked={lsState.enabled} onChange={(v) => setLs("enabled", v)} label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_isEnabled"), "Enable Search")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_isEnabled"))} align="right" />
           </div>
 
           {lsState.enabled && (
@@ -1510,10 +1516,10 @@ export function LearnerExperiencePanel({
                   <p className="text-xs text-[#6b7280] mt-1">Select which word-matching strategies are active.</p>
                 </div>
                 <div className="px-4 py-4 space-y-3">
-                  <LrToggle checked={lsState.matchOn.contentWordBeginsPhraseWord} onChange={(v) => setMatchOn("contentWordBeginsPhraseWord", v)} label={getSchemaLabel(getSchemaNode(searchSchema, "_matchOn", "_contentWordBeginsPhraseWord"), "A word in the content begins the search phrase word")} hint={getSchemaHint(getSchemaNode(searchSchema, "_matchOn", "_contentWordBeginsPhraseWord"))} />
-                  <LrToggle checked={lsState.matchOn.contentWordContainsPhraseWord} onChange={(v) => setMatchOn("contentWordContainsPhraseWord", v)} label={getSchemaLabel(getSchemaNode(searchSchema, "_matchOn", "_contentWordContainsPhraseWord"), "A word in the content contains the search phrase word")} hint={getSchemaHint(getSchemaNode(searchSchema, "_matchOn", "_contentWordContainsPhraseWord"))} />
-                  <LrToggle checked={lsState.matchOn.contentWordEqualsPhraseWord} onChange={(v) => setMatchOn("contentWordEqualsPhraseWord", v)} label={getSchemaLabel(getSchemaNode(searchSchema, "_matchOn", "_contentWordEqualsPhraseWord"), "A word in the content equals the search phrase word")} hint={getSchemaHint(getSchemaNode(searchSchema, "_matchOn", "_contentWordEqualsPhraseWord"))} />
-                  <LrToggle checked={lsState.matchOn.phraseWordBeginsContentWord} onChange={(v) => setMatchOn("phraseWordBeginsContentWord", v)} label={getSchemaLabel(getSchemaNode(searchSchema, "_matchOn", "_phraseWordBeginsContentWord"), "A word in the content starts with the search phrase word")} hint={getSchemaHint(getSchemaNode(searchSchema, "_matchOn", "_phraseWordBeginsContentWord"))} />
+                  <LrToggle checked={lsState.matchOn.contentWordBeginsPhraseWord} onChange={(v) => setMatchOn("contentWordBeginsPhraseWord", v)} label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_matchOn", "_contentWordBeginsPhraseWord"), "A word in the content begins the search phrase word")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_matchOn", "_contentWordBeginsPhraseWord"))} />
+                  <LrToggle checked={lsState.matchOn.contentWordContainsPhraseWord} onChange={(v) => setMatchOn("contentWordContainsPhraseWord", v)} label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_matchOn", "_contentWordContainsPhraseWord"), "A word in the content contains the search phrase word")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_matchOn", "_contentWordContainsPhraseWord"))} />
+                  <LrToggle checked={lsState.matchOn.contentWordEqualsPhraseWord} onChange={(v) => setMatchOn("contentWordEqualsPhraseWord", v)} label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_matchOn", "_contentWordEqualsPhraseWord"), "A word in the content equals the search phrase word")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_matchOn", "_contentWordEqualsPhraseWord"))} />
+                  <LrToggle checked={lsState.matchOn.phraseWordBeginsContentWord} onChange={(v) => setMatchOn("phraseWordBeginsContentWord", v)} label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_matchOn", "_phraseWordBeginsContentWord"), "A word in the content starts with the search phrase word")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_matchOn", "_phraseWordBeginsContentWord"))} />
                 </div>
               </div>
 
@@ -1523,38 +1529,38 @@ export function LearnerExperiencePanel({
                   <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Display Options</p>
                 </div>
                 <div className="px-4 py-4 space-y-3">
-                  <LrToggle checked={lsState.showFoundWords} onChange={(v) => setLs("showFoundWords", v)} label={getSchemaLabel(getSchemaNode(searchSchema, "_showFoundWords"), "Show found words")} hint={getSchemaHint(getSchemaNode(searchSchema, "_showFoundWords"))} />
-                  <LrToggle checked={lsState.showHighlights} onChange={(v) => setLs("showHighlights", v)} label={getSchemaLabel(getSchemaNode(searchSchema, "_showHighlights"), "Show highlights")} hint={getSchemaHint(getSchemaNode(searchSchema, "_showHighlights"))} />
+                  <LrToggle checked={lsState.showFoundWords} onChange={(v) => setLs("showFoundWords", v)} label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_showFoundWords"), "Show found words")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_showFoundWords"))} />
+                  <LrToggle checked={lsState.showHighlights} onChange={(v) => setLs("showHighlights", v)} label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_showHighlights"), "Show highlights")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_showHighlights"))} />
                 </div>
               </div>
 
               {/* Ignored Words */}
-              <LrField label={getSchemaLabel(getSchemaNode(searchSchema, "_ignoreWords"), "Ignored Words")} hint={getSchemaHint(getSchemaNode(searchSchema, "_ignoreWords"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_ignoreWords"), "Ignored Words")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_ignoreWords"))}>
                 <IgnoredWordsInput words={lsState.ignoredWords} onChange={(w) => setLs("ignoredWords", w)} />
                 <p className="text-xs text-[#9ca3af] mt-1">Type a word and press Enter to add. These words are excluded from search indexing.</p>
               </LrField>
 
               {/* Numeric settings */}
               <div className="grid grid-cols-2 gap-4">
-                <LrField label={getSchemaLabel(getSchemaNode(searchSchema, "_minimumWordLength"), "Minimum Word Length")} hint={getSchemaHint(getSchemaNode(searchSchema, "_minimumWordLength"))}>
+                <LrField label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_minimumWordLength"), "Minimum Word Length")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_minimumWordLength"))}>
                   <input type="number" min={1} value={lsState.minimumWordLength} onChange={(e) => setLs("minimumWordLength", Number(e.target.value))} className={LR_INPUT} />
                 </LrField>
               </div>
 
               {/* Text fields */}
-              <LrField label={getSchemaLabel(getSchemaNode(searchSchema, "title"), "Title")} hint={getSchemaHint(getSchemaNode(searchSchema, "title"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "title"), "Title")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "title"))}>
                 <input type="text" value={lsState.title} onChange={(e) => setLs("title", e.target.value)} placeholder="e.g. How can we help?" className={LR_INPUT} />
               </LrField>
-              <LrField label={getSchemaLabel(getSchemaNode(searchSchema, "description"), "Placeholder")} hint={getSchemaHint(getSchemaNode(searchSchema, "description"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "description"), "Placeholder")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "description"))}>
                 <input type="text" value={lsState.placeholder} onChange={(e) => setLs("placeholder", e.target.value)} placeholder="e.g. Type in search words" className={LR_INPUT} />
               </LrField>
-              <LrField label={getSchemaLabel(getSchemaNode(searchSchema, "placeholder"), "Placeholder Text for the Search Box")} hint={getSchemaHint(getSchemaNode(searchSchema, "placeholder"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "placeholder"), "Placeholder Text for the Search Box")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "placeholder"))}>
                 <input type="text" value={lsState.searchBoxPlaceholder} onChange={(e) => setLs("searchBoxPlaceholder", e.target.value)} placeholder="e.g. Enter search criteria" className={LR_INPUT} />
               </LrField>
-              <LrField label={getSchemaLabel(getSchemaNode(searchSchema, "noResultsMessage"), "No Results Message")} hint={getSchemaHint(getSchemaNode(searchSchema, "noResultsMessage"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "noResultsMessage"), "No Results Message")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "noResultsMessage"))}>
                 <input type="text" value={lsState.noResultsMessage} onChange={(e) => setLs("noResultsMessage", e.target.value)} placeholder="e.g. Sorry, no results were found" className={LR_INPUT} />
               </LrField>
-              <LrField label={getSchemaLabel(getSchemaNode(searchSchema, "awaitingResultsMessage"), "Processing Results Message")} hint={getSchemaHint(getSchemaNode(searchSchema, "awaitingResultsMessage"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "awaitingResultsMessage"), "Processing Results Message")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "awaitingResultsMessage"))}>
                 <input type="text" value={lsState.processingResultsMessage} onChange={(e) => setLs("processingResultsMessage", e.target.value)} placeholder="e.g. Formulating results..." className={LR_INPUT} />
               </LrField>
             </>
@@ -1584,8 +1590,8 @@ export function LearnerExperiencePanel({
             <LrToggle
               checked={atState.enabled}
               onChange={(v) => setAt("enabled", v)}
-              label={getSchemaLabel(getSchemaNode(aiTutorSchema, "_isEnabled"), "Enable AI Tutor")}
-              hint={getSchemaHint(getSchemaNode(aiTutorSchema, "_isEnabled"))}
+              label={getSchemaLabel(getSchemaNode(aiTutorFieldsSchema, "_isEnabled"), "Enable AI Tutor")}
+              hint={getSchemaHint(getSchemaNode(aiTutorFieldsSchema, "_isEnabled"))}
               align="right"
             />
           </div>
@@ -1593,7 +1599,7 @@ export function LearnerExperiencePanel({
           {atState.enabled && (
             <>
               {/* Title */}
-              <LrField label={getSchemaLabel(getSchemaNode(aiTutorSchema, "_aiTutorTitle"), "Title")} hint={getSchemaHint(getSchemaNode(aiTutorSchema, "_aiTutorTitle"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(aiTutorFieldsSchema, "_aiTutorTitle"), "Title")} hint={getSchemaHint(getSchemaNode(aiTutorFieldsSchema, "_aiTutorTitle"))}>
                 <input
                   type="text"
                   value={atState.title}
@@ -1604,7 +1610,7 @@ export function LearnerExperiencePanel({
               </LrField>
 
               {/* Placeholder Text */}
-              <LrField label={getSchemaLabel(getSchemaNode(aiTutorSchema, "_placeHolderText"), "Placeholder Text")} hint={getSchemaHint(getSchemaNode(aiTutorSchema, "_placeHolderText"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(aiTutorFieldsSchema, "_placeHolderText"), "Placeholder Text")} hint={getSchemaHint(getSchemaNode(aiTutorFieldsSchema, "_placeHolderText"))}>
                 <input
                   type="text"
                   value={atState.placeholderText}
@@ -1615,7 +1621,7 @@ export function LearnerExperiencePanel({
               </LrField>
 
               {/* Language Code */}
-              <LrField label={getSchemaLabel(getSchemaNode(aiTutorSchema, "_languageCode"), "Language Code")} hint={getSchemaHint(getSchemaNode(aiTutorSchema, "_languageCode"))}>
+              <LrField label={getSchemaLabel(getSchemaNode(aiTutorFieldsSchema, "_languageCode"), "Language Code")} hint={getSchemaHint(getSchemaNode(aiTutorFieldsSchema, "_languageCode"))}>
                 <input
                   type="text"
                   value={atState.languageCode}
@@ -1688,8 +1694,8 @@ export function LearnerExperiencePanel({
             <LrToggle
               checked={cfState.enabled}
               onChange={(v) => setCf("enabled", v)}
-              label={getSchemaLabel(getSchemaNode(feedbackSchema, "_isEnabled"), "Enable Laerdal Course Feedback")}
-              hint={getSchemaHint(getSchemaNode(feedbackSchema, "_isEnabled"))}
+              label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_isEnabled"), "Enable Laerdal Course Feedback")}
+              hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_isEnabled"))}
               align="right"
             />
           </div>
@@ -1716,7 +1722,7 @@ export function LearnerExperiencePanel({
                   <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Trigger Button</p>
                 </div>
                 <div className="px-4 py-4 space-y-3">
-                  <LrField label={getSchemaLabel(getSchemaNode(feedbackSchema, "_triggerButton", "text"), "Button text")} hint={getSchemaHint(getSchemaNode(feedbackSchema, "_triggerButton", "text"))}>
+                  <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_triggerButton", "text"), "Button text")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_triggerButton", "text"))}>
                     <input
                       type="text"
                       value={cfState.buttonText}
@@ -1725,7 +1731,7 @@ export function LearnerExperiencePanel({
                       className={LR_INPUT}
                     />
                   </LrField>
-                  <LrField label={getSchemaLabel(getSchemaNode(feedbackSchema, "_triggerButton", "ariaLabel"), "Aria label")} hint={getSchemaHint(getSchemaNode(feedbackSchema, "_triggerButton", "ariaLabel"))}>
+                  <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_triggerButton", "ariaLabel"), "Aria label")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_triggerButton", "ariaLabel"))}>
                     <input
                       type="text"
                       value={cfState.buttonAriaLabel}
@@ -1748,7 +1754,7 @@ export function LearnerExperiencePanel({
                       <p className="text-xs font-semibold text-[#374151] uppercase tracking-wide">Rating Step</p>
                     </div>
                     <div className="px-3.5 py-3 space-y-3">
-                      <LrField label={getSchemaLabel(getSchemaNode(feedbackSchema, "_widget", "_rating", "title"), "Title")} hint={getSchemaHint(getSchemaNode(feedbackSchema, "_widget", "_rating", "title"))}>
+                      <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "title"), "Title")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "title"))}>
                         <input
                           type="text"
                           value={cfState.ratingTitle}
@@ -1757,7 +1763,7 @@ export function LearnerExperiencePanel({
                           className={LR_INPUT}
                         />
                       </LrField>
-                      <LrField label={getSchemaLabel(getSchemaNode(feedbackSchema, "_widget", "_rating", "ariaLabel"), "Aria label")} hint={getSchemaHint(getSchemaNode(feedbackSchema, "_widget", "_rating", "ariaLabel"))}>
+                      <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "ariaLabel"), "Aria label")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "ariaLabel"))}>
                         <input
                           type="text"
                           value={cfState.ratingAriaLabel}
@@ -1767,7 +1773,7 @@ export function LearnerExperiencePanel({
                         />
                       </LrField>
                       <div className="grid grid-cols-2 gap-3">
-                        <LrField label={getSchemaLabel(getSchemaNode(feedbackSchema, "_widget", "_rating", "labelLow"), "Lowest rating label")} hint={getSchemaHint(getSchemaNode(feedbackSchema, "_widget", "_rating", "labelLow"))}>
+                        <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "labelLow"), "Lowest rating label")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "labelLow"))}>
                           <input
                             type="text"
                             value={cfState.lowestRatingLabel}
@@ -1776,7 +1782,7 @@ export function LearnerExperiencePanel({
                             className={LR_INPUT}
                           />
                         </LrField>
-                        <LrField label={getSchemaLabel(getSchemaNode(feedbackSchema, "_widget", "_rating", "labelHigh"), "Highest rating label")} hint={getSchemaHint(getSchemaNode(feedbackSchema, "_widget", "_rating", "labelHigh"))}>
+                        <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "labelHigh"), "Highest rating label")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "labelHigh"))}>
                           <input
                             type="text"
                             value={cfState.highestRatingLabel}
@@ -1794,7 +1800,7 @@ export function LearnerExperiencePanel({
                       <p className="text-xs font-semibold text-[#374151] uppercase tracking-wide">Common Step</p>
                     </div>
                     <div className="px-3.5 py-3 space-y-3">
-                      <LrField label={getSchemaLabel(getSchemaNode(feedbackSchema, "_widget", "_comment", "title"), "Title")} hint={getSchemaHint(getSchemaNode(feedbackSchema, "_widget", "_comment", "title"))}>
+                      <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "title"), "Title")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "title"))}>
                         <input
                           type="text"
                           value={cfState.commonTitle}
@@ -1803,7 +1809,7 @@ export function LearnerExperiencePanel({
                           className={LR_INPUT}
                         />
                       </LrField>
-                      <LrField label={getSchemaLabel(getSchemaNode(feedbackSchema, "_widget", "_comment", "placeholder"), "Placeholder")} hint={getSchemaHint(getSchemaNode(feedbackSchema, "_widget", "_comment", "placeholder"))}>
+                      <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "placeholder"), "Placeholder")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "placeholder"))}>
                         <input
                           type="text"
                           value={cfState.commonPlaceholder}
@@ -1812,7 +1818,7 @@ export function LearnerExperiencePanel({
                           className={LR_INPUT}
                         />
                       </LrField>
-                      <LrField label={getSchemaLabel(getSchemaNode(feedbackSchema, "_widget", "_comment", "ariaLabel"), "Aria label")} hint={getSchemaHint(getSchemaNode(feedbackSchema, "_widget", "_comment", "ariaLabel"))}>
+                      <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "ariaLabel"), "Aria label")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "ariaLabel"))}>
                         <input
                           type="text"
                           value={cfState.commonAriaLabel}
@@ -1821,7 +1827,7 @@ export function LearnerExperiencePanel({
                           className={LR_INPUT}
                         />
                       </LrField>
-                      <LrField label={getSchemaLabel(getSchemaNode(feedbackSchema, "_widget", "_comment", "maxLength"), "Maximum character length")} hint={getSchemaHint(getSchemaNode(feedbackSchema, "_widget", "_comment", "maxLength"))} help={<LrHelp>Maximum characters allowed (for SCORM 1.2 compatibility, recommended 250 or less)</LrHelp>}>
+                      <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "maxLength"), "Maximum character length")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "maxLength"))} help={<LrHelp>Maximum characters allowed (for SCORM 1.2 compatibility, recommended 250 or less)</LrHelp>}>
                         <input
                           type="number"
                           min={0}
@@ -1838,7 +1844,7 @@ export function LearnerExperiencePanel({
                       <p className="text-xs font-semibold text-[#374151] uppercase tracking-wide">Buttons</p>
                     </div>
                     <div className="px-3.5 py-3 space-y-3">
-                      <LrField label={getSchemaLabel(getSchemaNode(feedbackSchema, "_widget", "_buttons", "next"), "Next button text")} hint={getSchemaHint(getSchemaNode(feedbackSchema, "_widget", "_buttons", "next"))}>
+                      <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_buttons", "next"), "Next button text")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_buttons", "next"))}>
                         <input
                           type="text"
                           value={cfState.nextButtonText}
@@ -1847,7 +1853,7 @@ export function LearnerExperiencePanel({
                           className={LR_INPUT}
                         />
                       </LrField>
-                      <LrField label={getSchemaLabel(getSchemaNode(feedbackSchema, "_widget", "_buttons", "close"), "Close button text")} hint={getSchemaHint(getSchemaNode(feedbackSchema, "_widget", "_buttons", "close"))}>
+                      <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_buttons", "close"), "Close button text")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_buttons", "close"))}>
                         <input
                           type="text"
                           value={cfState.closeButtonText}
@@ -1867,7 +1873,7 @@ export function LearnerExperiencePanel({
                   <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">THANK YOU MESSAGE</p>
                 </div>
                 <div className="px-4 py-4">
-                  <LrField label={getSchemaLabel(getSchemaNode(feedbackSchema, "_widget", "_thankYou", "body"), "Body")} hint={getSchemaHint(getSchemaNode(feedbackSchema, "_widget", "_thankYou", "body"))}>
+                  <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_thankYou", "body"), "Body")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_thankYou", "body"))}>
                     <ClickToEditRichText
                       value={cfState.thankYouBody}
                       onChange={(html) => setCf("thankYouBody", html)}
