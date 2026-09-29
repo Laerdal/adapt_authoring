@@ -12,6 +12,7 @@ import { useCourseStructure } from "../hooks/useCourseStructure";
 import { STRUCTURE_LABELS } from "../types/structure";
 import { BasicRichTextEditor } from "../components/common";
 import { CourseOverviewPage } from "./setup/courseOverviewPage";
+import { SaveChangesButton } from "./setup/SaveChangesButton";
 import SelectThemePage from "./setup/themePage";
 import { MenuPage } from "./setup/menuPage";
 import { NavigationPage } from "./setup/navigationPage";
@@ -192,7 +193,6 @@ const NAV_ITEMS = [
     ),
   },
 ];
-
 type NavLeafItem = Extract<(typeof NAV_ITEMS)[number], { heading?: false }>;
 
 function isNavLeafItem(item: (typeof NAV_ITEMS)[number]): item is NavLeafItem {
@@ -214,7 +214,6 @@ const NAV_GROUPS = NAV_ITEMS.reduce<{ id: string; label: string; items: NavLeafI
 // Navigation guard source of truth:
 // To guard a page in future (unsaved-changes interception), add `guarded: true`
 // on that page item in NAV_ITEMS. It will automatically be included here.
-
 const GUARDED_NAV_IDS = new Set([
   ...NAV_ITEMS.filter((item) => item.heading !== true && item.guarded).map((item) => item.id),
   "export-pdf",
@@ -291,14 +290,17 @@ function CourseStructurePanel({
 
   return (
     <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
-      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-start justify-between gap-4">
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-start gap-4">
         <div>
           <h2 className="text-xl font-bold text-[#111827]">Course Structure</h2>
           <p className="text-sm text-[#6b7280] mt-0.5">Build your structure before editing.</p>
         </div>
 
-        {/* View mode toggle */}
-        <div className="flex items-center border border-[#e5e7eb] rounded-lg overflow-hidden shrink-0">
+        <div className="ml-auto flex items-center gap-3 shrink-0">
+          <SaveChangesButton dirty={dirty} saving={saving} onClick={() => void save()} portalTargetId="setup-save-button-slot" />
+
+          {/* View mode toggle */}
+          <div className="flex items-center border border-[#e5e7eb] rounded-lg overflow-hidden shrink-0">
           <button
             type="button"
             onClick={() => setViewMode("tree")}
@@ -338,6 +340,7 @@ function CourseStructurePanel({
             Map
           </button>
         </div>
+      </div>
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0">
@@ -447,62 +450,6 @@ function CourseStructurePanel({
                 </svg>
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {!loading && dirty && !showConfirmModal && (
-        <div data-unsaved-changes-bar="true" className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-4 rounded-xl border border-[var(--life-warning-100)] bg-white px-4 py-3 shadow-lg animate-fade-in-down">
-          <span className="flex items-center gap-2 text-sm text-[#374151]">
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="var(--life-warning-500)"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="shrink-0"
-            >
-              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-              <line x1="12" y1="9" x2="12" y2="13" />
-              <line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
-            Unsaved changes
-          </span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={discard}
-              disabled={saving}
-              className="rounded-lg border border-[#d1d5db] bg-white px-4 py-2 text-sm font-medium text-[#374151] transition-colors hover:bg-[#f9fafb] disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => void save()}
-              disabled={saving}
-              className="inline-flex items-center gap-2 rounded-lg bg-[var(--life-primary-500)] px-4 py-2 text-sm font-semibold text-[var(--life-base-white)] transition-colors hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:opacity-50"
-            >
-              {saving && (
-                <svg
-                  className="animate-spin"
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                </svg>
-              )}
-              {saving ? "Saving…" : "Save Changes"}
-            </button>
           </div>
         </div>
       )}
@@ -2992,6 +2939,7 @@ function CourseCreationCenterContent() {
           </div>
 
         <div className="ml-auto flex items-center gap-4">
+          <div id="setup-save-button-slot" className="flex items-center" />
           {canExportCourse && (
             <ExportMenu
               disabled={!courseId || !user?._tenantId}
