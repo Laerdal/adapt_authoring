@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  getUserById,
   listStoryboardComments,
   addStoryboardComment,
   updateStoryboardComment,
@@ -11,11 +12,13 @@ import {
   listStoryboardAudit,
   type StoryboardComment,
   type StoryboardAuditEvent,
+  type UserSummary,
 } from "../api/adaptAuthoring";
 
 export interface UseStoryboardReviewResult {
   comments: StoryboardComment[];
   audit: StoryboardAuditEvent[];
+  commentAuthors: Record<string, UserSummary | null>;
   openCount: number;
   resolvedCount: number;
   loading: boolean;
@@ -35,6 +38,7 @@ export function useStoryboardReview(
 ): UseStoryboardReviewResult {
   const [comments, setComments] = useState<StoryboardComment[]>([]);
   const [audit, setAudit] = useState<StoryboardAuditEvent[]>([]);
+  const [commentAuthors, setCommentAuthors] = useState<Record<string, UserSummary | null>>({});
   const [loading, setLoading] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -49,8 +53,20 @@ export function useStoryboardReview(
         listStoryboardComments(storyboardId),
         listStoryboardAudit(storyboardId),
       ]);
-      setComments(Array.isArray(c) ? c : []);
+      const nextComments = Array.isArray(c) ? c : [];
+      setComments(nextComments);
       setAudit(Array.isArray(a) ? a : []);
+      const authorIds = Array.from(
+        new Set(
+          nextComments
+            .map((comment) => comment.createdBy)
+            .filter((createdBy): createdBy is string => !!createdBy)
+        )
+      );
+      const resolvedAuthors = await Promise.all(
+        authorIds.map(async (authorId) => [authorId, await getUserById(authorId)] as const)
+      );
+      setCommentAuthors(Object.fromEntries(resolvedAuthors));
     } catch {
       /* leave previous state; the panel shows empty states */
     } finally {
@@ -103,5 +119,5 @@ export function useStoryboardReview(
     };
   }, [comments]);
 
-  return { comments, audit, openCount, resolvedCount, loading, refresh, addComment, setResolved, removeComment };
+  return { comments, audit, commentAuthors, openCount, resolvedCount, loading, refresh, addComment, setResolved, removeComment };
 }

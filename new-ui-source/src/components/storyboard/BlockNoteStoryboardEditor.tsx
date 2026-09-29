@@ -257,10 +257,16 @@ function BlockNoteStoryboardEditorImpl(
       } catch {
         /* block removed — ignore */
       }
-      document.querySelector(`[data-id="${blockId}"]`)?.scrollIntoView({
+      const el = document.querySelector(`[data-id="${blockId}"]`);
+      el?.scrollIntoView({
         behavior: 'smooth',
         block: 'center',
       });
+      if (el instanceof HTMLElement) {
+        document.querySelectorAll('.sb-storyboard-focus-target').forEach((node) => node.classList.remove('sb-storyboard-focus-target'));
+        el.classList.add('sb-storyboard-focus-target');
+        window.setTimeout(() => el.classList.remove('sb-storyboard-focus-target'), 1800);
+      }
     },
     [editor]
   );
@@ -398,6 +404,25 @@ function BlockNoteStoryboardEditorImpl(
     if (strikeIndex === -1) return [...items, ...scriptButtons];
     return [...items.slice(0, strikeIndex + 1), ...scriptButtons, ...items.slice(strikeIndex + 1)];
   };
+
+  useEffect(() => {
+    const applySideMenuLabels = () => {
+      document.querySelectorAll('.bn-side-menu').forEach((menu) => {
+        const buttons = Array.from(menu.querySelectorAll('button'));
+        buttons.forEach((button, index) => {
+          const isDragHandle = button.getAttribute('data-test') === 'dragHandle';
+          const label = isDragHandle ? 'Open block actions' : index === 0 ? 'Add block' : 'Open block actions';
+          button.setAttribute('aria-label', label);
+          button.setAttribute('title', label);
+        });
+      });
+    };
+
+    applySideMenuLabels();
+    const observer = new MutationObserver(applySideMenuLabels);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <BlockNoteView editor={editor} editable={editable} theme="light" slashMenu={false} formattingToolbar={false}>

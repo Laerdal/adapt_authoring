@@ -20,6 +20,7 @@ import {
   ClipboardList,
   Award,
   RefreshCw,
+  Pencil,
   Sparkles,
   Trash2,
   Check,
@@ -34,6 +35,7 @@ import { storyboardActions } from '../storyboardActions';
 import { resolveCommentAnchor } from '../commentAnchor';
 import type { AssetKind } from '@/api/adaptAuthoring';
 import AssetPickerModal from '@/components/common/AssetPickerModal';
+import ConfirmDialog from '@/components/common/ConfirmDialog';
 import { BasicRichTextEditor } from '@/components/common';
 import { sanitizeEditorHtml } from '@/components/common/BasicRichTextEditor';
 import { CheckboxIndicator } from '@/components/common/Checkbox';
@@ -254,6 +256,31 @@ function HeaderBtn({ onClick, active, children, title }: { onClick: () => void; 
       {children}
     </button>
   );
+}
+
+function instructionPlaceholder(kind: ComponentKind): string {
+  switch (kind) {
+    case 'image':
+      return 'e.g. Study the image before continuing.';
+    case 'video':
+      return 'e.g. Watch the video before continuing.';
+    case 'audio':
+      return 'e.g. Listen to the audio before continuing.';
+    case 'h5p':
+      return 'e.g. Complete the interactive activity before continuing.';
+    case 'laerdalForm':
+      return 'e.g. Complete the form before continuing.';
+    case 'groupedContent':
+      return 'e.g. Explore each content item before continuing.';
+    case 'assessmentResult':
+      return 'e.g. Review the result before continuing.';
+    default:
+      return 'e.g. Read the content before continuing.';
+  }
+}
+
+function plainText(value: string): string {
+  return value.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 // Preview a chosen asset by kind. Prefers the resolvable preview `url`, falling
@@ -934,6 +961,7 @@ export const componentBlock = createReactBlockSpec(
       // still-blank component (just inserted) opens expanded instead.
       const [collapsed, setCollapsed] = useState(() => hasComponentContent(kind, model, block.props.title as string));
       const [dismissed, setDismissed] = useState(false);
+      const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
       const title = block.props.title as string;
 
       const setData = (next: ComponentData) => {
@@ -947,7 +975,7 @@ export const componentBlock = createReactBlockSpec(
       // created): Replace overwrites the content, Insert appends to it.
       const openAi = () => {
         storyboardActions.openAi({
-          initialText: model.description || (model.items || []).map((i) => i.body).join('\n'),
+          initialText: plainText(model.description || (model.items || []).map((i) => i.body).join('\n')),
           onReplace: (text) => setData({ ...model, description: text }),
           onInsert: (text) =>
             setData({ ...model, description: model.description ? `${model.description}\n\n${text}` : text }),
@@ -974,9 +1002,10 @@ export const componentBlock = createReactBlockSpec(
             <button
               type="button"
               onClick={() => setCollapsed(false)}
+              title="Edit content"
               className="absolute right-1 top-1 inline-flex items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-xs text-muted-foreground opacity-0 shadow-sm transition-opacity hover:bg-muted group-hover:opacity-100"
             >
-              <RefreshCw className="h-3 w-3" /> Edit
+              <Pencil className="h-3 w-3" /> Edit
             </button>
           </div>
         );
@@ -999,7 +1028,7 @@ export const componentBlock = createReactBlockSpec(
             <HeaderBtn onClick={openComment} title="Comment on this component">
               <MessageSquare className="h-3 w-3" /> Comment
             </HeaderBtn>
-            <HeaderBtn onClick={() => editor.removeBlocks([block])} title="Delete component">
+            <HeaderBtn onClick={() => setConfirmDeleteOpen(true)} title="Delete content">
               <Trash2 className="h-3 w-3" /> Delete
             </HeaderBtn>
             <HeaderBtn onClick={() => setCollapsed(true)} title="Collapse">
@@ -1016,7 +1045,7 @@ export const componentBlock = createReactBlockSpec(
               label="Instruction text (optional)"
               value={model.instruction}
               onChange={(html) => setData({ ...model, instruction: html })}
-              placeholder="e.g. Watch the video before continuing."
+              placeholder={instructionPlaceholder(kind)}
               minHeight={80}
               ariaLabel="Instruction text"
               resetKey={`${block.id}-instruction`}
@@ -1039,6 +1068,20 @@ export const componentBlock = createReactBlockSpec(
               </button>
             </div>
           )}
+
+          <ConfirmDialog
+            open={confirmDeleteOpen}
+            title="Delete this content item?"
+            message="This content item will be removed from the storyboard."
+            note="This action cannot be undone from the storyboard."
+            confirmLabel="Delete"
+            cancelLabel="Cancel"
+            onCancel={() => setConfirmDeleteOpen(false)}
+            onConfirm={() => {
+              setConfirmDeleteOpen(false);
+              editor.removeBlocks([block]);
+            }}
+          />
         </div>
       );
     },

@@ -18,6 +18,7 @@ const path = require('path');
 const util = require('util');
 const crypto = require('crypto');
 const fsx = require('fs-extra');
+const database = require('../../lib/database');
 
 const configuration = require('../../lib/configuration');
 const Constants = require('../../lib/outputmanager').Constants;
@@ -230,6 +231,32 @@ const DATA_FILES = {
   'blocks.json': 'block',
   'components.json': 'component'
 };
+
+function requestedCourseAssetFilename(file) {
+  const normalized = String(file || '').replace(/\\/g, '/');
+  const match = normalized.match(/(?:^|\/)course(?:\/[^/]+)?\/assets\/([^/?#]+)$/i);
+  return match ? match[1] : null;
+}
+
+function findCourseAssetId(courseId, filename, cb) {
+  database.getDatabase((err, db) => {
+    if (err) return cb(err);
+    db.retrieve(
+      'courseasset',
+      {
+        _courseId: courseId,
+        _fieldName: filename,
+        _assetId: { $exists: true, $ne: '' }
+      },
+      { operators: { sort: { _dateCreated: -1 }, limit: 1 } },
+      (retrieveErr, docs) => {
+        if (retrieveErr) return cb(retrieveErr);
+        const assetId = Array.isArray(docs) && docs[0] && docs[0]._assetId ? docs[0]._assetId : null;
+        cb(null, assetId);
+      }
+    );
+  });
+}
 
 /* ------------------------------------------------------------------ *
  * Live-JSON assembly cache. The framework requests all six data files in a
@@ -455,7 +482,16 @@ server.get('/studio/:tenant/:course/*', (req, res, next) => {
 
   function sendStatic(file) {
     res.sendFile(file, { root: buildRoot() }, error => {
-      if (error) res.status(error.status || 404).end();
+      if (!error) return;
+      const filename = requestedCourseAssetFilename(file);
+      if (!filename) return res.status(error.status || 404).end();
+      findCourseAssetId(courseId, filename, (lookupErr, assetId) => {
+        if (lookupErr || !assetId) {
+          if (lookupErr) logger.log('warn', `Studio: asset fallback lookup failed for ${courseId}/${filename}: ${lookupErr.message}`);
+          return res.status(error.status || 404).end();
+        }
+        res.redirect(`/api/asset/serve/${assetId}`);
+      });
     });
   }
 

@@ -113,6 +113,32 @@ export function sanitizeEditorHtml(rawHtml: string): string {
   return sanitizedHtml && sanitizedHtml !== "<br>" ? sanitizedHtml : "";
 }
 
+function normalizeEditorDom(editor: HTMLDivElement | null): void {
+  if (!editor) return;
+
+  editor.querySelectorAll("ul").forEach((node) => {
+    const list = node as HTMLUListElement;
+    list.style.listStyleType = "disc";
+    list.style.listStylePosition = "outside";
+    list.style.paddingLeft = "1.5rem";
+    list.style.margin = "0.5rem 0";
+  });
+
+  editor.querySelectorAll("ol").forEach((node) => {
+    const list = node as HTMLOListElement;
+    list.style.listStyleType = "decimal";
+    list.style.listStylePosition = "outside";
+    list.style.paddingLeft = "1.5rem";
+    list.style.margin = "0.5rem 0";
+  });
+
+  editor.querySelectorAll("li").forEach((node) => {
+    const item = node as HTMLLIElement;
+    item.style.display = "list-item";
+    item.style.margin = "0.2rem 0";
+  });
+}
+
 /**
  * Treat browser-noise HTML like `<p><br></p>` or whitespace-only markup as
  * empty, so an untouched editor persists as an empty string rather than a
@@ -295,6 +321,7 @@ export default function BasicRichTextEditor({
     if (node && node.dataset.editorInitialized !== "true") {
       node.dataset.editorInitialized = "true";
       node.innerHTML = normalizeHtmlForEditor(html);
+      normalizeEditorDom(node);
     }
   }, []);
 
@@ -308,6 +335,7 @@ export default function BasicRichTextEditor({
 
     if (shouldReset || shouldRefresh) {
       editor.innerHTML = normalizedHtml;
+      normalizeEditorDom(editor);
     }
 
     if (resetKey !== undefined) {
@@ -329,13 +357,31 @@ export default function BasicRichTextEditor({
   }, []);
 
   const emit = useCallback(() => {
-    if (editorRef.current) onChange(editorRef.current.innerHTML);
+    if (editorRef.current) {
+      normalizeEditorDom(editorRef.current);
+      onChange(editorRef.current.innerHTML);
+    }
   }, [onChange]);
 
   const applyFormat = useCallback((cmd: string) => {
     if (disabled) return;
-    editorRef.current?.focus();
-    document.execCommand(cmd, false);
+    const editor = editorRef.current;
+    editor?.focus();
+    if (editor && (cmd === "insertUnorderedList" || cmd === "insertOrderedList") && isEditorEmpty(editor.innerHTML)) {
+      const tag = cmd === "insertOrderedList" ? "ol" : "ul";
+      editor.innerHTML = `<${tag}><li></li></${tag}>`;
+      const item = editor.querySelector("li");
+      if (item) {
+        const range = document.createRange();
+        range.selectNodeContents(item);
+        range.collapse(true);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+      }
+    } else {
+      document.execCommand(cmd, false);
+    }
     syncFormats();
     emit();
   }, [disabled, emit, syncFormats]);
@@ -486,27 +532,30 @@ export default function BasicRichTextEditor({
       onMouseEnter={() => setToolbarVisible((value) => value || focused)}
       onMouseLeave={() => setToolbarVisible(focused)}
     >
-      {toolbarVisible && (
-        <div
-          ref={toolbarRef}
-          onFocusCapture={() => setToolbarVisible(true)}
-          onBlurCapture={(event) => {
-            const nextTarget = event.relatedTarget as Node | null;
-            const containsFocus = !!nextTarget && (
-              (editorRef.current?.contains(nextTarget) ?? false) ||
-              (toolbarRef.current?.contains(nextTarget) ?? false)
-            );
-            if (!containsFocus) setToolbarVisible(false);
-          }}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 2,
-            padding: "6px 8px",
-            borderBottom: "1px solid var(--life-neutral-200)",
-            background: "var(--life-neutral-020)",
-          }}
-        >
+      <div
+        ref={toolbarRef}
+        onFocusCapture={() => setToolbarVisible(true)}
+        onBlurCapture={(event) => {
+          const nextTarget = event.relatedTarget as Node | null;
+          const containsFocus = !!nextTarget && (
+            (editorRef.current?.contains(nextTarget) ?? false) ||
+            (toolbarRef.current?.contains(nextTarget) ?? false)
+          );
+          if (!containsFocus) setToolbarVisible(false);
+        }}
+        aria-hidden={!toolbarVisible}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 2,
+          padding: "6px 8px",
+          minHeight: 41,
+          borderBottom: "1px solid var(--life-neutral-200)",
+          background: "var(--life-neutral-020)",
+          visibility: toolbarVisible ? "visible" : "hidden",
+          pointerEvents: toolbarVisible ? "auto" : "none",
+        }}
+      >
           {commands.map(({ cmd, title, icon }) => {
             const active = activeFormats.has(cmd);
             return (
@@ -569,8 +618,7 @@ export default function BasicRichTextEditor({
           >
             <SamaritanIcon className="h-4 w-4" monochrome />
           </button>
-        </div>
-      )}
+      </div>
 
       {samaritanOpen && (
         <AiAssistPopover
@@ -598,6 +646,10 @@ export default function BasicRichTextEditor({
         aria-label={ariaLabel}
         dir="ltr"
         data-placeholder={placeholder}
+        onMouseDownCapture={(e) => e.stopPropagation()}
+        onPointerDownCapture={(e) => e.stopPropagation()}
+        onKeyDownCapture={(e) => e.stopPropagation()}
+        onKeyUpCapture={(e) => e.stopPropagation()}
         onInput={() => { emit(); syncFormats(); }}
         onKeyDown={handleKeyDown}
         onKeyUp={syncFormats}
