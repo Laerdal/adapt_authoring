@@ -11,6 +11,8 @@ import { usePageLoader } from "../../hooks";
 import type { AssetPickerRequest } from "../../types/assetPicker";
 import { BasicRichTextEditor, isEditorEmpty, InfoFieldLabel } from "../../components/common";
 import { isSafeLanguageCode } from "../../api/adaptAuthoring";
+import { SaveChangesButton } from "./SaveChangesButton";
+import { SaveStatusToast } from "./SaveStatusToast";
 import {
   getConfigRootSchema,
   getCourseRootSchema,
@@ -604,15 +606,21 @@ export function CourseOverviewPage({
         unicodeBidi: "plaintext",
       }}
     >
+      <SaveStatusToast toast={saveSuccess && !isDirty ? { type: "success", message: "Changes saved successfully" } : null} onDismiss={() => setSaveSuccess(false)} />
 
       {/* ── Header ───────────────────────────────────────────────── */}
-      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb]">
-        <h2 className="text-xl font-bold text-[var(--life-base-black)] m-0">
-          Course Overview
-        </h2>
-        <p className="text-sm text-[#6b7280] mt-0.5 mb-0">
-          Click any field to review and edit its content inline.
-        </p>
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-center gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-[var(--life-base-black)] m-0">
+            Course Overview
+          </h2>
+          <p className="text-sm text-[#6b7280] mt-0.5 mb-0">
+            Click any field to review and edit its content inline.
+          </p>
+        </div>
+        <div className="ml-auto">
+          <SaveChangesButton dirty={isDirty} saving={saving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0">
@@ -624,12 +632,6 @@ export function CourseOverviewPage({
           {saveError}
         </div>
       )}
-      {saveSuccess && !isDirty && (
-        <div style={{ marginBottom: 20, padding: "10px 14px", borderRadius: 8, background: "var(--life-positive-050)", border: "1px solid var(--life-positive-400)", fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-positive-500)" }}>
-          Changes saved successfully.
-        </div>
-      )}
-
       {/* ── Fields ───────────────────────────────────────────────── */}
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
@@ -1138,42 +1140,6 @@ export function CourseOverviewPage({
             </button>
           </div>
         </>
-      )}
-
-      {/* Floating "Unsaved changes" bar — only while the form is dirty */}
-      {!loading && isDirty && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-3 rounded-xl bg-white border border-[var(--life-warning-100)] shadow-lg animate-fade-in-down">
-          <span className="flex items-center gap-2 text-sm text-[#374151]">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-warning-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
-            Unsaved changes
-          </span>
-          {saveError && <span className="text-xs text-[#ef4444] max-w-[180px] truncate">{saveError}</span>}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleDiscard}
-              disabled={saving}
-              className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] disabled:opacity-50 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving || !courseId}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:opacity-50 rounded-lg transition-colors"
-            >
-              {saving && (
-                <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                </svg>
-              )}
-              {saving ? "Saving…" : "Save Changes"}
-            </button>
-          </div>
-        </div>
       )}
 
       <UnsavedChangesModal

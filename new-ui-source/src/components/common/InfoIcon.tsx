@@ -81,7 +81,7 @@ export function InfoIcon({
     <>
       <span
         ref={triggerRef}
-        className={`relative inline-flex h-[16px] w-[16px] shrink-0 items-center justify-center text-[#64748b] ${hasHint ? "cursor-help" : "cursor-default"} ${className}`}
+        className={`relative inline-flex h-[16px] w-[16px] shrink-0 items-center justify-center text-[#64748b] ${hasHint ? "cursor-pointer" : "cursor-default"} ${className}`}
         tabIndex={hasHint ? 0 : undefined}
         aria-label={hasHint ? `More information about ${label}` : undefined}
         aria-describedby={hasHint ? tooltipId : undefined}

@@ -688,14 +688,14 @@ type BehaviourAssetContext = {
   onClear: (path: string, extensionKey?: string) => void;
 };
 
-function getBehaviourAssetType(fieldName: string, fieldSchema: BehaviourFieldSchema): AssetKind | undefined {
+export function getBehaviourAssetType(fieldName: string, fieldSchema: BehaviourFieldSchema): AssetKind | undefined {
   const inputType = typeof fieldSchema.inputType === "string" ? fieldSchema.inputType.toLowerCase() : "";
   const suffix = inputType.startsWith("asset")
     ? inputType.replace(/^asset:?/, "").trim()
     : "";
 
-  if (suffix === "image" || suffix === "audio" || suffix === "video" || suffix === "h5p") {
-    return suffix;
+  if (["image", "audio", "video", "other", "h5p"].includes(suffix)) {
+    return suffix as AssetKind;
   }
 
   const normalizedField = fieldName.toLowerCase();
@@ -707,6 +707,9 @@ function getBehaviourAssetType(fieldName: string, fieldSchema: BehaviourFieldSch
   }
   if (["mp3", "ogg"].includes(normalizedField) || normalizedField.includes("audio")) {
     return "audio";
+  }
+  if (normalizedField.includes("transcript") || normalizedField.includes("caption") || normalizedField.includes("description") || normalizedField.includes("chapter")) {
+    return "other";
   }
   if (normalizedField.includes("h5p")) {
     return "h5p";

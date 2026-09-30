@@ -111,6 +111,7 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [inlineId, setInlineId] = useState<string | null>(null);
   const [inlineValue, setInlineValue] = useState('');
+  const [inlineOriginalValue, setInlineOriginalValue] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [drag, setDrag] = useState<Dragged | null>(null);
   const [dropTarget, setDropTarget] = useState<{ rowId: string; mode: 'before' | 'into' } | null>(null);
@@ -118,13 +119,30 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
   const isOpen = (id: string) => collapsed[id] !== true;
   const toggle = (id: string) => setCollapsed((p) => ({ ...p, [id]: p[id] ? false : true }));
 
-  function startRename(id: string, title: string) { setInlineId(id); setInlineValue(title); }
+  function startRename(id: string, title: string) {
+    setInlineId(id);
+    setInlineValue(title);
+    setInlineOriginalValue(title);
+  }
+  function handleInlineChange(level: StructureLevel, id: string, value: string) {
+    setInlineValue(value);
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    props.onRename(level, id, trimmed);
+  }
   function commitRename(level: StructureLevel) {
     if (!inlineId) return;
     const v = inlineValue.trim();
     const id = inlineId;
     setInlineId(null);
+    setInlineOriginalValue('');
     if (v) props.onRename(level, id, v);
+  }
+  function cancelRename(level: StructureLevel, id: string) {
+    props.onRename(level, id, inlineOriginalValue);
+    setInlineId(null);
+    setInlineValue('');
+    setInlineOriginalValue('');
   }
   function clearDrag() { setDrag(null); setDropTarget(null); }
 
@@ -222,8 +240,8 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
               <input
                 autoFocus
                 value={inlineValue}
-                onChange={(e) => setInlineValue(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitRename(p.level); } else if (e.key === 'Escape') { e.preventDefault(); setInlineId(null); } }}
+                onChange={(e) => handleInlineChange(p.level, p.id, e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commitRename(p.level); } else if (e.key === 'Escape') { e.preventDefault(); cancelRename(p.level, p.id); } }}
                 onBlur={() => commitRename(p.level)}
                 onClick={(e) => e.stopPropagation()}
                 aria-label="Edit title"

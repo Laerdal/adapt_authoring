@@ -413,7 +413,7 @@ function AssetPreviewPanel({
 
   if (!asset) {
     return (
-      <aside className="xl:sticky xl:top-0 xl:self-start">
+      <aside className="sticky top-0 self-start">
         <div className="rounded-[24px] border border-[#e5edf5] bg-white/90 p-6 text-center shadow-[0_16px_40px_rgba(15,23,42,0.06)] backdrop-blur">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#eef6fd] text-[#2d6fa8]">
             <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -446,7 +446,7 @@ function AssetPreviewPanel({
   }
 
   return (
-    <aside className="xl:sticky xl:top-0 xl:self-start xl:h-[calc(100vh-10rem)]">
+    <aside className="sticky top-0 self-start h-[calc(100vh-10rem)]">
       <div className="flex h-full flex-col overflow-hidden rounded-[24px] border border-[#e5edf5] bg-white shadow-[0_16px_40px_rgba(15,23,42,0.08)]">
         <div className="border-b border-[#edf2f7] bg-[linear-gradient(135deg,#f6fbff_0%,#eef5fb_100%)] px-5 py-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#2d6fa8]">Asset Preview</p>
@@ -1246,8 +1246,8 @@ export function AssetManagementWorkspace({
       </div>
 
       {/* ── Content ── */}
-      <div className="flex-1 px-6 md:px-8 pb-6 overflow-y-auto">
-        <div className={`grid items-start gap-6 ${pickerMode ? "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px]" : "grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px]"}`}>
+      <div className="flex-1 overflow-x-hidden overflow-y-auto px-4 pb-4 sm:px-6 sm:pb-6 md:px-8">
+        <div className="grid grid-cols-[minmax(0,1fr)_168px] items-start gap-3 sm:grid-cols-[minmax(0,1fr)_220px] sm:gap-4 md:grid-cols-[minmax(0,1fr)_280px] md:gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
           <div className="min-w-0">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
@@ -1260,7 +1260,7 @@ export function AssetManagementWorkspace({
             <p className="text-xs text-[#9ca3af] mt-1">Try adjusting your search or filter, or upload a new asset.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-4">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-3 sm:grid-cols-[repeat(auto-fill,minmax(170px,1fr))] md:gap-4 xl:grid-cols-[repeat(auto-fill,minmax(230px,1fr))]">
             {filtered.map((a) => <AssetCardItem key={a.id} asset={a} onEdit={handleEditAsset} onDelete={handleDeleteAsset} clickable onActivate={handleAssetActivate} hideActions={hideActions} selected={selectedAssetId === a.backendId} />)}
           </div>
         )}

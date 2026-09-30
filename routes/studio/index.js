@@ -124,7 +124,8 @@ function computeFingerprint(tenantId, courseId, cb) {
           theme: cfg._theme || null,
           menu: cfg._menu || null,
           components: sortedNames(cfg._enabledComponents),
-          extensions: sortedNames(cfg._enabledExtensions)
+          extensions: sortedNames(cfg._enabledExtensions),
+          customStyle: plugin.computeCustomStyleFingerprint(raw)
         });
         cb(null, crypto.createHash('sha1').update(key).digest('hex').slice(0, 16));
       });
