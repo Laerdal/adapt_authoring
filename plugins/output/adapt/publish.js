@@ -30,6 +30,7 @@ function publishCourse(courseId, mode, request, response, next) {
   let frameworkVersion;
   let isForceRebuild;
   let computedFingerprint = '';
+  let customStyleFingerprint = '';
   let isCacheHit = false;
 
   let resultObject = {};
@@ -163,6 +164,7 @@ function publishCourse(courseId, mode, request, response, next) {
         outputJson = data;
         // PERF: fingerprint the raw course JSON now; used by cache gate below
         computedFingerprint = self.computeFingerprint(outputJson);
+        customStyleFingerprint = self.computeCustomStyleFingerprint(outputJson);
         callback(null);
       });
     },
@@ -205,10 +207,14 @@ function publishCourse(courseId, mode, request, response, next) {
           self.buildFlagExists(path.join(BUILD_FOLDER, Constants.Filenames.Rebuild), function(err, buildFlagExists) {
             if (err) return done(err);
             isForceRebuild = request && request.query.force === 'true';
+            var storedCustomStyleFingerprint = '';
+            try {
+              storedCustomStyleFingerprint = fs.readFileSync(path.join(BUILD_FOLDER, '.custom-style-hash'), 'utf8').trim();
+            } catch (_) { /* missing marker forces one compatibility rebuild */ }
             if (!fs.existsSync(path.normalize(BUILD_FOLDER + '/index.html'))) {
               buildFlagExists = true;
             }
-            if (mode === Constants.Modes.Export || mode === Constants.Modes.Publish || buildFlagExists || isForceRebuild) {
+            if (mode === Constants.Modes.Export || mode === Constants.Modes.Publish || buildFlagExists || isForceRebuild || storedCustomStyleFingerprint !== customStyleFingerprint) {
               isRebuildRequired = true;
             }
             if (mode === Constants.Modes.Export || mode === Constants.Modes.Publish || isForceRebuild) {
@@ -466,6 +472,9 @@ function publishCourse(courseId, mode, request, response, next) {
       if (isCacheHit) return callback(); // hash is already current — no need to rewrite
       const hashFile = path.join(BUILD_FOLDER, '.build-hash');
       try { fs.writeFileSync(hashFile, computedFingerprint); } catch (_) {}
+      if (isRebuildRequired) {
+        try { fs.writeFileSync(path.join(BUILD_FOLDER, '.custom-style-hash'), customStyleFingerprint); } catch (_) {}
+      }
       callback();
     },
     function(callback) {
