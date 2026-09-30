@@ -23,6 +23,8 @@ import {
   type SetupSchemaNode,
 } from "../../helpers/setupInfoSchema";
 import { usePageLoader } from "../../hooks";
+import { SaveChangesButton } from "./SaveChangesButton";
+import { SaveStatusToast } from "./SaveStatusToast";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 import { CheckboxIndicator } from "../../components/common/Checkbox";
@@ -34,36 +36,6 @@ function Spinner({ className = "" }: { className?: string }) {
     <svg className={`animate-spin ${className}`} width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M21 12a9 9 0 1 1-6.219-8.56" />
     </svg>
-  );
-}
-
-function Toast({ toast, onDismiss }: { toast: { type: "success" | "error"; message: string }; onDismiss: () => void }) {
-  return (
-    <div className="fixed top-4 right-4 z-[60] pointer-events-none">
-      <div
-        className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium border pointer-events-auto animate-fade-in-down min-w-[260px] max-w-sm ${
-          toast.type === "success"
-            ? "bg-[var(--life-positive-050)] border-[var(--life-positive-100)] text-[var(--life-positive-500)]"
-            : "bg-[var(--life-critical-050)] border-[var(--life-critical-100)] text-[var(--life-critical-500)]"
-        }`}
-      >
-        {toast.type === "success" ? (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-positive-500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-            <polyline points="20 6 9 17 4 12" />
-          </svg>
-        ) : (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-critical-500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-            <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-          </svg>
-        )}
-        <span className="flex-1">{toast.message}</span>
-        <button type="button" onClick={onDismiss} className="opacity-60 hover:opacity-100 transition-opacity ml-1" aria-label="Dismiss">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-      </div>
-    </div>
   );
 }
 
@@ -642,12 +614,17 @@ export function CdnDeploymentPage({
   return (
     <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
       {/* Header */}
-      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb]">
-        <h2 className="text-xl font-bold text-[var(--life-base-black)]">CDN Deployment</h2>
-        <p className="text-sm text-[#6b7280] mt-0.5">Configure CDN targets and deploy this course to the storage container.</p>
-        {cdnCliVersion && (
-          <p className="text-xs text-[#9ca3af] mt-2">NPM <span className="font-mono">cdndeploy</span> version: {cdnCliVersion}</p>
-        )}
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-start gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-[var(--life-base-black)]">CDN Deployment</h2>
+          <SaveChangesButton dirty={dirty} saving={saving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+          {cdnCliVersion && (
+            <p className="text-xs text-[#9ca3af] mt-2">NPM <span className="font-mono">cdndeploy</span> version: {cdnCliVersion}</p>
+          )}
+        </div>
+        <div className="ml-auto pt-1">
+          <SaveChangesButton dirty={dirty} saving={saving} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0">
@@ -933,28 +910,7 @@ export function CdnDeploymentPage({
         </div>
       </div>
 
-      {/* Floating "Unsaved changes" bar */}
-      {!loading && dirty && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-3 rounded-xl bg-white border border-[var(--life-warning-100)] shadow-lg animate-fade-in-down">
-          <span className="flex items-center gap-2 text-sm text-[#374151]">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-warning-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
-            Unsaved changes
-          </span>
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={handleCancel} disabled={saving} className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] disabled:opacity-50 transition-colors">
-              Cancel
-            </button>
-            <button type="button" onClick={() => void handleSave()} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:opacity-50 rounded-lg transition-colors">
-              {saving && <Spinner />}
-              {saving ? "Saving…" : "Save Changes"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {toast && <Toast toast={toast} onDismiss={() => setToast(null)} />}
+      <SaveStatusToast toast={toast} onDismiss={() => setToast(null)} autoHideMs={3500} />
 
       <UnsavedChangesModal
         isOpen={showConfirmModal}
