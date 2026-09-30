@@ -60,14 +60,23 @@ export default function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
   const location = useLocation();
   const { user } = useAuth();
   const visibleSecondaryNav = navSecondary.filter((item) => canAccessDashboardSection(user, item.sectionKey));
-  const [active, setActive] = useState(
-    location.pathname === "/users" ? "User Management" :
-    location.pathname === "/plugins" ? "Plugin Management" :
-    location.pathname === "/assets" ? "Asset Management" :
-    location.pathname === "/templates" ? "Template Management" :
-    location.pathname === "/shared" ? "Shared with Me" :
-    "My Courses"
-  );
+
+  const getActiveLabel = (pathname: string): string => {
+    const normalizedPath = pathname.replace(/\/+$/, "") || "/";
+
+    if (normalizedPath === "/users") return "User Management";
+    if (normalizedPath === "/plugins") return "Plugin Management";
+    if (normalizedPath === "/assets") return "Asset Management";
+    if (normalizedPath === "/templates") return "Template Management";
+    if (normalizedPath === "/shared") return "Shared with Me";
+    return "My Courses";
+  };
+
+  const [active, setActive] = useState(() => getActiveLabel(location.pathname));
+
+  useEffect(() => {
+    setActive(getActiveLabel(location.pathname));
+  }, [location.pathname]);
 
   // Close drawer on route change / escape key
   useEffect(() => {
