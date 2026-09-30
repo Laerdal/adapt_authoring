@@ -1061,21 +1061,19 @@ export function AssetManagementWorkspace({
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">{pickerMode ? (pickerTitle || "Select Asset") : "Asset Management"}</h1>
         </div>
-        {pickerMode ? null : (
-          <button
-            type="button"
-            onClick={() => { setUpload(EMPTY_UPLOAD); setUploadOpen(true); }}
-            className="shrink-0 flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors shadow-sm"
-          >
-          <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-            <polyline points="17 8 12 3 7 8" />
-            <line x1="12" y1="3" x2="12" y2="15" />
-          </svg>
-          <span className="hidden sm:inline">Upload Asset</span>
-          <span className="sm:hidden">Upload</span>
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => { setUpload(EMPTY_UPLOAD); setUploadOpen(true); }}
+          className="shrink-0 flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors shadow-sm"
+        >
+        <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+          <polyline points="17 8 12 3 7 8" />
+          <line x1="12" y1="3" x2="12" y2="15" />
+        </svg>
+        <span className="hidden sm:inline">Upload Asset</span>
+        <span className="sm:hidden">Upload</span>
+        </button>
       </div>
 
       {/* ── Toolbar ── */}
@@ -1291,7 +1289,7 @@ export function AssetManagementWorkspace({
       {/* ════════════════════════════════════════════════════════════════
           Upload Modal — multi-step: pick → details → uploading → done
       ════════════════════════════════════════════════════════════════ */}
-      {!pickerMode && uploadOpen && (
+      {uploadOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
           onClick={(e) => { if (e.target === e.currentTarget && upload.step !== "uploading") closeUpload(); }}
