@@ -1543,14 +1543,14 @@ export function AssetManagementWorkspace({
                     onClick={() => { setUpload(EMPTY_UPLOAD); }}
                     className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
                   >
-                    Upload Another
+                    Upload New Asest
                   </button>
                   <button
                     type="button"
                     onClick={closeUpload}
                     className="px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors"
                   >
-                    Done
+                    Use Asset
                   </button>
                 </div>
               </>
