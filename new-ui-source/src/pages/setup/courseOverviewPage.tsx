@@ -575,11 +575,11 @@ export function CourseOverviewPage({
     e.currentTarget.style.borderColor = "var(--life-neutral-400)"; // #949494
   }
 
-  function renderFieldLabel(label: string, schemaPath: string[], options?: { required?: boolean; schemaRoot?: SetupSchemaNode | null }) {
+  function renderFieldLabel(label: string, schemaPath: string[], options?: { required?: boolean; schemaRoot?: SetupSchemaNode | null; hint?: string }) {
     const schemaRoot = options?.schemaRoot ?? courseSchema;
     const schemaNode = getSchemaNode(schemaRoot, ...schemaPath);
     const displayLabel = getSchemaLabel(schemaNode, label);
-    const hint = getSchemaHint(schemaNode);
+    const hint = options?.hint ?? getSchemaHint(schemaNode);
 
     return (
       <div style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 4, flexWrap: "nowrap" }}>
@@ -675,7 +675,7 @@ export function CourseOverviewPage({
 
           {/* Body */}
         <div>
-          {renderFieldLabel("Course Metadata", ["body"])}
+          {renderFieldLabel("Course Metadata", ["body"], { hint: "This information is not currently displayed within the course" })}
           <BasicRichTextEditor
             key={bodyEditorKey}
             html={formBody}
