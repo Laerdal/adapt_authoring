@@ -1532,9 +1532,8 @@ export function AssetManagementWorkspace({
                     </svg>
                   </div>
                   <div className="text-center">
-                    <p className="text-base font-semibold text-[#111827]">Upload complete!</p>
-                    <p className="text-sm text-[#6b7280] mt-1">
-                      <span className="font-medium text-[#111827]">"{upload.title}"</span> has been added to your assets.
+                    <p className="text-base font-bold text-[#111827]">
+                      Your asset has been added to the Asset Library and is ready to use.
                     </p>
                   </div>
                 </div>
