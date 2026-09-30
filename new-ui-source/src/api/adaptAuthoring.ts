@@ -189,16 +189,18 @@ export interface Asset {
   path?: string;
 }
 
-export type AssetKind = "image" | "audio" | "video" | "h5p";
+export type AssetKind = "image" | "audio" | "video" | "other" | "h5p";
 
 // Query assets of a given kind from the engine asset manager.
 // GET /api/asset/query?search[mimeType]=<kind>
 // H5P is a `.h5p` (zip) file — the DAM stores those under the generic
 // `application/…` mimetypes rather than a well-known prefix. So for `h5p` we
 // query WITHOUT the mimeType filter and narrow to .h5p files client-side.
+// `other` is a generic/document asset bucket, so it should not pass a MIME
+// filter to the server — the list is filtered client-side by `AssetFormat`.
 export async function queryAssets(kind: AssetKind, search?: string): Promise<Asset[]> {
   const params = new URLSearchParams();
-  if (kind !== "h5p") params.append("search[mimeType]", kind);
+  if (kind !== "h5p" && kind !== "other") params.append("search[mimeType]", kind);
   if (search) params.append("search[title]", search);
   try {
     const result = await apiClient.get<Asset[]>(`/api/asset/query?${params}`);
