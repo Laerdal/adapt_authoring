@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { logout } from "@/api/adaptAuthoring";
 import { redirectToLogin } from "@/utils/authRedirect";
+import { toClassicUrl } from "@/utils/classicLink";
 import EditorMaskIcon from "@/components/editor/EditorMaskIcon";
 
 function getInitials(firstName?: string, lastName?: string, email?: string) {
@@ -55,6 +56,11 @@ export default function ProfileMenu() {
     return () => document.removeEventListener("mousedown", handleMouseDown);
   }, []);
 
+  function switchToClassic() {
+    setProfileOpen(false);
+    window.location.href = toClassicUrl(window.location.pathname);
+  }
+
   return (
     <div ref={profileRef} className="relative shrink-0">
       <button
@@ -83,6 +89,15 @@ export default function ProfileMenu() {
             <button type="button" onClick={() => { setProfileOpen(false); openSupport(); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-[#374151] hover:text-[var(--life-primary-700)] transition-colors cursor-pointer">
               <EditorMaskIcon file="support-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />
               Support
+            </button>
+          </div>
+
+          <div className="border-t border-[#f3f4f6] py-1">
+            <button type="button" onClick={switchToClassic} className="w-full flex items-center justify-between gap-2.5 px-4 py-2.5 text-sm text-[#374151] hover:text-[var(--life-primary-700)] transition-colors cursor-pointer">
+              <span>Switch to Classic</span>
+              <span className="relative inline-flex h-4 w-7 shrink-0 items-center rounded-full bg-[#e5e7eb]" aria-hidden="true">
+                <span className="inline-block h-3 w-3 translate-x-0.5 rounded-full bg-white shadow" />
+              </span>
             </button>
           </div>
 

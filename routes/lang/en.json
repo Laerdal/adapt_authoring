@@ -81,6 +81,7 @@
   "app.dashboard": "Dashboard",
   "app.gotodashboard": "Go to Dashboard",
   "app.loggedinas": "Logged in as",
+  "app.switchtonew": "Switch to New",
   "app.logbackinas": "Log back in as",
   "app.edit": "Edit",
   "app.view": "View",
