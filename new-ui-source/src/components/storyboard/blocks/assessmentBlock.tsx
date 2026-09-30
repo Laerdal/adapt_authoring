@@ -668,8 +668,13 @@ export const assessmentBlock = createReactBlockSpec(
             {renderInstructionHtml(model, kind)}
 
             {issues.length > 0 && (
-              <div className="mt-2 inline-flex items-center gap-1 text-xs text-[#92400e]" title={issues.join('\n')}>
-                <AlertTriangle className="h-3.5 w-3.5" /> {issues.length} to fix
+              <div className="mt-2 space-y-1 text-xs">
+                {issues.map((issue, i) => (
+                  <div key={i} className="inline-flex items-start gap-1 text-[#991b1b]">
+                    <AlertTriangle className="mt-0.5 h-3 w-3 flex-shrink-0" />
+                    <span>{issue}</span>
+                  </div>
+                ))}
               </div>
             )}
 
@@ -686,7 +691,7 @@ export const assessmentBlock = createReactBlockSpec(
       }
 
       return (
-        <div className={`my-2 rounded-lg border p-3 ${issues.length ? 'border-[#f59e0b] bg-[#fffbeb]' : ''}`} contentEditable={false}>
+        <div className="my-2 rounded-lg border border-border p-3" contentEditable={false}>
           {/* Header */}
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -753,12 +758,17 @@ export const assessmentBlock = createReactBlockSpec(
           <FeedbackGroup fb={fb} set={(f) => update({ ...model, feedback: f })} />
 
           {/* Footer + readiness */}
-          <div className="mt-2 flex items-center justify-between">
+          <div className="mt-2">
             <p className="mt-3">{renderInstructionHtml(model, kind)}</p>
             {issues.length > 0 && (
-              <span className="inline-flex items-center gap-1 text-xs text-[#92400e]" title={issues.join('\n')}>
-                <AlertTriangle className="h-3.5 w-3.5" /> {issues.length} to fix
-              </span>
+              <div className="mt-2 space-y-1 rounded-md border border-[#fee2e2] bg-[#fef2f2] p-2">
+                {issues.map((issue, i) => (
+                  <div key={i} className="inline-flex items-start gap-1 text-xs text-[#991b1b]">
+                    <AlertTriangle className="mt-0.5 h-3 w-3 flex-shrink-0" />
+                    <span>{issue}</span>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 

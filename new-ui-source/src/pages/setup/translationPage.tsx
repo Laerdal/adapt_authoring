@@ -160,7 +160,7 @@ function TabButton({ active, children, description, onClick }: { active: boolean
       type="button"
       onClick={onClick}
       className={clsx(
-        "flex min-w-[180px] flex-1 flex-col rounded-xl border px-5 py-4 text-left transition-colors",
+        "flex min-w-[180px] flex-1 flex-col rounded-xl border px-5 py-4 text-left transition-all",
         active
           ? "border-[#2fa4d6] bg-[#f4fbff] text-[#17384a] shadow-[inset_0_0_0_1px_rgba(47,164,214,0.08)]"
           : "border-[#dbe3ea] bg-white text-[#344054] hover:border-[#a7c7d8] hover:bg-[#f8fbfd]",
@@ -174,7 +174,7 @@ function TabButton({ active, children, description, onClick }: { active: boolean
 
 function Notice({ tone, title, children }: { tone: "info" | "success" | "warning" | "error"; title: string; children: ReactNode }) {
   const toneClass = {
-    info: "border-[#bfd8e5] bg-[#f3f9fc] text-[#27566f]",
+    info: "border-[#bfd8e5] bg-[#f5fbff] text-[#27566f]",
     success: "border-emerald-200 bg-emerald-50 text-emerald-700",
     warning: "border-amber-200 bg-amber-50 text-amber-800",
     error: "border-rose-200 bg-rose-50 text-rose-700",
@@ -225,7 +225,7 @@ function ActionButton({
   title?: string;
 }) {
   const variantClass = {
-    primary: "border-[#236585] bg-[#236585] text-white hover:bg-[#1f5470]",
+    primary: "border-[#2fa4d6] bg-[#2fa4d6] text-white hover:bg-[#278db9]",
     secondary: "border-[#d0d9e2] bg-white text-[#344054] hover:bg-[#f9fafb]",
     danger: "border-rose-200 bg-white text-rose-700 hover:bg-rose-50",
   }[variant];
@@ -271,7 +271,7 @@ function StepButton({
       className={clsx(
         "group flex min-w-0 flex-1 items-start gap-3 rounded-2xl border px-4 py-4 text-left transition",
         active
-          ? "border-[#236585] bg-[#eff7fb] shadow-[0_1px_2px_rgba(35,101,133,0.08)]"
+          ? "border-[#2fa4d6] bg-[#eff7fb] shadow-[0_1px_2px_rgba(47,164,214,0.08)]"
           : "border-[#d8dde6] bg-white hover:border-[#bfd0db] hover:bg-[#fbfdff]",
         locked && "cursor-not-allowed opacity-60 hover:border-[#d8dde6] hover:bg-white",
       )}
@@ -279,7 +279,7 @@ function StepButton({
       <div
         className={clsx(
           "flex h-11 w-11 shrink-0 items-center justify-center rounded-full border text-sm font-semibold",
-          active || completed ? "border-[#236585] bg-[#236585] text-white" : "border-[#d0d9e2] bg-[#f8fafc] text-[#667085]",
+          active || completed ? "border-[#2fa4d6] bg-[#2fa4d6] text-white" : "border-[#d0d9e2] bg-[#f8fafc] text-[#667085]",
         )}
       >
         {completed ? "✓" : step}
@@ -324,12 +324,12 @@ function MethodCard({
       onClick={onClick}
       className={clsx(
         "flex h-full flex-col items-start rounded-2xl border px-4 py-4 text-left transition",
-        active ? "border-[#236585] bg-[#eff7fb]" : "border-[#d8dde6] bg-white hover:border-[#b7cedb] hover:bg-[#fbfdff]",
+        active ? "border-[#2fa4d6] bg-[#eff7fb]" : "border-[#d8dde6] bg-white hover:border-[#b7cedb] hover:bg-[#fbfdff]",
       )}
     >
       <div className="flex w-full items-center justify-between gap-3">
         <span className="text-sm font-semibold text-[#152332]">{title}</span>
-        {badge ? <span className="rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#236585]">{badge}</span> : null}
+        {badge ? <span className="rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#2fa4d6]">{badge}</span> : null}
       </div>
       <p className="mt-2 text-sm leading-6 text-[#667085]">{subtitle}</p>
     </button>
