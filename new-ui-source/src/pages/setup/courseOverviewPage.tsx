@@ -675,14 +675,14 @@ export function CourseOverviewPage({
 
           {/* Body */}
         <div>
-          {renderFieldLabel("Body", ["body"])}
+          {renderFieldLabel("Course Metadata", ["body"])}
           <BasicRichTextEditor
             key={bodyEditorKey}
             html={formBody}
             onChange={(next) => { setFormBody(next); markDirty(); }}
             disabled={loading}
-            placeholder="Add the main content for this course overview"
-            ariaLabel="Body"
+            placeholder="Provide description to be added to the course manifest metadata"
+            ariaLabel="Course Metadata"
           />
         </div>
 
