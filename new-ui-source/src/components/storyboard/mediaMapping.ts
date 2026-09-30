@@ -28,6 +28,7 @@ export interface MediaData {
   captionsSource: string;
   descriptionsSource: string;
   chaptersSource: string;
+  language?: string; // BCP 47 language tag (e.g., 'en', 'es', 'fr') for transcript/caption tracks; defaults to 'en'
 }
 
 export function emptyMediaData(): MediaData {
@@ -39,6 +40,7 @@ export function emptyMediaData(): MediaData {
     captionsSource: "",
     descriptionsSource: "",
     chaptersSource: "",
+    language: "en",
   };
 }
 
@@ -161,17 +163,24 @@ function buildTranscriptTrack(media?: MediaData): Record<string, unknown> | null
   const transcriptText = media?.transcriptText?.trim() || "";
   if (!transcriptSource && !transcriptText) return null;
 
+  const lang = media?.language || "en";
+  const langLabel = lang === "en" ? "English" : lang.toUpperCase();
+
   const track: Record<string, unknown> = { _srcType: "transcript" };
   if (transcriptSource) {
     track._srcAssetTranscript = {
       src: transcriptSource,
       inlineTranscriptTitle: "Transcript",
+      label: langLabel,
+      srclang: lang,
     };
   }
   if (transcriptText) {
     track._transcriptInline = {
       inlineTranscriptTitle: "Transcript",
       inlineTranscriptBody: transcriptText,
+      label: langLabel,
+      srclang: lang,
     };
   }
   return track;
@@ -179,10 +188,14 @@ function buildTranscriptTrack(media?: MediaData): Record<string, unknown> | null
 
 function buildNamedTrack(
   type: "captions" | "descriptions" | "chapters",
-  src: string
+  src: string,
+  language?: string
 ): Record<string, unknown> | null {
   const trimmed = src.trim();
   if (!trimmed) return null;
+
+  const lang = language || "en";
+  const langLabel = lang === "en" ? "English" : lang.toUpperCase();
 
   const fieldName =
     type === "captions"
@@ -194,8 +207,8 @@ function buildNamedTrack(
   return {
     _srcType: type,
     [fieldName]: {
-      label: "",
-      srclang: "",
+      label: langLabel,
+      srclang: lang,
       src: trimmed,
     },
   };
@@ -235,9 +248,9 @@ export function buildMediaField(kind: "video" | "audio", media?: MediaData, orig
   
   const newTracks = [
     buildTranscriptTrack(media),
-    buildNamedTrack("captions", media?.captionsSource || ""),
-    buildNamedTrack("descriptions", media?.descriptionsSource || ""),
-    buildNamedTrack("chapters", media?.chaptersSource || ""),
+    buildNamedTrack("captions", media?.captionsSource || "", media?.language),
+    buildNamedTrack("descriptions", media?.descriptionsSource || "", media?.language),
+    buildNamedTrack("chapters", media?.chaptersSource || "", media?.language),
   ].filter((track): track is Record<string, unknown> => !!track);
   
   _media.cc = [...preservedTracks, ...newTracks];

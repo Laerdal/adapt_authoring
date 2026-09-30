@@ -492,7 +492,7 @@ function ComponentBody({ kind, data, set, blockId }: { kind: ComponentKind; data
                 <Trash2 className="h-3.5 w-3.5" />
               </button>
             </div>
-            <input value={it.title} placeholder="Item title" onKeyDown={stop} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))} className={`${inputCls} mb-1`} />
+            <input value={it.title} placeholder="Item title *" onKeyDown={stop} onChange={(e) => setItems(items.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))} className={`${inputCls} mb-1`} />
             <div className="mb-1">
               <RichTextField
                 label={`Item ${i + 1} body`}
@@ -595,7 +595,7 @@ function ComponentBody({ kind, data, set, blockId }: { kind: ComponentKind; data
               </select>
             </label>
             <label className="mt-1 block">
-              <span className={labelCls}>Label</span>
+              <span className={labelCls}>Label *</span>
               <input value={f.label} onKeyDown={stop} onChange={(e) => setFields(fields.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))} className={inputCls} />
             </label>
             <label className="mt-1 block">
@@ -605,7 +605,10 @@ function ComponentBody({ kind, data, set, blockId }: { kind: ComponentKind; data
             <label className="mt-1 flex items-center gap-1.5 text-sm text-foreground cursor-pointer group">
               <input type="checkbox" checked={f.mandatory} onChange={(e) => setFields(fields.map((x, j) => (j === i ? { ...x, mandatory: e.target.checked } : x)))} aria-label="Is mandatory" className="sr-only peer" />
               <CheckboxIndicator checked={f.mandatory} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
-              Is mandatory
+              <span>
+                Required field
+                {f.mandatory && <span className="text-red-600 font-bold">*</span>}
+              </span>
             </label>
           </div>
         ))}
@@ -848,6 +851,7 @@ const instructionHtml = sanitizeEditorHtml(data.instruction);
 
   if (kind === 'laerdalForm') {
     const fields = data.fields ?? [];
+    console.log('[DEBUG ComponentPreview laerdalForm] Fields received:', fields);
     return (
       <div>
         {heading}
@@ -954,6 +958,7 @@ export const componentBlock = createReactBlockSpec(
     render: ({ block, editor }) => {
       const kind = (COMPONENT_KINDS.includes(block.props.kind as ComponentKind) ? block.props.kind : 'text') as ComponentKind;
       const meta = META[kind];
+      console.log('[DEBUG] Resolved meta:', { kind, metaBadge: meta.badge, hasIcon: !!meta.Icon });
       const [model, setModel] = useState<ComponentData>(() => parseData(kind, block.props.data as string));
       // content already on the page opens in read-only Preview —
       // the author clicks "Edit" to reveal the editable fields, rather than
@@ -997,16 +1002,23 @@ export const componentBlock = createReactBlockSpec(
 
       if (collapsed) {
         return (
-          <div className="group relative my-2 rounded-lg px-1 py-2 hover:bg-muted/20" contentEditable={false}>
+          <div className="group relative my-2 rounded-lg border border-border bg-background/50 p-3" contentEditable={false}>
+            {/* Badge/type indicator at the top */}
+            <div className="mb-2 flex items-center justify-between">
+              <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                <meta.Icon className="h-3 w-3" /> {meta.badge}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCollapsed(false)}
+                title="Edit content"
+                className="inline-flex items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-xs text-muted-foreground shadow-sm transition-opacity hover:bg-muted"
+              >
+                <Pencil className="h-3 w-3" /> Edit
+              </button>
+            </div>
+            {/* Preview content */}
             <ComponentPreview kind={kind} title={title} data={model} />
-            <button
-              type="button"
-              onClick={() => setCollapsed(false)}
-              title="Edit content"
-              className="absolute right-1 top-1 inline-flex items-center gap-1 rounded-full border bg-background px-2 py-0.5 text-xs text-muted-foreground opacity-0 shadow-sm transition-opacity hover:bg-muted group-hover:opacity-100"
-            >
-              <Pencil className="h-3 w-3" /> Edit
-            </button>
           </div>
         );
       }
@@ -1018,7 +1030,7 @@ export const componentBlock = createReactBlockSpec(
             <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
               <meta.Icon className="h-3 w-3" /> {meta.badge}
             </span>
-            <input value={title} placeholder={`${meta.badge} title`} onKeyDown={stop} onChange={(e) => setTitle(e.target.value)} className="min-w-0 flex-1 border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground" />
+            <input value={title} placeholder={`${meta.badge} title *`} onKeyDown={stop} onChange={(e) => setTitle(e.target.value)} className="min-w-0 flex-1 border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground" />
             <HeaderBtn onClick={() => setData({ ...model, showTitle: !model.showTitle })} active={model.showTitle} title="Show the title to learners">
               <Check className="h-3 w-3" /> Show title
             </HeaderBtn>

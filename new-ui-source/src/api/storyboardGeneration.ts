@@ -1121,5 +1121,9 @@ export async function generateStoryboardCourse(
     console.warn("Storyboard generation: failed to seed course schema defaults", err);
   }
 
+  if (unsupported.size > 0) {
+    console.warn('[DEBUG] Unsupported component kinds:', Array.from(unsupported));
+  }
+
   return { created, updated, deleted, blockToContent, missingTypes: [...unsupported] };
 }

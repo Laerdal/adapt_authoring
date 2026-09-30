@@ -15,7 +15,7 @@ var idCounter;
 function resetStore() {
   store = { storyboard: [], storyboardcomment: [], storyboardaudit: [] };
   idCounter = 0;
-  store.storyboard.push({ _id: 'sb-1', _courseId: 'course-1', status: 'draft', title: 'Untitled Storyboard' });
+  store.storyboard.push({ _id: 'sb-1', _courseId: 'course-1', status: 'draft', title: 'Untitled Storyboard', createdBy: 'user-1', _shareWithUsers: ['user-1'] });
 }
 
 function matches(doc, search) {
