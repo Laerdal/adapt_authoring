@@ -573,7 +573,7 @@ export function NavigationPage({
               </NavAccordion>
 
               {/* ── Menu Lock Settings ── */}
-              <NavAccordion {...acc("menuLock")} title={getSchemaLabel(getSchemaNode(courseSchema, "_lockType"), "Menu Lock Settings")} hint={getSchemaHint(getSchemaNode(courseSchema, "_lockType"))} subtitle="Restrict how learners can move between menu items.">
+              <NavAccordion {...acc("menuLock")} title={getSchemaLabel(getSchemaNode(courseSchema, "_lockType"), "Menu Lock Settings")} subtitle="Restrict how learners can move between menu items.">
                 <NavSelect
                   label={getSchemaLabel(getSchemaNode(courseSchema, "_lockType"), "Menu Lock")}
                   hint={getSchemaHint(getSchemaNode(courseSchema, "_lockType"))}
