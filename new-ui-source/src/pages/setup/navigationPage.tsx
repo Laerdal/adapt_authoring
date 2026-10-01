@@ -512,8 +512,8 @@ export function NavigationPage({
           ) : (
             <>
               {/* ── Start settings ── */}
-              <NavAccordion {...acc("start")} title={getSchemaLabel(startSchema, "Start settings")} hint={getSchemaHint(startSchema)} subtitle="Choose which page(s) learners land on when they open the course.">
-                <ToggleSwitch checked={s.start._isEnabled} onChange={(v) => setStart({ _isEnabled: v })} label={getSchemaLabel(getSchemaNode(startSchema, "_isEnabled"), "Enable start settings")} hint={getSchemaHint(getSchemaNode(startSchema, "_isEnabled"))} />
+              <NavAccordion {...acc("start")} title={getSchemaLabel(startSchema, "Start settings")} subtitle="Choose which page(s) learners land on when they open the course.">
+                <ToggleSwitch checked={s.start._isEnabled} onChange={(v) => setStart({ _isEnabled: v })} label={getSchemaLabel(getSchemaNode(startSchema, "_isEnabled"), "Enabled?")} hint={getSchemaHint(startSchema) ?? getSchemaHint(getSchemaNode(startSchema, "_isEnabled"))} />
 
                 {s.start._isEnabled && (
                   <div className="flex flex-col gap-3">
