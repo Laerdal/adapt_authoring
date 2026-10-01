@@ -2212,46 +2212,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           style={{ zIndex: 9999, backgroundColor: 'rgba(248, 250, 252, 0.99)', paddingTop: '72px' }}
           onClick={() => setIsExpanded(false)}
         >
-          <div className="fixed right-6 top-20 z-[10000] flex items-center gap-2">
-            <button
-              onClick={() => setDarkMode(!darkMode)}
-              className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#d1d5db] bg-white px-3 text-sm font-medium text-[#374151] shadow-sm hover:bg-[#f9fafb]"
-              title="Toggle dark mode"
-              aria-label="Toggle dark mode"
-              type="button"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-              </svg>
-              <span>Dark mode</span>
-            </button>
-            <button
-              onClick={() => setIsExpanded(false)}
-              className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#d1d5db] bg-white px-3 text-sm font-medium text-[#374151] shadow-sm hover:bg-[#f9fafb]"
-              title="Minimize preview"
-              aria-label="Minimize preview"
-              type="button"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              <span>Minimize</span>
-            </button>
-            <button
-              onClick={() => setIsExpanded(false)}
-              className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#d1d5db] bg-white px-3 text-sm font-medium text-[#374151] shadow-sm hover:bg-[#f9fafb]"
-              title="Close preview"
-              aria-label="Close preview"
-              type="button"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-              <span>Close</span>
-            </button>
-          </div>
-
           <div
             className="mx-auto flex min-h-full w-full max-w-6xl min-h-0 flex-col overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-2xl"
             style={{ position: 'relative', zIndex: 10000 }}
@@ -2267,7 +2227,33 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                 </svg>
                 <span className="text-sm font-semibold text-[#111827]">Live Preview</span>
               </div>
-              <span className="text-xs text-[#6b7280]">Press Esc to close</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[#6b7280] mr-1">Press Esc to close</span>
+                <button
+                  onClick={() => setDarkMode(!darkMode)}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#d1d5db] bg-white px-3 text-sm font-medium text-[#374151] shadow-sm hover:bg-[#f9fafb]"
+                  title="Toggle dark mode"
+                  aria-label="Toggle dark mode"
+                  type="button"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                  </svg>
+                  <span>Dark mode</span>
+                </button>
+                <button
+                  onClick={() => setIsExpanded(false)}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#d1d5db] bg-white px-3 text-sm font-medium text-[#374151] shadow-sm hover:bg-[#f9fafb]"
+                  title="Minimize preview"
+                  aria-label="Minimize preview"
+                  type="button"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  <span>Minimize</span>
+                </button>
+              </div>
             </div>
             <div className="min-h-0 flex-1" style={{ backgroundColor: canvasBg }}>
               {previewContent}
