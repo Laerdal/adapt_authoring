@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { saveThemeForCourse, saveThemeVariables, getThemePresets, saveThemePreset, applyThemePreset, getThemePresetParentTheme, renameThemePreset, deleteThemePreset, getThemeTypeVariablesSchemaByLabel, type ThemePreset } from "../../api/adaptAuthoring";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import InfoIcon, { InfoFieldLabel } from "../../components/common/InfoIcon";
@@ -2204,6 +2205,79 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       </div>
     );
 
+    const expandedPreview = isExpanded && typeof document !== 'undefined'
+      ? createPortal(
+        <div
+          className="fixed inset-0 overflow-y-auto p-4"
+          style={{ zIndex: 9999, backgroundColor: 'rgba(248, 250, 252, 0.99)', paddingTop: '72px' }}
+          onClick={() => setIsExpanded(false)}
+        >
+          <div className="fixed right-6 top-20 z-[10000] flex items-center gap-2">
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#d1d5db] bg-white px-3 text-sm font-medium text-[#374151] shadow-sm hover:bg-[#f9fafb]"
+              title="Toggle dark mode"
+              aria-label="Toggle dark mode"
+              type="button"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+              </svg>
+              <span>Dark mode</span>
+            </button>
+            <button
+              onClick={() => setIsExpanded(false)}
+              className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#d1d5db] bg-white px-3 text-sm font-medium text-[#374151] shadow-sm hover:bg-[#f9fafb]"
+              title="Minimize preview"
+              aria-label="Minimize preview"
+              type="button"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              <span>Minimize</span>
+            </button>
+            <button
+              onClick={() => setIsExpanded(false)}
+              className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#d1d5db] bg-white px-3 text-sm font-medium text-[#374151] shadow-sm hover:bg-[#f9fafb]"
+              title="Close preview"
+              aria-label="Close preview"
+              type="button"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+              <span>Close</span>
+            </button>
+          </div>
+
+          <div
+            className="mx-auto flex min-h-full w-full max-w-6xl min-h-0 flex-col overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-2xl"
+            style={{ position: 'relative', zIndex: 10000 }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Live Preview"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-[#e5e7eb] shrink-0 sticky top-0 z-10">
+              <div className="flex items-center gap-2">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill={primaryColor} stroke="none">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                </svg>
+                <span className="text-sm font-semibold text-[#111827]">Live Preview</span>
+              </div>
+              <span className="text-xs text-[#6b7280]">Press Esc to close</span>
+            </div>
+            <div className="min-h-0 flex-1" style={{ backgroundColor: canvasBg }}>
+              {previewContent}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )
+      : null;
+
     return (
       <>
         <div className="flex flex-col h-full rounded-xl overflow-hidden border border-[#e5e7eb]" style={{ backgroundColor: canvasBg }}>
@@ -2245,56 +2319,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           {previewContent}
         </div>
 
-        {isExpanded && (
-          <div className="fixed inset-x-0 top-14 bottom-0 z-50 overflow-y-auto bg-black/50 p-4" onClick={() => setIsExpanded(false)}>
-            <div
-              className="mx-auto flex min-h-full w-full max-w-6xl min-h-0 flex-col overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-2xl"
-              role="dialog"
-              aria-modal="true"
-              aria-label="Live Preview"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-[#e5e7eb] shrink-0">
-                <div className="flex items-center gap-2">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill={primaryColor} stroke="none">
-                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                  </svg>
-                  <span className="text-sm font-semibold text-[#111827]">Live Preview</span>
-                </div>
-                <div className="flex gap-1.5">
-                  <button
-                    onClick={() => setDarkMode(!darkMode)}
-                    className="w-9 h-9 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
-                    title="Toggle dark mode"
-                    aria-label="Toggle dark mode"
-                    type="button"
-                  >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => setIsExpanded(false)}
-                    className="w-9 h-9 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
-                    title="Collapse preview"
-                    aria-label="Collapse preview"
-                    type="button"
-                  >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="9 3 3 3 3 9" />
-                      <polyline points="15 21 21 21 21 15" />
-                      <line x1="3" y1="3" x2="10" y2="10" />
-                      <line x1="14" y1="14" x2="21" y2="21" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-              <div className="min-h-0 flex-1" style={{ backgroundColor: canvasBg }}>
-                {previewContent}
-              </div>
-            </div>
-          </div>
-        )}
+        {expandedPreview}
       </>
     );
   };
