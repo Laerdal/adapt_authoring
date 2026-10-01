@@ -1,0 +1,41 @@
+{
+  "type": "object",
+  "$schema": "http://json-schema.org/draft-04/schema",
+  "id": "http://jsonschema.net",
+  "$ref": "http://localhost/system/tenantObject.schema",
+  "properties": {
+    "_storyboardId": {
+      "type": "objectid",
+      "required": true
+    },
+    "_courseId": {
+      "type": "objectid",
+      "required": false
+    },
+    "event": {
+      "type": "string",
+      "required": true
+    },
+    "fromStatus": {
+      "type": "string",
+      "required": false
+    },
+    "toStatus": {
+      "type": "string",
+      "required": false
+    },
+    "meta": {
+      "type": "string",
+      "default": "{}"
+    },
+    "_tenantId": {
+      "type": "objectid",
+      "required": true
+    },
+    "createdBy": {
+      "type": "objectid",
+      "required": false,
+      "ref": "user"
+    }
+  }
+}

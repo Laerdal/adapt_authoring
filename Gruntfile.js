@@ -465,6 +465,21 @@ module.exports = function(grunt) {
       } catch (e) { return false; }
     }
 
+    // Verify every declared dependency is actually installed. A partial or
+    // interrupted install — or one accidentally run at the repo root instead of
+    // new-ui-source — leaves node_modules present but missing packages (e.g.
+    // lucide-react / @blocknote/*), which then fail `tsc && vite build`. Detect
+    // that so we reinstall and self-heal rather than build against a broken tree.
+    function depsComplete() {
+      try {
+        var pkg = JSON.parse(fs.readFileSync(path.join(newUiDir, 'package.json'), 'utf8'));
+        var deps = Object.keys(pkg.dependencies || {});
+        return deps.every(function(d) {
+          return fs.existsSync(path.join(newUiDir, 'node_modules', d, 'package.json'));
+        });
+      } catch (e) { return false; }
+    }
+
     function runSync() {
       var env = Object.assign({}, process.env, { NEW_UI_DIST_PATH: distDir });
       var syncChild = spawn(process.execPath, [syncScript], { stdio: 'inherit', env: env });
@@ -487,9 +502,10 @@ module.exports = function(grunt) {
       });
     }
 
-    // Install when deps are missing OR the oxide native binding is absent
-    // (self-heals a tree installed under the wrong Node). Otherwise skip for speed.
-    if (!fs.existsSync(path.join(newUiDir, 'node_modules')) || !oxideBindingPresent()) {
+    // Install when node_modules is absent, any declared dependency is missing,
+    // OR the oxide native binding is absent (self-heals a tree installed under
+    // the wrong Node / a partial install). Otherwise skip for speed.
+    if (!fs.existsSync(path.join(newUiDir, 'node_modules')) || !depsComplete() || !oxideBindingPresent()) {
       grunt.log.writeln('Installing new-ui-source dependencies ('
         + (node20Bin ? 'Node 20 via ' + node20Src : 'default Node') + ')...');
       npmStep(['install'], 'New UI dependency install', build);

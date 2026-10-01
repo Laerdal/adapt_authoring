@@ -1,0 +1,14 @@
+staged_classic=$(git diff --cached --name-only --diff-filter=ACM | grep '^frontend/src/' || true)
+
+if [ -n "$staged_classic" ]; then
+  echo ""
+  echo "-------------------------------------------------------------------"
+  echo "Heads up: this commit touches the CLASSIC (legacy) UI under frontend/src/:"
+  echo "$staged_classic" | sed 's/^/  - /'
+  echo ""
+  echo "The classic UI is in maintenance mode - it only gets bugfixes."
+  echo "New features belong in new-ui-source/ instead."
+  echo "If this really is a legacy bugfix, go ahead - this is a warning, not a block."
+  echo "-------------------------------------------------------------------"
+  echo ""
+fi

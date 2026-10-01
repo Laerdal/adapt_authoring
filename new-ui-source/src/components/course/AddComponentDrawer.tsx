@@ -3,6 +3,7 @@ import {
   getAvailableComponents,
   type ComponentTypeOption,
 } from "../../api/adaptAuthoring";
+import { StructureIcon, STRUCTURE_ICON_COLOR_CLASS } from "./StructureIcons";
 
 // Best-effort category grouping for the picker. Unknown component keys fall
 // into "Other". Keyed by the engine `_component` name (lower-cased).
@@ -171,14 +172,12 @@ export default function AddComponentDrawer({ onSelect, onClose }: AddComponentDr
                       onClick={() => onSelect(c)}
                       className="w-full flex items-center gap-3 px-2 py-2.5 rounded-lg hover:bg-[#f0f7ff] text-left transition-colors group"
                     >
-                      <span className="shrink-0 w-9 h-9 rounded-lg bg-[#eef2f7] flex items-center justify-center overflow-hidden text-[#2d6fa8]">
-                        {c.icon ? (
-                          <img src={c.icon} alt="" className="w-5 h-5 object-contain" />
-                        ) : (
-                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                            <rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 21V9" />
-                          </svg>
-                        )}
+                      <span className="shrink-0 w-9 h-9 rounded-lg bg-[#eef2f7] flex items-center justify-center">
+                        <StructureIcon
+                          level="component"
+                          size={16}
+                          className={STRUCTURE_ICON_COLOR_CLASS.component}
+                        />
                       </span>
                       <span className="min-w-0">
                         <span className="block text-sm font-medium text-[#111827] truncate">{c.displayName}</span>

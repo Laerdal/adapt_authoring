@@ -2,4 +2,8 @@ define(['core/origin', './views/navigationView'], function(Origin, NavigationVie
   Origin.once('origin:dataReady', function() {
     $('#app').before(new NavigationView({ model: Origin.sessionModel }).$el);
   });
+
+  Origin.on('navigation:switchToNew', function() {
+    window.location.href = '/';
+  });
 });

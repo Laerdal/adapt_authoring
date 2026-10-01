@@ -112,6 +112,23 @@
       "validators": [],
       "title": "Classes"
     },
+    "_htmlClasses": {
+      "type": "string",
+      "default": "",
+      "isSetting": true,
+      "inputType": "Text",
+      "validators": [],
+      "title": "HTML classes"
+    },
+    "requirecompletionof": {
+      "type": "string",
+      "required": false,
+      "default": "-1",
+      "isSetting": true,
+      "inputType": "Text",
+      "validators": [],
+      "title": "Require completion of"
+    },
     "_isOptional": {
       "type": "boolean",
       "default": false,

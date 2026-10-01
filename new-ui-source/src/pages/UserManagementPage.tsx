@@ -1,5 +1,9 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { getUsers, setUserRole, deleteUser } from "@/api/adaptAuthoring";
+import { usePageLoader } from "@/hooks";
+import { useAuth } from "@/context/AuthContext";
+import AiAssistant from "@/components/common/AiAssistant";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
 
 type Role = "Super Admin" | "Authenticated User" | "Course Creator";
 
@@ -52,9 +56,19 @@ function isCompleteEmail(value: string): boolean {
 }
 
 export default function UserManagementPage() {
+  const { user: currentUser } = useAuth();
   const [users, setUsers]             = useState<User[]>([]);
+  const [loading, setLoading]         = useState(true);
 
-  const loadUsers = () => { getUsers().then(setUsers).catch(() => setUsers([])); };
+  usePageLoader(loading);
+
+  const loadUsers = () => {
+    setLoading(true);
+    getUsers()
+      .then(setUsers)
+      .catch(() => setUsers([]))
+      .finally(() => setLoading(false));
+  };
   useEffect(() => { loadUsers(); }, []);
   const [search, setSearch]           = useState("");
   const [searchError, setSearchError] = useState("");
@@ -63,16 +77,6 @@ export default function UserManagementPage() {
   const [sortDir, setSortDir]         = useState<SortDir>("asc");
   const [page, setPage]               = useState(1);
   const [pageSize, setPageSize]       = useState(10);
-  const [filterOpen, setFilterOpen]   = useState(false);
-
-  // Add user modal state
-  const [addOpen, setAddOpen]         = useState(false);
-  const [addEmail, setAddEmail]       = useState("");
-  const [addRole, setAddRole]         = useState<Role>("Authenticated User");
-  const [addTenant, setAddTenant]     = useState(TENANTS[0]);
-  const [addEmailErr, setAddEmailErr] = useState("");
-  const [addRoleOpen, setAddRoleOpen] = useState(false);
-  const [addTenantOpen, setAddTenantOpen] = useState(false);
 
   // Row-action state
   const [deleteTarget, setDeleteTarget]         = useState<User | null>(null);
@@ -86,7 +90,6 @@ export default function UserManagementPage() {
       if (tableRef.current && !tableRef.current.contains(e.target as Node)) {
         setRoleMenuTarget(null);
         setActionMenuTarget(null);
-        setFilterOpen(false);
       }
     }
     document.addEventListener("mousedown", handleMouseDown);
@@ -132,56 +135,6 @@ export default function UserManagementPage() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const paginated  = filtered.slice((page - 1) * pageSize, page * pageSize);
-
-  function openAddModal() {
-    setAddEmail("");
-    setAddRole("Authenticated User");
-    setAddTenant(TENANTS[0]);
-    setAddEmailErr("");
-    setAddRoleOpen(false);
-    setAddTenantOpen(false);
-    setAddOpen(true);
-  }
-
-  function handleAddEmailChange(value: string) {
-    setAddEmail(value);
-    if (value.trim() === "") {
-      setAddEmailErr("");
-    } else if (!isCompleteEmail(value) && value.includes("@")) {
-      setAddEmailErr("Enter a valid email address");
-    } else if (users.some((u) => u.email.toLowerCase() === value.trim().toLowerCase())) {
-      setAddEmailErr("A user with this email already exists");
-    } else {
-      setAddEmailErr("");
-    }
-  }
-
-  function submitAddUser() {
-    const email = addEmail.trim();
-    if (!isCompleteEmail(email)) {
-      setAddEmailErr("Enter a valid email address");
-      return;
-    }
-    if (users.some((u) => u.email.toLowerCase() === email.toLowerCase())) {
-      setAddEmailErr("A user with this email already exists");
-      return;
-    }
-    const today = new Date();
-    const dd = String(today.getDate()).padStart(2, "0");
-    const mm = String(today.getMonth() + 1).padStart(2, "0");
-    const yy = String(today.getFullYear()).slice(2);
-    const newUser: User = {
-      id: Math.max(0, ...users.map((u) => u.id)) + 1,
-      email,
-      tenant: addTenant,
-      role: addRole,
-      failedLogins: 0,
-      lastAccess: `${dd}-${mm}-${yy}`,
-    };
-    setUsers((prev) => [newUser, ...prev]);
-    setPage(1);
-    setAddOpen(false);
-  }
 
   function handleSort(key: SortKey) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -241,18 +194,8 @@ export default function UserManagementPage() {
       <div className="px-6 md:px-8 pt-6 pb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">User Management</h1>
-          <p className="text-sm text-[#6b7280] mt-1">Manage users, roles, and access for this instance.</p>
+          <p className="text-sm text-[#6b7280] mt-1">Manage users, roles, and access for this instance</p>
         </div>
-        <button
-          type="button"
-          onClick={openAddModal}
-          className="flex items-center gap-2 px-4 py-2.5 bg-[#2d6fa8] hover:bg-[#245c8f] text-white text-sm font-semibold rounded-lg transition-colors shrink-0"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-          Add User
-        </button>
       </div>
 
       {/* ── Toolbar ── */}
@@ -293,93 +236,38 @@ export default function UserManagementPage() {
         </div>
 
         {/* Role filter */}
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setFilterOpen((o) => !o)}
-            aria-label="Filter by role"
-            aria-expanded={filterOpen}
-            className={`flex items-center gap-2 px-3 py-2 text-sm border rounded-lg transition-colors ${
-              roleFilter !== "All"
-                ? "border-[#2d6fa8] bg-[#dbeeff] text-[#2d6fa8] font-medium"
-                : "border-[#e5e7eb] bg-white hover:bg-[#f9fafb] text-[#374151]"
-            }`}
-          >
-            <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18M7 8h10M11 12h2" />
-            </svg>
-            {roleFilter === "All" ? "All Roles" : roleFilter}
-            {roleFilter !== "All" && (
-              <span className="ml-0.5 w-4 h-4 rounded-full bg-[#2d6fa8] text-white text-[10px] font-bold flex items-center justify-center">1</span>
-            )}
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${filterOpen ? "rotate-180" : ""}`}>
-              <path d="M6 9l6 6 6-6" />
-            </svg>
-          </button>
-          {filterOpen && (
-            <div className="absolute left-0 mt-1 w-52 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-30 py-1">
-              <p className="px-3 py-1.5 text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">Filter by role</p>
-              {(["All", ...ROLES] as const).map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => { setRoleFilter(r as Role | "All"); setFilterOpen(false); setPage(1); }}
-                  className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${roleFilter === r ? "bg-[#dbeeff] text-[#2d6fa8] font-medium" : "text-[#374151] hover:bg-[#f9fafb]"}`}
-                >
-                  {r === "All" ? "All Roles" : r}
-                  {roleFilter === r && (
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                  )}
-                </button>
-              ))}
-              {roleFilter !== "All" && (
-                <>
-                  <div className="border-t border-[#f3f4f6] my-1" />
-                  <button
-                    type="button"
-                    onClick={() => { setRoleFilter("All"); setFilterOpen(false); setPage(1); }}
-                    className="w-full text-left px-3 py-2 text-sm text-[#ef4444] hover:bg-[#fef2f2] transition-colors"
-                  >
-                    Clear filter
-                  </button>
-                </>
-              )}
-            </div>
-          )}
+        <div className="flex items-center gap-1 bg-[#f3f4f6] rounded-lg p-1">
+          {(["All", ...ROLES] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={roleFilter === option}
+              onClick={() => {
+                setRoleFilter(option);
+                setPage(1);
+              }}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors whitespace-nowrap ${
+                roleFilter === option
+                  ? "bg-white text-[#2d6fa8] shadow-sm"
+                  : "text-[#6b7280] hover:text-[#374151]"
+              }`}
+            >
+              {option}
+            </button>
+          ))}
         </div>
 
         {/* Active filter chips */}
-        {(search || roleFilter !== "All") && (
+        {search && !searchError && (
           <div className="flex items-center gap-2 flex-wrap">
-            {search && !searchError && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#f3f4f6] text-xs text-[#374151] font-medium">
-                Email: <span className="text-[#2d6fa8]">"{search}"</span>
-                <button type="button" onClick={clearSearch} aria-label="Remove email filter" className="text-[#9ca3af] hover:text-[#374151] ml-0.5">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              </span>
-            )}
-            {roleFilter !== "All" && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#dbeeff] text-xs text-[#2d6fa8] font-medium">
-                Role: {roleFilter}
-                <button type="button" onClick={() => { setRoleFilter("All"); setPage(1); }} aria-label="Remove role filter" className="text-[#2d6fa8] hover:text-[#1e4d73] ml-0.5">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </button>
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => { clearSearch(); setRoleFilter("All"); setPage(1); }}
-              className="text-xs text-[#9ca3af] hover:text-[#374151] underline underline-offset-2 transition-colors"
-            >
-              Clear all
-            </button>
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#f3f4f6] text-xs text-[#374151] font-medium">
+              Email: <span className="text-[#2d6fa8]">"{search}"</span>
+              <button type="button" onClick={clearSearch} aria-label="Remove email filter" className="text-[#9ca3af] hover:text-[#374151] ml-0.5">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </span>
           </div>
         )}
 
@@ -399,7 +287,7 @@ export default function UserManagementPage() {
 
       {/* ── Table ── */}
       <div className="flex-1 px-6 md:px-8 pb-4">
-        <div className="rounded-xl border border-[#e5e7eb] overflow-hidden bg-white">
+        <div className="rounded-xl border border-[#e5e7eb] overflow-visible bg-white">
           <table className="w-full text-sm min-w-[700px]">
             <thead>
               <tr className="bg-[#f9fafb] border-b border-[#e5e7eb]">
@@ -415,15 +303,15 @@ export default function UserManagementPage() {
                   <th
                     key={key}
                     onClick={() => handleSort(key)}
-                    className="group px-4 py-3 text-left text-xs font-semibold text-[#374151] uppercase tracking-wide cursor-pointer select-none whitespace-nowrap hover:text-[#2d6fa8] transition-colors"
+                    className={`group px-4 py-3 text-xs font-semibold text-[#374151] uppercase tracking-wide cursor-pointer select-none whitespace-nowrap hover:text-[#2d6fa8] transition-colors ${key === "email" ? "text-left" : "text-center"}`}
                   >
-                    <span className="inline-flex items-center gap-1">
+                    <span className={`inline-flex items-center gap-1 ${key === "email" ? "" : "justify-center w-full"}`}>
                       {label}
                       <SortIcon col={key} />
                     </span>
                   </th>
                 ))}
-                <th className="px-4 py-3 text-right text-xs font-semibold text-[#374151] uppercase tracking-wide whitespace-nowrap">Actions</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-[#374151] uppercase tracking-wide whitespace-nowrap">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -431,27 +319,36 @@ export default function UserManagementPage() {
                 <tr>
                   <td colSpan={6} className="px-4 py-16 text-center text-sm text-[#9ca3af]">No users found</td>
                 </tr>
-              ) : paginated.map((user) => (
-                <tr key={user.id} className="border-b border-[#f3f4f6] hover:bg-[#fafafa] transition-colors group/row">
+              ) : paginated.map((user) => {
+                const isCurrentUser = user.email.toLowerCase() === currentUser?.email.toLowerCase();
+
+                return (
+                <tr key={user.id} className={`border-b border-[#f3f4f6] hover:bg-[#fafafa] transition-colors group/row ${isCurrentUser ? "font-bold" : ""}`}>
                   {/* Email */}
-                  <td className="px-4 py-3 text-[#111827] font-medium">{user.email}</td>
+                  <td className={`px-4 py-3 text-[#111827] ${isCurrentUser ? "font-bold" : "font-normal"}`}>{user.email}</td>
 
                   {/* Tenant */}
-                  <td className="px-4 py-3 text-[#6b7280]">{user.tenant}</td>
+                  <td className={`px-4 py-3 text-center ${isCurrentUser ? "font-bold text-[#111827]" : "text-[#6b7280]"}`}>{user.tenant}</td>
 
                   {/* Role — click to change */}
-                  <td className="px-4 py-3 relative">
-                    <button
-                      type="button"
-                      onClick={() => setRoleMenuTarget(roleMenuTarget === user.id ? null : user.id)}
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${ROLE_COLORS[user.role]} hover:opacity-80 transition-opacity`}
-                    >
-                      {user.role}
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M6 9l6 6 6-6" />
-                      </svg>
-                    </button>
-                    {roleMenuTarget === user.id && (
+                  <td className="px-4 py-3 text-center relative">
+                    {isCurrentUser ? (
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${ROLE_COLORS[user.role]}`}>
+                        {user.role}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setRoleMenuTarget(roleMenuTarget === user.id ? null : user.id)}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${ROLE_COLORS[user.role]} hover:opacity-80 transition-opacity`}
+                      >
+                        {user.role}
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M6 9l6 6 6-6" />
+                        </svg>
+                      </button>
+                    )}
+                    {!isCurrentUser && roleMenuTarget === user.id && (
                       <div className="absolute left-3 top-full mt-1 w-44 bg-white border border-[#e5e7eb] rounded-lg shadow-xl z-30 py-1">
                         <p className="px-3 py-1.5 text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">Change role</p>
                         {ROLES.map((r) => (
@@ -474,18 +371,21 @@ export default function UserManagementPage() {
                   </td>
 
                   {/* Failed logins */}
-                  <td className="px-4 py-3">
-                    <span className={`font-medium ${user.failedLogins >= 5 ? "text-[#ef4444]" : user.failedLogins >= 1 ? "text-[#f59e0b]" : "text-[#6b7280]"}`}>
+                  <td className="px-4 py-3 text-center">
+                    <span className={`${isCurrentUser ? "font-bold text-[#111827]" : `font-medium ${user.failedLogins >= 5 ? "text-[#ef4444]" : user.failedLogins >= 1 ? "text-[#f59e0b]" : "text-[#6b7280]"}`}`}>
                       {user.failedLogins}
                     </span>
                   </td>
 
                   {/* Last access */}
-                  <td className="px-4 py-3 text-[#6b7280] tabular-nums">{user.lastAccess}</td>
+                  <td className={`px-4 py-3 text-center tabular-nums ${isCurrentUser ? "font-bold text-[#111827]" : "text-[#6b7280]"}`}>{user.lastAccess}</td>
 
                   {/* Actions */}
-                  <td className="px-4 py-3">
-                    <div className="flex items-center justify-end gap-1 relative">
+                  <td className="px-4 py-3 text-center">
+                    {isCurrentUser ? (
+                      <span className="block text-center text-xs text-[#111827] font-bold leading-snug w-40 mx-auto">Please log in as another admin for full access.</span>
+                    ) : (
+                    <div className="flex items-center justify-center gap-1 relative">
                       {/* Delete */}
                       <button
                         type="button"
@@ -547,23 +447,14 @@ export default function UserManagementPage() {
                             </svg>
                             Share all courses
                           </button>
-                          <div className="border-t border-[#f3f4f6] my-1" />
-                          <button
-                            type="button"
-                            onClick={() => handleActionMenu(user.id, "delete")}
-                            className="w-full text-left px-3 py-2 text-sm text-[#ef4444] hover:bg-[#fef2f2] flex items-center gap-2.5"
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-                            </svg>
-                            Delete user
-                          </button>
                         </div>
                       )}
                     </div>
+                    )}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
 
@@ -664,223 +555,18 @@ export default function UserManagementPage() {
         </div>
       </div>
 
-      {/* ── Add User modal ── */}
-      {addOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-          onClick={(e) => { if (e.target === e.currentTarget) setAddOpen(false); }}
-        >
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md flex flex-col overflow-hidden">
-            {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-[#e5e7eb]">
-              <div>
-                <h2 className="font-semibold text-[#111827] text-base">Add User</h2>
-                <p className="text-xs text-[#6b7280] mt-0.5">Invite a new user to this instance</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setAddOpen(false)}
-                aria-label="Close"
-                className="p-1.5 rounded-lg hover:bg-[#f3f4f6] text-[#6b7280] transition-colors"
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="px-6 py-5 flex flex-col gap-5">
-              {/* Email */}
-              <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">
-                  Email Address <span className="text-[#ef4444]">*</span>
-                </label>
-                <input
-                  type="email"
-                  value={addEmail}
-                  onChange={(e) => handleAddEmailChange(e.target.value)}
-                  placeholder="e.g. user@laerdal.com"
-                  autoFocus
-                  aria-invalid={!!addEmailErr}
-                  aria-describedby={addEmailErr ? "add-email-error" : undefined}
-                  className={`w-full px-3 py-2.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:border-transparent text-[#111827] placeholder-[#9ca3af] transition-colors ${
-                    addEmailErr
-                      ? "border-[#ef4444] focus:ring-[#ef4444]"
-                      : "border-[#d1d5db] focus:ring-[#2d6fa8]"
-                  }`}
-                />
-                {addEmailErr && (
-                  <p id="add-email-error" role="alert" className="mt-1.5 text-xs text-[#ef4444] flex items-center gap-1.5">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-                    </svg>
-                    {addEmailErr}
-                  </p>
-                )}
-              </div>
-
-              {/* Role */}
-              <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">Role</label>
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => { setAddRoleOpen((o) => !o); setAddTenantOpen(false); }}
-                    aria-expanded={addRoleOpen}
-                    className="w-full flex items-center justify-between px-3 py-2.5 text-sm border border-[#d1d5db] rounded-lg bg-white hover:border-[#2d6fa8] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] text-[#111827] transition-colors"
-                  >
-                    <span className="flex items-center gap-2">
-                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${ROLE_COLORS[addRole]}`}>{addRole}</span>
-                    </span>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${addRoleOpen ? "rotate-180" : ""}`}>
-                      <path d="M6 9l6 6 6-6" />
-                    </svg>
-                  </button>
-                  {addRoleOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-10 py-1">
-                      {ROLES.map((r) => (
-                        <button
-                          key={r}
-                          type="button"
-                          onClick={() => { setAddRole(r); setAddRoleOpen(false); }}
-                          className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${addRole === r ? "bg-[#dbeeff] text-[#2d6fa8] font-medium" : "text-[#374151] hover:bg-[#f9fafb]"}`}
-                        >
-                          <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-semibold ${ROLE_COLORS[r]}`}>{r}</span>
-                          {addRole === r && (
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Tenant */}
-              <div>
-                <label className="block text-sm font-medium text-[#374151] mb-1.5">Tenant</label>
-                <div className="relative">
-                  <button
-                    type="button"
-                    onClick={() => { setAddTenantOpen((o) => !o); setAddRoleOpen(false); }}
-                    aria-expanded={addTenantOpen}
-                    className="w-full flex items-center justify-between px-3 py-2.5 text-sm border border-[#d1d5db] rounded-lg bg-white hover:border-[#2d6fa8] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] text-[#111827] transition-colors"
-                  >
-                    <span>{addTenant}</span>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${addTenantOpen ? "rotate-180" : ""}`}>
-                      <path d="M6 9l6 6 6-6" />
-                    </svg>
-                  </button>
-                  {addTenantOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-10 py-1">
-                      {TENANTS.map((t) => (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => { setAddTenant(t); setAddTenantOpen(false); }}
-                          className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${addTenant === t ? "bg-[#dbeeff] text-[#2d6fa8] font-medium" : "text-[#374151] hover:bg-[#f9fafb]"}`}
-                        >
-                          {t}
-                          {addTenant === t && (
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                              <polyline points="20 6 9 17 4 12" />
-                            </svg>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#e5e7eb]">
-              <button
-                type="button"
-                onClick={() => setAddOpen(false)}
-                className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={submitAddUser}
-                disabled={!addEmail.trim() || !!addEmailErr}
-                className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" />
-                  <line x1="19" y1="8" x2="19" y2="14" /><line x1="22" y1="11" x2="16" y2="11" />
-                </svg>
-                Add User
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <AiAssistant context="User Management" />
 
       {/* ── Delete confirmation modal ── */}
       {deleteTarget && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-          onClick={(e) => { if (e.target === e.currentTarget) setDeleteTarget(null); }}
-        >
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
-            {/* Header */}
-            <div className="px-6 pt-6 pb-4">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-full bg-[#fef2f2] flex items-center justify-center shrink-0 mt-0.5">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-                    <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-                  </svg>
-                </div>
-                <div>
-                  <h2 className="font-semibold text-[#111827] text-base">Delete User</h2>
-                  <p className="text-sm text-[#6b7280] mt-1">
-                    You are about to delete <span className="font-medium text-[#111827]">{deleteTarget.email}</span>.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Body */}
-            <div className="px-6 pb-5 flex flex-col gap-3">
-              <div className="p-4 rounded-lg bg-[#fef3c7] border border-[#fde68a]">
-                <p className="text-sm font-semibold text-[#92400e]">
-                  Ownership of this user's courses will be transferred to you.
-                </p>
-              </div>
-              <div className="p-4 rounded-lg bg-[#fef2f2] border border-[#fecaca]">
-                <p className="text-sm text-[#b91c1c]">
-                  ⚠ This action cannot be reverted. The user will be permanently removed.
-                </p>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#e5e7eb]">
-              <button
-                type="button"
-                onClick={() => setDeleteTarget(null)}
-                className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmDelete}
-                className="px-4 py-2 text-sm font-semibold text-white bg-[#ef4444] hover:bg-[#dc2626] rounded-lg transition-colors"
-              >
-                Delete User
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          open
+          title="Delete User"
+          message="Are you sure you want to delete this user?"
+          note={<>Ownership of this user's courses will be transferred to you. This action cannot be reverted. The user will be permanently removed.</>}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={confirmDelete}
+        />
       )}
 
     </div>

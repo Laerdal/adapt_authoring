@@ -1,0 +1,1436 @@
+import { useState, useEffect, useCallback } from "react";
+import {
+  setCompletionNotifierEnabledInConfig,
+  getCourseAdaptiveContentSettings,
+  getCourseAssessmentSettings,
+  getCourseBookmarkingSettings,
+  getCourseCompletionNotifier,
+  getCourseEstimatedTimeSettings,
+  getCoursePageLevelProgressSettings,
+  getCourseTechnicalSettings,
+  saveCourseAdaptiveContentSettings,
+  saveCourseAssessmentSettings,
+  saveCourseBookmarkingSettings,
+  saveCourseCompletionNotifier,
+  saveCourseEstimatedTimeSettings,
+  saveCoursePageLevelProgressSettings,
+  updateCourseTechnicalSettings,
+  type CourseAdaptiveContentSettings,
+  type CourseAssessmentSettings,
+  type CourseBookmarkingSettings,
+  type CourseCompletionNotifier,
+  type CourseEstimatedTimeSettings,
+  type CourseTechnicalSettings,
+} from "../../api/adaptAuthoring";
+import { SaveChangesButton } from "./SaveChangesButton";
+import { SaveStatusToast } from "./SaveStatusToast";
+import { InfoFieldLabel, InfoIcon } from "../../components/common/InfoIcon";
+import {
+  getConfigRootSchema,
+  getExtensionSchema,
+  getSchemaHint,
+  getSchemaLabel,
+  getSchemaNode,
+  type SetupSchemaNode,
+} from "../../helpers/setupInfoSchema";
+import { UnsavedChangesModal } from "./unsavedChangesModal";
+import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
+/* ─────────────────────────────────────────────────────────────
+   Types
+───────────────────────────────────────────────────────────── */
+type CourseCompletionRule =
+  | "all-content"
+  | "assessment"
+  | "submit-every-attempt"
+  | "submit-score";
+type BookmarkLocation     = "page" | "block" | "component";
+type BookmarkReturn       = "previous" | "furthest";
+type ProgressType         = "pages" | "questions";
+type ProgressFormat       = "bar" | "stepper" | "percentage";
+type ProgressIndicator    =
+  | "page-completion"
+  | "course-completion"
+  | "nav-bar"
+  | "all-content-objects"
+  | "course-level-nav-btn";
+interface CompletionProgressSettings {
+  courseCompletionRules:           CourseCompletionRule[];
+  completionNotifierEnabled: boolean;
+  progressIndicatorEnabled: boolean;
+  notifierLine1:        string;
+  notifierLine2:        string;
+  notifierAriaLabel:    string;
+  bookmarkingEnabled:   boolean;
+  bookmarkingLevel:     BookmarkLocation;
+  bookmarkingReturn:    BookmarkReturn;
+  bookmarkingShowPrompt: boolean;
+  bookmarkingAutoRestore: boolean;
+  bookmarkingPromptTitle: string;
+  bookmarkingPromptMessage: string;
+  bookmarkingPromptYes: string;
+  bookmarkingPromptNo: string;
+  assessmentCompletionEnabled: boolean;
+  assessmentIsPercentageBased: boolean;
+  assessmentScoreToPass: number;
+  assessmentCorrectToPass: number;
+  adaptiveContentEnabled: boolean;
+  adaptiveContentShouldSubmitScore: boolean;
+  adaptiveContentDiagnosticAssessmentId: string;
+  adaptiveContentFinalAssessmentId: string;
+  progressIndicators:   ProgressIndicator[];
+  progressIndicatorText: string;
+  progressIndicatorAriaLabel: string;
+  progressType:         ProgressType;
+  progressFormat:       ProgressFormat;
+  progressBarStyle:     "continuous" | "compact" | "";
+  timeEnabled:          boolean;
+  timeIconClass:        string;
+  timeTextBefore:       string;
+  timeTextAfter:        string;
+  timeTextCompleted:    string;
+}
+
+type CompletionCriteriaConfig = NonNullable<CourseTechnicalSettings["_completionCriteria"]>;
+type CompletionNotifierConfig = CourseCompletionNotifier;
+type BookmarkingConfig = CourseBookmarkingSettings;
+type AssessmentConfig = CourseAssessmentSettings;
+type AdaptiveContentConfig = CourseAdaptiveContentSettings;
+type EstimatedTimeConfig = CourseEstimatedTimeSettings;
+
+function completionNotifierEnabledFromConfig(
+  config?: CourseTechnicalSettings | null,
+): boolean {
+  const cfg = (config ?? {}) as CourseTechnicalSettings & {
+    _extensions?: Record<string, unknown>;
+    _completionNotifier?: { _isEnabled?: unknown };
+    _enabledExtensions?: Record<string, { name?: unknown; targetAttribute?: unknown }>;
+  };
+  const extensionNotifier = (cfg._extensions?._completionNotifier ?? {}) as { _isEnabled?: unknown };
+  const rootNotifier = cfg._completionNotifier ?? {};
+  const rawEnabled = extensionNotifier._isEnabled ?? rootNotifier._isEnabled;
+  const enabledExtensions = cfg._enabledExtensions ?? {};
+  const installedInOldUi = Object.values(enabledExtensions).some((entry) => {
+    if (!entry) return false;
+    const byName = typeof entry.name === "string" && entry.name === "adapt-completion-notifier";
+    const byTarget = typeof entry.targetAttribute === "string" && entry.targetAttribute === "_completionNotifier";
+    return byName || byTarget;
+  });
+  const enabled = extensionNotifier._isEnabled ?? rootNotifier._isEnabled;
+  if (typeof enabled === "boolean") return enabled;
+  return installedInOldUi;
+}
+
+const COURSE_COMPLETION_RULE_ORDER: CourseCompletionRule[] = [
+  "all-content",
+  "assessment",
+  "submit-every-attempt",
+  "submit-score",
+];
+
+function normalizeCourseCompletionRules(rules: CourseCompletionRule[]): CourseCompletionRule[] {
+  const uniqueRules = new Set(rules);
+  return COURSE_COMPLETION_RULE_ORDER.filter((rule) => uniqueRules.has(rule));
+}
+
+function rulesFromCompletionCriteria(
+  criteria?: CompletionCriteriaConfig | null,
+): CourseCompletionRule[] {
+  const rules: CourseCompletionRule[] = [];
+  if (criteria?._requireContentCompleted !== false) rules.push("all-content");
+  if (criteria?._requireAssessmentCompleted) rules.push("assessment");
+  if (criteria?._submitOnEveryAssessmentAttempt) rules.push("submit-every-attempt");
+  if (criteria?._shouldSubmitScore) rules.push("submit-score");
+  return normalizeCourseCompletionRules(rules);
+}
+
+function completionCriteriaFromRules(
+  rules: CourseCompletionRule[],
+  base?: CompletionCriteriaConfig | null,
+): CompletionCriteriaConfig {
+  const normalizedRules = new Set(normalizeCourseCompletionRules(rules));
+  return {
+    ...(base ?? {}),
+    _requireContentCompleted: normalizedRules.has("all-content"),
+    _requireAssessmentCompleted: normalizedRules.has("assessment"),
+    _submitOnEveryAssessmentAttempt: normalizedRules.has("submit-every-attempt"),
+    _shouldSubmitScore: normalizedRules.has("submit-score"),
+  };
+}
+
+function completionNotifierFromCourse(
+  notifier?: CompletionNotifierConfig | null,
+): Pick<CompletionProgressSettings, "notifierLine1" | "notifierLine2" | "notifierAriaLabel"> {
+  const message = notifier?._message;
+  const ariaLabel = typeof notifier?.ariaLabel === "string"
+    ? notifier.ariaLabel
+    : typeof notifier?._ariaLabel === "string"
+      ? notifier._ariaLabel
+      : "Close completion message";
+
+  return {
+    notifierLine1: typeof message?.line1 === "string" ? message.line1 : "",
+    notifierLine2: typeof message?.line2 === "string" ? message.line2 : "",
+    notifierAriaLabel: ariaLabel,
+  };
+}
+
+function completionNotifierToCourse(
+  settings: Pick<CompletionProgressSettings, "notifierLine1" | "notifierLine2" | "notifierAriaLabel">,
+  base?: CompletionNotifierConfig | null,
+): CompletionNotifierConfig {
+  return {
+    ...(base ?? {}),
+    _message: {
+      ...(base?._message ?? {}),
+      line1: settings.notifierLine1,
+      line2: settings.notifierLine2,
+    },
+    ariaLabel: settings.notifierAriaLabel,
+    _ariaLabel: settings.notifierAriaLabel,
+  };
+}
+
+const DEFAULT_SETTINGS: CompletionProgressSettings = {
+  courseCompletionRules:          ["all-content"],
+  completionNotifierEnabled: false,
+  progressIndicatorEnabled: true,
+  notifierLine1:        "",
+  notifierLine2:        "",
+  notifierAriaLabel:    "Close completion message",
+  bookmarkingEnabled:   false,
+  bookmarkingLevel:     "component",
+  bookmarkingReturn:    "furthest",
+  bookmarkingShowPrompt: true,
+  bookmarkingAutoRestore: true,
+  bookmarkingPromptTitle: "Bookmarking",
+  bookmarkingPromptMessage: "Would you like to continue where you left off?",
+  bookmarkingPromptYes: "Yes",
+  bookmarkingPromptNo: "No",
+  assessmentCompletionEnabled: false,
+  assessmentIsPercentageBased: true,
+  assessmentScoreToPass: 60,
+  assessmentCorrectToPass: 60,
+  adaptiveContentEnabled: false,
+  adaptiveContentShouldSubmitScore: true,
+  adaptiveContentDiagnosticAssessmentId: "",
+  adaptiveContentFinalAssessmentId: "",
+  progressIndicators:   [],
+  progressIndicatorText: "",
+  progressIndicatorAriaLabel: "",
+  progressType:         "pages",
+  progressFormat:       "bar",
+  progressBarStyle:     "",
+  timeEnabled:          false,
+  timeIconClass:        "icon-time",
+  timeTextBefore:       "Remaining time to complete module:",
+  timeTextAfter:        "minutes",
+  timeTextCompleted:    "Module completed.",
+};
+/* ─────────────────────────────────────────────────────────────
+   Shared primitive widgets (scoped to this file)
+───────────────────────────────────────────────────────────── */
+function CpCheckbox({
+  checked,
+  onChange,
+  label,
+  hint,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  hint?: string;
+}) {
+  return (
+    <label className="flex items-start gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-[#f9fafb] group">
+      <div
+        onClick={() => onChange(!checked)}
+        className={`mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
+          checked
+            ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]"
+            : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
+        }`}
+      >
+        {checked && (
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        )}
+      </div>
+      <span className="text-sm text-[#374151] leading-snug">{label}{hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
+    </label>
+  );
+}
+function CpSelect<T extends string>({
+  label,
+  hint,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <InfoFieldLabel label={label} hint={hint} description={hint} className="text-[#374151]" />
+      {hint && <p className="text-[11px] text-[var(--life-neutral-300)] leading-snug">{hint}</p>}
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value as T)}
+          title={label}
+          aria-label={label}
+          className="w-full border border-[#e5e7eb] rounded-lg px-3 py-2.5 text-sm text-[var(--life-base-black)] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:border-transparent pr-8"
+        >
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        <svg
+          className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+          width="14" height="14" viewBox="0 0 24 24" fill="none"
+          stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </div>
+    </div>
+  );
+}
+function CpTextInput({
+  label,
+  hint,
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  type?: "text" | "number";
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <InfoFieldLabel label={label} hint={hint} description={hint} className="text-[#374151]" />
+      {hint && <p className="text-[11px] text-[var(--life-neutral-300)] leading-snug">{hint}</p>}
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:border-transparent transition-colors"
+      />
+    </div>
+  );
+}
+function CpToggle({
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <label className="flex items-center justify-between gap-4 py-1 cursor-pointer">
+      <span className="text-sm font-semibold text-[var(--life-base-black)] leading-snug">{label}{hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border-2 transition-colors duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--life-primary-500)] ${
+          checked
+            ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]"
+            : "bg-[#e5e7eb] border-[#e5e7eb]"
+        }`}
+      >
+        <span
+          className={`inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-150 ${
+            checked ? "translate-x-5" : "translate-x-0.5"
+          }`}
+        />
+      </button>
+    </label>
+  );
+}
+function CpRadioGroup<T extends string>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      {options.map((opt) => {
+        const sel = value === opt.value;
+        return (
+          <label
+            key={opt.value}
+            className="flex items-center gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-[#f9fafb] transition-colors group"
+          >
+            <div
+              onClick={() => onChange(opt.value)}
+              className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors cursor-pointer ${
+                sel
+                  ? "border-[var(--life-primary-500)]"
+                  : "border-[#d1d5db] bg-white group-hover:border-[var(--life-primary-300)]"
+              }`}
+            >
+              {sel && <div className="w-2 h-2 rounded-full bg-[var(--life-primary-500)]" />}
+            </div>
+            <span className="text-sm text-[#374151]">{opt.label}</span>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+function CpCheckboxMulti<T extends string>({
+  options,
+  selected,
+  onChange,
+}: {
+  options: { value: T; label: string; hint?: string }[];
+  selected: T[];
+  onChange: (v: T[]) => void;
+}) {
+  const toggle = (val: T) => {
+    onChange(
+      selected.includes(val)
+        ? selected.filter((s) => s !== val)
+        : [...selected, val],
+    );
+  };
+  return (
+    <div className="flex flex-col gap-0.5">
+      {options.map((opt) => {
+        const checked = selected.includes(opt.value);
+        return (
+          <label
+            key={opt.value}
+            className="flex items-start gap-3 py-2 px-2 rounded-lg cursor-pointer hover:bg-[#f9fafb] transition-colors group"
+          >
+            <div
+              onClick={() => toggle(opt.value)}
+              className={`mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
+                checked
+                  ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]"
+                  : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
+              }`}
+            >
+              {checked && (
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              )}
+            </div>
+            <span className="text-sm text-[#374151] leading-snug">{opt.label}{opt.hint ? <InfoIcon label={opt.label} hint={opt.hint} className="ml-1 inline-flex align-middle" /> : null}</span>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+function CpInfoNote({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl bg-[#c3deee] border border-[#2986b5] px-5 py-3 text-sm text-[#206a92] leading-relaxed">
+      <span>{children}</span>
+    </div>
+  );
+}
+/* ─────────────────────────────────────────────────────────────
+   Accordion (matches NavAccordion exactly)
+───────────────────────────────────────────────────────────── */
+function CpAccordion({
+  title,
+  hint,
+  subtitle,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string;
+  hint?: string;
+  subtitle?: string;
+  open: boolean;
+  onToggle: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="group w-full flex items-center justify-between gap-3 px-5 py-4 text-left bg-white text-[#111827] transition-colors hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] disabled:bg-[#f7f7f7] disabled:text-[#b7b7b7]"
+      >
+        <div className="min-w-0">
+          <h3 className="text-sm font-bold text-current flex items-center gap-1.5">{title}{hint ? <InfoIcon label={title} hint={hint} /> : null}</h3>
+          {subtitle && <p className="text-xs text-[#6b7280] mt-0.5 leading-snug group-hover:text-[#0f5f75]">{subtitle}</p>}
+        </div>
+        <svg
+          className="shrink-0 ml-auto text-current"
+          width="18" height="18" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+        >
+          <polyline points={open ? "6 9 12 15 18 9" : "9 6 15 12 9 18"} />
+        </svg>
+      </button>
+      {open && (
+        <div className="px-5 pb-5 pt-1 border-t border-[#f3f4f6] flex flex-col gap-4">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+function CpInnerCard({
+  title,
+  subtitle,
+  headerSlot,
+  children,
+}: {
+  title?: string;
+  subtitle?: string;
+  headerSlot?: React.ReactNode;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
+      <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
+        {headerSlot ?? (
+          <>
+            {title && <p className="text-xs font-semibold text-[#374151]">{title}</p>}
+            {subtitle && <p className="text-xs text-[#9ca3af] mt-0.5 leading-snug">{subtitle}</p>}
+          </>
+        )}
+      </div>
+      {children && <div className="px-4 py-3">{children}</div>}
+    </div>
+  );
+}
+/* ─────────────────────────────────────────────────────────────
+   Section content components
+───────────────────────────────────────────────────────────── */
+function CompletionRulesContent({
+  cfg,
+  set,
+  configSchema,
+  assessmentSchema,
+  adaptiveContentSchema,
+}: {
+  cfg: CompletionProgressSettings;
+  set: <K extends keyof CompletionProgressSettings>(k: K, v: CompletionProgressSettings[K]) => void;
+  configSchema?: SetupSchemaNode | null;
+  assessmentSchema?: SetupSchemaNode | null;
+  adaptiveContentSchema?: SetupSchemaNode | null;
+}) {
+  const completionRuleHints = {
+    "all-content": getSchemaHint(getSchemaNode(configSchema, "_completionCriteria", "_requireContentCompleted")),
+    assessment: getSchemaHint(getSchemaNode(configSchema, "_completionCriteria", "_requireAssessmentCompleted")),
+    "submit-every-attempt": getSchemaHint(getSchemaNode(configSchema, "_completionCriteria", "_submitOnEveryAssessmentAttempt")),
+    "submit-score": getSchemaHint(getSchemaNode(configSchema, "_completionCriteria", "_shouldSubmitScore")),
+  } satisfies Record<CourseCompletionRule, string | undefined>;
+
+  return (
+    <>
+      <CpInnerCard title="Course Completion" subtitle="Complete course when:">
+        <CpCheckboxMulti<CourseCompletionRule>
+          selected={cfg.courseCompletionRules}
+          onChange={(v) => set("courseCompletionRules", normalizeCourseCompletionRules(v))}
+          options={[
+            { value: "all-content", label: "All content in the course must be completed", hint: completionRuleHints["all-content"] },
+            { value: "assessment", label: "The assessment must be completed", hint: completionRuleHints.assessment },
+            { value: "submit-every-attempt", label: "Submit completion on every assessment attempt", hint: completionRuleHints["submit-every-attempt"] },
+            { value: "submit-score", label: "Submit score to LMS", hint: completionRuleHints["submit-score"] },
+          ]}
+        />
+      </CpInnerCard>
+
+      <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
+        <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
+          <CpToggle
+            label={getSchemaLabel(getSchemaNode(assessmentSchema, "_isEnabled"), "Enable Assessment Completion")}
+            hint={getSchemaHint(getSchemaNode(assessmentSchema, "_isEnabled"))}
+            checked={cfg.assessmentCompletionEnabled}
+            onChange={(v) => set("assessmentCompletionEnabled", v)}
+          />
+        </div>
+        {cfg.assessmentCompletionEnabled && (
+          <div className="px-4 py-4 flex flex-col gap-4">
+            <CpCheckbox
+              label={getSchemaLabel(getSchemaNode(assessmentSchema, "_isPercentageBased"), "Choose whether the pass mark uses a percentage or raw score")}
+              hint={getSchemaHint(getSchemaNode(assessmentSchema, "_isPercentageBased"))}
+              checked={cfg.assessmentIsPercentageBased}
+              onChange={(v) => set("assessmentIsPercentageBased", v)}
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <CpTextInput
+                label={getSchemaLabel(getSchemaNode(assessmentSchema, "_scoreToPass"), "Pass mark")}
+                hint={getSchemaHint(getSchemaNode(assessmentSchema, "_scoreToPass"))}
+                type="number"
+                value={String(cfg.assessmentScoreToPass)}
+                onChange={(v) => set("assessmentScoreToPass", Number(v) || 0)}
+                placeholder="60"
+              />
+              <CpTextInput
+                label={getSchemaLabel(getSchemaNode(assessmentSchema, "_correctToPass"), "Correct pass mark")}
+                hint={getSchemaHint(getSchemaNode(assessmentSchema, "_correctToPass"))}
+                type="number"
+                value={String(cfg.assessmentCorrectToPass)}
+                onChange={(v) => set("assessmentCorrectToPass", Number(v) || 0)}
+                placeholder="60"
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
+        <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
+          <CpToggle
+            label={getSchemaLabel(getSchemaNode(adaptiveContentSchema, "_isEnabled"), "Enable Adaptive Content")}
+            hint={getSchemaHint(getSchemaNode(adaptiveContentSchema, "_isEnabled"))}
+            checked={cfg.adaptiveContentEnabled}
+            onChange={(v) => set("adaptiveContentEnabled", v)}
+          />
+        </div>
+        {cfg.adaptiveContentEnabled && (
+          <div className="px-4 py-4 flex flex-col gap-4">
+            <CpCheckbox
+              label={getSchemaLabel(getSchemaNode(adaptiveContentSchema, "_shouldSubmitScore"), "Record score to LMS")}
+              hint={getSchemaHint(getSchemaNode(adaptiveContentSchema, "_shouldSubmitScore"))}
+              checked={cfg.adaptiveContentShouldSubmitScore}
+              onChange={(v) => set("adaptiveContentShouldSubmitScore", v)}
+            />
+            <CpTextInput
+              label={getSchemaLabel(getSchemaNode(adaptiveContentSchema, "_diagnosticAssessmentId"), "Name of the diagnostic assessment")}
+              hint={getSchemaHint(getSchemaNode(adaptiveContentSchema, "_diagnosticAssessmentId")) ?? "The diagnostic assessment tests the learner's knowledge. If all questions related to a topic are answered correctly, that topic is hidden from the course."}
+              value={cfg.adaptiveContentDiagnosticAssessmentId}
+              onChange={(v) => set("adaptiveContentDiagnosticAssessmentId", v)}
+              placeholder="diagnostic"
+            />
+            <CpTextInput
+              label={getSchemaLabel(getSchemaNode(adaptiveContentSchema, "_finalAssessmentId"), "Name of the final assessment (if used)")}
+              hint={getSchemaHint(getSchemaNode(adaptiveContentSchema, "_finalAssessmentId")) ?? "If the course has a final assessment, specify its assessment ID here."}
+              value={cfg.adaptiveContentFinalAssessmentId}
+              onChange={(v) => set("adaptiveContentFinalAssessmentId", v)}
+              placeholder="final"
+            />
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+function CompletionFeedbackContent({
+  cfg,
+  set,
+  completionNotifierSchema,
+}: {
+  cfg: CompletionProgressSettings;
+  set: <K extends keyof CompletionProgressSettings>(k: K, v: CompletionProgressSettings[K]) => void;
+  completionNotifierSchema?: SetupSchemaNode | null;
+}) {
+  return (
+    <>
+      <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
+        <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
+          <CpToggle
+            label={getSchemaLabel(getSchemaNode(completionNotifierSchema, "_isEnabled"), "Enable Completion Notifier")}
+            hint={getSchemaHint(getSchemaNode(completionNotifierSchema, "_isEnabled"))}
+            checked={cfg.completionNotifierEnabled}
+            onChange={(v) => set("completionNotifierEnabled", v)}
+          />
+        </div>
+        {cfg.completionNotifierEnabled && (
+          <div className="px-4 py-4 flex flex-col gap-4">
+            <CpTextInput
+              label={getSchemaLabel(getSchemaNode(completionNotifierSchema, "_message", "line1"), "First line message for the completion notifier")}
+              hint={getSchemaHint(getSchemaNode(completionNotifierSchema, "_message", "line1"))}
+              value={cfg.notifierLine1}
+              onChange={(v) => set("notifierLine1", v)}
+              placeholder="e.g. Congratulations!"
+            />
+            <CpTextInput
+              label={getSchemaLabel(getSchemaNode(completionNotifierSchema, "_message", "line2"), "Second line message for the completion notifier")}
+              hint={getSchemaHint(getSchemaNode(completionNotifierSchema, "_message", "line2"))}
+              value={cfg.notifierLine2}
+              onChange={(v) => set("notifierLine2", v)}
+              placeholder="e.g. You have completed this course."
+            />
+            <CpTextInput
+              label={getSchemaLabel(getSchemaNode(completionNotifierSchema, "_ariaLabel"), "Close button aria label")}
+              hint={getSchemaHint(getSchemaNode(completionNotifierSchema, "_ariaLabel")) ?? "Accessible label announced by screen readers for the close button"}
+              value={cfg.notifierAriaLabel}
+              onChange={(v) => set("notifierAriaLabel", v)}
+              placeholder="e.g. Close completion message"
+            />
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+function ResumeBookmarkingContent({
+  cfg,
+  set,
+  bookmarkingSchema,
+}: {
+  cfg: CompletionProgressSettings;
+  set: <K extends keyof CompletionProgressSettings>(k: K, v: CompletionProgressSettings[K]) => void;
+  bookmarkingSchema?: SetupSchemaNode | null;
+}) {
+  const effectiveBookmarkingSchema =
+    getSchemaNode(bookmarkingSchema, "pluginLocations", "course", "_bookmarking")
+    ?? getSchemaNode(bookmarkingSchema, "course", "_bookmarking")
+    ?? getSchemaNode(bookmarkingSchema, "_bookmarking")
+    ?? bookmarkingSchema;
+
+  return (
+    <>
+      <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
+        <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
+          <CpToggle label={getSchemaLabel(getSchemaNode(effectiveBookmarkingSchema, "_isEnabled"), "Enable Bookmarking")} hint={getSchemaHint(getSchemaNode(effectiveBookmarkingSchema, "_isEnabled"))} checked={cfg.bookmarkingEnabled} onChange={(v) => set("bookmarkingEnabled", v)} />
+        </div>
+        {cfg.bookmarkingEnabled && (
+          <div className="px-4 py-4 flex flex-col gap-4">
+            <CpSelect<BookmarkLocation>
+              label={getSchemaLabel(getSchemaNode(effectiveBookmarkingSchema, "_level"), "Bookmarking is done at")}
+              hint={getSchemaHint(getSchemaNode(effectiveBookmarkingSchema, "_level"))}
+              value={cfg.bookmarkingLevel}
+              onChange={(v) => set("bookmarkingLevel", v)}
+              options={[
+                { value: "page",      label: "Topic" },
+                { value: "block",     label: "Content Group" },
+                { value: "component", label: "Component" },
+              ]}
+            />
+            <CpInfoNote>Bookmarking done at component level will be the most accurate.</CpInfoNote>
+
+            <CpSelect<BookmarkReturn>
+              label={getSchemaLabel(getSchemaNode(effectiveBookmarkingSchema, "_location"), "Bookmarking location – learner is taken back to")}
+              hint={getSchemaHint(getSchemaNode(effectiveBookmarkingSchema, "_location")) ?? "Location: where the learner is returned on re-entry"}
+              value={cfg.bookmarkingReturn}
+              onChange={(v) => set("bookmarkingReturn", v)}
+              options={[
+                { value: "previous", label: "Previous" },
+                { value: "furthest", label: "Furthest" },
+              ]}
+            />
+            {cfg.bookmarkingReturn === "furthest" && (
+              <CpInfoNote>The furthest option pairs well with sequential navigation, ensuring learners always progress forward.</CpInfoNote>
+            )}
+
+            <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] p-3 flex flex-col gap-3">
+              <CpCheckbox
+                label={getSchemaLabel(getSchemaNode(effectiveBookmarkingSchema, "_showPrompt"), "Show prompt")}
+                hint={getSchemaHint(getSchemaNode(effectiveBookmarkingSchema, "_showPrompt"))}
+                checked={cfg.bookmarkingShowPrompt}
+                onChange={(v) => set("bookmarkingShowPrompt", v)}
+              />
+              <CpCheckbox
+                label={getSchemaLabel(getSchemaNode(effectiveBookmarkingSchema, "_autoRestore"), "Auto restore")}
+                hint={getSchemaHint(getSchemaNode(effectiveBookmarkingSchema, "_autoRestore"))}
+                checked={cfg.bookmarkingAutoRestore}
+                onChange={(v) => set("bookmarkingAutoRestore", v)}
+              />
+              <CpTextInput
+                label={getSchemaLabel(getSchemaNode(effectiveBookmarkingSchema, "title"), "Prompt title")}
+                hint={getSchemaHint(getSchemaNode(effectiveBookmarkingSchema, "title"))}
+                value={cfg.bookmarkingPromptTitle}
+                onChange={(v) => set("bookmarkingPromptTitle", v)}
+                placeholder="Bookmarking"
+              />
+              <CpTextInput
+                label={getSchemaLabel(getSchemaNode(effectiveBookmarkingSchema, "body"), "Prompt message")}
+                hint={getSchemaHint(getSchemaNode(effectiveBookmarkingSchema, "body"))}
+                value={cfg.bookmarkingPromptMessage}
+                onChange={(v) => set("bookmarkingPromptMessage", v)}
+                placeholder="Would you like to continue where you left off?"
+              />
+              <div className="grid grid-cols-2 gap-3">
+                <CpTextInput
+                  label={getSchemaLabel(getSchemaNode(effectiveBookmarkingSchema, "_buttons", "yes"), "Yes")}
+                  hint={getSchemaHint(getSchemaNode(effectiveBookmarkingSchema, "_buttons", "yes"))}
+                  value={cfg.bookmarkingPromptYes}
+                  onChange={(v) => set("bookmarkingPromptYes", v)}
+                  placeholder="Yes"
+                />
+                <CpTextInput
+                  label={getSchemaLabel(getSchemaNode(effectiveBookmarkingSchema, "_buttons", "no"), "No")}
+                  hint={getSchemaHint(getSchemaNode(effectiveBookmarkingSchema, "_buttons", "no"))}
+                  value={cfg.bookmarkingPromptNo}
+                  onChange={(v) => set("bookmarkingPromptNo", v)}
+                  placeholder="No"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+const PROGRESS_INDICATOR_OPTIONS: { value: ProgressIndicator; label: string }[] = [
+  { value: "page-completion",      label: "Show topic completion" },
+  { value: "course-completion",    label: "Show course completion indicator" },
+  { value: "nav-bar",              label: "Show progress in the navigation bar" },
+  { value: "all-content-objects",  label: "Display all content objects and the current topic components" },
+  { value: "course-level-nav-btn", label: "Use course-level progress on navigation button" },
+];
+function ProgressBarStylePicker({
+  value,
+  onChange,
+  hint,
+}: {
+  value: "continuous" | "compact" | "";
+  onChange: (v: "continuous" | "compact" | "") => void;
+  hint?: string;
+}) {
+  const options: { value: "continuous" | "compact"; label: string; description: string }[] = [
+    {
+      value: "continuous",
+      label: "Continuous bar",
+      description: "A single bar spanning the full width beneath the navigation bar. (Laerdal Page Level Progress)",
+    },
+    {
+      value: "compact",
+      label: "Compact indicator",
+      description: "A small pill-shaped progress indicator inside the navigation bar. (Page Level Progress)",
+    },
+  ];
+  return (
+    <div className="flex flex-col gap-2.5">
+      <div className="flex items-center gap-1.5">
+        <InfoFieldLabel label="Progress Bar Style" hint={hint} className="text-[#374151]" />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        {options.map((opt) => {
+          const selected = value === opt.value;
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => onChange(value === opt.value ? "" : opt.value)}
+              className={`flex flex-col gap-3 rounded-xl border-2 p-3 text-left transition-all ${
+                selected
+                  ? "border-[var(--life-base-black)] bg-white shadow-sm"
+                  : "border-[#e5e7eb] bg-white hover:border-[#d1d5db]"
+              }`}
+            >
+              {/* Nav bar mockup */}
+              <div className="w-full rounded-lg border border-[#e5e7eb] bg-[#f9fafb] overflow-hidden">
+                {/* Nav row */}
+                <div className="flex items-center justify-between px-2.5 py-1.5">
+                  <div className="flex items-center gap-1 text-[10px] text-[#6b7280]">
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="15 18 9 12 15 6" />
+                    </svg>
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
+                    </svg>
+                    <span className="font-medium text-[#374151]">Home / Case 1</span>
+                  </div>
+                  {opt.value === "compact" ? (
+                    /* Compact: pill indicator top-right */
+                    <div className="flex items-center gap-1.5">
+                      <div className="h-2 w-8 rounded-full bg-[#e5e7eb] overflow-hidden">
+                        <div className="h-full w-3/5 rounded-full bg-[var(--life-primary-500)]" />
+                      </div>
+                      <span className="text-[9px] font-semibold text-[#6b7280]">v0.0.2</span>
+                    </div>
+                  ) : (
+                    <span className="text-[9px] font-semibold text-[#6b7280]">v0.0.2</span>
+                  )}
+                </div>
+                {opt.value === "continuous" && (
+                  /* Continuous: full-width bar below nav */
+                  <div className="h-1.5 w-full bg-[#e5e7eb]">
+                    <div className="h-full w-3/5 bg-[var(--life-primary-500)]" />
+                  </div>
+                )}
+              </div>
+              {/* Label row */}
+              <div className="flex items-start gap-2">
+                <div className={`mt-0.5 w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                  selected
+                    ? "border-[var(--life-primary-500)]"
+                    : "border-[#d1d5db]"
+                }`}>
+                  {selected && <div className="w-2 h-2 rounded-full bg-[var(--life-primary-500)]" />}
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-[#111827]">{opt.label}</p>
+                  <p className="text-[11px] text-[#6b7280] mt-0.5 leading-snug">{opt.description}</p>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+function ProgressIndicatorsContent({
+  cfg,
+  set,
+  progressionSchema,
+  pageLevelProgressSchema,
+  laerdalPageLevelProgressSchema,
+}: {
+  cfg: CompletionProgressSettings;
+  set: <K extends keyof CompletionProgressSettings>(k: K, v: CompletionProgressSettings[K]) => void;
+  progressionSchema?: SetupSchemaNode | null;
+  pageLevelProgressSchema?: SetupSchemaNode | null;
+  laerdalPageLevelProgressSchema?: SetupSchemaNode | null;
+}) {
+  const progressIndicatorOptions: { value: ProgressIndicator; label: string; hint?: string }[] = [
+    {
+      value: "page-completion",
+      label: "Show topic completion",
+      hint:
+        getSchemaHint(getSchemaNode(laerdalPageLevelProgressSchema, "pluginLocations", "course", "_laerdalPageLevelProgress", "_showPageCompletion"))
+        ?? getSchemaHint(getSchemaNode(pageLevelProgressSchema, "pluginLocations", "course", "_pageLevelProgress", "_showPageCompletion")),
+    },
+    {
+      value: "course-completion",
+      label: "Show course completion indicator",
+      hint:
+        getSchemaHint(getSchemaNode(laerdalPageLevelProgressSchema, "pluginLocations", "course", "_laerdalPageLevelProgress", "_isCompletionIndicatorEnabled"))
+        ?? getSchemaHint(getSchemaNode(pageLevelProgressSchema, "pluginLocations", "course", "_pageLevelProgress", "_isCompletionIndicatorEnabled")),
+    },
+    {
+      value: "nav-bar",
+      label: "Show progress in the navigation bar",
+      hint:
+        getSchemaHint(getSchemaNode(laerdalPageLevelProgressSchema, "pluginLocations", "course", "_laerdalPageLevelProgress", "_isShownInNavigationBar"))
+        ?? getSchemaHint(getSchemaNode(pageLevelProgressSchema, "pluginLocations", "course", "_pageLevelProgress", "_isShownInNavigationBar")),
+    },
+    {
+      value: "all-content-objects",
+      label: "Display all content objects and the current topic components",
+      hint: getSchemaHint(getSchemaNode(pageLevelProgressSchema, "pluginLocations", "course", "_pageLevelProgress", "_showAtCourseLevel")),
+    },
+    {
+      value: "course-level-nav-btn",
+      label: "Use course-level progress on navigation button",
+      hint:
+        getSchemaHint(getSchemaNode(laerdalPageLevelProgressSchema, "pluginLocations", "course", "_laerdalPageLevelProgress", "_useCourseProgressInNavigationButton"))
+        ?? getSchemaHint(getSchemaNode(pageLevelProgressSchema, "pluginLocations", "course", "_pageLevelProgress", "_useCourseProgressInNavigationButton")),
+    },
+  ];
+
+  return (
+    <>
+      <ProgressBarStylePicker
+        value={cfg.progressBarStyle}
+        onChange={(v) => set("progressBarStyle", v)}
+        hint={getSchemaHint(pageLevelProgressSchema) ?? getSchemaHint(laerdalPageLevelProgressSchema) ?? getSchemaHint(progressionSchema)}
+      />
+      <CpInnerCard title="Show progress indicators" subtitle="Select all that apply">
+        <CpCheckboxMulti<ProgressIndicator>
+          selected={cfg.progressIndicators}
+          onChange={(v) => set("progressIndicators", v)}
+          options={progressIndicatorOptions}
+        />
+      </CpInnerCard>
+      <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
+        <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
+          <CpToggle
+            label={getSchemaLabel(getSchemaNode(progressionSchema, "_isEnabled"), "Enable Progression Indicator")}
+            hint={getSchemaHint(getSchemaNode(progressionSchema, "_isEnabled"))}
+            checked={cfg.progressIndicatorEnabled}
+            onChange={(v) => set("progressIndicatorEnabled", v)}
+          />
+        </div>
+        {cfg.progressIndicatorEnabled && (
+          <div className="px-4 py-4 flex flex-col gap-4">
+            <div className="grid grid-cols-2 gap-4">
+              <CpTextInput
+                label={getSchemaLabel(getSchemaNode(progressionSchema, "_progressionLabel"), "Progression Indicator text")}
+                hint={getSchemaHint(getSchemaNode(progressionSchema, "_progressionLabel"))}
+                value={cfg.progressIndicatorText}
+                onChange={(v) => set("progressIndicatorText", v)}
+                placeholder="Topic Progress"
+              />
+              <CpTextInput
+                label={getSchemaLabel(getSchemaNode(progressionSchema, "_progressionAriaLabel"), "Aria label")}
+                hint={getSchemaHint(getSchemaNode(progressionSchema, "_progressionAriaLabel"))}
+                value={cfg.progressIndicatorAriaLabel}
+                onChange={(v) => set("progressIndicatorAriaLabel", v)}
+                placeholder="Topic progress. {{percentageComplete}}%. Open topic sections."
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <CpSelect<ProgressType>
+                label={getSchemaLabel(getSchemaNode(progressionSchema, "_progressionType"), "Progression Type")}
+                hint={getSchemaHint(getSchemaNode(progressionSchema, "_progressionType"))}
+                value={cfg.progressType}
+                onChange={(v) => set("progressType", v)}
+                options={[
+                  { value: "pages",     label: "Topics" },
+                  { value: "questions", label: "Questions" },
+                ]}
+              />
+              <CpSelect<ProgressFormat>
+                label={getSchemaLabel(getSchemaNode(progressionSchema, "_progressionFormat"), "Progression Format")}
+                hint={getSchemaHint(getSchemaNode(progressionSchema, "_progressionFormat"))}
+                value={cfg.progressFormat}
+                onChange={(v) => set("progressFormat", v)}
+                options={[
+                  { value: "bar",        label: "Bar" },
+                  { value: "stepper",    label: "Stepper" },
+                  { value: "percentage", label: "Percentage" },
+                ]}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+function TimeEstimateContent({
+  cfg,
+  set,
+  estimatedTimeSchema,
+}: {
+  cfg: CompletionProgressSettings;
+  set: <K extends keyof CompletionProgressSettings>(k: K, v: CompletionProgressSettings[K]) => void;
+  estimatedTimeSchema?: SetupSchemaNode | null;
+}) {
+  return (
+    <>
+      <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
+        <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
+          <CpToggle label={getSchemaLabel(getSchemaNode(estimatedTimeSchema, "_isEnabled"), "Enable Time Estimate")} hint={getSchemaHint(getSchemaNode(estimatedTimeSchema, "_isEnabled"))} checked={cfg.timeEnabled} onChange={(v) => set("timeEnabled", v)} />
+        </div>
+        {cfg.timeEnabled && (
+          <div className="px-4 py-4 flex flex-col gap-4">
+            <CpTextInput
+              label={getSchemaLabel(getSchemaNode(estimatedTimeSchema, "iconClass"), "Icon class")}
+              hint={getSchemaHint(getSchemaNode(estimatedTimeSchema, "iconClass"))}
+              value={cfg.timeIconClass}
+              onChange={(v) => set("timeIconClass", v)}
+              placeholder="icon-time"
+            />
+            <CpTextInput
+              label={getSchemaLabel(getSchemaNode(estimatedTimeSchema, "textBefore"), "Text before duration")}
+              hint={getSchemaHint(getSchemaNode(estimatedTimeSchema, "textBefore"))}
+              value={cfg.timeTextBefore}
+              onChange={(v) => set("timeTextBefore", v)}
+              placeholder="Remaining time to complete module:"
+            />
+            <CpTextInput
+              label={getSchemaLabel(getSchemaNode(estimatedTimeSchema, "textAfter"), "Text after duration")}
+              hint={getSchemaHint(getSchemaNode(estimatedTimeSchema, "textAfter"))}
+              value={cfg.timeTextAfter}
+              onChange={(v) => set("timeTextAfter", v)}
+              placeholder="minutes"
+            />
+            <CpTextInput
+              label={getSchemaLabel(getSchemaNode(estimatedTimeSchema, "moduleCompleted"), "Text shown when module is completed")}
+              hint={getSchemaHint(getSchemaNode(estimatedTimeSchema, "moduleCompleted"))}
+              value={cfg.timeTextCompleted}
+              onChange={(v) => set("timeTextCompleted", v)}
+              placeholder="Module completed."
+            />
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+/* ─────────────────────────────────────────────────────────────
+   Page component (exported)
+───────────────────────────────────────────────────────────── */
+export interface CompletionProgressPageProps {
+  courseId: string;
+  onNavigationRequest?: (nav: string) => void;
+  pendingNavigation?: string | null;
+  onPendingNavigationHandled?: () => void;
+}
+export function CompletionProgressPage({
+  courseId,
+  onNavigationRequest,
+  pendingNavigation,
+  onPendingNavigationHandled,
+}: CompletionProgressPageProps) {
+  const [cfg, setCfg] = useState<CompletionProgressSettings>(DEFAULT_SETTINGS);
+  const [saved, setSaved] = useState<CompletionProgressSettings>(DEFAULT_SETTINGS);
+  const [configId, setConfigId] = useState<string | null>(null);
+  const [completionCriteria, setCompletionCriteria] = useState<CompletionCriteriaConfig>({
+    _requireContentCompleted: true,
+    _requireAssessmentCompleted: false,
+    _submitOnEveryAssessmentAttempt: false,
+    _shouldSubmitScore: false,
+  });
+  const [completionNotifier, setCompletionNotifier] = useState<CompletionNotifierConfig>({
+    _message: {
+      line1: DEFAULT_SETTINGS.notifierLine1,
+      line2: DEFAULT_SETTINGS.notifierLine2,
+    },
+    ariaLabel: DEFAULT_SETTINGS.notifierAriaLabel,
+    _ariaLabel: DEFAULT_SETTINGS.notifierAriaLabel,
+  });
+  const [loadErrorMessage, setLoadErrorMessage] = useState<string | null>(null);
+  const [configSchema, setConfigSchema] = useState<SetupSchemaNode | null>(null);
+  const [bookmarkingSchema, setBookmarkingSchema] = useState<SetupSchemaNode | null>(null);
+  const [assessmentSchema, setAssessmentSchema] = useState<SetupSchemaNode | null>(null);
+  const [adaptiveContentSchema, setAdaptiveContentSchema] = useState<SetupSchemaNode | null>(null);
+  const [estimatedTimeSchema, setEstimatedTimeSchema] = useState<SetupSchemaNode | null>(null);
+  const [completionNotifierSchema, setCompletionNotifierSchema] = useState<SetupSchemaNode | null>(null);
+  const [progressionSchema, setProgressionSchema] = useState<SetupSchemaNode | null>(null);
+  const [pageLevelProgressSchema, setPageLevelProgressSchema] = useState<SetupSchemaNode | null>(null);
+  const [laerdalPageLevelProgressSchema, setLaerdalPageLevelProgressSchema] = useState<SetupSchemaNode | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  type Section = "completionRules" | "completionFeedback" | "resumeBookmarking" | "progressIndicators" | "timeEstimate";
+  const [openSection, setOpenSection] = useState<Section | "">("");
+  const acc = (id: Section) => ({
+    open: openSection === id,
+    onToggle: () => setOpenSection((s) => (s === id ? "" : id)),
+  });
+  const dirty = JSON.stringify(cfg) !== JSON.stringify(saved);
+  const set = useCallback(
+    <K extends keyof CompletionProgressSettings>(k: K, v: CompletionProgressSettings[K]) =>
+      setCfg((prev) => ({ ...prev, [k]: v })),
+    [],
+  );
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadCompletionCriteria() {
+      if (!courseId) {
+        if (!cancelled) {
+          setConfigId(null);
+          setLoadErrorMessage(null);
+          setCompletionCriteria(completionCriteriaFromRules(DEFAULT_SETTINGS.courseCompletionRules));
+          setCompletionNotifier(completionNotifierToCourse(DEFAULT_SETTINGS));
+          setCfg(DEFAULT_SETTINGS);
+          setSaved(DEFAULT_SETTINGS);
+        }
+        return;
+      }
+
+      try {
+        setLoadErrorMessage(null);
+        const [config, notifier, bookmarking, estimatedTime, pageLevelProgress, assessment, adaptiveContent] = await Promise.all([
+          getCourseTechnicalSettings(courseId),
+          getCourseCompletionNotifier(courseId),
+          getCourseBookmarkingSettings(courseId),
+          getCourseEstimatedTimeSettings(courseId),
+          getCoursePageLevelProgressSettings(courseId),
+          getCourseAssessmentSettings(courseId),
+          getCourseAdaptiveContentSettings(courseId),
+        ]);
+        if (cancelled) return;
+
+        const nextCriteria = completionCriteriaFromRules(
+          rulesFromCompletionCriteria(config._completionCriteria),
+          config._completionCriteria,
+        );
+        const nextRules = rulesFromCompletionCriteria(nextCriteria);
+        const nextNotifier = completionNotifierFromCourse(notifier);
+        const nextSettings = {
+          ...DEFAULT_SETTINGS,
+          courseCompletionRules: nextRules,
+          completionNotifierEnabled: completionNotifierEnabledFromConfig(config),
+          ...nextNotifier,
+          bookmarkingEnabled: !!bookmarking._isEnabled,
+          bookmarkingLevel: (bookmarking._level ?? DEFAULT_SETTINGS.bookmarkingLevel) as BookmarkLocation,
+          bookmarkingReturn: (bookmarking._location ?? DEFAULT_SETTINGS.bookmarkingReturn) as BookmarkReturn,
+          bookmarkingShowPrompt: typeof bookmarking._showPrompt === "boolean"
+            ? bookmarking._showPrompt
+            : DEFAULT_SETTINGS.bookmarkingShowPrompt,
+          bookmarkingAutoRestore: typeof bookmarking._autoRestore === "boolean"
+            ? bookmarking._autoRestore
+            : DEFAULT_SETTINGS.bookmarkingAutoRestore,
+          bookmarkingPromptTitle: typeof bookmarking.title === "string"
+            ? bookmarking.title
+            : DEFAULT_SETTINGS.bookmarkingPromptTitle,
+          bookmarkingPromptMessage: typeof bookmarking.body === "string"
+            ? bookmarking.body
+            : DEFAULT_SETTINGS.bookmarkingPromptMessage,
+          bookmarkingPromptYes: typeof bookmarking._buttons?.yes === "string"
+            ? bookmarking._buttons.yes
+            : DEFAULT_SETTINGS.bookmarkingPromptYes,
+          bookmarkingPromptNo: typeof bookmarking._buttons?.no === "string"
+            ? bookmarking._buttons.no
+            : DEFAULT_SETTINGS.bookmarkingPromptNo,
+          timeEnabled:      estimatedTime._isEnabled,
+          timeIconClass:    estimatedTime.iconClass,
+          timeTextBefore:   estimatedTime.textBefore,
+          timeTextAfter:    estimatedTime.textAfter,
+          timeTextCompleted: estimatedTime.moduleCompleted,
+          progressBarStyle: pageLevelProgress.progressBarStyle,
+          progressIndicators: pageLevelProgress.progressIndicators,
+          progressIndicatorEnabled: pageLevelProgress.progressIndicatorEnabled,
+          progressIndicatorText: pageLevelProgress.progressIndicatorText,
+          progressIndicatorAriaLabel: pageLevelProgress.progressIndicatorAriaLabel,
+          progressType: pageLevelProgress.progressType,
+          progressFormat: pageLevelProgress.progressFormat,
+          assessmentCompletionEnabled: !!assessment._isEnabled,
+          assessmentIsPercentageBased: typeof assessment._isPercentageBased === "boolean"
+            ? assessment._isPercentageBased
+            : DEFAULT_SETTINGS.assessmentIsPercentageBased,
+          assessmentScoreToPass: typeof assessment._scoreToPass === "number"
+            ? assessment._scoreToPass
+            : DEFAULT_SETTINGS.assessmentScoreToPass,
+          assessmentCorrectToPass: typeof assessment._correctToPass === "number"
+            ? assessment._correctToPass
+            : DEFAULT_SETTINGS.assessmentCorrectToPass,
+          adaptiveContentEnabled: !!adaptiveContent._isEnabled,
+          adaptiveContentShouldSubmitScore: typeof adaptiveContent._shouldSubmitScore === "boolean"
+            ? adaptiveContent._shouldSubmitScore
+            : DEFAULT_SETTINGS.adaptiveContentShouldSubmitScore,
+          adaptiveContentDiagnosticAssessmentId: typeof adaptiveContent._diagnosticAssessmentId === "string"
+            ? adaptiveContent._diagnosticAssessmentId
+            : DEFAULT_SETTINGS.adaptiveContentDiagnosticAssessmentId,
+          adaptiveContentFinalAssessmentId: typeof adaptiveContent._finalAssessmentId === "string"
+            ? adaptiveContent._finalAssessmentId
+            : DEFAULT_SETTINGS.adaptiveContentFinalAssessmentId,
+        };
+
+        setConfigId(config._id ?? null);
+        setCompletionCriteria(nextCriteria);
+        setCompletionNotifier(completionNotifierToCourse(nextSettings, notifier));
+        setCfg(nextSettings);
+        setSaved(nextSettings);
+      } catch (error) {
+        if (cancelled) return;
+        console.error("Failed to load completion settings", error);
+        setConfigId(null);
+        setLoadErrorMessage("Completion settings didn't load. Reload the page before saving.");
+      }
+    }
+
+    void loadCompletionCriteria();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      getConfigRootSchema(),
+      getExtensionSchema("adapt-contrib-bookmarking"),
+      getExtensionSchema("adapt-contrib-assessment"),
+      getExtensionSchema("adapt-adaptiveContent"),
+      getExtensionSchema("adapt-estimated-time"),
+      getExtensionSchema("adapt-completion-notifier"),
+      getExtensionSchema("adapt-progression-indicator"),
+      getExtensionSchema("adapt-contrib-pageLevelProgress"),
+      getExtensionSchema("adapt-laerdal-pageLevelProgress"),
+    ]).then(([
+      nextConfigSchema,
+      nextBookmarkingSchema,
+      nextAssessmentSchema,
+      nextAdaptiveContentSchema,
+      nextEstimatedTimeSchema,
+      nextCompletionNotifierSchema,
+      nextProgressionSchema,
+      nextPageLevelProgressSchema,
+      nextLaerdalPageLevelProgressSchema,
+    ]) => {
+      if (cancelled) return;
+      setConfigSchema(nextConfigSchema);
+      setBookmarkingSchema(nextBookmarkingSchema);
+      setAssessmentSchema(nextAssessmentSchema);
+      setAdaptiveContentSchema(nextAdaptiveContentSchema);
+      setEstimatedTimeSchema(nextEstimatedTimeSchema);
+      setCompletionNotifierSchema(nextCompletionNotifierSchema);
+      setProgressionSchema(nextProgressionSchema);
+      setPageLevelProgressSchema(nextPageLevelProgressSchema);
+      setLaerdalPageLevelProgressSchema(nextLaerdalPageLevelProgressSchema);
+    }).catch(() => {
+      if (cancelled) return;
+    });
+    return () => { cancelled = true; };
+  }, []);
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [toast]);
+  const { showConfirmModal, consumePendingNavigation, clearPendingNavigation } =
+    useUnsavedChangesNavigationGuard({
+      hasChanges: dirty,
+      pendingNavigation,
+      onPendingNavigationHandled,
+      onNavigate: onNavigationRequest,
+    });
+  function handleCancel() {
+    setCfg(saved);
+    setToast(null);
+  }
+  async function handleSave() {
+    if (saving) return;
+    if (!courseId) {
+      setToast({ type: "error", message: "Course id is missing. Reload the page before saving." });
+      return;
+    }
+    if (loadErrorMessage) {
+      setToast({ type: "error", message: loadErrorMessage });
+      return;
+    }
+    if (!configId) {
+      setToast({ type: "error", message: "Completion criteria config didn't load. Reload the page before saving." });
+      return;
+    }
+
+    setSaving(true);
+    setToast(null);
+    try {
+      const nextCompletionCriteria = completionCriteriaFromRules(cfg.courseCompletionRules, completionCriteria);
+      const nextCompletionNotifier = completionNotifierToCourse(cfg, completionNotifier);
+      const nextBookmarking: BookmarkingConfig = {
+        _isEnabled: cfg.bookmarkingEnabled,
+        _level: cfg.bookmarkingLevel,
+        _location: cfg.bookmarkingReturn,
+        _showPrompt: cfg.bookmarkingShowPrompt,
+        _autoRestore: cfg.bookmarkingAutoRestore,
+        title: cfg.bookmarkingPromptTitle,
+        body: cfg.bookmarkingPromptMessage,
+        _buttons: {
+          yes: cfg.bookmarkingPromptYes,
+          no: cfg.bookmarkingPromptNo,
+        },
+      };
+      const nextAssessment: AssessmentConfig = {
+        _isEnabled: cfg.assessmentCompletionEnabled,
+        _isPercentageBased: cfg.assessmentIsPercentageBased,
+        _scoreToPass: cfg.assessmentScoreToPass,
+        _correctToPass: cfg.assessmentCorrectToPass,
+      };
+      const nextAdaptiveContent: AdaptiveContentConfig = {
+        _isEnabled: cfg.adaptiveContentEnabled,
+        _shouldSubmitScore: cfg.adaptiveContentShouldSubmitScore,
+        _diagnosticAssessmentId: cfg.adaptiveContentDiagnosticAssessmentId,
+        _finalAssessmentId: cfg.adaptiveContentFinalAssessmentId,
+      };
+      const changedFields: Partial<CourseTechnicalSettings> = {
+        _id: configId,
+        _courseId: courseId,
+        _completionCriteria: nextCompletionCriteria,
+      };
+
+      const nextEstimatedTime: CourseEstimatedTimeSettings = {
+        _isEnabled:      cfg.timeEnabled,
+        _debugEnabled:   false,
+        _attachTo:       "",
+        iconClass:       cfg.timeIconClass,
+        textBefore:      cfg.timeTextBefore,
+        textAfter:       cfg.timeTextAfter,
+        moduleCompleted: cfg.timeTextCompleted,
+      };
+
+      await updateCourseTechnicalSettings(configId, changedFields);
+      await saveCourseBookmarkingSettings(courseId, nextBookmarking);
+      await saveCourseAssessmentSettings(courseId, nextAssessment);
+      await saveCourseAdaptiveContentSettings(courseId, nextAdaptiveContent);
+      await saveCourseEstimatedTimeSettings(courseId, nextEstimatedTime);
+      await saveCoursePageLevelProgressSettings(courseId, {
+        progressBarStyle: cfg.progressBarStyle,
+        progressIndicators: cfg.progressIndicators,
+        progressIndicatorEnabled: cfg.progressIndicatorEnabled,
+        progressIndicatorText: cfg.progressIndicatorText,
+        progressIndicatorAriaLabel: cfg.progressIndicatorAriaLabel,
+        progressType: cfg.progressType,
+        progressFormat: cfg.progressFormat,
+      });
+      await setCompletionNotifierEnabledInConfig(configId, courseId, cfg.completionNotifierEnabled);
+      // Write notifier settings last to avoid later extension updates clobbering message fields.
+      await saveCourseCompletionNotifier(courseId, nextCompletionNotifier);
+      setCompletionCriteria(nextCompletionCriteria);
+      setCompletionNotifier(nextCompletionNotifier);
+      setSaved({
+        ...cfg,
+        courseCompletionRules: normalizeCourseCompletionRules(cfg.courseCompletionRules),
+      });
+      setToast({ type: "success", message: "Changes saved successfully" });
+    } catch (error) {
+      console.error("Failed to save completion settings", error);
+      setToast({ type: "error", message: "Couldn't save. Please try again." });
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function handleConfirmSave() {
+    await handleSave();
+    const target = consumePendingNavigation();
+    if (target) onNavigationRequest?.(target);
+  }
+  function handleConfirmDiscard() {
+    handleCancel();
+    const target = consumePendingNavigation();
+    if (target) onNavigationRequest?.(target);
+  }
+  return (
+    <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-center gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-[var(--life-base-black)]">Completion &amp; Progress</h2>
+          <p className="text-sm text-[#6b7280] mt-0.5">
+            Configure how course and topic completion is tracked and displayed to learners.
+          </p>
+        </div>
+        <div className="ml-auto">
+          <SaveChangesButton dirty={dirty} saving={saving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="max-w-3xl px-6 py-6 flex flex-col gap-2">
+        <CpAccordion {...acc("completionRules")} title={getSchemaLabel(getSchemaNode(configSchema, "_completionCriteria"), "Completion Rules")} hint={getSchemaHint(getSchemaNode(configSchema, "_completionCriteria"))}>
+          <CompletionRulesContent cfg={cfg} set={set} configSchema={configSchema} assessmentSchema={assessmentSchema} adaptiveContentSchema={adaptiveContentSchema} />
+        </CpAccordion>
+        <CpAccordion {...acc("completionFeedback")} title={getSchemaLabel(completionNotifierSchema, "Completion Feedback")} hint={getSchemaHint(completionNotifierSchema)}>
+          <CompletionFeedbackContent cfg={cfg} set={set} completionNotifierSchema={completionNotifierSchema} />
+        </CpAccordion>
+        <CpAccordion {...acc("resumeBookmarking")} title={getSchemaLabel(bookmarkingSchema, "Resume & Bookmarking")} hint={getSchemaHint(bookmarkingSchema)}>
+          <ResumeBookmarkingContent cfg={cfg} set={set} bookmarkingSchema={bookmarkingSchema} />
+        </CpAccordion>
+        <CpAccordion {...acc("progressIndicators")} title={getSchemaLabel(progressionSchema, "Progress Indicators")} hint={getSchemaHint(progressionSchema) ?? getSchemaHint(pageLevelProgressSchema) ?? getSchemaHint(laerdalPageLevelProgressSchema)}>
+          <ProgressIndicatorsContent cfg={cfg} set={set} progressionSchema={progressionSchema} pageLevelProgressSchema={pageLevelProgressSchema} laerdalPageLevelProgressSchema={laerdalPageLevelProgressSchema} />
+        </CpAccordion>
+        <CpAccordion {...acc("timeEstimate")} title={getSchemaLabel(estimatedTimeSchema, "Time Estimate")} hint={getSchemaHint(estimatedTimeSchema)}>
+          <TimeEstimateContent cfg={cfg} set={set} estimatedTimeSchema={estimatedTimeSchema} />
+        </CpAccordion>
+
+        <div className="flex items-start gap-2.5 rounded-lg bg-[#fff7ed] border border-[#fed7aa] px-4 py-3 mt-2">
+          <span className="text-base leading-none mt-0.5" aria-hidden="true">💡</span>
+          <p className="text-sm text-[#9a3412] leading-snug">
+            Set the default completion, bookmarking, and progress tracking behavior for the course. Supported options, such as bookmarking and progress tracking, can be overridden at the topic level.
+          </p>
+        </div>
+
+      </div>
+      <div className="h-8" />
+      </div>
+      
+      <SaveStatusToast toast={toast} onDismiss={() => setToast(null)} autoHideMs={3500} />
+      <UnsavedChangesModal
+        isOpen={showConfirmModal}
+        isSaving={saving}
+        onDiscard={handleConfirmDiscard}
+        onSave={() => void handleConfirmSave()}
+        onClose={clearPendingNavigation}
+      />
+    </div>
+  );
+}

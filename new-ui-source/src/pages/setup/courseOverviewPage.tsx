@@ -1,0 +1,1156 @@
+import { useEffect, useRef, useState } from "react";
+import {
+  findUserByEmail,
+  getCourseBootstrapData,
+  getUserById,
+  searchUsersByEmailQuery,
+  updateCourse,
+  type UserSummary,
+} from "../../api/adaptAuthoring";
+import { usePageLoader } from "../../hooks";
+import type { AssetPickerRequest } from "../../types/assetPicker";
+import { BasicRichTextEditor, isEditorEmpty, InfoFieldLabel } from "../../components/common";
+import { isSafeLanguageCode } from "../../api/adaptAuthoring";
+import { SaveChangesButton } from "./SaveChangesButton";
+import { SaveStatusToast } from "./SaveStatusToast";
+import {
+  getConfigRootSchema,
+  getCourseRootSchema,
+  getSchemaHint,
+  getSchemaLabel,
+  getSchemaNode,
+  type SetupSchemaNode,
+} from "../../helpers/setupInfoSchema";
+import { UnsavedChangesModal } from "./unsavedChangesModal";
+import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
+
+interface CourseOverviewPageProps {
+  courseId: string;
+  title: string;
+  description: string;
+  onNavigationRequest?: (nav: string) => void;
+  pendingNavigation?: string | null;
+  onPendingNavigationHandled?: () => void;
+  onRequestAssetPicker?: (request: AssetPickerRequest) => void;
+}
+
+const LANGUAGES: { label: string; iso: string }[] = [
+  { label: "English", iso: "en" },
+  { label: "Norwegian", iso: "no" },
+  { label: "Swedish", iso: "sv" },
+  { label: "Danish", iso: "da" },
+  { label: "Finnish", iso: "fi" },
+  { label: "German", iso: "de" },
+  { label: "French", iso: "fr" },
+  { label: "Spanish", iso: "es" },
+  { label: "Portuguese", iso: "pt" },
+  { label: "Italian", iso: "it" },
+  { label: "Dutch", iso: "nl" },
+  { label: "Polish", iso: "pl" },
+  { label: "Russian", iso: "ru" },
+  { label: "Arabic", iso: "ar" },
+  { label: "Chinese (Simplified)", iso: "zh-CN" },
+  { label: "Chinese (Traditional)", iso: "zh-TW" },
+  { label: "Japanese", iso: "ja" },
+  { label: "Korean", iso: "ko" },
+  { label: "Turkish", iso: "tr" },
+  { label: "Hindi", iso: "hi" },
+  { label: "Hebrew", iso: "he" },
+  { label: "Urdu", iso: "ur" },
+  { label: "Other", iso: "other" },
+];
+
+const RTL_LANGUAGE_CODES = new Set(["ar", "he", "ur"]);
+
+function getLanguageDirection(languageValue: string): "ltr" | "rtl" {
+  const normalized = languageValue.trim().toLowerCase();
+  if (!normalized) return "ltr";
+  const primaryLanguage = normalized.split(/[-_]/)[0];
+  if (RTL_LANGUAGE_CODES.has(primaryLanguage)) return "rtl";
+  if (/[\u0590-\u08FF\uFB1D-\uFB4F\u0600-\u06FF]/.test(primaryLanguage)) return "rtl";
+  return "ltr";
+}
+
+interface Collaborator {
+  userId: string;   // ObjectId on the server
+  email: string;
+}
+
+export function CourseOverviewPage({
+  courseId,
+  title: initialTitle,
+  description: initialDescription,
+  onNavigationRequest,
+  pendingNavigation,
+  onPendingNavigationHandled,
+  onRequestAssetPicker,
+}: CourseOverviewPageProps) {
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [loading, setLoading] = useState(!!courseId);
+
+  // Committed values (server state)
+  const [savedTitle, setSavedTitle] = useState(initialTitle);
+  const [savedSubtitle, setSavedSubtitle] = useState("");
+  const [savedBody, setSavedBody] = useState("");
+  const [savedDesc, setSavedDesc] = useState(initialDescription);
+  const [savedInstruction, setSavedInstruction] = useState("");
+  const [savedTags, setSavedTags] = useState<string[]>([]);
+  const [savedHeroAssetId, setSavedHeroAssetId] = useState<string | null>(null);
+  const [savedLanguage, setSavedLanguage] = useState("");
+  const [savedIsShared, setSavedIsShared] = useState(false);
+  const [savedCollaborators, setSavedCollaborators] = useState<Collaborator[]>([]);
+
+  // Live form values
+  const [formTitle, setFormTitle] = useState(initialTitle);
+  const [formSubtitle, setFormSubtitle] = useState("");
+  const [formBody, setFormBody] = useState(""); 
+  const [formDesc, setFormDesc] = useState(initialDescription);
+  const [formInstruction, setFormInstruction] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
+  const [heroAssetId, setHeroAssetId] = useState<string | null>(null);
+  const [heroPreviewUrl, setHeroPreviewUrl] = useState<string | null>(null);
+  const [language, setLanguage] = useState("");
+  const [customLanguage, setCustomLanguage] = useState("");
+  const [selectedLanguageOption, setSelectedLanguageOption] = useState("");
+
+  // Collaboration — wired to _isShared and _shareWithUsers on the engine
+  const [shareMode, setShareMode] = useState<"all" | "specific">("specific");
+  const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
+  const [emailInput, setEmailInput] = useState("");
+  const [emailSearching, setEmailSearching] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailSuggestions, setEmailSuggestions] = useState<UserSummary[]>([]);
+  const [showEmailSuggestions, setShowEmailSuggestions] = useState(false);
+  const [activeEmailSuggestionIndex, setActiveEmailSuggestionIndex] = useState(-1);
+  const [emailInputFocused, setEmailInputFocused] = useState(false);
+  const emailSearchRequestIdRef = useRef(0);
+  const emailInputRef = useRef<HTMLInputElement | null>(null);
+  const [showAuthoringBanner, setShowAuthoringBanner] = useState(true);
+  const [courseSchema, setCourseSchema] = useState<SetupSchemaNode | null>(null);
+  const [configSchema, setConfigSchema] = useState<SetupSchemaNode | null>(null);
+
+  // Remount key for the Body rich-text editor. Bumping this forces the
+  // uncontrolled contentEditable surface to re-initialize its innerHTML
+  // (used after bootstrap load and on discard).
+  const [bodyEditorKey, setBodyEditorKey] = useState(0);
+
+  usePageLoader(loading);
+
+  function serializeCollaborators(list: Collaborator[]) {
+    return [...list]
+      .sort((a, b) => a.userId.localeCompare(b.userId))
+      .map(({ userId }) => userId);
+  }
+
+  // Detect unsaved changes (core fields + sharing)
+  const isDirty =
+    formTitle !== savedTitle ||
+    formSubtitle !== savedSubtitle ||
+    formBody !== savedBody ||
+    formDesc !== savedDesc ||
+    formInstruction !== savedInstruction ||
+    heroAssetId !== savedHeroAssetId ||
+    language !== savedLanguage ||
+    JSON.stringify(tags) !== JSON.stringify(savedTags) ||
+    (shareMode === "all") !== savedIsShared ||
+    JSON.stringify(serializeCollaborators(collaborators)) !==
+      JSON.stringify(serializeCollaborators(savedCollaborators));
+
+  // Load full course data on mount
+  useEffect(() => {
+    if (!courseId) return;
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
+        const data = await getCourseBootstrapData(courseId);
+        if (cancelled) return;
+        setSavedTitle(data.title);
+        setSavedSubtitle(data.subtitle);
+        setSavedBody(data.body);
+        setSavedDesc(data.description);
+        setSavedInstruction(data.instruction);
+        setSavedTags(data.tags);
+        setSavedHeroAssetId(data.heroAssetId);
+        setFormTitle(data.title);
+        setFormSubtitle(data.subtitle);
+        setFormBody(data.body);
+        setBodyEditorKey((k) => k + 1);
+        setFormDesc(data.description);
+        setFormInstruction(data.instruction);
+        setTags(data.tags);
+        setHeroAssetId(data.heroAssetId);
+        setHeroPreviewUrl(data.heroAssetId ? `/api/asset/serve/${data.heroAssetId}` : null);
+        const normalizedLanguage = data.language || "";
+        const isKnownLanguage = !!normalizedLanguage && LANGUAGES.some((entry) => entry.iso === normalizedLanguage);
+        setLanguage(normalizedLanguage);
+        setSavedLanguage(normalizedLanguage);
+        setCustomLanguage(isKnownLanguage ? "" : normalizedLanguage);
+        setSelectedLanguageOption(isKnownLanguage ? normalizedLanguage : normalizedLanguage ? "other" : "");
+
+        // Load sharing state
+        const isShared = data.isShared;
+        setSavedIsShared(isShared);
+        setShareMode(isShared ? "all" : "specific");
+
+        // Resolve user IDs to email addresses for the collaborator list
+        if (data.shareWithUserIds.length > 0) {
+          const resolved = await Promise.all(
+            data.shareWithUserIds.map(async (uid) => {
+              const user = await getUserById(uid);
+              return user ? { userId: uid, email: user.email } : null;
+            })
+          );
+          const validCollabs = resolved.filter((c): c is Collaborator => c !== null);
+          setSavedCollaborators(validCollabs);
+          setCollaborators(validCollabs);
+        }
+      } catch {
+        // keep initial values
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void Promise.all([getCourseRootSchema(), getConfigRootSchema()])
+      .then(([nextCourseSchema, nextConfigSchema]) => {
+        if (cancelled) return;
+        setCourseSchema(nextCourseSchema);
+        setConfigSchema(nextConfigSchema);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setCourseSchema(null);
+        setConfigSchema(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  function markDirty() {
+    setSaveSuccess(false);
+    setSaveError(null);
+  }
+
+  useEffect(() => {
+    const trimmedEmailInput = emailInput.trim();
+    const shouldSearch =
+      shareMode === "specific" && (trimmedEmailInput.length > 0 || emailInputFocused);
+
+    if (!shouldSearch) {
+      setEmailSuggestions([]);
+      setShowEmailSuggestions(false);
+      setActiveEmailSuggestionIndex(-1);
+      setEmailSearching(false);
+      return;
+    }
+
+    const requestId = ++emailSearchRequestIdRef.current;
+    const timeoutId = window.setTimeout(async () => {
+      setEmailSearching(true);
+      try {
+        const users = await searchUsersByEmailQuery(trimmedEmailInput);
+        if (emailSearchRequestIdRef.current !== requestId) return;
+        const existingUserIds = new Set(collaborators.map((c) => c.userId));
+        const filteredUsers = users.filter((u) => !existingUserIds.has(u._id));
+        setEmailSuggestions(filteredUsers);
+        setShowEmailSuggestions(true);
+        setActiveEmailSuggestionIndex(filteredUsers.length ? 0 : -1);
+      } catch {
+        if (emailSearchRequestIdRef.current !== requestId) return;
+        setEmailSuggestions([]);
+        setShowEmailSuggestions(false);
+      } finally {
+        if (emailSearchRequestIdRef.current === requestId) {
+          setEmailSearching(false);
+        }
+      }
+    }, 220);
+
+    return () => {
+      emailSearchRequestIdRef.current++;
+      window.clearTimeout(timeoutId);
+    };
+  }, [emailInput, shareMode, collaborators, emailInputFocused]);
+
+  function addCollaborator(user: UserSummary) {
+    if (collaborators.find((c) => c.userId === user._id || c.email.toLowerCase() === user.email.toLowerCase())) {
+      setEmailError("This user is already in the list.");
+      return;
+    }
+    setCollaborators((prev) => [...prev, { userId: user._id, email: user.email }]);
+    setEmailInput("");
+    setEmailSuggestions([]);
+    setShowEmailSuggestions(false);
+    setActiveEmailSuggestionIndex(-1);
+    setEmailError(null);
+    markDirty();
+  }
+
+  function handleSelectEmailSuggestion(user: UserSummary) {
+    addCollaborator(user);
+  }
+
+  function handleAddTag() {
+    const t = tagInput.trim();
+    if (t && !tags.includes(t)) setTags((prev) => [...prev, t]);
+    setTagInput("");
+    markDirty();
+  }
+  function handleRemoveTag(tag: string) {
+    setTags((prev) => prev.filter((t) => t !== tag));
+    markDirty();
+  }
+
+  async function handleAddEmail() {
+    const email = emailInput.trim();
+    if (!email) return;
+    if (showEmailSuggestions && activeEmailSuggestionIndex >= 0 && emailSuggestions[activeEmailSuggestionIndex]) {
+      handleSelectEmailSuggestion(emailSuggestions[activeEmailSuggestionIndex]);
+      return;
+    }
+
+    if (collaborators.find((c) => c.email.toLowerCase() === email.toLowerCase())) {
+      setEmailError("This user is already in the list.");
+      return;
+    }
+
+    setEmailSearching(true);
+    setEmailError(null);
+    try {
+      const user = await findUserByEmail(email);
+      if (!user) {
+        setEmailError(`No user found with email "${email}". Make sure the user has an account first.`);
+        return;
+      }
+      addCollaborator(user);
+    } catch {
+      setEmailError("Failed to look up user. Please try again.");
+    } finally {
+      setEmailSearching(false);
+    }
+  }
+  function handleRemoveCollaborator(userId: string) {
+    setCollaborators((prev) => prev.filter((c) => c.userId !== userId));
+    markDirty();
+  }
+
+  const { showConfirmModal, consumePendingNavigation, clearPendingNavigation } =
+    useUnsavedChangesNavigationGuard({
+      hasChanges: isDirty,
+      pendingNavigation,
+      onPendingNavigationHandled,
+      onNavigate: onNavigationRequest,
+    });
+
+  async function handleConfirmSave() {
+    const didSave = await handleSave();
+    if (!didSave) return;
+    const navTarget = consumePendingNavigation();
+    if (navTarget) onNavigationRequest?.(navTarget);
+  }
+
+  function handleConfirmDiscard() {
+    handleDiscard();
+    const navTarget = consumePendingNavigation();
+    if (navTarget) onNavigationRequest?.(navTarget);
+  }
+
+  async function handleSave() {
+    if (!courseId) return false;
+    if (!formTitle.trim()) {
+      setSaveError("Title is required.");
+      return false;
+    }
+    setSaving(true);
+    setSaveError(null);
+    setSaveSuccess(false);
+    try {
+      const isSharedAll = shareMode === "all";
+      const bodyToPersist = isEditorEmpty(formBody) ? "" : formBody;
+      const languageToPersist = selectedLanguageOption === "other" ? customLanguage.trim() : language.trim();
+      const normalizedLanguageForSave = languageToPersist.trim();
+
+      if (!normalizedLanguageForSave) {
+        setSaveError("Default language is required.");
+        return false;
+      }
+
+      if (!isSafeLanguageCode(normalizedLanguageForSave)) {
+        const message = selectedLanguageOption === "other"
+          ? "Custom language code is invalid. Use a safe ISO-style value such as en, ar, or zh-CN."
+          : "Default language is invalid. Please select a valid language.";
+        setSaveError(message);
+        return false;
+      }
+
+      const directionToPersist = getLanguageDirection(normalizedLanguageForSave);
+      await updateCourse(courseId, {
+        title: formTitle.trim(),
+        displayTitle: formTitle.trim(),
+        subtitle: formSubtitle.trim(),
+        body: bodyToPersist,
+        description: formDesc.trim(),
+        instruction: formInstruction.trim(),
+        heroAssetId,
+        tags,
+        isShared: isSharedAll,
+        shareWithUserIds: isSharedAll ? [] : collaborators.map((c) => c.userId),
+        language: normalizedLanguageForSave,
+        direction: directionToPersist,
+      });
+      setSavedTitle(formTitle.trim());
+      setSavedSubtitle(formSubtitle.trim());
+      setSavedDesc(formDesc.trim());
+      setSavedBody(bodyToPersist);
+      setFormBody(bodyToPersist);
+      setSavedInstruction(formInstruction.trim());
+      setSavedTags(tags);
+      setSavedHeroAssetId(heroAssetId);
+      setSavedLanguage(normalizedLanguageForSave);
+      setLanguage(normalizedLanguageForSave);
+      setSelectedLanguageOption(
+        normalizedLanguageForSave && LANGUAGES.some((entry) => entry.iso === normalizedLanguageForSave)
+          ? normalizedLanguageForSave
+          : normalizedLanguageForSave
+            ? "other"
+            : ""
+      );
+      setSavedIsShared(isSharedAll);
+      const nextSavedCollaborators = isSharedAll ? [] : collaborators;
+      setSavedCollaborators(nextSavedCollaborators);
+      if (isSharedAll) {
+        setCollaborators([]);
+        setEmailInput("");
+        setEmailSuggestions([]);
+        setShowEmailSuggestions(false);
+        setActiveEmailSuggestionIndex(-1);
+        setEmailError(null);
+      }
+      setSaveSuccess(true);
+      return true;
+    } catch {
+      setSaveError("Failed to save changes. Please try again.");
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleOpenCourseStructure() {
+    if (loading || !courseId) return;
+    if (isDirty) {
+      const didSave = await handleSave();
+      if (!didSave) return;
+    }
+    onNavigationRequest?.("structure");
+  }
+
+  function handleDiscard() {
+    setFormTitle(savedTitle);
+    setFormSubtitle(savedSubtitle);
+    setFormBody(savedBody);
+    setBodyEditorKey((k) => k + 1);
+    setFormDesc(savedDesc);
+    setFormInstruction(savedInstruction);
+    setTags(savedTags);
+    setHeroAssetId(savedHeroAssetId);
+    setHeroPreviewUrl(savedHeroAssetId ? `/api/asset/serve/${savedHeroAssetId}` : null);
+    setLanguage(savedLanguage);
+    const isKnownSavedLanguage = !!savedLanguage && LANGUAGES.some((entry) => entry.iso === savedLanguage);
+    setCustomLanguage(isKnownSavedLanguage ? "" : savedLanguage);
+    setSelectedLanguageOption(isKnownSavedLanguage ? savedLanguage : savedLanguage ? "other" : "");
+    setTagInput("");
+    setShareMode(savedIsShared ? "all" : "specific");
+    setCollaborators(savedCollaborators);
+    setEmailInput("");
+    setEmailSuggestions([]);
+    setShowEmailSuggestions(false);
+    setActiveEmailSuggestionIndex(-1);
+    setEmailError(null);
+    setSaveError(null);
+    setSaveSuccess(false);
+  }
+
+  function handleLanguageSelectionChange(nextValue: string) {
+    if (nextValue === "other") {
+      setSelectedLanguageOption("other");
+      setLanguage(customLanguage.trim());
+      markDirty();
+      return;
+    }
+
+    setSelectedLanguageOption(nextValue);
+    setLanguage(nextValue);
+    setCustomLanguage("");
+    markDirty();
+  }
+
+  function handleRequestCourseImagePicker() {
+    onRequestAssetPicker?.({
+      assetType: "image",
+      title: "Select Course Image",
+      description: "Choose a cover image for this course.",
+      onSelect: (asset) => {
+        setHeroAssetId(asset.id);
+        setHeroPreviewUrl(asset.url || `/api/asset/serve/${asset.id}`);
+        markDirty();
+      },
+    });
+  }
+
+  function handleEmailInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Backspace" && !emailInput.trim() && collaborators.length > 0) {
+      e.preventDefault();
+      handleRemoveCollaborator(collaborators[collaborators.length - 1].userId);
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      if (!showEmailSuggestions || emailSuggestions.length === 0) return;
+      e.preventDefault();
+      setActiveEmailSuggestionIndex((prev) => (prev + 1) % emailSuggestions.length);
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      if (!showEmailSuggestions || emailSuggestions.length === 0) return;
+      e.preventDefault();
+      setActiveEmailSuggestionIndex((prev) => (prev <= 0 ? emailSuggestions.length - 1 : prev - 1));
+      return;
+    }
+    if (e.key === "Escape") {
+      setShowEmailSuggestions(false);
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleAddEmail();
+    }
+  }
+
+  const labelStyle: React.CSSProperties = {
+    fontFamily: '"Lato", sans-serif',
+    fontSize: 13,
+    fontWeight: 700,
+    color: "var(--life-base-black)",   // #1A1A1A
+    display: "block",
+    marginBottom: 6,
+  };
+
+  // Input field border = life-neutral-400 (#949494) — matches Figma border weight
+  const inputBase: React.CSSProperties = {
+    fontFamily: '"Lato", sans-serif',
+    fontSize: 14,
+    color: "var(--life-base-black)",           // #1A1A1A
+    background: "#ffffff",
+    border: "1px solid var(--life-neutral-400)", // #949494 — matches Figma
+    borderRadius: 8,
+    padding: "10px 14px",
+    height: 44,
+    width: "100%",
+    outline: "none",
+    transition: "border-color 0.15s",
+    boxSizing: "border-box" as const,
+  };
+
+  const textareaBase: React.CSSProperties = {
+    ...inputBase,
+    height: "auto",
+    resize: "none" as const,
+  };
+
+  function focusIn(e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
+    e.currentTarget.style.borderColor = "var(--life-primary-500)"; // #2E7FA1
+  }
+  function focusOut(e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) {
+    e.currentTarget.style.borderColor = "var(--life-neutral-400)"; // #949494
+  }
+
+  function renderFieldLabel(
+    label: string,
+    schemaPath: string[],
+    options?: { required?: boolean; schemaRoot?: SetupSchemaNode | null; hint?: string; labelOverride?: string }
+  ) {
+    const schemaRoot = options?.schemaRoot ?? courseSchema;
+    const schemaNode = getSchemaNode(schemaRoot, ...schemaPath);
+    const displayLabel = options?.labelOverride ?? getSchemaLabel(schemaNode, label);
+    const hint = options?.hint ?? getSchemaHint(schemaNode);
+
+    return (
+      <div style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 4, flexWrap: "nowrap" }}>
+        <InfoFieldLabel label={displayLabel} hint={hint} className="text-[#374151] !mb-0" />
+        {options?.required ? <span style={{ color: "var(--life-critical-500)", fontWeight: 400, lineHeight: 1 }}>*</span> : null}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="flex flex-col h-full w-full bg-[#f7f9fb]"
+      dir="ltr"
+      style={{
+        fontFamily: '"Lato", sans-serif',
+        direction: "ltr",
+        textAlign: "left",
+        unicodeBidi: "plaintext",
+      }}
+    >
+      <SaveStatusToast toast={saveSuccess && !isDirty ? { type: "success", message: "Changes saved successfully" } : null} onDismiss={() => setSaveSuccess(false)} />
+
+      {/* ── Header ───────────────────────────────────────────────── */}
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-center gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-[var(--life-base-black)] m-0">
+            Course Overview
+          </h2>
+          <p className="text-sm text-[#6b7280] mt-0.5 mb-0">
+            Click any field to review and edit its content inline.
+          </p>
+        </div>
+        <div className="ml-auto">
+          <SaveChangesButton dirty={isDirty} saving={saving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="max-w-2xl px-6 py-6">
+
+      {/* ── Banners ──────────────────────────────────────────────── */}
+      {saveError && (
+        <div style={{ marginBottom: 20, padding: "10px 14px", borderRadius: 8, background: "var(--life-critical-050)", border: "1px solid var(--life-critical-500)", fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-critical-600)" }}>
+          {saveError}
+        </div>
+      )}
+      {/* ── Fields ───────────────────────────────────────────────── */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+
+        {/* Title */}
+        <div>
+          {renderFieldLabel("Title", ["title"], { required: true })}
+          <input
+            value={formTitle}
+            onChange={(e) => { setFormTitle(e.target.value); markDirty(); }}
+            placeholder="Title to be displayed in the course main menu"
+            disabled={loading}
+            style={inputBase}
+            onFocus={focusIn}
+            onBlur={focusOut}
+          />
+        </div>
+
+        {/* Sub-Title */}
+        <div>
+          {renderFieldLabel("Subtitle", ["subtitle"])}
+          <input
+            value={formSubtitle}
+            onChange={(e) => { setFormSubtitle(e.target.value); markDirty(); }}
+            placeholder="Subtitle to be displayed in the course main menu"
+            disabled={loading}
+            style={inputBase}
+            onFocus={focusIn}
+            onBlur={focusOut}
+          />
+        </div>
+
+
+        {/* Description */}
+        <div>
+          {renderFieldLabel("Description", ["description"])}
+          <textarea
+            rows={4}
+            value={formDesc}
+            onChange={(e) => { setFormDesc(e.target.value); markDirty();}}
+            placeholder="Describe what this course is about and what learners will gain"
+            disabled={loading}
+            style={textareaBase}
+            onFocus={focusIn}
+            onBlur={focusOut}
+          />
+        </div>
+
+          {/* Body */}
+        <div>
+          {renderFieldLabel("Course Metadata", ["body"], {
+            labelOverride: "Course Metadata",
+            hint: "This information is not currently displayed within the course",
+          })}
+          <BasicRichTextEditor
+            key={bodyEditorKey}
+            html={formBody}
+            onChange={(next) => { setFormBody(next); markDirty(); }}
+            disabled={loading}
+            placeholder="Provide description to be added to the course manifest metadata"
+            ariaLabel="Course Metadata"
+          />
+        </div>
+
+        {/* Instructions */}
+        <div>
+          {renderFieldLabel("Instructions", ["instruction"])}
+          <textarea
+            rows={4}
+            value={formInstruction}
+            onChange={(e) => { setFormInstruction(e.target.value); markDirty(); }}
+            placeholder="Provide any special instructions for learners..."
+            disabled={loading}
+            style={textareaBase}
+            onFocus={focusIn}
+            onBlur={focusOut}
+          />
+        </div>
+
+        {/* Course Image */}
+        <div>
+          {renderFieldLabel("Course Image", ["heroImage"])}
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label={heroPreviewUrl ? "Replace course image" : "Choose a cover image"}
+            onClick={handleRequestCourseImagePicker}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                handleRequestCourseImagePicker();
+              }
+            }}
+            className="group relative cursor-pointer overflow-hidden"
+            style={{
+              width: "100%", height: 128,
+              border: heroPreviewUrl ? "none" : "2px dashed var(--life-neutral-300)",
+              borderRadius: 8,
+              background: heroPreviewUrl ? "transparent" : "var(--life-neutral-050)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexDirection: "column", gap: 8,
+              transition: "border-color 0.15s, background 0.15s",
+            }}
+            onMouseEnter={(e) => { if (!heroPreviewUrl) { e.currentTarget.style.borderColor = "var(--life-primary-500)"; } }}
+            onMouseLeave={(e) => { if (!heroPreviewUrl) { e.currentTarget.style.borderColor = "var(--life-neutral-300)"; } }}
+          >
+            {heroPreviewUrl ? (
+              <>
+                <img src={heroPreviewUrl} alt="Course cover" style={{ width: "100%", height: 128, objectFit: "cover", borderRadius: 8 }} />
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setHeroAssetId(null); setHeroPreviewUrl(null); markDirty(); }}
+                  aria-label="Remove image"
+                  style={{
+                    position: "absolute",
+                    top: 8,
+                    right: 8,
+                    width: 24,
+                    height: 24,
+                    borderRadius: 999,
+                    border: "none",
+                    background: "rgba(255,255,255,0.95)",
+                    color: "var(--life-neutral-500)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    zIndex: 2,
+                    padding: 0,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = "#ffffff";
+                    e.currentTarget.style.color = "var(--life-critical-500)";
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = "rgba(255,255,255,0.95)";
+                    e.currentTarget.style.color = "var(--life-neutral-500)";
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                    <path d="M9 3L3 9M3 3l6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                </button>
+                <div
+                  className="absolute inset-0 flex flex-col items-center justify-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ background: "rgba(0,0,0,0.45)", borderRadius: 8 }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8l2 3h6a2 2 0 0 1 2 2z" />
+                  </svg>
+                  <span style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, color: "#fff", fontWeight: 700 }}>Replace Image</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ color: "var(--life-neutral-400)" }}>
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8l2 3h6a2 2 0 0 1 2 2z" />
+                </svg>
+                <span style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-neutral-400)" }}>Choose a cover image</span>
+                <span style={{ fontFamily: '"Lato", sans-serif', fontSize: 11, color: "var(--life-neutral-400)" }}>JPG, PNG or WebP · 16:9 aspect ratio recommended</span>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Tags */}
+        <div>
+          {renderFieldLabel("Tags", ["tags"])}
+          <div style={{ display: "flex", gap: 8, marginBottom: tags.length > 0 ? 10 : 0 }}>
+            <input
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddTag(); } }}
+              placeholder="Add tags to your course and press Enter"
+              disabled={loading}
+              style={{ ...inputBase, flex: 1 }}
+              onFocus={focusIn}
+              onBlur={focusOut}
+            />
+          </div>
+          {tags.length > 0 && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {tags.map((tag) => (
+                <span
+                  key={tag}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 12px", borderRadius: 999, background: "var(--life-neutral-050)", fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-base-black)", border: "1px solid var(--life-neutral-200)" }}
+                >
+                  {tag}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveTag(tag)}
+                    style={{ background: "transparent", border: "none", cursor: "pointer", color: "var(--life-neutral-400)", lineHeight: 1, padding: 0, display: "flex", alignItems: "center" }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = "var(--life-critical-500)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = "var(--life-neutral-400)")}
+                    aria-label={`Remove tag ${tag}`}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M9 3L3 9M3 3l6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Default Language */}
+        <div>
+          {renderFieldLabel("Default Language", ["_defaultLanguage"], { schemaRoot: configSchema })}
+          <div style={{ position: "relative" }}>
+            <select
+              value={selectedLanguageOption}
+              onChange={(e) => handleLanguageSelectionChange(e.target.value)}
+              style={{ ...inputBase, appearance: "none", WebkitAppearance: "none", paddingRight: 36, cursor: "pointer", color: selectedLanguageOption ? "var(--life-base-black)" : "var(--life-neutral-400)" } as React.CSSProperties}
+              onFocus={focusIn}
+              onBlur={focusOut}
+            >
+              <option value="">Select language</option>
+              {LANGUAGES.map((lang) => (
+                <option key={lang.iso} value={lang.iso}>
+                  {lang.iso === "other" ? lang.label : `${lang.iso.toUpperCase()} — ${lang.label}`}
+                </option>
+              ))}
+            </select>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "var(--life-neutral-400)" }}>
+              <path d="M3 5l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+          {selectedLanguageOption === "other" && (
+            <div style={{ marginTop: 10 }}>
+              <input
+                type="text"
+                value={customLanguage}
+                onChange={(e) => {
+                  const nextCustomValue = e.target.value;
+                  setCustomLanguage(nextCustomValue);
+                  setLanguage(nextCustomValue);
+                  setSelectedLanguageOption("other");
+                  markDirty();
+                }}
+                placeholder="Enter the default language"
+                style={inputBase}
+                onFocus={focusIn}
+                onBlur={focusOut}
+              />
+            </div>
+          )}
+        </div>
+
+      </div>
+
+      {/* ── Divider ───────────────────────────────────────────────── */}
+      <div style={{ height: 1, background: "var(--life-neutral-200)", margin: "28px 0" }} />
+
+      {/* ── Collaboration — Shared With ────────────────────────────── */}
+      <div>
+        <div style={{ marginBottom: 16 }}>
+          <h5 style={{ fontFamily: '"Lato", sans-serif', fontSize: 16, fontWeight: 700, color: "var(--life-base-black)", margin: 0 }}>
+            Collaboration — Shared With
+          </h5>
+          <p style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-neutral-400)", marginTop: 4, marginBottom: 0 }}>
+            Collaborators in the instance who have access to this course.
+          </p>
+        </div>
+
+        {/* Share mode radio */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 18 }}>
+          {(["all", "specific"] as const).map((mode) => (
+            <label key={mode} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+              <input
+                type="radio"
+                name="shareMode"
+                value={mode}
+                checked={shareMode === mode}
+                onChange={() => setShareMode(mode)}
+                style={{ accentColor: "var(--life-primary-500)", width: 16, height: 16, cursor: "pointer", flexShrink: 0 }}
+              />
+              <span style={{ fontFamily: '"Lato", sans-serif', fontSize: 14, color: "var(--life-base-black)" }}>
+                {mode === "all" ? "Share with All" : "Share with"}
+              </span>
+            </label>
+          ))}
+        </div>
+
+        {/* Share with All banner */}
+        {shareMode === "all" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 8, background: "var(--life-primary-020)", border: "1px solid var(--life-primary-300)", marginBottom: 12 }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--life-primary-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+              <circle cx="9" cy="7" r="4" />
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+              <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+            <span style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-primary-600)", lineHeight: 1.4 }}>
+              All members of your organization will have access to this course.
+            </span>
+          </div>
+        )}
+
+        {/* Email input for specific sharing */}
+        {shareMode === "specific" && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ position: "relative", marginBottom: emailError ? 6 : 0 }}>
+              <div
+                role="group"
+                aria-label="Share with users"
+                onMouseDown={(event) => {
+                  if (event.target instanceof HTMLButtonElement) return;
+                  event.preventDefault();
+                  emailInputRef.current?.focus();
+                }}
+                style={{
+                  ...inputBase,
+                  minHeight: 44,
+                  height: "auto",
+                  padding: "7px 10px",
+                  display: "flex",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 8,
+                  borderColor: emailInputFocused ? "var(--life-primary-500)" : "var(--life-neutral-400)",
+                }}
+              >
+                {collaborators.map(({ userId, email }) => (
+                  <span
+                    key={userId}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 8,
+                      maxWidth: "100%",
+                      padding: "5px 10px",
+                      borderRadius: 6,
+                      background: "#15d28e",
+                      color: "#ffffff",
+                      fontFamily: '"Lato", sans-serif',
+                      fontSize: 13,
+                      fontWeight: 700,
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{email}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveCollaborator(userId)}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        cursor: "pointer",
+                        color: "inherit",
+                        lineHeight: 1,
+                        padding: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        opacity: 0.92,
+                      }}
+                      aria-label={`Remove collaborator ${email}`}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                        <path d="M9 3L3 9M3 3l6 6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  </span>
+                ))}
+                <input
+                  ref={emailInputRef}
+                  type="email"
+                  value={emailInput}
+                  onChange={(e) => {
+                    setEmailInput(e.target.value);
+                    setEmailError(null);
+                    if (!showEmailSuggestions) setShowEmailSuggestions(true);
+                  }}
+                  onKeyDown={handleEmailInputKeyDown}
+                  placeholder={collaborators.length === 0 ? "colleague@laerdal.com" : ""}
+                  style={{
+                    flex: 1,
+                    minWidth: 180,
+                    height: 28,
+                    border: "none",
+                    outline: "none",
+                    background: "transparent",
+                    padding: 0,
+                    margin: "2px 4px",
+                    fontFamily: '"Lato", sans-serif',
+                    fontSize: 14,
+                    color: "var(--life-base-black)",
+                  }}
+                  onFocus={() => {
+                    setEmailInputFocused(true);
+                    if (emailSuggestions.length > 0) setShowEmailSuggestions(true);
+                  }}
+                  onBlur={() => {
+                    setEmailInputFocused(false);
+                    window.setTimeout(() => setShowEmailSuggestions(false), 120);
+                  }}
+                />
+              </div>
+              {showEmailSuggestions && (emailSuggestions.length > 0 || emailSearching) && (
+                <div
+                  role="listbox"
+                  aria-label="User suggestions"
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 6px)",
+                    left: 0,
+                    right: 0,
+                    zIndex: 30,
+                    background: "#ffffff",
+                    border: "1px solid var(--life-neutral-200)",
+                    borderRadius: 8,
+                    boxShadow: "0 8px 20px rgba(0,0,0,0.08)",
+                    maxHeight: 220,
+                    overflowY: "auto",
+                  }}
+                >
+                  {emailSearching && emailSuggestions.length === 0 ? (
+                    <div style={{ padding: "10px 12px", fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-neutral-400)" }}>
+                      Searching users...
+                    </div>
+                  ) : (
+                    emailSuggestions.map((user, index) => {
+                      const isActive = index === activeEmailSuggestionIndex;
+                      return (
+                        <button
+                          key={user._id}
+                          type="button"
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                            handleSelectEmailSuggestion(user);
+                          }}
+                          onMouseEnter={() => setActiveEmailSuggestionIndex(index)}
+                          style={{
+                            width: "100%",
+                            textAlign: "left",
+                            border: "none",
+                            background: isActive ? "var(--life-primary-020)" : "#ffffff",
+                            padding: "10px 12px",
+                            cursor: "pointer",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 2,
+                          }}
+                        >
+                          <span style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, fontWeight: 700, color: "var(--life-base-black)" }}>
+                            {user.email}
+                          </span>
+                          {(user.firstName || user.lastName) && (
+                            <span style={{ fontFamily: '"Lato", sans-serif', fontSize: 12, color: "var(--life-neutral-400)" }}>
+                              {[user.firstName, user.lastName].filter(Boolean).join(" ")}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+            {emailError && (
+              <div style={{ fontFamily: '"Lato", sans-serif', fontSize: 12, color: "var(--life-critical-600)", marginTop: 4, lineHeight: 1.4 }}>
+                {emailError}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {showAuthoringBanner && (
+        <>
+          <div style={{ height: 1, background: "var(--life-neutral-200)", margin: "28px 0" }} />
+          <div style={{ position: "relative", display: "flex", alignItems: "flex-start", gap: 14, padding: "18px 20px", borderRadius: 10, background: "var(--life-primary-020)", border: "1px solid var(--life-primary-300)" }}>
+            <div style={{ flexShrink: 0, marginTop: 2 }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--life-primary-500)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6L12 2z" />
+              </svg>
+            </div>
+
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontFamily: '"Lato", sans-serif', fontSize: 15, fontWeight: 700, color: "var(--life-base-black)", marginBottom: 4 }}>
+                Ready to start authoring?
+              </div>
+              <div style={{ fontFamily: '"Lato", sans-serif', fontSize: 13, color: "var(--life-neutral-500)", lineHeight: 1.55, marginBottom: 14 }}>
+                Nice - now start authoring by adding pages and building your course structure. We&apos;ve already scaffolded a starter tree for you.
+              </div>
+              <button
+                type="button"
+                onClick={handleOpenCourseStructure}
+                disabled={loading || saving || !courseId}
+                className="inline-flex items-center gap-2 rounded-lg bg-[var(--life-primary-500)] px-4 py-2 text-sm font-bold text-[var(--life-base-white)] transition-colors hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <span>Open Course Structure</span>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <path d="M3 7h8M7 3l4 4-4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowAuthoringBanner(false)}
+              aria-label="Dismiss"
+              className="absolute top-[14px] right-[14px] flex items-center rounded text-[var(--life-neutral-400)] transition-colors hover:text-[var(--life-base-black)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--life-primary-500)] focus-visible:ring-offset-2"
+              style={{ background: "transparent", border: "none", cursor: "pointer", padding: 4 }}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M11 3L3 11M3 3l8 8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+        </>
+      )}
+
+      <UnsavedChangesModal
+        isOpen={showConfirmModal}
+        isSaving={saving}
+        onDiscard={handleConfirmDiscard}
+        onSave={handleConfirmSave}
+        onClose={clearPendingNavigation}
+      />
+      </div>
+      </div>
+    </div>
+  );
+}

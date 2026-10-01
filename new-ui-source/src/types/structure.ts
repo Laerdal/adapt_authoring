@@ -21,24 +21,119 @@ export interface SComponent {
   id: string;
   title: string;
   componentKey: string; // engine `_component` key, e.g. 'text' | 'mcq'
+  layout?: "full" | "left" | "right";
+  subtitle?: string;
+  description?: string;
+  instruction?: string;
+  themeSettings?: Record<string, unknown>;
+  properties?: Record<string, unknown>;
+  url?: string;
+  classes?: string;
+  colorLabel?: string;
+  isOptional?: boolean;
+  isAvailable?: boolean;
+  isHidden?: boolean;
+  isVisible?: boolean;
+  isResetOnRevisit?: "false" | "soft" | "hard";
+  showDisplayTitleInPreview?: boolean;
+  onScreen?: {
+    _isEnabled?: boolean;
+    _classes?: string;
+    _percentInviewVertical?: number;
+  };
+  ariaLevel?: string;
+  isA11yCompletionDescriptionEnabled?: boolean;
+  extensions?: Record<string, unknown>;
 }
 
 export interface SContentGroup {
   id: string;
   title: string;
+  displayTitle?: string;
+  description?: string;
+  instruction?: string;
+  themeSettings?: Record<string, unknown>;
+  classes?: string;
+  colorLabel?: string;
+  requireCompletionOf?: string;
+  isOptional?: boolean;
+  isAvailable?: boolean;
+  isHidden?: boolean;
+  isVisible?: boolean;
+  onScreen?: {
+    _isEnabled?: boolean;
+    _classes?: string;
+    _percentInviewVertical?: number;
+  };
+  ariaLevel?: string;
+  isA11yCompletionDescriptionEnabled?: boolean;
+  extensions?: Record<string, unknown>;
   components: SComponent[];
 }
 
 export interface SSection {
   id: string;
   title: string;
+  displayTitle?: string;
+  description?: string;
+  instruction?: string;
+  themeSettings?: Record<string, unknown>;
+  classes?: string;
+  colorLabel?: string;
+  requireCompletionOf?: string;
+  isOptional?: boolean;
+  isAvailable?: boolean;
+  isHidden?: boolean;
+  isVisible?: boolean;
+  onScreen?: {
+    _isEnabled?: boolean;
+    _classes?: string;
+    _percentInviewVertical?: number;
+  };
+  ariaLevel?: string;
+  isA11yCompletionDescriptionEnabled?: boolean;
+  extensions?: Record<string, unknown>;
   contentGroups: SContentGroup[];
 }
 
 export interface STopic {
   id: string;
   title: string;
+  displayTitle?: string;
   sortOrder: number;
+  subtitle?: string;
+  body?: string;
+  // contentobject.pageBody: "If set, this text will be shown instead of the
+  // body text when this page is viewed" (body stays the menu-item text).
+  pageBody?: string;
+  instruction?: string;
+  description?: string;
+  colorLabel?: string;
+  graphic?: {
+    src?: string;
+    alt?: string;
+  };
+  linkText?: string;
+  duration?: string;
+  lockType?: string;
+  lockedBy?: string[];
+  classes?: string;
+  htmlClasses?: string;
+  requireCompletionOf?: string;
+  isOptional?: boolean;
+  isAvailable?: boolean;
+  isHidden?: boolean;
+  isVisible?: boolean;
+  onScreen?: {
+    _isEnabled?: boolean;
+    _classes?: string;
+    _percentInviewVertical?: number;
+  };
+  ariaLevel?: string;
+  isA11yCompletionDescriptionEnabled?: boolean;
+  extensions?: Record<string, unknown>;
+  themeSettings?: Record<string, unknown>;
+  menuSettings?: Record<string, unknown>;
   sections: SSection[];
 }
 
@@ -62,10 +157,18 @@ export type ContainerChild =
   | { kind: "topic"; node: STopic; sortOrder: number };
 
 export function mergedChildren(modules: SModule[], topics: STopic[]): ContainerChild[] {
-  const children: ContainerChild[] = [
-    ...modules.map((node) => ({ kind: "module" as const, node, sortOrder: node.sortOrder })),
-    ...topics.map((node) => ({ kind: "topic" as const, node, sortOrder: node.sortOrder })),
-  ];
+  const seen = new Set<string>();
+  const children: ContainerChild[] = [];
+  for (const node of modules) {
+    if (seen.has(node.id)) continue;
+    seen.add(node.id);
+    children.push({ kind: "module" as const, node, sortOrder: node.sortOrder });
+  }
+  for (const node of topics) {
+    if (seen.has(node.id)) continue;
+    seen.add(node.id);
+    children.push({ kind: "topic" as const, node, sortOrder: node.sortOrder });
+  }
   return children.sort((a, b) => a.sortOrder - b.sortOrder);
 }
 

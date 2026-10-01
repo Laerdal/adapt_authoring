@@ -6,7 +6,7 @@ import {
   type StructureLevel,
   mergedChildren,
 } from "../../types/structure";
-import { StructureIcon } from "./StructureIcons";
+import { StructureIcon, STRUCTURE_ICON_COLOR_CLASS } from "./StructureIcons";
 
 // Top-down org-chart of the real course hierarchy:
 //   Course → Module → Sub-Module → Topic → Section → Content Group → Component
@@ -48,6 +48,7 @@ export default function CourseStructureMapView(props: Props) {
   const { structure, labels } = props;
   const [inlineId, setInlineId] = useState<string | null>(null);
   const [inlineValue, setInlineValue] = useState("");
+  const [inlineOriginalValue, setInlineOriginalValue] = useState("");
   const [fullscreen, setFullscreen] = useState(false);
 
   useEffect(() => {
@@ -57,21 +58,53 @@ export default function CourseStructureMapView(props: Props) {
     return () => document.removeEventListener("keyup", onKey);
   }, [fullscreen]);
 
-  function startRename(id: string, title: string) { setInlineId(id); setInlineValue(title); }
+  function startRename(id: string, title: string) {
+    setInlineId(id);
+    setInlineValue(title);
+    setInlineOriginalValue(title);
+  }
+  function handleInlineChange(level: StructureLevel, id: string, value: string) {
+    setInlineValue(value);
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    props.onRename(level, id, trimmed);
+  }
   function commitRename(level: StructureLevel) {
     if (!inlineId) return;
     const v = inlineValue.trim();
     const id = inlineId;
     setInlineId(null);
+    setInlineOriginalValue("");
     if (v) props.onRename(level, id, v);
   }
+  function cancelRename(level: StructureLevel, id: string) {
+    props.onRename(level, id, inlineOriginalValue);
+    setInlineId(null);
+    setInlineValue("");
+    setInlineOriginalValue("");
+  }
+
+  const levelTone = (level: StructureLevel | "course") => {
+    switch (level) {
+      case "topic":
+        return STRUCTURE_ICON_COLOR_CLASS.topic;
+      case "section":
+        return STRUCTURE_ICON_COLOR_CLASS.section;
+      case "contentGroup":
+        return STRUCTURE_ICON_COLOR_CLASS.contentGroup;
+      case "component":
+        return STRUCTURE_ICON_COLOR_CLASS.component;
+      default:
+        return "text-[#3d6b91]";
+    }
+  };
 
   function card(level: StructureLevel | "course", id: string, title: string, onOpen?: () => void) {
     const editing = inlineId === id;
     const levelLabel = level === "course" ? "Course" : labels[level];
     return (
       <div className={`csm-card inline-block w-[156px] rounded-xl border border-[#cfe0ef] bg-white shadow-sm overflow-hidden align-top ${onOpen ? "hover:shadow-md transition-shadow" : ""}`}>
-        <div className="h-14 bg-[#dbeaf5] flex items-center justify-center text-[#3d6b91]">
+        <div className={`h-14 bg-[#dbeaf5] flex items-center justify-center ${levelTone(level)}`}>
           {level === "course" ? (
             <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
               <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
@@ -86,9 +119,9 @@ export default function CourseStructureMapView(props: Props) {
               <input
                 autoFocus
                 value={inlineValue}
-                onChange={(e) => setInlineValue(e.target.value)}
+                onChange={(e) => handleInlineChange(level as StructureLevel, id, e.target.value)}
                 onClick={(e) => e.stopPropagation()}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitRename(level as StructureLevel); } else if (e.key === "Escape") { e.preventDefault(); setInlineId(null); } }}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitRename(level as StructureLevel); } else if (e.key === "Escape") { e.preventDefault(); cancelRename(level as StructureLevel, id); } }}
                 onBlur={() => commitRename(level as StructureLevel)}
                 aria-label="Edit title"
                 className="w-full text-xs border border-[#2d6fa8] rounded px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500"

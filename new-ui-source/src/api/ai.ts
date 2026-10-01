@@ -1,91 +1,139 @@
-// AI service — wraps compress() from headroom-ai around Anthropic fetch calls.
-// headroom-ai intercepts messages before they reach Claude, compressing
-// repeated course context, conversation history, and tool outputs.
+// AI service (ADAPT-3760, AC7).
+//
+// The browser no longer holds any LLM key. All AI calls go through the engine's
+// server-side proxy (POST /api/storyboard/ai), which talks to Azure OpenAI with
+// credentials that stay on the server (see plugins/content/storyboard/utils/
+// aiClient.js). VITE_ANTHROPIC_API_KEY and the direct Anthropic call have been
+// removed.
 
-import { compress } from 'headroom-ai';
+import { apiClient } from "./client";
+
+export type StoryboardAiAction = "improve" | "rewrite" | "summarize" | "suggest";
+
+// Samaritan Assistance actions (parity with the legacy CKEditor tool). `custom`
+// carries a free-text instruction. All share the same server proxy.
+export type SamaritanAction = "improve" | "shorten" | "lengthen" | "spelling" | "custom";
+
+// Run an AI action on a piece of text via the server proxy. Returns the result.
+export async function storyboardAi(
+  action: StoryboardAiAction,
+  text: string,
+  context?: string
+): Promise<string> {
+  const res = await apiClient.post<{ text: string }>("/api/storyboard/ai", { action, text, context });
+  return res.text ?? "";
+}
+
+// Samaritan Assistance call: a fixed action (improve/shorten/lengthen/spelling)
+// or a free-text `custom` instruction. `text` is the content to operate on (may
+// be empty for generate-from-scratch). `context` is the course title. Keys stay
+// server-side — same /api/storyboard/ai proxy.
+export async function samaritanAssist(
+  action: SamaritanAction,
+  text: string,
+  opts?: { instruction?: string; context?: string }
+): Promise<string> {
+  const res = await apiClient.post<{ text: string }>("/api/storyboard/ai", {
+    action,
+    text,
+    instruction: opts?.instruction,
+    context: opts?.context,
+  });
+  return res.text ?? "";
+}
 
 export interface ChatMessage {
-  role: 'user' | 'assistant';
+  role: "user" | "assistant";
   content: string;
 }
 
-export interface SendMessageOptions {
+// Back-compat helper for the (placeholder) AiAssistant chat widget: routes the
+// latest user turn through the server proxy. No client-side key.
+export async function sendMessage(opts: {
   messages: ChatMessage[];
-  systemPrompt?: string;
   courseContext?: unknown;
-  model?: string;
-  maxTokens?: number;
+}): Promise<{ text: string }> {
+  const lastUser = [...opts.messages].reverse().find((m) => m.role === "user");
+  const context = opts.courseContext ? JSON.stringify(opts.courseContext) : undefined;
+  const text = await storyboardAi("suggest", lastUser?.content ?? "", context);
+  return { text };
 }
 
-export interface SendMessageResult {
-  text: string;
-  tokensBefore: number;
-  tokensAfter: number;
-  tokensSaved: number;
+// ─── AI Tutor (Samaritan) — full feature parity with the legacy plugin ───
+// The new UI targets the same server routes the legacy frontend plugin uses
+// (see `frontend/src/plugins/ai-tutor` + `plugins/services/ai-tutor/routes`),
+// so both authoring surfaces share one Samaritan brain: same prompts, same
+// retrieval, same citation badges, same "new chat" history reset.
+
+export interface CitationBadge {
+  label: string;
+  href?: string;
 }
 
-const HEADROOM_BASE_URL = import.meta.env.VITE_HEADROOM_URL ?? 'http://localhost:8787';
-const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY ?? '';
-const DEFAULT_MODEL = 'claude-sonnet-4-6';
+// The route/context object the server expects. `route` is used server-side to
+// bias grounding (e.g. dashboard queries hit live course data — see
+// `isDashboardContext` in requestHandlers.js). All fields are optional.
+export interface AiTutorContext {
+  route?: string;
+  courseName?: string;
+  courseId?: string;
+  pageId?: string;
+  articleId?: string;
+  blockId?: string;
+  componentId?: string;
+  [key: string]: unknown;
+}
 
-export async function sendMessage(opts: SendMessageOptions): Promise<SendMessageResult> {
-  const { messages, systemPrompt, courseContext, model = DEFAULT_MODEL, maxTokens = 1024 } = opts;
+export interface AiTutorChatResponse {
+  reply: string;
+  citationBadges: CitationBadge[];
+}
 
-  // Build the raw messages array in Anthropic format
-  const rawMessages: Array<{ role: string; content: string }> = [];
+// Envelope every route in plugins/services/ai-tutor responds with (see
+// utils/sendResponse.js: `sendSuccess` → `{ success, data }`, `sendError` →
+// `{ success: false, error }`).
+interface AiTutorEnvelope<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+}
 
-  // Inline course context into the first user turn if provided
-  if (courseContext && messages.length > 0) {
-    const [first, ...rest] = messages;
-    rawMessages.push({
-      role: 'user',
-      content: `Course context:\n${JSON.stringify(courseContext)}\n\n${first.content}`,
-    });
-    rawMessages.push(...rest);
-  } else {
-    rawMessages.push(...messages);
-  }
-
-  // Compress with Headroom before sending to Anthropic
-  const result = await compress(rawMessages, {
-    model,
-    baseUrl: HEADROOM_BASE_URL,
-    fallback: true, // pass through uncompressed if proxy is unreachable
+// The full-parity "AI Tutor" service (Azure OpenAI + retrieval + citations +
+// server-side conversation history — see `plugins/services/ai-tutor`) IS
+// registered and running (`rest.post('/ai-tutor/chat', handleChat)` in
+// `plugins/services/ai-tutor/routes/index.js`) — it's just untracked by git
+// in this branch, which is not the same as "not deployed". The legacy
+// authoring tool widget (`frontend/src/plugins/ai-tutor/views/chatPanelView.js`)
+// already talks to it directly at POST /api/ai-tutor/chat with
+// `{ message, context }` and reads `resp.data.reply` / `resp.data.citationBadges`.
+// This widget must hit the same route with the same shape so both surfaces
+// share one Samaritan brain — routing through the storyboard text-rewrite
+// proxy instead (as a previous fix mistakenly did) skips the retrieval/
+// grounding/history behind /api/ai-tutor/chat, which is why Studio's replies
+// diverged from the Authoring Tool's.
+export async function aiTutorChat(
+  message: string,
+  context?: AiTutorContext
+): Promise<AiTutorChatResponse> {
+  const res = await apiClient.post<AiTutorEnvelope<AiTutorChatResponse>>("/api/ai-tutor/chat", {
+    message,
+    context,
   });
-
-  // Build Anthropic messages API request
-  const body: Record<string, unknown> = {
-    model,
-    max_tokens: maxTokens,
-    messages: result.messages,
-  };
-
-  if (systemPrompt) {
-    body.system = systemPrompt;
+  if (!res.success || !res.data) {
+    throw new Error(res.error || "AI Tutor request failed.");
   }
+  return { reply: res.data.reply ?? "", citationBadges: res.data.citationBadges ?? [] };
+}
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: { message: response.statusText } }));
-    throw new Error(error?.error?.message ?? `Anthropic API error ${response.status}`);
+// Clears this session's server-side conversation history so the next message
+// starts a fresh context (see `handleClearHistory` / `utils/sessionHistory.js`
+// in plugins/services/ai-tutor) — same route the legacy widget calls.
+export async function aiTutorClearHistory(): Promise<void> {
+  const res = await apiClient.post<AiTutorEnvelope<unknown>>("/api/ai-tutor/history/clear");
+  if (!res.success) {
+    // A 200 with `{ success: false, error }` must still fail loudly — otherwise
+    // the caller (and the UI) would report the conversation as cleared while
+    // server-side history is untouched.
+    throw new Error(res.error || "Failed to clear AI Tutor history.");
   }
-
-  const data = await response.json();
-  const text: string = data.content?.[0]?.text ?? '';
-
-  return {
-    text,
-    tokensBefore: result.tokensBefore,
-    tokensAfter: result.tokensAfter,
-    tokensSaved: result.tokensSaved,
-  };
 }

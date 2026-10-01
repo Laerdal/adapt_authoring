@@ -1,0 +1,7 @@
+{
+  "name": "adapt-content-storyboardaudit",
+  "displayName": "Storyboard Audit",
+  "version": "0.1.0",
+  "main": "index",
+  "dependencies": {}
+}

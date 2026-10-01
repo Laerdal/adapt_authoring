@@ -69,7 +69,7 @@ function doQuery(req, res, andOptions, next) {
     if(andList.length || andOptions.length) query.$and = andList.concat(andOptions);
 
     options.fields = DASHBOARD_COURSE_FIELDS.join(' ');
-    options.populate = Object.assign({ 'createdBy': 'email firstName lastName' }, options.populate);
+    options.populate = Object.assign({ 'createdBy': 'email firstName lastName', 'tags': '_id title' }, options.populate);
     options.jsonOnly = true;
     
     // Add a timeout to detect hanging queries
@@ -441,6 +441,7 @@ function duplicate(data, cb) {
 
       // New course name
       doc.title = 'Copy of ' + doc.title;
+      doc.displayTitle = doc.title;
 
       // Set the current user's ID as the creator
       doc.createdBy = user._id;
@@ -603,6 +604,18 @@ async function referenceId(courseId, cb) {
 
     // Update the configObject with the new footer custom id
     await updateContentObject(db, configObject);
+
+    // The updates above write straight to the collections, bypassing
+    // contentmanager's create/update/destroy hooks - so Studio's live-preview
+    // cache (which invalidates on those hooks) is never told this course
+    // changed. Fire the 'post' hooks manually so the cache doesn't serve
+    // stale data for this course until its TTL expires.
+    await new Promise((resolve) => {
+      origin().contentmanager.processContentHooks('update', 'course', {}, { when: 'post' }, (hookError) => {
+        if (hookError) console.error('Error invalidating Studio live cache after reference ID processing:', hookError);
+        resolve();
+      });
+    });
 
   } catch (error) {
     console.error('Error during reference ID processing:', error);

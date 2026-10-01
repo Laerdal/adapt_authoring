@@ -2,7 +2,11 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { CourseCard } from '@/components/course'
 import AiAssistant from '@/components/common/AiAssistant'
-import { createCourse, deleteCourse, duplicateCourse, fetchDashboardCourses, getAuthoringMenuOptions, getAuthoringThemeOptions, updateCourse } from '@/api/adaptAuthoring'
+import PermissionDeniedModal from '@/components/common/PermissionDeniedModal'
+import { useAuth, isSuperAdmin, canManageCourses } from '@/context/AuthContext'
+import { usePageLoader } from '@/hooks'
+import { createCourse, deleteCourse, duplicateCourse, fetchDashboardCourses, fetchDashboardTags, getAuthoringMenuOptions, getAuthoringThemeOptions, updateCourse, type CourseSort } from '@/api/adaptAuthoring'
+import ImportCourseModal from '@/components/importExport/Import'
 
 
 type Theme = string
@@ -33,7 +37,6 @@ const SORT_OPTIONS = [
   { label: 'Recently Modified', value: 'recent'    },
   { label: 'Alphabetical A–Z',  value: 'alpha-asc' },
   { label: 'Alphabetical Z–A',  value: 'alpha-desc'},
-  { label: 'Date Created',      value: 'date'      },
 ]
 const FALLBACK_THEME_OPTIONS: Theme[] = ['LIFE Theme']
 const FALLBACK_MENU_OPTIONS = ['LIFE Menu']
@@ -65,19 +68,21 @@ function pickPreferredMenu(options: string[]): string {
 export default function HomePage() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { user } = useAuth()
+  const canImportCourses = isSuperAdmin(user)
+  const canCreateOrManageCourses = canManageCourses(user)
   const [courses, setCourses] = useState<Course[]>([])
   const [isLoadingCourses, setIsLoadingCourses] = useState(true)
+  const [permissionDialog, setPermissionDialog] = useState<{ title: string; message: string } | null>(null)
   const READ_ONLY_REASON = 'Import is temporarily disabled until the matching Adapt API endpoint is wired.'
 
   // Search / filter / sort / view
   const [search, setSearch]           = useState('')
-  const [themeFilter, setThemeFilter] = useState<Theme | 'All'>('All')
   const [themeOptions, setThemeOptions] = useState<Theme[]>(FALLBACK_THEME_OPTIONS)
   const [menuOptions, setMenuOptions] = useState<string[]>(FALLBACK_MENU_OPTIONS)
   const [sort, setSort]               = useState('recent')
   const [view, setView]               = useState<'grid' | 'list'>('grid')
   const [sortOpen, setSortOpen]       = useState(false)
-  const [filterOpen, setFilterOpen]   = useState(false)
   const [tagFilterOpen, setTagFilterOpen] = useState(false)
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [tagSearch, setTagSearch]         = useState('')
@@ -93,25 +98,111 @@ export default function HomePage() {
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 3500)
   }, [])
 
-  const loadCourses = useCallback(async () => {
-    try {
-      setIsLoadingCourses(true)
-      const shared = location.pathname === '/shared'
-      const apiCourses = await fetchDashboardCourses(shared)
-      // Always reflect the live result — including empty (e.g. no shared courses),
-      // so the UI matches the engine instead of falling back to sample data.
-      setCourses(apiCourses)
-    } catch {
-      setCourses([])
-      showToast('Could not load live course data.', 'info')
-    } finally {
-      setIsLoadingCourses(false)
-    }
-  }, [location.pathname, showToast])
+  // Server-side search/sort/paging (parity with the old UI). We fetch one page at
+  // a time and let the server filter+sort the whole set, so a user with 1000s of
+  // courses never pulls them all; subsequent pages stream in on scroll.
+  const PAGE = 50
+  const loadGenRef = useRef(0)
+  const skipRef = useRef(0)
+  const loadingMoreRef = useRef(false)
+  const [hasMore, setHasMore] = useState(false)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
 
+  // usePageLoader(isLoadingCourses)
+
+  // Full tag universe for the filter dropdown (from the autocomplete endpoint,
+  // not the loaded course slice) + a title→id map to filter courses by tag id.
+  const [availableTags, setAvailableTags] = useState<string[]>([])
+  const tagIdByTitleRef = useRef<Record<string, string>>({})
+
+  // Debounce the search box so typing doesn't fire a request per keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(t)
+  }, [search])
+
+  const buildQuery = useCallback(() => ({
+    search: debouncedSearch,
+    sort: sort as CourseSort,
+    tags: selectedTags.map((t) => tagIdByTitleRef.current[t]).filter(Boolean),
+  }), [debouncedSearch, sort, selectedTags])
+
+  const loadCourses = useCallback(async () => {
+    const gen = ++loadGenRef.current
+    const shared = location.pathname === '/shared'
+    setIsLoadingCourses(true)
+    skipRef.current = 0
+    try {
+      const page = await fetchDashboardCourses(shared, 0, PAGE, buildQuery())
+      if (gen !== loadGenRef.current) return // superseded (route change / newer load)
+      setCourses(page)
+      skipRef.current = PAGE
+      setHasMore(page.length === PAGE)
+    } catch {
+      if (gen === loadGenRef.current) {
+        setCourses([])
+        setHasMore(false)
+        showToast('Could not load live course data.', 'info')
+      }
+    } finally {
+      if (gen === loadGenRef.current) setIsLoadingCourses(false)
+    }
+  }, [location.pathname, buildQuery, showToast])
+
+  const loadMore = useCallback(async () => {
+    if (!hasMore || loadingMoreRef.current) return
+    const gen = loadGenRef.current
+    const shared = location.pathname === '/shared'
+    loadingMoreRef.current = true
+    setIsLoadingMore(true)
+    try {
+      const page = await fetchDashboardCourses(shared, skipRef.current, PAGE, buildQuery())
+      if (gen !== loadGenRef.current) return // a page-0 reload superseded us
+      setCourses((prev) => {
+        const seen = new Set(prev.map((c) => c.backendId))
+        return [...prev, ...page.filter((c) => c.backendId && !seen.has(c.backendId))]
+      })
+      skipRef.current += PAGE
+      setHasMore(page.length === PAGE)
+    } catch {
+      /* keep what we have; the sentinel retries on the next scroll */
+    } finally {
+      loadingMoreRef.current = false
+      if (gen === loadGenRef.current) setIsLoadingMore(false)
+    }
+  }, [hasMore, location.pathname, buildQuery])
+
+  // (Re)load page 0 whenever the route or any server-side filter/sort changes.
   useEffect(() => {
     void loadCourses()
   }, [loadCourses])
+
+  // Load the tag universe once for the filter dropdown.
+  useEffect(() => {
+    let cancelled = false
+    fetchDashboardTags()
+      .then((rows) => {
+        if (cancelled) return
+        tagIdByTitleRef.current = Object.fromEntries(rows.map((r) => [r.title, r.id]))
+        setAvailableTags(rows.map((r) => r.title))
+      })
+      .catch(() => { if (!cancelled) setAvailableTags([]) })
+    return () => { cancelled = true }
+  }, [])
+
+  // Infinite scroll: pull the next page when the sentinel nears the viewport.
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el) return
+    const io = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) void loadMore() },
+      { rootMargin: '400px' },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [loadMore])
 
   useEffect(() => {
     let cancelled = false;
@@ -161,7 +252,6 @@ export default function HomePage() {
     function handleMouseDown(e: MouseEvent) {
       if (toolbarRef.current && !toolbarRef.current.contains(e.target as Node)) {
         setSortOpen(false)
-        setFilterOpen(false)
         setTagFilterOpen(false)
       }
     }
@@ -264,6 +354,7 @@ export default function HomePage() {
 
   // Import
   const importInputRef = useRef<HTMLInputElement>(null)
+  const [importModalOpen, setImportModalOpen] = useState(false)
 
   function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -272,10 +363,24 @@ export default function HomePage() {
     showToast(`${READ_ONLY_REASON} Import is blocked for now.`, 'info')
   }
 
+  async function handleImportSuccess(deprecatedPlugins?: string[]) {
+    await loadCourses()
+    if (deprecatedPlugins && deprecatedPlugins.length > 0) {
+      showToast(
+        `Course imported with warnings: deprecated plugin(s) found — ${deprecatedPlugins.join(', ')}. We recommend replacing or removing them.`,
+        'info'
+      )
+    } else {
+      showToast('Course imported successfully.')
+    }
+  }
+  function showPermissionDenied(title: string, message: string) {
+    setPermissionDialog({ title, message })
+  }
+
   function clearSearch() { setSearch('') }
-  function clearTheme()  { setThemeFilter('All') }
   function clearTags()   { setSelectedTags([]) }
-  function clearAll()    { setSearch(''); setThemeFilter('All'); setSelectedTags([]) }
+  function clearAll()    { setSearch(''); setSelectedTags([]) }
 
   function toggleTag(tag: string) {
     setSelectedTags((prev) => (
@@ -285,45 +390,18 @@ export default function HomePage() {
     ))
   }
 
-  function normalizeTagValue(tag: unknown): string {
-    if (typeof tag === 'string') return tag.trim()
-    if (!tag || typeof tag !== 'object') return ''
-
-    const candidate = tag as { title?: unknown; name?: unknown; label?: unknown; id?: unknown }
-    const text = candidate.title ?? candidate.name ?? candidate.label ?? candidate.id
-    return typeof text === 'string' ? text.trim() : ''
-  }
-
-  const availableTags = useMemo(() => {
-    const tags = courses.flatMap((course) => course.tags)
-      .map((tag) => normalizeTagValue(tag))
-      .filter(Boolean)
-
-    return Array.from(new Set(tags)).sort((a, b) => a.localeCompare(b))
-  }, [courses])
-
-  const displayed = useMemo(() => {
-    let list = courses.filter((c) => {
-      const q = search.trim().toLowerCase()
-      const matchSearch = q === '' || c.title.toLowerCase().includes(q)
-      const matchTheme  = themeFilter === 'All' || c.theme === themeFilter
-      const courseTagLabels = c.tags.map((courseTag) => normalizeTagValue(courseTag)).filter(Boolean)
-      const matchTags = selectedTags.length === 0 || selectedTags.every((selectedTag) => (
-        courseTagLabels.some((courseTag) => courseTag.toLowerCase() === selectedTag.toLowerCase())
-      ))
-      return matchSearch && matchTheme && matchTags
-    })
-    switch (sort) {
-      case 'alpha-asc':  list = [...list].sort((a, b) => a.title.localeCompare(b.title)); break
-      case 'alpha-desc': list = [...list].sort((a, b) => b.title.localeCompare(a.title)); break
-      case 'date':       list = [...list].sort((a, b) => a.savedDateTs - b.savedDateTs);  break
-      default:           list = [...list].sort((a, b) => b.savedDateTs - a.savedDateTs);  break // recent
-    }
-    return list
-  }, [courses, search, themeFilter, selectedTags, sort])
+  // Courses arrive already filtered + sorted by the server (see fetchDashboardCourses),
+  // so the list is rendered as-is — no client-side filter/sort pass.
+  const displayed = courses
 
   const activeSort = SORT_OPTIONS.find((o) => o.value === sort)!
-  const hasFilters = search.trim() !== '' || themeFilter !== 'All' || selectedTags.length > 0
+  const hasFilters = search.trim() !== '' || selectedTags.length > 0
+
+  // When Vanilla theme is selected, only Box Menu is allowed
+  const isVanillaSelected = /vanilla/i.test(newTheme)
+  function pickBoxMenu(options: string[]): string {
+    return options.find((o) => /box/i.test(o)) ?? options[0] ?? 'Box Menu'
+  }
 
   return (
     <>
@@ -332,40 +410,47 @@ export default function HomePage() {
           {/* Page heading */}
           <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">{location.pathname === '/shared' ? 'Shared with Me' : location.pathname === '/my-courses' ? 'My Courses' : 'All Courses'}</h1>
-              <p className="text-sm text-[#6b7280] mt-1">Manage and organize your courses</p>
-              <p className="text-xs text-[#b45309] mt-1">Partial write mode: copy, edit, delete, and create are persisted; import remains disabled.</p>
+              <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">{location.pathname === '/shared' ? 'Shared with Me' : 'My Courses'}</h1>
+              <p className="text-sm text-[#6b7280] mt-1">{location.pathname === '/shared' ? 'View and access courses shared with you' : 'Manage and organize your courses'}</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               {/* Import */}
-              <input
-                ref={importInputRef}
-                type="file"
-                accept=".zip,.json"
-                className="hidden"
-                aria-label="Import course file"
-                onChange={handleImport}
-              />
-              <button
-                type="button"
-                onClick={() => importInputRef.current?.click()}
-                title={READ_ONLY_REASON}
-                disabled
-                className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[#d1d5db] hover:bg-[#f9fafb] text-[#374151] text-sm font-semibold rounded-lg transition-colors"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="17 8 12 3 7 8" />
-                  <line x1="12" y1="3" x2="12" y2="15" />
-                </svg>
-                <span className="hidden sm:inline">Import Course</span>
-                <span className="sm:hidden">Import</span>
-              </button>
+              {canImportCourses && (
+              <>  
+                <input
+                  ref={importInputRef}
+                  type="file"
+                  accept=".zip,.json"
+                  className="hidden"
+                  aria-label="Import course file"
+                  onChange={handleImport}
+                />
+                <button
+                  type="button"
+                  onClick={() => setImportModalOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-white border border-[#d1d5db] hover:bg-[#f9fafb] text-[#374151] text-sm font-semibold rounded-lg transition-colors"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                  </svg>
+                  <span className="hidden sm:inline">Import Course</span>
+                  <span className="sm:hidden">Import</span>
+                </button>
+              </>
+              )}
 
               {/* Create New Course */}
               <button
                 type="button"
-                onClick={openCreateModal}
+                onClick={() => {
+                  if (!canCreateOrManageCourses) {
+                    showPermissionDenied('Create Course', 'You do not have permission to create a new course.');
+                    return;
+                  }
+                  openCreateModal();
+                }}
                 className="flex items-center gap-2 px-4 py-2.5 bg-[#2d6fa8] hover:bg-[#245c8f] text-white text-sm font-semibold rounded-lg transition-colors"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -406,7 +491,7 @@ export default function HomePage() {
               <div className="relative shrink-0">
                 <button
                   type="button"
-                  onClick={() => { setTagFilterOpen((open) => !open); setFilterOpen(false); setSortOpen(false); setTagSearch('') }}
+                  onClick={() => { setTagFilterOpen((open) => !open); setSortOpen(false); setTagSearch('') }}
                   className={`flex items-center gap-1.5 px-3 py-2.5 text-sm border rounded-lg transition-colors whitespace-nowrap ${
                     selectedTags.length > 0
                       ? 'border-[#2d6fa8] bg-[#dbeeff] text-[#2d6fa8] font-medium'
@@ -455,7 +540,7 @@ export default function HomePage() {
                             isSelected ? 'bg-[#dbeeff] text-[#2d6fa8] font-medium' : 'text-[#374151] hover:bg-[#f9fafb]'
                           }`}
                         >
-                          <span>#{tag}</span>
+                          <span>{tag}</span>
                           {isSelected && (
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
                               <polyline points="20 6 9 17 4 12" />
@@ -479,65 +564,11 @@ export default function HomePage() {
             </div>
 
             <div className="flex items-center gap-2 ml-auto sm:ml-0">
-              {/* Theme filter */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => { setFilterOpen((o) => !o); setSortOpen(false) }}
-                  className={`flex items-center gap-1.5 px-3 py-2.5 text-sm border rounded-lg transition-colors whitespace-nowrap ${
-                    themeFilter !== 'All'
-                      ? 'border-[#2d6fa8] bg-[#dbeeff] text-[#2d6fa8] font-medium'
-                      : 'bg-white border-[#e5e7eb] text-[#374151] hover:bg-[#f9fafb]'
-                  }`}
-                >
-                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 4h18M7 8h10M11 12h2" />
-                  </svg>
-                  <span className="hidden sm:inline">{themeFilter === 'All' ? 'Filter' : themeFilter}</span>
-                  {themeFilter !== 'All' && (
-                    <span className="w-4 h-4 rounded-full bg-[#2d6fa8] text-white text-[10px] font-bold flex items-center justify-center">1</span>
-                  )}
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${filterOpen ? 'rotate-180' : ''}`}>
-                    <path d="M6 9l6 6 6-6" />
-                  </svg>
-                </button>
-                {filterOpen && (
-                  <div className="absolute right-0 mt-1 w-52 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-20 py-1">
-                    <p className="px-3 py-1.5 text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">Filter by theme</p>
-                    {(['All', ...themeOptions]).map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => { setThemeFilter(opt as Theme | 'All'); setFilterOpen(false) }}
-                        className={`w-full text-left px-3 py-2 text-sm transition-colors flex items-center justify-between ${
-                          themeFilter === opt ? 'bg-[#dbeeff] text-[#2d6fa8] font-medium' : 'text-[#374151] hover:bg-[#f9fafb]'
-                        }`}
-                      >
-                        {opt === 'All' ? 'All Themes' : opt}
-                        {themeFilter === opt && (
-                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
-                        )}
-                      </button>
-                    ))}
-                    {themeFilter !== 'All' && (
-                      <>
-                        <div className="border-t border-[#f3f4f6] my-1" />
-                        <button type="button" onClick={() => { clearTheme(); setFilterOpen(false) }} className="w-full text-left px-3 py-2 text-sm text-[#ef4444] hover:bg-[#fef2f2] transition-colors">
-                          Clear filter
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-
               {/* Sort dropdown */}
               <div className="relative">
                 <button
                   type="button"
-                  onClick={() => { setSortOpen((o) => !o); setFilterOpen(false) }}
+                  onClick={() => { setSortOpen((o) => !o); setTagFilterOpen(false) }}
                   className="flex items-center gap-1.5 px-3 py-2.5 text-sm text-[#374151] bg-white border border-[#e5e7eb] rounded-lg hover:bg-[#f9fafb] transition-colors whitespace-nowrap"
                 >
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -613,19 +644,9 @@ export default function HomePage() {
                   </button>
                 </span>
               )}
-              {themeFilter !== 'All' && (
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#dbeeff] text-xs text-[#2d6fa8] font-medium">
-                  Theme: {themeFilter}
-                  <button type="button" onClick={clearTheme} aria-label="Remove theme filter" className="text-[#2d6fa8] hover:text-[#1e4d73] ml-0.5">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
-                  </button>
-                </span>
-              )}
               {selectedTags.map((tag) => (
                 <span key={tag} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#eef2ff] text-xs text-[#3730a3] font-medium">
-                  Tag: #{tag}
+                  Tag: {tag}
                   <button
                     type="button"
                     onClick={() => setSelectedTags((prev) => prev.filter((item) => item.toLowerCase() !== tag.toLowerCase()))}
@@ -661,14 +682,23 @@ export default function HomePage() {
           ) : (
             <div className={
               view === 'grid'
-                ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5'
+                ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[repeat(auto-fit,minmax(max(280px,calc((100%_-_5rem)/5)),1fr))] gap-4 md:gap-5'
                 : 'flex flex-col gap-2'
             }>
               {displayed.map((course) => (
                 <CourseCard
                   key={course.id}
                   {...course}
-                  view={view}
+                  showAuthor={location.pathname === '/shared'}
+                  canManageCourses={canCreateOrManageCourses}
+                  onPermissionDenied={(action) => {
+                    if (action === 'edit') {
+                      showPermissionDenied('Edit Course', 'You do not have permission to edit this course.');
+                    } else if (action === 'delete') {
+                      showPermissionDenied('Delete Course', 'You do not have permission to delete this course.');
+                    }
+                  }}
+                  viewHref={course.backendId ? `/course/${course.backendId}/preview` : ""}
                   onUpdate={(patch) => handleUpdate(course.id, patch)}
                   onCopy={() => handleCopy(course.id)}
                   onCopyId={() => handleCopyId(course.id)}
@@ -677,7 +707,21 @@ export default function HomePage() {
               ))}
             </div>
           )}
+
+          {/* Infinite-scroll sentinel — pulls the next server page as it nears view */}
+          {hasMore && (
+            <div ref={sentinelRef} className="flex justify-center py-8 text-sm text-[#9ca3af]">
+              {isLoadingMore ? 'Loading more…' : ''}
+            </div>
+          )}
     </div>
+
+      <PermissionDeniedModal
+        open={!!permissionDialog}
+        title={permissionDialog?.title ?? 'Permission Denied'}
+        message={permissionDialog?.message ?? 'You do not have permission to perform this action.'}
+        onClose={() => setPermissionDialog(null)}
+      />
 
       {/* Create Course Modal */}
       {createOpen && (
@@ -690,7 +734,7 @@ export default function HomePage() {
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#e5e7eb]">
               <div>
                 <h2 className="font-semibold text-[#111827] text-base">Create New Course</h2>
-                <p className="text-xs text-[#6b7280] mt-0.5">Set up the basics before entering the editor</p>
+                <p className="text-xs text-[#6b7280] mt-0.5">Set up the course basics to get started.</p>
               </div>
               <button
                 type="button"
@@ -755,7 +799,13 @@ export default function HomePage() {
                           <button
                             key={opt}
                             type="button"
-                            onClick={() => { setNewTheme(opt); setThemeOpen(false); }}
+                            onClick={() => {
+                              setNewTheme(opt)
+                              setThemeOpen(false)
+                              if (/vanilla/i.test(opt)) {
+                                setNewMenu(pickBoxMenu(menuOptions))
+                              }
+                            }}
                             className={`w-full text-left px-3 py-2 text-sm transition-colors ${newTheme === opt ? 'bg-[#dbeeff] text-[#2d6fa8] font-medium' : 'text-[#374151] hover:bg-[#f9fafb]'}`}
                           >
                             {opt}
@@ -782,16 +832,27 @@ export default function HomePage() {
                     </button>
                     {menuOpen && (
                       <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-[#e5e7eb] rounded-lg shadow-lg z-10 py-1">
-                        {menuOptions.map((opt) => (
-                          <button
-                            key={opt}
-                            type="button"
-                            onClick={() => { setNewMenu(opt); setMenuOpen(false); }}
-                            className={`w-full text-left px-3 py-2 text-sm transition-colors ${newMenu === opt ? 'bg-[#dbeeff] text-[#2d6fa8] font-medium' : 'text-[#374151] hover:bg-[#f9fafb]'}`}
-                          >
-                            {opt}
-                          </button>
-                        ))}
+                        {menuOptions.map((opt) => {
+                            const isBoxOpt = /box/i.test(opt)
+                            const isDisabled = isVanillaSelected && !isBoxOpt
+                            return (
+                              <button
+                                key={opt}
+                                type="button"
+                                disabled={isDisabled}
+                                onClick={() => { if (!isDisabled) { setNewMenu(opt); setMenuOpen(false) } }}
+                                className={`w-full text-left px-3 py-2 text-sm transition-colors ${
+                                  isDisabled
+                                    ? 'text-[#d1d5db] cursor-not-allowed'
+                                    : newMenu === opt
+                                    ? 'bg-[#dbeeff] text-[#2d6fa8] font-medium'
+                                    : 'text-[#374151] hover:bg-[#f9fafb]'
+                                }`}
+                              >
+                                {opt}
+                              </button>
+                            )
+                          })}
                       </div>
                     )}
                   </div>
@@ -811,7 +872,7 @@ export default function HomePage() {
               <button
                 type="button"
                 onClick={handleNext}
-                disabled={!newTitle.trim() || isCreatingCourse}
+                disabled={!newTitle.trim() || isCreatingCourse || (isVanillaSelected && !/box/i.test(newMenu))}
                 className="flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] disabled:opacity-40 disabled:cursor-not-allowed rounded-lg transition-colors"
               >
                 {isCreatingCourse ? 'Creating...' : 'Next'}
@@ -859,6 +920,12 @@ export default function HomePage() {
           </div>
         ))}
       </div>
+
+      <ImportCourseModal
+        isOpen={importModalOpen}
+        onClose={() => setImportModalOpen(false)}
+        onSuccess={handleImportSuccess}
+      />
 
       <AiAssistant context="Dashboard" />
     </>

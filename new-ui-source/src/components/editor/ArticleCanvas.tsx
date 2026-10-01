@@ -1,7 +1,8 @@
 "use client";
 
 import BlockCanvas from "./BlockCanvas";
-import type { ArticleData, BlockData } from "@/components/course/CourseEditor";
+import EditorMaskIcon from "./EditorMaskIcon";
+import type { ArticleData, BlockData } from "@/pages/editor/pageEditorWorkspace";
 
 interface ArticleCanvasProps {
   article: ArticleData;
@@ -22,6 +23,7 @@ interface ArticleCanvasProps {
   selectedComponentId?: string | null;
   isSelected: boolean;
   isEditingInPanel?: boolean;
+  previewMode?: boolean;
 }
 
 export default function ArticleCanvas({
@@ -43,6 +45,7 @@ export default function ArticleCanvas({
   selectedComponentId,
   isSelected,
   isEditingInPanel,
+  previewMode = false,
 }: ArticleCanvasProps) {
   function handleCardClick(e: React.MouseEvent) {
     e.stopPropagation();
@@ -57,43 +60,51 @@ export default function ArticleCanvas({
         className={`menu-canvas-card relative w-full max-w-3xl mx-auto cursor-pointer transition-all border-2 ${
           isSelected
             ? "border-[#2E7FA1] bg-[#D4E9F2]"
-            : isEditingInPanel
-              ? "border-transparent bg-white hover:border-[#2E7FA1]"
-              : "border-[#E5E5E5] bg-white hover:border-[#2E7FA1]"
+            : "border-transparent bg-white hover:border-transparent hover:shadow-[0_0_5px_2px_#CBE1E6]"
         }`}
       >
-        <div className="flex items-start gap-4 px-6 py-6">
+        <div className={`flex items-start ${previewMode ? "gap-0 px-6 py-4" : "gap-4 px-6 py-6"}`}>
           {/* Drag handle */}
-          <div className="text-[#ABABAB] flex-shrink-0 mt-1">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-              <circle cx="9" cy="5" r="1.5" />
-              <circle cx="9" cy="12" r="1.5" />
-              <circle cx="9" cy="19" r="1.5" />
-              <circle cx="16" cy="5" r="1.5" />
-              <circle cx="16" cy="12" r="1.5" />
-              <circle cx="16" cy="19" r="1.5" />
-            </svg>
-          </div>
+          {!previewMode && (
+            <div className="text-[#ABABAB] flex-shrink-0 mt-1">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="9" cy="5" r="1.5" />
+                <circle cx="9" cy="12" r="1.5" />
+                <circle cx="9" cy="19" r="1.5" />
+                <circle cx="16" cy="5" r="1.5" />
+                <circle cx="16" cy="12" r="1.5" />
+                <circle cx="16" cy="19" r="1.5" />
+              </svg>
+            </div>
+          )}
 
           <div className="flex-1 flex flex-col gap-4">
             {/* "Article" chip */}
-            <div className="menu-canvas-chip self-start rounded-lg px-3 py-1 text-sm font-medium">
-              Article
-            </div>
+            {!previewMode && (
+              <div className="menu-canvas-chip self-start rounded-lg px-3 py-1 text-sm font-medium">
+                Article
+              </div>
+            )}
 
             {/* Article Title */}
-            <input
-              type="text"
-              value={article.title}
-              onChange={(e) => onUpdate({ title: e.target.value })}
-              placeholder="Article Title"
-              className="w-full bg-transparent border-none outline-none text-2xl font-bold placeholder-[#ABABAB] focus:ring-0 cursor-text font-[Lato]"
-              aria-label="Article title"
-            />
+            {previewMode ? (
+              <h2 className="w-full text-4xl font-normal leading-tight font-[Lato] text-[#1f2937]">
+                {article.title || "Untitled Section"}
+              </h2>
+            ) : (
+              <input
+                type="text"
+                value={article.title}
+                onChange={(e) => onUpdate({ title: e.target.value })}
+                placeholder="Article Title"
+                className="w-full bg-transparent border-none outline-none text-2xl font-bold placeholder-[#ABABAB] focus:ring-0 cursor-text font-[Lato]"
+                aria-label="Article title"
+              />
+            )}
           </div>
 
           {/* Action icons */}
-          <div className="flex items-center gap-2 flex-shrink-0">
+          {!previewMode && <div className="flex items-center gap-2 flex-shrink-0">
             <button
               type="button"
               aria-label="Copy article"
@@ -111,11 +122,9 @@ export default function ArticleCanvas({
               onClick={(e) => { e.stopPropagation(); if (window.confirm("Delete this article?")) onDelete?.(); }}
               className="w-6 h-6 flex items-center justify-center rounded text-[#ABABAB] hover:text-[#DC3449] hover:bg-[#FDDEE2] transition-colors"
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6h16zM10 11v6M14 11v6" />
-              </svg>
+              <EditorMaskIcon file="delete-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current" />
             </button>
-          </div>
+          </div>}
         </div>
       </div>
 
@@ -150,6 +159,7 @@ export default function ArticleCanvas({
               selectedComponentId={selectedComponentId}
               isSelected={selectedBlockId === block.id}
               isEditingInPanel={isEditingInPanel}
+              previewMode={previewMode}
             />
           ))
         )}

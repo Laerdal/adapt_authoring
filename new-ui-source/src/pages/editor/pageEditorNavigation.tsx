@@ -1,0 +1,165 @@
+import { CourseOutlinePanel } from "../../components/editor/index";
+import type { ContentPageData } from "./pageEditorWorkspace";
+import type { CourseStructure } from "../../types/structure";
+
+const ICON_BASE = "/new/assets/icons";
+
+function MaskIcon({ file, className }: { file: string; className?: string }) {
+  const iconPath = `${ICON_BASE}/${file}`;
+  return (
+    <span
+      aria-hidden="true"
+      className={className ?? "block w-[14px] h-[14px] shrink-0 bg-current"}
+      style={{
+        WebkitMaskImage: `url(${iconPath})`,
+        maskImage: `url(${iconPath})`,
+        WebkitMaskRepeat: "no-repeat",
+        maskRepeat: "no-repeat",
+        WebkitMaskPosition: "center",
+        maskPosition: "center",
+        WebkitMaskSize: "contain",
+        maskSize: "contain",
+      }}
+    />
+  );
+}
+
+interface PageEditorNavigationProps {
+  courseId: string;
+  leftPanelOpen: boolean;
+  onClosePanels: () => void;
+  onOpenPanels: () => void;
+  menuPageCreated: boolean;
+  menuSelected: boolean;
+  courseStructure?: CourseStructure | null;
+  contentPages: ContentPageData[];
+  selectedPageId: string | null;
+  selectedSubPageId: string | null;
+  selectedArticleId: string | null;
+  selectedBlockId: string | null;
+  selectedComponentId: string | null;
+  onMenuSelect: () => void;
+  onPageSelect: (pageId: string) => void;
+  onSubPageSelect: (pageId: string, subPageId: string) => void;
+  onArticleSelect: (pageId: string, articleId: string) => void;
+  onBlockSelect: (pageId: string, articleId: string, blockId: string) => void;
+  onComponentSelect: (pageId: string, articleId: string, blockId: string, componentId: string) => void;
+  onAddModule?: () => void;
+  onAddSubModule?: (parentModuleId: string) => void;
+  onDeleteModule?: (moduleId: string) => void;
+  onAddPage: (moduleId?: string) => void;
+  onDeletePage: (pageId: string) => void;
+  onAddArticle: (pageId: string) => void;
+  onDeleteArticle: (pageId: string, articleId: string) => void;
+  onAddSubPage: (pageId: string) => void;
+  onAddBlock: (pageId: string, articleId: string) => void;
+  onDeleteBlock: (pageId: string, articleId: string, blockId: string) => void;
+  onAddComponent: (pageId: string, articleId: string, blockId: string) => void;
+  onDeleteComponent: (pageId: string, articleId: string, blockId: string, componentId: string) => void;
+  onUseTemplate?: (target: {
+    level: "topic" | "section" | "group" | "component";
+    pageId: string;
+    articleId?: string;
+    blockId?: string;
+    moduleId?: string;
+  }) => void;
+}
+
+export default function PageEditorNavigation({
+  courseId,
+  leftPanelOpen,
+  onClosePanels,
+  onOpenPanels,
+  menuPageCreated,
+  menuSelected,
+  courseStructure,
+  contentPages,
+  selectedPageId,
+  selectedSubPageId,
+  selectedArticleId,
+  selectedBlockId,
+  selectedComponentId,
+  onMenuSelect,
+  onPageSelect,
+  onSubPageSelect,
+  onArticleSelect,
+  onBlockSelect,
+  onComponentSelect,
+  onAddModule,
+  onAddSubModule,
+  onDeleteModule,
+  onAddPage,
+  onDeletePage,
+  onAddArticle,
+  onDeleteArticle,
+  onAddSubPage,
+  onAddBlock,
+  onDeleteBlock,
+  onAddComponent,
+  onDeleteComponent,
+  onUseTemplate,
+}: PageEditorNavigationProps) {
+  return (
+    <>
+      {leftPanelOpen && (
+        <div
+          className="md:hidden fixed inset-0 z-30 bg-black/40"
+          onClick={onClosePanels}
+          aria-hidden="true"
+        />
+      )}
+
+      {leftPanelOpen && (
+        <div className="flex md:relative fixed inset-y-0 left-0 z-40 md:z-auto h-full md:h-auto shrink-0">
+          <CourseOutlinePanel
+            onClose={onClosePanels}
+            menuPageCreated={menuPageCreated}
+            menuSelected={menuSelected}
+            onMenuSelect={onMenuSelect}
+            courseStructure={courseStructure}
+            contentPages={contentPages}
+            selectedPageId={selectedPageId}
+            selectedSubPageId={selectedSubPageId}
+            selectedArticleId={selectedArticleId}
+            selectedBlockId={selectedBlockId}
+            selectedComponentId={selectedComponentId}
+            onPageSelect={onPageSelect}
+            onSubPageSelect={onSubPageSelect}
+            onArticleSelect={onArticleSelect}
+            onBlockSelect={onBlockSelect}
+            onComponentSelect={onComponentSelect}
+            onAddModule={onAddModule}
+            onAddSubModule={onAddSubModule}
+            onDeleteModule={onDeleteModule}
+            onAddPage={onAddPage}
+            onDeletePage={onDeletePage}
+            onAddArticle={onAddArticle}
+            onDeleteArticle={onDeleteArticle}
+            onAddSubPage={onAddSubPage}
+            onAddBlock={onAddBlock}
+            onDeleteBlock={onDeleteBlock}
+            onAddComponent={onAddComponent}
+            onDeleteComponent={onDeleteComponent}
+            onUseTemplate={onUseTemplate}
+          />
+        </div>
+      )}
+
+      {!leftPanelOpen && (
+        <aside className="hidden md:flex h-full w-[56px] bg-white border-r border-[#d8dee6] shrink-0 flex-col items-center py-3">
+          <div className="w-full flex flex-col items-center pb-3 border-b border-[#d8dee6]">
+            <button
+              type="button"
+              onClick={onOpenPanels}
+              className="w-8 h-8 rounded-[6px] flex items-center justify-center text-[#5f6d79] hover:bg-[#f1f5f9] transition-colors"
+              aria-label="Expand structure"
+              title="Expand structure"
+            >
+              <MaskIcon file="panel-toggle-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current" />
+            </button>
+          </div>
+        </aside>
+      )}
+    </>
+  );
+}

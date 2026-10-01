@@ -1,0 +1,1942 @@
+import React, { useEffect, useState } from "react";
+import InfoIcon, { InfoFieldLabel, shouldRenderFieldInfoIcon } from "../../components/common/InfoIcon";
+import AssetPickerModal from "../../components/common/AssetPickerModal";
+import RichTextEditor from "../../components/common/RichTextEditor";
+import { SaveChangesButton } from "./SaveChangesButton";
+import { SaveStatusToast } from "./SaveStatusToast";
+import {
+  defaultAiTutorSettings,
+  defaultCourseFeedbackSettings,
+  defaultLearnerNotesSettings,
+  defaultLearnerSearchSettings,
+  defaultLearningResourcesSettings,
+  getAiTutorSettings,
+  getCourseFeedbackSettings,
+  getLearnerNotesSettings,
+  getLearnerSearchSettings,
+  getLearningResourcesSettings,
+  saveAiTutorSettings,
+  saveCourseFeedbackSettings,
+  saveLearnerNotesSettings,
+  saveLearnerSearchSettings,
+  saveLearningResourcesSettings,
+  type AiTutorSettings,
+  type CourseFeedbackOption,
+  type CourseFeedbackSettings,
+  type LearnerNotesSettings,
+  type LearnerSearchSettings,
+  type LearningResourceItem,
+  type LearningResourcesSettings,
+  type LearningResourceFilterText as LrFilterTextHelper,
+} from "../../helpers/learnerExperienceHelper";
+import {
+  getExtensionSchema,
+  getSchemaHint,
+  getSchemaLabel,
+  getSchemaNode,
+  type SetupSchemaNode,
+} from "../../helpers/setupInfoSchema";
+import { usePageLoader } from "../../hooks";
+import { UnsavedChangesModal } from "./unsavedChangesModal";
+import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
+import { htmlToPlainText } from "../../utils/ckEditorSamaritan";
+
+/* -------------------------------------------------------------
+   LEARNER EXPERIENCE PANEL - Learning Resources accordion
+   ------------------------------------------------------------- */
+
+type ResourceFormat = LearningResourceItem["format"];
+
+// Re-use imported types under local names for backwards compat with existing JSX
+type LearningResource = LearningResourceItem;
+type LearningResourcesState = LearningResourcesSettings;
+type LearnerExperienceAccordion = "learningResources" | "learnerNotes" | "learnerSearch" | "aiTutor" | "courseFeedback";
+
+type LearningResourceFilterText = LrFilterTextHelper;
+
+const LEARNING_RESOURCE_FILTER_FIELDS: { key: keyof LearningResourceFilterText; label: string }[] = [
+  { key: "all", label: "All" },
+  { key: "document", label: "Document" },
+  { key: "media", label: "Media" },
+  { key: "link", label: "Link" },
+  { key: "customType1", label: "Custom type 1" },
+  { key: "customType2", label: "Custom type 2" },
+  { key: "customType3", label: "Custom type 3" },
+  { key: "customType4", label: "Custom type 4" },
+  { key: "customType5", label: "Custom type 5" },
+  { key: "customType6", label: "Custom type 6" },
+  { key: "customType7", label: "Custom type 7" },
+  { key: "customType8", label: "Custom type 8" },
+  { key: "customType9", label: "Custom type 9" },
+  { key: "customType10", label: "Custom type 10" },
+];
+
+const RESOURCE_FORMAT_OPTIONS: { value: ResourceFormat; label: string }[] = [
+  { value: "document", label: "Document" },
+  { value: "media",    label: "Media" },
+  { value: "link",     label: "Link" },
+  { value: "custom1",   label: "Custom 1" },
+  { value: "custom2",   label: "Custom 2" },
+  { value: "custom3",   label: "Custom 3" },
+  { value: "custom4",   label: "Custom 4" },
+  { value: "custom5",   label: "Custom 5" },
+  { value: "custom6",   label: "Custom 6" },
+  { value: "custom7",   label: "Custom 7" },
+  { value: "custom8",   label: "Custom 8" },
+  { value: "custom9",   label: "Custom 9" },
+  { value: "custom10",  label: "Custom 10" },
+];
+
+function getResourceFormatLabel(format: ResourceFormat): string {
+  if (format === "document") return "Document";
+  if (format === "media") return "Media";
+  if (format === "link") return "Link";
+  return `Custom ${format.slice(6)}`;
+}
+
+function newResource(): LearningResource {
+  return {
+    id: Math.random().toString(36).slice(2),
+    format: "document",
+    forceDownload: false,
+    title: "",
+    fileName: "",
+    description: "",
+    sourceType: "asset",
+    assetValue: "",
+    urlValue: "",
+    displayOnEveryPage: false,
+  };
+}
+
+function learningResourcePickerType(format: ResourceFormat): import("../../types/assetPicker").AssetPickerType {
+  if (format === "document") return "other";
+  if (format === "media") return "media";
+  return "all";
+}
+
+/* small helpers */
+function LrToggle({
+  checked,
+  onChange,
+  label,
+  align = "left",
+  help,
+  hint,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  align?: "left" | "right";
+  help?: React.ReactNode;
+  hint?: string;
+}) {
+  const showInfoIcon = shouldRenderFieldInfoIcon({ hint, help });
+
+  if (align === "right") {
+    return (
+      <div>
+        <div className="flex items-center justify-between gap-3 py-2">
+          <span className="text-sm font-semibold text-[var(--life-base-black)] leading-snug">{label}{showInfoIcon ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={checked}
+            aria-label={label}
+            onClick={() => onChange(!checked)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:ring-offset-1 ${checked ? "bg-[var(--life-primary-500)]" : "bg-[#d1d5db]"}`}
+          >
+            <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-5" : "translate-x-1"}`} />
+          </button>
+        </div>
+        {help}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <label className="flex items-center gap-2 cursor-pointer select-none">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          onClick={() => onChange(!checked)}
+          className={`relative w-9 h-5 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2d6fa8] ${checked ? "bg-[#2d6fa8]" : "bg-[#d1d5db]"}`}
+        >
+          <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-150 ${checked ? "translate-x-4" : ""}`} />
+        </button>
+        <span className="text-sm text-[#374151]">{label}{showInfoIcon ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}</span>
+      </label>
+      {help}
+    </div>
+  );
+}
+
+function LrField({ label, hint, help, children }: { label: string; hint?: string; help?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <InfoFieldLabel label={label} hint={hint} help={help} className="text-[#374151]" />
+      {help}
+      {children}
+    </div>
+  );
+}
+
+function LrHelp({ children }: { children: React.ReactNode }) {
+  return <p className="text-xs text-[#6b7280] mt-1 leading-snug">{children}</p>;
+}
+
+function ClickToEditRichText({
+  value,
+  onChange,
+  placeholder,
+  courseContext,
+}: {
+  value: string;
+  onChange: (html: string) => void;
+  placeholder: string;
+  courseContext: string;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  if (editing) {
+    return <RichTextEditor value={value} onChange={onChange} placeholder={placeholder} courseContext={courseContext} />;
+  }
+
+  const preview = htmlToPlainText(value).trim();
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      className="w-full min-h-[96px] px-3 py-2 text-left text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#374151] hover:border-[#2d6fa8] hover:bg-[#f8fbff] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8]"
+      aria-label={preview ? "Click to edit thank you message" : placeholder}
+    >
+      {preview || <span className="text-[#9ca3af]">{placeholder}</span>}
+    </button>
+  );
+}
+
+const LR_INPUT = "w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent";
+const LR_TEXTAREA = `${LR_INPUT} resize-none`;
+
+/* Demo video placeholder shown at top of each accordion section */
+function DemoVideoPlaceholder({ label }: { label?: string }) {
+  return (
+    <div className="rounded-lg overflow-hidden border border-[#e5e7eb]">
+      <div className="relative bg-[#1b3a4b] flex flex-col items-center justify-center gap-2.5" style={{ aspectRatio: '16/9' }}>
+        <div className="w-12 h-12 rounded-full bg-white/15 border-2 border-white/35 flex items-center justify-center backdrop-blur-sm">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="rgba(255,255,255,0.8)"><polygon points="5,3 19,12 5,21"/></svg>
+        </div>
+        <span className="text-xs text-white/50 font-medium">{label ?? 'Demo video coming soon'}</span>
+      </div>
+    </div>
+  );
+}
+
+/* Add Resource modal/drawer */
+function AddResourceDialog({
+  initial,
+  onAdd,
+  onCancel,
+}: {
+  initial?: LearningResource;
+  onAdd: (r: LearningResource) => void;
+  onCancel: () => void;
+}) {
+  const [res, setRes] = useState<LearningResource>(initial ?? newResource());
+  const [assetPickerOpen, setAssetPickerOpen] = useState(false);
+  const [errors, setErrors] = useState<{ title?: string; format?: string; source?: string }>({});
+  const set = <K extends keyof LearningResource>(k: K, v: LearningResource[K]) =>
+    setRes((prev) => ({ ...prev, [k]: v }));
+
+  function validateResource(): boolean {
+    const nextErrors: { title?: string; format?: string; source?: string } = {};
+    if (!res.format) nextErrors.format = "Format is required.";
+    if (!res.title.trim()) nextErrors.title = "Title is required.";
+
+    if (res.sourceType === "asset") {
+      if (!res.assetValue.trim()) nextErrors.source = "Source is required.";
+    } else if (!res.urlValue.trim()) {
+      nextErrors.source = "Source is required.";
+    }
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  }
+
+  function handleAddClick() {
+    if (!validateResource()) return;
+    onAdd(res);
+  }
+
+  return (
+    <>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col max-h-[90vh] overflow-hidden">
+        {/* header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-[#f3f4f6] shrink-0">
+          <h3 className="text-base font-bold text-[#111827]">Add Resource</h3>
+          <button type="button" onClick={onCancel} className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#f3f4f6] transition-colors">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* body */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+
+          {/* Resource Format */}
+          <LrField label="Resource Format">
+            <div className="relative">
+              <select
+                value={res.format}
+                onChange={(e) => {
+                  set("format", e.target.value as ResourceFormat);
+                  setErrors((prev) => ({ ...prev, format: undefined }));
+                }}
+                aria-label="Resource Format"
+                className={`${LR_INPUT} appearance-none pr-8 ${errors.format ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+              >
+                {RESOURCE_FORMAT_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </div>
+            {errors.format && <p className="text-xs text-[#dc2626] mt-1">{errors.format}</p>}
+          </LrField>
+
+          {/* Force Download */}
+          <LrToggle
+            checked={res.forceDownload}
+            onChange={(v) => set("forceDownload", v)}
+            label="Force download"
+            help={<LrHelp>Forces the resource to be downloaded rather than opened in the browser. Only supported in browsers that support the 'download' attribute and for resources that are part of the course content/hosted on the same URL.</LrHelp>}
+          />
+
+          {/* Title */}
+          <LrField label="Title">
+            <input
+              type="text"
+              value={res.title}
+              onChange={(e) => {
+                set("title", e.target.value);
+                setErrors((prev) => ({ ...prev, title: undefined }));
+              }}
+              placeholder="Enter resource title"
+              className={`${LR_INPUT} ${errors.title ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+            />
+            {errors.title && <p className="text-xs text-[#dc2626] mt-1">{errors.title}</p>}
+          </LrField>
+
+          {/* File Name */}
+          <LrField label="File Name" help={<LrHelp>Used to set the name of the downloaded file to something different to the source filename. Only supported in browsers that support the 'download' attribute and for resources that are part of the course content/hosted on the same URL. Forces the file to be downloaded regardless of what 'Force download' is set to.</LrHelp>}>
+            <input
+              type="text"
+              value={res.fileName}
+              onChange={(e) => set("fileName", e.target.value)}
+              placeholder="Enter file name"
+              className={LR_INPUT}
+            />
+          </LrField>
+
+          {/* Description */}
+          <LrField label="Description">
+            <textarea
+              value={res.description}
+              onChange={(e) => set("description", e.target.value)}
+              placeholder="Enter resource description"
+              rows={3}
+              className={LR_TEXTAREA}
+            />
+          </LrField>
+
+          {/* Source - asset vs URL tabs */}
+          <LrField label="Source">
+            <div className="flex rounded-lg border border-[#e5e7eb] overflow-hidden mb-2">
+              {(["asset", "url"] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => {
+                    set("sourceType", t);
+                    setErrors((prev) => ({ ...prev, source: undefined }));
+                  }}
+                  className={`flex-1 py-2 text-xs font-medium transition-colors ${
+                    res.sourceType === t ? "bg-[#2d6fa8] text-white" : "bg-white text-[#6b7280] hover:bg-[#f9fafb]"
+                  }`}
+                >
+                  {t === "asset" ? "Select from Asset" : "URL"}
+                </button>
+              ))}
+            </div>
+            {res.sourceType === "asset" ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setAssetPickerOpen(true);
+                  setErrors((prev) => ({ ...prev, source: undefined }));
+                }}
+                className={`w-full flex items-center justify-center gap-2 border-2 border-dashed rounded-xl py-4 text-sm text-[#6b7280] hover:border-[#2d6fa8] hover:text-[#2d6fa8] hover:bg-[#f0f7ff] transition-colors ${
+                  errors.source ? "border-[#dc2626]" : "border-[#d1d5db]"
+                }`}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+                </svg>
+                {res.assetValue ? res.assetValue : "Browse assets..."}
+              </button>
+            ) : (
+              <input
+                type="url"
+                value={res.urlValue}
+                onChange={(e) => {
+                  set("urlValue", e.target.value);
+                  setErrors((prev) => ({ ...prev, source: undefined }));
+                }}
+                placeholder="https://example.com/resource"
+                className={`${LR_INPUT} ${errors.source ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+              />
+            )}
+            {errors.source && <p className="text-xs text-[#dc2626] mt-1">{errors.source}</p>}
+          </LrField>
+
+          {/* Display on every page */}
+          <LrToggle
+            checked={res.displayOnEveryPage}
+            onChange={(v) => set("displayOnEveryPage", v)}
+            label="Is displayed on every page?"
+          />
+        </div>
+
+        {/* footer */}
+        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[#f3f4f6] shrink-0 bg-[#f9fafb]">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#e5e7eb] rounded-lg hover:bg-[#f3f4f6] transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleAddClick}
+            className="px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors"
+          >
+            Add
+          </button>
+        </div>
+      </div>
+    </div>
+
+    {assetPickerOpen && (
+      <AssetPickerModal
+        assetType={learningResourcePickerType(res.format)}
+        onSelect={(asset) => {
+          set("assetValue", asset.assetLink);
+          setErrors((prev) => ({ ...prev, source: undefined }));
+          setAssetPickerOpen(false);
+        }}
+        onClose={() => setAssetPickerOpen(false)}
+      />
+    )}
+    </>
+  );
+}
+
+/* Resource format icon badge with colored background (matches Figma design) */
+const FORMAT_STYLES: Record<ResourceFormat, { bg: string; color: string }> = {
+  document: { bg: "#fee2e2", color: "#dc2626" },
+  media:    { bg: "#ede9f6", color: "#7c5cbf" },
+  link:     { bg: "#dbeeff", color: "#2d6fa8" },
+  custom1:  { bg: "#d1fae5", color: "#059669" },
+  custom2:  { bg: "#d1fae5", color: "#059669" },
+  custom3:  { bg: "#d1fae5", color: "#059669" },
+  custom4:  { bg: "#d1fae5", color: "#059669" },
+  custom5:  { bg: "#d1fae5", color: "#059669" },
+  custom6:  { bg: "#d1fae5", color: "#059669" },
+  custom7:  { bg: "#d1fae5", color: "#059669" },
+  custom8:  { bg: "#d1fae5", color: "#059669" },
+  custom9:  { bg: "#d1fae5", color: "#059669" },
+  custom10: { bg: "#d1fae5", color: "#059669" },
+};
+
+function ResourceFormatIcon({ format }: { format: ResourceFormat }) {
+  const { bg, color } = FORMAT_STYLES[format];
+  const icon = format === "document" ? (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+    </svg>
+  ) : format === "media" ? (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+    </svg>
+  ) : format === "link" ? (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+    </svg>
+  ) : (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+  );
+  return (
+    <span className="w-7 h-7 rounded-md flex items-center justify-center shrink-0" style={{ backgroundColor: bg, color }}>
+      {icon}
+    </span>
+  );
+}
+
+/* -- Course Feedback types -- */
+type CourseFeedbackState = CourseFeedbackSettings;
+
+const COURSE_FEEDBACK_OPTIONS: { value: CourseFeedbackOption; label: string; help: string }[] = [
+  { value: "autoOpen",        label: "Auto-open on course complete", help: "If the feedback widget hasn’t been opened or submitted, it will automatically open when the course is completed. The feedback button remains visible regardless of this setting." },
+  { value: "hideAfterSubmit", label: "Hide button after submission", help: "Hide the feedback button after the user submits feedback. By default, the button remains visible." },
+];
+
+/* -- Ask AI Tutor types -- */
+
+type AiTutorState = AiTutorSettings;
+
+/* -- Learner Notes types -- */
+type LearnerNotesState = LearnerNotesSettings;
+type LearnerNotesRequiredKey =
+  | "searchErrorMessage"
+  | "successMessage"
+  | "errorMessage"
+  | "createANewNote"
+  | "exportANote"
+  | "saveNote"
+  | "downloadANote"
+  | "uploadANote"
+  | "searchNote"
+  | "deleteNote"
+  | "cancel"
+  | "editNote";
+
+/* -- Learner Search types -- */
+type LearnerSearchState = LearnerSearchSettings;
+
+/* shared multi-select checkbox list */
+function LrCheckList<T extends string>({
+  options,
+  selected,
+  onChange,
+}: {
+  options: { value: T; label: string; help?: string }[];
+  selected: T[];
+  onChange: (v: T[]) => void;
+}) {
+  function toggle(val: T) {
+    onChange(
+      selected.includes(val)
+        ? selected.filter((s) => s !== val)
+        : [...selected, val],
+    );
+  }
+  return (
+    <div className="space-y-1">
+      {options.map(({ value, label, help }) => {
+        const checked = selected.includes(value);
+        return (
+          <label
+            key={value}
+            className="flex items-start gap-3 py-2 px-2 rounded-lg hover:bg-[#f9fafb] cursor-pointer group"
+          >
+            <div
+              onClick={() => toggle(value)}
+              className={`mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
+                checked
+                  ? "bg-[#2d6fa8] border-[#2d6fa8]"
+                  : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
+              }`}
+            >
+              {checked && (
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              )}
+            </div>
+            <span className="text-sm text-[#374151] leading-snug">
+              {label}
+              {help && <span className="block mt-1"><LrHelp>{help}</LrHelp></span>}
+            </span>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+/* shared single-select radio list */
+function LrRadioList<T extends string>({
+  options,
+  selected,
+  onChange,
+}: {
+  options: { value: T; label: string }[];
+  selected: T;
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="flex items-center gap-3 flex-wrap">
+      {options.map(({ value, label }) => {
+        const active = selected === value;
+        return (
+          <button
+            key={value}
+            type="button"
+            onClick={() => onChange(value)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+              active
+                ? "bg-[#2d6fa8] border-[#2d6fa8] text-white"
+                : "bg-white border-[#e5e7eb] text-[#374151] hover:border-[#93c5fd] hover:bg-[#f0f7ff]"
+            }`}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* -- Ignored words tag input -- */
+function IgnoredWordsInput({ words, onChange }: { words: string[]; onChange: (w: string[]) => void }) {
+  const [draft, setDraft] = useState("");
+
+  function addWord(raw: string) {
+    const word = raw.trim().toLowerCase();
+    if (word && !words.includes(word)) onChange([...words, word]);
+    setDraft("");
+  }
+
+  function handleKey(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      addWord(draft);
+    } else if (e.key === "Backspace" && draft === "" && words.length > 0) {
+      onChange(words.slice(0, -1));
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5 min-h-[44px] w-full px-3 py-2 rounded-lg border border-[#e5e7eb] bg-white focus-within:ring-2 focus-within:ring-[#2d6fa8] focus-within:border-transparent transition-all">
+      {words.map((w) => (
+        <span key={w} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#dbeeff] text-[#1e4f7a] text-xs font-medium">
+          {w}
+          <button type="button" onClick={() => onChange(words.filter((x) => x !== w))} className="text-[#2d6fa8] hover:text-[#1e4f7a] leading-none">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </span>
+      ))}
+      <input
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={handleKey}
+        onBlur={() => { if (draft.trim()) addWord(draft); }}
+        placeholder={words.length === 0 ? "Type a word and press Enter" : ""}
+        className="flex-1 min-w-[120px] text-sm text-[#111827] outline-none bg-transparent placeholder-[#9ca3af]"
+      />
+    </div>
+  );
+}
+
+/* reusable accordion shell used by both Learning Resources and Learner Search */
+function LeAccordion({
+  open,
+  onToggle,
+  icon,
+  title,
+  hint,
+  children,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  icon: React.ReactNode;
+  title: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="border border-[#e5e7eb] rounded-xl overflow-hidden bg-white">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="group w-full flex items-center justify-between gap-3 px-5 py-4 text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
+      >
+        <div className="flex items-center gap-2.5">
+          <span className="text-current">{icon}</span>
+          <span className="text-sm font-semibold text-current flex items-center gap-1.5">{title}{hint ? <InfoIcon label={title} hint={hint} /> : null}</span>
+        </div>
+        <svg
+          width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+          className="shrink-0 ml-auto text-current"
+        >
+          <polyline points={open ? "6 9 12 15 18 9" : "9 6 15 12 9 18"}/>
+        </svg>
+      </button>
+      {open && (
+        <div className="px-[22px] py-[20px] border-t border-[#f3f4f6] bg-white space-y-4">
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function LearnerExperiencePanel({
+  courseId,
+  onNavigationRequest,
+  pendingNavigation,
+  onPendingNavigationHandled,
+}: {
+  courseId: string;
+  onNavigationRequest?: (nav: string) => void;
+  pendingNavigation?: string | null;
+  onPendingNavigationHandled?: () => void;
+}) {
+  /* -- Learning Resources state -- */
+  const [lrState, setLrState] = useState<LearningResourcesState>(defaultLearningResourcesSettings);
+  const [savedLrState, setSavedLrState] = useState<LearningResourcesState>(defaultLearningResourcesSettings);
+  const [lrLoading, setLrLoading] = useState(false);
+  const [lrSaving, setLrSaving] = useState(false);
+  const [showAddDialog, setShowAddDialog] = useState(false);
+  const [openAccordion, setOpenAccordion] = useState<LearnerExperienceAccordion | "">("");
+  const toggleAccordion = (accordion: LearnerExperienceAccordion) => {
+    setOpenAccordion((current) => (current === accordion ? "" : accordion));
+  };
+
+  const setLr = <K extends keyof LearningResourcesState>(k: K, v: LearningResourcesState[K]) =>
+    setLrState((prev) => ({ ...prev, [k]: v }));
+
+  function setLrFilterButton<K extends keyof LearningResourceFilterText>(k: K, v: LearningResourceFilterText[K]) {
+    setLrState((prev) => ({ ...prev, filterButtons: { ...prev.filterButtons, [k]: v } }));
+  }
+
+  function setLrAriaLabel<K extends keyof LearningResourceFilterText>(k: K, v: LearningResourceFilterText[K]) {
+    setLrState((prev) => ({ ...prev, ariaLabels: { ...prev.ariaLabels, [k]: v } }));
+  }
+
+  function handleAddResource(r: LearningResource) {
+    setLrState((prev) => ({ ...prev, resources: [...prev.resources, r] }));
+    setShowAddDialog(false);
+  }
+
+  function handleRemoveResource(id: string) {
+    setLrState((prev) => ({ ...prev, resources: prev.resources.filter((r) => r.id !== id) }));
+  }
+
+  /* -- Learner Notes state -- */
+  const [lnState, setLnState] = useState<LearnerNotesState>(defaultLearnerNotesSettings());
+  const [savedLnState, setSavedLnState] = useState<LearnerNotesState>(defaultLearnerNotesSettings());
+  const [lnLoading, setLnLoading] = useState(false);
+  const [lsLoading, setLsLoading] = useState(false);
+  const [atLoading, setAtLoading] = useState(false);
+  const [cfLoading, setCfLoading] = useState(false);
+  usePageLoader(lrLoading || lnLoading || lsLoading || atLoading || cfLoading);
+  const [lnSaving, setLnSaving] = useState(false);
+  const [lnToast, setLnToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [lrFieldErrors, setLrFieldErrors] = useState<{ sectionTitle?: string }>({});
+  const [lnFieldErrors, setLnFieldErrors] = useState<Partial<Record<LearnerNotesRequiredKey, string>>>({});
+  const [lsState, setLsState] = useState<LearnerSearchState>(defaultLearnerSearchSettings());
+  const [savedLsState, setSavedLsState] = useState<LearnerSearchState>(defaultLearnerSearchSettings());
+  const [cfState, setCfState] = useState<CourseFeedbackState>(defaultCourseFeedbackSettings());
+  const [savedCfState, setSavedCfState] = useState<CourseFeedbackState>(defaultCourseFeedbackSettings());
+  const [atState, setAtState] = useState<AiTutorState>(defaultAiTutorSettings());
+  const [savedAtState, setSavedAtState] = useState<AiTutorState>(defaultAiTutorSettings());
+  const [assetPickerOpen, setAssetPickerOpen] = useState(false);
+  const [resourcesSchema, setResourcesSchema] = useState<SetupSchemaNode | null>(null);
+  const [notesSchema, setNotesSchema] = useState<SetupSchemaNode | null>(null);
+  const [searchSchema, setSearchSchema] = useState<SetupSchemaNode | null>(null);
+  const [feedbackSchema, setFeedbackSchema] = useState<SetupSchemaNode | null>(null);
+  const [aiTutorSchema, setAiTutorSchema] = useState<SetupSchemaNode | null>(null);
+
+  const resourcesFieldsSchema = getSchemaNode(resourcesSchema, "pluginLocations", "course", "_resources");
+  const notesFieldsSchema = getSchemaNode(notesSchema, "pluginLocations", "course", "_courseNotes");
+  const searchFieldsSchema = getSchemaNode(searchSchema, "pluginLocations", "course", "_search");
+  const feedbackFieldsSchema = getSchemaNode(feedbackSchema, "pluginLocations", "config", "_courseFeedback");
+  const aiTutorFieldsSchema = getSchemaNode(aiTutorSchema, "pluginLocations", "config", "_aiTutor");
+
+  const setLn = <K extends keyof LearnerNotesState>(k: K, v: LearnerNotesState[K]) =>
+    setLnState((prev) => ({ ...prev, [k]: v }));
+  const setLs = <K extends keyof LearnerSearchState>(k: K, v: LearnerSearchState[K]) =>
+    setLsState((prev) => ({ ...prev, [k]: v }));
+  const setCf = <K extends keyof CourseFeedbackState>(k: K, v: CourseFeedbackState[K]) =>
+    setCfState((prev) => ({ ...prev, [k]: v }));
+  const setAt = <K extends keyof AiTutorState>(k: K, v: AiTutorState[K]) =>
+    setAtState((prev) => ({ ...prev, [k]: v }));
+
+  function setMatchOn(key: keyof LearnerSearchState["matchOn"], value: boolean) {
+    setLsState((prev) => ({ ...prev, matchOn: { ...prev.matchOn, [key]: value } }));
+  }
+
+  useEffect(() => {
+    if (!courseId) {
+      const defaults = defaultLearningResourcesSettings();
+      setLrState(defaults);
+      setSavedLrState(defaults);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setLrLoading(true);
+      try {
+        const loaded = await getLearningResourcesSettings(courseId);
+        if (cancelled) return;
+        setLrState(loaded);
+        setSavedLrState(loaded);
+      } catch {
+        if (cancelled) return;
+        const defaults = defaultLearningResourcesSettings();
+        setLrState(defaults);
+        setSavedLrState(defaults);
+      } finally {
+        if (!cancelled) setLrLoading(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [courseId]);
+
+  useEffect(() => {
+    if (!courseId) {
+      const defaults = defaultLearnerNotesSettings();
+      setLnState(defaults);
+      setSavedLnState(defaults);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setLnLoading(true);
+      try {
+        const loaded = await getLearnerNotesSettings(courseId);
+        if (cancelled) return;
+        setLnState(loaded);
+        setSavedLnState(loaded);
+      } catch {
+        if (cancelled) return;
+        const defaults = defaultLearnerNotesSettings();
+        setLnState(defaults);
+        setSavedLnState(defaults);
+      } finally {
+        if (!cancelled) setLnLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      getExtensionSchema("adapt-contrib-resources"),
+      getExtensionSchema("adapt-courseNotes"),
+      getExtensionSchema("adapt-search"),
+      getExtensionSchema("laerdal-course-feedback"),
+      getExtensionSchema("adapt-laerdal-ai-tutor"),
+    ]).then(([
+      nextResourcesSchema,
+      nextNotesSchema,
+      nextSearchSchema,
+      nextFeedbackSchema,
+      nextAiTutorSchema,
+    ]) => {
+      if (cancelled) return;
+      setResourcesSchema(nextResourcesSchema);
+      setNotesSchema(nextNotesSchema);
+      setSearchSchema(nextSearchSchema);
+      setFeedbackSchema(nextFeedbackSchema);
+      setAiTutorSchema(nextAiTutorSchema);
+    }).catch(() => {
+      if (cancelled) return;
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!courseId) {
+      const defaults = defaultCourseFeedbackSettings();
+      setCfState(defaults);
+      setSavedCfState(defaults);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setCfLoading(true);
+      try {
+        const loaded = await getCourseFeedbackSettings(courseId);
+        if (cancelled) return;
+        setCfState(loaded);
+        setSavedCfState(loaded);
+      } catch {
+        if (cancelled) return;
+        const defaults = defaultCourseFeedbackSettings();
+        setCfState(defaults);
+        setSavedCfState(defaults);
+      } finally {
+        if (!cancelled) setCfLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
+
+  useEffect(() => {
+    if (!courseId) {
+      const defaults = defaultLearnerSearchSettings();
+      setLsState(defaults);
+      setSavedLsState(defaults);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setLsLoading(true);
+      try {
+        const loaded = await getLearnerSearchSettings(courseId);
+        if (cancelled) return;
+        setLsState(loaded);
+        setSavedLsState(loaded);
+      } catch {
+        if (cancelled) return;
+        const defaults = defaultLearnerSearchSettings();
+        setLsState(defaults);
+        setSavedLsState(defaults);
+      } finally {
+        if (!cancelled) setLsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
+
+  useEffect(() => {
+    if (!courseId) {
+      const defaults = defaultAiTutorSettings();
+      setAtState(defaults);
+      setSavedAtState(defaults);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      setAtLoading(true);
+      try {
+        const loaded = await getAiTutorSettings(courseId);
+        if (cancelled) return;
+        setAtState(loaded);
+        setSavedAtState(loaded);
+      } catch {
+        if (cancelled) return;
+        const defaults = defaultAiTutorSettings();
+        setAtState(defaults);
+        setSavedAtState(defaults);
+      } finally {
+        if (!cancelled) setAtLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
+
+  useEffect(() => {
+    if (!lnToast) return;
+    const t = setTimeout(() => setLnToast(null), 3500);
+    return () => clearTimeout(t);
+  }, [lnToast]);
+
+  const lnDirty = JSON.stringify(lnState) !== JSON.stringify(savedLnState);
+  const lsDirty = JSON.stringify(lsState) !== JSON.stringify(savedLsState);
+  const cfDirty = JSON.stringify(cfState) !== JSON.stringify(savedCfState);
+  const lrDirty = JSON.stringify(lrState) !== JSON.stringify(savedLrState);
+  const atDirty = JSON.stringify(atState) !== JSON.stringify(savedAtState);
+  const hasChanges = lnDirty || lsDirty || cfDirty || lrDirty || atDirty;
+
+  const { showConfirmModal, consumePendingNavigation, clearPendingNavigation } =
+    useUnsavedChangesNavigationGuard({
+      hasChanges,
+      pendingNavigation,
+      onPendingNavigationHandled,
+      onNavigate: onNavigationRequest,
+    });
+
+  function handleLnCancel() {
+    setLnState(savedLnState);
+    setLsState(savedLsState);
+    setCfState(savedCfState);
+    setLrState(savedLrState);
+    setAtState(savedAtState);
+    setLrFieldErrors({});
+    setLnFieldErrors({});
+  }
+
+  function validateRequiredFields(): boolean {
+    let hasErrors = false;
+    const nextLrFieldErrors: { sectionTitle?: string } = {};
+
+    if (lrState.enabled && !lrState.sectionTitle.trim()) {
+      nextLrFieldErrors.sectionTitle = "Title is required.";
+      setOpenAccordion("learningResources");
+      hasErrors = true;
+    }
+    setLrFieldErrors(nextLrFieldErrors);
+
+    const nextLnFieldErrors: Partial<Record<LearnerNotesRequiredKey, string>> = {};
+    if (lnState.enabled) {
+      const requiredLearnerNoteFields: { key: LearnerNotesRequiredKey; label: string }[] = [
+        { key: "searchErrorMessage", label: "Learner Notes: Search Error Message" },
+        { key: "successMessage", label: "Learner Notes: Success Message" },
+        { key: "errorMessage", label: "Learner Notes: Error Message" },
+        { key: "createANewNote", label: "Learner Notes: Create a note" },
+        { key: "exportANote", label: "Learner Notes: Export a note" },
+        { key: "saveNote", label: "Learner Notes: Save note" },
+        { key: "downloadANote", label: "Learner Notes: Download a note" },
+        { key: "uploadANote", label: "Learner Notes: Upload a note" },
+        { key: "searchNote", label: "Learner Notes: Search note" },
+        { key: "deleteNote", label: "Learner Notes: Delete note" },
+        { key: "cancel", label: "Learner Notes: Cancel" },
+        { key: "editNote", label: "Learner Notes: Edit note" },
+      ];
+
+      for (const { key, label } of requiredLearnerNoteFields) {
+        const value = lnState[key];
+        if (typeof value === "string" && !value.trim()) {
+          nextLnFieldErrors[key] = `${label} is required.`;
+          hasErrors = true;
+        }
+      }
+
+      if (Object.keys(nextLnFieldErrors).length > 0) {
+        setOpenAccordion("learnerNotes");
+      }
+    }
+    setLnFieldErrors(nextLnFieldErrors);
+
+    return !hasErrors;
+  }
+
+  async function handleLnSave() {
+    if (!courseId || lnSaving) return;
+    setLnToast(null);
+    if (!validateRequiredFields()) return;
+    setLnSaving(true);
+    try {
+      await saveLearnerNotesSettings(courseId, lnState as LearnerNotesSettings);
+      await saveLearnerSearchSettings(courseId, lsState);
+      await saveCourseFeedbackSettings(courseId, cfState);
+      await saveLearningResourcesSettings(courseId, lrState);
+      await saveAiTutorSettings(courseId, atState);
+      setSavedLnState(lnState);
+      setSavedLsState(lsState);
+      setSavedCfState(cfState);
+      setSavedLrState(lrState);
+      setSavedAtState(atState);
+      setLnToast({ type: "success", message: "Changes saved successfully" });
+    } catch {
+      setLnToast({ type: "error", message: "Couldn't save. Please try again." });
+    } finally {
+      setLnSaving(false);
+    }
+  }
+
+  async function handleConfirmSave() {
+    if (!courseId || lnSaving) return;
+    setLnToast(null);
+    if (!validateRequiredFields()) return;
+    setLnSaving(true);
+    try {
+      await saveLearnerNotesSettings(courseId, lnState);
+      await saveLearnerSearchSettings(courseId, lsState);
+      await saveCourseFeedbackSettings(courseId, cfState);
+      await saveLearningResourcesSettings(courseId, lrState);
+      await saveAiTutorSettings(courseId, atState);
+      setSavedLnState(lnState);
+      setSavedLsState(lsState);
+      setSavedCfState(cfState);
+      setSavedLrState(lrState);
+      setSavedAtState(atState);
+      const navTarget = consumePendingNavigation();
+      setLnToast({ type: "success", message: "Changes saved successfully" });
+      if (navTarget) onNavigationRequest?.(navTarget);
+    } catch {
+      setLnToast({ type: "error", message: "Couldn't save. Please try again." });
+    } finally {
+      setLnSaving(false);
+    }
+  }
+
+  function handleConfirmDiscard() {
+    setLnState(savedLnState);
+    setLsState(savedLsState);
+    setCfState(savedCfState);
+    setLrState(savedLrState);
+    setAtState(savedAtState);
+    const navTarget = consumePendingNavigation();
+    if (navTarget) onNavigationRequest?.(navTarget);
+  }
+
+  function handleAddDocument() {
+    setAssetPickerOpen(true);
+  }
+
+  function handleRemoveDocument(id: string) {
+    setAtState((prev) => ({ ...prev, documents: prev.documents.filter((d) => d.id !== id) }));
+  }
+
+  return (
+    <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
+      {/* header */}
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-center gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-[#111827]">Learner Experience</h2>
+          <p className="text-sm text-[#6b7280] mt-0.5">Configure what learners see and can access throughout the course.</p>
+        </div>
+        <div className="ml-auto">
+          <SaveChangesButton dirty={hasChanges} saving={lnSaving} disabled={!courseId} onClick={() => void handleLnSave()} portalTargetId="setup-save-button-slot" />
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="max-w-2xl px-6 py-6 flex flex-col gap-3">
+
+        {/* -- Learning Resources accordion -- */}
+        <LeAccordion
+          open={openAccordion === "learningResources"}
+          onToggle={() => toggleAccordion("learningResources")}
+          title={getSchemaLabel(resourcesSchema, "Learning Resources")}
+          hint={getSchemaHint(resourcesSchema)}
+          icon={
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
+            </svg>
+          }
+        >
+          {/* Enable toggle */}
+          <DemoVideoPlaceholder label="See how Learning Resources works" />
+          {lrLoading && (
+            <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-sm text-[#6b7280]">
+              Loading Learning Resources settings...
+            </div>
+          )}
+          <div className={`pt-3${lrState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
+            <LrToggle
+              checked={lrState.enabled}
+              onChange={(v) => setLr("enabled", v)}
+              label={getSchemaLabel(getSchemaNode(resourcesFieldsSchema, "_isEnabled"), "Enable Learning Resources")}
+              hint={getSchemaHint(getSchemaNode(resourcesFieldsSchema, "_isEnabled"))}
+              align="right"
+            />
+          </div>
+
+          {lrState.enabled && (
+            <>
+              {/* Drawer order */}
+              <LrField label={getSchemaLabel(getSchemaNode(resourcesFieldsSchema, "_drawerOrder"), "Drawer order")} hint={getSchemaHint(getSchemaNode(resourcesFieldsSchema, "_drawerOrder"))}>
+                <input
+                  type="number"
+                  min={0}
+                  value={lrState.drawerOrder}
+                  onChange={(e) => setLr("drawerOrder", Number(e.target.value))}
+                  className={LR_INPUT}
+                />
+              </LrField>
+
+              {/* Section Title */}
+              <LrField label={getSchemaLabel(getSchemaNode(resourcesFieldsSchema, "displayTitle"), "Title")} hint={getSchemaHint(getSchemaNode(resourcesFieldsSchema, "displayTitle"))}>
+                <input
+                  type="text"
+                  value={lrState.sectionTitle}
+                  onChange={(e) => {
+                    setLr("sectionTitle", e.target.value);
+                    setLrFieldErrors((prev) => ({ ...prev, sectionTitle: undefined }));
+                  }}
+                  placeholder="e.g. Additional Resources"
+                  className={`${LR_INPUT} ${lrFieldErrors.sectionTitle ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lrFieldErrors.sectionTitle && <p className="text-xs text-[#dc2626] mt-1">{lrFieldErrors.sectionTitle}</p>}
+              </LrField>
+
+              {/* Description */}
+              <LrField label={getSchemaLabel(getSchemaNode(resourcesFieldsSchema, "description"), "Description")} hint={getSchemaHint(getSchemaNode(resourcesFieldsSchema, "description"))} help={<LrHelp>The description text for the resources button which displays when more than one extension is using the drawer.</LrHelp>}>
+                <textarea
+                  value={lrState.description}
+                  onChange={(e) => setLr("description", e.target.value)}
+                  placeholder="Briefly describe the resources available to learners"
+                  rows={3}
+                  className={LR_TEXTAREA}
+                />
+              </LrField>
+
+              <LrField label={getSchemaLabel(getSchemaNode(resourcesFieldsSchema, "body"), "Body")} hint={getSchemaHint(getSchemaNode(resourcesFieldsSchema, "body"))} help={<LrHelp>The body text for the resources which displays at the top of the resources drawer.</LrHelp>}>
+                <input
+                  type="text"
+                  value={lrState.body}
+                  onChange={(e) => setLr("body", e.target.value)}
+                  placeholder="e.g. Explore additional learner resources"
+                  className={LR_INPUT}
+                />
+              </LrField>
+
+              <LrField label={getSchemaLabel(getSchemaNode(resourcesFieldsSchema, "instruction"), "Instruction")} hint={getSchemaHint(getSchemaNode(resourcesFieldsSchema, "instruction"))}>
+                <input
+                  type="text"
+                  value={lrState.instruction}
+                  onChange={(e) => setLr("instruction", e.target.value)}
+                  placeholder="e.g. Select a filter to narrow resources"
+                  className={LR_INPUT}
+                />
+              </LrField>
+
+              <LrToggle
+                checked={lrState.enableFilterButton}
+                onChange={(v) => setLr("enableFilterButton", v)}
+                label={getSchemaLabel(getSchemaNode(resourcesFieldsSchema, "_enableFilters"), "Enable filter button")}
+                hint={getSchemaHint(getSchemaNode(resourcesFieldsSchema, "_enableFilters"))}
+                help={<LrHelp>Turns the filter buttons on and off. Note that the filter buttons will be automatically disabled if all resource items have the same Type value.</LrHelp>}
+              />
+
+              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
+                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
+                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Filter Buttons</p>
+                </div>
+                <div className="px-4 py-4 space-y-3">
+                  {LEARNING_RESOURCE_FILTER_FIELDS.map(({ key, label }) => (
+                    <LrField key={key} label={label}>
+                      <input
+                        type="text"
+                        value={lrState.filterButtons[key]}
+                        onChange={(e) => setLrFilterButton(key, e.target.value)}
+                        placeholder={`e.g. ${label}`}
+                        className={LR_INPUT}
+                      />
+                    </LrField>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
+                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
+                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Aria Labels</p>
+                </div>
+                <div className="px-4 py-4 space-y-3">
+                  {LEARNING_RESOURCE_FILTER_FIELDS.map(({ key, label }) => (
+                    <LrField key={`aria-${key}`} label={key === "link" ? "Links" : label}>
+                      <input
+                        type="text"
+                        value={lrState.ariaLabels[key]}
+                        onChange={(e) => setLrAriaLabel(key, e.target.value)}
+                        placeholder={key === "link" ? "e.g. Links" : `e.g. ${label}`}
+                        className={LR_INPUT}
+                      />
+                    </LrField>
+                  ))}
+                </div>
+              </div>
+
+              {/* Resources list */}
+              {lrState.resources.length > 0 && (
+                <div className="space-y-2">
+                  {lrState.resources.map((r) => (
+                    <div key={r.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-[#e5e7eb] bg-[#f9fafb]">
+                      <ResourceFormatIcon format={r.format} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-[#111827] truncate">{r.title || <span className="text-[#9ca3af] font-normal">Untitled resource</span>}</p>
+                        <p className="text-xs text-[#6b7280]">{getResourceFormatLabel(r.format)}{r.displayOnEveryPage ? " · Every page" : ""}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveResource(r.id)}
+                        className="p-1 rounded text-[#9ca3af] hover:text-[#ef4444] hover:bg-[#fef2f2] transition-colors shrink-0"
+                        title="Remove resource"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Add resource button */}
+              <button
+                type="button"
+                onClick={() => setShowAddDialog(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 border-dashed border-[#d1d5db] text-sm text-[#6b7280] hover:border-[#2d6fa8] hover:text-[#2d6fa8] hover:bg-[#f0f7ff] transition-colors w-full justify-center"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                Add resource
+              </button>
+            </>
+          )}
+        </LeAccordion>
+
+        {/* -- Learner Notes accordion -- */}
+        <LeAccordion
+          open={openAccordion === "learnerNotes"}
+          onToggle={() => toggleAccordion("learnerNotes")}
+          title={getSchemaLabel(notesSchema, "Learner Notes")}
+          hint={getSchemaHint(notesSchema)}
+          icon={
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+            </svg>
+          }
+        >
+          <DemoVideoPlaceholder label="See how Learner Notes works" />
+          {lnLoading && (
+            <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-sm text-[#6b7280]">
+              Loading Learner Notes settings...
+            </div>
+          )}
+          <div className={`pt-3${lnState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
+            <LrToggle
+              checked={lnState.enabled}
+              onChange={(v) => setLn("enabled", v)}
+              label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "_isEnabled"), "Enable Notes")}
+              hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "_isEnabled"))}
+              align="right"
+            />
+          </div>
+
+          {lnState.enabled && (
+            <>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "displayTitle"), "Title")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "displayTitle"))}>
+                <input type="text" value={lnState.title} onChange={(e) => setLn("title", e.target.value)} placeholder="e.g. My Notes" className={LR_INPUT} />
+              </LrField>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "instruction"), "Instruction")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "instruction"))}>
+                <input type="text" value={lnState.instruction} onChange={(e) => setLn("instruction", e.target.value)} placeholder="e.g. Write your notes here" className={LR_INPUT} />
+              </LrField>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "placeholder"), "Placeholder")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "placeholder"))}>
+                <input type="text" value={lnState.placeholder} onChange={(e) => setLn("placeholder", e.target.value)} placeholder="e.g. Start typing your notes..." className={LR_INPUT} />
+              </LrField>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "errorMessageSearch"), "Search Error Message")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "errorMessageSearch"))}>
+                <input
+                  type="text"
+                  value={lnState.searchErrorMessage}
+                  onChange={(e) => {
+                    setLn("searchErrorMessage", e.target.value);
+                    setLnFieldErrors((prev) => ({ ...prev, searchErrorMessage: undefined }));
+                  }}
+                  placeholder="e.g. Sorry, no results were found"
+                  className={`${LR_INPUT} ${lnFieldErrors.searchErrorMessage ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lnFieldErrors.searchErrorMessage && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.searchErrorMessage}</p>}
+              </LrField>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "successMessage"), "Success Message")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "successMessage"))}>
+                <input
+                  type="text"
+                  value={lnState.successMessage}
+                  onChange={(e) => {
+                    setLn("successMessage", e.target.value);
+                    setLnFieldErrors((prev) => ({ ...prev, successMessage: undefined }));
+                  }}
+                  placeholder="e.g. Note saved successfully"
+                  className={`${LR_INPUT} ${lnFieldErrors.successMessage ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lnFieldErrors.successMessage && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.successMessage}</p>}
+              </LrField>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "errorMessage"), "Error Message")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "errorMessage"))}>
+                <input
+                  type="text"
+                  value={lnState.errorMessage}
+                  onChange={(e) => {
+                    setLn("errorMessage", e.target.value);
+                    setLnFieldErrors((prev) => ({ ...prev, errorMessage: undefined }));
+                  }}
+                  placeholder="e.g. An error occurred. Please try again."
+                  className={`${LR_INPUT} ${lnFieldErrors.errorMessage ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lnFieldErrors.errorMessage && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.errorMessage}</p>}
+              </LrField>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "newNote"), "Create a New Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "newNote"))}>
+                <input
+                  type="text"
+                  value={lnState.createANewNote}
+                  onChange={(e) => {
+                    setLn("createANewNote", e.target.value);
+                    setLnFieldErrors((prev) => ({ ...prev, createANewNote: undefined }));
+                  }}
+                  placeholder="e.g. Create a new note"
+                  className={`${LR_INPUT} ${lnFieldErrors.createANewNote ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lnFieldErrors.createANewNote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.createANewNote}</p>}
+              </LrField>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "exportNote"), "Export a Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "exportNote"))}>
+                <input
+                  type="text"
+                  value={lnState.exportANote}
+                  onChange={(e) => {
+                    setLn("exportANote", e.target.value);
+                    setLnFieldErrors((prev) => ({ ...prev, exportANote: undefined }));
+                  }}
+                  placeholder="e.g. Export note"
+                  className={`${LR_INPUT} ${lnFieldErrors.exportANote ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lnFieldErrors.exportANote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.exportANote}</p>}
+              </LrField>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "saveNote"), "Save Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "saveNote"))}>
+                <input
+                  type="text"
+                  value={lnState.saveNote}
+                  onChange={(e) => {
+                    setLn("saveNote", e.target.value);
+                    setLnFieldErrors((prev) => ({ ...prev, saveNote: undefined }));
+                  }}
+                  placeholder="e.g. Save note"
+                  className={`${LR_INPUT} ${lnFieldErrors.saveNote ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lnFieldErrors.saveNote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.saveNote}</p>}
+              </LrField>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "downloadNote"), "Download a Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "downloadNote"))}>
+                <input
+                  type="text"
+                  value={lnState.downloadANote}
+                  onChange={(e) => {
+                    setLn("downloadANote", e.target.value);
+                    setLnFieldErrors((prev) => ({ ...prev, downloadANote: undefined }));
+                  }}
+                  placeholder="e.g. Download note"
+                  className={`${LR_INPUT} ${lnFieldErrors.downloadANote ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lnFieldErrors.downloadANote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.downloadANote}</p>}
+              </LrField>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "uploadNote"), "Upload a Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "uploadNote"))}>
+                <input
+                  type="text"
+                  value={lnState.uploadANote}
+                  onChange={(e) => {
+                    setLn("uploadANote", e.target.value);
+                    setLnFieldErrors((prev) => ({ ...prev, uploadANote: undefined }));
+                  }}
+                  placeholder="e.g. Upload note"
+                  className={`${LR_INPUT} ${lnFieldErrors.uploadANote ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lnFieldErrors.uploadANote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.uploadANote}</p>}
+              </LrField>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "searchNote"), "Search Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "searchNote"))}>
+                <input
+                  type="text"
+                  value={lnState.searchNote}
+                  onChange={(e) => {
+                    setLn("searchNote", e.target.value);
+                    setLnFieldErrors((prev) => ({ ...prev, searchNote: undefined }));
+                  }}
+                  placeholder="e.g. Search notes"
+                  className={`${LR_INPUT} ${lnFieldErrors.searchNote ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lnFieldErrors.searchNote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.searchNote}</p>}
+              </LrField>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "deleteNote"), "Delete Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "deleteNote"))}>
+                <input
+                  type="text"
+                  value={lnState.deleteNote}
+                  onChange={(e) => {
+                    setLn("deleteNote", e.target.value);
+                    setLnFieldErrors((prev) => ({ ...prev, deleteNote: undefined }));
+                  }}
+                  placeholder="e.g. Delete note"
+                  className={`${LR_INPUT} ${lnFieldErrors.deleteNote ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lnFieldErrors.deleteNote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.deleteNote}</p>}
+              </LrField>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "cancelNote"), "Cancel")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "cancelNote"))}>
+                <input
+                  type="text"
+                  value={lnState.cancel}
+                  onChange={(e) => {
+                    setLn("cancel", e.target.value);
+                    setLnFieldErrors((prev) => ({ ...prev, cancel: undefined }));
+                  }}
+                  placeholder="e.g. Cancel"
+                  className={`${LR_INPUT} ${lnFieldErrors.cancel ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lnFieldErrors.cancel && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.cancel}</p>}
+              </LrField>
+              <LrField label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "editNote"), "Edit Note")} hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "editNote"))}>
+                <input
+                  type="text"
+                  value={lnState.editNote}
+                  onChange={(e) => {
+                    setLn("editNote", e.target.value);
+                    setLnFieldErrors((prev) => ({ ...prev, editNote: undefined }));
+                  }}
+                  placeholder="e.g. Edit note"
+                  className={`${LR_INPUT} ${lnFieldErrors.editNote ? "border-[#dc2626] focus:ring-[#dc2626]" : ""}`}
+                />
+                {lnFieldErrors.editNote && <p className="text-xs text-[#dc2626] mt-1">{lnFieldErrors.editNote}</p>}
+              </LrField>
+            </>
+          )}
+        </LeAccordion>
+
+        {/* -- Learner Search accordion -- */}
+        <LeAccordion
+          open={openAccordion === "learnerSearch"}
+          onToggle={() => toggleAccordion("learnerSearch")}
+          title={getSchemaLabel(searchSchema, "Learner Search")}
+          hint={getSchemaHint(searchSchema)}
+          icon={
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+          }
+        >
+          <DemoVideoPlaceholder label="See how Learner Search works" />
+          {lsLoading && (
+            <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-sm text-[#6b7280]">
+              Loading Learner Search settings...
+            </div>
+          )}
+          <div className={`pt-3${lsState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
+            <LrToggle checked={lsState.enabled} onChange={(v) => setLs("enabled", v)} label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_isEnabled"), "Enable Search")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_isEnabled"))} align="right" />
+          </div>
+
+          {lsState.enabled && (
+            <>
+              {/* Match On Rules */}
+              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
+                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
+                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Match On Rules</p>
+                  <p className="text-xs text-[#6b7280] mt-1">Select which word-matching strategies are active.</p>
+                </div>
+                <div className="px-4 py-4 space-y-3">
+                  <LrToggle checked={lsState.matchOn.contentWordBeginsPhraseWord} onChange={(v) => setMatchOn("contentWordBeginsPhraseWord", v)} label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_matchOn", "_contentWordBeginsPhraseWord"), "A word in the content begins the search phrase word")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_matchOn", "_contentWordBeginsPhraseWord"))} />
+                  <LrToggle checked={lsState.matchOn.contentWordContainsPhraseWord} onChange={(v) => setMatchOn("contentWordContainsPhraseWord", v)} label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_matchOn", "_contentWordContainsPhraseWord"), "A word in the content contains the search phrase word")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_matchOn", "_contentWordContainsPhraseWord"))} />
+                  <LrToggle checked={lsState.matchOn.contentWordEqualsPhraseWord} onChange={(v) => setMatchOn("contentWordEqualsPhraseWord", v)} label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_matchOn", "_contentWordEqualsPhraseWord"), "A word in the content equals the search phrase word")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_matchOn", "_contentWordEqualsPhraseWord"))} />
+                  <LrToggle checked={lsState.matchOn.phraseWordBeginsContentWord} onChange={(v) => setMatchOn("phraseWordBeginsContentWord", v)} label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_matchOn", "_phraseWordBeginsContentWord"), "A word in the content starts with the search phrase word")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_matchOn", "_phraseWordBeginsContentWord"))} />
+                </div>
+              </div>
+
+              {/* Display options */}
+              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
+                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
+                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Display Options</p>
+                </div>
+                <div className="px-4 py-4 space-y-3">
+                  <LrToggle checked={lsState.showFoundWords} onChange={(v) => setLs("showFoundWords", v)} label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_showFoundWords"), "Show found words")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_showFoundWords"))} />
+                  <LrToggle checked={lsState.showHighlights} onChange={(v) => setLs("showHighlights", v)} label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_showHighlights"), "Show highlights")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_showHighlights"))} />
+                </div>
+              </div>
+
+              {/* Ignored Words */}
+              <LrField label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_ignoreWords"), "Ignored Words")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_ignoreWords"))}>
+                <IgnoredWordsInput words={lsState.ignoredWords} onChange={(w) => setLs("ignoredWords", w)} />
+                <p className="text-xs text-[#9ca3af] mt-1">Type a word and press Enter to add. These words are excluded from search indexing.</p>
+              </LrField>
+
+              {/* Numeric settings */}
+              <div className="grid grid-cols-2 gap-4">
+                <LrField label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "_minimumWordLength"), "Minimum Word Length")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "_minimumWordLength"))}>
+                  <input type="number" min={1} value={lsState.minimumWordLength} onChange={(e) => setLs("minimumWordLength", Number(e.target.value))} className={LR_INPUT} />
+                </LrField>
+              </div>
+
+              {/* Text fields */}
+              <LrField label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "title"), "Title")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "title"))}>
+                <input type="text" value={lsState.title} onChange={(e) => setLs("title", e.target.value)} placeholder="e.g. How can we help?" className={LR_INPUT} />
+              </LrField>
+              <LrField label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "description"), "Placeholder")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "description"))}>
+                <input type="text" value={lsState.placeholder} onChange={(e) => setLs("placeholder", e.target.value)} placeholder="e.g. Type in search words" className={LR_INPUT} />
+              </LrField>
+              <LrField label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "placeholder"), "Placeholder Text for the Search Box")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "placeholder"))}>
+                <input type="text" value={lsState.searchBoxPlaceholder} onChange={(e) => setLs("searchBoxPlaceholder", e.target.value)} placeholder="e.g. Enter search criteria" className={LR_INPUT} />
+              </LrField>
+              <LrField label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "noResultsMessage"), "No Results Message")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "noResultsMessage"))}>
+                <input type="text" value={lsState.noResultsMessage} onChange={(e) => setLs("noResultsMessage", e.target.value)} placeholder="e.g. Sorry, no results were found" className={LR_INPUT} />
+              </LrField>
+              <LrField label={getSchemaLabel(getSchemaNode(searchFieldsSchema, "awaitingResultsMessage"), "Processing Results Message")} hint={getSchemaHint(getSchemaNode(searchFieldsSchema, "awaitingResultsMessage"))}>
+                <input type="text" value={lsState.processingResultsMessage} onChange={(e) => setLs("processingResultsMessage", e.target.value)} placeholder="e.g. Formulating results..." className={LR_INPUT} />
+              </LrField>
+            </>
+          )}
+        </LeAccordion>
+
+        {/* -- Ask AI Tutor accordion -- */}
+        <LeAccordion
+          open={openAccordion === "aiTutor"}
+          onToggle={() => toggleAccordion("aiTutor")}
+          title={getSchemaLabel(aiTutorSchema, "Ask AI Tutor")}
+          hint={getSchemaHint(aiTutorSchema)}
+          icon={
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+          }
+        >
+          {/* Enable toggle */}
+          <DemoVideoPlaceholder label="See how Ask AI Tutor works" />
+          {atLoading && (
+            <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-sm text-[#6b7280]">
+              Loading Ask AI Tutor settings...
+            </div>
+          )}
+          <div className={`pt-3${atState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
+            <LrToggle
+              checked={atState.enabled}
+              onChange={(v) => setAt("enabled", v)}
+              label={getSchemaLabel(getSchemaNode(aiTutorFieldsSchema, "_isEnabled"), "Enable AI Tutor")}
+              hint={getSchemaHint(getSchemaNode(aiTutorFieldsSchema, "_isEnabled"))}
+              align="right"
+            />
+          </div>
+
+          {atState.enabled && (
+            <>
+              {/* Title */}
+              <LrField label={getSchemaLabel(getSchemaNode(aiTutorFieldsSchema, "_aiTutorTitle"), "Title")} hint={getSchemaHint(getSchemaNode(aiTutorFieldsSchema, "_aiTutorTitle"))}>
+                <input
+                  type="text"
+                  value={atState.title}
+                  onChange={(e) => setAt("title", e.target.value)}
+                  placeholder="e.g. Ask the AI Tutor"
+                  className={LR_INPUT}
+                />
+              </LrField>
+
+              {/* Placeholder Text */}
+              <LrField label={getSchemaLabel(getSchemaNode(aiTutorFieldsSchema, "_placeHolderText"), "Placeholder Text")} hint={getSchemaHint(getSchemaNode(aiTutorFieldsSchema, "_placeHolderText"))}>
+                <input
+                  type="text"
+                  value={atState.placeholderText}
+                  onChange={(e) => setAt("placeholderText", e.target.value)}
+                  placeholder="e.g. Ask me anything about this course..."
+                  className={LR_INPUT}
+                />
+              </LrField>
+
+              {/* Language Code */}
+              <LrField label={getSchemaLabel(getSchemaNode(aiTutorFieldsSchema, "_languageCode"), "Language Code")} hint={getSchemaHint(getSchemaNode(aiTutorFieldsSchema, "_languageCode"))}>
+                <input
+                  type="text"
+                  value={atState.languageCode}
+                  onChange={(e) => setAt("languageCode", e.target.value)}
+                  placeholder="e.g. en-US"
+                  className={LR_INPUT}
+                />
+              </LrField>
+
+              {/* Documents */}
+              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
+                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
+                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Documents</p>
+                  <p className="text-xs text-[#6b7280] mt-1">Upload reference documents for the AI Tutor to draw from.</p>
+                </div>
+                <div className="px-4 py-3 space-y-2">
+                  {atState.documents.length > 0 && (
+                    <div className="space-y-1.5">
+                      {atState.documents.map((doc) => (
+                        <div key={doc.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-[#e5e7eb] bg-[#f9fafb]">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                          </svg>
+                          <span className="flex-1 text-sm text-[#374151] truncate">{doc.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveDocument(doc.id)}
+                            className="p-1 rounded text-[#9ca3af] hover:text-[#ef4444] hover:bg-[#fef2f2] transition-colors shrink-0"
+                            title="Remove document"
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                            </svg>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleAddDocument}
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 border-dashed border-[#d1d5db] text-sm text-[#6b7280] hover:border-[#2d6fa8] hover:text-[#2d6fa8] hover:bg-[#f0f7ff] transition-colors w-full justify-center"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    Add document
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </LeAccordion>
+
+        {/* -- Laerdal Course Feedback accordion -- */}
+        <LeAccordion
+          open={openAccordion === "courseFeedback"}
+          onToggle={() => toggleAccordion("courseFeedback")}
+          title={getSchemaLabel(feedbackSchema, "Laerdal Course Feedback")}
+          hint={getSchemaHint(feedbackSchema)}
+          icon={
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+            </svg>
+          }
+        >
+          {/* Enable toggle */}
+          <DemoVideoPlaceholder label="See how Laerdal Course Feedback works" />
+          <div className={`pt-3${cfState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
+            <LrToggle
+              checked={cfState.enabled}
+              onChange={(v) => setCf("enabled", v)}
+              label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_isEnabled"), "Enable Laerdal Course Feedback")}
+              hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_isEnabled"))}
+              align="right"
+            />
+          </div>
+
+          {cfState.enabled && (
+            <>
+              {/* Options - multi-select */}
+              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
+                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
+                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Options</p>
+                </div>
+                <div className="px-4 py-2">
+                  <LrCheckList<CourseFeedbackOption>
+                    options={COURSE_FEEDBACK_OPTIONS}
+                    selected={cfState.options}
+                    onChange={(v) => setCf("options", v)}
+                  />
+                </div>
+              </div>
+
+              {/* Trigger button */}
+              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
+                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
+                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Trigger Button</p>
+                </div>
+                <div className="px-4 py-4 space-y-3">
+                  <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_triggerButton", "text"), "Button text")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_triggerButton", "text"))}>
+                    <input
+                      type="text"
+                      value={cfState.buttonText}
+                      onChange={(e) => setCf("buttonText", e.target.value)}
+                      placeholder="e.g. Give Feedback"
+                      className={LR_INPUT}
+                    />
+                  </LrField>
+                  <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_triggerButton", "ariaLabel"), "Aria label")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_triggerButton", "ariaLabel"))}>
+                    <input
+                      type="text"
+                      value={cfState.buttonAriaLabel}
+                      onChange={(e) => setCf("buttonAriaLabel", e.target.value)}
+                      placeholder="e.g. Open course feedback"
+                      className={LR_INPUT}
+                    />
+                  </LrField>
+                </div>
+              </div>
+
+              {/* Feedback widget */}
+              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
+                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
+                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Feedback Widget</p>
+                </div>
+                <div className="px-4 py-4 space-y-4">
+                  <div className="rounded-lg border border-[#e5e7eb] overflow-hidden">
+                    <div className="px-3.5 py-2.5 bg-[#fafafa] border-b border-[#f3f4f6]">
+                      <p className="text-xs font-semibold text-[#374151] uppercase tracking-wide">Rating Step</p>
+                    </div>
+                    <div className="px-3.5 py-3 space-y-3">
+                      <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "title"), "Title")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "title"))}>
+                        <input
+                          type="text"
+                          value={cfState.ratingTitle}
+                          onChange={(e) => setCf("ratingTitle", e.target.value)}
+                          placeholder="e.g. How was your learning experience?"
+                          className={LR_INPUT}
+                        />
+                      </LrField>
+                      <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "ariaLabel"), "Aria label")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "ariaLabel"))}>
+                        <input
+                          type="text"
+                          value={cfState.ratingAriaLabel}
+                          onChange={(e) => setCf("ratingAriaLabel", e.target.value)}
+                          placeholder="e.g. Rate your experience"
+                          className={LR_INPUT}
+                        />
+                      </LrField>
+                      <div className="grid grid-cols-2 gap-3">
+                        <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "labelLow"), "Lowest rating label")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "labelLow"))}>
+                          <input
+                            type="text"
+                            value={cfState.lowestRatingLabel}
+                            onChange={(e) => setCf("lowestRatingLabel", e.target.value)}
+                            placeholder="e.g. Poor"
+                            className={LR_INPUT}
+                          />
+                        </LrField>
+                        <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "labelHigh"), "Highest rating label")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_rating", "labelHigh"))}>
+                          <input
+                            type="text"
+                            value={cfState.highestRatingLabel}
+                            onChange={(e) => setCf("highestRatingLabel", e.target.value)}
+                            placeholder="e.g. Excellent"
+                            className={LR_INPUT}
+                          />
+                        </LrField>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-[#e5e7eb] overflow-hidden">
+                    <div className="px-3.5 py-2.5 bg-[#fafafa] border-b border-[#f3f4f6]">
+                      <p className="text-xs font-semibold text-[#374151] uppercase tracking-wide">Common Step</p>
+                    </div>
+                    <div className="px-3.5 py-3 space-y-3">
+                      <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "title"), "Title")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "title"))}>
+                        <input
+                          type="text"
+                          value={cfState.commonTitle}
+                          onChange={(e) => setCf("commonTitle", e.target.value)}
+                          placeholder="e.g. Tell us more"
+                          className={LR_INPUT}
+                        />
+                      </LrField>
+                      <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "placeholder"), "Placeholder")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "placeholder"))}>
+                        <input
+                          type="text"
+                          value={cfState.commonPlaceholder}
+                          onChange={(e) => setCf("commonPlaceholder", e.target.value)}
+                          placeholder="e.g. Share your feedback..."
+                          className={LR_INPUT}
+                        />
+                      </LrField>
+                      <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "ariaLabel"), "Aria label")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "ariaLabel"))}>
+                        <input
+                          type="text"
+                          value={cfState.commonAriaLabel}
+                          onChange={(e) => setCf("commonAriaLabel", e.target.value)}
+                          placeholder="e.g. Feedback comment"
+                          className={LR_INPUT}
+                        />
+                      </LrField>
+                      <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "maxLength"), "Maximum character length")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_comment", "maxLength"))} help={<LrHelp>Maximum characters allowed (for SCORM 1.2 compatibility, recommended 250 or less)</LrHelp>}>
+                        <input
+                          type="number"
+                          min={0}
+                          value={cfState.maximumCharacterLength}
+                          onChange={(e) => setCf("maximumCharacterLength", Number(e.target.value))}
+                          className={LR_INPUT}
+                        />
+                      </LrField>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border border-[#e5e7eb] overflow-hidden">
+                    <div className="px-3.5 py-2.5 bg-[#fafafa] border-b border-[#f3f4f6]">
+                      <p className="text-xs font-semibold text-[#374151] uppercase tracking-wide">Buttons</p>
+                    </div>
+                    <div className="px-3.5 py-3 space-y-3">
+                      <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_buttons", "next"), "Next button text")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_buttons", "next"))}>
+                        <input
+                          type="text"
+                          value={cfState.nextButtonText}
+                          onChange={(e) => setCf("nextButtonText", e.target.value)}
+                          placeholder="e.g. Next"
+                          className={LR_INPUT}
+                        />
+                      </LrField>
+                      <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_buttons", "close"), "Close button text")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_buttons", "close"))}>
+                        <input
+                          type="text"
+                          value={cfState.closeButtonText}
+                          onChange={(e) => setCf("closeButtonText", e.target.value)}
+                          placeholder="e.g. Close"
+                          className={LR_INPUT}
+                        />
+                      </LrField>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Thank you message */}
+              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
+                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
+                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">THANK YOU MESSAGE</p>
+                </div>
+                <div className="px-4 py-4">
+                  <LrField label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_widget", "_thankYou", "body"), "Body")} hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_widget", "_thankYou", "body"))}>
+                    <ClickToEditRichText
+                      value={cfState.thankYouBody}
+                      onChange={(html) => setCf("thankYouBody", html)}
+                      placeholder="e.g. Thank you for your feedback!"
+                      courseContext={courseId}
+                    />
+                  </LrField>
+                </div>
+              </div>
+            </>
+          )}
+        </LeAccordion>
+
+        <div className="flex items-start gap-2.5 rounded-lg bg-[#fff7ed] border border-[#fed7aa] px-4 py-3">
+          <span className="text-base leading-none mt-0.5" aria-hidden="true">💡</span>
+          <p className="text-sm text-[#9a3412] leading-snug">
+            <span className="font-semibold">Tip:</span> Manage learner engagement features including Feedback, AI Tutor, Resources, Notes, and Search. Feedback submissions are reported in Course Insights, while AI Tutor activity is retained in backend logs and available through the ELT team.
+          </p>
+        </div>
+
+      </div>
+
+      {showAddDialog && (
+        <AddResourceDialog
+          onAdd={handleAddResource}
+          onCancel={() => setShowAddDialog(false)}
+        />
+      )}
+
+      <div className="h-8" />
+      </div>
+
+      <SaveStatusToast toast={lnToast} onDismiss={() => setLnToast(null)} autoHideMs={3500} />
+
+      {assetPickerOpen && (
+        <AssetPickerModal
+          assetType="other"
+          onSelect={(asset) => {
+            const name = asset.assetLink.split("/").pop() ?? asset.assetLink;
+            setAtState((prev) => ({
+              ...prev,
+              documents: [...prev.documents, { id: asset.id, name, document: asset.assetLink }],
+            }));
+            setAssetPickerOpen(false);
+          }}
+          onClose={() => setAssetPickerOpen(false)}
+        />
+      )}
+
+      <UnsavedChangesModal
+        isOpen={showConfirmModal}
+        isSaving={lnSaving}
+        onDiscard={handleConfirmDiscard}
+        onSave={handleConfirmSave}
+        onClose={clearPendingNavigation}
+      />
+    </div>
+  );
+}

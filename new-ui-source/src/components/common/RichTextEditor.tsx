@@ -1,0 +1,153 @@
+// Real CKEditor 5 rich-text field — replaces the plain <textarea> previously
+// used for every schema field with `inputType: "TextArea"` (the old tool's
+// Backbone Forms override at frontend/src/modules/scaffold/backboneFormsOverrides.js
+// globally replaces `editors.TextArea.render` with a CKEditor instance for
+// EXACTLY those fields, nothing else — so mirroring that inputType check is
+// enough to know where CKEditor belongs vs a plain input).
+//
+// Toolbar mirrors ckEditorManager.js (Laerdal-Medical/adapt-framework-plugins
+// extensions/adapt-preview-edit — the same CDN-loaded CKEditor 5 build used by
+// Quick Edit) plus a "Samaritan Assistance" button wired to the existing
+// AiAssistPopover/samaritanAssist (already built for Storyboard) instead of
+// re-porting the old tool's bespoke AiAgentPlugin.
+import { useEffect, useRef, useState } from "react";
+import AiAssistPopover from "../storyboard/AiAssistPopover";
+import {
+  CKEDITOR_FULL_TOOLBAR_ITEMS,
+  CKEDITOR_HEADING_CONFIG,
+  CKEDITOR_IMAGE_CONFIG,
+  CKEDITOR_LIST_CONFIG,
+  CKEDITOR_STANDARD_COLOUR_PALETTE,
+  CKEDITOR_TABLE_CONFIG,
+  loadCKEditor5,
+} from "../../utils/ckEditor5Loader";
+import {
+  CKEDITOR_LINK_CONFIG,
+  getSamaritanSeedText,
+  insertAiResultIntoEditor,
+  replaceAiResultInEditor,
+} from "../../utils/ckEditorSamaritan";
+
+export default function RichTextEditor({
+  value,
+  onChange,
+  placeholder,
+  courseContext,
+  disabled,
+  syncExternalValue = false,
+}: {
+  value: string;
+  onChange: (html: string) => void;
+  placeholder?: string;
+  courseContext?: string;
+  disabled?: boolean;
+  // Pull in `value` changes made elsewhere (e.g. the same field edited on the
+  // page editor canvas) instead of staying the sole source of truth.
+  syncExternalValue?: boolean;
+}) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const editorRef = useRef<any>(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const applyingExternalValueRef = useRef(false);
+  const [ready, setReady] = useState(false);
+  const [samaritanOpen, setSamaritanOpen] = useState(false);
+  const [samaritanSeedText, setSamaritanSeedText] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        await loadCKEditor5();
+        if (cancelled || !containerRef.current) return;
+        const CKEDITOR = (window as any).CKEDITOR;
+        const editor = await CKEDITOR.create(containerRef.current, {
+          plugins: [...CKEDITOR.pluginsConfig, CKEDITOR.SamaritanPlugin, CKEDITOR.PasteToolsPlugin],
+          toolbar: { items: [...CKEDITOR_FULL_TOOLBAR_ITEMS.slice(0, -1), "pasteWithFormatting", "xmlToHtml", "|", "samaritan"], shouldNotGroupWhenFull: true },
+          fontColor: { colors: CKEDITOR_STANDARD_COLOUR_PALETTE },
+          fontBackgroundColor: { colors: CKEDITOR_STANDARD_COLOUR_PALETTE },
+          heading: CKEDITOR_HEADING_CONFIG,
+          list: CKEDITOR_LIST_CONFIG,
+          table: CKEDITOR_TABLE_CONFIG,
+          image: CKEDITOR_IMAGE_CONFIG,
+          link: CKEDITOR_LINK_CONFIG,
+          htmlSupport: { allow: [{ name: /.*/, attributes: true, classes: true, style: true, styles: true }] },
+          initialData: value || "",
+          samaritanOnClick: (ed: any) => {
+            setSamaritanSeedText(getSamaritanSeedText(ed));
+            setSamaritanOpen(true);
+          },
+        });
+        if (cancelled) {
+          editor.destroy();
+          return;
+        }
+        editor.model.document.on("change:data", () => {
+          if (applyingExternalValueRef.current) return;
+          onChangeRef.current(editor.getData());
+        });
+        editorRef.current = editor;
+        setReady(true);
+      } catch (err) {
+        console.warn("Failed to load CKEditor 5", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (editorRef.current) {
+        editorRef.current.destroy().catch(() => {});
+        editorRef.current = null;
+      }
+    };
+    // Only ever created once per mount — external `value` changes after
+    // creation are intentionally not pushed back in (matches the old tool:
+    // the field is the source of truth once the editor exists).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (editorRef.current) {
+      editorRef.current.isReadOnly = !!disabled;
+    }
+  }, [disabled]);
+
+  useEffect(() => {
+    if (!syncExternalValue || !ready) return;
+    const editor = editorRef.current;
+    if (!editor || editor.ui.focusTracker.isFocused) return;
+    if (editor.getData() === (value || "")) return;
+    applyingExternalValueRef.current = true;
+    try {
+      editor.setData(value || "");
+    } finally {
+      applyingExternalValueRef.current = false;
+    }
+  }, [ready, syncExternalValue, value]);
+
+  // Insert keeps the rest of the field and drops the result at the caret;
+  // Replace swaps the selection (or the whole field when nothing is
+  // selected) — same split the old tool's Samaritan popup makes.
+  const applySamaritanResult = (text: string, mode: "insert" | "replace") => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    if (mode === "insert") insertAiResultIntoEditor(editor, text);
+    else replaceAiResultInEditor(editor, text);
+    onChangeRef.current(editor.getData());
+  };
+
+  return (
+    <div className="rich-text-editor-field">
+      <div ref={containerRef} />
+      {!ready && <div className="text-[12px] text-[#9ca3af] px-1 py-1">Loading editor…</div>}
+      {samaritanOpen && (
+        <AiAssistPopover
+          initialText={samaritanSeedText}
+          courseContext={courseContext}
+          onInsert={(text) => applySamaritanResult(text, "insert")}
+          onReplace={(text) => applySamaritanResult(text, "replace")}
+          onClose={() => setSamaritanOpen(false)}
+        />
+      )}
+    </div>
+  );
+}

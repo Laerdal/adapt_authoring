@@ -1,5 +1,9 @@
-import { useEffect, useState, useCallback, useRef } from "react";
-import { saveThemeForCourse, saveThemeVariables, getThemePresets, saveThemePreset, applyThemePreset, getThemePresetParentTheme, renameThemePreset, deleteThemePreset, type ThemePreset } from "../../api/adaptAuthoring";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { saveThemeForCourse, saveThemeVariables, getThemePresets, saveThemePreset, applyThemePreset, getThemePresetParentTheme, renameThemePreset, deleteThemePreset, getThemeTypeVariablesSchemaByLabel, type ThemePreset } from "../../api/adaptAuthoring";
+import ConfirmDialog from "../../components/common/ConfirmDialog";
+import InfoIcon, { InfoFieldLabel } from "../../components/common/InfoIcon";
+import { SaveChangesButton } from "./SaveChangesButton";
+import { SaveStatusToast } from "./SaveStatusToast";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 
@@ -46,14 +50,66 @@ const PREVIEW_TITLE_SIZE: Record<string, string | null> = {
   Paragraph: "0.95rem",
 };
 
-const CALC_VALUES = [
-  { label: "H1 (Page Title)", rem: "3.5rem", px: "56px" },
-  { label: "H2", rem: "3rem", px: "48px" },
-  { label: "H3", rem: "2.5rem", px: "40px" },
-  { label: "H4", rem: "2rem", px: "32px" },
-  { label: "H5", rem: "1.5rem", px: "24px" },
-  { label: "Paragraph", rem: "1.125rem", px: "18px" },
-];
+const PAGE_TITLE_SIZE_REM: Record<string, number> = {
+  H1: 3.5, H2: 3, H3: 2.5, H4: 2, H5: 1.5, Paragraph: 1.125,
+};
+
+function calcDesktopSizes(baseRem: number) {
+  const MIN_INSTRUCTION_REM = 0.875;
+  const MIN_FONT_STEP_REM = 0.0625;
+  const MIN_PARAGRAPH_REM = MIN_INSTRUCTION_REM + MIN_FONT_STEP_REM;
+
+  const h1Raw = baseRem;
+  const h2Raw = baseRem - 0.5;
+  const h3Raw = baseRem - 1;
+  const h4Raw = baseRem - 1.25;
+  const h5Raw = baseRem - 1.5;
+  const h6Raw = baseRem - 1.75;
+
+  const h6 = Math.max(h6Raw, MIN_PARAGRAPH_REM);
+  const h5 = Math.max(h5Raw, h6 + MIN_FONT_STEP_REM);
+  const h4 = Math.max(h4Raw, h5 + MIN_FONT_STEP_REM);
+  const h3 = Math.max(h3Raw, h4 + MIN_FONT_STEP_REM);
+  const h2 = Math.max(h2Raw, h3 + MIN_FONT_STEP_REM);
+  const h1 = Math.max(h1Raw, h2 + MIN_FONT_STEP_REM);
+  const p = h6;
+
+  const formatSize = (rem: number) => {
+    const px = Math.round(rem * 16);
+    const formatted = rem.toFixed(4).replace(/\.?0+$/, "");
+    return { rem: formatted, px };
+  };
+
+  const h1Size = formatSize(h1);
+  const h2Size = formatSize(h2);
+  const h3Size = formatSize(h3);
+  const h4Size = formatSize(h4);
+  const h5Size = formatSize(h5);
+  const h6Size = formatSize(h6);
+  const pSize = formatSize(p);
+
+  return [
+    { label: "H1 (Topic Title)", size: h1Size.rem, px: h1Size.px },
+    { label: "H2", size: h2Size.rem, px: h2Size.px },
+    { label: "H3", size: h3Size.rem, px: h3Size.px },
+    { label: "H4", size: h4Size.rem, px: h4Size.px },
+    { label: "H5", size: h5Size.rem, px: h5Size.px },
+    { label: "H6", size: h6Size.rem, px: h6Size.px },
+    { label: "Paragraph", size: pSize.rem, px: pSize.px },
+  ];
+}
+
+function DesktopCalculatedValues({ baseRem }: { baseRem: number }) {
+  const sizes = calcDesktopSizes(baseRem);
+  return (
+    <div className="mt-2 px-4 py-3 text-xs text-[var(--life-neutral-500)] space-y-0.5 bg-[var(--life-primary-020)] border-l-4 border-[var(--life-primary-500)]">
+      <p className="font-semibold text-[var(--life-base-black)] mb-1">Calculated values for Desktop:</p>
+      {sizes.map((s) => (
+        <p key={s.label}><span className="font-semibold">{s.label}:</span> {s.size}rem ({s.px}px)</p>
+      ))}
+    </div>
+  );
+}
 
 const H1_SIZE_OPTIONS = [
   { label: "H1 - 3.5rem", value: "3.5rem" },
@@ -139,21 +195,21 @@ function FontSelect({ label, value, onChange }: { label: string; value: string; 
 function Accordion({ title, icon, children, defaultOpen = false }: { title: string; icon: React.ReactNode; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border border-[#e5e7eb] rounded-xl overflow-hidden">
+    <div className="border border-[#e5e7eb] rounded-xl overflow-visible bg-white">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between px-4 py-3.5 bg-white hover:bg-[#f9fafb] transition-colors"
+        className="group w-full flex items-center justify-between gap-3 px-5 py-4 !h-[56px] text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
       >
-        <div className="flex items-center gap-2.5 text-sm font-semibold text-[#111827]">
-          <span className="text-[#6b7280]">{icon}</span>
+        <div className="flex items-center gap-2.5 text-sm font-semibold text-current">
+          <span className="text-current">{icon}</span>
           {title}
         </div>
         <svg
           width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-          className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`}
+          className="shrink-0 ml-auto text-current"
         >
-          <polyline points="6 9 12 15 18 9" />
+          <polyline points={open ? "6 9 12 15 18 9" : "9 6 15 12 9 18"} />
         </svg>
       </button>
       {open && <div className="px-[22px] py-[20px] border-t border-[#f3f4f6] bg-white">{children}</div>}
@@ -203,7 +259,7 @@ function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
             </svg>
-            <span className="text-xs text-white flex-1" style={{ fontFamily: cfg.headingFont }}>New Course Title / New Menu/Page Title</span>
+            <span className="text-xs text-white flex-1" style={{ fontFamily: cfg.headingFont }}>New Course Title / New Menu/Topic Title</span>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
             </svg>
@@ -211,13 +267,13 @@ function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
 
           <div className="p-4">
             {/* page title */}
-            <h1 className="font-bold mb-3" style={{ ...headingStyle, fontSize: h1Size }}>{cfg.pageTitleSize === "h6" ? "-" : "New Menu/Page Title"}</h1>
+            <h1 className="font-bold mb-3" style={{ ...headingStyle, fontSize: h1Size }}>{cfg.pageTitleSize === "h6" ? "-" : "New Menu/Topic Title"}</h1>
 
             {/* article block */}
             <div className="border border-[#e5e7eb] rounded-lg p-3 mb-3">
-              <h2 className="font-semibold text-sm mb-1" style={headingStyle}>New Article Title</h2>
+              <h2 className="font-semibold text-sm mb-1" style={headingStyle}>New Section Title</h2>
               <div className="border border-[#e5e7eb] rounded-md p-3">
-                <h3 className="font-semibold text-xs mb-1" style={headingStyle}>New Block Title</h3>
+                <h3 className="font-semibold text-xs mb-1" style={headingStyle}>New Content Group Title</h3>
                 <div className="border border-[#e5e7eb] rounded p-3">
                   <p className="font-semibold text-xs mb-1" style={headingStyle}>New Component Title</p>
                   <p className="text-xs mb-1" style={bodyStyle}>Body text</p>
@@ -257,21 +313,6 @@ function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
 function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (v: CustomThemeValues) => void }) {
   const set = <K extends keyof CustomThemeValues>(k: K, v: CustomThemeValues[K]) => setCfg({ ...cfg, [k]: v });
 
-  const calcSizes = () => {
-    const base = cfg.pageTitleSize === "h6" ? null : parseFloat(cfg.pageTitleSize);
-    if (!base) return null;
-    return [
-      { label: "H1 (Page Title)", size: base, px: Math.round(base * 16) },
-      { label: "H2", size: +(base - 0.5).toFixed(1), px: Math.round((base - 0.5) * 16) },
-      { label: "H3", size: +(base - 1).toFixed(1), px: Math.round((base - 1) * 16) },
-      { label: "H4", size: +(base - 1.5).toFixed(1), px: Math.round((base - 1.5) * 16) },
-      { label: "H5", size: +(base - 2).toFixed(1), px: Math.round((base - 2) * 16) },
-      { label: "Paragraph", size: 1.125, px: 18 },
-    ];
-  };
-
-  const sizes = calcSizes();
-
   return (
     <div className="space-y-5 mt-4">
       {/* colours row 1 */}
@@ -293,10 +334,10 @@ function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (
         <ColorField label="Instruction colour" value={cfg.instructionColor} onChange={(v) => set("instructionColor", v)} />
         <ColorField label="Link font colour" value={cfg.linkFontColor} onChange={(v) => set("linkFontColor", v)} />
       </div>
-      {/* page title size */}
+      {/* topic title size */}
       <div className="flex flex-col gap-1.5">
         <span className="text-xs font-medium text-[#374151] flex items-center gap-1">
-          Page Title Size (H1)
+          Topic Title Size (H1)
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
@@ -310,8 +351,8 @@ function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (
           <select
             value={cfg.pageTitleSize}
             onChange={(e) => set("pageTitleSize", e.target.value)}
-            aria-label="Page Title Size (H1)"
-            title="Page Title Size (H1)"
+            aria-label="Topic Title Size (H1)"
+            title="Topic Title Size (H1)"
             className="w-full border-2 border-[var(--life-primary-500)] rounded-lg px-3 py-2.5 text-sm text-[#111827] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] pr-8"
           >
             {H1_SIZE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -320,14 +361,7 @@ function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (
             <polyline points="6 9 12 15 18 9"/>
           </svg>
         </div>
-        {sizes && (
-          <div className="mt-2 rounded-lg bg-[var(--life-primary-020)] border-l-4 border-[var(--life-primary-500)] px-4 py-3 text-xs text-[#374151] space-y-0.5">
-            <p className="font-semibold text-[#111827] mb-1">Calculated values for Desktop:</p>
-            {sizes.map((s) => (
-              <p key={s.label}><span className="font-semibold">{s.label}:</span> {s.size}rem ({s.px}px)</p>
-            ))}
-          </div>
-        )}
+        {cfg.pageTitleSize !== "h6" && <DesktopCalculatedValues baseRem={parseFloat(cfg.pageTitleSize)} />}
       </div>
     </div>
   );
@@ -361,13 +395,13 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
     },
     {
       id: "page",
-      title: "Page Structure",
+      title: "Topic Structure",
       icon: (
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
           <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>
         </svg>
       ),
-      content: <div className="pt-4 text-sm text-[#9ca3af] italic">Page structure options coming soon.</div>,
+      content: <div className="pt-4 text-sm text-[#9ca3af] italic">Topic structure options coming soon.</div>,
     },
     {
       id: "progress",
@@ -471,7 +505,7 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
                 { key: "markingNotFinal",          label: "Display marking for not-final attempts" },
                 { key: "markingUnansweredCorrect",  label: "Display marking for unanswered correct responses" },
                 { key: "hideFeedbackFirstAttempt",  label: "Hide feedback on first attempt on assessments" },
-                { key: "hidePartiallyCorrect",      label: "Hide partially correct feedback on the question and result page" },
+                { key: "hidePartiallyCorrect",      label: "Hide partially correct feedback on the question and result topic" },
               ] as { key: keyof typeof componentConfig; label: string }[]
             ).map(({ key, label }) => (
               <label key={key} className="flex items-start gap-3 py-2 px-2 rounded-lg hover:bg-[#f9fafb] cursor-pointer group">
@@ -565,26 +599,26 @@ const CUSTOM_ACCORDION_DEFS: CustomSectionDef[] = [
       { key: 'heading-color', label: 'Heading font colour', inputType: 'color' },
       { key: 'instruction-color', label: 'Instruction colour', inputType: 'color' },
       { key: 'link', label: 'Link font colour', inputType: 'color' },
-      { key: 'page-heading-font-size', label: 'Page Title Size (H1)', inputType: 'select', options: CUSTOM_SELECT_PAGE_TITLE_SIZE_OPTIONS },
+      { key: 'page-heading-font-size', label: 'Topic Title Size (H1)', inputType: 'select', options: CUSTOM_SELECT_PAGE_TITLE_SIZE_OPTIONS },
     ],
   },
   {
     id: '_pageStructure',
-    label: 'Page Structure',
+    label: 'Topic Structure',
     fields: [
-      { key: 'page-bg-color', label: 'Page background', inputType: 'color' },
-      { key: 'article-bg-color', label: 'Article background', inputType: 'color' },
-      { key: 'block-bg-color', label: 'Block background', inputType: 'color' },
+      { key: 'page-bg-color', label: 'Topic background', inputType: 'color' },
+      { key: 'article-bg-color', label: 'Section background', inputType: 'color' },
+      { key: 'block-bg-color', label: 'Content Group background', inputType: 'color' },
       { key: 'component-bg-color', label: 'Component background', inputType: 'color' },
-      { key: 'page-header-background-color', label: 'Page header background colour', inputType: 'color' },
-      { key: 'page-header-title-color', label: 'Page header title colour', inputType: 'color' },
-      { key: 'page-header-subtitle-color', label: 'Page header subtitle colour', inputType: 'color' },
-      { key: 'page-header-body-color', label: 'Page header body colour', inputType: 'color' },
-      { key: 'page-header-instruction-color', label: 'Page header instruction colour', inputType: 'color' },
-      { key: 'article-top-padding', label: 'Article top padding', inputType: 'select', options: CUSTOM_SELECT_PADDING_OPTIONS },
-      { key: 'article-bottom-padding', label: 'Article bottom padding', inputType: 'select', options: CUSTOM_SELECT_PADDING_OPTIONS },
-      { key: 'block-top-padding', label: 'Block top padding', inputType: 'select', options: CUSTOM_SELECT_PADDING_OPTIONS },
-      { key: 'block-bottom-padding', label: 'Block bottom padding', inputType: 'select', options: CUSTOM_SELECT_PADDING_OPTIONS },
+      { key: 'page-header-background-color', label: 'Topic header background colour', inputType: 'color' },
+      { key: 'page-header-title-color', label: 'Topic header title colour', inputType: 'color' },
+      { key: 'page-header-subtitle-color', label: 'Topic header subtitle colour', inputType: 'color' },
+      { key: 'page-header-body-color', label: 'Topic header body colour', inputType: 'color' },
+      { key: 'page-header-instruction-color', label: 'Topic header instruction colour', inputType: 'color' },
+      { key: 'article-top-padding', label: 'Section top padding', inputType: 'select', options: CUSTOM_SELECT_PADDING_OPTIONS },
+      { key: 'article-bottom-padding', label: 'Section bottom padding', inputType: 'select', options: CUSTOM_SELECT_PADDING_OPTIONS },
+      { key: 'block-top-padding', label: 'Content Group top padding', inputType: 'select', options: CUSTOM_SELECT_PADDING_OPTIONS },
+      { key: 'block-bottom-padding', label: 'Content Group bottom padding', inputType: 'select', options: CUSTOM_SELECT_PADDING_OPTIONS },
     ],
   },
   {
@@ -632,6 +666,74 @@ const CUSTOM_ACCORDION_DEFS: CustomSectionDef[] = [
   },
 ];
 
+function getSchemaText(schema: Record<string, unknown> | null | undefined, key: string): string | undefined {
+  const value = schema?.[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function getSchemaSections(
+  schema: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | null | undefined {
+  const variables = schema?.variables;
+  return variables && typeof variables === 'object' && !Array.isArray(variables)
+    ? variables as Record<string, unknown>
+    : schema;
+}
+
+function getSchemaField(
+  sections: Record<string, unknown> | null | undefined,
+  sectionId: string,
+  fieldKey?: string,
+): Record<string, unknown> | undefined {
+  const section = sections?.[sectionId] as Record<string, unknown> | undefined;
+  if (!section) return undefined;
+  if (!fieldKey) return section;
+  const properties = section.properties as Record<string, unknown> | undefined;
+  const field = properties?.[fieldKey] as Record<string, unknown> | undefined;
+  return field;
+}
+
+function getSchemaNestedFieldText(
+  fieldSchema: Record<string, unknown> | null | undefined,
+  nestedKey: string,
+  textKey: string,
+): string | undefined {
+  const nestedFields = fieldSchema?.properties as Record<string, unknown> | undefined;
+  const nestedField = nestedFields?.[nestedKey] as Record<string, unknown> | undefined;
+  return getSchemaText(nestedField, textKey);
+}
+
+function getSchemaArrayItemField(
+  fieldSchema: Record<string, unknown> | null | undefined,
+  nestedKey: string,
+): Record<string, unknown> | undefined {
+  const items = fieldSchema?.items as Record<string, unknown> | undefined;
+  const nestedFields = items?.properties as Record<string, unknown> | undefined;
+  return nestedFields?.[nestedKey] as Record<string, unknown> | undefined;
+}
+
+function getSchemaArrayItemFieldText(
+  fieldSchema: Record<string, unknown> | null | undefined,
+  nestedKey: string,
+  textKey: string,
+): string | undefined {
+  return getSchemaText(getSchemaArrayItemField(fieldSchema, nestedKey), textKey);
+}
+
+function getThemeComponentSectionSchema(
+  schema: Record<string, unknown> | null | undefined,
+): Record<string, unknown> | undefined {
+  return getSchemaField(schema, '_componentConfig') ?? getSchemaField(schema, '_components');
+}
+
+function getSchemaPropertyField(
+  sectionSchema: Record<string, unknown> | null | undefined,
+  fieldKey: string,
+): Record<string, unknown> | undefined {
+  const properties = sectionSchema?.properties as Record<string, unknown> | undefined;
+  return properties?.[fieldKey] as Record<string, unknown> | undefined;
+}
+
 const CUSTOM_FIELD_DEFAULTS: Record<string, string> = {
   '_global::_primaryBrandColor': '#2e7fa1',
   '_global::_secondaryBrandColor': '#25837e',
@@ -663,7 +765,7 @@ const CUSTOM_FIELD_DEFAULTS: Record<string, string> = {
   '_menu::menu-header-background-color': '',
   '_menu::menu-item': '',
   '_menu::menu-item-progress': '',
-  '_nav::nav': '#FFFFFF',
+  '_nav::nav': '#2e7fa1',
   '_nav::nav-progress': '#2e7fa1',
   '_notify::notify': '#ffffff',
   '_notify::drawer': '#ffffff',
@@ -673,7 +775,7 @@ const CUSTOM_FIELD_DEFAULTS: Record<string, string> = {
 // Mirrors linkedProperties in custom-theme properties.schema.
 // Format uses UI keys: "sectionId::fieldKey".
 const CUSTOM_LINKED_PROPERTY_MAP: Record<string, string[]> = {
-  '_global::_primaryBrandColor': ['_progress::progress', '_global::link'],
+  '_global::_primaryBrandColor': ['_progress::progress', '_global::link', '_nav::nav', '_pageStructure::page-header-background-color'],
   '_progress::progress': ['_nav::nav-progress', '_menu::menu-item-progress'],
 };
 
@@ -689,7 +791,6 @@ const VANILLA_ACCORDION_DEFS: { id: string; label: string; fields: { key: string
       { key: 'link-inverted-hover', label: 'Link font colour - inverted hover' },
       { key: 'heading-color', label: 'Heading colour' },
       { key: 'heading-color-inverted', label: 'Heading colour - inverted' },
-      { key: 'body-background-color', label: 'Body background colour' },
     ],
   },
   {
@@ -771,16 +872,6 @@ const VANILLA_ACCORDION_DEFS: { id: string; label: string; fields: { key: string
       { key: 'progress', label: 'Progress fill colour' },
       { key: 'progress-inverted', label: 'Progress background colour' },
       { key: 'progress-border', label: 'Progress border colour' },
-    ],
-  },
-  {
-    id: '_page', label: 'Page',
-    fields: [
-      { key: 'page-header-background-color', label: 'Page header background colour' },
-      { key: 'page-header-title-color', label: 'Page header title colour' },
-      { key: 'page-header-subtitle-color', label: 'Page header subtitle colour' },
-      { key: 'page-header-body-color', label: 'Page header body colour' },
-      { key: 'page-header-instruction-color', label: 'Page header instruction colour' },
     ],
   },
   {
@@ -880,7 +971,6 @@ const VANILLA_ACCORDION_DEFS: { id: string; label: string; fields: { key: string
       { key: 'drawer-item-inverted-focus', label: 'Drawer item background colour - inverted focus' },
       { key: 'drawer-item-selected', label: 'Drawer item background colour - selected' },
       { key: 'drawer-item-inverted-selected', label: 'Drawer item background colour - inverted selected' },
-      { key: 'drawer-item-selected-underline', label: 'Drawer item colour - selected underline' },
       { key: 'drawer-item-locked', label: 'Drawer item background colour - locked' },
       { key: 'drawer-item-inverted-locked', label: 'Drawer item background colour - inverted locked' },
       { key: 'drawer-progress', label: 'Drawer progress fill colour' },
@@ -892,245 +982,58 @@ const VANILLA_ACCORDION_DEFS: { id: string; label: string; fields: { key: string
     ],
   },
   {
-    id: '_pullQuote', label: 'Pull Quotes',
-    fields: [
-      { key: 'pull-quote', label: 'Pull quote background colour' },
-      { key: 'pull-quote-inverted', label: 'Pull quote text colour' },
-      { key: 'pull-quote-border', label: 'Pull quote border colour' },
-    ],
-  },
-  {
     id: '_misc', label: 'Misc',
     fields: [
       { key: 'background', label: 'Background colour' },
       { key: 'background-inverted', label: 'Background colour - inverted' },
       { key: 'shadow', label: 'Shadow background colour (loading / popup background)' },
       { key: 'shadow-inverted', label: 'Shadow background colour - inverted' },
-      { key: 'shadow-opacity', label: 'Shadow opacity' },
       { key: 'loading', label: 'Loading animation background colour' },
       { key: 'loading-inverted', label: 'Loading animation colour - inverted' },
     ],
   },
-  {
-    id: '_tooltip', label: 'Tooltip',
-    fields: [
-      { key: 'tooltip-color', label: 'Tooltip background colour' },
-      { key: 'tooltip-text-color', label: 'Tooltip text colour' },
-    ],
-  },
 ];
 
-const LIFE_STYLING_ACCORDIONS = [
-  {
-    id: "_global",
-    label: "Styling: Global",
-    fields: [
-      { key: "font-color", label: "Font colour", defaultValue: "#1f1f1f" },
-      { key: "font-color-inverted", label: "Font colour inverted", defaultValue: "#ffffff" },
-      { key: "link", label: "Link font colour", defaultValue: "" },
-      { key: "link-inverted", label: "Link font colour - inverted", defaultValue: "" },
-      { key: "link-hover", label: "Link font colour - hover", defaultValue: "" },
-      { key: "link-inverted-hover", label: "Link font colour - inverted hover", defaultValue: "" },
-      { key: "heading-color", label: "Heading colour", defaultValue: "#333333" },
-      { key: "heading-color-inverted", label: "Heading colour - inverted", defaultValue: "#ffffff" },
-    ],
-  },
-  {
-    id: "_blockStyles",
-    label: "Styling: Blocks",
-    fields: [
-      { key: "block-bg-color", label: "Background colour", defaultValue: "" },
-    ],
-  },
-  {
-    id: "_items",
-    label: "Styling: Components",
-    fields: [
-      { key: "component-bg-color", label: "Background colour", defaultValue: "" },
-      { key: "item-color", label: "Item colour", defaultValue: "#edfcfb" },
-      { key: "item-color-inverted", label: "Item colour - inverted", defaultValue: "#23716d" },
-      { key: "item-color-hover", label: "Item colour - hover", defaultValue: "" },
-      { key: "item-color-inverted-hover", label: "Item colour - inverted hover", defaultValue: "" },
-      { key: "item-color-selected", label: "Item colour - selected", defaultValue: "" },
-      { key: "item-color-inverted-selected", label: "Item colour - inverted selected", defaultValue: "" },
-      { key: "visited", label: "Visited colour", defaultValue: "#edfcfb" },
-      { key: "visited-inverted", label: "Visited colour - inverted", defaultValue: "#23716d" },
-    ],
-  },
-  {
-    id: "_buttons",
-    label: "Styling: Buttons",
-    fields: [
-      { key: "btn-color", label: "Button colour", defaultValue: "#2e7fa1" },
-      { key: "btn-color-inverted", label: "Button colour - inverted", defaultValue: "#ffffff" },
-      { key: "btn-color-hover", label: "Button colour - hover", defaultValue: "" },
-      { key: "btn-color-inverted-hover", label: "Button colour - inverted hover", defaultValue: "" },
-      { key: "disabled", label: "Disabled colour", defaultValue: "#dddddd" },
-      { key: "disabled-inverted", label: "Disabled colour - inverted", defaultValue: "#000000" },
-    ],
-  },
-  {
-    id: "_validation",
-    label: "Styling: Validation states",
-    fields: [
-      { key: "validation-success", label: "Validation success colour", defaultValue: "#065f28" },
-      { key: "validation-success-inverted", label: "Validation success colour - inverted", defaultValue: "#ffffff" },
-      { key: "validation-error", label: "Validation error colour", defaultValue: "#ff0000" },
-      { key: "validation-error-inverted", label: "Validation error colour - inverted", defaultValue: "#ffffff" },
-    ],
-  },
-  {
-    id: "_progress",
-    label: "Styling: Progress",
-    fields: [
-      { key: "progress", label: "Progress fill colour", defaultValue: "#2e7fa1" },
-      { key: "progress-inverted", label: "Progress background colour", defaultValue: "#e5e5e5" },
-      { key: "progress-border", label: "Progress border colour", defaultValue: "transparent" },
-    ],
-  },
-  {
-    id: "_page",
-    label: "Page",
-    fields: [
-      { key: "page-header-background-color", label: "Page header background colour", defaultValue: "" },
-      { key: "page-header-title-color", label: "Page header title colour", defaultValue: "" },
-      { key: "page-header-subtitle-color", label: "Page header subtitle colour", defaultValue: "" },
-      { key: "page-header-body-color", label: "Page header body colour", defaultValue: "" },
-      { key: "page-header-instruction-color", label: "Page header instruction colour", defaultValue: "" },
-    ],
-  },
-  {
-    id: "_menu",
-    label: "Styling: Menu",
-    fields: [
-      { key: "menu-header-background-color", label: "Menu header background colour", defaultValue: "" },
-      { key: "menu-header-title-color", label: "Menu header title colour", defaultValue: "" },
-      { key: "menu-header-subtitle-color", label: "Menu header subtitle colour", defaultValue: "#949494" },
-      { key: "menu-header-body-color", label: "Menu header body colour", defaultValue: "" },
-      { key: "menu-header-instruction-color", label: "Menu header instruction colour", defaultValue: "" },
-      { key: "menu-item", label: "Menu item colour", defaultValue: "" },
-      { key: "menu-item-inverted", label: "Menu item colour - inverted", defaultValue: "" },
-      { key: "menu-item-border-color", label: "Menu item border colour", defaultValue: "" },
-      { key: "menu-item-progress", label: "Menu item progress fill colour", defaultValue: "" },
-      { key: "menu-item-progress-inverted", label: "Menu item progress background colour", defaultValue: "" },
-      { key: "menu-item-progress-border", label: "Menu item progress border colour", defaultValue: "" },
-      { key: "menu-item-btn-color", label: "Menu item button background colour", defaultValue: "" },
-      { key: "menu-item-btn-color-inverted", label: "Menu item button background colour - inverted", defaultValue: "" },
-      { key: "menu-item-btn-color-hover", label: "Menu item button background colour - hover", defaultValue: "" },
-      { key: "menu-item-btn-color-inverted-hover", label: "Menu item button background colour - inverted hover", defaultValue: "" },
-    ],
-  },
-  {
-    id: "_nav",
-    label: "Styling: Navigation",
-    fields: [
-      { key: "nav", label: "Navigation background colour", defaultValue: "#ffffff" },
-      { key: "nav-inverted", label: "Navigation background colour - inverted", defaultValue: "#9096a0" },
-      { key: "nav-icon", label: "Navigation button background colour", defaultValue: "" },
-      { key: "nav-icon-inverted", label: "Navigation button background colour - inverted", defaultValue: "" },
-      { key: "nav-icon-hover", label: "Navigation button background colour - hover", defaultValue: "" },
-      { key: "nav-icon-inverted-hover", label: "Navigation button background colour - inverted hover", defaultValue: "" },
-      { key: "nav-progress", label: "Navigation progress fill color", defaultValue: "" },
-      { key: "nav-progress-inverted", label: "Navigation progress background color - inverted", defaultValue: "" },
-      { key: "nav-progress-border", label: "Navigation progress border colour", defaultValue: "" },
-      { key: "nav-progress-hover", label: "Navigation progress fill color - hover", defaultValue: "" },
-      { key: "nav-progress-inverted-hover", label: "Navigation progress background color - inverted hover", defaultValue: "" },
-      { key: "nav-progress-border-hover", label: "Navigation progress border colour - hover", defaultValue: "" },
-    ],
-  },
-  {
-    id: "_notify",
-    label: "Styling: Notify (pop up)",
-    fields: [
-      { key: "notify", label: "Notify background colour", defaultValue: "#ffffff" },
-      { key: "notify-inverted", label: "Notify background colour - inverted", defaultValue: "#333333" },
-      { key: "notify-title-color", label: "Notify title colour", defaultValue: "" },
-      { key: "notify-link", label: "Notify link font colour", defaultValue: "" },
-      { key: "notify-link-hover", label: "Notify link font colour - hover", defaultValue: "" },
-      { key: "notify-btn", label: "Notify button background colour", defaultValue: "" },
-      { key: "notify-btn-inverted", label: "Notify button background colour - inverted", defaultValue: "" },
-      { key: "notify-btn-hover", label: "Notify button background colour - hover", defaultValue: "" },
-      { key: "notify-btn-inverted-hover", label: "Notify button background colour - inverted hover", defaultValue: "" },
-      { key: "notify-icon", label: "Notify icon button background colour", defaultValue: "" },
-      { key: "notify-icon-inverted", label: "Notify icon button background colour - inverted", defaultValue: "" },
-      { key: "notify-icon-hover", label: "Notify icon button background colour - hover", defaultValue: "" },
-      { key: "notify-icon-inverted-hover", label: "Notify icon button background colour - inverted hover", defaultValue: "" },
-    ],
-  },
-  {
-    id: "_drawer",
-    label: "Styling: Drawer",
-    fields: [
-      { key: "drawer", label: "Drawer background colour", defaultValue: "#ffffff" },
-      { key: "drawer-inverted", label: "Drawer background colour - inverted", defaultValue: "#333333" },
-      { key: "drawer-link", label: "Drawer link font colour", defaultValue: "" },
-      { key: "drawer-link-hover", label: "Drawer link font colour - hover", defaultValue: "" },
-      { key: "drawer-icon", label: "Drawer icon button background colour", defaultValue: "" },
-      { key: "drawer-icon-inverted", label: "Drawer icon button background colour - inverted", defaultValue: "" },
-      { key: "drawer-icon-hover", label: "Drawer icon button background colour - hover", defaultValue: "" },
-      { key: "drawer-icon-inverted-hover", label: "Drawer icon button background colour - inverted hover", defaultValue: "" },
-      { key: "drawer-item", label: "Drawer item background colour", defaultValue: "" },
-      { key: "drawer-item-inverted", label: "Drawer item background colour - inverted", defaultValue: "" },
-      { key: "drawer-item-hover", label: "Drawer item background colour - hover", defaultValue: "" },
-      { key: "drawer-item-inverted-hover", label: "Drawer item background colour - inverted hover", defaultValue: "" },
-      { key: "drawer-item-selected", label: "Drawer item background colour - selected", defaultValue: "" },
-      { key: "drawer-item-inverted-selected", label: "Drawer item background colour - inverted selected", defaultValue: "" },
-      { key: "drawer-progress", label: "Drawer progress fill colour", defaultValue: "" },
-      { key: "drawer-progress-inverted", label: "Drawer progress background colour", defaultValue: "" },
-      { key: "drawer-progress-border", label: "Drawer progress border colour", defaultValue: "" },
-      { key: "drawer-progress-hover", label: "Drawer progress colour - hover", defaultValue: "" },
-      { key: "drawer-progress-inverted-hover", label: "Drawer progress colour - inverted hover", defaultValue: "" },
-      { key: "drawer-progress-border-hover", label: "Drawer progress border colour - hover", defaultValue: "" },
-    ],
-  },
-  {
-    id: "_pullQuote",
-    label: "Pull Quote",
-    fields: [
-      { key: "pull-quote", label: "Pull quote background colour", defaultValue: "" },
-      { key: "pull-quote-inverted", label: "Pull quote text colour", defaultValue: "" },
-      { key: "pull-quote-border", label: "Pull quote border colour", defaultValue: "" },
-    ],
-  },
-  {
-    id: "_misc",
-    label: "Styling: Misc",
-    fields: [
-      { key: "background", label: "Background colour", defaultValue: "#000000" },
-      { key: "background-inverted", label: "Background colour - inverted", defaultValue: "#ffffff" },
-      { key: "shadow", label: "Shadow background colour (loading / pop up background)", defaultValue: "#000000" },
-      { key: "shadow-inverted", label: "Shadow background colour - inverted", defaultValue: "#ffffff" },
-      { key: "shadow-opacity", label: "Shadow opacity", defaultValue: "", inputType: "text" },
-      { key: "loading", label: "Loading animation background colour", defaultValue: "" },
-      { key: "loading-inverted", label: "Loading animation colour - inverted", defaultValue: "" },
-    ],
-  },
-] as const;
-
-type LifeStylingSection = typeof LIFE_STYLING_ACCORDIONS[number];
-type LifeStylingSectionId = LifeStylingSection["id"];
-type LifeStylingValues = Record<LifeStylingSectionId, Record<string, string>>;
 type LifeSpriteSheet = { _spriteSheetId: string; src: string };
 type LifeSingleIcon = { iconId: string; src: string };
 type LifeCourseConfig = {
   _svgSpriteSheets: LifeSpriteSheet[];
   _singleIcons: LifeSingleIcon[];
 };
+type LifeListItemErrors = {
+  _spriteSheetId?: string;
+  iconId?: string;
+  src?: string;
+};
+type LifeCourseConfigErrors = {
+  _svgSpriteSheets: LifeListItemErrors[];
+  _singleIcons: LifeListItemErrors[];
+};
 type LifeBlocksConfig = {
   _paddingTop: string;
   _paddingBottom: string;
 };
 
-const LIFE_STYLING_DEFAULTS: LifeStylingValues = LIFE_STYLING_ACCORDIONS.reduce((acc, section) => {
-  const values: Record<string, string> = {};
-  section.fields.forEach((field) => {
-    values[field.key] = field.defaultValue ?? "";
-  });
-  acc[section.id] = values;
-  return acc;
-}, {} as LifeStylingValues);
+type OnScreenLevelKey = 'page' | 'section' | 'contentGroup' | 'content';
+type OnScreenLevelConfig = {
+  _classes: string;
+  _percentInviewVertical: number;
+};
+type OnScreenLevelsConfig = Record<OnScreenLevelKey, OnScreenLevelConfig>;
+
+type OnScreenConfig = {
+  _isEnabled: boolean;
+  _classes: string;
+  _percentInviewVertical: number;
+  _levels: OnScreenLevelsConfig;
+};
 
 const DEFAULT_LIFE_COURSE_CONFIG: LifeCourseConfig = {
+  _svgSpriteSheets: [],
+  _singleIcons: [],
+};
+
+const DEFAULT_LIFE_COURSE_CONFIG_ERRORS: LifeCourseConfigErrors = {
   _svgSpriteSheets: [],
   _singleIcons: [],
 };
@@ -1140,52 +1043,108 @@ const DEFAULT_LIFE_BLOCKS_CONFIG: LifeBlocksConfig = {
   _paddingBottom: "",
 };
 
+const DEFAULT_ON_SCREEN_CONFIG: OnScreenConfig = {
+  _isEnabled: false,
+  _classes: "",
+  _percentInviewVertical: 50,
+  _levels: {
+    page: { _classes: '', _percentInviewVertical: 50 },
+    section: { _classes: '', _percentInviewVertical: 50 },
+    contentGroup: { _classes: '', _percentInviewVertical: 50 },
+    content: { _classes: '', _percentInviewVertical: 50 },
+  },
+};
+
+const ON_SCREEN_ROW_DEFS: Array<{ key: OnScreenLevelKey; label: string }> = [
+  { key: 'page', label: 'Topic' },
+  { key: 'section', label: 'Section' },
+  { key: 'contentGroup', label: 'Content Group' },
+  { key: 'content', label: 'Component' },
+];
+
+const ON_SCREEN_CLASS_OPTIONS = [
+  '',
+  'fade-in',
+  'fade-in-left',
+  'fade-in-right',
+  'fade-in-top',
+  'fade-in-bottom',
+  'fade-out',
+];
+
 function LifeListField({
   title,
   description,
   items,
+  errors,
   onAdd,
   onRemove,
   onChange,
   idLabel,
   idKey,
+  idHint,
+  sourceLabel,
+  sourceHint,
 }: {
   title: string;
   description: string;
   items: Array<LifeSpriteSheet | LifeSingleIcon>;
+  errors: LifeListItemErrors[];
   onAdd: () => void;
   onRemove: (index: number) => void;
   onChange: (index: number, key: string, value: string) => void;
   idLabel: string;
   idKey: '_spriteSheetId' | 'iconId';
+  idHint?: string;
+  sourceLabel: string;
+  sourceHint?: string;
 }) {
   return (
     <div className="space-y-3">
       <div>
-        <p className="text-xs font-semibold text-[#111827] mb-1.5">{title}</p>
+        <InfoFieldLabel
+          label={title}
+          className="mb-1.5"
+        />
         <p className="text-xs text-[#6b7280] leading-relaxed">{description}</p>
       </div>
       <div className="space-y-3">
-        {items.map((item, index) => (
+        {items.map((item, index) => {
+          const itemErrors = errors[index] ?? {};
+          const idError = idKey === '_spriteSheetId' ? itemErrors._spriteSheetId : itemErrors.iconId;
+
+          return (
           <div key={`${idKey}-${index}`} className="border border-[#e5e7eb] rounded-lg p-3 space-y-3 bg-[#fafafa]">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <p className="text-xs font-semibold text-[#111827] mb-2">{idLabel}</p>
+                <InfoFieldLabel
+                  label={idLabel}
+                  hint={idHint}
+                  className="mb-2"
+                />
                 <input
                   type="text"
                   value={idKey === '_spriteSheetId' ? (item as LifeSpriteSheet)._spriteSheetId : (item as LifeSingleIcon).iconId}
                   onChange={(e) => onChange(index, idKey, e.target.value)}
-                  className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1.5 text-[#111827] focus:border-[var(--life-primary-500)] outline-none"
+                  aria-invalid={!!idError}
+                  className={`text-xs w-full border rounded px-2 py-1.5 text-[#111827] outline-none ${idError ? 'border-[#ef4444] focus:border-[#ef4444]' : 'border-[#d1d5db] focus:border-[var(--life-primary-500)]'}`}
                 />
+                {idError && <p className="mt-1 text-xs text-[#ef4444]">{idError}</p>}
               </div>
               <div>
-                <p className="text-xs font-semibold text-[#111827] mb-2">External Source</p>
+                <InfoFieldLabel
+                  label={sourceLabel}
+                  hint={sourceHint}
+                  className="mb-2"
+                />
                 <input
                   type="text"
                   value={item.src}
                   onChange={(e) => onChange(index, 'src', e.target.value)}
-                  className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1.5 text-[#111827] focus:border-[var(--life-primary-500)] outline-none"
+                  aria-invalid={!!itemErrors.src}
+                  className={`text-xs w-full border rounded px-2 py-1.5 text-[#111827] outline-none ${itemErrors.src ? 'border-[#ef4444] focus:border-[#ef4444]' : 'border-[#d1d5db] focus:border-[var(--life-primary-500)]'}`}
                 />
+                {itemErrors.src && <p className="mt-1 text-xs text-[#ef4444]">{itemErrors.src}</p>}
               </div>
             </div>
             <button
@@ -1196,7 +1155,7 @@ function LifeListField({
               Remove
             </button>
           </div>
-        ))}
+        )})}
       </div>
       <button
         type="button"
@@ -1322,6 +1281,10 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     const labelMap: Record<string, string> = { life: 'LIFE Theme', vanilla: 'Vanilla Theme', custom: 'Custom Theme' };
     const themeLabel = labelMap[selected];
     if (!themeLabel) return;
+    if ((selected === 'life' || selected === 'custom') && !validateLifeCourseConfig()) {
+      setSaveError('Fix the custom icon fields before saving.');
+      return;
+    }
     setSaving(true);
     setSaveError(null);
     setSaveSuccess(false);
@@ -1364,6 +1327,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         themePresetId: selectedPresetId,
       });
       setLastSavedStateSnapshot(buildUnsavedStateSnapshot());
+      // Parent may re-hydrate `initialThemeVariables` with normalized values after
+      // save, which triggers a second snapshot capture once state settles.
+      setPendingSnapshotSync(true);
 
       const navTarget = consumePendingNavigation();
       if (navTarget) onNavigationRequest?.(navTarget);
@@ -1438,14 +1404,122 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   const [checkHideFeedback, setCheckHideFeedback] = useState(false);
   const [checkHidePartial, setCheckHidePartial] = useState(false);
   const [activeAccordion, setActiveAccordion] = useState<string | null>(null);
-  const [activeLifeStylingAccordion, setActiveLifeStylingAccordion] = useState<LifeStylingSectionId | null>("_global");
-  const [lifeStyling, setLifeStyling] = useState<LifeStylingValues>(LIFE_STYLING_DEFAULTS);
   const [lifeCourseConfig, setLifeCourseConfig] = useState<LifeCourseConfig>(DEFAULT_LIFE_COURSE_CONFIG);
+  const [lifeCourseConfigErrors, setLifeCourseConfigErrors] = useState<LifeCourseConfigErrors>(DEFAULT_LIFE_COURSE_CONFIG_ERRORS);
   const [lifeBlocksConfig, setLifeBlocksConfig] = useState<LifeBlocksConfig>(DEFAULT_LIFE_BLOCKS_CONFIG);
+  const [onScreenConfig, setOnScreenConfig] = useState<OnScreenConfig>(DEFAULT_ON_SCREEN_CONFIG);
   const [activeVanillaAccordion, setActiveVanillaAccordion] = useState<string | null>('_global');
   const [vanillaColors, setVanillaColors] = useState<Record<string, string>>({});
   const [activeCustomAccordion, setActiveCustomAccordion] = useState<string | null>('_global');
   const [customSettings, setCustomSettings] = useState<Record<string, string>>(CUSTOM_FIELD_DEFAULTS);
+  const [selectedThemeSchema, setSelectedThemeSchema] = useState<Record<string, unknown> | undefined>(undefined);
+  const isLifeTheme = selected === 'life';
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!selected) {
+      setSelectedThemeSchema(undefined);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const themeLabelMap: Record<string, string> = {
+      life: 'LIFE Theme',
+      vanilla: 'Vanilla Theme',
+      custom: 'Custom Theme',
+    };
+    const themeLabel = themeLabelMap[selected];
+    if (!themeLabel) {
+      setSelectedThemeSchema(undefined);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void getThemeTypeVariablesSchemaByLabel(themeLabel)
+      .then((schema) => {
+        if (!cancelled) setSelectedThemeSchema(schema ?? undefined);
+      })
+      .catch((error) => {
+        console.warn('Failed to load theme type schema', error);
+        if (!cancelled) setSelectedThemeSchema(undefined);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selected]);
+
+  const selectedThemeComponentSchema = useMemo(
+    () => getThemeComponentSectionSchema(selectedThemeSchema),
+    [selectedThemeSchema],
+  );
+
+  const clearLifeCourseValidation = useCallback(() => {
+    setLifeCourseConfigErrors(DEFAULT_LIFE_COURSE_CONFIG_ERRORS);
+    setSaveError(null);
+  }, []);
+
+  const isValidExternalUrl = useCallback((value: string) => {
+    try {
+      const parsed = new URL(value);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const validateLifeCourseConfig = useCallback(() => {
+    const hasAnyCustomIcons = lifeCourseConfig._svgSpriteSheets.length > 0 || lifeCourseConfig._singleIcons.length > 0;
+    if (!hasAnyCustomIcons) {
+      setLifeCourseConfigErrors(DEFAULT_LIFE_COURSE_CONFIG_ERRORS);
+      return true;
+    }
+
+    const nextErrors: LifeCourseConfigErrors = {
+      _svgSpriteSheets: lifeCourseConfig._svgSpriteSheets.map((item) => {
+        const itemErrors: LifeListItemErrors = {};
+        if (!item._spriteSheetId.trim()) itemErrors._spriteSheetId = 'Icon set name is required.';
+        if (!item.src.trim()) itemErrors.src = 'External source URL is required.';
+        else if (!isValidExternalUrl(item.src.trim())) itemErrors.src = 'Enter a valid URL.';
+        return itemErrors;
+      }),
+      _singleIcons: lifeCourseConfig._singleIcons.map((item) => {
+        const itemErrors: LifeListItemErrors = {};
+        if (!item.iconId.trim()) itemErrors.iconId = 'Icon id is required.';
+        if (!item.src.trim()) itemErrors.src = 'External source URL is required.';
+        else if (!isValidExternalUrl(item.src.trim())) itemErrors.src = 'Enter a valid URL.';
+        return itemErrors;
+      }),
+    };
+
+    const hasErrors = [...nextErrors._svgSpriteSheets, ...nextErrors._singleIcons].some((item) => Object.keys(item).length > 0);
+    setLifeCourseConfigErrors(nextErrors);
+    return !hasErrors;
+  }, [isValidExternalUrl, lifeCourseConfig]);
+
+  const updateOnScreenRow = useCallback((rowKey: OnScreenLevelKey, patch: Partial<OnScreenLevelConfig>) => {
+    setOnScreenConfig((prev) => {
+      const nextRow = {
+        ...prev._levels[rowKey],
+        ...patch,
+      };
+      const nextLevels = {
+        ...prev._levels,
+        [rowKey]: nextRow,
+      };
+      const next = {
+        ...prev,
+        _levels: nextLevels,
+      };
+      if (rowKey === 'content') {
+        next._classes = nextRow._classes;
+        next._percentInviewVertical = nextRow._percentInviewVertical;
+      }
+      return next;
+    });
+  }, []);
 
   const setCustomSettingWithDependencies = useCallback((key: string, value: string) => {
     setCustomSettings((prev) => {
@@ -1477,13 +1551,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         return acc;
       }, {});
 
-    const normalizeLifeStyling = (styling: LifeStylingValues) => (Object.keys(styling) as LifeStylingSectionId[])
-      .sort()
-      .reduce<Record<string, Record<string, string>>>((acc, sectionKey) => {
-        acc[sectionKey] = normalizeRecord(styling[sectionKey]);
-        return acc;
-      }, {});
-
     return JSON.stringify({
       selected,
       selectedPresetId,
@@ -1491,9 +1558,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       checkUnanswered,
       checkHideFeedback,
       checkHidePartial,
-      lifeStyling: normalizeLifeStyling(lifeStyling),
       lifeCourseConfig,
       lifeBlocksConfig,
+      onScreenConfig,
       vanillaColors: normalizeRecord(vanillaColors),
       customSettings: normalizeRecord(customSettings),
     });
@@ -1505,7 +1572,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     customSettings,
     lifeBlocksConfig,
     lifeCourseConfig,
-    lifeStyling,
+    onScreenConfig,
     selected,
     selectedPresetId,
     vanillaColors,
@@ -1516,9 +1583,44 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     setLastSavedStateSnapshot(buildUnsavedStateSnapshot());
   }, [buildUnsavedStateSnapshot, initialHydrationComplete, lastSavedStateSnapshot]);
 
+  // After a save, the parent may push a normalized `initialThemeVariables` prop,
+  // which re-runs hydration and mutates snapshot inputs (customSettings/vanillaColors/…).
+  // If we captured the snapshot synchronously inside handleSave, the next render
+  // reads different state and hasChanges flips true, re-showing the popup.
+  //
+  // The debounced re-capture must NOT swallow an edit the user makes during the
+  // window. We tie the re-capture to two conditions: (1) the parent prop actually
+  // changed after the save (i.e. hydration ran), and (2) no user pointer/key
+  // input arrived while the window was open. If either fails, we drop the
+  // pending sync without overwriting `lastSavedStateSnapshot`, so hasChanges
+  // correctly reflects the user's edit.
+  const [pendingSnapshotSync, setPendingSnapshotSync] = useState(false);
+  useEffect(() => {
+    if (!pendingSnapshotSync) return;
+    let cancelled = false;
+    const bail = () => {
+      if (cancelled) return;
+      cancelled = true;
+      setPendingSnapshotSync(false);
+    };
+    window.addEventListener("pointerdown", bail, true);
+    window.addEventListener("keydown", bail, true);
+    const timeout = setTimeout(() => {
+      if (cancelled) return;
+      setLastSavedStateSnapshot(buildUnsavedStateSnapshot());
+      setPendingSnapshotSync(false);
+    }, 100);
+    return () => {
+      clearTimeout(timeout);
+      window.removeEventListener("pointerdown", bail, true);
+      window.removeEventListener("keydown", bail, true);
+    };
+  }, [pendingSnapshotSync, buildUnsavedStateSnapshot]);
+
   const hasChanges =
     initialHydrationComplete &&
     !!lastSavedStateSnapshot &&
+    !pendingSnapshotSync &&
     buildUnsavedStateSnapshot() !== lastSavedStateSnapshot;
 
   const {
@@ -1534,16 +1636,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
   const buildMergedLifeThemeVariables = useCallback((baseVars: Record<string, unknown>) => {
     const merged: Record<string, unknown> = { ...(baseVars ?? {}) };
-    (Object.keys(lifeStyling) as LifeStylingSectionId[]).forEach((sectionKey) => {
-      const existing = merged[sectionKey];
-      const existingSection = (existing && typeof existing === 'object' && !Array.isArray(existing))
-        ? { ...(existing as Record<string, unknown>) }
-        : {};
-      Object.entries(lifeStyling[sectionKey]).forEach(([fieldKey, fieldValue]) => {
-        existingSection[fieldKey] = fieldValue;
-      });
-      merged[sectionKey] = existingSection;
-    });
     merged._course = {
       ...(merged._course && typeof merged._course === 'object' && !Array.isArray(merged._course)
         ? merged._course as Record<string, unknown>
@@ -1564,8 +1656,22 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       _paddingTop: lifeBlocksConfig._paddingTop,
       _paddingBottom: lifeBlocksConfig._paddingBottom,
     };
+    merged._onScreen = {
+      ...(merged._onScreen && typeof merged._onScreen === 'object' && !Array.isArray(merged._onScreen)
+        ? merged._onScreen as Record<string, unknown>
+        : {}),
+      _isEnabled: onScreenConfig._isEnabled,
+      _classes: onScreenConfig._classes,
+      _percentInviewVertical: onScreenConfig._percentInviewVertical,
+      _levels: {
+        page: { ...onScreenConfig._levels.page },
+        section: { ...onScreenConfig._levels.section },
+        contentGroup: { ...onScreenConfig._levels.contentGroup },
+        content: { ...onScreenConfig._levels.content },
+      },
+    };
     return merged;
-  }, [lifeBlocksConfig, lifeCourseConfig, lifeStyling]);
+  }, [lifeBlocksConfig, lifeCourseConfig, onScreenConfig]);
 
   const buildMergedVanillaThemeVariables = useCallback((baseVars: Record<string, unknown>) => {
     const merged: Record<string, unknown> = { ...(baseVars ?? {}) };
@@ -1628,8 +1734,31 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       _hidePartiallyFeedback: checkHidePartial,
     };
 
+    merged._blocks = {
+      ...(merged._blocks && typeof merged._blocks === 'object' && !Array.isArray(merged._blocks)
+        ? merged._blocks as Record<string, unknown>
+        : {}),
+      _paddingTop: lifeBlocksConfig._paddingTop,
+      _paddingBottom: lifeBlocksConfig._paddingBottom,
+    };
+
+    merged._onScreen = {
+      ...(merged._onScreen && typeof merged._onScreen === 'object' && !Array.isArray(merged._onScreen)
+        ? merged._onScreen as Record<string, unknown>
+        : {}),
+      _isEnabled: onScreenConfig._isEnabled,
+      _classes: onScreenConfig._classes,
+      _percentInviewVertical: onScreenConfig._percentInviewVertical,
+      _levels: {
+        page: { ...onScreenConfig._levels.page },
+        section: { ...onScreenConfig._levels.section },
+        contentGroup: { ...onScreenConfig._levels.contentGroup },
+        content: { ...onScreenConfig._levels.content },
+      },
+    };
+
     return merged;
-  }, [checkHideFeedback, checkHidePartial, checkNotFinal, checkUnanswered, customSettings, lifeCourseConfig]);
+  }, [checkHideFeedback, checkHidePartial, checkNotFinal, checkUnanswered, customSettings, lifeBlocksConfig, lifeCourseConfig, onScreenConfig]);
 
   useEffect(() => {
     setSelected(mapThemeNameToId(initialThemeName));
@@ -1712,24 +1841,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     });
     setVanillaColors(vanillaPatch);
 
-    // LIFE styling sections are nested per section id
-    const lifePatch: LifeStylingValues = (Object.keys(LIFE_STYLING_DEFAULTS) as LifeStylingSectionId[]).reduce((acc, sectionKey) => {
-      acc[sectionKey] = { ...LIFE_STYLING_DEFAULTS[sectionKey] };
-      return acc;
-    }, {} as LifeStylingValues);
-
-    (Object.keys(LIFE_STYLING_DEFAULTS) as LifeStylingSectionId[]).forEach((sectionKey) => {
-      const section = v[sectionKey];
-      if (!section || typeof section !== 'object' || Array.isArray(section)) return;
-      const sectionRecord = section as Record<string, unknown>;
-      Object.keys(LIFE_STYLING_DEFAULTS[sectionKey]).forEach((fieldKey) => {
-        if (typeof sectionRecord[fieldKey] === 'string') {
-          lifePatch[sectionKey][fieldKey] = sectionRecord[fieldKey] as string;
-        }
-      });
-    });
-    setLifeStyling(lifePatch);
-
     const course = v._course as Record<string, unknown> | undefined;
     const nextLifeCourseConfig: LifeCourseConfig = {
       _svgSpriteSheets: [],
@@ -1763,12 +1874,46 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       _paddingBottom: blocks && typeof blocks._paddingBottom === 'string' ? blocks._paddingBottom : '',
     });
 
+    const onScreen = v._onScreen as Record<string, unknown> | undefined;
+    const legacyClasses = onScreen && typeof onScreen._classes === 'string' ? onScreen._classes : '';
+    const legacyPercent =
+      onScreen && typeof onScreen._percentInviewVertical === 'number'
+        ? onScreen._percentInviewVertical
+        : DEFAULT_ON_SCREEN_CONFIG._percentInviewVertical;
+    const levelsSource = onScreen && typeof onScreen._levels === 'object' && !Array.isArray(onScreen._levels)
+      ? onScreen._levels as Record<string, unknown>
+      : undefined;
+    const parseOnScreenLevel = (levelKey: OnScreenLevelKey): OnScreenLevelConfig => {
+      const source = levelsSource && typeof levelsSource[levelKey] === 'object' && !Array.isArray(levelsSource[levelKey])
+        ? levelsSource[levelKey] as Record<string, unknown>
+        : undefined;
+      return {
+        _classes: source && typeof source._classes === 'string' ? source._classes : legacyClasses,
+        _percentInviewVertical:
+          source && typeof source._percentInviewVertical === 'number'
+            ? source._percentInviewVertical
+            : legacyPercent,
+      };
+    };
+    setOnScreenConfig({
+      _isEnabled: !!(onScreen && typeof onScreen._isEnabled === 'boolean' && onScreen._isEnabled),
+      _classes: legacyClasses,
+      _percentInviewVertical: legacyPercent,
+      _levels: {
+        page: parseOnScreenLevel('page'),
+        section: parseOnScreenLevel('section'),
+        contentGroup: parseOnScreenLevel('contentGroup'),
+        content: parseOnScreenLevel('content'),
+      },
+    });
+
     // Component configuration checkboxes: custom uses _componentConfig, LIFE uses _components.
     const comp = (v._componentConfig as Record<string, unknown> | undefined) ?? (v._components as Record<string, unknown> | undefined);
     setCheckNotFinal(!!(comp && typeof comp._canShowFinalMarking === 'boolean' && comp._canShowFinalMarking));
     setCheckUnanswered(!!(comp && typeof comp._hidePartiallyDisplayMarking === 'boolean' && comp._hidePartiallyDisplayMarking));
     setCheckHideFeedback(!!(comp && typeof comp._hideFeedbackFirstAttempt === 'boolean' && comp._hideFeedbackFirstAttempt));
     setCheckHidePartial(!!(comp && typeof comp._hidePartiallyFeedback === 'boolean' && comp._hidePartiallyFeedback));
+    setLifeCourseConfigErrors(DEFAULT_LIFE_COURSE_CONFIG_ERRORS);
   }, []);
 
   // Load saved themeVariables into customSettings / vanillaColors / checkboxes.
@@ -1793,9 +1938,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   }, [hydrateThemeVariablesIntoEditors, presets, selectedPresetId]);
 
   // Color Picker Component
-  const ColorPickerField = ({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) => (
+  const ColorPickerField = ({ label, hint, value, onChange }: { label: string; hint?: string; value: string; onChange: (v: string) => void }) => (
     <div>
-      <p className="text-xs font-bold text-[#111827] mb-2">{label}</p>
+      <InfoFieldLabel label={label} hint={hint} className="mb-2" />
       <div className="flex gap-2 items-center">
         <label className="w-8 h-8 rounded border border-[#d1d5db] cursor-pointer flex-shrink-0 block overflow-hidden relative">
           <span className="block w-full h-full" style={{ backgroundColor: value }} />
@@ -1807,9 +1952,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   );
 
   // Font Dropdown Component
-  const FontDropdownField = ({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) => (
+  const FontDropdownField = ({ label, hint, value, onChange }: { label: string; hint?: string; value: string; onChange: (v: string) => void }) => (
     <div>
-      <p className="text-xs font-bold text-[#111827] mb-2">{label}</p>
+      <InfoFieldLabel label={label} hint={hint} className="mb-2" />
       <select value={value} onChange={e => onChange(e.target.value)} className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:border-[var(--life-primary-500)] outline-none">
         {FONT_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
       </select>
@@ -1824,6 +1969,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   // Live Preview Component
   const LivePreview = () => {
     const [darkMode, setDarkMode] = useState(false);
+    const [isExpanded, setIsExpanded] = useState(false);
     const primaryColor = getCustomSetting('_global', '_primaryBrandColor') || '#2e7fa1';
     const secondaryColor = getCustomSetting('_global', '_secondaryBrandColor') || '#25837e';
     const paragraphFont = getCustomSetting('_global', 'paragraph-font-family') || 'Lato';
@@ -1851,19 +1997,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     const progressBackground = getCustomSetting('_progress', 'progress-inverted') || '#e5e5e5';
     const progressBorder = getCustomSetting('_progress', 'progress-border') || 'transparent';
 
-    const menuHeaderBg = getCustomSetting('_menu', 'menu-header-background-color') || '#ffffff';
-    const menuItemColor = getCustomSetting('_menu', 'menu-item') || headingColorTheme;
-    const menuItemProgress = getCustomSetting('_menu', 'menu-item-progress') || primaryColor;
-
     const navBg = getCustomSetting('_nav', 'nav') || pageHeaderBg;
-    const navProgress = getCustomSetting('_nav', 'nav-progress') || progressFill;
-
-    const notifyBg = getCustomSetting('_notify', 'notify') || '#ffffff';
-    const drawerBg = getCustomSetting('_notify', 'drawer') || '#ffffff';
-    const notifyTitleColor = getCustomSetting('_notify', 'notify-title-color') || headingColorTheme;
-
-    const validationSuccess = getCustomSetting('_validation', 'validation-success') || '#065f28';
-    const validationError = getCustomSetting('_validation', 'validation-error') || '#ff0000';
 
     const spacingScale: Record<string, number> = {
       remove: 0,
@@ -1873,97 +2007,213 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     };
 
     const previewBg = darkMode ? '#1a1a1a' : pageBgColor;
+    const canvasBg = darkMode ? '#111827' : '#f0f4f8';
     const textColor = darkMode ? '#e8e8e8' : fontColor;
     const headingColor = darkMode ? '#ffffff' : headingColorTheme;
+    const navIconColor = (pageHeaderTitleColor && pageHeaderTitleColor !== 'transparent') ? pageHeaderTitleColor : '#ffffff';
+    const navTextColor = (pageHeaderBodyColor && pageHeaderBodyColor !== 'transparent') ? pageHeaderBodyColor : navIconColor;
     const titleSize = titleSizeRaw;
     const articleTop = spacingScale[articleTopPadding] ?? spacingScale.standard;
     const articleBottom = spacingScale[articleBottomPadding] ?? spacingScale.standard;
     const blockTop = spacingScale[blockTopPadding] ?? spacingScale.standard;
     const blockBottom = spacingScale[blockBottomPadding] ?? spacingScale.standard;
 
-    return (
-      <div className="border border-[#e5e7eb] rounded-xl overflow-hidden" style={{ boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)' }}>
-        <div className="flex items-center justify-between px-3 py-2 bg-white border-b border-[#e5e7eb]">
-          <div className="flex items-center gap-2">
-            <div style={{ width: '13px', height: '13px', backgroundColor: primaryColor, borderRadius: '2px' }} />
-            <span className="text-xs font-bold text-[#111827]">Live Preview</span>
-          </div>
-          <div className="flex gap-1">
-            <button onClick={() => setDarkMode(!darkMode)} className="w-7 h-7 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded text-[#6b7280] hover:bg-[#f9fafb]" title="Toggle dark mode">
-              {darkMode ? 'L' : 'D'}
-            </button>
-          </div>
-        </div>
-        <div style={{ backgroundColor: previewBg, fontSize: '13px' }}>
-          <div style={{ height: '4px', borderTop: `1px solid ${progressBorder}`, borderBottom: `1px solid ${progressBorder}`, background: `linear-gradient(to right, ${progressFill} 60%, ${progressBackground} 60%)` }} />
-          <div style={{ background: navBg, padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <span style={{ color: pageHeaderSubtitleColor, fontSize: '11px' }}>{'<'}</span>
-            <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '11px', color: pageHeaderBodyColor, flex: 1 }}>
-              New Course Title <span style={{ opacity: 0.6 }}>/ Page Title</span>
-            </span>
-            <span style={{ color: pageHeaderSubtitleColor, fontSize: '11px' }}>{'>'}</span>
-          </div>
-          <div style={{ padding: '20px 18px', display: 'grid', gridTemplateColumns: '1fr 220px', gap: '12px' }}>
-            <div style={{ background: articleBgColor, border: `1px solid ${darkMode ? '#3a3a3a' : '#e5e7eb'}`, borderRadius: '8px', paddingTop: `${articleTop}px`, paddingBottom: `${articleBottom}px`, paddingLeft: '14px', paddingRight: '14px' }}>
-              <div style={{ background: pageHeaderBg, borderRadius: '6px', padding: '10px 12px', marginBottom: '10px' }}>
-                <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: titleSize || '3rem', fontWeight: 700, color: pageHeaderTitleColor, lineHeight: 1.2 }}>
-                  New Menu/Page Title
+    useEffect(() => {
+      if (!isExpanded) return;
+
+      const previousOverflow = document.body.style.overflow;
+      const onKeyDown = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') setIsExpanded(false);
+      };
+
+      document.body.style.overflow = 'hidden';
+      window.addEventListener('keydown', onKeyDown);
+
+      return () => {
+        document.body.style.overflow = previousOverflow;
+        window.removeEventListener('keydown', onKeyDown);
+      };
+    }, [isExpanded]);
+
+    const previewContent = (
+      <div className="min-h-0 flex-1 overflow-y-auto p-0" style={{ fontSize: '13px' }}>
+        <div style={{ maxWidth: '760px', margin: '0 auto' }}>
+          <div className="overflow-hidden rounded-xl border border-[#e5e7eb]" style={{ backgroundColor: previewBg }}>
+            <div style={{ height: '4px', borderTop: `1px solid ${progressBorder}`, borderBottom: `1px solid ${progressBorder}`, background: `linear-gradient(to right, ${progressFill} 60%, ${progressBackground} 60%)` }} />
+            <div style={{ background: navBg, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', borderBottom: darkMode ? '1px solid #374151' : '1px solid #f3f4f6' }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={navIconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 12H5M12 19l-7-7 7-7" />
+              </svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={navIconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="6" x2="21" y2="6" />
+                <line x1="3" y1="12" x2="21" y2="12" />
+                <line x1="3" y1="18" x2="21" y2="18" />
+              </svg>
+              <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.76rem', color: navTextColor, flex: 1 }}>
+                New Course Title <span style={{ opacity: 0.7 }}>/ New Topic Title</span>
+              </span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={navIconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" />
+                <line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+            </div>
+            <div style={{ backgroundColor: previewBg, padding: '18px' }}>
+              <div style={{ maxWidth: '560px', margin: '0 auto' }}>
+                <div style={{ padding: '6px 0 14px' }}>
+                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: titleSize || '3rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '4px' }}>
+                    New Topic Title
+                  </div>
+                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: textColor, fontSize: '0.88rem', lineHeight: 1.45 }}>
+                    Topic subtitle
+                  </div>
                 </div>
-                <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: pageHeaderSubtitleColor, fontSize: '0.8rem', marginTop: '4px' }}>Page subtitle</div>
-                <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: pageHeaderBodyColor, fontSize: '0.78rem', marginTop: '3px' }}>Page intro body text</div>
-                <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: pageHeaderInstructionColor, fontSize: '0.76rem', fontStyle: 'italic', marginTop: '4px' }}>Page instruction text</div>
-              </div>
-              <div style={{ background: blockBgColor, border: `1px solid ${darkMode ? '#4b4b4b' : '#e5e7eb'}`, borderRadius: '6px', paddingTop: `${blockTop}px`, paddingBottom: `${blockBottom}px`, paddingLeft: '10px', paddingRight: '10px' }}>
-                <div style={{ background: componentBgColor, border: `1px solid ${darkMode ? '#5a5a5a' : '#e5e7eb'}`, borderRadius: '6px', padding: '10px' }}>
-                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.9rem', color: headingColor, lineHeight: 1.2, marginBottom: '6px' }}>
+
+                <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.84rem', color: linkColor, textDecoration: 'underline', cursor: 'pointer', marginBottom: '12px' }}>
+                  This is a sample link
+                </div>
+
+                <div style={{ border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`, borderRadius: '10px', background: articleBgColor, padding: '12px' }}>
+                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.9rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '8px' }}>
                     New Component Title
                   </div>
-                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.85rem', color: textColor, lineHeight: 1.5 }}>Body text</div>
-                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.85rem', color: linkColor, textDecoration: 'underline', cursor: 'pointer' }}>
-                    This is a sample link
-                  </div>
-                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: instructionColor, fontStyle: 'italic' }}>
+                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: instructionColor, fontStyle: 'italic', marginBottom: '10px' }}>
                     Choose one option then select Submit.
                   </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
-                    {[{ label: 'Correct', selected: true }, { label: 'Incorrect', selected: false }].map(opt => (
-                      <div key={opt.label} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <div style={{ width: '14px', height: '14px', borderRadius: '50%', flexShrink: 0, border: `2px solid ${opt.selected ? secondaryColor : (darkMode ? '#555' : '#ccc')}`, background: opt.selected ? secondaryColor : 'transparent' }} />
-                        <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: textColor }}>{opt.label}</span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {[{ label: 'Correct', selected: true }, { label: 'Incorrect', selected: false }].map((opt) => (
+                      <div
+                        key={opt.label}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
+                          border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
+                          borderRadius: '999px',
+                          padding: '8px 12px',
+                          background: opt.selected ? `${secondaryColor}1F` : articleBgColor,
+                        }}
+                      >
+                        <div style={{ width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0, border: `2px solid ${opt.selected ? secondaryColor : (darkMode ? '#6b7280' : '#cbd5e1')}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: componentBgColor }}>
+                          {opt.selected && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: secondaryColor }} />}
+                        </div>
+                        <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.8rem', fontWeight: 600, color: textColor }}>{opt.label}</span>
                       </div>
                     ))}
                   </div>
-                  <div style={{ alignSelf: 'flex-start', display: 'inline-block', marginTop: '9px', background: primaryColor, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
-                    Submit
+                  <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-start' }}>
+                    <div style={{ display: 'inline-block', background: primaryColor, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
+                      Submit
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '14px' }}>
+                  <div style={{ display: 'inline-block', border: `1px solid ${primaryColor}`, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 600, color: primaryColor }}>
+                    Previous
+                  </div>
+                  <div style={{ display: 'inline-block', background: primaryColor, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
+                    Next
                   </div>
                 </div>
               </div>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <div style={{ background: menuHeaderBg, border: `1px solid ${darkMode ? '#474747' : '#e5e7eb'}`, borderRadius: '8px', padding: '8px' }}>
-                <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.78rem', color: menuItemColor, marginBottom: '6px' }}>Menu Preview</div>
-                {[1, 2, 3].map((n) => (
-                  <div key={n} style={{ marginBottom: n === 3 ? 0 : '6px' }}>
-                    <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.74rem', color: menuItemColor, marginBottom: '3px' }}>Menu item {n}</div>
-                    <div style={{ height: '3px', borderRadius: '2px', background: `linear-gradient(to right, ${menuItemProgress} ${35 + (n * 18)}%, ${progressBackground} ${35 + (n * 18)}%)` }} />
-                  </div>
-                ))}
-              </div>
-              <div style={{ background: drawerBg, border: `1px solid ${darkMode ? '#474747' : '#e5e7eb'}`, borderRadius: '8px', padding: '8px' }}>
-                <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.78rem', color: notifyTitleColor, marginBottom: '5px' }}>Drawer / Notify</div>
-                <div style={{ background: notifyBg, border: `1px solid ${darkMode ? '#575757' : '#e5e7eb'}`, borderRadius: '6px', padding: '6px' }}>
-                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.72rem', color: textColor }}>This is a notification.</div>
-                </div>
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <div style={{ flex: 1, background: validationSuccess, color: '#fff', borderRadius: '6px', padding: '6px 8px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.72rem' }}>Validation success</div>
-                <div style={{ flex: 1, background: validationError, color: '#fff', borderRadius: '6px', padding: '6px 8px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.72rem' }}>Validation error</div>
-              </div>
-              <div style={{ height: '4px', borderRadius: '2px', background: `linear-gradient(to right, ${navProgress} 70%, ${progressBackground} 70%)`, border: `1px solid ${progressBorder}` }} />
             </div>
           </div>
         </div>
       </div>
+    );
+
+    return (
+      <>
+        <div className="flex flex-col h-full rounded-xl overflow-hidden border border-[#e5e7eb]" style={{ backgroundColor: canvasBg }}>
+          <div className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-[#e5e7eb] shrink-0">
+            <div className="flex items-center gap-2">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill={primaryColor} stroke="none">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+              </svg>
+              <span className="text-xs font-semibold text-[#111827]">Live Preview</span>
+            </div>
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                className="w-8 h-8 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
+                title="Toggle dark mode"
+                aria-label="Toggle dark mode"
+                type="button"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                </svg>
+              </button>
+              <button
+                onClick={() => setIsExpanded(true)}
+                className="w-8 h-8 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
+                title="Expand preview"
+                aria-label="Expand preview"
+                type="button"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="15 3 21 3 21 9" />
+                  <polyline points="9 21 3 21 3 15" />
+                  <line x1="21" y1="3" x2="14" y2="10" />
+                  <line x1="3" y1="21" x2="10" y2="14" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          {previewContent}
+        </div>
+
+        {isExpanded && (
+          <div className="fixed inset-x-0 top-14 bottom-0 z-50 overflow-y-auto bg-black/50 p-4" onClick={() => setIsExpanded(false)}>
+            <div
+              className="mx-auto flex min-h-full w-full max-w-6xl min-h-0 flex-col overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-2xl"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Live Preview"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-[#e5e7eb] shrink-0">
+                <div className="flex items-center gap-2">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill={primaryColor} stroke="none">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                  </svg>
+                  <span className="text-sm font-semibold text-[#111827]">Live Preview</span>
+                </div>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => setDarkMode(!darkMode)}
+                    className="w-9 h-9 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
+                    title="Toggle dark mode"
+                    aria-label="Toggle dark mode"
+                    type="button"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => setIsExpanded(false)}
+                    className="w-9 h-9 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
+                    title="Collapse preview"
+                    aria-label="Collapse preview"
+                    type="button"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="9 3 3 3 3 9" />
+                      <polyline points="15 21 21 21 21 15" />
+                      <line x1="3" y1="3" x2="10" y2="10" />
+                      <line x1="14" y1="14" x2="21" y2="21" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div className="min-h-0 flex-1" style={{ backgroundColor: canvasBg }}>
+                {previewContent}
+              </div>
+            </div>
+          </div>
+        )}
+      </>
     );
   };
 
@@ -1985,14 +2235,14 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           {CUSTOM_ACCORDION_DEFS.map((acc) => {
             const isOpen = activeCustomAccordion === acc.id;
             return (
-              <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-hidden">
+              <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-visible bg-white">
                 <button
                   onClick={() => setActiveCustomAccordion(isOpen ? null : acc.id)}
-                  className={`w-full flex items-center justify-between px-4 py-3 transition-colors border-b border-[#e5e7eb] ${isOpen ? 'bg-[#f9fafb]' : 'bg-white hover:bg-[#f9fafb]'}`}
+                  className="group w-full flex items-center justify-between gap-3 px-5 py-4 !h-[56px] text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
                 >
-                  <span className="text-xs font-bold text-[#111827]">{acc.label}</span>
-                  <svg className={`w-4 h-4 text-[#6b7280] transition-transform ${isOpen ? 'rotate-180' : ''}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <polyline points="6 9 12 15 18 9" />
+                  <span className="text-sm font-bold text-current">{acc.label}</span>
+                  <svg className="shrink-0 ml-auto text-current" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points={isOpen ? "6 9 12 15 18 9" : "9 6 15 12 9 18"} />
                   </svg>
                 </button>
                 {isOpen && acc.id === 'global' && (
@@ -2014,20 +2264,11 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                       <ColorPickerField label="Link font colour" value={customSettings.linkFontColor} onChange={v => setCustomSettings({...customSettings, linkFontColor: v})} />
                     </div>
                     <div className="mt-4">
-                      <p className="text-xs font-bold text-[#111827] mb-2">Page Title Size</p>
+                      <p className="text-xs font-bold text-[#111827] mb-2">Topic Title Size</p>
                       <select value={customSettings.pageTitleSize} onChange={e => setCustomSettings({...customSettings, pageTitleSize: e.target.value})} className="text-xs w-full border-2 border-[var(--life-primary-500)] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:outline-none">
                         {PAGE_TITLE_OPTIONS.map(h => <option key={h} value={h}>{PAGE_TITLE_LABELS[h]}</option>)}
                       </select>
-                      {customSettings.pageTitleSize !== 'H6' && (
-                        <div className="mt-2 border-l-[3px] border-l-[var(--life-primary-500)] bg-[var(--life-primary-020)] rounded-r px-3 py-2">
-                          <p className="text-xs font-bold text-[#111827] mb-1">Calculated values for Desktop:</p>
-                          {CALC_VALUES.map(row => (
-                            <div key={row.label} className="text-xs text-[var(--life-primary-500)] leading-relaxed">
-                              {row.label}: {row.rem} ({row.px})
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                      {customSettings.pageTitleSize !== 'H6' && PAGE_TITLE_SIZE_REM[customSettings.pageTitleSize] != null && <DesktopCalculatedValues baseRem={PAGE_TITLE_SIZE_REM[customSettings.pageTitleSize]} />}
                     </div>
                   </div>
                 )}
@@ -2048,13 +2289,25 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
   return (
     // <div className="max-w-3xl w-full px-6 py-6">
-    <div className="w-full px-6 py-6 font-[var(--font-family-primary)]">
+    <div className="flex flex-col h-full w-full bg-[#f7f9fb] font-[var(--font-family-primary)]">
+      <SaveStatusToast toast={saveSuccess ? { type: "success", message: "Changes saved successfully" } : null} onDismiss={() => setSaveSuccess(false)} />
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-center gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-[var(--life-base-black)] m-0">Theme</h2>
+          <p className="text-sm text-[#6b7280] mt-0.5 mb-0">Choose and configure the visual theme for your course.</p>
+        </div>
+        <div className="ml-auto">
+          <SaveChangesButton dirty={hasChanges} saving={saving} disabled={!courseId || !selected} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="w-full px-6 py-6">
       <div className="flex items-start justify-between mb-6">
         <div>
           <h2 className="text-base font-semibold text-[var(--life-base-black)]">
             Select Theme <span className="text-red-500">*</span>
           </h2>
-          <p className="text-sm text-[var(--life-neutral-300)] mt-0.5">Choose a theme for your course.</p>
+          <p className="text-sm text-[var(--life-neutral-300)] mt-0.5"> Select the base theme for your course </p>
         </div>
       </div>
 
@@ -2178,54 +2431,84 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         {/* Configuration: Course - LIFE and Custom */}
         {selected !== "vanilla" && (
           <ThemeAccordion
-            label="Configuration: Course"
-            isOpen={activeAccordion === "Configuration: Course"}
-            onToggle={() => setActiveAccordion(activeAccordion === "Configuration: Course" ? null : "Configuration: Course")}
+            label={getSchemaText(getSchemaField(selectedThemeSchema, '_course'), 'title') ?? 'Configuration: Course'}
+            hint={getSchemaText(getSchemaField(selectedThemeSchema, '_course'), 'help')}
+            isOpen={isLifeTheme || activeAccordion === "Configuration: Course"}
+            onToggle={() => {
+              if (isLifeTheme) return;
+              setActiveAccordion(activeAccordion === "Configuration: Course" ? null : "Configuration: Course");
+            }}
           >
             <div className="space-y-6">
               {selected === 'life' || selected === 'custom' ? (
                 <>
                   <LifeListField
-                    title="Custom Icons: Sprite Sheets"
-                    description="Add a reference to an external sprite sheet with icons that can be used in the course."
+                    title={getSchemaText(getSchemaField(selectedThemeSchema, '_course', '_svgSpriteSheets'), 'title') ?? 'Custom Icons: Sprite Sheets'}
+                    description={getSchemaText(getSchemaField(selectedThemeSchema, '_course', '_svgSpriteSheets'), 'help') ?? 'Add a reference to an external sprite sheet with icons that can be used in the course.'}
                     items={lifeCourseConfig._svgSpriteSheets}
-                    idLabel="Icon Set Name"
+                    errors={lifeCourseConfigErrors._svgSpriteSheets}
+                    idLabel={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_svgSpriteSheets'), '_spriteSheetId', 'title') ?? 'Icon Set Name'}
+                    idHint={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_svgSpriteSheets'), '_spriteSheetId', 'help')}
                     idKey="_spriteSheetId"
-                    onAdd={() => setLifeCourseConfig((prev) => ({
-                      ...prev,
-                      _svgSpriteSheets: [...prev._svgSpriteSheets, { _spriteSheetId: '', src: '' }],
-                    }))}
-                    onRemove={(index) => setLifeCourseConfig((prev) => ({
-                      ...prev,
-                      _svgSpriteSheets: prev._svgSpriteSheets.filter((_, itemIndex) => itemIndex !== index),
-                    }))}
-                    onChange={(index, key, value) => setLifeCourseConfig((prev) => ({
-                      ...prev,
-                      _svgSpriteSheets: prev._svgSpriteSheets.map((item, itemIndex) => (
-                        itemIndex === index ? { ...item, [key]: value } : item
-                      )),
-                    }))}
+                    sourceLabel={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_svgSpriteSheets'), 'src', 'title') ?? 'External Source'}
+                    sourceHint={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_svgSpriteSheets'), 'src', 'help')}
+                    onAdd={() => {
+                      clearLifeCourseValidation();
+                      setLifeCourseConfig((prev) => ({
+                        ...prev,
+                        _svgSpriteSheets: [...prev._svgSpriteSheets, { _spriteSheetId: '', src: '' }],
+                      }));
+                    }}
+                    onRemove={(index) => {
+                      clearLifeCourseValidation();
+                      setLifeCourseConfig((prev) => ({
+                        ...prev,
+                        _svgSpriteSheets: prev._svgSpriteSheets.filter((_, itemIndex) => itemIndex !== index),
+                      }));
+                    }}
+                    onChange={(index, key, value) => {
+                      clearLifeCourseValidation();
+                      setLifeCourseConfig((prev) => ({
+                        ...prev,
+                        _svgSpriteSheets: prev._svgSpriteSheets.map((item, itemIndex) => (
+                          itemIndex === index ? { ...item, [key]: value } : item
+                        )),
+                      }));
+                    }}
                   />
                   <LifeListField
-                    title="Custom Icons: Single Icons"
-                    description="Add a reference to an external individual icon that can be used in the course."
+                    title={getSchemaText(getSchemaField(selectedThemeSchema, '_course', '_singleIcons'), 'title') ?? 'Custom Icons: Single Icons'}
+                    description={getSchemaText(getSchemaField(selectedThemeSchema, '_course', '_singleIcons'), 'help') ?? 'Add a reference to an external individual icon that can be used in the course.'}
                     items={lifeCourseConfig._singleIcons}
-                    idLabel="Icon Id"
+                    errors={lifeCourseConfigErrors._singleIcons}
+                    idLabel={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_singleIcons'), 'iconId', 'title') ?? 'Icon Id'}
+                    idHint={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_singleIcons'), 'iconId', 'help')}
                     idKey="iconId"
-                    onAdd={() => setLifeCourseConfig((prev) => ({
-                      ...prev,
-                      _singleIcons: [...prev._singleIcons, { iconId: '', src: '' }],
-                    }))}
-                    onRemove={(index) => setLifeCourseConfig((prev) => ({
-                      ...prev,
-                      _singleIcons: prev._singleIcons.filter((_, itemIndex) => itemIndex !== index),
-                    }))}
-                    onChange={(index, key, value) => setLifeCourseConfig((prev) => ({
-                      ...prev,
-                      _singleIcons: prev._singleIcons.map((item, itemIndex) => (
-                        itemIndex === index ? { ...item, [key]: value } : item
-                      )),
-                    }))}
+                    sourceLabel={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_singleIcons'), 'src', 'title') ?? 'External Source'}
+                    sourceHint={getSchemaArrayItemFieldText(getSchemaField(selectedThemeSchema, '_course', '_singleIcons'), 'src', 'help')}
+                    onAdd={() => {
+                      clearLifeCourseValidation();
+                      setLifeCourseConfig((prev) => ({
+                        ...prev,
+                        _singleIcons: [...prev._singleIcons, { iconId: '', src: '' }],
+                      }));
+                    }}
+                    onRemove={(index) => {
+                      clearLifeCourseValidation();
+                      setLifeCourseConfig((prev) => ({
+                        ...prev,
+                        _singleIcons: prev._singleIcons.filter((_, itemIndex) => itemIndex !== index),
+                      }));
+                    }}
+                    onChange={(index, key, value) => {
+                      clearLifeCourseValidation();
+                      setLifeCourseConfig((prev) => ({
+                        ...prev,
+                        _singleIcons: prev._singleIcons.map((item, itemIndex) => (
+                          itemIndex === index ? { ...item, [key]: value } : item
+                        )),
+                      }));
+                    }}
                   />
                 </>
               ) : null}
@@ -2233,16 +2516,24 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           </ThemeAccordion>
         )}
 
-        {/* Configuration: Blocks - LIFE only */}
-        {selected === "life" && (
+        {/* Configuration: Content Groups - LIFE and Custom */}
+        {selected !== "vanilla" && (
           <ThemeAccordion
-            label="Configuration: Blocks"
-            isOpen={activeAccordion === "Configuration: Blocks"}
-            onToggle={() => setActiveAccordion(activeAccordion === "Configuration: Blocks" ? null : "Configuration: Blocks")}
+            label={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks'), 'title') ?? 'Configuration: Content Groups'}
+            hint={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks'), 'help')}
+            isOpen={isLifeTheme || activeAccordion === "Configuration: Content Groups"}
+            onToggle={() => {
+              if (isLifeTheme) return;
+              setActiveAccordion(activeAccordion === "Configuration: Content Groups" ? null : "Configuration: Content Groups");
+            }}
           >
             <div className="space-y-5">
               <div>
-                <p className="text-xs font-semibold text-[#111827] mb-2">Spacing top</p>
+                <InfoFieldLabel
+                  label={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks', '_paddingTop'), 'title') ?? 'Spacing top'}
+                  hint={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks', '_paddingTop'), 'help')}
+                  className="mb-2"
+                />
                 <select
                   value={lifeBlocksConfig._paddingTop}
                   onChange={(e) => setLifeBlocksConfig((prev) => ({ ...prev, _paddingTop: e.target.value }))}
@@ -2257,7 +2548,11 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                 </select>
               </div>
               <div>
-                <p className="text-xs font-semibold text-[#111827] mb-2">Spacing bottom</p>
+                <InfoFieldLabel
+                  label={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks', '_paddingBottom'), 'title') ?? 'Spacing bottom'}
+                  hint={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks', '_paddingBottom'), 'help')}
+                  className="mb-2"
+                />
                 <select
                   value={lifeBlocksConfig._paddingBottom}
                   onChange={(e) => setLifeBlocksConfig((prev) => ({ ...prev, _paddingBottom: e.target.value }))}
@@ -2278,11 +2573,17 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         {/* Configuration: Components - LIFE and Custom only */}
         {selected !== "vanilla" && (
           <ThemeAccordion
-            label="Configuration: Components"
-            isOpen={activeAccordion === "Configuration: Components"}
-            onToggle={() => setActiveAccordion(activeAccordion === "Configuration: Components" ? null : "Configuration: Components")}
+            label={getSchemaText(selectedThemeComponentSchema, 'title') ?? 'Configuration: Components'}
+            isOpen={isLifeTheme || activeAccordion === "Configuration: Components"}
+            onToggle={() => {
+              if (isLifeTheme) return;
+              setActiveAccordion(activeAccordion === "Configuration: Components" ? null : "Configuration: Components");
+            }}
           >
             <div className="space-y-5">
+              <p className="text-xs text-[#6b7280] leading-relaxed">
+                {getSchemaText(selectedThemeComponentSchema, 'help') ?? 'Component-level behavior and feedback configuration.'}
+              </p>
               <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCheckNotFinal(!checkNotFinal)}>
                 <div 
                   style={{
@@ -2304,7 +2605,11 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     </svg>
                   )}
                 </div>
-                <span className="text-xs text-[#111827] leading-normal">Display marking for not-final attempts</span>
+                <InfoFieldLabel
+                  label={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_canShowFinalMarking'), 'title') ?? 'Display marking for not-final attempts'}
+                  hint={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_canShowFinalMarking'), 'help')}
+                  className="leading-normal"
+                />
               </div>
 
               <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCheckUnanswered(!checkUnanswered)}>
@@ -2328,7 +2633,11 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     </svg>
                   )}
                 </div>
-                <span className="text-xs text-[#111827] leading-normal">Display marking for unanswered correct responses</span>
+                <InfoFieldLabel
+                  label={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_hidePartiallyDisplayMarking'), 'title') ?? 'Display marking for unanswered correct responses'}
+                  hint={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_hidePartiallyDisplayMarking'), 'help')}
+                  className="leading-normal"
+                />
               </div>
 
               <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCheckHideFeedback(!checkHideFeedback)}>
@@ -2352,7 +2661,11 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     </svg>
                   )}
                 </div>
-                <span className="text-xs text-[#111827] leading-normal">Hide feedback on first attempt on assessments</span>
+                <InfoFieldLabel
+                  label={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_hideFeedbackFirstAttempt'), 'title') ?? 'Hide feedback on first attempt on assessments'}
+                  hint={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_hideFeedbackFirstAttempt'), 'help')}
+                  className="leading-normal"
+                />
               </div>
 
               <div className="flex items-center gap-3 cursor-pointer" onClick={() => setCheckHidePartial(!checkHidePartial)}>
@@ -2376,7 +2689,11 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                     </svg>
                   )}
                 </div>
-                <span className="text-xs text-[#111827] leading-normal">Hide partially correct feedback on the question and result page</span>
+                <InfoFieldLabel
+                  label={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_hidePartiallyFeedback'), 'title') ?? 'Hide partially correct feedback on the question and result page'}
+                  hint={getSchemaText(getSchemaPropertyField(selectedThemeComponentSchema, '_hidePartiallyFeedback'), 'help')}
+                  className="leading-normal"
+                />
               </div>
             </div>
           </ThemeAccordion>
@@ -2389,103 +2706,81 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           onToggle={() => setActiveAccordion(activeAccordion === "On Screen Classes" ? null : "On Screen Classes")}
         >
           <div className="space-y-5">
+            <p className="text-xs text-[#6b7280] leading-relaxed">
+              These settings allow you to attach classes when content is within the browser viewport.
+              Supported classes include fade-in, fade-in-left, fade-in-right, fade-in-top, and fade-in-bottom.
+            </p>
+
             <div className="flex items-center gap-3">
               <button
-                onClick={() => {}}
+                type="button"
+                role="switch"
+                aria-checked={onScreenConfig._isEnabled}
+                aria-label="Enable On Screen Classes"
+                onClick={() => setOnScreenConfig((prev) => ({ ...prev, _isEnabled: !prev._isEnabled }))}
                 className="relative w-10 h-5.5 rounded-full border-none cursor-pointer flex-shrink-0 transition-colors"
-                style={{ backgroundColor: "#d1d5db" }}
+                style={{ backgroundColor: onScreenConfig._isEnabled ? "var(--life-primary-500)" : "#d1d5db" }}
               >
                 <span
                   className="absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-all"
-                  style={{ boxShadow: "0 1px 3px rgba(0, 0, 0, 0.25)" }}
+                  style={{
+                    boxShadow: "0 1px 3px rgba(0, 0, 0, 0.25)",
+                    transform: onScreenConfig._isEnabled ? "translateX(18px)" : "translateX(0)",
+                  }}
                 />
               </button>
               <span className="text-xs text-[#111827] font-semibold">Enable On Screen Classes</span>
             </div>
+
+            {onScreenConfig._isEnabled && (
+              <div className="space-y-4 pt-1">
+                {ON_SCREEN_ROW_DEFS.map((row) => {
+                  const rowConfig = onScreenConfig._levels[row.key];
+                  return (
+                    <div key={row.key} className="bg-[#f9fafb] border border-[#e5e7eb] rounded-lg p-4 space-y-3">
+                      <span className="text-xs font-bold text-[#111827]">{row.label}</span>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <p className="text-xs font-semibold text-[#6b7280] mb-2">Classes</p>
+                          <select
+                            value={rowConfig._classes}
+                            onChange={(e) => updateOnScreenRow(row.key, { _classes: e.target.value })}
+                            className="text-xs w-full border border-[#d1d5db] rounded-md px-2.5 py-1.5 text-[#111827] bg-white focus:border-[var(--life-primary-500)] outline-none"
+                          >
+                            <option value="">Select a class</option>
+                            {ON_SCREEN_CLASS_OPTIONS.filter((option) => option !== '').map((option) => (
+                              <option key={option} value={option}>{option}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <p className="text-xs font-semibold text-[#6b7280] mb-2">Percent in view</p>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={rowConfig._percentInviewVertical}
+                            onChange={(e) => {
+                              const parsed = Number(e.target.value);
+                              const safeValue = Number.isFinite(parsed)
+                                ? Math.max(0, Math.min(100, parsed))
+                                : DEFAULT_ON_SCREEN_CONFIG._percentInviewVertical;
+                              updateOnScreenRow(row.key, { _percentInviewVertical: safeValue });
+                            }}
+                            className="text-xs w-full border border-[#d1d5db] rounded-md px-2.5 py-1.5 text-[#111827] bg-white focus:border-[var(--life-primary-500)] outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </ThemeAccordion>
       </div>
-
-      {/* LIFE Theme Styling - only shown when LIFE is selected */}
-      {selected === "life" && (
-        <div className="border border-[#e5e7eb] rounded-xl p-6 bg-white mt-2">
-          <h3 className="text-sm font-bold text-[#111827] mb-4">LIFE Theme Styling</h3>
-          <div className="space-y-2">
-            {LIFE_STYLING_ACCORDIONS.map((acc) => {
-              const isOpen = activeLifeStylingAccordion === acc.id;
-              return (
-                <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => setActiveLifeStylingAccordion(isOpen ? null : acc.id)}
-                    className={`w-full flex items-center justify-between px-4 py-3 transition-colors border-b border-[#e5e7eb] ${isOpen ? 'bg-[#f9fafb]' : 'bg-white hover:bg-[#f9fafb]'}`}
-                  >
-                    <span className="text-xs font-bold text-[#111827]">{acc.label}</span>
-                    <svg
-                      className={`w-4 h-4 text-[#6b7280] transition-transform ${isOpen ? 'rotate-180' : ''}`}
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <polyline points="6 9 12 15 18 9" />
-                    </svg>
-                  </button>
-                  {isOpen && (
-                    <div className="px-4 py-4 bg-white border-t border-[#e5e7eb]">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {acc.fields.map((field) => {
-                          const rawValue = lifeStyling[acc.id][field.key] ?? "";
-                          const isTextField = "inputType" in field && field.inputType === "text";
-                          if (isTextField) {
-                            return (
-                              <div key={field.key}>
-                                <p className="text-xs font-bold text-[#111827] mb-2">{field.label}</p>
-                                <input
-                                  type="text"
-                                  value={rawValue}
-                                  onChange={(e) => {
-                                    const value = e.target.value;
-                                    setLifeStyling((prev) => ({
-                                      ...prev,
-                                      [acc.id]: {
-                                        ...prev[acc.id],
-                                        [field.key]: value,
-                                      },
-                                    }));
-                                  }}
-                                  className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1 text-[#111827] focus:border-[var(--life-primary-500)] outline-none"
-                                  placeholder="e.g. 50%"
-                                />
-                              </div>
-                            );
-                          }
-
-                          return (
-                            <ColorPickerField
-                              key={field.key}
-                              label={field.label}
-                              value={/^#[0-9A-Fa-f]{6}$/.test(rawValue) ? rawValue : "#ffffff"}
-                              onChange={(value) => {
-                                setLifeStyling((prev) => ({
-                                  ...prev,
-                                  [acc.id]: {
-                                    ...prev[acc.id],
-                                    [field.key]: value,
-                                  },
-                                }));
-                              }}
-                            />
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Vanilla Theme Settings - only shown when Vanilla is selected */}
       {selected === "vanilla" && (
@@ -2494,33 +2789,48 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <div className="space-y-2">
             {VANILLA_ACCORDION_DEFS.map((acc) => {
               const isOpen = activeVanillaAccordion === acc.id;
+              const sectionSchema = getSchemaField(selectedThemeSchema, acc.id);
+              const sectionLabel = getSchemaText(sectionSchema, 'title') ?? acc.label;
+              const sectionHint = getSchemaText(sectionSchema, 'help');
               return (
-                <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-hidden">
+                <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-visible bg-white">
                   <button
                     onClick={() => setActiveVanillaAccordion(isOpen ? null : acc.id)}
-                    className={`w-full flex items-center justify-between px-4 py-3 transition-colors border-b border-[#e5e7eb] ${isOpen ? 'bg-[#f9fafb]' : 'bg-white hover:bg-[#f9fafb]'}`}
+                    className="group w-full flex items-center justify-between gap-3 px-5 py-4 !h-[56px] text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
                   >
-                    <span className="text-xs font-bold text-[#111827]">{acc.label}</span>
+                    <span className="flex items-center gap-1.5 text-sm font-bold text-current">
+                      {sectionLabel}
+                      {sectionHint && <InfoIcon label={sectionLabel} hint={sectionHint} />}
+                    </span>
                     <svg
-                      className={`w-4 h-4 text-[#6b7280] transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                      className="shrink-0 ml-auto text-current"
+                      width="18"
+                      height="18"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
                       strokeWidth="2"
                     >
-                      <polyline points="6 9 12 15 18 9" />
+                      <polyline points={isOpen ? "6 9 12 15 18 9" : "9 6 15 12 9 18"} />
                     </svg>
                   </button>
                   {isOpen && (
-                    <div className="px-4 py-4 bg-white border-t border-[#e5e7eb]">
+                    <div className="px-5 pb-5 pt-1 bg-white border-t border-[#f3f4f6]">
                       <div className="flex flex-col gap-4">
                         {acc.fields.map((field) => {
                           const key = `${acc.id}::${field.key}`;
                           const colorVal = vanillaColors[key] ?? '';
                           const isEmpty = !colorVal;
+                          const fieldSchema = getSchemaField(selectedThemeSchema, acc.id, field.key);
+                          const fieldLabel = getSchemaText(fieldSchema, 'title') ?? field.label;
+                          const fieldHint = getSchemaText(fieldSchema, 'help');
                           return (
                             <div key={field.key}>
-                              <p className="text-xs text-[#111827] mb-2 leading-snug">{field.label}</p>
+                              <InfoFieldLabel
+                                label={fieldLabel}
+                                hint={fieldHint}
+                                className="mb-2 text-[#111827]"
+                              />
                               <label
                                 style={{
                                   display: 'block',
@@ -2570,47 +2880,49 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Left column: Breadcrumb + Accordions */}
             <div className="space-y-4">
-              <div className="text-xs text-[#6b7280]">
-                <span className="font-semibold">Theme</span>
-                {activeCustomAccordion && (
-                  <>
-                    <span className="mx-1.5">/</span>
-                    <span className="font-semibold">{CUSTOM_ACCORDION_DEFS.find(a => a.id === activeCustomAccordion)?.label}</span>
-                  </>
-                )}
-              </div>
-
               <div className="space-y-2">
                 {CUSTOM_ACCORDION_DEFS.map((acc) => {
                   const isOpen = activeCustomAccordion === acc.id;
+                  const sectionHint = getSchemaText(getSchemaField(selectedThemeSchema, acc.id), 'help');
+                  const sectionSchema = getSchemaField(selectedThemeSchema, acc.id);
                   return (
-                    <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-hidden">
+                    <div key={acc.id} className="border border-[#e5e7eb] rounded-lg overflow-visible bg-white">
                       <button
                         onClick={() => setActiveCustomAccordion(isOpen ? null : acc.id)}
-                        className={`w-full flex items-center justify-between px-4 py-3 transition-colors ${isOpen ? 'bg-[#f9fafb]' : 'bg-white hover:bg-[#f9fafb]'}`}
+                        className="group w-full flex items-center justify-between gap-3 px-5 py-4 !h-[56px] text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
                       >
-                        <span className="text-xs font-bold text-[#111827]">{acc.label}</span>
+                        <span className="flex items-center gap-1.5 text-sm font-bold text-curren">
+                          {getSchemaText(sectionSchema, 'title') ?? acc.label}
+                          <InfoIcon label={getSchemaText(sectionSchema, 'title') ?? acc.label} hint={sectionHint} />
+                        </span>
                         <svg
-                          className={`w-4 h-4 text-[#6b7280] transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                          className="shrink-0 ml-auto text-current"
+                          width="18"
+                          height="18"
                           viewBox="0 0 24 24"
                           fill="none"
                           stroke="currentColor"
                           strokeWidth="2"
                         >
-                          <polyline points="6 9 12 15 18 9" />
+                          <polyline points={isOpen ? "6 9 12 15 18 9" : "9 6 15 12 9 18"} />
                         </svg>
                       </button>
                       {isOpen && (
-                        <div className="px-4 py-4 bg-white border-t border-[#e5e7eb]">
+                        <div className="px-5 pb-5 pt-1 bg-white border-t border-[#f3f4f6]">
                           <div className="grid grid-cols-2 gap-x-4 gap-y-4">
                             {acc.fields.map((field) => {
                               const key = `${acc.id}::${field.key}`;
                               const value = customSettings[key] ?? CUSTOM_FIELD_DEFAULTS[key] ?? '';
+                              const hint = getSchemaNestedFieldText(sectionSchema, field.key, 'help');
+                              const fieldLabel = getSchemaText(getSchemaField(selectedThemeSchema, acc.id, field.key), 'title') ?? field.label;
 
                               if (field.inputType === 'select') {
                                 return (
-                                  <div key={field.key}>
-                                    <p className="text-xs font-bold text-[#111827] mb-2">{field.label}</p>
+                                  <div
+                                    key={field.key}
+                                    className={acc.id === '_global' && field.key === 'page-heading-font-size' ? 'col-span-2' : ''}
+                                  >
+                                    <InfoFieldLabel label={fieldLabel} hint={hint} className="mb-2" />
                                     <select
                                       value={value}
                                       onChange={(e) => setCustomSettingWithDependencies(key, e.target.value)}
@@ -2620,6 +2932,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                                         <option key={option.value} value={option.value}>{option.label}</option>
                                       ))}
                                     </select>
+                                    {acc.id === '_global' && field.key === 'page-heading-font-size' && parseFloat(value) > 0 && <DesktopCalculatedValues baseRem={parseFloat(value)} />}
                                   </div>
                                 );
                               }
@@ -2627,7 +2940,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                               return (
                                 <ColorPickerField
                                   key={field.key}
-                                  label={field.label}
+                                  label={fieldLabel}
+                                  hint={hint}
                                   value={value || '#ffffff'}
                                   onChange={(nextValue) => setCustomSettingWithDependencies(key, nextValue)}
                                 />
@@ -2651,6 +2965,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           </div>
         </div>
       )}
+      </div>
+      </div>
 
       <UnsavedChangesModal
         isOpen={showConfirmModal}
@@ -2664,41 +2980,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         onClose={clearPendingNavigation}
       />
 
-      {/* Floating "Unsaved changes" bar — only while the form is dirty */}
-      {hasChanges && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 px-4 py-3 rounded-xl bg-white border border-[var(--life-warning-100)] shadow-lg animate-fade-in-down">
-          <span className="flex items-center gap-2 text-sm text-[#374151]">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-warning-500)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
-            Unsaved changes
-          </span>
-          {saveError && <span className="text-xs text-[#ef4444] max-w-[180px] truncate">{saveError}</span>}
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={handleDiscardChanges}
-              disabled={saving}
-              className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] disabled:opacity-50 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={saving || !selected || !courseId}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] disabled:opacity-50 rounded-lg transition-colors"
-            >
-              {saving && (
-                <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                </svg>
-              )}
-              {saving ? "Saving…" : "Save Changes"}
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -2720,14 +3001,14 @@ function ManagePresetsModal({
   const [editingName, setEditingName] = useState('');
   const [editError, setEditError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [confirmDeleteTarget, setConfirmDeleteTarget] = useState<ThemePreset | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   function startEdit(preset: ThemePreset) {
     setEditingId(preset._id);
     setEditingName(preset.displayName);
     setEditError(null);
-    setConfirmDeleteId(null);
+    setConfirmDeleteTarget(null);
   }
 
   function cancelEdit() {
@@ -2766,15 +3047,17 @@ function ManagePresetsModal({
     try {
       await deleteThemePreset(preset._id);
       onPresetDeleted(preset._id);
-      setConfirmDeleteId(null);
+      setConfirmDeleteTarget(null);
     } catch {
       setErrorMsg('Failed to delete preset.');
+      setConfirmDeleteTarget(null);
     } finally {
       setDeletingId(null);
     }
   }
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
       <div
         className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4 overflow-hidden"
@@ -2840,31 +3123,6 @@ function ManagePresetsModal({
                     </button>
                   </div>
                 </div>
-              ) : confirmDeleteId === preset._id ? (
-                /* Delete confirmation */
-                <div className="space-y-1.5">
-                  <p className="text-xs text-[#374151] leading-snug">
-                    Delete preset <strong>"{preset.displayName}"</strong>?{' '}
-                    <span className="font-semibold text-[#ef4444]">This will affect any existing courses using this preset.</span>
-                  </p>
-                  <div className="flex gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => confirmDelete(preset)}
-                      disabled={deletingId === preset._id}
-                      className="text-xs font-semibold px-3 py-1.5 bg-[#ef4444] text-white rounded-md hover:bg-[#dc2626] disabled:opacity-50 transition-colors"
-                    >
-                      {deletingId === preset._id ? 'Deleting…' : 'Delete'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmDeleteId(null)}
-                      className="text-xs px-3 py-1.5 border border-[#d1d5db] text-[#6b7280] rounded-md hover:bg-[#f9fafb] transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
               ) : (
                 /* Normal row */
                 <div className="flex items-center justify-between gap-2">
@@ -2882,8 +3140,9 @@ function ManagePresetsModal({
                     </button>
                     <button
                       type="button"
-                      onClick={() => { setConfirmDeleteId(preset._id); cancelEdit(); }}
+                      onClick={() => { setConfirmDeleteTarget(preset); cancelEdit(); }}
                       title="Delete preset"
+                      disabled={deletingId === preset._id}
                       className="p-1.5 rounded-md border border-[#e5e7eb] text-[#6b7280] hover:bg-[#fef2f2] hover:text-[#ef4444] hover:border-[#ef4444] transition-colors"
                     >
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2909,6 +3168,17 @@ function ManagePresetsModal({
         </div>
       </div>
     </div>
+    {confirmDeleteTarget && (
+      <ConfirmDialog
+        open
+        title="Delete Preset"
+        message="Are you sure you want to delete this preset?"
+        note="This will affect any existing courses using this preset."
+        onCancel={() => setConfirmDeleteTarget(null)}
+        onConfirm={() => confirmDelete(confirmDeleteTarget)}
+      />
+    )}
+    </>
   );
 }
 
@@ -2916,32 +3186,39 @@ function ThemeAccordion({
   label,
   children,
   isOpen,
-  onToggle
+  onToggle,
+  hint
 }: {
   label: string;
   children: React.ReactNode;
   isOpen: boolean;
   onToggle: () => void;
+  hint?: string;
 }) {
   return (
-    <div className="border border-[#e5e7eb] rounded-lg overflow-hidden">
+    <div className="border border-[#e5e7eb] rounded-lg overflow-visible bg-white">
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-[var(--life-neutral-100)] transition-colors border-b border-[var(--life-neutral-200)]"
+        className="group w-full flex items-center justify-between gap-3 px-5 py-4 !h-[56px] text-left bg-white text-[#111827] hover:bg-[#eaf8fb] hover:text-[#0f5f75] active:bg-[#d6edf6] transition-colors"
       >
-        <span className="text-sm font-semibold text-[var(--life-base-black)]">{label}</span>
+        <span className="flex items-center gap-1.5 text-sm font-bold text-current">
+          {label}
+          {hint && <InfoIcon label={label} hint={hint} />}
+        </span>
         <svg
-          className={`w-4 h-4 text-[#6b7280] transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          className="shrink-0 ml-auto text-current"
+          width="18"
+          height="18"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
           strokeWidth="2"
         >
-          <polyline points="6 9 12 15 18 9" />
+          <polyline points={isOpen ? "6 9 12 15 18 9" : "9 6 15 12 9 18"} />
         </svg>
       </button>
       {isOpen && (
-        <div className="px-4 py-3 bg-white border-t border-[#e5e7eb]">
+        <div className="px-5 pb-5 pt-1 bg-white border-t border-[#f3f4f6]">
           {children}
         </div>
       )}

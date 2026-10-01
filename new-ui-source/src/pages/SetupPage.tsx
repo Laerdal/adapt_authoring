@@ -1,21 +1,43 @@
-import { useSearchParams, useNavigate } from "react-router-dom";
-import { Link } from "react-router-dom";
+import { useSearchParams, useNavigate, useParams } from "react-router-dom";
 import { Suspense, useEffect, useState, useRef, useCallback } from "react";
-import { useAuth } from "../context/AuthContext";
+import { useAuth, isSuperAdmin } from "../context/AuthContext";
 import AiAssistant from "../components/common/AiAssistant";
 import CourseStructureMapView from "../components/course/CourseStructureMapView";
 import CourseStructureTree from "../components/course/CourseStructureTree";
 import AddComponentDrawer from "../components/course/AddComponentDrawer";
-import { getCourseBootstrapData } from "../api/adaptAuthoring";
+import { StoryboardWorkspace } from "../components/storyboard";
+import CommonCourseTopBarRow from "../components/course/CommonCourseTopBarRow";
+import { getCourseBootstrapData, publishCoursePackage } from "../api/adaptAuthoring";
 import { useCourseStructure } from "../hooks/useCourseStructure";
 import { STRUCTURE_LABELS } from "../types/structure";
-import { MenuPage } from "./setup/menuPage";
-import { TechnicalSettingPage } from "./setup/technicalSettingPage";
-import { NavigationPage } from "./setup/navigationPage";
+import { BasicRichTextEditor } from "../components/common";
+import { CourseOverviewPage } from "./setup/courseOverviewPage";
+import { SaveChangesButton } from "./setup/SaveChangesButton";
+import { SaveStatusToast } from "./setup/SaveStatusToast";
 import SelectThemePage from "./setup/themePage";
+import { MenuPage } from "./setup/menuPage";
+import { NavigationPage } from "./setup/navigationPage";
 import { AccessibilityPage } from "./setup/accessibilityPage";
+import { TechnicalSettingPage } from "./setup/technicalSettingPage";
+import { TrackingAnalyticsPage } from "./setup/trackingAnalyticsPage";
+import { LearnerExperiencePanel } from "./setup/learnerExperiencePage";
+import { TranslationPage } from "./setup/translationPage";
 import { UnsavedChangesModal } from "./setup/unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./setup/useUnsavedChangesNavigationGuard";
+import { CompletionProgressPage } from "./setup/completionProgressPage";
+import { CdnDeploymentPage } from "./setup/cdnDeploymentPage";
+import ExportMenu, { ExportStatusPopup } from "../components/importExport/Export";
+import ExportPdfPage from "../components/importExport/ExportPdfPage";
+import { runExportSourceAction } from "../helpers/importExportHelper";
+import { PreflightValidatorPage } from "./setup/preflightValidatorPage";
+import PublishMenuButton from "../components/publish/PublishMenuButton";
+import PublishCourseDialog, { type PublishCoursePhase } from "../components/publish/PublishCourseDialog";
+import ExportDialog from "../components/common/ExportDialog";
+import ErrorDialog from "../components/common/ErrorDialog";
+import { AssetManagementWorkspace } from "./AssetManagementPage";
+import { PageTransitionBoundary, usePageTransition } from "../context/PageTransitionContext";
+import { usePageLoader } from "../hooks";
+import type { AssetPickerRequest, AssetPickerResult } from "../types/assetPicker";
 
 const ICON_BASE = "/new/assets/icons";
 
@@ -50,6 +72,7 @@ const NAV_ITEMS = [
   {
     id: "overview",
     label: "Course Overview",
+    guarded: true,
     icon: (
       <SidebarMaskIcon file="overview-icon.svg" />
     ),
@@ -101,6 +124,7 @@ const NAV_ITEMS = [
   {
     id: "completion",
     label: "Completion & Progress",
+    guarded: true,
     icon: (
       <SidebarMaskIcon file="completion-icon.svg" />
     ),
@@ -108,6 +132,7 @@ const NAV_ITEMS = [
   {
     id: "learner-experience",
     label: "Learner Experience",
+    guarded: true,
     icon: (
       <SidebarMaskIcon file="learner-icon.svg" />
     ),
@@ -121,6 +146,7 @@ const NAV_ITEMS = [
   {
     id: "tracking",
     label: "Tracking & Analytics",
+    guarded: true,
     icon: (
       <SidebarMaskIcon file="tracking-icon.svg" />
     ),
@@ -156,6 +182,7 @@ const NAV_ITEMS = [
   {
     id: "cdn-deployment",
     label: "CDN Deployment",
+    guarded: true,
     icon: (
       <SidebarMaskIcon file="cdn-icon.svg" />
     ),
@@ -168,7 +195,6 @@ const NAV_ITEMS = [
     ),
   },
 ];
-
 type NavLeafItem = Extract<(typeof NAV_ITEMS)[number], { heading?: false }>;
 
 function isNavLeafItem(item: (typeof NAV_ITEMS)[number]): item is NavLeafItem {
@@ -190,128 +216,13 @@ const NAV_GROUPS = NAV_ITEMS.reduce<{ id: string; label: string; items: NavLeafI
 // Navigation guard source of truth:
 // To guard a page in future (unsaved-changes interception), add `guarded: true`
 // on that page item in NAV_ITEMS. It will automatically be included here.
-const GUARDED_NAV_IDS = new Set(
-  NAV_ITEMS.filter((item) => item.heading !== true && item.guarded === true).map((item) => item.id)
-);
+const GUARDED_NAV_IDS = new Set([
+  ...NAV_ITEMS.filter((item) => item.heading !== true && item.guarded).map((item) => item.id),
+  "export-pdf",
+]);
 
-/* ── Course Overview panel ── */
-function CourseOverviewPanel({ title, description }: { title: string; description: string }) {
-  const [editing, setEditing] = useState(false);
-  const [formTitle, setFormTitle] = useState(title);
-  const [formSubTitle, setFormSubTitle] = useState("");
-  const [formDesc, setFormDesc] = useState(description);
-  const [formInstructions, setFormInstructions] = useState("");
-  const [formTags, setFormTags] = useState("");
-  const [formCollaborators, setFormCollaborators] = useState("");
-
-  const fieldClass = "w-full px-3 py-2.5 text-sm rounded-lg border border-[#e5e7eb] bg-[#f3f4f6] text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent focus:bg-white transition-colors";
-  const readonlyClass = "w-full px-3 py-2.5 text-sm rounded-lg bg-[#f3f4f6] text-[#6b7280]";
-
-  return (
-    <div className="max-w-2xl w-full">
-      <div className="flex items-start justify-between mb-1">
-        <div>
-          <h2 className="text-xl font-bold text-[#111827]">Course Overview</h2>
-          <p className="text-sm text-[#6b7280] mt-0.5">Review and edit the core details for your course.</p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setEditing((e) => !e)}
-          className="px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors shrink-0"
-        >
-          {editing ? "Done" : "Edit"}
-        </button>
-      </div>
-
-      <div className="mt-6 flex flex-col gap-5">
-        {/* Course Title */}
-        <div>
-          <label className="block text-sm font-semibold text-[#111827] mb-1.5">
-            Course Title <span className="text-[#ef4444]">*</span>
-          </label>
-          {editing ? (
-            <input type="text" value={formTitle} onChange={(e) => setFormTitle(e.target.value)} placeholder="Enter course title" className={fieldClass} />
-          ) : (
-            <div className={readonlyClass}>{formTitle || <span className="text-[#9ca3af]">No title set</span>}</div>
-          )}
-        </div>
-
-        {/* Course Sub-Title */}
-        <div>
-          <label className="block text-sm font-semibold text-[#111827] mb-1.5">Course Sub-Title</label>
-          {editing ? (
-            <input type="text" value={formSubTitle} onChange={(e) => setFormSubTitle(e.target.value)} placeholder="No sub-title set" className={fieldClass} />
-          ) : (
-            <div className={readonlyClass}><span className="text-[#9ca3af]">{formSubTitle || "No sub-title set"}</span></div>
-          )}
-        </div>
-
-        {/* Course Description */}
-        <div>
-          <label className="block text-sm font-semibold text-[#111827] mb-1.5">Course Description</label>
-          {editing ? (
-            <textarea value={formDesc} onChange={(e) => setFormDesc(e.target.value)} rows={3} placeholder="No description set" className={`${fieldClass} resize-none`} />
-          ) : (
-            <div className={readonlyClass}><span className="text-[#9ca3af]">{formDesc || "No description set"}</span></div>
-          )}
-        </div>
-
-        {/* Instructions */}
-        <div>
-          <label className="block text-sm font-semibold text-[#111827] mb-1.5">Instructions</label>
-          {editing ? (
-            <textarea value={formInstructions} onChange={(e) => setFormInstructions(e.target.value)} rows={2} placeholder="No instructions set" className={`${fieldClass} resize-none`} />
-          ) : (
-            <div className={readonlyClass}><span className="text-[#9ca3af]">{formInstructions || "No instructions set"}</span></div>
-          )}
-        </div>
-
-        {/* Course Image */}
-        <div>
-          <label className="block text-sm font-semibold text-[#111827] mb-1.5">Course Image</label>
-          <div className="w-full h-32 rounded-lg bg-[#f3f4f6] border border-[#e5e7eb] flex items-center justify-center text-sm text-[#9ca3af]">
-            {editing ? (
-              <label className="cursor-pointer flex flex-col items-center gap-2 text-[#6b7280] hover:text-[#2d6fa8] transition-colors">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" />
-                  <polyline points="21 15 16 10 5 21" />
-                </svg>
-                <span className="text-xs">Click to upload image</span>
-                <input type="file" accept="image/*" className="hidden" title="Upload course image" aria-label="Upload course image" />
-              </label>
-            ) : (
-              "No image uploaded"
-            )}
-          </div>
-        </div>
-
-        {/* Tags */}
-        <div>
-          <label className="block text-sm font-semibold text-[#111827] mb-1.5">Tags</label>
-          {editing ? (
-            <input type="text" value={formTags} onChange={(e) => setFormTags(e.target.value)} placeholder="Add tags, separated by commas" className={fieldClass} />
-          ) : (
-            <div className={readonlyClass}><span className="text-[#9ca3af]">{formTags || "No tags added"}</span></div>
-          )}
-        </div>
-
-        <div className="border-t border-[#e5e7eb] pt-5">
-          <div className="mb-1">
-            <p className="text-sm font-semibold text-[#111827]">Collaboration — Shared With</p>
-            <p className="text-xs text-[#6b7280] mt-0.5">Collaborators who have access to this course</p>
-          </div>
-          <div className="mt-3">
-            {editing ? (
-              <input type="text" value={formCollaborators} onChange={(e) => setFormCollaborators(e.target.value)} placeholder="Add collaborator email addresses" className={fieldClass} />
-            ) : (
-              <div className={readonlyClass}><span className="text-[#9ca3af]">{formCollaborators || "No collaborators added"}</span></div>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+const DEFERRED_NAV_ACTION = "__deferred_nav_action__";
+type SetupAssetPickerRequest = AssetPickerRequest;
 
 /* -- Course Structure panel -- */
 function CourseStructurePanel({
@@ -335,6 +246,7 @@ function CourseStructurePanel({
   // Content-group id whose Add Component drawer is open (null = closed).
   const [addComponentBlockId, setAddComponentBlockId] = useState<string | null>(null);
   const [hintDismissed, setHintDismissed] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState(false);
   const {
     state,
     loading,
@@ -353,6 +265,9 @@ function CourseStructurePanel({
     remove,
     moveNode,
   } = useCourseStructure(courseId, courseTitle);
+  const [dismissedStructureError, setDismissedStructureError] = useState<Error | null>(null);
+
+  usePageLoader(loading);
 
   // Edits are staged locally and saved only on demand — confirm before leaving
   // with unsaved changes (mirrors Technical Settings / Navigation).
@@ -365,10 +280,15 @@ function CourseStructurePanel({
     });
 
   async function handleConfirmSave() {
-    const ok = await save();
+    const ok = await handleSave();
     if (!ok) return; // save failed — stay put, show the error
     const target = consumePendingNavigation();
     if (target) onNavigationRequest?.(target);
+  }
+  async function handleSave() {
+    const ok = await save();
+    if (ok) setSaveSuccess(true);
+    return ok;
   }
   function handleConfirmDiscard() {
     discard();
@@ -377,15 +297,19 @@ function CourseStructurePanel({
   }
 
   return (
-    <div className="max-w-5xl w-full">
-      <div className="flex items-start justify-between mb-4">
+    <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
+      <SaveStatusToast toast={saveSuccess ? { type: "success", message: "Changes saved successfully" } : null} onDismiss={() => setSaveSuccess(false)} />
+      <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-start gap-4">
         <div>
           <h2 className="text-xl font-bold text-[#111827]">Course Structure</h2>
           <p className="text-sm text-[#6b7280] mt-0.5">Build your structure before editing.</p>
         </div>
 
-        {/* View mode toggle */}
-        <div className="flex items-center border border-[#e5e7eb] rounded-lg overflow-hidden shrink-0">
+        <div className="ml-auto flex items-center gap-3 shrink-0">
+          <SaveChangesButton dirty={dirty} saving={saving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+
+          {/* View mode toggle */}
+          <div className="flex items-center border border-[#e5e7eb] rounded-lg overflow-hidden shrink-0">
           <button
             type="button"
             onClick={() => setViewMode("tree")}
@@ -426,6 +350,10 @@ function CourseStructurePanel({
           </button>
         </div>
       </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto min-h-0">
+      <div className="max-w-5xl px-6 py-6">
 
       {/* Rules banner (top) */}
       <div className="mb-3 p-3.5 rounded-lg bg-[#f0faf8] border border-[#99e6de] text-sm text-[#0d7377]">
@@ -444,41 +372,12 @@ function CourseStructurePanel({
         </p>
       </div>
 
-      {/* Unsaved-changes bar — edits persist only on Save Changes */}
-      {dirty && (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-[#e5e7eb] bg-white shadow-sm px-4 py-2.5">
-          <div className="flex items-center gap-2">
-            <svg className="shrink-0 text-[#f59e0b]" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" />
-            </svg>
-            <span className="text-sm text-[#4b5563]">Unsaved changes</span>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={discard}
-              disabled={saving}
-              className="px-3 py-1.5 text-sm rounded-lg text-[#374151] bg-white border border-[#e5e7eb] hover:bg-[#f9fafb] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => void save()}
-              disabled={saving}
-              className="px-3.5 py-1.5 text-sm font-semibold rounded-lg text-white bg-[#2d6fa8] hover:bg-[#235694] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {saving ? "Saving…" : "Save Changes"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {error && (
-        <div className="mb-4 rounded-lg border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b]">
-          {error.message}
-        </div>
-      )}
+      <ErrorDialog
+        open={!!error && dismissedStructureError !== error}
+        title="Error"
+        message={error?.message || ""}
+        onClose={() => setDismissedStructureError(error)}
+      />
 
       {!courseId ? (
         <div className="rounded-lg border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b]">
@@ -581,6 +480,8 @@ function CourseStructurePanel({
         onSave={handleConfirmSave}
         onClose={clearPendingNavigation}
       />
+      </div>
+      </div>
     </div>
   );
 }
@@ -645,6 +546,21 @@ const DEFAULT_CUSTOM: CustomThemeValues = {
   linkFontColor: "#4a90a4",
   pageTitleSize: "3.5rem",
 };
+
+function DesktopCalculatedValues({
+  sizes,
+}: {
+  sizes: Array<{ label: string; value: string }>;
+}) {
+  return (
+    <div className="mt-2 rounded-lg bg-[#f0f7ff] border-l-4 border-[#2d6fa8] px-4 py-3 text-xs text-[#374151] space-y-0.5">
+      <p className="font-semibold text-[#111827] mb-1">Calculated values for Desktop:</p>
+      {sizes.map((s) => (
+        <p key={s.label}><span className="font-semibold">{s.label}:</span> {s.value}</p>
+      ))}
+    </div>
+  );
+}
 
 /* colour swatch picker row */
 function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
@@ -817,13 +733,40 @@ function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (
   const calcSizes = () => {
     const base = cfg.pageTitleSize === "h6" ? null : parseFloat(cfg.pageTitleSize);
     if (!base) return null;
+
+    const MIN_INSTRUCTION_REM = 0.875;
+    const MIN_FONT_STEP_REM = 0.0625;
+    const MIN_PARAGRAPH_REM = MIN_INSTRUCTION_REM + MIN_FONT_STEP_REM;
+
+    const h1Raw = base;
+    const h2Raw = base - 0.5;
+    const h3Raw = base - 1;
+    const h4Raw = base - 1.25;
+    const h5Raw = base - 1.5;
+    const h6Raw = base - 1.75;
+
+    const h6 = Math.max(h6Raw, MIN_PARAGRAPH_REM);
+    const h5 = Math.max(h5Raw, h6 + MIN_FONT_STEP_REM);
+    const h4 = Math.max(h4Raw, h5 + MIN_FONT_STEP_REM);
+    const h3 = Math.max(h3Raw, h4 + MIN_FONT_STEP_REM);
+    const h2 = Math.max(h2Raw, h3 + MIN_FONT_STEP_REM);
+    const h1 = Math.max(h1Raw, h2 + MIN_FONT_STEP_REM);
+    const p = h6;
+
+    const formatSize = (rem: number) => {
+      const px = Math.round(rem * 16);
+      const formatted = rem.toFixed(4).replace(/\.?0+$/, "");
+      return `${formatted}rem (${px}px)`;
+    };
+
     return [
-      { label: "H1 (Page Title)", size: base, px: Math.round(base * 16) },
-      { label: "H2", size: +(base - 0.5).toFixed(1), px: Math.round((base - 0.5) * 16) },
-      { label: "H3", size: +(base - 1).toFixed(1), px: Math.round((base - 1) * 16) },
-      { label: "H4", size: +(base - 1.5).toFixed(1), px: Math.round((base - 1.5) * 16) },
-      { label: "H5", size: +(base - 2).toFixed(1), px: Math.round((base - 2) * 16) },
-      { label: "Paragraph", size: 1.125, px: 18 },
+      { label: "H1 (Page Title)", value: formatSize(h1) },
+      { label: "H2", value: formatSize(h2) },
+      { label: "H3", value: formatSize(h3) },
+      { label: "H4", value: formatSize(h4) },
+      { label: "H5", value: formatSize(h5) },
+      { label: "H6", value: formatSize(h6) },
+      { label: "Paragraph", value: formatSize(p) },
     ];
   };
 
@@ -877,14 +820,7 @@ function GlobalThemeSection({ cfg, setCfg }: { cfg: CustomThemeValues; setCfg: (
             <polyline points="6 9 12 15 18 9"/>
           </svg>
         </div>
-        {sizes && (
-          <div className="mt-2 rounded-lg bg-[#f0f7ff] border-l-4 border-[#2d6fa8] px-4 py-3 text-xs text-[#374151] space-y-0.5">
-            <p className="font-semibold text-[#111827] mb-1">Calculated values for Desktop:</p>
-            {sizes.map((s) => (
-              <p key={s.label}><span className="font-semibold">{s.label}:</span> {s.size}rem ({s.px}px)</p>
-            ))}
-          </div>
-        )}
+        {sizes && <DesktopCalculatedValues sizes={sizes} />}
       </div>
     </div>
   );
@@ -1462,12 +1398,11 @@ function MenuFieldLabel({ children, required }: { children: React.ReactNode; req
   );
 }
 
-/* -- Rich text editor with formatting toolbar -- */
 const FONT_SIZE_OPTIONS = [
-  { label: "Small",    value: "12px" },
-  { label: "Default",  value: "14px" },
-  { label: "Large",    value: "18px" },
-  { label: "X-Large",  value: "24px" },
+  { label: "Small", value: "12px" },
+  { label: "Default", value: "14px" },
+  { label: "Large", value: "18px" },
+  { label: "X-Large", value: "24px" },
   { label: "2X-Large", value: "32px" },
 ];
 
@@ -1492,91 +1427,11 @@ function RichTextEditor({
   color: string;
   onColorChange: (v: string) => void;
 }) {
-  const editorRef = useRef<HTMLDivElement>(null);
-  const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set());
-
-  // Set innerHTML only on mount - never re-set during typing (avoids cursor reset / reversed text)
-  const initRef = useCallback((node: HTMLDivElement | null) => {
-    if (node) {
-      node.innerHTML = html;
-      (editorRef as React.MutableRefObject<HTMLDivElement | null>).current = node;
-    }
-  // intentionally empty deps - run once on mount only
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const syncFormats = useCallback(() => {
-    const formats = new Set<string>();
-    if (document.queryCommandState("bold"))          formats.add("bold");
-    if (document.queryCommandState("italic"))        formats.add("italic");
-    if (document.queryCommandState("underline"))     formats.add("underline");
-    if (document.queryCommandState("strikeThrough")) formats.add("strikeThrough");
-    setActiveFormats(formats);
-  }, []);
-
-  const emit = useCallback(() => {
-    if (editorRef.current) onChange(editorRef.current.innerHTML);
-  }, [onChange]);
-
-  const applyFormat = useCallback((cmd: string) => {
-    editorRef.current?.focus();
-    document.execCommand(cmd, false);
-    syncFormats();
-    emit();
-  }, [emit, syncFormats]);
-
-  const handleInput = useCallback(() => { emit(); syncFormats(); }, [emit, syncFormats]);
-
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    if (!multiline && e.key === "Enter") { e.preventDefault(); return; }
-    if (e.key === "b" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); applyFormat("bold"); }
-    if (e.key === "i" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); applyFormat("italic"); }
-    if (e.key === "u" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); applyFormat("underline"); }
-  }, [multiline, applyFormat]);
-
-  const FORMAT_BUTTONS: { cmd: string; title: string; icon: React.ReactNode }[] = [
-    {
-      cmd: "bold", title: "Bold (Ctrl+B)",
-      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 4h8a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/><path d="M6 12h9a4 4 0 0 1 4 4 4 4 0 0 1-4 4H6z"/></svg>,
-    },
-    {
-      cmd: "italic", title: "Italic (Ctrl+I)",
-      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></svg>,
-    },
-    {
-      cmd: "underline", title: "Underline (Ctrl+U)",
-      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M6 3v7a6 6 0 0 0 6 6 6 6 0 0 0 6-6V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg>,
-    },
-    {
-      cmd: "strikeThrough", title: "Strikethrough",
-      icon: <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17.3 12H6.7"/><path d="M10 7.5C10 6.1 11.1 5 12.5 5c1 0 1.9.6 2.3 1.5"/><path d="M6 16.5C6 17.9 7.1 19 8.5 19h5.5a3 3 0 0 0 0-6H6"/></svg>,
-    },
-  ];
-
   return (
     <div className="flex flex-col gap-1.5">
       <MenuFieldLabel>{label}</MenuFieldLabel>
       <div className="border border-[#d1d5db] rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-[#2d6fa8] focus-within:border-transparent">
-
-        {/* -- toolbar -- */}
-        <div className="flex items-center flex-wrap gap-0.5 px-2 py-1.5 border-b border-[#e5e7eb] bg-[#f9fafb]">
-
-          {/* bold / italic / underline / strikethrough */}
-          {FORMAT_BUTTONS.map(({ cmd, title, icon }) => (
-            <button
-              key={cmd}
-              type="button"
-              title={title}
-              onMouseDown={(e) => { e.preventDefault(); applyFormat(cmd); }}
-              className={`w-7 h-7 flex items-center justify-center rounded transition-colors ${activeFormats.has(cmd) ? "bg-[#2d6fa8] text-white" : "text-[#6b7280] hover:bg-[#e5e7eb] hover:text-[#374151]"}`}
-            >
-              {icon}
-            </button>
-          ))}
-
-          <div className="w-px h-4 bg-[#e5e7eb] mx-1 shrink-0" />
-
-          {/* font size dropdown - directly controls the cfg field, no execCommand */}
+        <div className="flex items-center flex-wrap gap-1.5 px-2 py-1.5 border-b border-[#e5e7eb] bg-[#f9fafb]">
           <div className="relative">
             <select
               value={fontSize}
@@ -1591,21 +1446,20 @@ function RichTextEditor({
               ))}
             </select>
             <svg className="absolute right-1 top-1/2 -translate-y-1/2 pointer-events-none" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="6 9 12 15 18 9"/>
+              <polyline points="6 9 12 15 18 9" />
             </svg>
           </div>
 
           <div className="w-px h-4 bg-[#e5e7eb] mx-1 shrink-0" />
 
-          {/* text color - directly controls the cfg field, anchored label for correct picker position */}
           <label
             title="Text color"
             className="relative w-7 h-7 flex flex-col items-center justify-center gap-0.5 rounded hover:bg-[#e5e7eb] transition-colors cursor-pointer"
             onMouseDown={(e) => e.preventDefault()}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#374151" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="4 20 8.5 8 12 17 15.5 8 20 20"/>
-              <line x1="6.5" y1="15" x2="17.5" y2="15"/>
+              <polyline points="4 20 8.5 8 12 17 15.5 8 20 20" />
+              <line x1="6.5" y1="15" x2="17.5" y2="15" />
             </svg>
             <span className="w-5 h-1 rounded-full block" style={{ backgroundColor: color }} />
             <input
@@ -1616,24 +1470,15 @@ function RichTextEditor({
               onChange={(e) => onColorChange(e.target.value)}
             />
           </label>
-
         </div>
 
-        {/* -- editable area - uncontrolled, innerHTML set once on mount -- */}
-        <div
-          ref={initRef}
-          contentEditable
-          suppressContentEditableWarning
-          dir="ltr"
-          lang="en"
-          onInput={handleInput}
-          onKeyDown={handleKeyDown}
-          onMouseUp={syncFormats}
-          onKeyUp={syncFormats}
-          onFocus={syncFormats}
-          data-placeholder={placeholder}
-          className={`px-3 py-2.5 outline-none bg-white text-[#374151] empty:before:content-[attr(data-placeholder)] empty:before:text-[#9ca3af] ${multiline ? "min-h-[80px]" : "min-h-[38px]"}`}
-          style={{ wordBreak: "break-word", direction: "ltr", unicodeBidi: "plaintext", textAlign: "left", fontSize }}
+        <BasicRichTextEditor
+          html={html}
+          onChange={onChange}
+          placeholder={placeholder}
+          minHeight={multiline ? 80 : 38}
+          ariaLabel={label}
+          fontSize={fontSize}
         />
       </div>
     </div>
@@ -2159,298 +2004,6 @@ function AddTagButton({ label, onClick }: { label: string; onClick: () => void }
   );
 }
 
-function TrackingAnalyticsPanel() {
-  const [cfg, setCfg] = useState<TrackingState>(DEFAULT_TRACKING);
-  const [standards, setStandards] = useState<string[]>([]);
-  const [ecl, setEcl] = useState<string[]>([]);
-
-  function set<K extends keyof TrackingState>(k: K, v: TrackingState[K]) {
-    setCfg((prev) => ({ ...prev, [k]: v }));
-  }
-
-  const TRACKING_STANDARD_OPTIONS: { id: "scorm" | "xapi" | "hyperbridge"; label: string; description: string }[] = [
-    { id: "scorm",       label: "SCORM",       description: "Sharable Content Object Reference Model" },
-    { id: "xapi",        label: "xAPI",        description: "Experience API (Tin Can API)" },
-    { id: "hyperbridge", label: "HyperBridge", description: "Laerdal HyperBridge protocol" },
-  ];
-
-  const SUCCESS_STATUS_OPTIONS = [
-    { value: "passed",     label: "Passed" },
-    { value: "completed",  label: "Completed" },
-    { value: "incomplete", label: "Incomplete" },
-    { value: "failed",     label: "Failed" },
-  ];
-
-  const FAILURE_STATUS_OPTIONS = [
-    { value: "failed",     label: "Failed" },
-    { value: "incomplete", label: "Incomplete" },
-    { value: "unknown",    label: "Unknown" },
-  ];
-
-  const SCORM_VERSION_OPTIONS = [
-    { value: "1.2",  label: "SCORM 1.2" },
-    { value: "2004", label: "SCORM 2004" },
-  ];
-
-  const ANALYTICS_PROVIDER_OPTIONS = [
-    { value: "google",  label: "Google Analytics" },
-    { value: "adobe",   label: "Adobe Analytics" },
-    { value: "matomo",  label: "Matomo" },
-    { value: "segment", label: "Segment" },
-  ];
-
-  return (
-    <div className="max-w-2xl w-full">
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-[#111827]">Tracking &amp; Analytics</h2>
-        <p className="text-sm text-[#6b7280] mt-0.5">Configure LMS tracking standards and analytics integrations for this course.</p>
-      </div>
-
-      <div className="flex flex-col gap-4">
-
-        {/* ----------------------------------------------
-            HEADING 1 - Tracking (Accordion)
-        ---------------------------------------------- */}
-        <Accordion
-          defaultOpen
-          title="Tracking"
-          icon={
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" />
-            </svg>
-          }
-        >
-          {/* Standard picker */}
-          <div className="mt-3">
-            <p className="text-xs text-[#6b7280] mb-3">Choose the basic tracking standard for the course</p>
-            <div className="flex flex-col gap-1.5">
-              {TRACKING_STANDARD_OPTIONS.map((opt) => (
-                <label
-                  key={opt.id}
-                  className={`flex items-start gap-3 py-2.5 px-3 rounded-lg border cursor-pointer transition-colors ${
-                    cfg.trackingStandard === opt.id
-                      ? "border-[#2d6fa8] bg-[#f0f7ff]"
-                      : "border-[#e5e7eb] hover:border-[#93c5fd] hover:bg-[#f9fafb]"
-                  }`}
-                >
-                  <div
-                    className={`mt-0.5 w-4 h-4 rounded-full shrink-0 border-2 flex items-center justify-center transition-colors ${
-                      cfg.trackingStandard === opt.id ? "border-[#2d6fa8]" : "border-[#d1d5db]"
-                    }`}
-                    onClick={() => set("trackingStandard", opt.id)}
-                  >
-                    {cfg.trackingStandard === opt.id && (
-                      <div className="w-2 h-2 rounded-full bg-[#2d6fa8]" />
-                    )}
-                  </div>
-                  <div onClick={() => set("trackingStandard", opt.id)}>
-                    <p className="text-sm font-semibold text-[#111827]">{opt.label}</p>
-                    <p className="text-xs text-[#6b7280]">{opt.description}</p>
-                  </div>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* -- Category 1 - Basic Settings -- */}
-          <div className="mt-5">
-            <TrackingSectionLabel>Basic Settings</TrackingSectionLabel>
-            <div className="flex flex-col gap-0.5">
-              <CheckboxRow
-                checked={cfg.submitCompletionOnEveryAttempt}
-                onChange={(v) => set("submitCompletionOnEveryAttempt", v)}
-                label="Submit completion on every assessment attempt"
-              />
-              <CheckboxRow
-                checked={cfg.submitScoreToLms}
-                onChange={(v) => set("submitScoreToLms", v)}
-                label="Submit score to LMS"
-              />
-            </div>
-          </div>
-
-          {/* -- Sub-category 1 - Tracking -- */}
-          <div className="mt-4 ml-4 pl-3 border-l-2 border-[#e5e7eb]">
-            <TrackingSubLabel>Tracking</TrackingSubLabel>
-            <div className="flex flex-col gap-0.5">
-              <CheckboxRow checked={cfg.storeQuestionState} onChange={(v) => set("storeQuestionState", v)} label="Store question state" />
-              <CheckboxRow checked={cfg.storeQuestionAttemptState} onChange={(v) => set("storeQuestionAttemptState", v)} label="Store question attempt state" />
-              <CheckboxRow checked={cfg.recordInteractions} onChange={(v) => set("recordInteractions", v)} label="Record interactions" />
-              <CheckboxRow checked={cfg.recordObjectives} onChange={(v) => set("recordObjectives", v)} label="Record objectives" />
-              <CheckboxRow checked={cfg.shouldCompressData} onChange={(v) => set("shouldCompressData", v)} label="Should compress data" />
-            </div>
-          </div>
-
-          {/* -- Sub-category 2 - Reporting -- */}
-          <div className="mt-4 ml-4 pl-3 border-l-2 border-[#e5e7eb]">
-            <TrackingSubLabel>Reporting</TrackingSubLabel>
-            <div className="flex flex-col gap-3">
-              <TrackingSelect
-                label="Tracking success status"
-                value={cfg.trackingSuccessStatus}
-                options={SUCCESS_STATUS_OPTIONS}
-                onChange={(v) => set("trackingSuccessStatus", v)}
-              />
-              <TrackingSelect
-                label="Assessment failure status"
-                value={cfg.assessmentFailureStatus}
-                options={FAILURE_STATUS_OPTIONS}
-                onChange={(v) => set("assessmentFailureStatus", v)}
-              />
-            </div>
-          </div>
-
-          {/* -- Category 2 - Advanced Settings -- */}
-          <div className="mt-5">
-            <TrackingSectionLabel>Advanced Settings</TrackingSectionLabel>
-            <div className="flex flex-col gap-3">
-              <TrackingSelect
-                label="SCORM version"
-                value={cfg.scormVersion}
-                options={SCORM_VERSION_OPTIONS}
-                onChange={(v) => set("scormVersion", v)}
-              />
-              <CheckboxRow checked={cfg.scormDebugWindow} onChange={(v) => set("scormDebugWindow", v)} label="SCORM debug window" />
-              <CheckboxRow checked={cfg.commitDataOnStatusChange} onChange={(v) => set("commitDataOnStatusChange", v)} label="Commit data on status change" />
-              <CheckboxRow checked={cfg.commitDataOnAnyChange} onChange={(v) => set("commitDataOnAnyChange", v)} label="Commit data on any change" />
-              <TrackingTextInput
-                label="Frequency (mins) of automatic commits"
-                value={cfg.commitFrequencyMins}
-                onChange={(v) => set("commitFrequencyMins", v)}
-                placeholder="e.g. 5"
-              />
-              <TrackingTextInput
-                label="Maximum number of commit retries"
-                value={cfg.maxCommitRetries}
-                onChange={(v) => set("maxCommitRetries", v)}
-                placeholder="e.g. 3"
-              />
-              <TrackingTextInput
-                label="Commit retry delay"
-                value={cfg.commitRetryDelay}
-                onChange={(v) => set("commitRetryDelay", v)}
-                placeholder="e.g. 2000"
-              />
-            </div>
-          </div>
-        </Accordion>
-
-        {/* ----------------------------------------------
-            HEADING 2 - Analytics (Accordion)
-        ---------------------------------------------- */}
-        <Accordion
-          title="Analytics"
-          icon={
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-            </svg>
-          }
-        >
-          <div className="mt-3 flex flex-col gap-3">
-            <CheckboxRow
-              checked={cfg.enableAnalytics}
-              onChange={(v) => set("enableAnalytics", v)}
-              label="Enable Analytics"
-            />
-
-            {cfg.enableAnalytics && (
-              <TrackingSelect
-                label="Analytics provider"
-                value={cfg.analyticsProvider}
-                options={ANALYTICS_PROVIDER_OPTIONS}
-                onChange={(v) => set("analyticsProvider", v)}
-              />
-            )}
-          </div>
-
-          {/* Advanced Settings */}
-          <div className="mt-5">
-            <TrackingSectionLabel>Advanced Settings</TrackingSectionLabel>
-            <div className="flex flex-col gap-3">
-              <TrackingTextInput
-                label="Project tag"
-                value={cfg.projectTag}
-                onChange={(v) => set("projectTag", v)}
-                placeholder="Enter project tag"
-              />
-              <TrackingTextInput
-                label="Portfolio"
-                value={cfg.portfolio}
-                onChange={(v) => set("portfolio", v)}
-                placeholder="Enter portfolio"
-              />
-              <TrackingTextInput
-                label="Resource Link ID"
-                value={cfg.resourceLinkId}
-                onChange={(v) => set("resourceLinkId", v)}
-                placeholder="Enter resource link ID"
-              />
-
-              {/* Standard */}
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs font-semibold text-[#374151]">Standard</span>
-                <div className="flex flex-wrap gap-2">
-                  {standards.map((s, i) => (
-                    <span key={i} className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full bg-[#dbeeff] text-[#2d6fa8] font-medium">
-                      {s}
-                      <button
-                        type="button"
-                        onClick={() => setStandards((prev) => prev.filter((_, idx) => idx !== i))}
-                        className="hover:text-[#1a4f7a]"
-                        aria-label={`Remove ${s}`}
-                      >
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                        </svg>
-                      </button>
-                    </span>
-                  ))}
-                  <AddTagButton
-                    label="Add"
-                    onClick={() => {
-                      const val = window.prompt("Enter standard value:");
-                      if (val?.trim()) setStandards((prev) => [...prev, val.trim()]);
-                    }}
-                  />
-                </div>
-              </div>
-
-              {/* ECL */}
-              <div className="flex flex-col gap-1.5">
-                <span className="text-xs font-semibold text-[#374151]">ECL (e-Course Library)</span>
-                <div className="flex flex-wrap gap-2">
-                  {ecl.map((s, i) => (
-                    <span key={i} className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-full bg-[#f0fdf4] text-[#16a34a] border border-[#bbf7d0] font-medium">
-                      {s}
-                      <button
-                        type="button"
-                        onClick={() => setEcl((prev) => prev.filter((_, idx) => idx !== i))}
-                        className="hover:text-[#15803d]"
-                        aria-label={`Remove ${s}`}
-                      >
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                        </svg>
-                      </button>
-                    </span>
-                  ))}
-                  <AddTagButton
-                    label="Add"
-                    onClick={() => {
-                      const val = window.prompt("Enter ECL value:");
-                      if (val?.trim()) setEcl((prev) => [...prev, val.trim()]);
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        </Accordion>
-
-      </div>
-    </div>
-  );
-}
 
 /* ---------------------------------------------------------------
    COMPLETION & PROGRESS PANEL
@@ -2603,7 +2156,7 @@ function CpCheckboxMulti({
               <div
                 onClick={() => toggle(opt.value)}
                 className={`mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
-                  checked ? "bg-[#2d6fa8] border-[#2d6fa8]" : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
+                  checked ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]" : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
                 }`}
               >
                 {checked && (
@@ -2965,1817 +2518,6 @@ function CompletionProgressPanel() {
   );
 }
 
-/* -------------------------------------------------------------
-   LEARNER EXPERIENCE PANEL - Learning Resources accordion
-   ------------------------------------------------------------- */
-
-type ResourceFormat = "document" | "media" | "link" | "custom";
-
-interface LearningResource {
-  id: string;
-  format: ResourceFormat;
-  forceDownload: boolean;
-  title: string;
-  fileName: string;
-  description: string;
-  sourceType: "asset" | "url";
-  assetValue: string;
-  urlValue: string;
-  displayOnEveryPage: boolean;
-}
-
-interface LearningResourcesState {
-  enabled: boolean;
-  sectionTitle: string;
-  description: string;
-  resources: LearningResource[];
-}
-
-const RESOURCE_FORMAT_OPTIONS: { value: ResourceFormat; label: string }[] = [
-  { value: "document", label: "Document" },
-  { value: "media",    label: "Media" },
-  { value: "link",     label: "Link" },
-  { value: "custom",   label: "Custom" },
-];
-
-function newResource(): LearningResource {
-  return {
-    id: Math.random().toString(36).slice(2),
-    format: "document",
-    forceDownload: false,
-    title: "",
-    fileName: "",
-    description: "",
-    sourceType: "asset",
-    assetValue: "",
-    urlValue: "",
-    displayOnEveryPage: false,
-  };
-}
-
-/* small helpers */
-function LrToggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
-  return (
-    <label className="flex items-center gap-2 cursor-pointer select-none">
-      <button
-        type="button"
-        role="switch"
-        aria-checked={checked}
-        onClick={() => onChange(!checked)}
-        className={`relative w-9 h-5 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2d6fa8] ${checked ? "bg-[#2d6fa8]" : "bg-[#d1d5db]"}`}
-      >
-        <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform duration-150 ${checked ? "translate-x-4" : ""}`} />
-      </button>
-      <span className="text-sm text-[#374151]">{label}</span>
-    </label>
-  );
-}
-
-function LrField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-xs font-semibold text-[#374151]">{label}</label>
-      {children}
-    </div>
-  );
-}
-
-const LR_INPUT = "w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg-white text-[#111827] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent";
-const LR_TEXTAREA = `${LR_INPUT} resize-none`;
-
-/* Add Resource modal/drawer */
-function AddResourceDialog({
-  initial,
-  onAdd,
-  onCancel,
-}: {
-  initial?: LearningResource;
-  onAdd: (r: LearningResource) => void;
-  onCancel: () => void;
-}) {
-  const [res, setRes] = useState<LearningResource>(initial ?? newResource());
-  const set = <K extends keyof LearningResource>(k: K, v: LearningResource[K]) =>
-    setRes((prev) => ({ ...prev, [k]: v }));
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col max-h-[90vh] overflow-hidden">
-        {/* header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#f3f4f6] shrink-0">
-          <h3 className="text-base font-bold text-[#111827]">Add Resource</h3>
-          <button type="button" onClick={onCancel} className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#f3f4f6] transition-colors">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-            </svg>
-          </button>
-        </div>
-
-        {/* body */}
-        <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-
-          {/* Resource Format */}
-          <LrField label="Resource Format">
-            <div className="relative">
-              <select
-                value={res.format}
-                onChange={(e) => set("format", e.target.value as ResourceFormat)}
-                aria-label="Resource Format"
-                className={`${LR_INPUT} appearance-none pr-8`}
-              >
-                {RESOURCE_FORMAT_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-              <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </div>
-          </LrField>
-
-          {/* Force Download */}
-          <LrToggle
-            checked={res.forceDownload}
-            onChange={(v) => set("forceDownload", v)}
-            label="Force download"
-          />
-
-          {/* Title */}
-          <LrField label="Title">
-            <input
-              type="text"
-              value={res.title}
-              onChange={(e) => set("title", e.target.value)}
-              placeholder="Enter resource title"
-              className={LR_INPUT}
-            />
-          </LrField>
-
-          {/* File Name */}
-          <LrField label="File Name">
-            <input
-              type="text"
-              value={res.fileName}
-              onChange={(e) => set("fileName", e.target.value)}
-              placeholder="Enter file name"
-              className={LR_INPUT}
-            />
-          </LrField>
-
-          {/* Description */}
-          <LrField label="Description">
-            <textarea
-              value={res.description}
-              onChange={(e) => set("description", e.target.value)}
-              placeholder="Enter resource description"
-              rows={3}
-              className={LR_TEXTAREA}
-            />
-          </LrField>
-
-          {/* Source - asset vs URL tabs */}
-          <LrField label="Source">
-            <div className="flex rounded-lg border border-[#e5e7eb] overflow-hidden mb-2">
-              {(["asset", "url"] as const).map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => set("sourceType", t)}
-                  className={`flex-1 py-2 text-xs font-medium transition-colors ${
-                    res.sourceType === t ? "bg-[#2d6fa8] text-white" : "bg-white text-[#6b7280] hover:bg-[#f9fafb]"
-                  }`}
-                >
-                  {t === "asset" ? "Select from Asset" : "URL"}
-                </button>
-              ))}
-            </div>
-            {res.sourceType === "asset" ? (
-              <button
-                type="button"
-                className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-[#d1d5db] rounded-xl py-4 text-sm text-[#6b7280] hover:border-[#2d6fa8] hover:text-[#2d6fa8] hover:bg-[#f0f7ff] transition-colors"
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
-                </svg>
-                {res.assetValue ? res.assetValue : "Browse assets..."}
-              </button>
-            ) : (
-              <input
-                type="url"
-                value={res.urlValue}
-                onChange={(e) => set("urlValue", e.target.value)}
-                placeholder="https://example.com/resource"
-                className={LR_INPUT}
-              />
-            )}
-          </LrField>
-
-          {/* Display on every page */}
-          <LrToggle
-            checked={res.displayOnEveryPage}
-            onChange={(v) => set("displayOnEveryPage", v)}
-            label="Is display on every page?"
-          />
-        </div>
-
-        {/* footer */}
-        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-[#f3f4f6] shrink-0 bg-[#f9fafb]">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#e5e7eb] rounded-lg hover:bg-[#f3f4f6] transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => onAdd(res)}
-            className="px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors"
-          >
-            Add
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* Resource format icon */
-function ResourceFormatIcon({ format }: { format: ResourceFormat }) {
-  if (format === "document") return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-    </svg>
-  );
-  if (format === "media") return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-    </svg>
-  );
-  if (format === "link") return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
-    </svg>
-  );
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-    </svg>
-  );
-}
-
-/* -- Course Feedback types -- */
-type CourseFeedbackOption = "autoOpen" | "hideAfterSubmit";
-
-interface CourseFeedbackState {
-  enabled: boolean;
-  options: CourseFeedbackOption[];
-  buttonText: string;
-  widgetTitle: string;
-  highestRatingLabel: string;
-  lowestRatingLabel: string;
-  commentTitle: string;
-  commentPlaceholder: string;
-  thankYouMessage: string;
-}
-
-const COURSE_FEEDBACK_OPTIONS: { value: CourseFeedbackOption; label: string }[] = [
-  { value: "autoOpen",        label: "Auto-open on course complete" },
-  { value: "hideAfterSubmit", label: "Hide button after submission" },
-];
-
-/* -- Ask AI Tutor types -- */
-type AiTutorCapability = "allPages" | "answerFromContent" | "useLearnerNotes" | "stepByStep";
-type AiTutorKnowledge  = "concise" | "detailed";
-type AiTutorControl    = "drawer" | "floating";
-
-interface AiTutorDocument {
-  id: string;
-  name: string;
-}
-
-interface AiTutorState {
-  enabled: boolean;
-  title: string;
-  availability: string;
-  capabilities: AiTutorCapability[];
-  knowledge: AiTutorKnowledge;
-  documents: AiTutorDocument[];
-  control: AiTutorControl;
-  promptPlaceholder: string;
-}
-
-const AI_TUTOR_CAPABILITIES: { value: AiTutorCapability; label: string }[] = [
-  { value: "allPages",          label: "Available on all pages" },
-  { value: "answerFromContent", label: "Answer question from course content" },
-  { value: "useLearnerNotes",   label: "Use learner notes" },
-  { value: "stepByStep",        label: "Provide step-by-step guidance" },
-];
-
-const AI_TUTOR_KNOWLEDGE_OPTIONS: { value: AiTutorKnowledge; label: string }[] = [
-  { value: "concise",  label: "Concise" },
-  { value: "detailed", label: "Detailed" },
-];
-
-const AI_TUTOR_CONTROL_OPTIONS: { value: AiTutorControl; label: string }[] = [
-  { value: "drawer",   label: "Drawer" },
-  { value: "floating", label: "Floating button" },
-];
-
-/* -- Learner Notes types -- */
-type NotesAvailability = "all" | "selected";
-type NotesFeature = "create" | "upload" | "download" | "search";
-
-interface LearnerNotesState {
-  enabled: boolean;
-  sectionTitle: string;
-  helperText: string;
-  availability: NotesAvailability;
-  features: NotesFeature[];
-  editorPlaceholder: string;
-}
-
-const NOTES_AVAILABILITY_OPTIONS: { value: NotesAvailability; label: string }[] = [
-  { value: "all",      label: "Available on all pages" },
-  { value: "selected", label: "Only on selected pages" },
-];
-
-const NOTES_FEATURES: { value: NotesFeature; label: string }[] = [
-  { value: "create",   label: "Allow note creation" },
-  { value: "upload",   label: "Allow file upload" },
-  { value: "download", label: "Allow download / export" },
-  { value: "search",   label: "Enable search" },
-];
-
-/* -- Learner Search types -- */
-type SearchMatchRule =
-  | "begins"
-  | "contains"
-  | "equals"
-  | "startsWith";
-
-type SearchFeature = "highlight" | "showKeywords";
-type SearchResultPreview = "short" | "medium" | "long";
-
-interface LearnerSearchState {
-  enabled: boolean;
-  sectionTitle: string;
-  helperText: string;
-  matchRules: SearchMatchRule[];
-  features: SearchFeature[];
-  resultPreview: SearchResultPreview;
-  searchPlaceholder: string;
-  noResultMessage: string;
-  loadingMessage: string;
-}
-
-const SEARCH_MATCH_RULES: { value: SearchMatchRule; label: string }[] = [
-  { value: "begins",     label: "A word in the content begins the search phrase word" },
-  { value: "contains",   label: "A word in the content contains the search phrase word" },
-  { value: "equals",     label: "A word in the content equals the search phrase word" },
-  { value: "startsWith", label: "A word in the content starts with the search phrase word" },
-];
-
-const SEARCH_FEATURES: { value: SearchFeature; label: string }[] = [
-  { value: "highlight",    label: "Highlight search terms in result" },
-  { value: "showKeywords", label: "Show matching keywords" },
-];
-
-const SEARCH_RESULT_PREVIEW_OPTIONS: { value: SearchResultPreview; label: string }[] = [
-  { value: "short",  label: "Short" },
-  { value: "medium", label: "Medium" },
-  { value: "long",   label: "Long" },
-];
-
-/* shared multi-select checkbox list */
-function LrCheckList<T extends string>({
-  options,
-  selected,
-  onChange,
-}: {
-  options: { value: T; label: string }[];
-  selected: T[];
-  onChange: (v: T[]) => void;
-}) {
-  function toggle(val: T) {
-    onChange(
-      selected.includes(val)
-        ? selected.filter((s) => s !== val)
-        : [...selected, val],
-    );
-  }
-  return (
-    <div className="space-y-1">
-      {options.map(({ value, label }) => {
-        const checked = selected.includes(value);
-        return (
-          <label
-            key={value}
-            className="flex items-start gap-3 py-2 px-2 rounded-lg hover:bg-[#f9fafb] cursor-pointer group"
-          >
-            <div
-              onClick={() => toggle(value)}
-              className={`mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
-                checked
-                  ? "bg-[#2d6fa8] border-[#2d6fa8]"
-                  : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
-              }`}
-            >
-              {checked && (
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-              )}
-            </div>
-            <span className="text-sm text-[#374151] leading-snug">{label}</span>
-          </label>
-        );
-      })}
-    </div>
-  );
-}
-
-/* shared single-select radio list */
-function LrRadioList<T extends string>({
-  options,
-  selected,
-  onChange,
-}: {
-  options: { value: T; label: string }[];
-  selected: T;
-  onChange: (v: T) => void;
-}) {
-  return (
-    <div className="flex items-center gap-3 flex-wrap">
-      {options.map(({ value, label }) => {
-        const active = selected === value;
-        return (
-          <button
-            key={value}
-            type="button"
-            onClick={() => onChange(value)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
-              active
-                ? "bg-[#2d6fa8] border-[#2d6fa8] text-white"
-                : "bg-white border-[#e5e7eb] text-[#374151] hover:border-[#93c5fd] hover:bg-[#f0f7ff]"
-            }`}
-          >
-            {label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-/* reusable accordion shell used by both Learning Resources and Learner Search */
-function LeAccordion({
-  open,
-  onToggle,
-  icon,
-  title,
-  children,
-}: {
-  open: boolean;
-  onToggle: () => void;
-  icon: React.ReactNode;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="border border-[#e5e7eb] rounded-xl overflow-hidden">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="w-full flex items-center justify-between px-4 py-3.5 bg-white hover:bg-[#f9fafb] transition-colors"
-      >
-        <div className="flex items-center gap-2.5">
-          <span className="text-[#6b7280]">{icon}</span>
-          <span className="text-sm font-semibold text-[#111827]">{title}</span>
-        </div>
-        <svg
-          width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-          className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-        >
-          <polyline points="6 9 12 15 18 9"/>
-        </svg>
-      </button>
-      {open && (
-        <div className="px-[22px] py-[20px] border-t border-[#f3f4f6] bg-white space-y-4">
-          {children}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function LearnerExperiencePanel() {
-  /* -- Learning Resources state -- */
-  const [lrState, setLrState] = useState<LearningResourcesState>({
-    enabled: false,
-    sectionTitle: "",
-    description: "",
-    resources: [],
-  });
-  const [showAddDialog, setShowAddDialog] = useState(false);
-  const [lrOpen, setLrOpen] = useState(false);
-
-  const setLr = <K extends keyof LearningResourcesState>(k: K, v: LearningResourcesState[K]) =>
-    setLrState((prev) => ({ ...prev, [k]: v }));
-
-  function handleAddResource(r: LearningResource) {
-    setLrState((prev) => ({ ...prev, resources: [...prev.resources, r] }));
-    setShowAddDialog(false);
-  }
-
-  function handleRemoveResource(id: string) {
-    setLrState((prev) => ({ ...prev, resources: prev.resources.filter((r) => r.id !== id) }));
-  }
-
-  /* -- Learner Search state -- */
-  const [lsOpen, setLsOpen] = useState(false);
-  const [lsState, setLsState] = useState<LearnerSearchState>({
-    enabled: false,
-    sectionTitle: "Search",
-    helperText: "",
-    matchRules: [],
-    features: [],
-    resultPreview: "medium",
-    searchPlaceholder: "",
-    noResultMessage: "",
-    loadingMessage: "",
-  });
-
-  const setLs = <K extends keyof LearnerSearchState>(k: K, v: LearnerSearchState[K]) =>
-    setLsState((prev) => ({ ...prev, [k]: v }));
-
-  /* -- Learner Notes state -- */
-  const [lnOpen, setLnOpen] = useState(false);
-  const [lnState, setLnState] = useState<LearnerNotesState>({
-    enabled: false,
-    sectionTitle: "",
-    helperText: "",
-    availability: "all",
-    features: [],
-    editorPlaceholder: "",
-  });
-
-  const setLn = <K extends keyof LearnerNotesState>(k: K, v: LearnerNotesState[K]) =>
-    setLnState((prev) => ({ ...prev, [k]: v }));
-
-  /* -- Ask AI Tutor state -- */
-  const [atOpen, setAtOpen] = useState(false);
-  const [atState, setAtState] = useState<AiTutorState>({
-    enabled: false,
-    title: "",
-    availability: "",
-    capabilities: [],
-    knowledge: "concise",
-    documents: [],
-    control: "drawer",
-    promptPlaceholder: "",
-  });
-
-  const setAt = <K extends keyof AiTutorState>(k: K, v: AiTutorState[K]) =>
-    setAtState((prev) => ({ ...prev, [k]: v }));
-
-  /* -- Course Feedback state -- */
-  const [cfOpen, setCfOpen] = useState(false);
-  const [cfState, setCfState] = useState<CourseFeedbackState>({
-    enabled: false,
-    options: [],
-    buttonText: "",
-    widgetTitle: "",
-    highestRatingLabel: "",
-    lowestRatingLabel: "",
-    commentTitle: "",
-    commentPlaceholder: "",
-    thankYouMessage: "",
-  });
-
-  const setCf = <K extends keyof CourseFeedbackState>(k: K, v: CourseFeedbackState[K]) =>
-    setCfState((prev) => ({ ...prev, [k]: v }));
-
-  function handleAddDocument() {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.onchange = () => {
-      const file = input.files?.[0];
-      if (file) {
-        setAtState((prev) => ({
-          ...prev,
-          documents: [...prev.documents, { id: Math.random().toString(36).slice(2), name: file.name }],
-        }));
-      }
-    };
-    input.click();
-  }
-
-  function handleRemoveDocument(id: string) {
-    setAtState((prev) => ({ ...prev, documents: prev.documents.filter((d) => d.id !== id) }));
-  }
-
-  return (
-    <div className="max-w-2xl w-full">
-      {/* header */}
-      <div className="mb-6">
-        <h2 className="text-xl font-bold text-[#111827]">Learner Experience</h2>
-        <p className="text-sm text-[#6b7280] mt-0.5">Configure what learners see and can access throughout the course.</p>
-      </div>
-
-      <div className="space-y-3">
-
-        {/* -- Learning Resources accordion -- */}
-        <LeAccordion
-          open={lrOpen}
-          onToggle={() => setLrOpen((o) => !o)}
-          title="Learning Resources"
-          icon={
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>
-            </svg>
-          }
-        >
-          {/* Enable toggle */}
-          <div className="pt-3">
-            <LrToggle
-              checked={lrState.enabled}
-              onChange={(v) => setLr("enabled", v)}
-              label="Enable Learning Resources"
-            />
-          </div>
-
-          {lrState.enabled && (
-            <>
-              {/* Section Title */}
-              <LrField label="Section Title">
-                <input
-                  type="text"
-                  value={lrState.sectionTitle}
-                  onChange={(e) => setLr("sectionTitle", e.target.value)}
-                  placeholder="e.g. Additional Resources"
-                  className={LR_INPUT}
-                />
-              </LrField>
-
-              {/* Description */}
-              <LrField label="Description">
-                <textarea
-                  value={lrState.description}
-                  onChange={(e) => setLr("description", e.target.value)}
-                  placeholder="Briefly describe the resources available to learners"
-                  rows={3}
-                  className={LR_TEXTAREA}
-                />
-              </LrField>
-
-              {/* Resources list */}
-              {lrState.resources.length > 0 && (
-                <div className="space-y-2">
-                  {lrState.resources.map((r) => (
-                    <div key={r.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-[#e5e7eb] bg-[#f9fafb]">
-                      <span className="text-[#6b7280] shrink-0">
-                        <ResourceFormatIcon format={r.format} />
-                      </span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-[#111827] truncate">{r.title || <span className="text-[#9ca3af] font-normal">Untitled resource</span>}</p>
-                        <p className="text-xs text-[#6b7280] capitalize">{r.format}{r.displayOnEveryPage ? " · Every page" : ""}</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveResource(r.id)}
-                        className="p-1 rounded text-[#9ca3af] hover:text-[#ef4444] hover:bg-[#fef2f2] transition-colors shrink-0"
-                        title="Remove resource"
-                      >
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-                        </svg>
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Add resource button */}
-              <button
-                type="button"
-                onClick={() => setShowAddDialog(true)}
-                className="flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 border-dashed border-[#d1d5db] text-sm text-[#6b7280] hover:border-[#2d6fa8] hover:text-[#2d6fa8] hover:bg-[#f0f7ff] transition-colors w-full justify-center"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-                </svg>
-                Add resource
-              </button>
-            </>
-          )}
-        </LeAccordion>
-
-        {/* -- Learner Search accordion -- */}
-        <LeAccordion
-          open={lsOpen}
-          onToggle={() => setLsOpen((o) => !o)}
-          title="Learner Search"
-          icon={
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-          }
-        >
-          {/* Enable toggle */}
-          <div className="pt-3">
-            <LrToggle
-              checked={lsState.enabled}
-              onChange={(v) => setLs("enabled", v)}
-              label="Enable Search"
-            />
-          </div>
-
-          {lsState.enabled && (
-            <>
-              {/* Section Title */}
-              <LrField label="Section Title">
-                <input
-                  type="text"
-                  value={lsState.sectionTitle}
-                  onChange={(e) => setLs("sectionTitle", e.target.value)}
-                  placeholder="Search"
-                  className={LR_INPUT}
-                />
-              </LrField>
-
-              {/* Helper Text */}
-              <LrField label="Helper Text">
-                <textarea
-                  value={lsState.helperText}
-                  onChange={(e) => setLs("helperText", e.target.value)}
-                  placeholder="Add helper text shown to learners above the search input"
-                  rows={3}
-                  className={LR_TEXTAREA}
-                />
-              </LrField>
-
-              {/* Search Scope -- Match On Rules */}
-              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Search Scope</p>
-                  <p className="text-xs font-semibold text-[#111827] mt-2 mb-0.5">Match On Rules</p>
-                  <p className="text-xs text-[#6b7280]">Select which word-matching strategies are active.</p>
-                </div>
-                <div className="px-4 py-2">
-                  <LrCheckList<SearchMatchRule>
-                    options={SEARCH_MATCH_RULES}
-                    selected={lsState.matchRules}
-                    onChange={(v) => setLs("matchRules", v)}
-                  />
-                </div>
-              </div>
-
-              {/* Features */}
-              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Features</p>
-                  <p className="text-xs text-[#6b7280] mt-1">Enable optional search result display features.</p>
-                </div>
-                <div className="px-4 py-2">
-                  <LrCheckList<SearchFeature>
-                    options={SEARCH_FEATURES}
-                    selected={lsState.features}
-                    onChange={(v) => setLs("features", v)}
-                  />
-                </div>
-              </div>
-
-              {/* Result Preview */}
-              <LrField label="Result Preview">
-                <LrRadioList<SearchResultPreview>
-                  options={SEARCH_RESULT_PREVIEW_OPTIONS}
-                  selected={lsState.resultPreview}
-                  onChange={(v) => setLs("resultPreview", v)}
-                />
-              </LrField>
-
-              {/* Search Placeholder */}
-              <LrField label="Search Placeholder">
-                <input
-                  type="text"
-                  value={lsState.searchPlaceholder}
-                  onChange={(e) => setLs("searchPlaceholder", e.target.value)}
-                  placeholder="e.g. Type to search..."
-                  className={LR_INPUT}
-                />
-              </LrField>
-
-              {/* No Result Message */}
-              <LrField label="No Result Message">
-                <input
-                  type="text"
-                  value={lsState.noResultMessage}
-                  onChange={(e) => setLs("noResultMessage", e.target.value)}
-                  placeholder="e.g. No results found for your search."
-                  className={LR_INPUT}
-                />
-              </LrField>
-
-              {/* Loading Message */}
-              <LrField label="Loading Message">
-                <input
-                  type="text"
-                  value={lsState.loadingMessage}
-                  onChange={(e) => setLs("loadingMessage", e.target.value)}
-                  placeholder="e.g. Searching..."
-                  className={LR_INPUT}
-                />
-              </LrField>
-            </>
-          )}
-        </LeAccordion>
-
-        {/* -- Learner Notes accordion -- */}
-        <LeAccordion
-          open={lnOpen}
-          onToggle={() => setLnOpen((o) => !o)}
-          title="Learner Notes"
-          icon={
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-            </svg>
-          }
-        >
-          {/* Enable toggle */}
-          <div className="pt-3">
-            <LrToggle
-              checked={lnState.enabled}
-              onChange={(v) => setLn("enabled", v)}
-              label="Enable Notes"
-            />
-          </div>
-
-          {lnState.enabled && (
-            <>
-              {/* Section Title */}
-              <LrField label="Section Title">
-                <input
-                  type="text"
-                  value={lnState.sectionTitle}
-                  onChange={(e) => setLn("sectionTitle", e.target.value)}
-                  placeholder="e.g. My Notes"
-                  className={LR_INPUT}
-                />
-              </LrField>
-
-              {/* Helper Text */}
-              <LrField label="Helper Text">
-                <textarea
-                  value={lnState.helperText}
-                  onChange={(e) => setLn("helperText", e.target.value)}
-                  placeholder="Add helper text shown to learners above the notes editor"
-                  rows={3}
-                  className={LR_TEXTAREA}
-                />
-              </LrField>
-
-              {/* Notes Availability */}
-              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Notes Availability</p>
-                  <p className="text-xs text-[#6b7280] mt-1">Choose which pages the notes panel is available on.</p>
-                </div>
-                <div className="px-4 py-3 space-y-1">
-                  {NOTES_AVAILABILITY_OPTIONS.map(({ value, label }) => {
-                    const active = lnState.availability === value;
-                    return (
-                      <label
-                        key={value}
-                        className="flex items-center gap-3 py-2 px-2 rounded-lg hover:bg-[#f9fafb] cursor-pointer group"
-                      >
-                        <div
-                          onClick={() => setLn("availability", value)}
-                          className={`w-4 h-4 rounded-full shrink-0 border-2 flex items-center justify-center transition-colors cursor-pointer ${
-                            active
-                              ? "border-[#2d6fa8] bg-[#2d6fa8]"
-                              : "border-[#d1d5db] bg-white group-hover:border-[#93c5fd]"
-                          }`}
-                        >
-                          {active && <span className="w-1.5 h-1.5 rounded-full bg-white block" />}
-                        </div>
-                        <span className="text-sm text-[#374151]">{label}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Features */}
-              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Features</p>
-                  <p className="text-xs text-[#6b7280] mt-1">Enable optional note-taking capabilities.</p>
-                </div>
-                <div className="px-4 py-2">
-                  <LrCheckList<NotesFeature>
-                    options={NOTES_FEATURES}
-                    selected={lnState.features}
-                    onChange={(v) => setLn("features", v)}
-                  />
-                </div>
-              </div>
-
-              {/* Editor Placeholder Text */}
-              <LrField label="Editor Placeholder Text">
-                <input
-                  type="text"
-                  value={lnState.editorPlaceholder}
-                  onChange={(e) => setLn("editorPlaceholder", e.target.value)}
-                  placeholder="e.g. Start typing your notes here..."
-                  className={LR_INPUT}
-                />
-              </LrField>
-            </>
-          )}
-        </LeAccordion>
-
-        {/* -- Ask AI Tutor accordion -- */}
-        <LeAccordion
-          open={atOpen}
-          onToggle={() => setAtOpen((o) => !o)}
-          title="Ask AI Tutor"
-          icon={
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2a10 10 0 0 1 10 10c0 5.52-4.48 10-10 10S2 17.52 2 12 6.48 2 12 2z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-            </svg>
-          }
-        >
-          {/* Enable toggle */}
-          <div className="pt-3">
-            <LrToggle
-              checked={atState.enabled}
-              onChange={(v) => setAt("enabled", v)}
-              label="Enable AI Tutor"
-            />
-          </div>
-
-          {atState.enabled && (
-            <>
-              {/* Title */}
-              <LrField label="Title">
-                <input
-                  type="text"
-                  value={atState.title}
-                  onChange={(e) => setAt("title", e.target.value)}
-                  placeholder="e.g. Ask the AI Tutor"
-                  className={LR_INPUT}
-                />
-              </LrField>
-
-              {/* Availability */}
-              <LrField label="Availability">
-                <textarea
-                  value={atState.availability}
-                  onChange={(e) => setAt("availability", e.target.value)}
-                  placeholder="Describe when and where the AI Tutor is available to learners"
-                  rows={3}
-                  className={LR_TEXTAREA}
-                />
-              </LrField>
-
-              {/* Capabilities */}
-              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Capabilities</p>
-                  <p className="text-xs text-[#6b7280] mt-1">Select what the AI Tutor is allowed to do.</p>
-                </div>
-                <div className="px-4 py-2">
-                  <LrCheckList<AiTutorCapability>
-                    options={AI_TUTOR_CAPABILITIES}
-                    selected={atState.capabilities}
-                    onChange={(v) => setAt("capabilities", v)}
-                  />
-                </div>
-              </div>
-
-              {/* Knowledge Sources */}
-              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Knowledge Sources</p>
-                  <p className="text-xs text-[#6b7280] mt-1">Choose the response style for the AI Tutor.</p>
-                </div>
-                <div className="px-4 py-3">
-                  <LrRadioList<AiTutorKnowledge>
-                    options={AI_TUTOR_KNOWLEDGE_OPTIONS}
-                    selected={atState.knowledge}
-                    onChange={(v) => setAt("knowledge", v)}
-                  />
-                </div>
-              </div>
-
-              {/* Documents */}
-              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Documents</p>
-                  <p className="text-xs text-[#6b7280] mt-1">Upload reference documents for the AI Tutor to draw from.</p>
-                </div>
-                <div className="px-4 py-3 space-y-2">
-                  {atState.documents.length > 0 && (
-                    <div className="space-y-1.5">
-                      {atState.documents.map((doc) => (
-                        <div key={doc.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-[#e5e7eb] bg-[#f9fafb]">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
-                          </svg>
-                          <span className="flex-1 text-sm text-[#374151] truncate">{doc.name}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveDocument(doc.id)}
-                            className="p-1 rounded text-[#9ca3af] hover:text-[#ef4444] hover:bg-[#fef2f2] transition-colors shrink-0"
-                            title="Remove document"
-                          >
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                            </svg>
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleAddDocument}
-                    className="flex items-center gap-2 px-4 py-2.5 rounded-lg border-2 border-dashed border-[#d1d5db] text-sm text-[#6b7280] hover:border-[#2d6fa8] hover:text-[#2d6fa8] hover:bg-[#f0f7ff] transition-colors w-full justify-center"
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-                    </svg>
-                    Add document
-                  </button>
-                </div>
-              </div>
-
-              {/* Controls */}
-              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Controls</p>
-                  <p className="text-xs text-[#6b7280] mt-1">Choose how learners open the AI Tutor.</p>
-                </div>
-                <div className="px-4 py-3">
-                  <LrRadioList<AiTutorControl>
-                    options={AI_TUTOR_CONTROL_OPTIONS}
-                    selected={atState.control}
-                    onChange={(v) => setAt("control", v)}
-                  />
-                </div>
-              </div>
-
-              {/* Prompt Placeholder */}
-              <LrField label="Prompt Placeholder">
-                <textarea
-                  value={atState.promptPlaceholder}
-                  onChange={(e) => setAt("promptPlaceholder", e.target.value)}
-                  placeholder="e.g. Ask me anything about this course..."
-                  rows={3}
-                  className={LR_TEXTAREA}
-                />
-              </LrField>
-            </>
-          )}
-        </LeAccordion>
-
-        {/* -- Course Feedback accordion -- */}
-        <LeAccordion
-          open={cfOpen}
-          onToggle={() => setCfOpen((o) => !o)}
-          title="Course Feedback"
-          icon={
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-            </svg>
-          }
-        >
-          {/* Enable toggle */}
-          <div className="pt-3">
-            <LrToggle
-              checked={cfState.enabled}
-              onChange={(v) => setCf("enabled", v)}
-              label="Enable Course Feedback"
-            />
-          </div>
-
-          {cfState.enabled && (
-            <>
-              {/* Options - multi-select */}
-              <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-                <div className="px-4 py-3 bg-[#f9fafb] border-b border-[#f3f4f6]">
-                  <p className="text-xs font-bold text-[#374151] uppercase tracking-wide">Options</p>
-                </div>
-                <div className="px-4 py-2">
-                  <LrCheckList<CourseFeedbackOption>
-                    options={COURSE_FEEDBACK_OPTIONS}
-                    selected={cfState.options}
-                    onChange={(v) => setCf("options", v)}
-                  />
-                </div>
-              </div>
-
-              {/* Button text */}
-              <LrField label="Text displayed on the feedback button">
-                <input
-                  type="text"
-                  value={cfState.buttonText}
-                  onChange={(e) => setCf("buttonText", e.target.value)}
-                  placeholder="e.g. Give Feedback"
-                  className={LR_INPUT}
-                />
-              </LrField>
-
-              {/* Widget title */}
-              <LrField label="Title for the feedback widget">
-                <input
-                  type="text"
-                  value={cfState.widgetTitle}
-                  onChange={(e) => setCf("widgetTitle", e.target.value)}
-                  placeholder="e.g. How did we do?"
-                  className={LR_INPUT}
-                />
-              </LrField>
-
-              {/* Rating labels */}
-              <div className="grid grid-cols-2 gap-3">
-                <LrField label="Highest rating label">
-                  <input
-                    type="text"
-                    value={cfState.highestRatingLabel}
-                    onChange={(e) => setCf("highestRatingLabel", e.target.value)}
-                    placeholder="e.g. Excellent"
-                    className={LR_INPUT}
-                  />
-                </LrField>
-                <LrField label="Lowest rating label">
-                  <input
-                    type="text"
-                    value={cfState.lowestRatingLabel}
-                    onChange={(e) => setCf("lowestRatingLabel", e.target.value)}
-                    placeholder="e.g. Poor"
-                    className={LR_INPUT}
-                  />
-                </LrField>
-              </div>
-
-              {/* Comment title */}
-              <LrField label="Comment title">
-                <textarea
-                  value={cfState.commentTitle}
-                  onChange={(e) => setCf("commentTitle", e.target.value)}
-                  placeholder="e.g. Tell us more about your experience"
-                  rows={2}
-                  className={LR_TEXTAREA}
-                />
-              </LrField>
-
-              {/* Comment placeholder */}
-              <LrField label="Placeholder text for the comment section">
-                <textarea
-                  value={cfState.commentPlaceholder}
-                  onChange={(e) => setCf("commentPlaceholder", e.target.value)}
-                  placeholder="e.g. Share your thoughts..."
-                  rows={2}
-                  className={LR_TEXTAREA}
-                />
-              </LrField>
-
-              {/* Thank you message */}
-              <LrField label="Message shown on the Thank you screen">
-                <textarea
-                  value={cfState.thankYouMessage}
-                  onChange={(e) => setCf("thankYouMessage", e.target.value)}
-                  placeholder="e.g. Thank you for your feedback! We really appreciate it."
-                  rows={3}
-                  className={LR_TEXTAREA}
-                />
-              </LrField>
-            </>
-          )}
-        </LeAccordion>
-
-      </div>
-
-      {showAddDialog && (
-        <AddResourceDialog
-          onAdd={handleAddResource}
-          onCancel={() => setShowAddDialog(false)}
-        />
-      )}
-
-      <div className="h-8" />
-    </div>
-  );
-}
-
-/* -- Export Panel -- */
-function AssetOrUrlPicker({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
-  const [tab, setTab] = useState<"asset" | "url">("asset");
-  return (
-    <div className="flex flex-col gap-2">
-      <span className="text-xs font-semibold text-[#374151]">{label}</span>
-      <div className="flex border border-[#e5e7eb] rounded-lg overflow-hidden w-fit">
-        {(["asset", "url"] as const).map((t) => (
-          <button
-            key={t}
-            type="button"
-            onClick={() => setTab(t)}
-            className={`px-3 py-1.5 text-xs font-medium transition-colors ${tab === t ? "bg-[#2d6fa8] text-white" : "bg-white text-[#6b7280] hover:bg-[#f3f4f6]"}`}
-          >
-            {t === "asset" ? "From Asset Library" : "From URL"}
-          </button>
-        ))}
-      </div>
-      {tab === "asset" ? (
-        <div className="flex items-center gap-2">
-          <div className="flex-1 flex items-center gap-2 px-3 py-2 border border-[#e5e7eb] rounded-lg bg-[#f9fafb] text-sm text-[#9ca3af]">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" />
-              <polyline points="21 15 16 10 5 21" />
-            </svg>
-            {value && !value.startsWith("http") ? value : "No asset selected"}
-          </div>
-          <button type="button" className="px-3 py-2 text-xs font-medium text-[#2d6fa8] border border-[#2d6fa8] rounded-lg hover:bg-[#dbeeff] transition-colors">
-            Browse
-          </button>
-        </div>
-      ) : (
-        <input
-          type="url"
-          value={value.startsWith("http") ? value : ""}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="https://example.com/image.png"
-          className="w-full px-3 py-2 text-sm border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] placeholder-[#9ca3af] text-[#374151]"
-        />
-      )}
-    </div>
-  );
-}
-
-function ExportCheckbox({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
-  return (
-    <label className="flex items-center gap-2.5 cursor-pointer select-none group">
-      <span
-        onClick={() => onChange(!checked)}
-        className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${checked ? "bg-[#2d6fa8] border-[#2d6fa8]" : "border-[#d1d5db] bg-white group-hover:border-[#2d6fa8]"}`}
-      >
-        {checked && (
-          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="2 6 5 9 10 3" />
-          </svg>
-        )}
-      </span>
-      <span className="text-sm text-[#374151]">{label}</span>
-    </label>
-  );
-}
-
-function ExportTextField({ label, placeholder, value, onChange, optional }: { label: string; placeholder?: string; value: string; onChange: (v: string) => void; optional?: boolean }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-xs font-semibold text-[#374151]">
-        {label}{optional && <span className="ml-1 text-[#9ca3af] font-normal">(Optional)</span>}
-      </label>
-      <input
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full px-3 py-2 text-sm border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] placeholder-[#9ca3af] text-[#374151]"
-      />
-    </div>
-  );
-}
-
-function ExportSelect({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (v: string) => void }) {
-  const id = label.toLowerCase().replace(/\s+/g, "-");
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label htmlFor={id} className="text-xs font-semibold text-[#374151]">{label}</label>
-      <select
-        id={id}
-        aria-label={label}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full px-3 py-2 text-sm border border-[#e5e7eb] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] text-[#374151] bg-white"
-      >
-        {options.map((o) => <option key={o}>{o}</option>)}
-      </select>
-    </div>
-  );
-}
-
-function ExportSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col gap-4">
-      <h3 className="text-sm font-semibold text-[#111827] border-b border-[#f3f4f6] pb-2">{title}</h3>
-      {children}
-    </div>
-  );
-}
-
-function PdfExportForm() {
-  const [coverImage, setCoverImage]               = useState("");
-  const [tocPageTitles, setTocPageTitles]         = useState(true);
-  const [tocArticleTitles, setTocArticleTitles]   = useState(true);
-  const [tocBlockTitles, setTocBlockTitles]       = useState(false);
-  const [tocComponentTitles, setTocComponentTitles] = useState(false);
-  const [pdfTitle, setPdfTitle]                   = useState("");
-  const [pdfAuthor, setPdfAuthor]                 = useState("");
-  const [pdfSubject, setPdfSubject]               = useState("");
-  const [pdfCopyright, setPdfCopyright]           = useState("");
-  const [footerLogo, setFooterLogo]               = useState("");
-  const [passwordEnabled, setPasswordEnabled]     = useState(false);
-  const [userPassword, setUserPassword]           = useState("");
-  const [ownerPassword, setOwnerPassword]         = useState("");
-  const [encryptionLevel, setEncryptionLevel]     = useState("AES-128");
-  const [disablePrinting, setDisablePrinting]     = useState(false);
-  const [disableCopying, setDisableCopying]       = useState(false);
-  const [disableAnnotations, setDisableAnnotations] = useState(false);
-  const [allowWatermark, setAllowWatermark]       = useState(false);
-  const [watermarkText, setWatermarkText]         = useState("");
-  const [watermarkPosition, setWatermarkPosition] = useState("Center");
-
-  return (
-    <div className="flex flex-col gap-8 max-w-2xl">
-
-      {/* Cover Page */}
-      <ExportSection title="Cover Page">
-        <AssetOrUrlPicker label="Cover Page Image" value={coverImage} onChange={setCoverImage} />
-      </ExportSection>
-
-      {/* Table of Contents */}
-      <ExportSection title="Table of Contents">
-        <div className="flex flex-col gap-3">
-          <ExportCheckbox checked={tocPageTitles}      onChange={setTocPageTitles}      label="Include Page Titles in TOC" />
-          <ExportCheckbox checked={tocArticleTitles}   onChange={setTocArticleTitles}   label="Include Article Titles in TOC" />
-          <ExportCheckbox checked={tocBlockTitles}     onChange={setTocBlockTitles}     label="Include Block Titles in TOC" />
-          <ExportCheckbox checked={tocComponentTitles} onChange={setTocComponentTitles} label="Include Component Titles in TOC" />
-        </div>
-      </ExportSection>
-
-      {/* Document Metadata */}
-      <ExportSection title="Document Metadata">
-        <div className="grid grid-cols-2 gap-4">
-          <ExportTextField label="PDF Title"     placeholder="e.g. Introduction to Digital Marketing" value={pdfTitle}     onChange={setPdfTitle} />
-          <ExportTextField label="PDF Author"    placeholder="e.g. Laerdal Medical"                    value={pdfAuthor}   onChange={setPdfAuthor} />
-          <ExportTextField label="PDF Subject"   placeholder="e.g. Healthcare Training"                value={pdfSubject}  onChange={setPdfSubject} />
-          <ExportTextField label="PDF Copyright" placeholder="e.g. (©) 2026 Laerdal Medical"           value={pdfCopyright} onChange={setPdfCopyright} />
-        </div>
-      </ExportSection>
-
-      {/* Footer */}
-      <ExportSection title="Footer">
-        <AssetOrUrlPicker label="PDF Footer Logo" value={footerLogo} onChange={setFooterLogo} />
-      </ExportSection>
-
-      {/* Password Protection */}
-      <ExportSection title="Password Protection">
-        <label className="flex items-center gap-3 cursor-pointer select-none">
-          <div
-            onClick={() => setPasswordEnabled((v) => !v)}
-            className={`relative w-9 h-5 rounded-full transition-colors ${passwordEnabled ? "bg-[#2d6fa8]" : "bg-[#d1d5db]"}`}
-          >
-            <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${passwordEnabled ? "translate-x-4" : "translate-x-0.5"}`} />
-          </div>
-          <span className="text-sm font-medium text-[#374151]">Enable Password Protection</span>
-        </label>
-
-        {passwordEnabled && (
-          <div className="flex flex-col gap-4 pl-0 pt-1">
-            <div className="grid grid-cols-2 gap-4">
-              <ExportTextField label="User Password"  placeholder="Required to open PDF"  value={userPassword}  onChange={setUserPassword} />
-              <ExportTextField label="Owner Password" placeholder="Required to edit PDF"  value={ownerPassword} onChange={setOwnerPassword} optional />
-            </div>
-            <ExportSelect label="Encryption Level" value={encryptionLevel} options={["RC4-40", "RC4-128", "AES-128", "AES-256"]} onChange={setEncryptionLevel} />
-
-            <div className="flex flex-col gap-1.5">
-              <span className="text-xs font-semibold text-[#374151]">Permissions</span>
-              <div className="flex flex-col gap-3 pl-1">
-                <ExportCheckbox checked={disablePrinting}    onChange={setDisablePrinting}    label="Disable Printing" />
-                <ExportCheckbox checked={disableCopying}     onChange={setDisableCopying}     label="Disable Copying" />
-                <ExportCheckbox checked={disableAnnotations} onChange={setDisableAnnotations} label="Disable Annotations" />
-              </div>
-            </div>
-          </div>
-        )}
-      </ExportSection>
-
-      {/* Watermark */}
-      <ExportSection title="Watermark">
-        <ExportCheckbox checked={allowWatermark} onChange={setAllowWatermark} label="Add Watermark" />
-        {allowWatermark && (
-          <div className="flex flex-col gap-4 pt-1">
-            <ExportTextField label="Watermark Text" placeholder="e.g. CONFIDENTIAL" value={watermarkText} onChange={setWatermarkText} />
-            <ExportSelect label="Watermark Position" value={watermarkPosition} options={["Top Left", "Top Center", "Top Right", "Center", "Bottom Left", "Bottom Center", "Bottom Right", "Diagonal"]} onChange={setWatermarkPosition} />
-          </div>
-        )}
-      </ExportSection>
-
-      {/* Export button */}
-      <div className="pt-2 border-t border-[#f3f4f6]">
-        <button
-          type="button"
-          className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-[#2E7FA1] hover:bg-[#266580] rounded-lg transition-colors"
-        >
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
-          Export as PDF
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function ExportPanel() {
-  const [activeExport, setActiveExport] = useState<"choose" | "source" | "pdf">("choose");
-
-  if (activeExport === "source") {
-    return (
-      <div className="max-w-2xl w-full flex flex-col gap-6">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setActiveExport("choose")}
-            className="flex items-center gap-1.5 text-sm text-[#6b7280] hover:text-[#111827] transition-colors"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M19 12H5M12 19l-7-7 7-7" />
-            </svg>
-            Back
-          </button>
-          <h2 className="text-lg font-semibold text-[#111827]">Export Source</h2>
-        </div>
-        <div className="flex flex-col items-center justify-center py-16 gap-4 text-center border border-dashed border-[#e5e7eb] rounded-xl bg-[#f9fafb]">
-          <div className="w-14 h-14 rounded-2xl bg-white border border-[#e5e7eb] flex items-center justify-center shadow-sm">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-            </svg>
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-[#374151]">Export Source Files</p>
-            <p className="text-xs text-[#9ca3af] mt-1 max-w-xs">Download the raw course source files for backup or import into another authoring tool.</p>
-          </div>
-          <button type="button" className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-[#2E7FA1] hover:bg-[#266580] rounded-lg transition-colors">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            Download Source
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (activeExport === "pdf") {
-    return (
-      <div className="max-w-2xl w-full flex flex-col gap-6">
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setActiveExport("choose")}
-            className="flex items-center gap-1.5 text-sm text-[#6b7280] hover:text-[#111827] transition-colors"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M19 12H5M12 19l-7-7 7-7" />
-            </svg>
-            Back
-          </button>
-          <h2 className="text-lg font-semibold text-[#111827]">Export as PDF</h2>
-        </div>
-        <PdfExportForm />
-      </div>
-    );
-  }
-
-  /* Choose export type */
-  return (
-    <div className="max-w-2xl w-full flex flex-col gap-6">
-      <div>
-        <h2 className="text-lg font-semibold text-[#111827]">Export</h2>
-        <p className="text-sm text-[#6b7280] mt-1">Choose how you'd like to export this course.</p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        {/* Export Source */}
-        <button
-          type="button"
-          onClick={() => setActiveExport("source")}
-          className="flex flex-col items-start gap-4 p-5 bg-white border border-[#e5e7eb] rounded-xl hover:border-[#2d6fa8] hover:shadow-sm transition-all text-left group"
-        >
-          <div className="w-10 h-10 rounded-xl bg-[#f3f4f6] group-hover:bg-[#dbeeff] flex items-center justify-center transition-colors">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="group-hover:stroke-[#2d6fa8]">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-              <line x1="12" y1="18" x2="12" y2="12" />
-              <line x1="9" y1="15" x2="15" y2="15" />
-            </svg>
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-[#111827]">Export Source</p>
-            <p className="text-xs text-[#6b7280] mt-1 leading-relaxed">Download the raw source files for backup or migration.</p>
-          </div>
-          <span className="mt-auto text-xs font-medium text-[#2d6fa8] flex items-center gap-1">
-            Select
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M5 12h14M12 5l7 7-7 7" />
-            </svg>
-          </span>
-        </button>
-
-        {/* Export as PDF */}
-        <button
-          type="button"
-          onClick={() => setActiveExport("pdf")}
-          className="flex flex-col items-start gap-4 p-5 bg-white border border-[#e5e7eb] rounded-xl hover:border-[#2d6fa8] hover:shadow-sm transition-all text-left group"
-        >
-          <div className="w-10 h-10 rounded-xl bg-[#f3f4f6] group-hover:bg-[#dbeeff] flex items-center justify-center transition-colors">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="group-hover:stroke-[#2d6fa8]">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14 2 14 8 20 8" />
-              <path d="M9 13h6M9 17h6M9 9h1" />
-            </svg>
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-[#111827]">Export as PDF</p>
-            <p className="text-xs text-[#6b7280] mt-1 leading-relaxed">Generate a styled PDF with TOC, metadata, and security options.</p>
-          </div>
-          <span className="mt-auto text-xs font-medium text-[#2d6fa8] flex items-center gap-1">
-            Select
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M5 12h14M12 5l7 7-7 7" />
-            </svg>
-          </span>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function ExportDialog({ onClose }: { onClose: () => void }) {
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4" onMouseDown={onClose}>
-      <div
-        className="w-full max-w-4xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-2xl border border-[#e5e7eb] flex flex-col"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Export dialog"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#f3f4f6] shrink-0">
-          <div>
-            <h3 className="text-base font-semibold text-[#111827]">Export</h3>
-            <p className="text-sm text-[#6b7280] mt-0.5">Choose how you'd like to export this course.</p>
-          </div>
-          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#f3f4f6] transition-colors" aria-label="Close export dialog">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-5 md:p-6 bg-[#f8fafc]">
-          <ExportPanel />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* -- Publish Panel -- */
-function PublishCheckbox({ checked, onChange, children }: { checked: boolean; onChange: (v: boolean) => void; children: React.ReactNode }) {
-  return (
-    <label className="flex items-start gap-3 cursor-pointer select-none group">
-      <span
-        onClick={() => onChange(!checked)}
-        className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${checked ? "bg-[#2d6fa8] border-[#2d6fa8]" : "border-[#d1d5db] bg-white group-hover:border-[#2d6fa8]"}`}
-      >
-        {checked && (
-          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="2 6 5 9 10 3" />
-          </svg>
-        )}
-      </span>
-      <span className="text-sm text-[#374151] leading-snug">{children}</span>
-    </label>
-  );
-}
-
-function PublishPanel() {
-  const [preflight, setPreflight]               = useState(true);
-  const [includeCourseVal, setIncludeCourseVal] = useState(true);
-  const [includeA11y, setIncludeA11y]           = useState(false);
-  const [includeScorm, setIncludeScorm]         = useState(false);
-  const [a11yChecked, setA11yChecked]           = useState(false);
-  const [scormChecked, setScormChecked]         = useState(false);
-
-  return (
-    <div className="max-w-2xl w-full flex flex-col gap-8">
-
-      {/* Heading */}
-      <div>
-        <h2 className="text-xl font-semibold text-[#111827]">Publish</h2>
-        <p className="text-sm text-[#6b7280] mt-1.5 leading-relaxed">
-          Configure your publish settings and optionally run a Preflight Validation to generate a report before publishing.
-        </p>
-      </div>
-
-      {/* Preflight Validation toggle */}
-      <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-        <div className="flex items-center justify-between px-5 py-4 bg-[#f9fafb] border-b border-[#e5e7eb]">
-          <div>
-            <p className="text-sm font-semibold text-[#111827]">Preflight Validation</p>
-            <p className="text-xs text-[#6b7280] mt-0.5">Generate a validation report before publishing</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setPreflight((v) => !v)}
-            aria-label="Toggle preflight validation"
-            className={`relative inline-flex w-12 h-7 rounded-full transition-colors duration-200 shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2d6fa8] focus-visible:ring-offset-2 ${preflight ? "bg-[#2d6fa8]" : "bg-[#d1d5db]"}`}
-          >
-            <span className={`absolute top-[3px] left-[3px] w-[22px] h-[22px] rounded-full shadow-sm transition-transform duration-200 flex items-center justify-center ${preflight ? "bg-white translate-x-[18px]" : "bg-[#3d3d3d] translate-x-0"}`}>
-              {preflight && (
-                <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="#2d6fa8" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="2 6 5 9 10 3" />
-                </svg>
-              )}
-            </span>
-          </button>
-        </div>
-
-        {preflight && (
-          <div className="px-5 py-4 flex flex-col gap-3 bg-white">
-            <p className="text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">Include in report</p>
-            <PublishCheckbox checked={includeCourseVal} onChange={setIncludeCourseVal}>Course Validation</PublishCheckbox>
-            <PublishCheckbox checked={includeA11y}      onChange={setIncludeA11y}>Accessibility Report</PublishCheckbox>
-            <PublishCheckbox checked={includeScorm}     onChange={setIncludeScorm}>SCORM Validation for LMS</PublishCheckbox>
-          </div>
-        )}
-      </div>
-
-      {/* Course Validation section */}
-      <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-        <div className="px-5 py-4 bg-[#f9fafb] border-b border-[#e5e7eb]">
-          <p className="text-sm font-semibold text-[#111827]">Course Evaluation</p>
-        </div>
-        <div className="px-5 py-5 flex flex-col gap-4 bg-white">
-          <p className="text-sm text-[#374151] leading-relaxed">
-            It is recommended to do the Course Evaluation and correct any findings before proceeding to the SCORM/Hyperbridge Validation.
-          </p>
-          <ul className="flex flex-col gap-2 pl-1">
-            {[
-              "Identifies duplicate IDs within the course",
-              "Validates the syntax of the IDs for Assessments",
-              "Finds if all necessary extensions are included; for example, courses with the Hyperbridge extension should also include the CDN Deployment extension",
-              "Alerts if both SPOOR and Hyperbridge extensions are included in a course",
-              "Alerts when assessment completion is set as the course completion criteria, but assessment extension is not enabled for any article in the course",
-            ].map((item) => (
-              <li key={item} className="flex items-start gap-2.5 text-sm text-[#6b7280]">
-                <svg className="shrink-0 mt-0.5" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2d6fa8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-                {item}
-              </li>
-            ))}
-          </ul>
-          <div className="pt-1">
-            <button type="button" className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 12l2 2 4-4" /><circle cx="12" cy="12" r="10" />
-              </svg>
-              Validation
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Accessibility Checker + SCORM/HyperBridge Validation */}
-      <div className="rounded-xl border border-[#e5e7eb] overflow-hidden">
-        <div className="px-5 py-4 bg-[#f9fafb] border-b border-[#e5e7eb]">
-          <p className="text-sm font-semibold text-[#111827]">Accessibility Checker &amp; SCORM/HyperBridge Validation</p>
-        </div>
-        <div className="px-5 py-5 flex flex-col gap-5 bg-white">
-
-          {/* Prerequisites */}
-          <div className="rounded-lg bg-[#fffbeb] border border-[#fcd34d] px-4 py-3 flex flex-col gap-1.5">
-            <p className="text-xs font-semibold text-[#92400e] uppercase tracking-wide flex items-center gap-1.5">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-                <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
-              </svg>
-              Prerequisites: Dependent Extensions for Validation
-            </p>
-            <p className="text-xs text-[#78350f] leading-relaxed">
-              To run these validation reports it is required to enable the below extensions well in advance to ensure successful validation.
-            </p>
-            <ul className="flex flex-col gap-1 mt-1">
-              {["Laerdal Validator Enabler", "SPOOR/HyperBridge Extension", "CDN config"].map((ext) => (
-                <li key={ext} className="flex items-center gap-2 text-xs text-[#92400e]">
-                  <span className="w-1 h-1 rounded-full bg-[#d97706] shrink-0" />
-                  {ext}
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          {/* Validation options */}
-          <div className="flex flex-col gap-5">
-            <p className="text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">Select validations to run</p>
-
-            {/* Accessibility Checker */}
-            <div
-              onClick={() => setA11yChecked((v) => !v)}
-              className={`flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-all ${a11yChecked ? "border-[#2d6fa8] bg-[#f0f7ff]" : "border-[#e5e7eb] bg-white hover:border-[#93c5fd]"}`}
-            >
-              <span className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${a11yChecked ? "bg-[#2d6fa8] border-[#2d6fa8]" : "border-[#d1d5db] bg-white"}`}>
-                {a11yChecked && (
-                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="2 6 5 9 10 3" />
-                  </svg>
-                )}
-              </span>
-              <div className="flex flex-col gap-1">
-                <p className="text-sm font-semibold text-[#111827]">Accessibility Checker</p>
-                <p className="text-xs text-[#6b7280] leading-relaxed">
-                  Runs the course through the AXE library from Deque to identify potential errors and warnings in compliance with WCAG A and AA standards. This includes checks for color contrast ratios, missing alternative text for images, heading structures, and keyboard navigation support.
-                </p>
-              </div>
-            </div>
-
-            {/* SCORM/Hyperbridge Validation */}
-            <div
-              onClick={() => setScormChecked((v) => !v)}
-              className={`flex items-start gap-3 p-4 rounded-xl border cursor-pointer transition-all ${scormChecked ? "border-[#2d6fa8] bg-[#f0f7ff]" : "border-[#e5e7eb] bg-white hover:border-[#93c5fd]"}`}
-            >
-              <span className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${scormChecked ? "bg-[#2d6fa8] border-[#2d6fa8]" : "border-[#d1d5db] bg-white"}`}>
-                {scormChecked && (
-                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="2 6 5 9 10 3" />
-                  </svg>
-                )}
-              </span>
-              <div className="flex flex-col gap-1.5">
-                <p className="text-sm font-semibold text-[#111827]">SCORM/Hyperbridge Validation</p>
-                <ul className="flex flex-col gap-1">
-                  {[
-                    "Checks the suspend data length varies for SPOOR and HyperBridge.",
-                    "Identifies any potential bugs that may occur during LMS deployment.",
-                    "Confirms if the course registers completion and if the assessment score is pushed where relevant.",
-                  ].map((item) => (
-                    <li key={item} className="flex items-start gap-2 text-xs text-[#6b7280]">
-                      <span className="w-1 h-1 rounded-full bg-[#9ca3af] shrink-0 mt-1.5" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          {/* Run validations button */}
-          {(a11yChecked || scormChecked) && (
-            <button type="button" className="self-start flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M9 12l2 2 4-4" /><circle cx="12" cy="12" r="10" />
-              </svg>
-              Run {[a11yChecked && "Accessibility", scormChecked && "SCORM"].filter(Boolean).join(" & ")} Validation
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Publish action */}
-      <div className="flex items-center justify-between pt-2 border-t border-[#f3f4f6]">
-        <p className="text-xs text-[#9ca3af]">Complete any outstanding validations before publishing.</p>
-        <button type="button" className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-[#2E7FA1] hover:bg-[#266580] rounded-lg transition-colors">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-          </svg>
-          Publish Course
-        </button>
-      </div>
-
-    </div>
-  );
-}
-
 /* -- Placeholder panel for sections not yet built -- */
 function ComingSoonPanel({ label }: { label: string }) {
   return (
@@ -4794,11 +2536,14 @@ function ComingSoonPanel({ label }: { label: string }) {
 /* -- Main page -- */
 function CourseCreationCenterContent() {
   const [params] = useSearchParams();
+  const routeParams = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const canExportCourse = isSuperAdmin(user);
   const initialTitle = params.get("title") ?? "Untitled Course";
   const initialDescription = params.get("description") ?? "";
-  const courseId = params.get("courseId") ?? "";
+  const initialPanel = params.get("panel") ?? "";
+  const courseId = routeParams.id ?? params.get("courseId") ?? "";
 
   const [title, setTitle] = useState(initialTitle);
   const [description, setDescription] = useState(initialDescription);
@@ -4807,12 +2552,38 @@ function CourseCreationCenterContent() {
   const [savedThemeVariables, setSavedThemeVariables] = useState<Record<string, unknown>>({});
   const [savedPresetId, setSavedPresetId] = useState("");
 
-  const [activeNav, setActiveNav] = useState("overview");
+  // canExportCourse depends on `user`, which AuthContext fetches asynchronously
+  // (starts null) — deciding the initial panel from it here would race a
+  // Super Admin's ?panel=export-pdf deep link to "overview" before the user
+  // loads. Pick from the URL alone; the effect below corrects non-admins once
+  // the user has actually loaded.
+  const [activeNav, setActiveNav] = useState(() =>
+    initialPanel === "storyboarding"
+      ? "storyboarding"
+      : initialPanel === "publish"
+        ? "publish"
+        : initialPanel === "export-pdf"
+          ? "export-pdf"
+          : "overview",
+  );
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (activeNav === "export-pdf" && !canExportCourse) setActiveNav("overview");
+  }, [authLoading, canExportCourse, activeNav]);
   const [collapsed, setCollapsed] = useState(false);
+  const [exportingSource, setExportingSource] = useState(false);
+  const [exportPopup, setExportPopup] = useState<{ status: "processing" | "success" | "error"; message: string } | null>(null);
   const [showExportDialog, setShowExportDialog] = useState(false);
+  const [publishDialogPhase, setPublishDialogPhase] = useState<PublishCoursePhase | null>(null);
+  const [publishResult, setPublishResult] = useState<{ zipName?: string; downloadUrl?: string; message?: string }>({});
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(NAV_GROUPS.map((group) => [group.id, true]))
   );
+  const contentScrollRef = useRef<HTMLElement | null>(null);
+  const deferredNavigationActionRef = useRef<(() => void) | null>(null);
+  const [assetPickerRequest, setAssetPickerRequest] = useState<SetupAssetPickerRequest | null>(null);
+  const { beginTransition } = usePageTransition();
 
   // Tracks requested navigation when on a panel with unsaved changes
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
@@ -4833,7 +2604,7 @@ function CourseCreationCenterContent() {
       try {
         const data = await getCourseBootstrapData(courseId);
         if (cancelled) return;
-        setTitle(data.title || initialTitle);
+        setTitle(data.displayTitle || data.title || initialTitle);
         setDescription(data.description || initialDescription);
         setSavedThemeName(data.themeName || "");
         setSavedMenuName(data.menuName || "");
@@ -4855,7 +2626,40 @@ function CourseCreationCenterContent() {
     };
   }, [courseId, initialDescription, initialTitle]);
 
+  useEffect(() => {
+    if (!exportPopup || (exportPopup.status !== "success" && exportPopup.status !== "error")) return;
+    const timer = window.setTimeout(() => setExportPopup(null), 3200);
+    return () => window.clearTimeout(timer);
+  }, [exportPopup]);
+
+  useEffect(() => {
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = prevBodyOverflow;
+      document.documentElement.style.overflow = prevHtmlOverflow;
+    };
+  }, []);
+
   const activeItem = NAV_ITEMS.find((n) => !n.heading && n.id === activeNav);
+  const panelHeading = assetPickerRequest?.title || activeItem?.label || "Course Overview";
+  const panelIcon = activeItem?.icon || <SidebarMaskIcon file="overview-icon.svg" />;
+  const fullCanvasPanels = new Set([
+    "overview",
+    "structure",
+    "theme",
+    "menu",
+    "navigation",
+    "completion",
+    "learner-experience",
+    "tracking",
+    "accessibility",
+    "technical-settings",
+    "cdn-deployment",
+  ]);
   const loginName = user?.username || user?.email || "Not signed in";
 
   function toggleGroup(groupId: string) {
@@ -4865,6 +2669,18 @@ function CourseCreationCenterContent() {
     }));
   }
 
+  function requestGuardedAction(callback: () => void) {
+    if (GUARDED_NAV_IDS.has(activeNav)) {
+      deferredNavigationActionRef.current = callback;
+      setPendingNavigation(DEFERRED_NAV_ACTION);
+      return;
+    }
+
+    deferredNavigationActionRef.current = null;
+    setPendingNavigation(null);
+    callback();
+  }
+
   // Smart navigation handler - used by sidebar items
   // When on a guarded setup panel, the page intercepts via pendingNavigation state.
   function handleNavigation(nextPanel: string) {
@@ -4872,47 +2688,202 @@ function CourseCreationCenterContent() {
       return;
     }
 
+    deferredNavigationActionRef.current = null;
+
     if (GUARDED_NAV_IDS.has(activeNav)) {
       // Signal to the active guarded setup page that navigation is requested.
       // The page decides whether to show a confirmation modal or allow navigation.
       setPendingNavigation(nextPanel);
     } else {
       setPendingNavigation(null);
-      setActiveNav(nextPanel);
+      performNavigation(nextPanel);
     }
   }
 
+  function triggerExportSource() {
+    void runExportSourceAction({
+      exportingSource,
+      tenantId: user?._tenantId,
+      courseId,
+      setExportingSource,
+      onProcessingStart: () => {
+        setExportPopup({ status: "processing", message: "Preparing course source export…" });
+      },
+      onDownloadStarted: () => {
+        setExportPopup({ status: "success", message: "Course source exported successfully" });
+      },
+      onUnavailable: () => {
+        setExportPopup({ status: "error", message: "Course export is not available right now." });
+      },
+      onError: (message) => {
+        setExportPopup({ status: "error", message: `Unable to export source. ${message}` });
+      },
+    });
+  }
+
+  function performNavigation(target: string) {
+    if (target === DEFERRED_NAV_ACTION) {
+      const deferredAction = deferredNavigationActionRef.current;
+      deferredNavigationActionRef.current = null;
+      deferredAction?.();
+      return;
+    }
+
+    if (target === activeNav) {
+      return;
+    }
+
+    if (target === "export-pdf") {
+      setExportPopup(null);
+    }
+
+    beginTransition();
+    setActiveNav(target);
+  }
+
   function renderPanel() {
-    if (activeNav === "overview") return <CourseOverviewPanel title={title} description={description} />;
-    if (activeNav === "structure")
-      return (
-        <CourseStructurePanel
-          courseId={courseId}
-          courseTitle={title}
-          onOpenEditor={(pageId) =>
-            navigate(`/course/${courseId}`, { state: { pageId } })
-          }
-          onOpenStoryboard={() => setActiveNav("storyboarding")}
-          onNavigationRequest={setActiveNav}
-          pendingNavigation={pendingNavigation}
-          onPendingNavigationHandled={() => setPendingNavigation(null)}
-        />
-      );
-    if (activeNav === "theme") return <SelectThemePage initialThemeName={savedThemeName} initialThemeVariables={savedThemeVariables} initialPresetId={savedPresetId} courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} onThemeSaved={({ themeName, themeVariables, themePresetId }) => { setSavedThemeName(themeName); setSavedThemeVariables(themeVariables); setSavedPresetId(themePresetId); }} />;
-    if (activeNav === "menu") return <MenuPage courseId={courseId} initialMenuName={savedMenuName} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "navigation") return <NavigationPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "accessibility") return <AccessibilityPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "tracking") return <TrackingAnalyticsPanel />;
-    if (activeNav === "completion") return <CompletionProgressPanel />;
-    if (activeNav === "learner-experience") return <LearnerExperiencePanel />;
-    if (activeNav === "technical-settings") return <TechnicalSettingPage courseId={courseId} onNavigationRequest={setActiveNav} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
-    if (activeNav === "publish") return <PublishPanel />;
-    return <ComingSoonPanel label={activeItem?.label ?? (activeNav === "storyboarding" ? "Storyboarding" : "")} />;
+    switch (activeNav) {
+      case "overview":
+        return <CourseOverviewPage courseId={courseId} title={title} description={description} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} onRequestAssetPicker={setAssetPickerRequest} />;
+      case "structure":
+        return (
+          <CourseStructurePanel
+            courseId={courseId}
+            courseTitle={title}
+            onOpenEditor={(pageId) => requestGuardedAction(() => openEditor(pageId))}
+            onOpenStoryboard={() => handleNavigation("storyboarding")}
+            onNavigationRequest={performNavigation}
+            pendingNavigation={pendingNavigation}
+            onPendingNavigationHandled={() => setPendingNavigation(null)}
+          />
+        );
+      case "theme":
+        return <SelectThemePage initialThemeName={savedThemeName} initialThemeVariables={savedThemeVariables} initialPresetId={savedPresetId} courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} onThemeSaved={({ themeName, themeVariables, themePresetId }) => { setSavedThemeName(themeName); setSavedThemeVariables(themeVariables); setSavedPresetId(themePresetId); }} />;
+      case "menu":
+        return <MenuPage courseId={courseId} initialMenuName={savedMenuName} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "navigation":
+        return <NavigationPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "accessibility":
+        return <AccessibilityPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "tracking":
+        return <TrackingAnalyticsPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "learner-experience":
+        return <LearnerExperiencePanel courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "completion":
+        return <CompletionProgressPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "technical-settings":
+        return <TechnicalSettingPage courseId={courseId} courseTitle={title} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "cdn-deployment":
+        return <CdnDeploymentPage courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
+      case "translation":
+        return <TranslationPage courseId={courseId} courseTitle={title} />;
+      case "publish":
+        return <PreflightValidatorPage courseId={courseId} onNavigationRequest={setActiveNav} />;
+      case "export-pdf":
+        if (canExportCourse) {
+          return (
+            <ExportPdfPage
+              courseId={courseId}
+              courseTitle={title}
+              onNavigationRequest={performNavigation}
+              pendingNavigation={pendingNavigation}
+              onPendingNavigationHandled={() => setPendingNavigation(null)}
+            />
+          );
+        }
+        break;
+      case "storyboarding":
+        return (
+          <StoryboardWorkspace
+            courseId={courseId}
+            courseTitle={title}
+            onBack={() => setActiveNav("overview")}
+            onTitleChange={setTitle}
+          />
+        );
+      default:
+        break;
+    }
+
+    return <ComingSoonPanel label={activeItem?.label ?? ""} />;
   }
 
   function openExportDialog() {
     setShowExportDialog(true);
   }
+
+  function openPublishDialog() {
+    setPublishResult({});
+    setPublishDialogPhase("confirm");
+  }
+
+  function closePublishDialog() {
+    setPublishDialogPhase(null);
+  }
+
+  async function handleConfirmPublish() {
+    const tenantId = user?._tenantId;
+    if (!courseId || !tenantId) {
+      setPublishResult({ message: "No course or tenant context available." });
+      setPublishDialogPhase("error");
+      return;
+    }
+    setPublishDialogPhase("running");
+    try {
+      const result = await publishCoursePackage(tenantId, courseId);
+      if (result.success) {
+        setPublishResult({ zipName: result.zipName, downloadUrl: result.downloadUrl });
+        setPublishDialogPhase("success");
+      } else {
+        setPublishResult({ message: result.message });
+        setPublishDialogPhase("error");
+      }
+    } catch (err) {
+      setPublishResult({ message: err instanceof Error ? err.message : "Publish failed." });
+      setPublishDialogPhase("error");
+    }
+  }
+
+  function buildPageEditorState(pageId?: string) {
+    return {
+      courseId,
+      title,
+      description,
+      theme: savedThemeName,
+      menu: savedMenuName,
+      ...(pageId ? { pageId } : {}),
+    };
+  }
+
+  function openEditor(pageId?: string) {
+    if (!courseId) return;
+
+    const chosenPageId = (pageId || "").trim();
+    if (chosenPageId) {
+      window.sessionStorage.setItem(`setup:${courseId}:lastPageId`, chosenPageId);
+    }
+
+    navigate(`/course/${courseId}`, {
+      state: buildPageEditorState(chosenPageId || undefined),
+    });
+  }
+
+  function openPreview(startFromCurrentPage: boolean) {
+    if (!courseId) return;
+
+    const savedPageId = (window.sessionStorage.getItem(`setup:${courseId}:lastPageId`) || "").trim();
+    const previewUrl = startFromCurrentPage && savedPageId
+      ? `/course/${courseId}/preview?pageId=${encodeURIComponent(savedPageId)}`
+      : `/course/${courseId}/preview`;
+    navigate(previewUrl);
+  }
+
+  const primaryTopNav: "settings" | "storyboard" | "editor" = activeNav === "storyboarding" ? "storyboard" : "settings";
+
+  useEffect(() => {
+    // Avoid carrying scroll position across panels (e.g. opening Export PDF mid-page).
+    contentScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+  }, [activeNav]);
 
   return (
     <div className="flex flex-col h-screen bg-[#f8fafc] overflow-hidden">
@@ -4921,73 +2892,65 @@ function CourseCreationCenterContent() {
           No backend course was initialized for this setup flow. Start from Create New Course on the dashboard.
         </div>
       )}
-      {/* -- Header -- */}
-      <header className="h-[56px] bg-white border-b border-[#d8dde6] flex items-center shrink-0 px-4 md:px-6 gap-3 relative z-10">
-        <div className="flex items-center gap-3 md:gap-4 min-w-0">
-          <img src="/adapt-logo.jpeg" alt="Adapt logo" width={34} height={34} className="rounded-lg shrink-0" />
-          <div className="min-w-0 flex items-center gap-3">
-            <p className="text-[15px] leading-none font-semibold text-[#1f2937] tracking-tight hidden lg:block">Adapt Studio</p>
-            <div className="hidden lg:block w-px h-5 bg-[#d8dde6]" />
-            <p className="text-[15px] font-[700] text-[#1a1a1a] truncate max-w-[260px]">{title}</p>
+      <CommonCourseTopBarRow
+        courseTitle={title}
+        loginName={loginName}
+        activeNav={primaryTopNav}
+        onBack={() => requestGuardedAction(() => {
+          if (window.history.length > 1) navigate(-1);
+          else navigate("/");
+        })}
+        onHome={() => requestGuardedAction(() => navigate("/"))}
+        onOpenCourseSettings={() => handleNavigation("overview")}
+        onOpenStoryboard={() => handleNavigation("storyboarding")}
+        onOpenEditor={() => requestGuardedAction(() => openEditor())}
+        onOpenPreview={() => requestGuardedAction(() => openPreview(false))}
+        previewDisabled={!courseId}
+        editorDisabled={!courseId}
+        previewMode="button"
+      />
+
+      {/* -- Second Row Header -- */}
+      {/* Hidden on Storyboard: it isn't part of the Course Configuration nav
+          (activeItem resolves to nothing there) and StoryboardTopBar already
+          provides its own Export/Publish-equivalent actions. */}
+      {activeNav !== "storyboarding" && !assetPickerRequest && (
+        <div className="h-[56px] bg-white border-b border-[#d8dde6] flex items-center px-4 md:px-6 gap-3 shrink-0 relative z-10">
+          <div className="flex items-center gap-2 text-[#111827] min-w-0">
+            <span className="shrink-0 opacity-80">{panelIcon}</span>
+            <span className="text-base font-semibold truncate">{panelHeading}</span>
+          </div>
+
+        <div className="ml-auto flex items-center gap-4">
+          <div id="setup-save-button-slot" className="flex items-center" />
+          {canExportCourse && (
+            <ExportMenu
+              disabled={!courseId || !user?._tenantId}
+              exportSourceLoading={exportingSource}
+              onExportSource={() => requestGuardedAction(() => triggerExportSource())}
+              onExportPdf={() => handleNavigation("export-pdf")}
+            />
+          )}
+
+            <PublishMenuButton
+              active={activeNav === "publish"}
+              onSelectPreflight={() => handleNavigation("publish")}
+              onSelectPublish={() => requestGuardedAction(openPublishDialog)}
+            />
           </div>
         </div>
-
-        <div className="ml-auto flex items-center gap-2">
-          <Link
-            to="/"
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold text-[#4b5563] border border-transparent rounded-[8px] hover:bg-[#f3f4f6] hover:text-[#111827] transition-colors cursor-pointer"
-          >
-            <SidebarMaskIcon file="back-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-            <span className="hidden md:inline">Back</span>
-          </Link>
-
-          <button
-            type="button"
-            onClick={() => handleNavigation("storyboarding")}
-            className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold border-2 rounded-[8px] transition-colors cursor-pointer bg-white ${activeNav === "storyboarding" ? "border-[var(--life-primary-800)] text-[var(--life-primary-800)]" : "border-[var(--life-neutral-200)] text-[var(--life-base-black)] hover:border-[var(--life-primary-700)] hover:text-[var(--life-primary-700)] active:border-[var(--life-primary-800)] active:text-[var(--life-primary-800)]"}`}
-          >
-            <SidebarMaskIcon file="storyboard-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-            <span className="hidden lg:inline">Storyboard</span>
-          </button>
-
-          <button type="button" className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold border-2 border-[var(--life-neutral-200)] text-[var(--life-base-black)] rounded-[8px] bg-white hover:border-[var(--life-primary-700)] hover:text-[var(--life-primary-700)] active:border-[var(--life-primary-800)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer">
-            <SidebarMaskIcon file="preview-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-            <span className="hidden lg:inline">Preview</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={openExportDialog}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold border-2 border-[var(--life-neutral-200)] bg-white text-[var(--life-base-black)] rounded-[8px] hover:border-[var(--life-primary-700)] hover:text-[var(--life-primary-700)] active:border-[var(--life-primary-800)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer"
-          >
-            <SidebarMaskIcon file="export-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-            <span className="hidden lg:inline">Export</span>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleNavigation("publish")}
-            className={`inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold rounded-[8px] transition-colors active:bg-[var(--life-primary-800)] cursor-pointer ${activeNav === "publish" ? "bg-[var(--life-primary-700)] text-[var(--life-base-white)]" : "bg-[var(--life-primary-500)] text-[var(--life-base-white)] hover:bg-[var(--life-primary-700)]"}`}
-          >
-            <SidebarMaskIcon file="publish-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-            <span className="hidden lg:inline">Publish</span>
-          </button>
-
-          <div className="hidden xl:flex items-center pl-3 border-l border-[#d8dde6]">
-            <span className="max-w-[260px] truncate text-[13px] font-medium text-[#9ca3af] select-none">
-              {loginName}
-            </span>
-          </div>
-        </div>
-      </header>
+      )}
 
       {/* -- Body -- */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden min-h-0">
 
         {/* -- Left panel -- */}
+        {/* Hidden on Storyboard (ADAPT-3785): the Storyboard workspace is not
+            one of this sidebar's nav items and ships its own full-bleed chrome
+            (StoryboardTopBar) per the Figma design — showing Course
+            Configuration alongside it duplicated navigation/export actions.
+            Course Configuration itself is unaffected on every other tab. */}
+        {activeNav !== "storyboarding" && !assetPickerRequest && (
         <aside
           className={`h-full bg-white border-r border-[#d8dde6] flex flex-col shrink-0 transition-all duration-200 ${collapsed ? "w-16" : "w-[256px]"}`}
         >
@@ -5102,47 +3065,52 @@ function CourseCreationCenterContent() {
             )}
           </nav>
 
-          {/* Skip to editor - bottom */}
-          {!collapsed && (
-            <div className="px-4 pb-4 border-t border-[#e5e7eb] pt-3 shrink-0">
-              <button
-                type="button"
-                disabled={!courseId}
-                onClick={() => navigate(`/course/${courseId}`)}
-                className="w-full flex items-center justify-center gap-2 px-4 py-3 text-sm font-bold text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Skip to Editor
-                <SidebarMaskIcon file="chevron-right.svg" className="block w-[13px] h-[13px] shrink-0 bg-current" />
-              </button>
-            </div>
-          )}
-          {collapsed && (
-            <div className="px-2 pb-3 border-t border-[#e5e7eb] pt-3 shrink-0">
-              <button
-                type="button"
-                disabled={!courseId}
-                onClick={() => navigate(`/course/${courseId}`)}
-                aria-label="Skip to Editor"
-                title="Skip to Editor"
-                className="w-full h-10 flex items-center justify-center rounded-lg text-[var(--life-base-white)] bg-[var(--life-primary-500)] hover:bg-[var(--life-primary-700)] active:bg-[var(--life-primary-800)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <SidebarMaskIcon file="chevron-right.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-              </button>
-            </div>
-          )}
         </aside>
+        )}
 
         {/* -- Right content panel -- */}
-        <main className={`flex-1 overflow-hidden bg-[#f8fafc] ${activeNav === "menu" || activeNav === "navigation" ? "" : "overflow-y-auto px-8 py-8 min-h-0"}`}>
-          {renderPanel()}
+        <main ref={contentScrollRef} className={`flex-1 min-h-0 min-w-0 bg-[#f7f9fb] ${fullCanvasPanels.has(activeNav) || activeNav === "storyboarding" || activeNav === "translation" ? "flex flex-col overflow-hidden" : "overflow-y-auto px-8 py-8"}`}>
+          <PageTransitionBoundary key={activeNav}>
+            {renderPanel()}
+          </PageTransitionBoundary>
         </main>
       </div>
+
+      {assetPickerRequest ? (
+        <div className="fixed inset-0 z-[90] bg-[#f8fafc]">
+          <AssetManagementWorkspace
+            pickerMode
+            pickerAssetType={assetPickerRequest.assetType}
+            pickerTitle={assetPickerRequest.title}
+            pickerDescription={assetPickerRequest.description}
+            hideAssistant
+            onCancelPick={() => setAssetPickerRequest(null)}
+            onPickAsset={(asset: AssetPickerResult) => {
+              assetPickerRequest.onSelect(asset);
+              setAssetPickerRequest(null);
+            }}
+          />
+        </div>
+      ) : null}
       {showExportDialog && <ExportDialog onClose={() => setShowExportDialog(false)} />}
+
+      {publishDialogPhase && (
+        <PublishCourseDialog
+          phase={publishDialogPhase}
+          courseTitle={title}
+          zipName={publishResult.zipName}
+          downloadUrl={publishResult.downloadUrl}
+          errorMessage={publishResult.message}
+          onConfirm={() => void handleConfirmPublish()}
+          onClose={closePublishDialog}
+        />
+      )}
       <AiAssistant context="Course Creation Center" suggestions={[
         'How do I set up my course structure?',
         'What does the Preflight Validator check?',
         'How do I configure SCORM tracking?',
       ]} />
+      {exportPopup && <ExportStatusPopup status={exportPopup.status} message={exportPopup.message} />}
     </div>
   );
 }

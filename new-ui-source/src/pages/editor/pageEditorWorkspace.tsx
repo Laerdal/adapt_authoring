@@ -1,0 +1,13516 @@
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from "react";
+import { createPortal } from "react-dom";
+import colorLabelIconSvgRaw from "../../../public/assets/icons/color-label-icon.svg?raw";
+import templateIconSvgRaw from "../../../public/assets/icons/template-icon.svg?raw";
+import AddComponentDrawer from "../../components/course/AddComponentDrawer";
+import AddTemplateDrawer from "../../components/course/AddTemplateDrawer";
+import AssetPickerModal from "../../components/common/AssetPickerModal";
+import InfoIcon from "../../components/common/InfoIcon";
+import RichTextEditor from "../../components/common/RichTextEditor";
+import AiAssistPopover from "../../components/storyboard/AiAssistPopover";
+import {
+  CKEDITOR_FULL_TOOLBAR_ITEMS,
+  CKEDITOR_HEADING_CONFIG,
+  CKEDITOR_IMAGE_CONFIG,
+  CKEDITOR_LIST_CONFIG,
+  CKEDITOR_STANDARD_COLOUR_PALETTE,
+  CKEDITOR_TABLE_CONFIG,
+  loadCKEditor5In,
+} from "../../utils/ckEditor5Loader";
+import {
+  CKEDITOR_LINK_CONFIG,
+  getSamaritanSeedText,
+  insertAiResultIntoEditor,
+  replaceAiResultInEditor,
+} from "../../utils/ckEditorSamaritan";
+import TopicAssetField, { detectAssetPreviewKind, toRenderableAssetUrl } from "../../components/common/AssetSelectionField";
+import ConfirmDialog from "../../components/common/ConfirmDialog";
+import ErrorDialog from "../../components/common/ErrorDialog";
+import { CheckboxIndicator } from "../../components/common/Checkbox";
+import CourseStructureMap from "../../components/course/CourseStructureMap";
+import { StructureIcon, STRUCTURE_ICON_COLOR_CLASS } from "../../components/course/StructureIcons";
+import { UnsavedChangesModal } from "../setup/unsavedChangesModal";
+import PublishCourseDialog, { type PublishCoursePhase } from "../../components/publish/PublishCourseDialog";
+import PageEditorTopBar from "./pageEditorTopBar";
+import PageEditorNavigation from "./pageEditorNavigation";
+import { useNavigate } from "react-router-dom";
+import { usePageLoader } from "@/hooks";
+import { apiClient } from "../../api/client";
+import {
+  buildSchemaDefaults,
+  componentSchemaSupportsPropertiesField,
+  createCourseAssetMapping,
+  createArticle,
+  createComponent,
+  deleteStructureNode,
+  disableExtensionForCourse,
+  enableExtensionForCourse,
+  getComponentBehaviourSchema,
+  getComponentExtensionSchema,
+  getCourseAssetMappings,
+  getCourseAssetIdMap,
+  getCourseBootstrapData,
+  getCourseExtensions,
+  getCourseStructure,
+  getExtensionSchemasByLevel,
+  getExtensionTypeOptions,
+  getMergedContentSchema,
+  getNavigationSettings,
+  getThemeSettingsSchemaByLevel,
+  getMenuSettingsSchemaByLevel,
+  findAppliedPluginSchemaFields,
+  findAppliedPluginSchemaKey,
+  type PluginSettingsFieldSchema,
+  pasteTemplateIntoCourse,
+  publishCoursePackage,
+  removeCourseAssetMappings,
+  saveContentAsTemplate,
+  searchUsersByEmailQuery,
+  seedDefaultContentGroup,
+  seedDefaultModule,
+  seedDefaultSection,
+  seedDefaultTopic,
+  type AssetKind,
+  type ComponentTypeOption,
+  type DashboardTemplate,
+  type ExtensionFieldSchema,
+  type ExtensionSchemaLevel,
+  type ExtensionTypeOption,
+  type NavFooterButton,
+  type NavFooterButtonKey,
+  type UserSummary,
+  updateComponentLayout,
+  updateStructureNode,
+  copyStructureNodeViaClipboard,
+  copyStructureNodeToClipboard,
+  pasteStructureNodeFromClipboard,
+} from "../../api/adaptAuthoring";
+import type { MenuPageData } from "../../components/editor/MenuPageCanvas";
+import type { Course } from "../../types/course";
+import type { CourseStructure, SModule } from "../../types/structure";
+import {
+  NEW_CONTENT_GROUP_TITLE,
+  NEW_SECTION_TITLE,
+  NEW_TOPIC_TITLE,
+} from "../../constants/structureDefaults";
+import { useAuth } from "../../context/AuthContext";
+import { getSchemaHint, getSchemaLabel, getSchemaNode } from "../../helpers/setupInfoSchema";
+
+interface PreviewBuildResponse {
+  success?: boolean;
+  message?: string;
+  payload?: {
+    pollUrl?: string;
+  };
+}
+
+const ICON_BASE = "/new/assets/icons";
+const RIGHT_PANEL_MIN_WIDTH = 300;
+const RIGHT_PANEL_MAX_EXPANSION_RATIO = 0.5;
+
+function MaskIcon({ file, className }: { file: string; className?: string }) {
+  const iconPath = `${ICON_BASE}/${file}`;
+  return (
+    <span
+      aria-hidden="true"
+      className={className ?? "block w-[14px] h-[14px] shrink-0 bg-current"}
+      style={{
+        WebkitMaskImage: `url(${iconPath})`,
+        maskImage: `url(${iconPath})`,
+        WebkitMaskRepeat: "no-repeat",
+        maskRepeat: "no-repeat",
+        WebkitMaskPosition: "center",
+        maskPosition: "center",
+        WebkitMaskSize: "contain",
+        maskSize: "contain",
+      }}
+    />
+  );
+}
+
+const defaultMenuPage: MenuPageData = {
+  logoUrl: null,
+  title: "",
+  subtitle: "",
+  body: "",
+  menuStyle: "Box Menu",
+  menuLockType: "",
+  textAlign: "center",
+  bgType: "Color",
+  bgColor: "#1e3a5f",
+  bgImageUrl: null,
+};
+
+type BreakpointKey = "_xlarge" | "_large" | "_medium" | "_small";
+
+type TopicGraphicSettings = {
+  src: string;
+  alt: string;
+};
+
+type TopicResponsiveAssetMap = Partial<Record<BreakpointKey, string>>;
+
+type TopicResponsiveClasses = Partial<Record<BreakpointKey, string>>;
+
+type TopicBackgroundStyles = {
+  _backgroundRepeat?: string;
+  _backgroundSize?: string;
+  _backgroundPosition?: string;
+};
+
+type TopicMinimumHeights = Partial<Record<BreakpointKey, number | "">>;
+
+type TopicTextAlignment = {
+  _title?: string;
+  _subtitle?: string;
+  _body?: string;
+  _instruction?: string;
+};
+
+type TopicOnScreenSettings = {
+  _isEnabled?: boolean;
+  _classes?: string;
+  _percentInviewVertical?: number | "";
+};
+
+type TopicThemeSettings = {
+  _htmlClasses?: string;
+  _backgroundImage?: TopicResponsiveAssetMap;
+  _backgroundStyles?: TopicBackgroundStyles;
+  _responsiveClasses?: TopicResponsiveClasses;
+  _textAlignment?: TopicTextAlignment;
+  _minimumHeights?: TopicMinimumHeights;
+  _isDividerBlock?: boolean;
+  _blockColors?: {
+    "block-bg-color"?: string;
+    "block-font-color"?: string;
+    "block-header-color"?: string;
+  };
+  _componentColors?: {
+    "component-bg-color"?: string;
+    "component-font-color"?: string;
+    "component-header-color"?: string;
+  };
+  _paddingTop?: string;
+  _paddingBottom?: string;
+  _componentVerticalAlignment?: string;
+  _componentHorizontalAlignment?: string;
+  _blockHeader?: {
+    _textAlignment?: TopicTextAlignment;
+    _backgroundImage?: TopicResponsiveAssetMap;
+    _backgroundStyles?: TopicBackgroundStyles;
+    _minimumHeights?: TopicMinimumHeights;
+  };
+  _pageHeader?: {
+    _graphic?: {
+      _src?: string;
+      alt?: string;
+    };
+    _textAlignment?: TopicTextAlignment;
+    _backgroundImage?: TopicResponsiveAssetMap;
+    _backgroundStyles?: TopicBackgroundStyles;
+    _minimumHeights?: TopicMinimumHeights;
+  };
+  _articleHeader?: {
+    _textAlignment?: TopicTextAlignment;
+    _backgroundImage?: TopicResponsiveAssetMap;
+    _backgroundStyles?: TopicBackgroundStyles;
+    _minimumHeights?: TopicMinimumHeights;
+  };
+};
+
+type TopicMenuSettings = {
+  _renderAsGroup?: boolean;
+  _graphic?: {
+    _src?: string;
+    alt?: string;
+  };
+  _skipSubmenuView?: boolean;
+  lockedNotification?: string;
+  _backgroundImage?: TopicResponsiveAssetMap;
+  _backgroundStyles?: TopicBackgroundStyles;
+  _menuHeader?: {
+    _displayAboveHeader?: boolean;
+    _textAlignment?: TopicTextAlignment;
+    _backgroundImage?: TopicResponsiveAssetMap;
+    _backgroundStyles?: TopicBackgroundStyles;
+    _minimumHeights?: TopicMinimumHeights;
+  };
+};
+
+type TopicAssetTarget =
+  | { scope: "pageGraphic" }
+  | { scope: "themePageBackground"; bp: BreakpointKey }
+  | { scope: "sectionBackground"; articleId: string; bp: BreakpointKey }
+  | { scope: "sectionArticleHeaderBackground"; articleId: string; bp: BreakpointKey }
+  | { scope: "contentGroupBackground"; articleId: string; blockId: string; bp: BreakpointKey }
+  | { scope: "contentGroupHeaderBackground"; articleId: string; blockId: string; bp: BreakpointKey }
+  | { scope: "componentBackground"; articleId: string; blockId: string; componentId: string; bp: BreakpointKey }
+  | { scope: "componentProperty"; articleId: string; blockId: string; componentId: string; path: string; assetType?: AssetKind }
+  | { scope: "extensionProperty"; level: "topic" | "section" | "contentGroup" | "component"; articleId?: string; blockId?: string; componentId?: string; extensionKey: string; path: string; assetType?: AssetKind }
+  | { scope: "themeHeaderGraphic" }
+  | { scope: "themeHeaderBackground"; bp: BreakpointKey }
+  | { scope: "menuGraphic" }
+  | { scope: "menuBackground"; bp: BreakpointKey }
+  | { scope: "menuHeaderBackground"; bp: BreakpointKey };
+
+type TopicExternalAssetTarget = {
+  pageId: string;
+  target: TopicAssetTarget;
+  initialValue: string;
+  title: string;
+};
+
+const BG_REPEAT_OPTIONS = ["", "repeat", "repeat-x", "repeat-y", "no-repeat"] as const;
+const BG_SIZE_OPTIONS = ["", "auto", "cover", "contain"] as const;
+const BG_POSITION_OPTIONS = [
+  "",
+  "left top",
+  "left center",
+  "left bottom",
+  "center top",
+  "center center",
+  "center bottom",
+  "right top",
+  "right center",
+  "right bottom",
+] as const;
+const BG_REPEAT_LABEL = "Set if/how the background image repeats";
+const BG_SIZE_LABEL = "Set the size of the background image";
+const BG_POSITION_LABEL = "Set the position of the background image";
+const ONSCREEN_CLASS_OPTIONS = [
+  "",
+  "fade-in",
+  "fade-out",
+  "slide-in-left",
+  "slide-in-right",
+  "slide-in-up",
+  "slide-in-down",
+  "zoom-in",
+  "zoom-out",
+  "bounce",
+  "flip",
+  "rotate-in",
+] as const;
+const TEXT_ALIGN_OPTIONS = ["", "left", "center", "right"] as const;
+const LOCK_TYPE_OPTIONS = ["", "custom", "lockLast", "sequential", "unlockFirst"] as const;
+const RESET_ON_REVISIT_OPTIONS = ["false", "soft", "hard"] as const;
+
+// Palette rows match the adapt-laerdal-life / custom-theme properties.schema exactly.
+const LIFE_PALETTE_ROWS: readonly (readonly string[])[] = [
+  ["#FFFFFF", "#FAFAFA", "#E5E5E5", "#CCCCCC"],
+  ["#F1FBFE", "#D4E9F2", "#A9D3E5", "#215369"],
+  ["#EDFCFB", "#C8EEEC", "#98D8D5", "#145653"],
+  ["#FFFAEE", "#F8E2BF", "#EAC785", "#604920"],
+];
+const VANILLA_PALETTE_ROWS: readonly (readonly string[])[] = [
+  ["#FFFFFF", "#FAFAFA", "#F0EDEA", "#D6D0C8"],
+  ["#F5F5F0", "#E8E4D4", "#D4CCBC", "#C8C0A0"],
+  ["#EDE8DC", "#D8CCBC", "#C0B094", "#A09070"],
+  ["#D4C8B0", "#B0966C", "#786050", "#504030"],
+];
+const THEME_COLOUR_PALETTE_ROWS: Record<string, readonly (readonly string[])[]> = {
+  "LIFE Theme":    LIFE_PALETTE_ROWS,
+  "Custom Theme":  LIFE_PALETTE_ROWS,
+  "Vanilla Theme": VANILLA_PALETTE_ROWS,
+};
+// block-font-color/block-header-color (and the component-level equivalents)
+// declare this exact restricted 2-swatch palette (`extra.palette`) in every
+// installed theme's schema — confirmed via the live themetypes collection.
+const FONT_HEADER_COLOUR_PALETTE_ROWS: readonly (readonly string[])[] = [
+  ["#FFFFFF", "#1F1F1F"],
+];
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function asBoolean(value: unknown, fallback = false): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function asNumberOrEmpty(value: unknown): number | "" {
+  return typeof value === "number" && Number.isFinite(value) ? value : "";
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function parseNumberishInput(value: string): number | "" {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : "";
+}
+
+// Perceived-brightness check for the Life v2 theme's auto-contrast component
+// font colour (ThemeComponentView.setComponentColors' isDarkColor): when a
+// component background colour is set with no explicit font colour, the
+// theme picks white/black text based on this. Approximated with the
+// standard YIQ luma formula; only understands hex input (what the
+// ColourPicker palette produces).
+function isPreviewColorDark(color: string): boolean {
+  const hex = color.trim().replace(/^#/, "");
+  if (![3, 6].includes(hex.length) || /[^0-9a-fA-F]/.test(hex)) return false;
+  const full = hex.length === 3 ? hex.split("").map((c) => c + c).join("") : hex;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  const luma = (r * 299 + g * 587 + b * 114) / 1000;
+  return luma < 128;
+}
+
+// ── Component "Behaviour" accordion: schema-driven field rendering ─────────
+// Renders a componenttype's own properties.schema fields (fetched via
+// getComponentBehaviourSchema, GET /api/componenttype) the same way
+// adapt-preview-edit/js/componentConfigView.js's buildFieldHtml/buildInputByType
+// do, minus the excluded/generic fields already covered by the other
+// accordions (General, Availability & Progression, Extensions, Theme
+// settings, Advanced Settings).
+const COMPONENT_BEHAVIOUR_EXCLUDED_FIELDS = new Set([
+  "_id", "__v", "_type", "_component", "_componentType", "_componentTypeDisplayName",
+  "_layout", "_parentId", "_courseId", "_sortOrder", "createdAt", "updatedAt",
+  "_contentType", "_enabledExtensions",
+  "title", "displayTitle", "body", "description", "instruction",
+  "_classes", "_htmlClasses",
+  "_isOptional", "_isAvailable", "_isHidden", "_isVisible",
+  "requirecompletionof", "requireCompletionOf", "_requireCompletionOf", "_isResetOnRevisit",
+  "_onScreen", "_ariaLevel", "_extensions",
+  "themeSettings", "menuSettings", "_pageHeader", "properties",
+]);
+
+type BehaviourFieldSchema = {
+  type?: string;
+  title?: string;
+  legend?: string;
+  default?: unknown;
+  enum?: string[];
+  properties?: Record<string, BehaviourFieldSchema>;
+  items?: BehaviourFieldSchema;
+  help?: string;
+  description?: string;
+  inputType?: string | { type: string; options?: Array<{ val?: string; label?: string } | string> };
+  editorOnly?: boolean;
+  extra?: { palette?: string[][] };
+  minItems?: number;
+  maxItems?: number;
+  required?: boolean;
+  validators?: string[];
+  editorAttrs?: Record<string, unknown>;
+  fieldAttrs?: Record<string, unknown>;
+};
+
+// Mirrors the old authoring tool's conditional-field mechanism
+type ConditionalContext = {
+  schemas: Record<string, BehaviourFieldSchema>;
+  values: Record<string, unknown>;
+  parents: Record<string, string>;
+};
+
+// Recursively walks a schema + its current values, collecting every field by
+// its own (bare) key — including fields nested inside object-type
+// properties — into flat schema/value/parent maps for conditional-visibility
+// lookups. Does not descend into arrays: each array item gets its own
+// freshly flattened scope instead (a button item's fields are unrelated to
+// its siblings or the outer array field).
+function flattenBehaviourSchema(
+  schema: Record<string, BehaviourFieldSchema> | undefined,
+  values: unknown,
+  outSchemas: Record<string, BehaviourFieldSchema> = {},
+  outValues: Record<string, unknown> = {},
+  outParents: Record<string, string> = {},
+  parentKey?: string
+): ConditionalContext {
+  if (!schema) return { schemas: outSchemas, values: outValues, parents: outParents };
+  const record = values && typeof values === "object" && !Array.isArray(values) ? (values as Record<string, unknown>) : {};
+  Object.keys(schema).forEach((key) => {
+    const fieldSchema = schema[key];
+    if (!fieldSchema) return;
+    const value = resolveBehaviourFieldValue(fieldSchema, record[key]);
+    outSchemas[key] = fieldSchema;
+    outValues[key] = value;
+    if (parentKey) outParents[key] = parentKey;
+    if (fieldSchema.type === "object" && fieldSchema.properties) {
+      flattenBehaviourSchema(fieldSchema.properties, value, outSchemas, outValues, outParents, key);
+    }
+  });
+  return { schemas: outSchemas, values: outValues, parents: outParents };
+}
+
+function isBehaviourFieldConditionallyVisible(
+  key: string,
+  context: ConditionalContext,
+  seen: Set<string> = new Set()
+): boolean {
+  if (seen.has(key)) return true; // guards against (invalid) circular depends-on chains
+  seen.add(key);
+
+  const fieldSchema = context.schemas[key];
+  if (!fieldSchema) return true;
+
+  const parentKey = context.parents[key];
+  if (parentKey && !isBehaviourFieldConditionallyVisible(parentKey, context, seen)) {
+    return false;
+  }
+
+  const dependsOn = fieldSchema.fieldAttrs?.["data-depends-on"];
+  if (typeof dependsOn !== "string" || !dependsOn) return true;
+  if (!isBehaviourFieldConditionallyVisible(dependsOn, context, seen)) return false;
+
+  const controllingSchema = context.schemas[dependsOn];
+  const controllingValue = context.values[dependsOn];
+
+  if (controllingSchema?.type === "boolean") {
+    return !!controllingValue;
+  }
+
+  const optionMatch = fieldSchema.fieldAttrs?.["data-option-match"];
+  if (optionMatch === undefined || optionMatch === null) return true;
+  return String(controllingValue ?? "") === String(optionMatch);
+}
+
+// Filters a set of field keys down to those that should currently be
+// rendered, per isBehaviourFieldConditionallyVisible.
+function filterVisibleBehaviourFieldKeys(keys: string[], context: ConditionalContext): string[] {
+  return keys.filter((key) => isBehaviourFieldConditionallyVisible(key, context));
+}
+
+// A field with no stored value yet (freshly-added array item, newly-added
+// extension/component, or simply never touched) must still display/act on
+// its schema `default` — otherwise radio/select controllers render blank
+// and any conditional field depending on them (which itself falls back to
+// the controller's default when unset) never gets a value to actually show.
+function resolveBehaviourFieldValue(fieldSchema: BehaviourFieldSchema | undefined, rawValue: unknown): unknown {
+  return rawValue !== undefined ? rawValue : fieldSchema?.default;
+}
+
+function formatBehaviourFieldName(fieldName: string): string {
+  const withoutPrefix = fieldName.replace(/^_/, "");
+  const spaced = withoutPrefix.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/_/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+type BehaviourOptionPair = { value: string; label: string };
+
+// Same option list as behaviourSelectOptions, but keeping each option's
+// display label alongside its stored value — needed for radio groups, whose
+// labels ("Modal"/"Drawer"/"Link") differ from their stored values
+// ("modal"/"drawer"/"link"), unlike TopicSelect's raw-value convention.
+function behaviourFieldOptionPairs(fieldSchema: BehaviourFieldSchema): BehaviourOptionPair[] {
+  if (fieldSchema.inputType && typeof fieldSchema.inputType === "object" && Array.isArray(fieldSchema.inputType.options)) {
+    return fieldSchema.inputType.options.map((option) => {
+      if (typeof option === "string") return { value: option, label: option };
+      const value = option.val ?? option.label ?? "";
+      return { value, label: option.label ?? value };
+    });
+  }
+  return Array.isArray(fieldSchema.enum) ? fieldSchema.enum.map((v) => ({ value: String(v), label: String(v) })) : [];
+}
+
+function behaviourSelectOptions(fieldSchema: BehaviourFieldSchema): string[] {
+  return behaviourFieldOptionPairs(fieldSchema).map((option) => option.value);
+}
+
+// Splits a dotted/bracketed path ("_items[0]._graphic.src") into keys/indices.
+function parseBehaviourPath(path: string): Array<string | number> {
+  const segments: Array<string | number> = [];
+  path.split(".").forEach((part) => {
+    const match = part.match(/^([^[]+)((?:\[\d+])*)$/);
+    if (!match) {
+      segments.push(part);
+      return;
+    }
+    segments.push(match[1]);
+    const indices = match[2].match(/\d+/g);
+    if (indices) indices.forEach((i) => segments.push(Number(i)));
+  });
+  return segments;
+}
+
+function cloneBehaviourNode(value: unknown): any {
+  if (Array.isArray(value)) return value.slice();
+  if (value && typeof value === "object") return { ...(value as Record<string, unknown>) };
+  return value;
+}
+
+function setBehaviourPath(source: Record<string, unknown>, path: string, value: unknown): Record<string, unknown> {
+  const segments = parseBehaviourPath(path);
+  const root: any = cloneBehaviourNode(source) ?? {};
+  let cursor = root;
+  for (let i = 0; i < segments.length - 1; i++) {
+    const segment = segments[i];
+    const nextIsIndex = typeof segments[i + 1] === "number";
+    const existing = cursor[segment];
+    const container = existing && typeof existing === "object" ? cloneBehaviourNode(existing) : nextIsIndex ? [] : {};
+    cursor[segment] = container;
+    cursor = container;
+  }
+  cursor[segments[segments.length - 1]] = value;
+  return root;
+}
+
+// Behaviour fields that resolve to an image/asset (matches the field-name and
+// object-shape heuristics adapt-preview-edit/js/componentConfigView.js uses
+// in isAssetField/isAssetFieldByInputType) render the same TopicAssetField
+// picker used everywhere else in the panel, instead of a plain text input.
+const BEHAVIOUR_ASSET_FIELD_NAMES = new Set([
+  "poster", "mp4", "mp3", "ogg", "webm", "_backgroundImage",
+]);
+
+// Matches the old authoring tool's ScaffoldAssetView (frontend/src/modules/
+// scaffold/views/scaffoldAssetView.js), which derives its asset type from
+// `inputType.replace(/Asset|:/g, '')` — i.e. ANY inputType starting with
+// "Asset" is an asset field, with or without a ":subtype" (e.g. plain
+// "Asset" on adapt-contrib-resources' `_link`, not just "Asset:image").
+function isBehaviourAssetInputType(fieldSchema: BehaviourFieldSchema): boolean {
+  return typeof fieldSchema.inputType === "string" && fieldSchema.inputType.startsWith("Asset");
+}
+
+// Matches the old authoring tool's required-field validation convention:
+// only an explicit "required" validator marks the field as required.
+function isBehaviourFieldRequired(fieldSchema: BehaviourFieldSchema): boolean {
+  return Array.isArray(fieldSchema.validators) && fieldSchema.validators.includes("required");
+}
+
+type BehaviourAssetPath = { path: string; value: string };
+
+// Walks a component's Behaviour schema together with its saved
+// settings.properties, collecting every leaf field the Behaviour accordion
+// renders as an asset picker (same isBehaviourAssetInputType /
+// BEHAVIOUR_ASSET_FIELD_NAMES heuristic as BehaviourField above) along with
+// its current string value. Used to live-patch the canvas with the SAME
+// upsertPreviewImage mechanism topic/section graphics already use, instead
+// of an asset change only ever taking effect after a rebuild.
+function collectBehaviourAssetPaths(
+  schema: Record<string, BehaviourFieldSchema>,
+  value: unknown,
+  pathPrefix = ""
+): BehaviourAssetPath[] {
+  const results: BehaviourAssetPath[] = [];
+  const record = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+
+  Object.entries(schema).forEach(([fieldName, fieldSchema]) => {
+    if (!fieldSchema || typeof fieldSchema !== "object") return;
+    const path = pathPrefix ? `${pathPrefix}.${fieldName}` : fieldName;
+    const fieldValue = record[fieldName];
+
+    if (fieldSchema.type === "object" && fieldSchema.properties) {
+      results.push(...collectBehaviourAssetPaths(fieldSchema.properties, fieldValue, path));
+      return;
+    }
+
+    if (fieldSchema.type === "array" && fieldSchema.items?.type === "object" && fieldSchema.items.properties) {
+      const itemSchema = fieldSchema.items.properties;
+      (Array.isArray(fieldValue) ? fieldValue : []).forEach((item, index) => {
+        results.push(...collectBehaviourAssetPaths(itemSchema, item, `${path}[${index}]`));
+      });
+      return;
+    }
+
+    if (isBehaviourAssetInputType(fieldSchema) || BEHAVIOUR_ASSET_FIELD_NAMES.has(fieldName)) {
+      results.push({ path, value: typeof fieldValue === "string" ? fieldValue : "" });
+    }
+  });
+
+  return results;
+}
+
+// title/subtitle/body/instruction already live-sync through the dedicated
+// header pipeline (fixed canonical classes every component template uses) —
+// collectBehaviourTextPaths must not also walk them, or its generic text
+// diffing would race the header pipeline over the same DOM text.
+const COMPONENT_BEHAVIOUR_TEXT_SYNC_EXCLUDED_FIELDS = new Set(["subtitle", "instruction"]);
+
+// Component-specific Behaviour fields (a Graphic's alt text, an MCQ item's
+// label, a Narrative item's title, ...) have no canonical class the way
+// title/body/instruction do — there's no fixed selector to patch. Instead,
+// this collects every other plain string field's path + value so the caller
+// can diff against the previous value and find/replace the OLD text
+// wherever it's literally rendered, without needing to know the template.
+function collectBehaviourTextPaths(
+  schema: Record<string, BehaviourFieldSchema>,
+  value: unknown,
+  pathPrefix = ""
+): BehaviourAssetPath[] {
+  const results: BehaviourAssetPath[] = [];
+  const record = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+
+  Object.entries(schema).forEach(([fieldName, fieldSchema]) => {
+    if (!fieldSchema || typeof fieldSchema !== "object") return;
+    if (fieldSchema.editorOnly) return;
+    if (!pathPrefix && (COMPONENT_BEHAVIOUR_EXCLUDED_FIELDS.has(fieldName) || COMPONENT_BEHAVIOUR_TEXT_SYNC_EXCLUDED_FIELDS.has(fieldName))) {
+      return;
+    }
+
+    const path = pathPrefix ? `${pathPrefix}.${fieldName}` : fieldName;
+    const fieldValue = record[fieldName];
+
+    if (fieldSchema.type === "object" && fieldSchema.properties) {
+      results.push(...collectBehaviourTextPaths(fieldSchema.properties, fieldValue, path));
+      return;
+    }
+
+    if (fieldSchema.type === "array" && fieldSchema.items?.type === "object" && fieldSchema.items.properties) {
+      const itemSchema = fieldSchema.items.properties;
+      (Array.isArray(fieldValue) ? fieldValue : []).forEach((item, index) => {
+        results.push(...collectBehaviourTextPaths(itemSchema, item, `${path}[${index}]`));
+      });
+      return;
+    }
+
+    if (isBehaviourAssetInputType(fieldSchema) || BEHAVIOUR_ASSET_FIELD_NAMES.has(fieldName)) return;
+
+    if (fieldSchema.type === "string" && typeof fieldValue === "string") {
+      results.push({ path, value: fieldValue });
+    }
+  });
+
+  return results;
+}
+
+type BehaviourAssetContext = {
+  pageId?: string;
+  articleId?: string;
+  blockId?: string;
+  componentId?: string;
+  resolveAssetPreviewUrl: (value: string) => string | null;
+  onPickAsset: (path: string, assetType?: AssetKind, extensionKey?: string) => void;
+  onPickExternal: (path: string, currentValue: string, extensionKey?: string) => void;
+  onClear: (path: string, extensionKey?: string) => void;
+};
+
+export function getBehaviourAssetType(fieldName: string, fieldSchema: BehaviourFieldSchema): AssetKind | undefined {
+  const inputType = typeof fieldSchema.inputType === "string" ? fieldSchema.inputType.toLowerCase() : "";
+  const suffix = inputType.startsWith("asset")
+    ? inputType.replace(/^asset:?/, "").trim()
+    : "";
+
+  if (["image", "audio", "video", "other", "h5p"].includes(suffix)) {
+    return suffix as AssetKind;
+  }
+
+  const normalizedField = fieldName.toLowerCase();
+  if (normalizedField === "poster" || normalizedField.includes("image") || normalizedField.includes("graphic") || normalizedField.includes("background")) {
+    return "image";
+  }
+  if (["mp4", "webm"].includes(normalizedField) || normalizedField.includes("video")) {
+    return "video";
+  }
+  if (["mp3", "ogg"].includes(normalizedField) || normalizedField.includes("audio")) {
+    return "audio";
+  }
+  if (normalizedField.includes("transcript") || normalizedField.includes("caption") || normalizedField.includes("description") || normalizedField.includes("chapter")) {
+    return "other";
+  }
+  if (normalizedField.includes("h5p")) {
+    return "h5p";
+  }
+
+  return undefined;
+}
+
+// The framework ships media with preload="none" and no poster, so the canvas
+// shows an empty box (just the play control) until playback actually starts.
+// Loading metadata is enough for the browser to paint the first frame.
+function primePreviewMediaFrames(doc: Document) {
+  doc.querySelectorAll<HTMLMediaElement>("video, audio").forEach((element) => {
+    if (element.getAttribute("data-preview-media-primed") === "true") return;
+    if (element instanceof HTMLVideoElement && element.poster) return;
+    if (element.readyState > 0 || !element.paused || element.currentTime > 0) return;
+    element.setAttribute("data-preview-media-primed", "true");
+    element.setAttribute("preload", "metadata");
+    try {
+      element.load();
+    } catch {
+      // Media element already detached from its document.
+    }
+  });
+}
+
+function resolveTopicAssetPickerType(target: TopicAssetTarget): AssetKind | undefined {
+  switch (target.scope) {
+    case "componentProperty":
+    case "extensionProperty":
+      return target.assetType ?? "image";
+    default:
+      return "image";
+  }
+}
+
+function truncateBehaviourItemTitle(value: string): string {
+  const stripped = value.replace(/<[^>]*>/g, "").trim();
+  return stripped.length > 60 ? `${stripped.slice(0, 57)}…` : stripped;
+}
+
+// Identifies an array item by its own title-ish field, so a collapsed item
+// accordion is identifiable without expanding it (matches other authoring
+// tools: narrative/accordion/hotgraphic items are addressed by their title,
+// not by index).
+function pickBehaviourItemTitle(item: unknown, itemSchema: BehaviourFieldSchema | undefined, index: number): string {
+  const record = item && typeof item === "object" && !Array.isArray(item) ? (item as Record<string, unknown>) : {};
+  const preferredKeys = ["title", "displayTitle", "_title", "heading", "name", "label", "strapline", "text"];
+  for (const key of preferredKeys) {
+    const raw = record[key];
+    if (typeof raw === "string" && raw.trim()) return truncateBehaviourItemTitle(raw);
+  }
+  if (itemSchema?.properties) {
+    for (const key of Object.keys(itemSchema.properties)) {
+      if (itemSchema.properties[key]?.type === "string") {
+        const raw = record[key];
+        if (typeof raw === "string" && raw.trim()) return truncateBehaviourItemTitle(raw);
+      }
+    }
+  }
+  return `Item ${index + 1}`;
+}
+
+function BehaviourField({
+  path,
+  fieldName,
+  fieldSchema,
+  value,
+  onChange,
+  assetContext,
+  conditionalContext,
+  getArrayItemDefaults,
+}: {
+  path: string;
+  fieldName: string;
+  fieldSchema: BehaviourFieldSchema;
+  value: unknown;
+  onChange: (path: string, value: unknown) => void;
+  assetContext?: BehaviourAssetContext;
+  conditionalContext?: ConditionalContext;
+  getArrayItemDefaults?: (path: string, itemSchema: BehaviourFieldSchema | undefined) => Record<string, unknown>;
+}) {
+  const label = fieldSchema.legend || fieldSchema.title || formatBehaviourFieldName(fieldName);
+  const hint = typeof fieldSchema.help === "string" && fieldSchema.help.trim().length ? fieldSchema.help : undefined;
+  const isRequired = isBehaviourFieldRequired(fieldSchema);
+  const type = fieldSchema.type;
+  const inputTypeStr = typeof fieldSchema.inputType === "string" ? fieldSchema.inputType : undefined;
+  const inputTypeObj = typeof fieldSchema.inputType === "object" ? fieldSchema.inputType : undefined;
+  const selectOptions = behaviourSelectOptions(fieldSchema);
+  // Only used by the "array" branch below, but declared unconditionally per
+  // the rules of hooks — one open item at a time, per array field instance.
+  const [openItemIndex, setOpenItemIndex] = useState<number | null>(null);
+
+  if (type === "object" && fieldSchema.properties) {
+    const objectValue = value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+    const hasAssetSrc = assetContext && Object.prototype.hasOwnProperty.call(fieldSchema.properties, "src");
+    const hasEnabledToggle = fieldSchema.properties._isEnabled?.type === "boolean";
+    // Reuse the ambient scope (whole array item / extension / component) if
+    // given, so a dependent nested arbitrarily deep can still find a
+    // controller declared as a flat sibling elsewhere in that same scope.
+    const localContext = conditionalContext ?? flattenBehaviourSchema(fieldSchema.properties, objectValue);
+    const objectFields = filterVisibleBehaviourFieldKeys(
+      Object.keys(fieldSchema.properties).filter((childKey) =>
+        !(hasEnabledToggle && childKey === "_isEnabled") && !(hasAssetSrc && childKey === "src")
+      ),
+      localContext
+    );
+    const fields = (
+      <>
+        {hasAssetSrc && assetContext && (
+          <TopicAssetField
+            resolveAssetPreviewUrl={assetContext.resolveAssetPreviewUrl}
+            assetType={getBehaviourAssetType(fieldName, fieldSchema)}
+            label={label}
+            required={isRequired}
+            value={asString(objectValue.src)}
+            onPickAsset={() => assetContext.onPickAsset(`${path}.src`, getBehaviourAssetType(fieldName, fieldSchema))}
+            onPickExternal={() => assetContext.onPickExternal(`${path}.src`, asString(objectValue.src))}
+            onClear={() => assetContext.onClear(`${path}.src`)}
+          />
+        )}
+        {objectFields.map((childKey) => {
+          const childSchema = fieldSchema.properties![childKey];
+          if (!childSchema || childSchema.editorOnly) return null;
+          return (
+            <BehaviourField
+              key={`${path}.${childKey}`}
+              path={`${path}.${childKey}`}
+              fieldName={childKey}
+              fieldSchema={childSchema}
+              value={resolveBehaviourFieldValue(childSchema, objectValue[childKey])}
+              onChange={onChange}
+              assetContext={assetContext}
+              conditionalContext={localContext}
+            />
+          );
+        })}
+      </>
+    );
+    if (hasEnabledToggle) {
+      return (
+        <TopicEnabledNestedAccordion
+          title={<span className="inline-flex items-center gap-1.5">{label}{hint ? <InfoIcon label={label} hint={hint} /> : null}{isRequired && <span className="text-[#dc2626] ml-0.5">*</span>}</span>}
+          enabled={objectValue._isEnabled !== false}
+          onEnabledChange={(enabled) => onChange(`${path}._isEnabled`, enabled)}
+        >
+          {fields}
+        </TopicEnabledNestedAccordion>
+      );
+    }
+    return (
+      <TopicNestedAccordion title={<span className="inline-flex items-center gap-1.5">{label}{hint ? <InfoIcon label={label} hint={hint} /> : null}{isRequired && <span className="text-[#dc2626] ml-0.5">*</span>}</span>}>
+        {fields}
+      </TopicNestedAccordion>
+    );
+  }
+
+  if (type === "array") {
+    const items = Array.isArray(value) ? value : [];
+    const itemSchema = fieldSchema.items;
+    const isObjectItems = itemSchema?.type === "object" && !!itemSchema.properties;
+    const canAddMore = typeof fieldSchema.maxItems !== "number" || items.length < fieldSchema.maxItems;
+
+    const handleAddItem = () => {
+      const itemDefaults = isObjectItems ? getArrayItemDefaults?.(path, itemSchema) ?? {} : "";
+      onChange(path, [...items, itemDefaults]);
+      setOpenItemIndex(items.length);
+    };
+    const handleCopyItem = (index: number) => {
+      onChange(path, [...items, cloneBehaviourNode(items[index])]);
+      setOpenItemIndex(items.length);
+    };
+    const handleDeleteItem = (index: number) => {
+      onChange(path, items.filter((_, i) => i !== index));
+      setOpenItemIndex((current) => {
+        if (current === null) return null;
+        if (current === index) return null;
+        return current > index ? current - 1 : current;
+      });
+    };
+
+    return (
+      <div className="flex flex-col gap-2">
+        <TopicFieldLabel required={isRequired} hint={hint}>{label}</TopicFieldLabel>
+        {items.map((item, index) => {
+          const isOpen = openItemIndex === index;
+          const itemTitle = pickBehaviourItemTitle(item, itemSchema, index);
+          return (
+            <div key={`${path}[${index}]`} className="w-full rounded-[8px] border border-[#d8dee6] bg-white overflow-hidden">
+              <div className="w-full flex items-center gap-2 px-3 py-2 bg-white hover:bg-[var(--life-neutral-020)] transition-colors">
+                <button
+                  type="button"
+                  onClick={() => setOpenItemIndex((current) => (current === index ? null : index))}
+                  aria-expanded={isOpen}
+                  className="flex-1 min-w-0 flex items-center gap-1.5 text-left"
+                >
+                  <svg
+                    className={`shrink-0 transition-transform duration-200 text-[#6b7280] ${isOpen ? "rotate-90" : ""}`}
+                    width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                  >
+                    <polyline points="9 18 15 12 9 6" />
+                  </svg>
+                  <span className="truncate text-[13px] font-semibold text-[var(--life-base-black)]">{itemTitle}</span>
+                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    aria-label="Duplicate item"
+                    title="Duplicate"
+                    disabled={!canAddMore}
+                    onClick={() => handleCopyItem(index)}
+                    className="w-6 h-6 flex items-center justify-center rounded-md text-[#6b7280] hover:bg-[var(--life-primary-020)] hover:text-[var(--life-primary-500)] transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-[#6b7280] disabled:cursor-not-allowed"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Delete item"
+                    title="Delete"
+                    onClick={() => handleDeleteItem(index)}
+                    className="w-6 h-6 flex items-center justify-center rounded-md text-[#6b7280] hover:bg-[#fee2e2] hover:text-[#b42318] transition-colors"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <polyline points="3 6 5 6 21 6" />
+                      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6h14z" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              {isOpen && (
+                <div className="px-3 pb-3 pt-2.5 border-t border-[#eef2f6] flex flex-col gap-2.5">
+                  {isObjectItems ? (() => {
+                    const itemRecord = item && typeof item === "object" ? (item as Record<string, unknown>) : {};
+                    // Fresh flattened scope per item: a button's own fields
+                    // (at any nesting depth) are independent of its siblings.
+                    const itemContext = flattenBehaviourSchema(itemSchema!.properties!, itemRecord);
+                    return filterVisibleBehaviourFieldKeys(Object.keys(itemSchema!.properties!), itemContext).map((childKey) => {
+                      const childSchema = itemSchema!.properties![childKey];
+                      if (!childSchema || childSchema.editorOnly) return null;
+                      return (
+                        <BehaviourField
+                          key={`${path}[${index}].${childKey}`}
+                          path={`${path}[${index}].${childKey}`}
+                          fieldName={childKey}
+                          fieldSchema={childSchema}
+                          value={resolveBehaviourFieldValue(childSchema, itemRecord[childKey])}
+                          onChange={onChange}
+                          assetContext={assetContext}
+                          conditionalContext={itemContext}
+                          getArrayItemDefaults={getArrayItemDefaults}
+                        />
+                      );
+                    });
+                  })() : (
+                    <TopicTextInput
+                      label="Value"
+                      hint={hint}
+                      value={typeof item === "string" ? item : item === undefined || item === null ? "" : String(item)}
+                      onChange={(v) => onChange(`${path}[${index}]`, v)}
+                    />
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {canAddMore && (
+          <button
+            type="button"
+            className="text-[12px] font-semibold text-[#2d6fa8] hover:underline self-start"
+            onClick={handleAddItem}
+          >
+            + Add {label}
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  if (assetContext && (isBehaviourAssetInputType(fieldSchema) || BEHAVIOUR_ASSET_FIELD_NAMES.has(fieldName))) {
+    const stringValue = asString(value);
+    return (
+      <TopicAssetField
+        resolveAssetPreviewUrl={assetContext.resolveAssetPreviewUrl}
+        assetType={getBehaviourAssetType(fieldName, fieldSchema)}
+        label={label}
+        required={isRequired}
+        value={stringValue}
+        onPickAsset={() => assetContext.onPickAsset(path, getBehaviourAssetType(fieldName, fieldSchema))}
+        onPickExternal={() => assetContext.onPickExternal(path, stringValue)}
+        onClear={() => assetContext.onClear(path)}
+      />
+    );
+  }
+
+  if (type === "boolean") {
+    return <TopicCheckbox label={label} hint={hint} required={isRequired} checked={!!value} onChange={(checked) => onChange(path, checked)} />;
+  }
+
+  if (inputTypeStr === "ColourPicker") {
+    return (
+      <TopicColorField
+        label={label}
+        hint={hint}
+        value={asString(value)}
+        onChange={(v) => onChange(path, v)}
+        paletteRows={fieldSchema.extra?.palette ?? LIFE_PALETTE_ROWS}
+      />
+    );
+  }
+
+  if (inputTypeObj?.type === "Radio" && selectOptions.length) {
+    return (
+      <TopicRadioGroup
+        label={label}
+        hint={hint}
+        required={isRequired}
+        value={value !== undefined && value !== null ? String(value) : ""}
+        onChange={(v) => onChange(path, v)}
+        options={behaviourFieldOptionPairs(fieldSchema)}
+      />
+    );
+  }
+
+  if (selectOptions.length) {
+    return (
+      <TopicSelect
+        label={label}
+        hint={hint}
+        required={isRequired}
+        value={value !== undefined && value !== null ? String(value) : ""}
+        onChange={(v) => onChange(path, v)}
+        options={selectOptions}
+      />
+    );
+  }
+
+  if (type === "number") {
+    return (
+      <TopicTextInput
+        label={label}
+        hint={hint}
+        required={isRequired}
+        type="number"
+        value={value !== undefined && value !== null ? String(value) : ""}
+        onChange={(v) => onChange(path, v === "" ? "" : Number(v))}
+      />
+    );
+  }
+
+  if (inputTypeObj?.type === "CodeEditor") {
+    const textValue = value && typeof value === "object" ? JSON.stringify(value, null, 2) : asString(value);
+    return (
+      <div className="flex flex-col gap-1.5">
+        <TopicFieldLabel required={isRequired}>{label}</TopicFieldLabel>
+        {hint ? <div className="-mt-1"><span className="inline-flex items-center gap-1.5 text-[11px] text-[#64748b]">More info<InfoIcon label={label} hint={hint} /></span></div> : null}
+        <textarea
+          defaultValue={textValue}
+          onBlur={(event) => {
+            try {
+              onChange(path, JSON.parse(event.target.value || "{}"));
+            } catch {
+              // Keep current value on invalid JSON.
+            }
+          }}
+          rows={6}
+          className="w-full px-2.5 py-1.5 text-[13px] rounded-md border border-[#e5e7eb] text-[#111827] bg-white focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent transition-colors resize-y font-mono"
+        />
+      </div>
+    );
+  }
+
+  // Matches the old tool's global Backbone Forms override (backboneFormsOverrides.js):
+  // EVERY schema field with inputType "TextArea" renders as a full CKEditor 5
+  // instance there, not a plain textarea — so mirror that here too. Must be
+  // driven ONLY by the schema's own inputType (never by field NAME) — a
+  // field literally called "body" whose schema declares inputType "Text"
+  // (e.g. Laerdal Checklist's per-item body) renders as plain text in the
+  // old tool, and must render identically here.
+  if (inputTypeStr === "TextArea") {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <TopicFieldLabel required={isRequired}>{label}</TopicFieldLabel>
+        {hint ? <div className="-mt-1"><span className="inline-flex items-center gap-1.5 text-[11px] text-[#64748b]">More info<InfoIcon label={label} hint={hint} /></span></div> : null}
+        <RichTextEditor value={asString(value)} onChange={(html) => onChange(path, html)} />
+      </div>
+    );
+  }
+
+  return (
+    <TopicTextInput
+      label={label}
+      hint={hint}
+      required={isRequired}
+      value={typeof value === "string" ? value : value === undefined || value === null ? "" : String(value)}
+      onChange={(v) => onChange(path, v)}
+    />
+  );
+}
+
+// ── Extensions accordion (Topic/Section/Content Group/Component) ───────────
+// Schema-driven "Added to this X" / "Available extensions" panel, shared by
+// all four content levels. `schemasForLevel` (getExtensionSchemasByLevel) is
+// already filtered server-side to the extensions that declare a schema for
+// this specific level, so an extension only ever appears where it actually
+// has settings (e.g. Trickle: Section + Content Group only).
+// A level-specific override for one extension field's rendering (e.g. the
+// navigation footer's `_buttons` field on Topic) — return null/undefined to
+// fall back to the generic schema-driven BehaviourField rendering.
+type ExtensionFieldRenderer = (args: {
+  extensionName: string | undefined;
+  fieldKey: string;
+  fieldSchema: BehaviourFieldSchema;
+  value: unknown;
+  onChange: (path: string, value: unknown) => void;
+}) => React.ReactNode | null | undefined;
+
+type ExtensionsAccordionBodyProps = {
+  levelLabel: string;
+  componentKey?: string;
+  extensions: Record<string, unknown>;
+  onChange: (next: Record<string, unknown>) => void;
+  schemasForLevel: Record<string, ExtensionFieldSchema>;
+  extensionTypeOptions: ExtensionTypeOption[];
+  onExtensionAdded?: (key: string, extensionName: string | undefined) => void;
+  onRequestRemoveExtension: (key: string, displayName: string, extensionName: string | undefined) => void;
+  customFieldRenderer?: ExtensionFieldRenderer;
+  getInheritanceTag?: (key: string) => ExtensionInheritanceTag;
+  assetContext?: BehaviourAssetContext;
+  getArrayItemDefaults?: (extensionKey: string, path: string, itemSchema: BehaviourFieldSchema | undefined) => Record<string, unknown>;
+};
+
+const ALL_COMPONENT_LEVEL_EXTENSION_NAMES = new Set([
+  "adapt-additional-material",
+  "adapt-contrib-pageLevelProgress",
+  "adapt-estimated-time",
+  "adapt-hint",
+  "adapt-integrated-media",
+  "adapt-laerdal-pageLevelProgress",
+  "adapt-search",
+]);
+
+const PAGE_LEVEL_PROGRESS_EXTENSION_NAMES = new Set([
+  "adapt-contrib-pageLevelProgress",
+  "adapt-laerdal-pageLevelProgress",
+]);
+
+const QUESTION_COMPONENT_KEYS = new Set([
+  "gmcq",
+  "laerdal-checklist",
+  "draganddropzone",
+  "sentenceordering",
+  "laerdal-slider",
+  "matching",
+  "mcq",
+  "preassessment",
+  "slider",
+  "textinput",
+]);
+
+const RESULT_COMPONENT_KEYS = new Set(["assessmentresults", "assessmentresultstotal"]);
+
+const ASSESSMENT_COMPONENT_KEYS = new Set(QUESTION_COMPONENT_KEYS);
+ASSESSMENT_COMPONENT_KEYS.delete("preassessment");
+
+const IMAGE_ENLARGE_COMPONENT_KEYS = new Set([
+  "accordion",
+  "gmcq",
+  "graphic",
+  "laerdal-cards",
+  "laerdal-imageslider",
+  "laerdal-tabs",
+  "narrative",
+  "talk",
+]);
+
+const QUESTION_BEHAVIOUR_EXTENSION_NAMES = new Set([
+  "adapt-answer-specific-feedback",
+  "adapt-contrib-tutor",
+  "adapt-question-state-graphic",
+]);
+
+const QUESTION_FLOW_COMPONENT_KEYS = new Set(ASSESSMENT_COMPONENT_KEYS);
+QUESTION_FLOW_COMPONENT_KEYS.delete("laerdal-checklist");
+
+function isComponentExtensionAllowed(extensionName: string | undefined, componentKey: string): boolean {
+  if (!extensionName) return true;
+  if (ALL_COMPONENT_LEVEL_EXTENSION_NAMES.has(extensionName)) return true;
+  if (extensionName === "adapt-results-page-detail-feedback") {
+    return QUESTION_COMPONENT_KEYS.has(componentKey) || RESULT_COMPONENT_KEYS.has(componentKey);
+  }
+  if (QUESTION_BEHAVIOUR_EXTENSION_NAMES.has(extensionName)) {
+    return QUESTION_COMPONENT_KEYS.has(componentKey);
+  }
+  if (extensionName === "adapt-contrib-assessment") return ASSESSMENT_COMPONENT_KEYS.has(componentKey);
+  if (extensionName === "adapt-adaptiveContent") return componentKey === "diagnosticresults";
+  if (extensionName === "adapt-inline-feedback") return false;
+  if (extensionName === "adapt-image-enlarge") return IMAGE_ENLARGE_COMPONENT_KEYS.has(componentKey);
+  if (extensionName === "adapt-contrib-trickle") return QUESTION_FLOW_COMPONENT_KEYS.has(componentKey);
+
+  // Decision Tree is explicitly marked "keep how it is" in the shared sheet.
+  // Unknown/future schemas also retain the existing schema-driven behavior.
+  return true;
+}
+
+function extensionDisplayName(
+  key: string,
+  fieldSchema: ExtensionFieldSchema | undefined,
+  extensionTypeOptions: ExtensionTypeOption[]
+): string {
+  const typeOption = extensionTypeOptions.find((o) => o.name === fieldSchema?.name);
+  return typeOption?.displayName || fieldSchema?.title || formatBehaviourFieldName(key);
+}
+
+// ── Inherited/Overridden tags ───────────────────────────────────────────────
+// Simpler, self-contained rule (no cross-level ancestor data needed): an
+// extension's settings at a level are "Overridden" if ANY field (other than
+// `_isEnabled`/`_enableOverride`) differs from that field's own SCHEMA
+// DEFAULT at this same level — otherwise "Inherited". This also naturally
+// covers explicit inherit-sentinel fields for free (e.g. adapt-contrib-
+// bookmarking's `_level` defaults to the literal string `"inherit"`, so an
+// untouched value already equals its own default and reads as "Inherited"
+// with no special-casing needed). Only shown at all when the extension is
+// configurable at more than one level (nothing to inherit from/override
+// otherwise) — see countExtensionApplicableLevels.
+export type ExtensionInheritanceTag = "inherited" | "overridden" | null;
+
+const EXTENSION_ENABLE_FIELD_NAMES = new Set(["_isEnabled", "_enableOverride"]);
+
+function deepValuesEqual(a: unknown, b: unknown): boolean {
+  // Missing values are treated as "use schema default" at this level.
+  if (a === undefined) return true;
+
+  const an = a === null ? "" : a;
+  const bn = b === undefined || b === null ? "" : b;
+  if (an === bn) return true;
+  try {
+    return JSON.stringify(an) === JSON.stringify(bn);
+  } catch {
+    return false;
+  }
+}
+
+type ExtensionFieldSchemaNode = {
+  type?: string;
+  properties?: Record<string, ExtensionFieldSchemaNode>;
+};
+
+// Recurses into nested objects, comparing each LEAF field's stored value
+// against its own schema default (defaultValue mirrors props' shape, from
+// buildSchemaDefaults). Returns one boolean (matches default?) per leaf.
+function collectDefaultMatches(
+  props: Record<string, ExtensionFieldSchemaNode>,
+  defaultValue: Record<string, unknown>,
+  currentValue: Record<string, unknown>
+): boolean[] {
+  const results: boolean[] = [];
+
+  Object.keys(props).forEach((key) => {
+    if (EXTENSION_ENABLE_FIELD_NAMES.has(key)) return;
+    const fieldSchema = props[key];
+
+    if (fieldSchema?.type === "object" && fieldSchema.properties) {
+      results.push(
+        ...collectDefaultMatches(fieldSchema.properties, asRecord(defaultValue[key]), asRecord(currentValue[key]))
+      );
+      return;
+    }
+
+    results.push(deepValuesEqual(currentValue[key], defaultValue[key]));
+  });
+
+  return results;
+}
+
+function computeExtensionInheritanceTag(
+  currentSchema: ExtensionFieldSchema | undefined,
+  currentValue: Record<string, unknown>,
+  applicableLevelCount: number
+): ExtensionInheritanceTag {
+  if (applicableLevelCount <= 1) return null;
+
+  const currentProps = (currentSchema?.properties ?? {}) as Record<string, ExtensionFieldSchemaNode>;
+  if (!Object.keys(currentProps).length) return null;
+
+  const defaults = buildSchemaDefaults(currentProps as Record<string, unknown>);
+  const matches = collectDefaultMatches(currentProps, defaults, currentValue);
+  if (!matches.length) return null;
+
+  return matches.every(Boolean) ? "inherited" : "overridden";
+}
+
+// Not every extension uses `_isEnabled` at a given level — e.g.
+// adapt-navigation-footer's `contentobject` (Topic) schema has no
+// `_isEnabled` at all, only a plain settings field (`_enableOverride`).
+// Only a real `_isEnabled` boolean gets the header checkbox treatment;
+// anything else (including `_enableOverride`) is just rendered as a normal
+// field inside the accordion body via BehaviourField, same as any other
+// setting — no special header control for it.
+type ExtensionEnableControl = { kind: "checkbox"; key: string } | { kind: "none" };
+
+function detectExtensionEnableControl(fieldSchema: ExtensionFieldSchema | undefined): ExtensionEnableControl {
+  const props = (fieldSchema?.properties ?? {}) as Record<string, BehaviourFieldSchema>;
+  if (props._isEnabled?.type === "boolean") {
+    return { kind: "checkbox", key: "_isEnabled" };
+  }
+  return { kind: "none" };
+}
+
+// An extension is only worth surfacing at a given level if there's something
+// to actually do here: either an enable-style control (checkbox/select) or at
+// least one other configurable setting. If a level has neither — the
+// extension is purely inherited from its parent/global setting with nothing
+// to configure or override here — it's excluded entirely (not listed as
+// "Added"/"Available", no dangling checkbox-less/settings-less row).
+function extensionHasVisibleContentAtLevel(fieldSchema: ExtensionFieldSchema | undefined): boolean {
+  const control = detectExtensionEnableControl(fieldSchema);
+  if (control.kind !== "none") return true;
+  return Object.keys(fieldSchema?.properties ?? {}).length > 0;
+}
+
+function ExtensionListItem({
+  itemKey,
+  fieldSchema,
+  displayName,
+  config,
+  onEnableControlChange,
+  onRemove,
+  onFieldChange,
+  customFieldRenderer,
+  inheritanceTag,
+  assetContext,
+  getArrayItemDefaults,
+}: {
+  itemKey: string;
+  fieldSchema: ExtensionFieldSchema | undefined;
+  displayName: string;
+  config: Record<string, unknown>;
+  onEnableControlChange: (control: ExtensionEnableControl, value: unknown) => void;
+  onRemove: () => void;
+  onFieldChange: (path: string, value: unknown) => void;
+  customFieldRenderer?: ExtensionFieldRenderer;
+  inheritanceTag?: ExtensionInheritanceTag;
+  assetContext?: BehaviourAssetContext;
+  getArrayItemDefaults?: (path: string, itemSchema: BehaviourFieldSchema | undefined) => Record<string, unknown>;
+}) {
+  const [open, setOpen] = useState(false);
+  const enableControl = detectExtensionEnableControl(fieldSchema);
+  const settingsFields = (fieldSchema?.properties ?? {}) as Record<string, BehaviourFieldSchema>;
+  const extensionContext = flattenBehaviourSchema(settingsFields, config);
+  const settingsKeys = filterVisibleBehaviourFieldKeys(
+    Object.keys(settingsFields).filter(
+      (k) => !(enableControl.kind !== "none" && k === enableControl.key)
+    ),
+    extensionContext
+  );
+
+  return (
+    <div className="w-full rounded-[8px] border border-[#d8dee6] bg-white overflow-hidden">
+      <div className="w-full flex items-center gap-1.5 px-2 py-1.5">
+        {enableControl.kind === "checkbox" && (
+          <TopicToggle
+            checked={config[enableControl.key] !== false}
+            onChange={(enabled) => onEnableControlChange(enableControl, enabled)}
+            label={`${displayName} enabled`}
+          />
+        )}
+        <button
+          type="button"
+          onClick={() => setOpen((prev) => !prev)}
+          aria-expanded={open}
+          disabled={!settingsKeys.length}
+          className="flex-1 min-w-0 flex items-center gap-1 text-left disabled:cursor-default"
+        >
+          {!!settingsKeys.length && (
+            <svg
+              className={`shrink-0 transition-transform duration-200 text-[#6b7280] ${open ? "rotate-90" : ""}`}
+              width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+            >
+              <polyline points="9 18 15 12 9 6" />
+            </svg>
+          )}
+          <span title={displayName} className="truncate text-[12px] font-semibold text-[var(--life-base-black)] inline-flex items-center gap-1.5">{displayName}{typeof fieldSchema?.help === "string" && fieldSchema.help.trim().length ? <InfoIcon label={displayName} hint={fieldSchema.help} /> : null}</span>
+        </button>
+        {inheritanceTag === "overridden" && (
+          <span title="Overridden" className="shrink-0 px-1 py-0.5 rounded-full text-[9px] leading-none font-semibold bg-[#f3e8ff] text-[#7c3aed]">Overridden</span>
+        )}
+        {inheritanceTag === "inherited" && (
+          <span title="Inherited" className="shrink-0 px-1 py-0.5 rounded-full text-[9px] leading-none font-semibold bg-[#f1f5f9] text-[#64748b]">Inherited</span>
+        )}
+        <button
+          type="button"
+          aria-label={`Remove ${displayName}`}
+          title="Remove"
+          onClick={onRemove}
+          className="w-5 h-5 shrink-0 flex items-center justify-center rounded-md text-[#6b7280] hover:bg-[#fee2e2] hover:text-[#b42318] transition-colors"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+      {open && !!settingsKeys.length && (
+        <div className="extension-settings-content px-3 pb-3 pt-2.5 border-t border-[#eef2f6] flex flex-col gap-2.5 text-[12px]">
+          {settingsKeys.map((fieldKey) => {
+            const childSchema = settingsFields[fieldKey] as BehaviourFieldSchema;
+            if (!childSchema || typeof childSchema !== "object") return null;
+            const overridden = customFieldRenderer?.({
+              extensionName: fieldSchema?.name,
+              fieldKey,
+              fieldSchema: childSchema,
+              value: resolveBehaviourFieldValue(childSchema, config[fieldKey]),
+              onChange: onFieldChange,
+            });
+            if (overridden) return <div key={`${itemKey}-${fieldKey}`}>{overridden}</div>;
+            return (
+              <BehaviourField
+                key={`${itemKey}-${fieldKey}`}
+                path={fieldKey}
+                fieldName={fieldKey}
+                fieldSchema={childSchema}
+                value={resolveBehaviourFieldValue(childSchema, config[fieldKey])}
+                onChange={onFieldChange}
+                assetContext={assetContext && {
+                  ...assetContext,
+                  onPickAsset: (path, assetType) => assetContext.onPickAsset(path, assetType, itemKey),
+                  onPickExternal: (path, currentValue) => assetContext.onPickExternal(path, currentValue, itemKey),
+                  onClear: (path) => assetContext.onClear(path, itemKey),
+                }}
+                conditionalContext={extensionContext}
+                getArrayItemDefaults={getArrayItemDefaults}
+              />
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ExtensionsAccordionBody({
+  levelLabel,
+  componentKey,
+  extensions,
+  onChange,
+  schemasForLevel,
+  extensionTypeOptions,
+  onExtensionAdded,
+  onRequestRemoveExtension,
+  customFieldRenderer,
+  getInheritanceTag,
+  assetContext,
+  getArrayItemDefaults,
+}: ExtensionsAccordionBodyProps) {
+  const visibleExtensionNames = new Set(extensionTypeOptions.map((option) => option.name));
+  const addedProgressExtensionName = Object.entries(schemasForLevel).find(([key, schema]) => (
+    Object.prototype.hasOwnProperty.call(extensions, key) &&
+    PAGE_LEVEL_PROGRESS_EXTENSION_NAMES.has(schema?.name ?? "")
+  ))?.[1]?.name;
+  const allKeys = Object.keys(schemasForLevel)
+    .filter((key) => extensionHasVisibleContentAtLevel(schemasForLevel[key]))
+    .filter((key) => {
+      const extensionName = schemasForLevel[key]?.name;
+      return Object.prototype.hasOwnProperty.call(extensions, key) ||
+        !extensionTypeOptions.length || !extensionName || visibleExtensionNames.has(extensionName);
+    })
+    .filter((key) => !componentKey || isComponentExtensionAllowed(schemasForLevel[key]?.name, componentKey))
+    .filter((key) => {
+      const extensionName = schemasForLevel[key]?.name ?? "";
+      return !addedProgressExtensionName ||
+        !PAGE_LEVEL_PROGRESS_EXTENSION_NAMES.has(extensionName) ||
+        extensionName === addedProgressExtensionName;
+    })
+    .sort((a, b) => a.localeCompare(b));
+  const addedKeys = allKeys.filter((key) => Object.prototype.hasOwnProperty.call(extensions, key));
+  const availableKeys = allKeys.filter((key) => !addedKeys.includes(key));
+
+  const handleEnableControlChange = (key: string, control: ExtensionEnableControl, value: unknown) => {
+    if (control.kind === "none") return;
+    onChange({ ...extensions, [key]: { ...asRecord(extensions[key]), [control.key]: value } });
+  };
+  const handleRemove = (key: string) => {
+    onRequestRemoveExtension(key, extensionDisplayName(key, schemasForLevel[key], extensionTypeOptions), schemasForLevel[key]?.name);
+  };
+  const handleAdd = (key: string) => {
+    const fieldSchema = schemasForLevel[key];
+    const defaults = buildSchemaDefaults(fieldSchema?.properties as Record<string, unknown> | undefined);
+    const control = detectExtensionEnableControl(fieldSchema);
+    // Newly-added extensions are enabled by default.
+    const patch = control.kind === "checkbox" ? { [control.key]: true } : {};
+    onChange({ ...extensions, [key]: { ...defaults, ...patch } });
+    onExtensionAdded?.(key, fieldSchema?.name);
+  };
+  const handleFieldChange = (key: string, path: string, value: unknown) => {
+    onChange({ ...extensions, [key]: setBehaviourPath(asRecord(extensions[key]), path, value) });
+  };
+
+  return (
+    <div className="flex flex-col gap-3.5">
+      <div className="flex flex-col gap-2">
+        <TopicFieldLabel>{`Added to this ${levelLabel}`}</TopicFieldLabel>
+        {!addedKeys.length && (
+          <p className="text-[13px] text-[var(--life-neutral-300)]">No extensions added to this {levelLabel} yet.</p>
+        )}
+        {addedKeys.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {addedKeys.map((key) => (
+              <ExtensionListItem
+                key={key}
+                itemKey={key}
+                fieldSchema={schemasForLevel[key]}
+                displayName={extensionDisplayName(key, schemasForLevel[key], extensionTypeOptions)}
+                config={asRecord(extensions[key])}
+                customFieldRenderer={customFieldRenderer}
+                assetContext={assetContext}
+                inheritanceTag={getInheritanceTag?.(key)}
+                onEnableControlChange={(control, value) => handleEnableControlChange(key, control, value)}
+                onRemove={() => handleRemove(key)}
+                onFieldChange={(path, value) => handleFieldChange(key, path, value)}
+                getArrayItemDefaults={getArrayItemDefaults ? (path, itemSchema) => getArrayItemDefaults(key, path, itemSchema) : undefined}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <TopicFieldLabel>Available extensions</TopicFieldLabel>
+        {!availableKeys.length && (
+          <p className="text-[13px] text-[var(--life-neutral-300)]">No additional extensions are available for this {levelLabel}.</p>
+        )}
+        {availableKeys.map((key) => (
+          <div key={key} className="w-full flex items-center gap-2 px-3 py-2 rounded-[8px] border border-[#d8dee6] bg-white">
+            <span className="flex-1 min-w-0 truncate text-[13px] font-semibold text-[var(--life-base-black)]">
+              {extensionDisplayName(key, schemasForLevel[key], extensionTypeOptions)}
+            </span>
+            <button
+              type="button"
+              onClick={() => handleAdd(key)}
+              className="shrink-0 px-2.5 py-1 text-[12px] font-semibold rounded-md border border-[#2d6fa8] text-[#2d6fa8] hover:bg-[var(--life-primary-020)] transition-colors"
+            >
+              + Add
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Icons for the Navigation Footer's per-button rows (Topic-level Extensions
+// accordion) — real assets (public/assets/icons), matching every other icon
+// in this panel (MaskIcon + bg-current so hover/color changes work exactly
+// like the inline-SVG currentColor approach these replace).
+const NAV_FOOTER_BUTTON_ICONS: Record<string, React.ReactNode> = {
+  _home: <MaskIcon file="home-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />,
+  _up: <MaskIcon file="up-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />,
+  _previous: <MaskIcon file="back-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />,
+  _next: <MaskIcon file="next-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />,
+  _close: <MaskIcon file="close-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />,
+  _custom: <MaskIcon file="custom-icon.svg" className="block w-[15px] h-[15px] shrink-0 bg-current" />,
+};
+
+const NAV_FOOTER_BUTTON_ORDER = ["_home", "_up", "_previous", "_next", "_close", "_custom"];
+
+// Canvas-injected level action icons (Copy/Color Label) — raw markup, not
+// React, since these are created directly inside the iframe's own document
+// by applyPreviewSelectionStyles. Copy icon matches the "Copy topic id"
+// icon already used in the right panel's General accordion (itself inline
+// SVG, no dedicated asset file); color-label icon is the REAL new-ui asset
+// (public/assets/icons/color-label-icon.svg, imported via Vite's `?raw` so
+// it can never drift from the actual file) with its hardcoded stroke color
+// swapped to currentColor so CSS can drive its color/fill like everywhere
+// else in this panel.
+const LEVEL_ACTION_COPY_ICON_SVG =
+  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+const LEVEL_ACTION_COLOR_LABEL_ICON_SVG = colorLabelIconSvgRaw.replace(/stroke="#[0-9a-fA-F]{3,6}"/g, 'stroke="currentColor"');
+// Matches the structure panel's own delete affordance.
+const LEVEL_ACTION_DELETE_ICON_SVG =
+  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>';
+
+const CANVAS_LEVEL_LABELS: Record<"topic" | "section" | "group" | "component", string> = {
+  topic: "Topic",
+  section: "Section",
+  group: "Content Group",
+  component: "Component",
+};
+
+function getCanvasDeleteMessage(level: keyof typeof CANVAS_LEVEL_LABELS): ReactNode {
+  if (level === "component") return <>Are you sure you want to delete the component.<br />This action cannot be undone.</>;
+  if (level === "section") return <>Are you sure you want to delete this section?<br />This will remove any content groups and components inside this section.</>;
+  if (level === "group") return <>Are you sure you want to delete this content group?<br />This will remove any components inside this section.</>;
+  return <>Are you sure you want to delete this topic?<br />You will lose all the contents of this topic</>;
+}
+
+// Same real asset the right panel's "Save as template" button uses.
+const LEVEL_ACTION_SAVE_TEMPLATE_ICON_SVG = templateIconSvgRaw
+  .replace(/stroke="#[0-9a-fA-F]{3,6}"/g, 'stroke="currentColor"')
+  .replace(/width="14"/, 'width="15"')
+  .replace(/height="14"/, 'height="15"');
+
+// Old tool's real palette (frontend/src/core/less/colourLabels.less) —
+// _colorLabel schema field stores one of these literal "colorlabel-N"
+// strings (or "" for none).
+const COLOR_LABEL_VALUES = Array.from({ length: 14 }, (_, i) => `colorlabel-${i + 1}`);
+const COLOR_LABEL_HEX: Record<string, string> = {
+  "colorlabel-1": "#616161",
+  "colorlabel-2": "#BDBDBD",
+  "colorlabel-3": "#D32F2F",
+  "colorlabel-4": "#EF9A9A",
+  "colorlabel-5": "#7B1FA2",
+  "colorlabel-6": "#CE93D8",
+  "colorlabel-7": "#1976D2",
+  "colorlabel-8": "#90CAF9",
+  "colorlabel-9": "#388E3C",
+  "colorlabel-10": "#A5D6A7",
+  "colorlabel-11": "#F57C00",
+  "colorlabel-12": "#FFCC80",
+  "colorlabel-13": "#5D4037",
+  "colorlabel-14": "#BCAAA4",
+};
+
+// Mirrors NavigationFooterView.js's `getOverrideValue`/`updateOverrideValues`
+// (adapt-navigation-footer) exactly — an empty `_enableOverride` inherits the
+// course-level `_isEnabled`, and an empty `btnText` inherits the course-level
+// button text. Home never has editable text anywhere in the framework (its
+// schema default btnText is always "" — the button is icon-only), so its
+// resolved text always comes straight from the course level, never the topic
+// override. Shared by both the Extensions accordion field (display only) and
+// the live canvas sync (syncNavigationFooterPreview) so both use identically
+// resolved values.
+function resolveNavFooterButtonState(
+  buttonKey: string,
+  storedButtons: Record<string, unknown>,
+  courseButtons: Record<NavFooterButtonKey, NavFooterButton> | null
+): { enabled: boolean; text: string } {
+  const stored = asRecord(storedButtons[buttonKey]);
+  const override = typeof stored._enableOverride === "string" ? (stored._enableOverride as string) : "";
+  const inherited = courseButtons?.[buttonKey as NavFooterButtonKey];
+  const enabled = override === "enable" ? true : override === "disable" ? false : inherited?._isEnabled ?? true;
+  const storedText = typeof stored.btnText === "string" ? (stored.btnText as string) : "";
+  const text = buttonKey === "_home" ? inherited?.btnText || "" : storedText || inherited?.btnText || "";
+  return { enabled, text };
+}
+
+// Topic-level "Navigation Footer" → `_buttons`. The inherited value is only
+// ever shown (checkbox state / text placeholder-like display) — nothing is
+// written back to `_buttons` here until the user actually checks/unchecks or
+// types, at which point that button's own field gets an explicit value.
+function NavigationFooterButtonsField({
+  fieldSchema,
+  value,
+  onChange,
+  courseButtons,
+}: {
+  fieldSchema: BehaviourFieldSchema;
+  value: unknown;
+  onChange: (path: string, value: unknown) => void;
+  courseButtons: Record<NavFooterButtonKey, NavFooterButton> | null;
+}) {
+  const buttonsSchema = (fieldSchema.properties ?? {}) as Record<string, BehaviourFieldSchema>;
+  const storedButtons = asRecord(value);
+  const orderedKeys = NAV_FOOTER_BUTTON_ORDER.filter((k) => buttonsSchema[k]);
+
+  return (
+    <div className="flex flex-col gap-2">
+      <TopicFieldLabel>Footer buttons</TopicFieldLabel>
+      {orderedKeys.map((buttonKey) => {
+        const { enabled: checked, text: displayText } = resolveNavFooterButtonState(buttonKey, storedButtons, courseButtons);
+        const label = (buttonsSchema[buttonKey]?.title as string) || formatBehaviourFieldName(buttonKey);
+        // Home has no editable text anywhere in the framework (its schema
+        // default btnText is always "" — the button is icon-only); show the
+        // course-level text read-only, falling back to a "Home" placeholder.
+        const isHomeButton = buttonKey === "_home";
+
+        return (
+          <div key={buttonKey} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[8px] border border-[#d8dee6] bg-white">
+            <label className="shrink-0 inline-flex items-center cursor-pointer group">
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={(event) => onChange(`_buttons.${buttonKey}._enableOverride`, event.target.checked ? "enable" : "disable")}
+                aria-label={`${label} button enabled`}
+                className="sr-only peer"
+              />
+              <CheckboxIndicator checked={checked} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
+            </label>
+            <span className={`shrink-0 ${checked ? "text-[var(--life-primary-500)]" : "text-[#9ca3af]"}`}>{NAV_FOOTER_BUTTON_ICONS[buttonKey]}</span>
+            <input
+              type="text"
+              value={displayText}
+              onChange={(event) => !isHomeButton && onChange(`_buttons.${buttonKey}.btnText`, event.target.value)}
+              readOnly={isHomeButton}
+              placeholder={isHomeButton ? "Home" : label}
+              aria-label={`${label} button text`}
+              className={`flex-1 min-w-0 px-2 py-1 text-[13px] rounded-md border border-transparent transition-colors ${
+                isHomeButton
+                  ? "bg-[#f8fafc] text-[#6b7280] cursor-default"
+                  : "hover:border-[#e5e7eb] bg-transparent focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
+              }`}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function isExternalAsset(value: string): boolean {
+  return /^(https?:)?\/\//i.test((value || "").trim());
+}
+
+function toCourseAssetFieldName(value: string): string | null {
+  const trimmed = (value || "").trim();
+  if (!trimmed || isExternalAsset(trimmed)) return null;
+
+  const normalized = trimmed.replace(/^\/+/, "");
+  if (!normalized.startsWith("course/assets/")) return null;
+
+  const fieldName = normalized.replace(/^course\/assets\//, "");
+  return fieldName || null;
+}
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function buildCourseAssetLinkCandidates(value: string): string[] {
+  const trimmed = (value || "").trim();
+  if (!trimmed) return [];
+
+  const normalized = trimmed.replace(/^\/+/, "").split(/[?#]/)[0];
+  const candidates = new Set<string>([trimmed, normalized, `/${normalized}`]);
+
+  if (normalized.startsWith("course/assets/")) {
+    const fieldName = normalized.replace(/^course\/assets\//, "");
+    const decodedFieldName = safeDecodeURIComponent(fieldName);
+    const encodedFieldName = encodeURIComponent(decodedFieldName).replace(/%2F/gi, "/");
+    candidates.add(`course/assets/${decodedFieldName}`);
+    candidates.add(`course/assets/${encodedFieldName}`);
+    candidates.add(`/course/assets/${decodedFieldName}`);
+    candidates.add(`/course/assets/${encodedFieldName}`);
+  }
+
+  return [...candidates];
+}
+
+function addAssetLinkMapping(target: Record<string, string>, fieldName: string, assetId: string) {
+  const decodedFieldName = safeDecodeURIComponent(fieldName);
+  const encodedFieldName = encodeURIComponent(decodedFieldName).replace(/%2F/gi, "/");
+  const variants = [
+    `course/assets/${fieldName}`,
+    `course/assets/${decodedFieldName}`,
+    `course/assets/${encodedFieldName}`,
+  ];
+
+  variants.forEach((link) => {
+    target[link] = assetId;
+    target[`/${link}`] = assetId;
+  });
+}
+
+function extractAssetIdFromCourseAssetPath(value: string): string | null {
+  const normalized = (value || "").trim().replace(/^\/+/, "");
+  if (!normalized.startsWith("course/assets/")) return null;
+
+  const tail = normalized.replace(/^course\/assets\//, "").split(/[?#]/)[0];
+  const basename = tail.split("/").pop() || "";
+  const match = basename.match(/^([a-f0-9]{24})(?:\.[^.]+)?$/i);
+  return match?.[1] || null;
+}
+
+function collectCourseAssetFieldNames(source: unknown, result = new Set<string>()): Set<string> {
+  if (typeof source === "string") {
+    const fieldName = toCourseAssetFieldName(source);
+    if (fieldName) result.add(fieldName);
+    return result;
+  }
+
+  if (Array.isArray(source)) {
+    source.forEach((entry) => collectCourseAssetFieldNames(entry, result));
+    return result;
+  }
+
+  if (source && typeof source === "object") {
+    Object.values(source as Record<string, unknown>).forEach((entry) => {
+      collectCourseAssetFieldNames(entry, result);
+    });
+  }
+
+  return result;
+}
+
+function TopicAccordion({
+  title,
+  open,
+  onToggle,
+  children,
+}: {
+  title: string;
+  open: boolean;
+  onToggle: (triggerEl: HTMLButtonElement) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={`w-full rounded-[8px] border bg-white overflow-hidden transition-colors ${
+        open
+          ? "border-[var(--life-primary-200)]"
+          : "border-[#d8dee6] hover:border-[var(--life-primary-100)]"
+      }`}
+    >
+      <button
+        type="button"
+        onClick={(event) => onToggle(event.currentTarget)}
+        aria-expanded={open}
+        className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left transition-colors ${
+          open
+            ? "bg-[var(--life-primary-020)]"
+            : "bg-white hover:bg-[var(--life-neutral-020)]"
+        }`}
+      >
+        <h3 className="text-[13px] font-semibold text-[var(--life-base-black)]">{title}</h3>
+        <svg
+          className={`shrink-0 ml-auto transition-transform duration-200 text-[var(--life-primary-700)] ${open ? "rotate-90" : ""}`}
+          width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+        >
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+      </button>
+      {open ? <div className="px-3 pb-3 pt-2.5 border-t border-[#eef2f6] flex flex-col gap-2.5">{children}</div> : null}
+    </div>
+  );
+}
+
+function TopicNestedAccordion({
+  title,
+  defaultOpen = false,
+  children,
+}: {
+  title: React.ReactNode;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <div className="w-full rounded-[8px] border border-[#d8dee6] bg-white overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left hover:bg-[var(--life-neutral-020)] transition-colors"
+      >
+        <span className="text-[13px] font-semibold text-[#21436b] underline underline-offset-[2px]">{title}</span>
+        <svg
+          className={`shrink-0 transition-transform duration-200 text-[#21436b] ${open ? "rotate-90" : ""}`}
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+      </button>
+      {open ? <div className="px-3 pb-2.5 pt-1.5 border-t border-[#eef2f6] flex flex-col gap-2">{children}</div> : null}
+    </div>
+  );
+}
+
+function TopicToggle({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  label?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full border-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--life-primary-500)] ${
+        checked
+          ? "bg-[var(--life-primary-500)] border-[var(--life-primary-500)]"
+          : "bg-[#e5e7eb] border-[#e5e7eb]"
+      }`}
+    >
+      <span className={`inline-block h-2.5 w-2.5 rounded-full bg-white shadow-sm transition-transform ${checked ? "translate-x-3" : "translate-x-0.5"}`} />
+    </button>
+  );
+}
+
+function TopicEnabledNestedAccordion({
+  title,
+  enabled,
+  onEnabledChange,
+  children,
+}: {
+  title: React.ReactNode;
+  enabled: boolean;
+  onEnabledChange: (enabled: boolean) => void;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(enabled);
+
+  const handleEnabledChange = (nextEnabled: boolean) => {
+    onEnabledChange(nextEnabled);
+    if (nextEnabled) setOpen(true);
+    else setOpen(false);
+  };
+
+  return (
+    <div className="w-full rounded-[8px] border border-[#d8dee6] bg-white overflow-hidden">
+      <div className="w-full flex items-center gap-2 px-3 py-2 hover:bg-[var(--life-neutral-020)] transition-colors">
+        <button
+          type="button"
+          onClick={() => enabled && setOpen((previous) => !previous)}
+          aria-expanded={enabled && open}
+          disabled={!enabled}
+          className="flex-1 min-w-0 flex items-center gap-1.5 text-left disabled:cursor-default"
+        >
+          <span className="text-[13px] font-semibold text-[#21436b] underline underline-offset-[2px]">{title}</span>
+          <svg
+            className={`shrink-0 ml-auto transition-transform duration-200 text-[#21436b] ${enabled && open ? "rotate-90" : ""}`}
+            width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+          >
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+        <TopicToggle checked={enabled} onChange={handleEnabledChange} label="Enabled" />
+      </div>
+      {enabled && open ? <div className="px-3 pb-2.5 pt-1.5 border-t border-[#eef2f6] flex flex-col gap-2">{children}</div> : null}
+    </div>
+  );
+}
+
+function TopicFieldLabel({ children, required, hint }: { children: React.ReactNode; required?: boolean; hint?: string }) {
+  return (
+    <span className="text-[11px] font-semibold text-[#374151] inline-flex items-center gap-1.5">
+      {children}
+      {hint ? <InfoIcon label={typeof children === "string" ? children : "field"} hint={hint} /> : null}
+      {required && <span className="text-[#dc2626] ml-0.5">*</span>}
+    </span>
+  );
+}
+
+function TopicTextInput({
+  label,
+  hint,
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+  readOnly = false,
+  required = false,
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  type?: "text" | "number";
+  readOnly?: boolean;
+  required?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <TopicFieldLabel required={required} hint={hint}>{label}</TopicFieldLabel>
+      <input
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        readOnly={readOnly}
+        className={`w-full px-2.5 py-1.5 text-[13px] rounded-md border border-[#e5e7eb] text-[#111827] transition-colors ${readOnly ? "bg-[#f8fafc]" : "bg-white focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"}`}
+      />
+    </div>
+  );
+}
+
+// A title consisting only of whitespace/line-breaks (e.g. everything
+// selected and deleted in a contenteditable canvas overlay, which can leave
+// a stray <br>) is still "empty" — title is mandatory everywhere.
+function isBlankTitleValue(value: string): boolean {
+  return value
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .trim().length === 0;
+}
+
+const TITLE_MANDATORY_MESSAGE =
+  'Title is mandatory and cannot be empty. If you want to hide the title from preview, please use the "Display title in preview" setting below.';
+
+// Standard duration a title-mandatory warning stays up before it auto-clears
+// and the blank title is restored to its last valid value — shared by the
+// panel field and the canvas overlay so both behave identically.
+const TITLE_WARNING_DURATION_MS = 6000;
+
+// Shared Title field for topic/section/content group/component General
+// accordions: title can never be saved blank. Like the canvas's inline
+// title, every non-blank keystroke commits live (via onChange) so the
+// canvas mirrors panel typing in real time, matching the canvas -> panel
+// direction. Blank keystrokes are never committed — otherwise the last
+// non-blank intermediate value (e.g. "N" from "New Topic 1" mid-backspace)
+// would become the wrong "revert to" target. `originalValueRef` captures
+// the true pre-edit value on focus so blur-while-blank can revert both the
+// local draft and the shared state (hence the canvas too) to it, and shows
+// the warning here since the edit originated in this panel.
+function TopicTitleField({
+  value,
+  onChange,
+  onDraftChange,
+  hint,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  // Fires on every keystroke, including blank ones that onChange skips —
+  // lets the canvas mirror the panel's literal text (blank included) live.
+  onDraftChange?: (value: string) => void;
+  hint?: string;
+}) {
+  const [draft, setDraft] = useState(value);
+  const [showWarning, setShowWarning] = useState(false);
+  const originalValueRef = useRef(value);
+  const autoRevertTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    setDraft(value);
+  }, [value]);
+
+  const cancelAutoRevert = () => {
+    if (autoRevertTimeoutRef.current !== null) {
+      window.clearTimeout(autoRevertTimeoutRef.current);
+      autoRevertTimeoutRef.current = null;
+    }
+  };
+
+  // Reverts the blank draft to the pre-edit value and clears the warning —
+  // shared by both blur (immediate) and the auto-revert timeout (after
+  // TITLE_WARNING_DURATION_MS of being left blank, matching the canvas).
+  const revertToOriginal = () => {
+    cancelAutoRevert();
+    const revertValue = originalValueRef.current;
+    setShowWarning(false);
+    setDraft(revertValue);
+    onDraftChange?.(revertValue);
+    if (revertValue !== value) onChange(revertValue);
+  };
+
+  useEffect(() => cancelAutoRevert, []);
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <TopicFieldLabel hint={hint}>Title</TopicFieldLabel>
+      <input
+        type="text"
+        value={draft}
+        onFocus={() => {
+          originalValueRef.current = value;
+        }}
+        onChange={(event) => {
+          const nextValue = event.target.value;
+          setDraft(nextValue);
+          onDraftChange?.(nextValue);
+          if (isBlankTitleValue(nextValue)) {
+            // Warn immediately, not just on blur — the user shouldn't have
+            // to defocus the field to find out the title can't be blank.
+            setShowWarning(true);
+            if (autoRevertTimeoutRef.current === null) {
+              autoRevertTimeoutRef.current = window.setTimeout(revertToOriginal, TITLE_WARNING_DURATION_MS);
+            }
+          } else {
+            cancelAutoRevert();
+            if (showWarning) setShowWarning(false);
+            onChange(nextValue);
+          }
+        }}
+        onBlur={() => {
+          if (isBlankTitleValue(draft)) {
+            revertToOriginal();
+            return;
+          }
+          cancelAutoRevert();
+          setShowWarning(false);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") (event.target as HTMLInputElement).blur();
+        }}
+        className="w-full px-2.5 py-1.5 text-[13px] rounded-md border border-[#e5e7eb] text-[#111827] bg-white transition-colors focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
+      />
+      {showWarning && (
+        <p className="text-[11px] text-[#b42318]">{TITLE_MANDATORY_MESSAGE}</p>
+      )}
+    </div>
+  );
+}
+
+// Matches the old Authoring Tool's Backbone-Forms Number editor: a numeric
+// input with stacked increment/decrement buttons instead of the browser's
+// native spinner. Used for "Require completion of" (topic/section/content
+// group levels).
+function TopicNumberStepper({
+  label,
+  hint,
+  value,
+  onChange,
+  min,
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (value: string) => void;
+  min?: number;
+}) {
+  const step = (delta: number) => {
+    const current = Number(value);
+    const base = Number.isFinite(current) ? current : (min ?? 0);
+    const next = base + delta;
+    onChange(String(min !== undefined ? Math.max(min, next) : next));
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <TopicFieldLabel hint={hint}>{label}</TopicFieldLabel>
+      <div className="relative">
+        <input
+          type="number"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="w-full px-2.5 py-1.5 pr-7 text-[13px] rounded-md border border-[#e5e7eb] text-[#111827] bg-white transition-colors focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        />
+        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex flex-col">
+          <button
+            type="button"
+            aria-label="Increment"
+            onClick={() => step(1)}
+            className="flex items-center justify-center w-4 h-3 text-[#6b7280] hover:text-[#2d6fa8]"
+          >
+            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15" /></svg>
+          </button>
+          <button
+            type="button"
+            aria-label="Decrement"
+            onClick={() => step(-1)}
+            className="flex items-center justify-center w-4 h-3 text-[#6b7280] hover:text-[#2d6fa8]"
+          >
+            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9" /></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TopicSelect({
+  label,
+  hint,
+  value,
+  onChange,
+  options,
+  emptyOptionLabel = "",
+  required = false,
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: readonly string[];
+  emptyOptionLabel?: string;
+  required?: boolean;
+}) {
+  // A value that isn't among the real options (e.g. a freshly-added array
+  // item, whose field genuinely has no value yet) must render as blank, not
+  // silently fall back to displaying the first real option — otherwise the
+  // dropdown visually looks pre-filled even though nothing was chosen.
+  const needsBlankOption = !options.includes(value);
+  return (
+    <div className="flex flex-col gap-1.5">
+      <TopicFieldLabel required={required} hint={hint}>{label}</TopicFieldLabel>
+      <div className="relative">
+        <select
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          className="w-full border border-[#e5e7eb] rounded-md px-2.5 py-2 text-[13px] text-[var(--life-base-black)] bg-white appearance-none focus:outline-none focus:ring-2 focus:ring-[var(--life-primary-500)] focus:border-transparent pr-8"
+        >
+          {needsBlankOption && <option value={value}>{emptyOptionLabel}</option>}
+          {options.map((option) => (
+            <option key={option} value={option}>{option || emptyOptionLabel}</option>
+          ))}
+        </select>
+        <svg className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function TopicCheckbox({
+  label,
+  hint,
+  checked,
+  onChange,
+  required = false,
+}: {
+  label: string;
+  hint?: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  required?: boolean;
+}) {
+  return (
+    <label className="flex items-start gap-2 text-[13px] text-[#111827] cursor-pointer group">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+        aria-label={label}
+        className="sr-only peer"
+      />
+      <CheckboxIndicator checked={checked} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
+      <span className="inline-flex items-center gap-1.5">{label}{hint ? <InfoIcon label={label} hint={hint} /> : null}{required && <span className="text-[#dc2626] ml-0.5">*</span>}</span>
+    </label>
+  );
+}
+
+function TopicRadioGroup({
+  label,
+  hint,
+  value,
+  onChange,
+  options,
+  required = false,
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: BehaviourOptionPair[];
+  required?: boolean;
+}) {
+  const groupName = useId();
+  return (
+    <div className="flex flex-col gap-1.5">
+      <TopicFieldLabel required={required} hint={hint}>{label}</TopicFieldLabel>
+      <div className="flex flex-col gap-1.5">
+        {options.map((option) => (
+          <label key={option.value} className="flex items-center gap-1.5 text-[13px] text-[#111827] cursor-pointer">
+            <input
+              type="radio"
+              name={groupName}
+              checked={value === option.value}
+              onChange={() => onChange(option.value)}
+              className="h-3.5 w-3.5 shrink-0 border-[#cbd5e1] text-[#2d6fa8] focus:ring-[#2d6fa8]"
+            />
+            <span>{option.label}</span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// HSV <-> hex conversions for the gradient/hue picker (matches the old tool's
+// spectrum.js colour model), used by TopicColorField's expanded "more" view.
+function hexToRgb(hex: string): [number, number, number] | null {
+  const m = /^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec((hex || "").trim());
+  if (!m) return null;
+  let h = m[1];
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  const num = parseInt(h, 16);
+  return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  const clamp = (n: number) => Math.max(0, Math.min(255, Math.round(n)));
+  return "#" + [r, g, b].map((n) => clamp(n).toString(16).padStart(2, "0")).join("");
+}
+
+function rgbToHsv(r: number, g: number, b: number): { h: number; s: number; v: number } {
+  const rn = r / 255, gn = g / 255, bn = b / 255;
+  const max = Math.max(rn, gn, bn), min = Math.min(rn, gn, bn);
+  const d = max - min;
+  let h = 0;
+  if (d !== 0) {
+    if (max === rn) h = ((gn - bn) / d) % 6;
+    else if (max === gn) h = (bn - rn) / d + 2;
+    else h = (rn - gn) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  const s = max === 0 ? 0 : d / max;
+  return { h, s: s * 100, v: max * 100 };
+}
+
+function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
+  const sn = s / 100, vn = v / 100;
+  const c = vn * sn;
+  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+  const m = vn - c;
+  let [r, g, b] = [0, 0, 0];
+  if (h < 60) [r, g, b] = [c, x, 0];
+  else if (h < 120) [r, g, b] = [x, c, 0];
+  else if (h < 180) [r, g, b] = [0, c, x];
+  else if (h < 240) [r, g, b] = [0, x, c];
+  else if (h < 300) [r, g, b] = [x, 0, c];
+  else [r, g, b] = [c, 0, x];
+  return [(r + m) * 255, (g + m) * 255, (b + m) * 255];
+}
+
+function hexToHsv(hex: string): { h: number; s: number; v: number } {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return { h: 0, s: 0, v: 0 };
+  return rgbToHsv(...rgb);
+}
+
+function hsvToHex(h: number, s: number, v: number): string {
+  return rgbToHex(...hsvToRgb(h, s, v));
+}
+
+function TopicColorField({
+  label,
+  hint,
+  value,
+  onChange,
+  paletteRows = [],
+}: {
+  label: string;
+  hint?: string;
+  value: string;
+  onChange: (value: string) => void;
+  paletteRows?: readonly (readonly string[])[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [showMore, setShowMore] = useState(false);
+  const [hsv, setHsv] = useState(() => hexToHsv(value || "#000000"));
+  const [hexDraft, setHexDraft] = useState(value || "");
+  const [popoverPos, setPopoverPos] = useState({ top: 0, left: 0 });
+  const originalValueRef = useRef(value);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
+  const squareRef = useRef<HTMLDivElement>(null);
+  const hueRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef<"square" | "hue" | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setHsv(hexToHsv(value || "#000000"));
+      setHexDraft(value || "");
+    }
+  }, [value, open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDown(e: MouseEvent) {
+      if (popoverRef.current?.contains(e.target as Node) || triggerRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  // Live-updates onChange on every drag step (matches the old tool's
+  // move.spectrum event, which pushes colour changes straight to the preview).
+  useEffect(() => {
+    if (!open) return;
+    function updateFromPoint(clientX: number, clientY: number) {
+      if (draggingRef.current === "square" && squareRef.current) {
+        const rect = squareRef.current.getBoundingClientRect();
+        const s = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * 100;
+        const v = 100 - Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)) * 100;
+        setHsv((prev) => {
+          const next = { ...prev, s, v };
+          const hex = hsvToHex(next.h, next.s, next.v);
+          setHexDraft(hex);
+          onChange(hex);
+          return next;
+        });
+      } else if (draggingRef.current === "hue" && hueRef.current) {
+        const rect = hueRef.current.getBoundingClientRect();
+        const h = Math.max(0, Math.min(1, (clientY - rect.top) / rect.height)) * 360;
+        setHsv((prev) => {
+          const next = { ...prev, h };
+          const hex = hsvToHex(next.h, next.s, next.v);
+          setHexDraft(hex);
+          onChange(hex);
+          return next;
+        });
+      }
+    }
+    function onMove(e: MouseEvent) { if (draggingRef.current) updateFromPoint(e.clientX, e.clientY); }
+    function onUp() { draggingRef.current = null; }
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+  }, [open, onChange]);
+
+  function openPicker() {
+    originalValueRef.current = value;
+    setHsv(hexToHsv(value || "#000000"));
+    setHexDraft(value || "");
+    setShowMore(false);
+    setOpen((o) => !o);
+  }
+
+  function cancelSelection() {
+    onChange(originalValueRef.current);
+    setOpen(false);
+  }
+
+  function commitHexDraft(raw: string) {
+    const v = raw.trim();
+    if (/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(v)) {
+      setHsv(hexToHsv(v));
+      onChange(v);
+    }
+  }
+
+  const isEmpty = !value;
+  const currentHex = hsvToHex(hsv.h, hsv.s, hsv.v);
+  const checkerStyle: React.CSSProperties = {
+    backgroundImage: "linear-gradient(45deg,#ccc 25%,transparent 25%),linear-gradient(-45deg,#ccc 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#ccc 75%),linear-gradient(-45deg,transparent 75%,#ccc 75%)",
+    backgroundSize: "8px 8px",
+    backgroundPosition: "0 0,0 4px,4px -4px,-4px 0",
+  };
+
+  // Measures the popover's actual rendered size (varies with paletteRows
+  // width and the "more" gradient/hue picker) and clamps it inside the
+  // viewport — a hardcoded width guess previously chopped wider palettes.
+  useLayoutEffect(() => {
+    if (!open) return;
+    const rect = triggerRef.current?.getBoundingClientRect();
+    const popoverWidth = popoverRef.current?.offsetWidth ?? 0;
+    if (!rect) return;
+    const top = rect.bottom + 4;
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - popoverWidth - 8));
+    setPopoverPos({ top, left });
+  }, [open, showMore, paletteRows]);
+
+  return (
+    <div className="flex flex-col gap-1">
+      <TopicFieldLabel hint={hint}>{label}</TopicFieldLabel>
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={openPicker}
+        aria-label={`Pick ${label}`}
+        className="w-10 h-10 rounded-md border-2 border-[#e5e7eb] hover:border-[var(--life-primary-500)] transition-colors relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#2d6fa8]"
+        style={isEmpty ? checkerStyle : { backgroundColor: value }}
+      >
+        {isEmpty && (
+          <svg className="absolute inset-0 m-auto text-[#9ca3af]" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        )}
+      </button>
+
+      {open && createPortal(
+        <div
+          ref={popoverRef}
+          className="fixed z-[100] bg-white border border-[#d1d5db] rounded-lg shadow-xl overflow-hidden"
+          style={{ ...popoverPos, maxWidth: "calc(100vw - 16px)" }}
+        >
+          <div className="flex">
+            {showMore && (
+              <div className="p-2 flex gap-1.5">
+                {/* Saturation/value gradient square */}
+                <div
+                  ref={squareRef}
+                  className="relative w-[140px] h-[140px] rounded cursor-crosshair shrink-0"
+                  style={{
+                    backgroundColor: hsvToHex(hsv.h, 100, 100),
+                    backgroundImage:
+                      "linear-gradient(to top, #000, rgba(0,0,0,0)), linear-gradient(to right, #fff, rgba(255,255,255,0))",
+                  }}
+                  onMouseDown={(e) => {
+                    draggingRef.current = "square";
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const s = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * 100;
+                    const v = 100 - Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)) * 100;
+                    setHsv((prev) => {
+                      const next = { ...prev, s, v };
+                      const hex = hsvToHex(next.h, next.s, next.v);
+                      setHexDraft(hex);
+                      onChange(hex);
+                      return next;
+                    });
+                  }}
+                >
+                  <div
+                    className="absolute w-3 h-3 rounded-full border-2 border-white shadow -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+                    style={{ left: `${hsv.s}%`, top: `${100 - hsv.v}%`, backgroundColor: currentHex }}
+                  />
+                </div>
+                {/* Hue slider */}
+                <div
+                  ref={hueRef}
+                  className="relative w-[14px] h-[140px] rounded cursor-pointer shrink-0"
+                  style={{ backgroundImage: "linear-gradient(to bottom, red, yellow, lime, cyan, blue, magenta, red)" }}
+                  onMouseDown={(e) => {
+                    draggingRef.current = "hue";
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const h = Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)) * 360;
+                    setHsv((prev) => {
+                      const next = { ...prev, h };
+                      const hex = hsvToHex(next.h, next.s, next.v);
+                      setHexDraft(hex);
+                      onChange(hex);
+                      return next;
+                    });
+                  }}
+                >
+                  <div
+                    className="absolute left-0 right-0 h-1 border border-white shadow -translate-y-1/2 pointer-events-none"
+                    style={{ top: `${(hsv.h / 360) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* Palette grid */}
+            {paletteRows.length > 0 && (
+              <div className="p-1.5">
+                {paletteRows.map((row, ri) => (
+                  <div key={ri} className="flex gap-1 mb-1 last:mb-0">
+                    {row.map((colour) => (
+                      <button
+                        key={colour}
+                        type="button"
+                        title={colour}
+                        onClick={() => { onChange(colour); setOpen(false); }}
+                        className="w-8 h-8 hover:scale-110 transition-transform focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] rounded-full border border-[#e5e7eb]"
+                        style={{ backgroundColor: colour }}
+                        aria-label={colour}
+                      />
+                    ))}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setShowMore((v) => !v)}
+                  className="w-full text-right px-1 pt-1 text-xs text-[#374151] hover:text-[#111827] transition-colors"
+                >
+                  {showMore ? "less" : "more"}
+                </button>
+              </div>
+            )}
+          </div>
+
+          {showMore && (
+            <div className="p-2 flex flex-col gap-2 border-t border-[#e5e7eb]">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  title={originalValueRef.current || "none"}
+                  onClick={() => commitHexDraft(originalValueRef.current || "#000000")}
+                  className="w-7 h-7 rounded border border-[#e5e7eb] shrink-0 relative overflow-hidden"
+                  style={originalValueRef.current ? { backgroundColor: originalValueRef.current } : checkerStyle}
+                  aria-label="Revert to previous colour"
+                />
+                <button
+                  type="button"
+                  className="w-7 h-7 rounded border border-[#e5e7eb] shrink-0 relative overflow-hidden"
+                  style={value ? { backgroundColor: value } : checkerStyle}
+                  aria-label="Current colour"
+                />
+                <input
+                  type="text"
+                  value={hexDraft}
+                  onChange={(e) => setHexDraft(e.target.value)}
+                  onBlur={(e) => commitHexDraft(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") commitHexDraft((e.target as HTMLInputElement).value); }}
+                  maxLength={7}
+                  placeholder="#000000"
+                  className="flex-1 border border-[#e5e7eb] rounded px-1.5 py-1 text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-[#2d6fa8]"
+                />
+              </div>
+              <button
+                type="button"
+                onClick={cancelSelection}
+                className="w-full px-2 py-1 text-[11px] border border-[#e5e7eb] rounded text-[#374151] hover:bg-[#f9fafb] transition-colors"
+              >
+                Cancel selection
+              </button>
+            </div>
+          )}
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+
+function ExternalAssetModal({
+  open,
+  title,
+  initialValue,
+  onCancel,
+  onSave,
+}: {
+  open: boolean;
+  title: string;
+  initialValue: string;
+  onCancel: () => void;
+  onSave: (value: string) => void;
+}) {
+  const [value, setValue] = useState(initialValue);
+
+  useEffect(() => {
+    if (open) {
+      setValue(initialValue);
+    }
+  }, [initialValue, open]);
+
+  if (!open) return null;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 px-4" onClick={onCancel}>
+      <div className="w-full max-w-xl rounded-2xl border border-[var(--life-neutral-200)] bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-[var(--life-neutral-200)] flex items-center justify-between">
+          <h3 className="text-[15px] font-bold text-[var(--life-base-black)]">{title}</h3>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="w-7 h-7 rounded-md border border-[var(--life-neutral-200)] text-[var(--life-neutral-500)] hover:bg-[var(--life-neutral-050)] flex items-center justify-center cursor-pointer"
+            aria-label="Close external asset dialog"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div className="px-5 py-4 flex flex-col gap-3">
+          <label className="text-sm font-semibold text-[#374151]">External asset URL</label>
+          <input
+            type="url"
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            placeholder="https://example.com/image.png"
+            className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
+          />
+          <p className="text-[13px] text-[var(--life-neutral-300)]">Paste an absolute URL to use an externally hosted image.</p>
+        </div>
+        <div className="px-5 py-4 border-t border-[var(--life-neutral-200)] flex items-center justify-end gap-2.5">
+          <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors cursor-pointer">Cancel</button>
+          <button type="button" onClick={() => onSave(value.trim())} className="px-4 py-2 text-sm font-medium text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors cursor-pointer">Save External Asset</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+// Matches the legacy Authoring Tool's "Save as template" popup — same fields
+// (name, description, share with all users / share with specific users),
+// same dynamic "Save {level} template" title/placeholders — in this UI's own
+// modal chrome. Level-specific wiring/labelling happens at the call site;
+// this component only collects the inputs and hands them back on Done.
+function SaveAsTemplateModal({
+  levelLabel,
+  isSaving,
+  errorMessage,
+  onDone,
+  onCancel,
+}: {
+  levelLabel: string;
+  isSaving: boolean;
+  errorMessage: string | null;
+  onDone: (data: { title: string; description: string; isShared: boolean; shareWithUsers: string[] }) => void;
+  onCancel: () => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [isShared, setIsShared] = useState(false);
+  const [collaborators, setCollaborators] = useState<{ userId: string; email: string }[]>([]);
+  const [emailInput, setEmailInput] = useState("");
+  const [emailSuggestions, setEmailSuggestions] = useState<UserSummary[]>([]);
+  const searchRequestIdRef = useRef(0);
+
+  useEffect(() => {
+    const query = emailInput.trim();
+    if (!query || isShared) {
+      setEmailSuggestions([]);
+      return;
+    }
+    const requestId = ++searchRequestIdRef.current;
+    const timer = window.setTimeout(async () => {
+      const results = await searchUsersByEmailQuery(query);
+      if (searchRequestIdRef.current !== requestId) return;
+      setEmailSuggestions(results.filter((user) => !collaborators.some((c) => c.userId === user._id)));
+    }, 300);
+    return () => window.clearTimeout(timer);
+  }, [emailInput, isShared, collaborators]);
+
+  const addCollaborator = (user: UserSummary) => {
+    setCollaborators((prev) => (prev.some((c) => c.userId === user._id) ? prev : [...prev, { userId: user._id, email: user.email }]));
+    setEmailInput("");
+    setEmailSuggestions([]);
+  };
+  const removeCollaborator = (userId: string) => {
+    setCollaborators((prev) => prev.filter((c) => c.userId !== userId));
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/50 px-4" onClick={onCancel}>
+      <div className="w-full max-w-xl rounded-2xl border border-[var(--life-neutral-200)] bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-[var(--life-neutral-200)] flex items-center justify-between">
+          <h3 className="text-[15px] font-bold text-[var(--life-base-black)]">Save {levelLabel} template</h3>
+          <button
+            type="button"
+            onClick={onCancel}
+            className="w-7 h-7 rounded-md border border-[var(--life-neutral-200)] text-[var(--life-neutral-500)] hover:bg-[var(--life-neutral-050)] flex items-center justify-center cursor-pointer"
+            aria-label="Close save template dialog"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div className="px-5 py-4 flex flex-col gap-3 max-h-[65vh] overflow-y-auto">
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-semibold text-[#374151]">Name of template</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder={`Name for the ${levelLabel} template`}
+              className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-semibold text-[#374151]">Description</label>
+            <input
+              type="text"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder={`Description for the ${levelLabel} template`}
+              className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
+            />
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer select-none group">
+            <input
+              type="checkbox"
+              checked={isShared}
+              onChange={(event) => setIsShared(event.target.checked)}
+              aria-label="Share with all users"
+              className="sr-only peer"
+            />
+            <CheckboxIndicator checked={isShared} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
+            <span className="text-sm font-semibold text-[#374151]">Share with all users</span>
+          </label>
+          <p className="text-[12px] text-[var(--life-neutral-300)] -mt-1">
+            Controls whether colleagues can see this template from the "Shared Templates" filter.
+          </p>
+          {!isShared && (
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-semibold text-[#374151]">Share with specific users</label>
+              <input
+                type="text"
+                value={emailInput}
+                onChange={(event) => setEmailInput(event.target.value)}
+                placeholder="Search by email"
+                className="w-full border border-[#d1d5db] rounded-[8px] px-3 py-2 text-sm text-[#374151] focus:outline-none focus:ring-2 focus:ring-[#2d6fa8] focus:border-transparent"
+              />
+              {emailSuggestions.length > 0 && (
+                <div className="border border-[#d1d5db] rounded-[8px] divide-y divide-[#e5e7eb] max-h-32 overflow-y-auto">
+                  {emailSuggestions.map((user) => (
+                    <button
+                      key={user._id}
+                      type="button"
+                      onClick={() => addCollaborator(user)}
+                      className="w-full text-left px-3 py-1.5 text-[13px] text-[#374151] hover:bg-[#f9fafb] cursor-pointer"
+                    >
+                      {user.email}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {collaborators.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {collaborators.map((collaborator) => (
+                    <span
+                      key={collaborator.userId}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#eef2f6] text-[12px] text-[#374151]"
+                    >
+                      {collaborator.email}
+                      <button
+                        type="button"
+                        onClick={() => removeCollaborator(collaborator.userId)}
+                        className="text-[#9ca3af] hover:text-[#374151] cursor-pointer"
+                        aria-label={`Remove ${collaborator.email}`}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {errorMessage && <p className="text-[13px] text-[#b42318]">{errorMessage}</p>}
+        </div>
+        <div className="px-5 py-4 border-t border-[var(--life-neutral-200)] flex items-center justify-end gap-2.5">
+          <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors cursor-pointer">
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={isSaving || !title.trim()}
+            onClick={() => onDone({ title, description, isShared, shareWithUsers: collaborators.map((c) => c.userId) })}
+            className="px-4 py-2 text-sm font-medium text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isSaving ? "Saving…" : "Done"}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function cloneContentPages(pages: ContentPageData[]): ContentPageData[] {
+  return JSON.parse(JSON.stringify(pages)) as ContentPageData[];
+}
+
+function toComponentType(componentKey: string): ComponentType {
+  switch (componentKey.toLowerCase()) {
+    case "image":
+      return "Image";
+    case "video":
+      return "Video";
+    case "accordion":
+      return "Accordion";
+    case "quiz":
+    case "mcq":
+      return "Quiz";
+    case "text":
+    default:
+      return "Text";
+  }
+}
+
+function mapStructureToPages(
+  structure: Awaited<ReturnType<typeof getCourseStructure>>
+): ContentPageData[] {
+  const pages: ContentPageData[] = [];
+
+  const pushTopic = (topic: {
+    id: string;
+    title: string;
+    description?: string;
+    subtitle?: string;
+    body?: string;
+    pageBody?: string;
+    instruction?: string;
+    colorLabel?: string;
+    graphic?: {
+      src?: string;
+      alt?: string;
+    };
+    themeSettings?: Record<string, unknown>;
+    menuSettings?: Record<string, unknown>;
+    linkText?: string;
+    duration?: string;
+    lockType?: string;
+    lockedBy?: string[];
+    classes?: string;
+    htmlClasses?: string;
+    requireCompletionOf?: string;
+    isOptional?: boolean;
+    isAvailable?: boolean;
+    isHidden?: boolean;
+    isVisible?: boolean;
+    onScreen?: TopicOnScreenSettings;
+    ariaLevel?: string;
+    isA11yCompletionDescriptionEnabled?: boolean;
+    extensions?: Record<string, unknown>;
+    displayTitle?: string;
+    sections: Array<{
+      id: string;
+      title: string;
+      displayTitle?: string;
+      description?: string;
+      instruction?: string;
+      themeSettings?: Record<string, unknown>;
+      classes?: string;
+      colorLabel?: string;
+      requireCompletionOf?: string;
+      isOptional?: boolean;
+      isAvailable?: boolean;
+      isHidden?: boolean;
+      isVisible?: boolean;
+      onScreen?: {
+        _isEnabled?: boolean;
+        _classes?: string;
+        _percentInviewVertical?: number;
+      };
+      ariaLevel?: string;
+      isA11yCompletionDescriptionEnabled?: boolean;
+      extensions?: Record<string, unknown>;
+      contentGroups: Array<{
+        id: string;
+        title: string;
+        displayTitle?: string;
+        description?: string;
+        instruction?: string;
+        themeSettings?: Record<string, unknown>;
+        classes?: string;
+        colorLabel?: string;
+        requireCompletionOf?: string;
+        isOptional?: boolean;
+        isAvailable?: boolean;
+        isHidden?: boolean;
+        isVisible?: boolean;
+        onScreen?: {
+          _isEnabled?: boolean;
+          _classes?: string;
+          _percentInviewVertical?: number;
+        };
+        ariaLevel?: string;
+        isA11yCompletionDescriptionEnabled?: boolean;
+        extensions?: Record<string, unknown>;
+          components: Array<{
+            id: string;
+            title: string;
+            componentKey: string;
+            layout?: "full" | "left" | "right";
+            description?: string;
+            instruction?: string;
+            subtitle?: string;
+            themeSettings?: Record<string, unknown>;
+            properties?: Record<string, unknown>;
+            url?: string;
+            classes?: string;
+            colorLabel?: string;
+            isOptional?: boolean;
+            isAvailable?: boolean;
+            isHidden?: boolean;
+            isVisible?: boolean;
+            isResetOnRevisit?: string;
+            ariaLevel?: string;
+            isA11yCompletionDescriptionEnabled?: boolean;
+            showDisplayTitleInPreview?: boolean;
+            onScreen?: {
+              _isEnabled?: boolean;
+              _classes?: string;
+              _percentInviewVertical?: number;
+            };
+            extensions?: Record<string, unknown>;
+          }>;
+      }>;
+    }>;
+  }) => {
+    const topicSubtitle = topic.subtitle || "";
+    const topicInstruction = topic.instruction || "";
+
+    pages.push({
+      id: topic.id,
+      title: topic.title || "Untitled Topic",
+      description: topic.description || "",
+      subtitle: topicSubtitle,
+      body: topic.body || "",
+      pageBody: topic.pageBody || "",
+      instruction: topicInstruction,
+      colorLabel: topic.colorLabel || "",
+      graphic: {
+        src: topic.graphic?.src || "",
+        alt: topic.graphic?.alt || "",
+      },
+      themeSettings: topic.themeSettings && typeof topic.themeSettings === "object"
+        ? topic.themeSettings as TopicThemeSettings
+        : {},
+      menuSettings: topic.menuSettings && typeof topic.menuSettings === "object"
+        ? topic.menuSettings as TopicMenuSettings
+        : {},
+      linkText: topic.linkText || "View",
+      duration: topic.duration || "",
+      lockType: topic.lockType || "",
+      lockedBy: Array.isArray(topic.lockedBy) ? topic.lockedBy : [],
+      classes: topic.classes || "",
+      htmlClasses: topic.htmlClasses || "",
+      requireCompletionOf: topic.requireCompletionOf || "-1",
+      isOptional: !!topic.isOptional,
+      isAvailable: topic.isAvailable !== false,
+      isHidden: !!topic.isHidden,
+      isVisible: topic.isVisible !== false,
+      onScreen: {
+        _isEnabled: !!topic.onScreen?._isEnabled,
+        _classes: topic.onScreen?._classes || "",
+        _percentInviewVertical:
+          typeof topic.onScreen?._percentInviewVertical === "number"
+            ? topic.onScreen._percentInviewVertical
+            : 50,
+      },
+      ariaLevel: topic.ariaLevel || "",
+      isA11yCompletionDescriptionEnabled: topic.isA11yCompletionDescriptionEnabled !== false,
+      extensions:
+        topic.extensions && typeof topic.extensions === "object"
+          ? topic.extensions
+          : {},
+      showDisplayTitleInPreview:
+        typeof topic.displayTitle === "string"
+          ? topic.displayTitle.trim().length > 0
+          : false,
+      subPages: [],
+      articles: topic.sections.map((section) => ({
+        id: section.id,
+        title: section.title || "Untitled Section",
+        description: section.description || "",
+        instruction: section.instruction || "",
+        themeSettings:
+          section.themeSettings && typeof section.themeSettings === "object"
+            ? section.themeSettings as TopicThemeSettings
+            : {},
+        isOptional: !!section.isOptional,
+        isAvailable: section.isAvailable !== false,
+        isHidden: !!section.isHidden,
+        isVisible: section.isVisible !== false,
+        requireCompletionOf: section.requireCompletionOf ?? "-1",
+        classes: section.classes || "",
+        colorLabel: section.colorLabel || "",
+        onScreen: {
+          _isEnabled: !!section.onScreen?._isEnabled,
+          _classes: section.onScreen?._classes || "",
+          _percentInviewVertical:
+            typeof section.onScreen?._percentInviewVertical === "number"
+              ? section.onScreen._percentInviewVertical
+              : 50,
+        },
+        ariaLevel: section.ariaLevel || "",
+        isA11yCompletionDescriptionEnabled: section.isA11yCompletionDescriptionEnabled !== false,
+        extensions: section.extensions ?? {},
+        showDisplayTitleInPreview:
+          typeof section.displayTitle === "string"
+            ? section.displayTitle.trim().length > 0
+            : false,
+        blocks: section.contentGroups.map((group) => ({
+          id: group.id,
+          title: group.title || "Untitled Content Group",
+          description: group.description || "",
+          instruction: group.instruction || "",
+          themeSettings:
+            group.themeSettings && typeof group.themeSettings === "object"
+              ? group.themeSettings as TopicThemeSettings
+              : {},
+          isOptional: !!group.isOptional,
+          isAvailable: group.isAvailable !== false,
+          isHidden: !!group.isHidden,
+          isVisible: group.isVisible !== false,
+          requireCompletionOf: group.requireCompletionOf ?? "-1",
+          classes: group.classes || "",
+          colorLabel: group.colorLabel || "",
+          onScreen: {
+            _isEnabled: !!group.onScreen?._isEnabled,
+            _classes: group.onScreen?._classes || "",
+            _percentInviewVertical:
+              typeof group.onScreen?._percentInviewVertical === "number"
+                ? group.onScreen._percentInviewVertical
+                : 50,
+          },
+          ariaLevel: group.ariaLevel || "",
+          isA11yCompletionDescriptionEnabled: group.isA11yCompletionDescriptionEnabled !== false,
+          extensions: group.extensions ?? {},
+          showDisplayTitleInPreview:
+            typeof group.displayTitle === "string"
+              ? group.displayTitle.trim().length > 0
+              : false,
+          components: group.components.map((component) => ({
+            id: component.id,
+            type: toComponentType(component.componentKey),
+            layout: component.layout,
+            settings: {
+              title: component.title || "",
+              description: component.description || "",
+              instruction:
+                component.instruction ||
+                (typeof component.properties?.instruction === "string"
+                  ? component.properties.instruction
+                  : ""),
+              subtitle:
+                component.subtitle ||
+                (typeof component.properties?.subtitle === "string"
+                  ? component.properties.subtitle
+                  : ""),
+              properties:
+                component.properties && typeof component.properties === "object"
+                  ? component.properties
+                  : {},
+              url: component.url || "",
+              componentKey: component.componentKey,
+            },
+            themeSettings:
+              component.themeSettings && typeof component.themeSettings === "object"
+                ? component.themeSettings as TopicThemeSettings
+                : {},
+            classes: component.classes || "",
+            colorLabel: component.colorLabel || "",
+            isOptional: !!component.isOptional,
+            isAvailable: component.isAvailable !== false,
+            isHidden: !!component.isHidden,
+            isVisible: component.isVisible !== false,
+            isResetOnRevisit: component.isResetOnRevisit || "false",
+            ariaLevel: component.ariaLevel || "",
+            isA11yCompletionDescriptionEnabled: component.isA11yCompletionDescriptionEnabled !== false,
+            showDisplayTitleInPreview: !!component.showDisplayTitleInPreview,
+            onScreen: {
+              _isEnabled: !!component.onScreen?._isEnabled,
+              _classes: component.onScreen?._classes || "",
+              _percentInviewVertical:
+                typeof component.onScreen?._percentInviewVertical === "number"
+                  ? component.onScreen._percentInviewVertical
+                  : 50,
+            },
+            extensions:
+              component.extensions && typeof component.extensions === "object"
+                ? component.extensions
+                : {},
+          })),
+        })),
+      })),
+    });
+  };
+
+  const walkModule = (module: {
+    modules: Array<any>;
+    topics: Array<any>;
+  }) => {
+    module.topics.forEach(pushTopic);
+    module.modules.forEach(walkModule);
+  };
+
+  structure.topics.forEach(pushTopic);
+  structure.modules.forEach(walkModule);
+
+  return pages;
+}
+
+export type ComponentType = "Image" | "Video" | "Accordion" | "Text" | "Quiz";
+
+export interface ComponentData {
+  id: string;
+  type: ComponentType;
+  layout?: "full" | "left" | "right";
+  themeSettings: TopicThemeSettings;
+  settings: {
+    title?: string;
+    description?: string;
+    subtitle?: string;
+    properties?: Record<string, unknown>;
+    url?: string;
+    [key: string]: any;
+  };
+  classes: string;
+  colorLabel: string;
+  isOptional: boolean;
+  isAvailable: boolean;
+  isHidden: boolean;
+  isVisible: boolean;
+  isResetOnRevisit: string;
+  ariaLevel: string;
+  isA11yCompletionDescriptionEnabled: boolean;
+  showDisplayTitleInPreview: boolean;
+  onScreen: TopicOnScreenSettings;
+  extensions: Record<string, unknown>;
+}
+
+export interface BlockData {
+  id: string;
+  title: string;
+  description: string;
+  instruction: string;
+  themeSettings: TopicThemeSettings;
+  components: ComponentData[];
+  isOptional: boolean;
+  isAvailable: boolean;
+  isHidden: boolean;
+  isVisible: boolean;
+  requireCompletionOf: string;
+  classes: string;
+  colorLabel: string;
+  onScreen: TopicOnScreenSettings;
+  ariaLevel: string;
+  isA11yCompletionDescriptionEnabled: boolean;
+  extensions: Record<string, unknown>;
+  showDisplayTitleInPreview: boolean;
+}
+
+export interface ArticleData {
+  id: string;
+  title: string;
+  description: string;
+  instruction: string;
+  themeSettings: TopicThemeSettings;
+  blocks: BlockData[];
+  isOptional: boolean;
+  isAvailable: boolean;
+  isHidden: boolean;
+  isVisible: boolean;
+  requireCompletionOf: string;
+  classes: string;
+  colorLabel: string;
+  onScreen: TopicOnScreenSettings;
+  ariaLevel: string;
+  isA11yCompletionDescriptionEnabled: boolean;
+  extensions: Record<string, unknown>;
+  showDisplayTitleInPreview: boolean;
+}
+
+export interface SubPageData {
+  id: string;
+  title: string;
+  description: string;
+}
+
+export interface ContentPageData {
+  id: string;
+  title: string;
+  description: string;
+  subtitle: string;
+  body: string;
+  // contentobject.pageBody — shown on the page view instead of `body` when set.
+  pageBody: string;
+  instruction: string;
+  colorLabel: string;
+  graphic: TopicGraphicSettings;
+  themeSettings: TopicThemeSettings;
+  menuSettings: TopicMenuSettings;
+  linkText: string;
+  duration: string;
+  lockType: string;
+  lockedBy: string[];
+  classes: string;
+  htmlClasses: string;
+  requireCompletionOf: string;
+  isOptional: boolean;
+  isAvailable: boolean;
+  isHidden: boolean;
+  isVisible: boolean;
+  onScreen: TopicOnScreenSettings;
+  ariaLevel: string;
+  isA11yCompletionDescriptionEnabled: boolean;
+  extensions: Record<string, unknown>;
+  showDisplayTitleInPreview: boolean;
+  articles: ArticleData[];
+  subPages: SubPageData[];
+}
+
+type PreviewHoverState = {
+  pageId: string | null;
+  articleId: string | null;
+  blockId: string | null;
+  componentId: string | null;
+  level: "menu" | "topic" | "section" | "group" | "component" | null;
+};
+
+type SelectionSource = "leftPanel" | "preview" | "internal";
+
+type PendingPreviewScrollTarget = {
+  level: "menu" | "topic" | "section" | "group" | "component";
+  id: string | null;
+};
+
+const DEFAULT_TOPIC_ACCORDIONS: Record<string, boolean> = {
+  general: true,
+  availability: false,
+  accessibility: false,
+  extensions: false,
+  theme: false,
+  menu: false,
+  media: false,
+  advanced: false,
+};
+
+const DEFAULT_SECTION_ACCORDIONS: Record<string, boolean> = {
+  general: true,
+  availability: false,
+  accessibility: false,
+  extensions: false,
+  theme: false,
+  advanced: false,
+};
+
+const DEFAULT_BLOCK_ACCORDIONS: Record<string, boolean> = {
+  general: true,
+  availability: false,
+  accessibility: false,
+  extensions: false,
+  theme: false,
+  advanced: false,
+};
+
+const DEFAULT_COMPONENT_ACCORDIONS: Record<string, boolean> = {
+  general: true,
+  behaviour: false,
+  availability: false,
+  accessibility: false,
+  extensions: false,
+  theme: false,
+  advanced: false,
+};
+
+// Every component template renders its interactive body — the items of an
+// items-array component included — inside `.component__widget`, while the
+// title/body/instruction that General owns sit outside it. Keying off that
+// one shared wrapper is what makes the Behaviour-on-widget-click rule work
+// for all components rather than per-component class lists.
+const PREVIEW_COMPONENT_WIDGET_SELECTOR = ".component__widget";
+
+// Room the hover/selection outline needs outside a level's box: its
+// `outline-offset: 2px` plus the 1px line itself, rounded up.
+const PREVIEW_OUTLINE_RING_PX = 4;
+
+const ALL_COMPONENT_ACCORDIONS_CLOSED: Record<string, boolean> = Object.fromEntries(
+  Object.keys(DEFAULT_COMPONENT_ACCORDIONS).map((key) => [key, false])
+);
+
+// Matches the legacy Authoring Tool's dynamic "Save {level} template" popup
+// title/placeholders — only the naming differs (Topic vs. its old "Page").
+const SAVE_TEMPLATE_LEVEL_LABELS: Record<"topic" | "section" | "group" | "component", string> = {
+  topic: "Topic",
+  section: "Section",
+  group: "Content Group",
+  component: "Component",
+};
+
+// Matches the theme's own _paddingTop/_paddingBottom enum (theme
+// properties.schema, pluginLocations.block) exactly — these are persisted
+// values, not display labels.
+const SPACING_OPTIONS = ["default", "double", "standard", "half", "remove"] as const;
+const VERTICAL_ALIGN_OPTIONS = ["top", "center", "bottom"] as const;
+const HORIZONTAL_ALIGN_OPTIONS = ["left", "center", "right"] as const;
+
+interface CourseEditorProps {
+  courseId?: string;
+  initialTitle?: string;
+  initialDescription?: string;
+  initialTheme?: string;
+  initialMenu?: string;
+  initialPageId?: string;
+}
+
+export default function CourseEditor({
+  courseId = "new-course",
+  initialTitle = "Untitled Course",
+  initialDescription = "",
+  initialTheme = "LIFE Theme",
+  initialMenu = "LIFE Menu",
+  initialPageId,
+}: CourseEditorProps) {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [leftPanelOpen, setLeftPanelOpen] = useState(true);
+  const [courseTitle, setCourseTitle] = useState(initialTitle);
+  const [courseDescription] = useState(initialDescription);
+  // initialTheme/initialMenu arrive via React Router navigation state
+  // (passed by whichever screen linked into the editor) and are only ever
+  // used as an instant-paint HINT, never trusted as the final answer - they
+  // can be MISSING entirely (a direct URL load, hard refresh, or bookmarked
+  // link has no location.state at all) or STALE (real, but from whenever
+  // this editor tab was originally opened - if the course's applied theme
+  // was later changed via Course Settings in a DIFFERENT tab/session, or the
+  // user simply navigated in a while ago, router state never refreshes on
+  // its own). Since theme-settings key resolution, colour palettes, and
+  // isThemeFieldSupported gating all key off this value, either case
+  // silently breaks all of them. Always self-correct against the course's
+  // REAL current config (same source CoursePreviewPage.tsx already uses) -
+  // this can only ever replace an initial guess with the true value, never
+  // the other way round.
+  const [courseTheme, setCourseTheme] = useState(initialTheme);
+  const [courseMenu, setCourseMenu] = useState(initialMenu);
+  useEffect(() => {
+    if (!courseId || courseId === "new-course") return;
+    let cancelled = false;
+    void getCourseBootstrapData(courseId)
+      .then((data) => {
+        if (cancelled) return;
+        if (data.themeName) setCourseTheme(data.themeName);
+        if (data.menuName) setCourseMenu(data.menuName);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // Only ever re-runs if the course itself changes - courseTheme/courseMenu
+    // are corrected exactly once per course load, not on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId]);
+
+  const [menuPageCreated, setMenuPageCreated] = useState(false);
+  const [menuSelected, setMenuSelected] = useState(false);
+  const [rightPanelOpen, setRightPanelOpen] = useState(false);
+  const [rightPanelWidth, setRightPanelWidth] = useState(RIGHT_PANEL_MIN_WIDTH);
+  const [isResizingRightPanel, setIsResizingRightPanel] = useState(false);
+  const [rightPanelType, setRightPanelType] = useState<"menu" | "page" | "subpage" | "article" | "block" | "component" | "addComponent" | "structure">("menu");
+  const [showStructureMap, setShowStructureMap] = useState(false);
+  const [menuData, setMenuData] = useState<MenuPageData>(defaultMenuPage);
+  const [courseStructure, setCourseStructure] = useState<CourseStructure | null>(null);
+  const [isLoadingStructure, setIsLoadingStructure] = useState(true);
+  const [structureLoadError, setStructureLoadError] = useState<string | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [dismissedStructureLoadError, setDismissedStructureLoadError] = useState<string | null>(null);
+  const [dismissedPreviewError, setDismissedPreviewError] = useState<string | null>(null);
+  const [titleValidationWarning, setTitleValidationWarning] = useState<string | null>(null);
+  // "Samaritan Assistance" triggered from a canvas body field's CKEditor
+  // toolbar button — the popover itself is this same React app's existing
+  // AiAssistPopover; only the editor instance it applies the result to lives
+  // in the iframe's realm (cross-realm method calls are fine, same-origin).
+  const [canvasSamaritanTarget, setCanvasSamaritanTarget] = useState<{ editor: any; seedText: string } | null>(null);
+  // Live text of the title currently being edited in the CANVAS, including
+  // transient blank states that are deliberately never committed to real
+  // state (see onInput's isBlankTitleValue guard) — the right panel's title
+  // field reads this in preference to the real value so it visually mirrors
+  // canvas edits keystroke-for-keystroke, exactly like the reverse direction.
+  // Only one node's title can be in-edit at a time, so no id-matching is
+  // needed: whichever TopicTitleField is mounted is for the selected node.
+  const [canvasTitleLiveOverride, setCanvasTitleLiveOverride] = useState<string | null>(null);
+  const [previewRefreshToken, setPreviewRefreshToken] = useState(0);
+  const [previewBuildVersion, setPreviewBuildVersion] = useState(0);
+  const [previewHoverState, setPreviewHoverState] = useState<PreviewHoverState>({
+    pageId: null,
+    articleId: null,
+    blockId: null,
+    componentId: null,
+    level: null,
+  });
+
+  const [contentPages, setContentPages] = useState<ContentPageData[]>([]);
+  // Read by applyPreviewSelectionStyles (hover hover-title-preview lookup)
+  // without adding contentPages to its own dependency array — that array
+  // deliberately only reacts to hover/selection id changes, not every
+  // keystroke, so it must read data via ref rather than closure capture.
+  const contentPagesRef = useRef(contentPages);
+  useEffect(() => {
+    contentPagesRef.current = contentPages;
+  }, [contentPages]);
+
+  // Which field the canvas body editor is bound to, latched per page for the
+  // whole editing session. Recomputing it per keystroke would silently switch
+  // targets the moment a pageBody override is emptied, so clearing an override
+  // would then overwrite `body` with the same edit.
+  const topicBodyTargetRef = useRef<{ pageId: string; target: "body" | "pageBody" } | null>(null);
+  const resolveTopicBodyTarget = useCallback((pageId: string): "body" | "pageBody" => {
+    const latched = topicBodyTargetRef.current;
+    if (latched?.pageId === pageId) return latched.target;
+    const page = contentPagesRef.current.find((candidate) => candidate.id === pageId);
+    const target: "body" | "pageBody" = page?.pageBody.trim() ? "pageBody" : "body";
+    topicBodyTargetRef.current = { pageId, target };
+    return target;
+  }, [courseId]);
+  const readTopicCanvasBody = useCallback(
+    (page: ContentPageData) => (resolveTopicBodyTarget(page.id) === "pageBody" ? page.pageBody : page.body),
+    [resolveTopicBodyTarget]
+  );
+  const topicCanvasBodyPatch = useCallback(
+    (pageId: string, html: string): Partial<ContentPageData> =>
+      resolveTopicBodyTarget(pageId) === "pageBody" ? { pageBody: html } : { body: html },
+    [resolveTopicBodyTarget]
+  );
+  const [selectedPageId, setSelectedPageId] = useState<string | null>(null);
+  const [selectedSubPageId, setSelectedSubPageId] = useState<string | null>(null);
+  const [selectedArticleId, setSelectedArticleId] = useState<string | null>(null);
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+  const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
+  const [hasCanvasSelection, setHasCanvasSelection] = useState(false);
+  const [savedContentPages, setSavedContentPages] = useState<ContentPageData[]>([]);
+  const [dirtyNodeKeys, setDirtyNodeKeys] = useState<Record<string, true>>({});
+  const [isSavingSelection, setIsSavingSelection] = useState(false);
+  const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
+  const [editorToast, setEditorToast] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
+  const [isPointerOverCanvas, setIsPointerOverCanvas] = useState(false);
+  const isPointerOverCanvasRef = useRef(false);
+  const pointerLeaveTimerRef = useRef<number | null>(null);
+  const [canvasDeleteTarget, setCanvasDeleteTarget] = useState<{    level: "topic" | "section" | "group" | "component";
+    pageId: string;
+    articleId: string | null;
+    blockId: string | null;
+    componentId: string | null;
+    name: string;
+  } | null>(null);
+  // Canvas Copy (Section/Content Group) — old-tool parity (editorView.js
+  // addToClipboard): a server-side clipboard-copy has been made, and the
+  // canvas is showing "Paste" zones at EVERY sibling gap (before the first,
+  // between each, after the last) in the copied node's own parent, until
+  // the user picks a slot or cancels.
+  const [clipboardEntry, setClipboardEntry] = useState<{
+    clipboardId: string;
+    structureLevel: "section" | "contentGroup";
+    pageId: string;
+    articleId: string | null;
+  } | null>(null);
+  const [topicClipboardEntry, setTopicClipboardEntry] = useState<{
+    clipboardId: string;
+    sourceTitle: string;
+  } | null>(null);
+  // handlePreviewFrameLoad's onClick closure is only re-created when the
+  // iframe itself reloads, so it never sees fresh clipboardEntry state from
+  // a later render — read the latest value via this ref instead.
+  const clipboardEntryRef = useRef(clipboardEntry);
+  useEffect(() => {
+    clipboardEntryRef.current = clipboardEntry;
+  }, [clipboardEntry]);
+  const [publishDialogPhase, setPublishDialogPhase] = useState<PublishCoursePhase | null>(null);
+  const [publishResult, setPublishResult] = useState<{ zipName?: string; downloadUrl?: string; message?: string }>({});
+  const [componentSubtitleSchemaSupport, setComponentSubtitleSchemaSupport] = useState<Record<string, boolean>>({});
+  const [componentInstructionSchemaSupport, setComponentInstructionSchemaSupport] = useState<Record<string, boolean>>({});
+  const [topicAssetPickerTarget, setTopicAssetPickerTarget] = useState<TopicAssetTarget | null>(null);
+  const [topicExternalAssetTarget, setTopicExternalAssetTarget] = useState<TopicExternalAssetTarget | null>(null);
+  const [saveTemplateTarget, setSaveTemplateTarget] = useState<{
+    level: "topic" | "section" | "group" | "component";
+    objectId: string;
+  } | null>(null);
+  const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+  const [saveTemplateError, setSaveTemplateError] = useState<string | null>(null);
+  const [copiedTopicId, setCopiedTopicId] = useState<string | null>(null);
+  const [copiedSectionId, setCopiedSectionId] = useState<string | null>(null);
+  const [copiedBlockId, setCopiedBlockId] = useState<string | null>(null);
+  const [copiedComponentId, setCopiedComponentId] = useState<string | null>(null);
+  const [openTopicAccordions, setOpenTopicAccordions] = useState<Record<string, boolean>>(DEFAULT_TOPIC_ACCORDIONS);
+  const [openSectionAccordions, setOpenSectionAccordions] = useState<Record<string, boolean>>(DEFAULT_SECTION_ACCORDIONS);
+  const [openBlockAccordions, setOpenBlockAccordions] = useState<Record<string, boolean>>(DEFAULT_BLOCK_ACCORDIONS);
+  const [openComponentAccordions, setOpenComponentAccordions] = useState<Record<string, boolean>>(DEFAULT_COMPONENT_ACCORDIONS);
+  const [componentBehaviourSchemas, setComponentBehaviourSchemas] = useState<Record<string, Record<string, unknown>>>({});
+  const [extensionSchemasByLevel, setExtensionSchemasByLevel] = useState<Record<ExtensionSchemaLevel, Record<string, ExtensionFieldSchema>> | null>(null);
+  const [courseExtensions, setCourseExtensions] = useState<Record<string, unknown>>({});
+  const [themeSettingsSchemaByLevel, setThemeSettingsSchemaByLevel] = useState<Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>> | null>(null);
+  const [menuSettingsSchemaByLevel, setMenuSettingsSchemaByLevel] = useState<Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>> | null>(null);
+  const [contentSchemaByLevel, setContentSchemaByLevel] = useState<{
+    contentobject: Record<string, unknown> | null;
+    article: Record<string, unknown> | null;
+    block: Record<string, unknown> | null;
+    component: Record<string, unknown> | null;
+  }>({
+    contentobject: null,
+    article: null,
+    block: null,
+    component: null,
+  });
+  const [componentExtensionSchemas, setComponentExtensionSchemas] = useState<Record<string, Record<string, ExtensionFieldSchema>>>({});
+  usePageLoader(isLoadingStructure);
+  const [extensionTypeOptions, setExtensionTypeOptions] = useState<ExtensionTypeOption[]>([]);
+  const [navFooterCourseButtons, setNavFooterCourseButtons] = useState<Record<NavFooterButtonKey, NavFooterButton> | null>(null);
+  const [courseAssetMappings, setCourseAssetMappings] = useState<Record<string, string>>({});
+  const [assetLinkIdMap, setAssetLinkIdMap] = useState<Record<string, string>>({});
+  // Read-only superset of the above: EVERY courseasset link in the course,
+  // including the component-scoped ones an import creates. Kept separate
+  // because courseAssetMappings also drives course-level link cleanup, which
+  // must not see component-owned links.
+  const [contentAssetIdMap, setContentAssetIdMap] = useState<Record<string, string>>({});
+  const liveSelectionRef = useRef({
+    hasCanvasSelection,
+    menuSelected,
+    selectedPageId,
+    selectedArticleId,
+    selectedBlockId,
+    selectedComponentId,
+  });
+  liveSelectionRef.current = {
+    hasCanvasSelection,
+    menuSelected,
+    selectedPageId,
+    selectedArticleId,
+    selectedBlockId,
+    selectedComponentId,
+  };
+  const structureLoadRequestIdRef = useRef(0);
+  const isMountedRef = useRef(true);
+  const pendingGuardedActionRef = useRef<(() => void) | null>(null);
+  const isInlineEditingRef = useRef(false);
+  // The title's committed value at the moment inline editing started — used to
+  // revert BOTH the canvas DOM and the underlying state if the edit session
+  // ends blank. onInput commits every non-blank keystroke live (so the right
+  // panel tracks canvas typing in real time), which means state can already
+  // hold an intermediate non-blank value (e.g. "N" from "New Topic 1" mid
+  // backspace) by the time the field goes fully blank — reverting to "current
+  // state" at that point would revert to that stale intermediate value, not
+  // the true pre-edit title. This ref preserves the real pre-edit value.
+  const titleEditOriginalValueRef = useRef<string | null>(null);
+  // Auto-revert timer for a title left blank in the canvas without blurring —
+  // mirrors the panel field's identical timeout so both surfaces behave the
+  // same: the warning stays up for TITLE_WARNING_DURATION_MS, then the title
+  // is restored automatically even if the user never leaves the field.
+  const titleAutoRevertTimeoutRef = useRef<number | null>(null);
+  // The iframe's course-preview SPA can still be mid-render for a moment
+  // after its own `load` event fires (or after a React selection/content
+  // update) — querying for the selected node's root can transiently miss it.
+  // Without a retry, the default initial selection (the topic, selected
+  // before the user has ever "changed" selection) can end up stuck
+  // non-editable until some later selection change happens to re-trigger a
+  // sync after the SPA has caught up. These back the bounded rAF retry in
+  // syncPreviewInlineEditors.
+  const inlineEditorSyncRetryFrameRef = useRef<number | null>(null);
+  const inlineEditorSyncRetryCountRef = useRef(0);
+  // Previous Behaviour text-field values for the currently selected
+  // component, keyed by path — lets syncPreviewTopicSettings diff old vs
+  // new value and find/replace the literal old text in the canvas, since
+  // component-specific fields (unlike title/body/instruction) have no fixed
+  // selector to patch directly. Reset whenever the selected component
+  // changes so a freshly-selected component doesn't diff against another
+  // component's stale values.
+  const previousBehaviourTextValuesRef = useRef<{ componentId: string | null; values: Record<string, string> }>({
+    componentId: null,
+    values: {},
+  });
+  const previousExtensionTextValuesRef = useRef<{ ownerKey: string | null; values: Record<string, string> }>({
+    ownerKey: null,
+    values: {},
+  });
+  // Previous Behaviour ASSET-field resolved URLs for the currently selected
+  // component, keyed by path — mirrors previousBehaviourTextValuesRef but
+  // for images. Diffing by the item's own previous src (rather than a
+  // generic class selector) is what lets an item array's Nth item update
+  // its OWN image, instead of always hitting the first image that matches
+  // a class shared by every item (e.g. every narrative slide's graphic).
+  const previousBehaviourAssetValuesRef = useRef<{ componentId: string | null; values: Record<string, string> }>({
+    componentId: null,
+    values: {},
+  });
+  // Watches the selected component's DOM for changes the real framework
+  // makes on its own — e.g. a narrative/accordion swapping which item is
+  // visible when its own nav/expand controls are clicked, which happens
+  // entirely inside the iframe with no React state change on our side to
+  // react to. Disconnected and recreated on every syncPreviewInlineEditors
+  // run so our OWN mutations (while it's disconnected) never re-trigger it.
+  const componentMutationObserverRef = useRef<MutationObserver | null>(null);
+  const [addComponentTarget, setAddComponentTarget] = useState<{
+    pageId: string;
+    articleId: string;
+    blockId: string;
+  } | null>(null);
+  const [addTemplateTarget, setAddTemplateTarget] = useState<{
+    level: "topic" | "section" | "group" | "component";
+    pageId: string;
+    articleId?: string;
+    blockId?: string;
+    moduleId?: string;
+  } | null>(null);
+  const previewBuildRequestIdRef = useRef(0);
+  const copiedTopicIdResetTimerRef = useRef<number | null>(null);
+  const copiedSectionIdResetTimerRef = useRef<number | null>(null);
+  const copiedBlockIdResetTimerRef = useRef<number | null>(null);
+  const copiedComponentIdResetTimerRef = useRef<number | null>(null);
+  const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const rightPanelContainerRef = useRef<HTMLElement | null>(null);
+  const rightPanelScrollRef = useRef<HTMLDivElement | null>(null);
+  const rightPanelResizeStateRef = useRef<{
+    panelRight: number;
+    previousCursor: string;
+    previousUserSelect: string;
+  } | null>(null);
+  const canvasRef = useRef<HTMLElement | null>(null);
+  const cleanupPreviewListenersRef = useRef<(() => void) | null>(null);
+  const pendingLeftPanelScrollTargetRef = useRef<PendingPreviewScrollTarget | null>(null);
+  const swapPersistenceQueueRef = useRef<Map<string, Promise<void>>>(new Map());
+  // Canvas "body" fields get a real CKEditor 5 instance (matching the old
+  // tool: every TextArea schema field renders CKEditor, body included) —
+  // keyed by the source element so re-running syncPreviewInlineEditors on
+  // every keystroke (it depends on contentPages) reuses the same instance
+  // instead of recreating it and losing focus/cursor position.
+  const canvasBodyEditorsRef = useRef<Map<HTMLElement, { editor: any; editableEl: HTMLElement; ownerKey: string; commit: () => string | null }>>(new Map());
+
+  // CKEditor5's own destroy() can throw SYNCHRONOUSLY ("Right-hand side of
+  // 'instanceof' is not an object", inside its updateSourceElement) when the
+  // iframe navigated/reloaded out from under it (its sourceElement's owner
+  // window/realm is gone) - a bare `.catch(() => {})` only guards a REJECTED
+  // promise, not a synchronous throw before the promise is even returned, so
+  // that class of error was escaping as an uncaught exception and wedging
+  // the whole click/hover pipeline (reported as "can't select or hover
+  // anything" right after this error). Wrap every destroy call through this
+  // instead of calling `.destroy()` directly.
+  const safeDestroyCanvasEditor = (editor: any) => {
+    try {
+      const result = editor?.destroy?.();
+      if (result && typeof result.catch === "function") result.catch(() => {});
+    } catch {
+      // Already gone/broken - nothing more we can do, and nothing left to
+      // clean up on our side either.
+    }
+  };
+
+  const getRightPanelMaxWidth = useCallback(() => {
+    const panel = rightPanelContainerRef.current;
+    const canvas = canvasRef.current;
+    if (!panel || !canvas) return RIGHT_PANEL_MIN_WIDTH;
+    const availableWidth = panel.getBoundingClientRect().right - canvas.getBoundingClientRect().left;
+    return RIGHT_PANEL_MIN_WIDTH + Math.floor(availableWidth * RIGHT_PANEL_MAX_EXPANSION_RATIO);
+  }, []);
+
+  const resizeRightPanelTo = useCallback((width: number) => {
+    setRightPanelWidth(Math.round(Math.min(getRightPanelMaxWidth(), Math.max(RIGHT_PANEL_MIN_WIDTH, width))));
+  }, [getRightPanelMaxWidth]);
+
+  const clampRightPanelWidth = useCallback(() => {
+    setRightPanelWidth((width) => (
+      Math.round(Math.min(getRightPanelMaxWidth(), Math.max(RIGHT_PANEL_MIN_WIDTH, width)))
+    ));
+  }, [getRightPanelMaxWidth]);
+
+  const finishRightPanelResize = useCallback(() => {
+    const resizeState = rightPanelResizeStateRef.current;
+    if (!resizeState) return;
+    rightPanelResizeStateRef.current = null;
+    document.body.style.cursor = resizeState.previousCursor;
+    document.body.style.userSelect = resizeState.previousUserSelect;
+    setIsResizingRightPanel(false);
+  }, []);
+
+  const handleRightPanelResizeMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const resizeState = rightPanelResizeStateRef.current;
+    if (!resizeState) return;
+    resizeRightPanelTo(resizeState.panelRight - event.clientX);
+  }, [resizeRightPanelTo]);
+
+  const handleRightPanelResizeStart = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const panelRight = rightPanelContainerRef.current?.getBoundingClientRect().right;
+    if (panelRight === undefined) return;
+
+    rightPanelResizeStateRef.current = {
+      panelRight,
+      previousCursor: document.body.style.cursor,
+      previousUserSelect: document.body.style.userSelect,
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    setIsResizingRightPanel(true);
+  }, [courseId]);
+
+  useEffect(() => {
+    if (!isResizingRightPanel) return;
+    window.addEventListener("pointerup", finishRightPanelResize);
+    window.addEventListener("pointercancel", finishRightPanelResize);
+    window.addEventListener("blur", finishRightPanelResize);
+    return () => {
+      window.removeEventListener("pointerup", finishRightPanelResize);
+      window.removeEventListener("pointercancel", finishRightPanelResize);
+      window.removeEventListener("blur", finishRightPanelResize);
+    };
+  }, [finishRightPanelResize, isResizingRightPanel]);
+
+  useEffect(() => {
+    setRightPanelWidth(RIGHT_PANEL_MIN_WIDTH);
+  }, [courseId]);
+
+  useEffect(() => {
+    const clampWidth = () => {
+      if (!rightPanelContainerRef.current || !canvasRef.current) return;
+      clampRightPanelWidth();
+    };
+    window.addEventListener("resize", clampWidth);
+    return () => window.removeEventListener("resize", clampWidth);
+  }, [clampRightPanelWidth]);
+
+  useEffect(() => {
+    if (!rightPanelOpen) return;
+    const frameId = window.requestAnimationFrame(clampRightPanelWidth);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [clampRightPanelWidth, rightPanelOpen]);
+
+  // Apply a Samaritan result to a canvas body editor. The popover lives in
+  // the parent document, so focus never returns to the editor on its own —
+  // commit explicitly, otherwise the change would never reach `contentPages`
+  // (the editor only commits on focus-out) and would be silently lost.
+  const applyCanvasSamaritanResult = useCallback((editor: any, text: string, mode: "insert" | "replace") => {
+    if (!editor) return;
+    if (mode === "insert") insertAiResultIntoEditor(editor, text);
+    else replaceAiResultInEditor(editor, text);
+    canvasBodyEditorsRef.current.forEach((entry) => {
+      if (entry.editor === editor) entry.commit();
+    });
+  }, []);
+
+  const hasUnsavedChanges = useMemo(() => Object.keys(dirtyNodeKeys).length > 0, [dirtyNodeKeys]);
+
+  const loadStructureFromDatabase = useCallback(async (selection?: {
+    pageId?: string | null;
+    articleId?: string | null;
+    blockId?: string | null;
+    componentId?: string | null;
+  }) => {
+    const requestId = ++structureLoadRequestIdRef.current;
+    const isCurrentRequest = () => isMountedRef.current && requestId === structureLoadRequestIdRef.current;
+
+    if (selection) {
+      pendingLeftPanelScrollTargetRef.current = selection.componentId
+        ? { level: "component", id: selection.componentId }
+        : selection.blockId
+          ? { level: "group", id: selection.blockId }
+          : selection.articleId
+            ? { level: "section", id: selection.articleId }
+            : selection.pageId
+              ? { level: "topic", id: selection.pageId }
+              : null;
+    }
+
+    if (!courseId || courseId === "new-course") {
+      if (isCurrentRequest()) {
+        setCourseAssetMappings({});
+        setAssetLinkIdMap({});
+        setContentAssetIdMap({});
+        setIsLoadingStructure(false);
+      }
+      return;
+    }
+
+    if (isCurrentRequest()) {
+      setIsLoadingStructure(true);
+      setStructureLoadError(null);
+    }
+
+    try {
+      const [structure, courseAssets, contentAssets] = await Promise.all([
+        getCourseStructure(courseId, courseTitle),
+        getCourseAssetMappings(courseId),
+        getCourseAssetIdMap(courseId),
+      ]);
+      if (!isCurrentRequest()) return;
+
+      const nextAssetLinkMap: Record<string, string> = {};
+      Object.entries(courseAssets || {}).forEach(([fieldName, assetId]) => {
+        addAssetLinkMapping(nextAssetLinkMap, fieldName, assetId);
+      });
+      setCourseAssetMappings(courseAssets || {});
+      setAssetLinkIdMap(nextAssetLinkMap);
+      setContentAssetIdMap(contentAssets || {});
+
+      setCourseStructure(structure);
+      const pages = mapStructureToPages(structure);
+      const fallbackPage = pages[0] ?? null;
+      const page = pages.find((item) => item.id === selection?.pageId) ?? fallbackPage;
+      const article = selection?.articleId && page
+        ? page.articles.find((item) => item.id === selection.articleId) ?? null
+        : null;
+      const block = selection?.blockId && article
+        ? article.blocks.find((item) => item.id === selection.blockId) ?? null
+        : null;
+      const component = selection?.componentId && block
+        ? block.components.find((item) => item.id === selection.componentId) ?? null
+        : null;
+
+      setContentPages(pages);
+      setSavedContentPages(cloneContentPages(pages));
+      setDirtyNodeKeys({});
+      topicBodyTargetRef.current = null;
+      setPendingExtensionDisableNames(new Set());
+      setMenuPageCreated(pages.length > 0);
+      setMenuSelected(false);
+      setSelectedPageId(page?.id ?? null);
+      setSelectedSubPageId(null);
+      setSelectedArticleId(article?.id ?? null);
+      setSelectedBlockId(block?.id ?? null);
+      setSelectedComponentId(component?.id ?? null);
+
+      const nextHasSelection = !!(component || block || article || page);
+      setHasCanvasSelection(nextHasSelection);
+      setRightPanelOpen(nextHasSelection);
+      setRightPanelType(
+        component
+          ? "component"
+          : block
+            ? "block"
+            : article
+              ? "article"
+              : page
+                ? "page"
+                : "menu"
+      );
+    } catch (error) {
+      if (!isCurrentRequest()) return;
+
+      setContentPages([]);
+      setMenuPageCreated(false);
+      setMenuSelected(false);
+      setSelectedPageId(null);
+      setSelectedSubPageId(null);
+      setSelectedArticleId(null);
+      setSelectedBlockId(null);
+      setSelectedComponentId(null);
+      setHasCanvasSelection(false);
+      setRightPanelOpen(false);
+      setCourseAssetMappings({});
+      setAssetLinkIdMap({});
+      setContentAssetIdMap({});
+      setStructureLoadError(
+        error instanceof Error ? error.message : "Failed to load course structure"
+      );
+    } finally {
+      if (isCurrentRequest()) {
+        setIsLoadingStructure(false);
+      }
+    }
+  }, [courseId, courseTitle]);
+
+  const resolveTopicAssetPreviewUrl = useCallback((value: string): string | null => {
+    const src = (value || "").trim();
+    if (!src) return null;
+    if (/^(https?:)?\/\//i.test(src) || src.startsWith("/api/asset/")) return src;
+    if (/^[a-f0-9]{24}$/i.test(src)) return `/api/asset/serve/${src}`;
+
+    const normalized = src.replace(/^\/+/, "");
+    if (!normalized.startsWith("course/assets/")) {
+      if (src.startsWith("/")) return src;
+      return src;
+    }
+
+    const fieldName = normalized.replace(/^course\/assets\//, "");
+    const decodedFieldName = safeDecodeURIComponent(fieldName);
+    const encodedFieldName = encodeURIComponent(decodedFieldName).replace(/%2F/gi, "/");
+    const assetId =
+      courseAssetMappings[fieldName] ||
+      courseAssetMappings[decodedFieldName] ||
+      courseAssetMappings[encodedFieldName] ||
+      buildCourseAssetLinkCandidates(src).map((candidate) => assetLinkIdMap[candidate]).find(Boolean) ||
+      contentAssetIdMap[fieldName] ||
+      contentAssetIdMap[decodedFieldName] ||
+      contentAssetIdMap[encodedFieldName];
+    if (assetId) return `/api/asset/serve/${assetId}`;
+
+    const embeddedAssetId = extractAssetIdFromCourseAssetPath(src);
+    if (embeddedAssetId) return `/api/asset/serve/${embeddedAssetId}`;
+
+    // Fallback for pre-existing assets when mappings are missing or stale.
+    return `/${encodeURI(normalized)}`;
+  }, [assetLinkIdMap, contentAssetIdMap, courseAssetMappings]);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      structureLoadRequestIdRef.current += 1;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!editorToast) return;
+    const timer = setTimeout(() => setEditorToast(null), 3500);
+    return () => clearTimeout(timer);
+  }, [editorToast]);
+
+  // Extensions accordion data (Topic/Section/Content Group/Component) plus
+  // raw course-level values used when seeding new component buttons.
+  useEffect(() => {
+    let cancelled = false;
+    void Promise.all([getExtensionSchemasByLevel(), getExtensionTypeOptions(), getCourseExtensions(courseId)])
+      .then(([schemasByLevel, typeOptions, extensions]) => {
+        if (cancelled) return;
+        setExtensionSchemasByLevel(schemasByLevel);
+        setExtensionTypeOptions(typeOptions);
+        setCourseExtensions(extensions);
+      })
+      .catch((err) => {
+        console.warn("Failed to load extension schemas", err);
+      });
+    void Promise.all([getThemeSettingsSchemaByLevel(), getMenuSettingsSchemaByLevel()])
+      .then(([themeByLevel, menuByLevel]) => {
+        if (cancelled) return;
+        setThemeSettingsSchemaByLevel(themeByLevel);
+        setMenuSettingsSchemaByLevel(menuByLevel);
+      })
+      .catch((err) => {
+        console.warn("Failed to load theme/menu settings schemas", err);
+      });
+    void Promise.all([
+      getMergedContentSchema("contentobject"),
+      getMergedContentSchema("article"),
+      getMergedContentSchema("block"),
+      getMergedContentSchema("component"),
+    ])
+      .then(([contentobject, article, block, component]) => {
+        if (cancelled) return;
+        setContentSchemaByLevel({ contentobject, article, block, component });
+      })
+      .catch((err) => {
+        console.warn("Failed to load content schemas", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
+
+  useEffect(() => {
+    void loadStructureFromDatabase(
+      initialPageId ? { pageId: initialPageId } : undefined
+    );
+  }, [initialPageId, loadStructureFromDatabase]);
+
+  // Course-level Navigation Footer button settings (the "parent" values the
+  // Topic-level `_enableOverride`/`btnText` fields inherit from when empty —
+  // see NavigationFooterButtonsField). Display-only: never written back here.
+  useEffect(() => {
+    if (!courseId) return;
+    let cancelled = false;
+    void getNavigationSettings(courseId)
+      .then((settings) => {
+        if (cancelled) return;
+        setNavFooterCourseButtons(settings.navFooter.buttons);
+      })
+      .catch((err) => {
+        console.warn("Failed to load course navigation footer settings", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
+
+  // Bridges the dirty keys computed inside seedExtensionDefaultsEverywhere's
+  // setContentPages updater over to its follow-up setDirtyNodeKeys call —
+  // see the comment at that call site for why a ref is used instead of a
+  // plain local variable.
+  const seedDirtyUpdatesRef = useRef<Record<string, true>>({});
+
+  // Mirrors what POST /api/extension/enable/:courseId seeds server-side
+  // (schema-default settings onto EVERY course/topic/section/content-group/
+  // component document) into the currently-loaded draft, so a newly-added
+  // extension immediately shows as "Added" at every level it has a schema
+  // for — not just the one level the user clicked Add on — without needing
+  // a reload. Never overwrites a level that already has this key (matches
+  // the server's `_.defaults` merge semantics). Course-level itself isn't
+  // tracked as loaded editor state, so it's left to the enable call alone.
+  const seedExtensionDefaultsEverywhere = useCallback(
+    (extensionKey: string) => {
+      if (!extensionSchemasByLevel) return;
+      const topicProps = extensionSchemasByLevel.contentobject?.[extensionKey]?.properties as Record<string, unknown> | undefined;
+      const articleProps = extensionSchemasByLevel.article?.[extensionKey]?.properties as Record<string, unknown> | undefined;
+      const blockProps = extensionSchemasByLevel.block?.[extensionKey]?.properties as Record<string, unknown> | undefined;
+      const componentProps = extensionSchemasByLevel.component?.[extensionKey]?.properties as Record<string, unknown> | undefined;
+      const hasTopicSchema = !!Object.keys(topicProps ?? {}).length;
+      const hasArticleSchema = !!Object.keys(articleProps ?? {}).length;
+      const hasBlockSchema = !!Object.keys(blockProps ?? {}).length;
+      const hasComponentSchema = !!Object.keys(componentProps ?? {}).length;
+      if (!hasTopicSchema && !hasArticleSchema && !hasBlockSchema && !hasComponentSchema) return;
+
+      const topicDefaults = buildSchemaDefaults(topicProps);
+      const articleDefaults = buildSchemaDefaults(articleProps);
+      const blockDefaults = buildSchemaDefaults(blockProps);
+      const componentDefaults = buildSchemaDefaults(componentProps);
+      // Uses the functional setState form (operating on the freshest
+      // `previousPages`, not the `contentPages` closure) because this runs
+      // in the same event handler as handleAdd's own `onChange` for the
+      // CURRENT level — with a plain value-based setContentPages call here,
+      // this would race that update and silently overwrite it with a stale
+      // snapshot from before it was applied.
+      //
+      // The resulting dirty keys are handed off via a ref rather than read
+      // back from local variables right after calling setContentPages —
+      // React may defer invoking the updater, so those variables aren't
+      // guaranteed to be populated yet at that point. The ref is instead
+      // read from INSIDE the setDirtyNodeKeys updater below, which React
+      // guarantees runs after the setContentPages updater above (state
+      // updates queued in the same tick are processed in call order), so by
+      // the time it reads seedDirtyUpdatesRef.current it's already set.
+      seedDirtyUpdatesRef.current = {};
+
+      setContentPages((previousPages) => {
+        const dirtyUpdates: Record<string, true> = {};
+
+        const nextPages = previousPages.map((page) => {
+        const pageHasKey = Object.prototype.hasOwnProperty.call(asRecord(page.extensions), extensionKey);
+        const seedPage = hasTopicSchema && !pageHasKey;
+        if (seedPage) dirtyUpdates[`topic:${page.id}`] = true;
+
+        const nextArticles = page.articles.map((article) => {
+          const articleHasKey = Object.prototype.hasOwnProperty.call(asRecord(article.extensions), extensionKey);
+          const seedArticle = hasArticleSchema && !articleHasKey;
+          if (seedArticle) dirtyUpdates[`section:${article.id}`] = true;
+
+          const nextBlocks = article.blocks.map((block) => {
+            const blockHasKey = Object.prototype.hasOwnProperty.call(asRecord(block.extensions), extensionKey);
+            const seedBlock = hasBlockSchema && !blockHasKey;
+            if (seedBlock) dirtyUpdates[`contentGroup:${block.id}`] = true;
+
+            const nextComponents = block.components.map((component) => {
+              const componentHasKey = Object.prototype.hasOwnProperty.call(asRecord(component.extensions), extensionKey);
+              if (!hasComponentSchema || componentHasKey) return component;
+              dirtyUpdates[`component:${component.id}`] = true;
+              return { ...component, extensions: { ...asRecord(component.extensions), [extensionKey]: componentDefaults } };
+            });
+
+            if (!seedBlock && nextComponents === block.components) return block;
+            return {
+              ...block,
+              extensions: seedBlock ? { ...asRecord(block.extensions), [extensionKey]: blockDefaults } : block.extensions,
+              components: nextComponents,
+            };
+          });
+
+          if (!seedArticle && nextBlocks === article.blocks) return article;
+          return {
+            ...article,
+            extensions: seedArticle ? { ...asRecord(article.extensions), [extensionKey]: articleDefaults } : article.extensions,
+            blocks: nextBlocks,
+          };
+        });
+
+        if (!seedPage && nextArticles === page.articles) return page;
+        return {
+          ...page,
+          extensions: seedPage ? { ...asRecord(page.extensions), [extensionKey]: topicDefaults } : page.extensions,
+          articles: nextArticles,
+        };
+        });
+
+        if (!Object.keys(dirtyUpdates).length) return previousPages;
+        seedDirtyUpdatesRef.current = dirtyUpdates;
+        return nextPages;
+      });
+
+      setDirtyNodeKeys((prev) => {
+        const updates = seedDirtyUpdatesRef.current;
+        return Object.keys(updates).length ? { ...prev, ...updates } : prev;
+      });
+    },
+    [extensionSchemasByLevel]
+  );
+
+  // Strips `extensionKey` from every level's stored settings across the whole
+  // course draft — the local-state mirror of what POST /api/extension/
+  // disable/:courseId does server-side (see disableExtensionForCourse). Only
+  // touches the in-memory draft; nothing is persisted until Save actually
+  // calls the disable endpoint for any extension removed this way.
+  const removeExtensionEverywhereInDraft = useCallback(
+    (extensionKey: string) => {
+      const dirtyUpdates: Record<string, true> = {};
+
+      const nextPages = contentPages.map((page) => {
+        const pageHasKey = Object.prototype.hasOwnProperty.call(asRecord(page.extensions), extensionKey);
+        if (pageHasKey) dirtyUpdates[`topic:${page.id}`] = true;
+
+        const nextArticles = page.articles.map((article) => {
+          const articleHasKey = Object.prototype.hasOwnProperty.call(asRecord(article.extensions), extensionKey);
+          if (articleHasKey) dirtyUpdates[`section:${article.id}`] = true;
+
+          const nextBlocks = article.blocks.map((block) => {
+            const blockHasKey = Object.prototype.hasOwnProperty.call(asRecord(block.extensions), extensionKey);
+            if (blockHasKey) dirtyUpdates[`contentGroup:${block.id}`] = true;
+
+            const nextComponents = block.components.map((component) => {
+              const componentHasKey = Object.prototype.hasOwnProperty.call(asRecord(component.extensions), extensionKey);
+              if (!componentHasKey) return component;
+              dirtyUpdates[`component:${component.id}`] = true;
+              const nextExtensions = { ...asRecord(component.extensions) };
+              delete nextExtensions[extensionKey];
+              return { ...component, extensions: nextExtensions };
+            });
+
+            if (!blockHasKey && nextComponents === block.components) return block;
+            let nextBlockExtensions = block.extensions;
+            if (blockHasKey) {
+              nextBlockExtensions = { ...asRecord(block.extensions) };
+              delete (nextBlockExtensions as Record<string, unknown>)[extensionKey];
+            }
+            return { ...block, extensions: nextBlockExtensions, components: nextComponents };
+          });
+
+          if (!articleHasKey && nextBlocks === article.blocks) return article;
+          let nextArticleExtensions = article.extensions;
+          if (articleHasKey) {
+            nextArticleExtensions = { ...asRecord(article.extensions) };
+            delete (nextArticleExtensions as Record<string, unknown>)[extensionKey];
+          }
+          return { ...article, extensions: nextArticleExtensions, blocks: nextBlocks };
+        });
+
+        if (!pageHasKey && nextArticles === page.articles) return page;
+        let nextPageExtensions = page.extensions;
+        if (pageHasKey) {
+          nextPageExtensions = { ...asRecord(page.extensions) };
+          delete (nextPageExtensions as Record<string, unknown>)[extensionKey];
+        }
+        return { ...page, extensions: nextPageExtensions, articles: nextArticles };
+      });
+
+      if (!Object.keys(dirtyUpdates).length) return;
+      setContentPages(nextPages);
+      setDirtyNodeKeys((prev) => ({ ...prev, ...dirtyUpdates }));
+    },
+    [contentPages]
+  );
+
+  // Extensions queued for removal-everywhere (keyed by extensiontype bower
+  // name) — the actual disable call only fires on the next successful Save,
+  // per the draft-until-save requirement; the local strip above is what
+  // makes it immediately look removed everywhere in the meantime.
+  const [pendingExtensionDisableNames, setPendingExtensionDisableNames] = useState<Set<string>>(new Set());
+  const [extensionRemovalTarget, setExtensionRemovalTarget] = useState<{
+    key: string;
+    displayName: string;
+    extensionName: string | undefined;
+  } | null>(null);
+
+  const requestRemoveExtension = useCallback(
+    (key: string, displayName: string, extensionName: string | undefined) => {
+      setExtensionRemovalTarget({ key, displayName, extensionName });
+    },
+    []
+  );
+
+  const confirmRemoveExtension = useCallback(() => {
+    if (!extensionRemovalTarget) return;
+    const { key, extensionName } = extensionRemovalTarget;
+    removeExtensionEverywhereInDraft(key);
+    if (extensionName) {
+      setPendingExtensionDisableNames((prev) => {
+        const next = new Set(prev);
+        next.add(extensionName);
+        return next;
+      });
+    }
+    setExtensionRemovalTarget(null);
+  }, [extensionRemovalTarget, removeExtensionEverywhereInDraft]);
+
+  // Ensures a newly-added extension is enabled for the course (adds it to
+  // config._enabledExtensions) so the framework build actually bundles it —
+  // mirrors the enable calls the hardcoded course-level extension helpers
+  // (course menu, topbar logos, ...) already make in adaptAuthoring.ts. Also
+  // seeds this extension's schema defaults into every OTHER currently-loaded
+  // level that has a schema for it (course/topic/section/content-group/
+  // component), so it immediately shows as "Added" everywhere in this
+  // editor session — mirroring what the enable endpoint just did server-side
+  // — instead of only appearing at the one level the user clicked Add on.
+  const handleExtensionAdded = useCallback(
+    (key: string, extensionName: string | undefined) => {
+      if (!extensionName || !courseId) return;
+      const typeOption = extensionTypeOptions.find((o) => o.name === extensionName);
+      if (typeOption) void enableExtensionForCourse(courseId, typeOption._id);
+      seedExtensionDefaultsEverywhere(key);
+    },
+    [courseId, extensionTypeOptions, seedExtensionDefaultsEverywhere]
+  );
+
+  // How many of the 5 content levels (course/topic/section/content group/
+  // component) this extension has ANY schema for — the Inherited/Overridden
+  // badge only makes sense when there's more than one, i.e. an actual parent
+  // hierarchy to inherit from or override.
+  const countExtensionApplicableLevels = useCallback(
+    (key: string) => {
+      if (!extensionSchemasByLevel) return 0;
+      const levels: ExtensionSchemaLevel[] = ["course", "contentobject", "article", "block", "component"];
+      return levels.filter((level) => Object.keys(extensionSchemasByLevel[level]?.[key]?.properties ?? {}).length > 0)
+        .length;
+    },
+    [extensionSchemasByLevel]
+  );
+
+  const createExtensionAssetContext = useCallback(
+    (
+      level: "topic" | "section" | "contentGroup" | "component",
+      pageId: string,
+      ids: { articleId?: string; blockId?: string; componentId?: string } = {}
+    ): BehaviourAssetContext => ({
+      resolveAssetPreviewUrl: resolveTopicAssetPreviewUrl,
+      onPickAsset: (path, assetType, extensionKey) => {
+        if (!extensionKey) return;
+        setTopicAssetPickerTarget({ scope: "extensionProperty", level, ...ids, extensionKey, path, assetType });
+      },
+      onPickExternal: (path, currentValue, extensionKey) => {
+        if (!extensionKey) return;
+        setTopicExternalAssetTarget({
+          pageId,
+          target: { scope: "extensionProperty", level, ...ids, extensionKey, path },
+          initialValue: currentValue,
+          title: "Select External Asset",
+        });
+      },
+      onClear: (path, extensionKey) => {
+        if (!extensionKey) return;
+        clearTopicAssetSelection(pageId, { scope: "extensionProperty", level, ...ids, extensionKey, path });
+      },
+    }),
+    [resolveTopicAssetPreviewUrl]
+  );
+
+  useEffect(() => {
+    if (!titleValidationWarning) return;
+    const timer = window.setTimeout(() => setTitleValidationWarning(null), TITLE_WARNING_DURATION_MS);
+    return () => window.clearTimeout(timer);
+  }, [titleValidationWarning]);
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+      return "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  useEffect(() => {
+    if (!menuPageCreated || isLoadingStructure || !courseId || courseId === "new-course" || !user?._tenantId) {
+      setIsPreviewLoading(false);
+      setPreviewError(null);
+      return;
+    }
+
+    let isDisposed = false;
+    const requestId = ++previewBuildRequestIdRef.current;
+    const isCurrentRequest = () => !isDisposed && requestId === previewBuildRequestIdRef.current;
+
+    const pollPreview = async (pollUrl: string) => {
+      const normalizedUrl = new URL(pollUrl, window.location.origin).toString();
+
+      while (isCurrentRequest()) {
+        const response = await fetch(normalizedUrl, {
+          credentials: "same-origin",
+        });
+
+        if (!response.ok) {
+          const errorBody = await response.json().catch(() => ({ message: response.statusText }));
+          throw new Error(errorBody.message || `HTTP ${response.status}`);
+        }
+
+        const data = await response.json().catch(() => ({} as { progress?: string | number }));
+        const progress = Number((data as { progress?: string | number }).progress ?? 100);
+        if (!Number.isNaN(progress) && progress >= 100) {
+          return;
+        }
+
+        await new Promise((resolve) => window.setTimeout(resolve, 1000));
+      }
+    };
+
+    const buildPreview = async () => {
+      setIsPreviewLoading(true);
+      setPreviewError(null);
+      setDismissedPreviewError(null);
+
+      try {
+        // Studio surface: ensure a render shell exists (cached unless the theme/menu/
+        // plugin set changed), then let the iframe load live JSON from the DB. Content
+        // edits reuse the cached shell — no grunt rebuild per change.
+        const result = await apiClient.post<PreviewBuildResponse>(`/studio/ensure/${user._tenantId}/${courseId}`);
+        if (!isCurrentRequest()) return;
+
+        if (!result?.success) {
+          throw new Error(result?.message || "Failed to generate course preview");
+        }
+
+        if (result.payload?.pollUrl) {
+          await pollPreview(result.payload.pollUrl);
+        }
+
+        if (!isCurrentRequest()) return;
+        setPreviewBuildVersion((current) => current + 1);
+      } catch (error) {
+        if (!isCurrentRequest()) return;
+        setPreviewError(
+          error instanceof Error ? error.message : "Failed to generate course preview"
+        );
+      } finally {
+        if (isCurrentRequest()) {
+          setIsPreviewLoading(false);
+        }
+      }
+    };
+
+    void buildPreview();
+
+    return () => {
+      isDisposed = true;
+    };
+  }, [courseId, isLoadingStructure, menuPageCreated, previewRefreshToken, user?._tenantId]);
+
+  const previewSrc = useMemo(() => {
+    if (!user?._tenantId || !courseId || courseId === "new-course" || !menuPageCreated) {
+      return null;
+    }
+
+    const basePath = `/studio/${user._tenantId}/${courseId}/?_pe=${previewBuildVersion}&embedded=1`;
+    if (selectedPageId && !menuSelected) {
+      return `${basePath}#/id/${selectedPageId}`;
+    }
+
+    return basePath;
+  }, [courseId, menuPageCreated, menuSelected, previewBuildVersion, selectedPageId, user]);
+
+  const applyPreviewSelectionStylesRef = useRef<() => void>(() => {});
+
+  const applyPreviewSelectionStyles = useCallback(() => {
+    const iframe = previewFrameRef.current;
+    const doc = iframe?.contentDocument;
+    if (!doc) return;
+
+    const head = doc.head || doc.getElementsByTagName("head")[0] || null;
+    if (!head) return;
+
+    doc.getElementById("adapt-authoring-preview-bridge-style")?.remove();
+
+    // Gates every "permanent" editing-mode spacing rule below (gutters,
+    // header padding, border reservation, label min-height) — present only
+    // while actively selecting or hovering something, so a fully
+    // deselected, un-hovered canvas renders as a pristine normal preview
+    // with none of that extra space, per explicit user request.
+    // Keyed on the pointer merely BEING in the canvas, never on which level
+    // is hovered: these rules resize headers, so tying them to the hovered
+    // level made hover change the layout, which moved the element out from
+    // under a stationary cursor, which changed the hovered level — a
+    // mouseover/mouseout oscillation (measured: 23 flips in one slow sweep).
+    doc.documentElement.classList.toggle(
+      "adapt-authoring-editing-active",
+      hasCanvasSelection || isPointerOverCanvas
+    );
+    // Selection only (not hover) — drives the disabled look on the theme's
+    // own nav/footer, which cannot be edited from here.
+    doc.documentElement.classList.toggle("adapt-authoring-selection-active", hasCanvasSelection);
+
+    const style = doc.createElement("style");
+    style.id = "adapt-authoring-preview-bridge-style";
+    style.textContent = `
+      /* In the editor canvas, media playback belongs in the Behaviour panel. */
+      .mejs__container,
+      .mejs__container * {
+        pointer-events: none !important;
+      }
+
+      /* Ported directly from Quick Edit's own CSS
+         (adapt-preview-edit/less/page.less .editable / .page__header-inner.editable /
+         .article__header-inner.editable / .block__header-inner.editable /
+         .component__inner.editable) — a real border+margin+padding box that
+         participates in normal layout flow, not an absolutely positioned
+         outline overlay. This is why it lines up with sibling content
+         automatically instead of needing computed/faked offsets.
+         Border is ALWAYS present (transparent when not hover/active) so
+         its 1px never gets added/removed on hover — box-sizing:border-box
+         means a transparent-to-visible COLOR swap causes zero layout
+         shift, unlike toggling border-width itself would.
+         Scoped under .adapt-authoring-editing-active (toggled on the
+         iframe's <html> based on hasCanvasSelection/hover below) so a
+         fully deselected, un-hovered canvas has ZERO extra reserved space
+         and renders as a pristine, unmodified preview — all of this
+         editing-mode spacing only exists while actively interacting. */
+      .adapt-authoring-editing-active .page__header-inner,
+      .adapt-authoring-editing-active .article__header-inner,
+      .adapt-authoring-editing-active .block__header-inner,
+      .adapt-authoring-editing-active .component__inner {
+        position: relative !important;
+        box-sizing: border-box !important;
+        border-radius: 8px !important;
+        outline: 1px dashed transparent;
+        outline-offset: 2px;
+        transition: outline-color 0.15s, border-left-color 0.15s;
+      }
+
+      /* Must be AT LEAST as specific as the .adapt-authoring-editing-active
+         base border rule above (2 classes) — otherwise, since both use
+         !important, the higher-specificity transparent base border always
+         wins over this lower-specificity color override regardless of
+         source order, and the dashed border never becomes visible at all
+         while hovering/selecting (confirmed live: computed border color
+         stayed rgba(0,0,0,0) on an actually-selected node). */
+      .adapt-authoring-editing-active .adapt-authoring-preview-hover,
+      .adapt-authoring-editing-active .adapt-authoring-preview-active {
+        outline-color: var(--life-primary-500, #2e7fa1) !important;
+      }
+
+      /* Padding/margin that gives a headerless-level header its visible
+         size must be PERMANENT, not conditional on the hover/active class.
+         Previously it only appeared once hovered — growing the box from 0
+         to ~94px tall the instant the cursor entered it. That size jump
+         moves whatever was previously under the (now relocated) cursor,
+         which re-fires mouseover/mouseout in a rapid loop — the reported
+         "glitch when moving a little up/down in empty space".
+         Applied to Topic too (not just Article/Block) so hover spacing is
+         visually IDENTICAL across every level — Topic's real theme padding
+         (2rem/1rem) differs from Article/Block's override and made its
+         hover box look inconsistently spaced next to them, per explicit
+         user feedback; overriding it here to match is a deliberate,
+         acceptable trade-off (editing-mode-only spacing, same precedent as
+         the .article/.block/.component gutter margins elsewhere in this
+         file), same as Article/Block already do. */
+      /* Topic/Section headers render edge-to-edge (measured: left 0 to
+         right 545 on a 545px-wide document, no horizontal scroll), so the
+         hover/selection outline — drawn 1px wide, 2px OUTSIDE the box — lands
+         at -3px/+3px and gets clipped away on both sides. Inset them to 8px,
+         which is exactly where Content Group and Component already sit
+         (block__inner's 16px padding minus the -8px pull-back on
+         .block__header-inner and .component__container), so all four levels
+         share one left/right alignment and every outline has room. */
+      /* Topic sits flush against the theme's 56px fixed nav bar (opaque
+         white, z-index 80), which painted over its outline's top edge —
+         the reported "chopped top border". 8px top margin clears it,
+         matching the inset Article already uses. */
+      .adapt-authoring-editing-active .page__header-inner {
+        margin-top: 8px !important;
+        margin-left: 8px !important;
+        margin-right: 8px !important;
+        padding: 0.5rem !important;
+      }
+
+      /* Selecting a node calls scrollIntoView({block:"start"}), which parks
+         it flush under that same fixed nav and re-hides the outline's top
+         edge. scroll-margin only shifts where scrolling stops — it adds no
+         layout box, so it cannot shift anything visually. */
+      .page, .menu,
+      .page__header, .page__header-inner,
+      .article__header-inner, .block__header-inner, .component__inner,
+      .laerdal-h5p__container {
+        scroll-margin-top: 64px;
+      }
+
+      .adapt-authoring-editing-active .article__header-inner {
+        margin-top: 8px !important;
+        margin-bottom: 8px !important;
+        margin-left: 8px !important;
+        margin-right: 8px !important;
+        padding: 0.5rem !important;
+      }
+
+      .adapt-authoring-editing-active .block__header-inner {
+        margin-left: -0.5rem !important;
+        margin-right: -0.5rem !important;
+        margin-bottom: 10px !important;
+        padding: 10px !important;
+      }
+
+      .adapt-authoring-preview-hover.menu,
+      .adapt-authoring-preview-active.menu {
+        padding: 0.5rem !important;
+      }
+
+      /* Vertical gutter for a Section/Content Group that renders NO header
+         of its own. Hover now resolves through headers only, so a level
+         that has one needs no gutter at all — its header box is already
+         held apart from its neighbours by the theme's own spacing, and the
+         gutter was only ever adding dead space between levels. A headerless
+         level still needs it: with nothing to point at, this margin is its
+         only hover surface, exactly as before. */
+      .adapt-authoring-editing-active .article:not(:has(> .article__inner > .article__header)),
+      .adapt-authoring-editing-active .block:not(:has(> .block__inner > .block__header)) {
+        margin-top: 10px !important;
+        margin-bottom: 10px !important;
+      }
+
+      /* Two half-width (left/right) components in the same Content Group
+         otherwise sit with their borders touching/flush against each
+         other, since .component__container is already a real CSS flex
+         row (see core/less/core/component.less) with no gap of its own
+         between items \u2014 a plain flex gap is all that's needed here, no
+         margin math on either side that could overflow past 100% width. */
+      .adapt-authoring-editing-active .component__container {
+        gap: 16px !important;
+      }
+
+      .adapt-authoring-editing-active .component__container:has(> .adapt-authoring-swap-positions-row) {
+        flex-wrap: wrap !important;
+        align-items: flex-start !important;
+      }
+
+      /* Without this, a headless Section's own gutter (the margin above
+         "block") collapses straight through Article and merges with
+         Article's own gutter (a real CSS "margin collapsing" side effect
+         of both having zero padding/border) into ONE gap that sits above
+         Article \u2014 confirmed live: article and block landed at the exact
+         same top offset with nothing between them. That single merged gap
+         only ever resolves to the OUTER (Topic) level on hover, so a
+         headless Section's own gutter effectively never existed \u2014 Topic
+         hover worked, Section hover silently never did. display: flow-root
+         establishes a new block formatting context on the PARENT (still
+         renders identically to display: block otherwise), which contains
+         a child's margin within its own border box instead of letting it
+         escape upward, restoring each level's own distinct gutter. */
+      .adapt-authoring-editing-active .page__inner,
+      .adapt-authoring-editing-active .article,
+      .adapt-authoring-editing-active .block {
+        display: flow-root !important;
+      }
+
+      /* Keep the editor's normal neutral frame when focused. Selection is
+         communicated by the surrounding labelled dashed box, so the
+         CKEditor focus state must not add a competing blue outline. */
+      .ck.ck-editor__editable.ck-focused:not(.ck-editor__nested-editable) {
+        border-color: var(--ck-color-base-border) !important;
+        box-shadow: none !important;
+      }
+
+      .adapt-authoring-preview-topic-shell-active {
+        border: none !important;
+      }
+
+      /* Same permanent-reservation principle as the padding above, applied
+         to the label line: it must always occupy its line of height for a
+         synthetic header, even before data-preview-bridge-label is ever
+         set (color: transparent, not display:none) — otherwise the label
+         appearing/disappearing on hover is itself a smaller second source
+         of the same "size changes on hover -> mouse ends up over a
+         different element -> flicker" bug the padding fix above targets.
+         min-height (not just line-height) because an EMPTY attr() value
+         (before any hover has ever set data-preview-bridge-label) collapses
+         a content-less block box to zero height in some engines — line-
+         height alone isn't a reliable floor without real content present. */
+      .adapt-authoring-editing-active .article__header-inner::before,
+      .adapt-authoring-editing-active .block__header-inner::before {
+        content: attr(data-preview-bridge-label);
+        display: block;
+        min-height: 11px;
+        color: transparent;
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        line-height: 1.2;
+        margin-bottom: 4px;
+        pointer-events: none;
+      }
+
+      /* A plain inline label in normal flow ahead of the level's own content
+         — matches Quick Edit's \`.editable:before { content: 'Block' }\`
+         exactly (a real line of text that pushes content down, not a
+         floating badge straddling the border), so it can never overlap
+         adjacent content again. Must be AT LEAST as specific as the
+         transparent label-reservation rule above (2 classes) for the same
+         reason as the border-color fix above — otherwise the transparent
+         color always wins and the label text never actually becomes
+         visible while hovering/selecting. */
+      .adapt-authoring-editing-active .adapt-authoring-preview-hover::before,
+      .adapt-authoring-editing-active .adapt-authoring-preview-active::before,
+      .adapt-authoring-editing-active .adapt-authoring-swap-hover-highlight::before {
+        content: attr(data-preview-bridge-label);
+        display: block;
+        color: var(--life-primary-500, #2e7fa1);
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        line-height: 1.2;
+        margin-bottom: 4px;
+        pointer-events: none;
+      }
+
+      /* The hover-only title preview (both freshly injected — Group/Section
+         with no real header — and an existing-but-hidden real title
+         swapped to dimmed — Topic) renders at its real, proper theme size,
+         in normal flow below the label, exactly like the SELECTED
+         treatment already looks (makeEditable's own dimmed title) — no
+         absolute positioning/font-size override. An earlier attempt took
+         it out of flow to stop hover from ever changing the header box's
+         height, but that made it overlap the label/underlying content
+         instead (an absolutely positioned element isn't constrained by its
+         container, and shrinking its font to avoid that looked wrong per
+         explicit user feedback) — reverted; a hover-triggered height
+         change here is the smaller problem of the two. */
+
+      .adapt-authoring-preview-clickable {
+        cursor: pointer !important;
+      }
+
+      .adapt-authoring-preview-inline-editable:not(.ck-editor__editable) {
+        outline: none !important;
+        border: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        min-height: 1.2em;
+        /* The real compiled theme CSS has a bare [contenteditable='true']
+           rule (page.less) reserving room for Quick Edit's own floating
+           Save icon button (padding-bottom: 50px; padding-right: 1.25rem).
+           Our canvas has no such button, so this must be zeroed out here
+           or every inline-editable field/item (title, body, instruction,
+           per-item behaviour text) shows that reserved gap as extra
+           spacing once selected. */
+        padding-bottom: 0 !important;
+        padding-right: 0 !important;
+      }
+
+      .adapt-authoring-preview-inline-editable:not(.ck-editor__editable):focus {
+        outline: none !important;
+        border: 0 !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        padding-bottom: 0 !important;
+        padding-right: 0 !important;
+      }
+
+      .adapt-authoring-preview-inline-empty::before {
+        content: attr(data-placeholder);
+        color: #9ca3af;
+      }
+
+      /* Same muted placeholder treatment for an empty body, which is a
+         CKEditor instance rather than a plain contenteditable. */
+      .ck.ck-editor__editable .ck-placeholder::before,
+      .ck.ck-editor__editable.ck-placeholder::before {
+        color: #9ca3af;
+        opacity: 1;
+      }
+
+      .adapt-authoring-preview-title-hidden {
+        display: none !important;
+      }
+
+      .adapt-authoring-preview-title-dimmed {
+        opacity: 0.45 !important;
+      }
+
+      /* A muted, "not currently in focus" look for everything nested
+         inside whichever level is selected (e.g. a section's own content
+         groups/components while the SECTION is selected) — makes it clear
+         at a glance which header is actually being edited right now vs.
+         what's just along for the ride. Purely visual: hover/click/editing
+         all keep working normally, and selecting a dimmed item directly
+         clears this the same run (see applyPreviewSelectionStyles). */
+      .adapt-authoring-preview-unfocused-descendant {
+        opacity: 0.55 !important;
+      }
+
+      /* Hovering (or selecting) a dimmed descendant must restore its
+         normal, full-opacity look — border color, label, everything —
+         instead of staying faded just because its ancestor is also
+         selected. Two separate cases, since the dimmed class and the
+         hover/active class don't always land on the SAME element:
+         (1) same-element case (2-class specificity beats the single-class
+         dimming rule above). (2) the dimmed node is the OUTER real element
+         (e.g. .article, from the "dim every descendant" sweep) while
+         hover/active applies to its header-inner DESCENDANT (from
+         resolveHighlightTarget) — CSS opacity on an ancestor still visually
+         composites/dims a descendant even if the descendant's OWN opacity
+         is separately reset to 1, so the ancestor's own dimming must be
+         lifted too via :has(), or a hovered header still looked faded. */
+      .adapt-authoring-preview-unfocused-descendant.adapt-authoring-preview-hover,
+      .adapt-authoring-preview-unfocused-descendant.adapt-authoring-preview-active,
+      .adapt-authoring-preview-unfocused-descendant:has(.adapt-authoring-preview-hover, .adapt-authoring-preview-active, .adapt-authoring-swap-hover-highlight) {
+        opacity: 1 !important;
+      }
+
+      .adapt-authoring-preview-inline-structured-header {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 8px !important;
+      }
+
+      .adapt-authoring-preview-inline-structured-header > .page__title,
+      .adapt-authoring-preview-inline-structured-header > .page__subtitle,
+      .adapt-authoring-preview-inline-structured-header > .page__body,
+      .adapt-authoring-preview-inline-structured-header > .page__instruction,
+      .adapt-authoring-preview-inline-structured-header > .article__title,
+      .adapt-authoring-preview-inline-structured-header > .article__body,
+      .adapt-authoring-preview-inline-structured-header > .article__instruction,
+      .adapt-authoring-preview-inline-structured-header > .block__title,
+      .adapt-authoring-preview-inline-structured-header > .block__body,
+      .adapt-authoring-preview-inline-structured-header > .block__instruction,
+      .adapt-authoring-preview-inline-structured-header > .component__title,
+      .adapt-authoring-preview-inline-structured-header > .component__body,
+      .adapt-authoring-preview-inline-structured-header > .component__instruction,
+      .adapt-authoring-preview-inline-structured-header > .laerdal-text__subtitle {
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+
+      /* Component is the one level whose header group shares its flex
+         container with the component's own real, non-header markup (item
+         lists, images, widgets, etc. rendered by the actual template inside
+         .component__inner) — those children never match a header selector
+         below, so without an explicit order they'd default to 0 and jump
+         ahead of the order:1 title despite already being correctly last in
+         DOM order. Default every child to order 5 (after instruction) so
+         only known header fields ever sort earlier, keeping this identical
+         to how the real, non-edited preview stacks them. Scoped to the
+         component-only modifier class — topic/section/content group each
+         get their OWN dedicated header wrapper with nothing else inside it,
+         so they never had this problem and must not be touched by it.
+       */
+      .adapt-authoring-preview-inline-structured-header--component > * {
+        order: 5 !important;
+      }
+
+      .adapt-authoring-preview-inline-structured-header > .page__title,
+      .adapt-authoring-preview-inline-structured-header > .article__title,
+      .adapt-authoring-preview-inline-structured-header > .block__title,
+      .adapt-authoring-preview-inline-structured-header > .component__title { order: 1 !important; }
+      .adapt-authoring-preview-inline-structured-header > .page__subtitle,
+      .adapt-authoring-preview-inline-structured-header > .laerdal-text__subtitle { order: 2 !important; }
+      .adapt-authoring-preview-inline-structured-header > .page__body,
+      .adapt-authoring-preview-inline-structured-header > .article__body,
+      .adapt-authoring-preview-inline-structured-header > .block__body,
+      .adapt-authoring-preview-inline-structured-header > .component__body { order: 3 !important; }
+      .adapt-authoring-preview-inline-structured-header > .page__instruction,
+      .adapt-authoring-preview-inline-structured-header > .article__instruction,
+      .adapt-authoring-preview-inline-structured-header > .block__instruction,
+      .adapt-authoring-preview-inline-structured-header > .component__instruction { order: 4 !important; }
+
+      .adapt-authoring-preview-inline-structured-header .page__title-inner,
+      .adapt-authoring-preview-inline-structured-header .page__subtitle-inner,
+      .adapt-authoring-preview-inline-structured-header .page__body-inner,
+      .adapt-authoring-preview-inline-structured-header .page__instruction-inner,
+      .adapt-authoring-preview-inline-structured-header .article__title-inner,
+      .adapt-authoring-preview-inline-structured-header .article__body-inner,
+      .adapt-authoring-preview-inline-structured-header .article__instruction-inner,
+      .adapt-authoring-preview-inline-structured-header .block__title-inner,
+      .adapt-authoring-preview-inline-structured-header .block__body-inner,
+      .adapt-authoring-preview-inline-structured-header .block__instruction-inner,
+      .adapt-authoring-preview-inline-structured-header .component__title-inner,
+      .adapt-authoring-preview-inline-structured-header .component__body-inner,
+      .adapt-authoring-preview-inline-structured-header .component__instruction-inner,
+      .adapt-authoring-preview-inline-structured-header .laerdal-text__subtitle {
+        margin: 0 !important;
+        padding: 0 !important;
+        min-height: 0 !important;
+      }
+
+      .adapt-authoring-preview-inline-structured-header > [data-preview-inline-container-empty="true"] {
+        min-height: 0 !important;
+      }
+
+      .adapt-authoring-preview-inline-structured-header > [data-preview-inline-container-empty="true"] .adapt-authoring-preview-inline-editable {
+        display: inline-block !important;
+        min-height: 0 !important;
+        line-height: 1.25 !important;
+      }
+
+      /* The real course chrome (top nav bar/back button, bottom navigation
+         footer) stays visible for WYSIWYG fidelity while a page is being
+         edited, but must never actually navigate the iframe away from the
+         page being edited — it's kept in sync with unsaved draft settings
+         instead (see syncNavigationFooterPreview). */
+      .navigation-footer,
+      .navigation-footer *,
+      .nav,
+      .nav *,
+      .navigation,
+      .navigation * {
+        pointer-events: none !important;
+        cursor: default !important;
+      }
+
+      /* While a level is selected these are visibly out of play — clicking
+         them clears the selection and explains why (see the chrome-click
+         notice in the canvas click handler). */
+      .adapt-authoring-selection-active .navigation-footer,
+      .adapt-authoring-selection-active .nav,
+      .adapt-authoring-selection-active .navigation {
+        opacity: 0.45 !important;
+        filter: grayscale(1) !important;
+        transition: opacity 0.15s, filter 0.15s;
+      }
+
+      /* Merged swap-positions control (syncSwapPositionsControls) — a single
+         always-visible plain-text affordance (no button chrome) replacing
+         the old tool's per-component move-left/move-right arrows. It lives
+         in normal flow before the component row, so a selected group's
+         header/editor can never overlap it. It must not be sticky: once the
+         button is rendered, its hit area must stay at that rendered position
+         while the canvas scrolls. */
+      .adapt-authoring-swap-positions-row {
+        position: static !important;
+        flex: 0 0 100% !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        display: flex !important;
+        justify-content: flex-end !important;
+        align-items: center !important;
+        min-height: 20px !important;
+        margin: 0 !important;
+        padding-right: 20px !important;
+        z-index: 9 !important;
+        pointer-events: auto !important;
+      }
+
+      .adapt-authoring-swap-positions-btn {
+        position: relative;
+        z-index: 8 !important;
+        margin: 0;
+        padding: 2px 0;
+        border: none;
+        background: transparent;
+        outline: none;
+        font-family: inherit;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.4;
+        white-space: nowrap;
+        color: #9ca3af;
+        cursor: pointer;
+      }
+
+      .adapt-authoring-swap-positions-btn:hover,
+      .adapt-authoring-swap-positions-btn:focus-visible {
+        color: #111827;
+      }
+
+      /* Hovering the swap control itself highlights BOTH components it
+         would swap (not just the one it's anchored to), so it's clear
+         which pair is affected. Same 2-class specificity as the existing
+         hover/active border-color override above, for the same reason. */
+      .adapt-authoring-editing-active .adapt-authoring-swap-hover-highlight {
+        outline-color: var(--life-primary-500, #2e7fa1) !important;
+      }
+
+      /* Copy/Color Label icon overlay (ensureLevelActionIcons) — top-right
+         corner of the hovered/selected outline, on the same line as the
+         level's own label (attr(data-preview-bridge-label) ::before above),
+         spaced from the border. */
+      .adapt-authoring-level-actions {
+        position: absolute;
+        top: 0.5rem;
+        right: 8px;
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        height: 15px;
+        z-index: 6;
+      }
+
+      /* Content Group header has its own larger 10px padding (see the
+         permanent .block__header-inner padding rule above) — match it so
+         the icons still land level with the label text, not the border. */
+      .adapt-authoring-editing-active .block__header-inner .adapt-authoring-level-actions {
+        top: 10px;
+      }
+
+      .adapt-authoring-level-action-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        padding: 0;
+        border: none;
+        border-radius: 3px;
+        background: transparent;
+        color: #9ca3af;
+        cursor: pointer;
+      }
+
+      .adapt-authoring-level-action-btn:hover {
+        background: var(--life-primary-100, #dbeafe);
+        color: #111827;
+      }
+
+      .adapt-authoring-level-action-btn--danger:hover {
+        background: #fef2f2;
+        color: #ef4444;
+      }
+
+      /* Hover-only preview (level not actually SELECTED yet) — icons show
+         but stay inert: no hover feedback, no click, per explicit user
+         instruction, consistent at every level. */
+      .adapt-authoring-level-actions[data-preview-actions-selected="false"] .adapt-authoring-level-action-btn {
+        pointer-events: none;
+      }
+
+      /* A color label is set: fill the tag icon solid instead of just
+         tinting its outline. */
+      .adapt-authoring-level-action-btn[data-preview-color-label-current]:not([data-preview-color-label-current=""]) svg path {
+        fill: currentColor;
+      }
+
+      /* Colour label (syncColorLabelIndicators): a real 4px solid left
+         border on the level's own box, matching the old tool's
+         box-shadow: -4px 0 0 colorlabel. Deliberately NOT scoped under
+         .adapt-authoring-editing-active — an applied label stays visible in
+         the resting canvas, in the same place, just without the dashed
+         hover/selection ring (which is an OUTLINE, drawn 2px outside the
+         box, so the two never collide). */
+      .adapt-authoring-color-label-host {
+        position: relative;
+        border-radius: 8px;
+        border-left: 4px solid var(--adapt-authoring-color-label, transparent) !important;
+      }
+
+      /* Clearance so text never runs up against the bar. The box's own left
+         edge doesn't move, so the bar sits exactly where the outline edge is
+         on an unlabelled level. Needs the .adapt-authoring-editing-active
+         prefix to MATCH the specificity of the per-level "padding: 0.5rem
+         !important" rules above — a 1-class !important rule loses to those
+         outright, so the padding silently stayed at 8px. */
+      .adapt-authoring-color-label-host,
+      .adapt-authoring-editing-active .adapt-authoring-color-label-host {
+        padding-left: 16px !important;
+      }
+
+      /* Colour Label popover \u2014 matches the shared design (title +
+         disclaimer copy + 6-column swatch grid + Reset/Cancel/Apply). */
+      .adapt-authoring-color-label-popover {
+        position: absolute;
+        width: 320px;
+        padding: 20px;
+        background: #fff;
+        border: 1px solid #e6ebf0;
+        border-radius: 12px;
+        box-shadow: 0 10px 32px rgba(0, 0, 0, 0.16);
+        z-index: 20;
+      }
+
+      .adapt-authoring-color-label-popover-title {
+        font-size: 17px;
+        font-weight: 700;
+        color: #111827;
+        margin-bottom: 8px;
+      }
+
+      .adapt-authoring-color-label-popover-desc {
+        font-size: 13px;
+        line-height: 1.4;
+        color: #6b7280;
+        margin: 0 0 16px;
+      }
+
+      .adapt-authoring-color-label-popover-grid {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 8px;
+        margin-bottom: 20px;
+      }
+
+      .adapt-authoring-color-label-swatch {
+        width: 100%;
+        aspect-ratio: 1;
+        border-radius: 6px;
+        border: 2px solid transparent;
+        padding: 0;
+        cursor: pointer;
+      }
+
+      .adapt-authoring-color-label-swatch:hover {
+        outline: 2px solid var(--life-primary-500, #2e7fa1);
+        outline-offset: 1px;
+      }
+
+      .adapt-authoring-color-label-swatch--selected {
+        border-color: var(--life-primary-500, #2e7fa1);
+        box-shadow: 0 0 0 2px #fff inset;
+      }
+
+      .adapt-authoring-color-label-popover-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      .adapt-authoring-btn-secondary,
+      .adapt-authoring-btn-primary {
+        padding: 8px 16px;
+        font-size: 14px;
+        font-weight: 500;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background-color 0.15s ease;
+      }
+
+      .adapt-authoring-btn-secondary {
+        color: #374151;
+        background: #fff;
+        border: 1px solid #d1d5db;
+      }
+
+      .adapt-authoring-btn-secondary:hover {
+        background: #f9fafb;
+      }
+
+      .adapt-authoring-btn-primary {
+        color: #fff;
+        background: #2d6fa8;
+        border: 1px solid transparent;
+      }
+
+      .adapt-authoring-btn-primary:hover {
+        background: #245c8f;
+      }
+
+      /* Paste-zone bars (canvas Copy on Section/Content Group) \u2014 old-tool
+         parity (editorPasteZoneView.js), shown around the just-copied node
+         until the user picks a slot or dismisses via the X. */
+      .adapt-authoring-paste-zone {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 2px 0;
+        color: var(--life-primary-500, #2e7fa1);
+        opacity: 0.5;
+        transition: opacity 0.15s ease;
+      }
+
+      .adapt-authoring-paste-zone:hover {
+        opacity: 1;
+      }
+
+      .adapt-authoring-paste-zone::before,
+      .adapt-authoring-paste-zone::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: var(--life-primary-300, #90caf9);
+      }
+
+      .adapt-authoring-paste-zone-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px;
+        border: none;
+        border-radius: 999px;
+        background: var(--life-primary-500, #2e7fa1);
+        color: #fff;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .adapt-authoring-paste-zone-cancel {
+        border: none;
+        background: transparent;
+        color: #9ca3af;
+        cursor: pointer;
+        font-size: 16px;
+        line-height: 1;
+        padding: 0 4px;
+      }
+
+      .adapt-authoring-paste-zone-cancel:hover {
+        color: #111827;
+      }
+    `;
+    head.appendChild(style);
+
+    doc
+      .querySelectorAll(".adapt-authoring-preview-hover, .adapt-authoring-preview-active, .adapt-authoring-preview-clickable, .adapt-authoring-preview-topic-shell-active, .adapt-authoring-preview-unfocused-descendant")
+      .forEach((node) => {
+        node.classList.remove(
+          "adapt-authoring-preview-hover",
+          "adapt-authoring-preview-active",
+          "adapt-authoring-preview-clickable",
+          "adapt-authoring-preview-topic-shell-active",
+          "adapt-authoring-preview-unfocused-descendant"
+        );
+        node.removeAttribute("data-preview-bridge-label");
+      });
+
+    // Purely visual hover-only title placeholders (see ensureHoverTitlePreview
+    // below) get torn down every run — they carry no editable state, so a
+    // clean rebuild each time is cheap and avoids ever going stale.
+    doc.querySelectorAll("[data-preview-hover-title-injected='true']").forEach((node) => {
+      if (node.isConnected) node.remove();
+    });
+
+    // A REAL template title node (e.g. Topic always renders one) that was
+    // temporarily shown dimmed for hover (see ensureHoverTitlePreview) goes
+    // back to its normal hidden state every run too — never removed, since
+    // it's part of the real rendered course, not something we created.
+    doc.querySelectorAll("[data-preview-hover-title-shown='true']").forEach((node) => {
+      node.classList.remove("adapt-authoring-preview-title-dimmed");
+      node.classList.add("adapt-authoring-preview-title-hidden");
+      node.removeAttribute("data-preview-hover-title-shown");
+    });
+
+    [".page", ".article", ".block", ".component", ".menu"].forEach((selector) => {
+      doc.querySelectorAll(selector).forEach((node) => {
+        node.classList.add("adapt-authoring-preview-clickable");
+      });
+    });
+
+    // When a level's title is hidden/empty, the real template renders NO
+    // header markup at all — falling back to the level's whole content
+    // container (.article__inner/.block__inner) as the hover/active target
+    // wraps every child underneath it too (e.g. a Content Group's hover box
+    // engulfing its Component). Quick Edit and syncPreviewInlineEditors'
+    // own selection path (ensureHeaderInnerHost) both avoid this by
+    // creating a small, real, permanent header placeholder to frame
+    // instead — mirrored here so HOVER gets the same small frame, not just
+    // Selection. Idempotent/safe to call from both hover and active
+    // resolution: checks for an existing header first, matches the exact
+    // classnames ensureHeaderInnerHost (syncPreviewInlineEditors) already
+    // uses, so whichever runs first is transparently reused by the other
+    // with no duplicate headers ever created.
+    const ensureLevelHeaderHost = (
+      level: "topic" | "section" | "group",
+      root: Element | null
+    ): HTMLElement | null => {
+      if (!root) return null;
+      const config =
+        level === "topic"
+          ? { headerSelector: ".page__header", headerClassName: "page__header", innerSelector: ".page__header-inner", innerClassName: "page__header-inner" }
+          : level === "section"
+            ? { headerSelector: ".article__header", headerClassName: "article__header", innerSelector: ".article__header-inner", innerClassName: "article__header-inner" }
+            : { headerSelector: ".block__header", headerClassName: "block__header", innerSelector: ".block__header-inner", innerClassName: "block__header-inner" };
+
+      const existingInner = root.querySelector(config.innerSelector) as HTMLElement | null;
+      if (existingInner) return existingInner;
+
+      let container = root.querySelector(config.headerSelector) as HTMLElement | null;
+      if (!container) {
+        container = doc.createElement("div");
+        container.className = config.headerClassName;
+        container.setAttribute("data-preview-injected", "true");
+        root.insertBefore(container, root.firstChild);
+      }
+
+      const inner = doc.createElement("div");
+      inner.className = config.innerClassName;
+      inner.setAttribute("data-preview-injected", "true");
+      container.appendChild(inner);
+      return inner;
+    };
+
+    const resolveHighlightTarget = (
+      level: "menu" | "topic" | "section" | "group" | "component",
+      id: string | null
+    ): Element | null => {
+      if (level === "menu") {
+        return doc.querySelector(".menu[data-adapt-id]");
+      }
+
+      if (!id) return null;
+
+      const base = doc.querySelector(`[data-adapt-id="${id}"]`);
+      if (!base) return null;
+
+      const root = level === "topic" ? base.closest(".page") ?? base : base;
+      // A hierarchy node's outer element includes every descendant. Framing
+      // it produces one giant block outline plus a second child hover frame.
+      // Quick Edit frames the level's own visible surface instead.
+      if (level === "topic") {
+        return root.querySelector(".page__header-inner") ?? ensureLevelHeaderHost("topic", root.querySelector(".page__inner") ?? root);
+      }
+      if (level === "section") {
+        return root.querySelector(".article__header-inner") ?? ensureLevelHeaderHost("section", root.querySelector(".article__inner") ?? root);
+      }
+      if (level === "group") {
+        return root.querySelector(".block__header-inner") ?? ensureLevelHeaderHost("group", root.querySelector(".block__inner") ?? root);
+      }
+      if (level === "component") {
+        return root.querySelector(".component__inner") ?? root;
+      }
+      return root;
+    };
+
+    const resolveContainerTarget = (
+      level: "menu" | "topic" | "section" | "group" | "component",
+      id: string | null
+    ): Element | null => {
+      if (level === "menu") {
+        return doc.querySelector(".menu[data-adapt-id]");
+      }
+
+      if (!id) return null;
+
+      const base = doc.querySelector(`[data-adapt-id="${id}"]`);
+      if (!base) return null;
+
+      if (level === "topic") {
+        return base.closest(".page") ?? base;
+      }
+
+      return base;
+    };
+
+    const toBadgeLabel = (level: "menu" | "topic" | "section" | "group" | "component") => {
+      if (level === "topic") return "Topic (Page)";
+      if (level === "section") return "Section (Article)";
+      if (level === "group") return "Content Group (Block)";
+      if (level === "component") return "Component";
+      return "Menu";
+    };
+
+    type LevelActionIds = { pageId: string; articleId: string | null; blockId: string | null; componentId: string | null };
+
+    const getColorLabelForLevel = (
+      level: "topic" | "section" | "group" | "component",
+      ids: LevelActionIds
+    ): string => {
+      const pages = contentPagesRef.current;
+      const page = pages.find((candidate) => candidate.id === ids.pageId);
+      if (level === "topic") return page?.colorLabel || "";
+      const article = page && ids.articleId ? page.articles.find((candidate) => candidate.id === ids.articleId) : null;
+      if (level === "section") return article?.colorLabel || "";
+      const block = article && ids.blockId ? article.blocks.find((candidate) => candidate.id === ids.blockId) : null;
+      if (level === "group") return block?.colorLabel || "";
+      const component = block && ids.componentId ? block.components.find((candidate) => candidate.id === ids.componentId) : null;
+      return component?.colorLabel || "";
+    };
+
+    // Copy (topic/section/group — Component deferred, see memory) + Color
+    // Label (every level, matching the old tool's context menu, which only
+    // withholds it from 'page-min' and 'course') icon overlay, top-right
+    // corner of the hovered/selected outline. Copy icon reused from the
+    // right panel's "Copy topic id" style, color-label icon from the
+    // new-ui asset.
+    const ensureLevelActionIcons = (
+      node: Element,
+      level: "topic" | "section" | "group" | "component",
+      ids: LevelActionIds,
+      isSelected: boolean
+    ): Element | null => {
+      const showCopy = level !== "component";
+      const showColorLabel = true;
+      if (!showCopy && !showColorLabel) return null;
+
+      let actions = node.querySelector<HTMLElement>(":scope > [data-preview-level-actions]");
+      if (!actions) {
+        actions = doc.createElement("div");
+        actions.setAttribute("data-preview-level-actions", "true");
+        actions.className = "adapt-authoring-level-actions";
+        node.appendChild(actions);
+      }
+      // Hover alone only ever PREVIEWS the icons (grey, inert) — real
+      // hover/click affordance is reserved for the level actually SELECTED,
+      // per explicit user instruction, consistent at every level.
+      actions.setAttribute("data-preview-actions-selected", isSelected ? "true" : "false");
+      actions.setAttribute("data-preview-action-level", level);
+      actions.setAttribute("data-preview-action-page-id", ids.pageId);
+      if (ids.articleId) actions.setAttribute("data-preview-action-article-id", ids.articleId);
+      else actions.removeAttribute("data-preview-action-article-id");
+      if (ids.blockId) actions.setAttribute("data-preview-action-block-id", ids.blockId);
+      else actions.removeAttribute("data-preview-action-block-id");
+      if (ids.componentId) actions.setAttribute("data-preview-action-component-id", ids.componentId);
+      else actions.removeAttribute("data-preview-action-component-id");
+
+      let colorBtn = actions.querySelector<HTMLButtonElement>("[data-preview-color-label-btn]");
+      if (showColorLabel) {
+        if (!colorBtn) {
+          colorBtn = doc.createElement("button");
+          colorBtn.type = "button";
+          colorBtn.setAttribute("data-preview-color-label-btn", "true");
+          colorBtn.className = "adapt-authoring-level-action-btn";
+          colorBtn.innerHTML = LEVEL_ACTION_COLOR_LABEL_ICON_SVG;
+          actions.insertBefore(colorBtn, actions.firstChild);
+        }
+        colorBtn.title = "Set Color Label";
+        const colorLabelValue = getColorLabelForLevel(level, ids);
+        colorBtn.setAttribute("data-preview-color-label-current", colorLabelValue);
+        colorBtn.style.color = colorLabelValue ? (COLOR_LABEL_HEX[colorLabelValue] || "") : "";
+      } else if (colorBtn) {
+        colorBtn.remove();
+      }
+
+      let copyBtn = actions.querySelector<HTMLButtonElement>("[data-preview-copy-node-btn]");
+      if (showCopy) {
+        if (!copyBtn) {
+          copyBtn = doc.createElement("button");
+          copyBtn.type = "button";
+          copyBtn.setAttribute("data-preview-copy-node-btn", "true");
+          copyBtn.className = "adapt-authoring-level-action-btn";
+          copyBtn.innerHTML = LEVEL_ACTION_COPY_ICON_SVG;
+          actions.appendChild(copyBtn);
+        }
+        copyBtn.title = `Copy ${toBadgeLabel(level)}`;
+      } else if (copyBtn) {
+        copyBtn.remove();
+      }
+
+      let templateBtn = actions.querySelector<HTMLButtonElement>("[data-preview-save-template-btn]");
+      if (!templateBtn) {
+        templateBtn = doc.createElement("button");
+        templateBtn.type = "button";
+        templateBtn.setAttribute("data-preview-save-template-btn", "true");
+        templateBtn.className = "adapt-authoring-level-action-btn";
+        templateBtn.innerHTML = LEVEL_ACTION_SAVE_TEMPLATE_ICON_SVG;
+        actions.appendChild(templateBtn);
+      }
+      templateBtn.title = `Save ${toBadgeLabel(level)} as template`;
+
+      let deleteBtn = actions.querySelector<HTMLButtonElement>("[data-preview-delete-node-btn]");
+      if (!deleteBtn) {
+        deleteBtn = doc.createElement("button");
+        deleteBtn.type = "button";
+        deleteBtn.setAttribute("data-preview-delete-node-btn", "true");
+        deleteBtn.className = "adapt-authoring-level-action-btn adapt-authoring-level-action-btn--danger";
+        deleteBtn.innerHTML = LEVEL_ACTION_DELETE_ICON_SVG;
+        actions.appendChild(deleteBtn);
+      }
+      deleteBtn.title = `Delete ${toBadgeLabel(level)}`;
+
+      return actions;
+    };
+
+    // Colour label indicator: a real 4px solid left border on the SAME box
+    // the hover/selection outline frames (old tool: box-shadow -4px 0 0 on
+    // the level's own element, editorOriginView.js + colorLabels.less).
+    // Unlike every other editing affordance here it is NOT gated by hover,
+    // selection or .adapt-authoring-editing-active — an applied label stays
+    // visible in the resting canvas, just without the dashed ring.
+    const applyColorLabelBorder = (host: HTMLElement, value: string) => {
+      host.classList.add("adapt-authoring-color-label-host");
+      const colour = COLOR_LABEL_HEX[value] ?? "";
+      if (host.style.getPropertyValue("--adapt-authoring-color-label") !== colour) {
+        host.style.setProperty("--adapt-authoring-color-label", colour);
+      }
+    };
+
+    const clearColorLabelBorder = (host: HTMLElement) => {
+      host.classList.remove("adapt-authoring-color-label-host");
+      host.style.removeProperty("--adapt-authoring-color-label");
+    };
+
+    // Same host resolution as resolveHighlightTarget but never CREATES a
+    // placeholder header — a level with no header of its own must not grow
+    // one just to carry a colour label.
+    const findExistingHighlightHost = (
+      level: "topic" | "section" | "group" | "component",
+      id: string
+    ): HTMLElement | null => {
+      const base = doc.querySelector(`[data-adapt-id="${id}"]`);
+      if (!base) return null;
+      const root = level === "topic" ? base.closest(".page") ?? base : base;
+      if (level === "topic") return root.querySelector(".page__header-inner");
+      if (level === "section") return root.querySelector(".article__header-inner");
+      if (level === "group") return root.querySelector(".block__header-inner");
+      return (root.querySelector(".component__inner") as HTMLElement | null) ?? (root as HTMLElement);
+    };
+
+    const syncColorLabelIndicators = (activeNode: Element | null, hoverNode: Element | null) => {
+      const labelled = new Set<HTMLElement>();
+
+      const stamp = (
+        level: "topic" | "section" | "group" | "component",
+        id: string,
+        value: string | undefined
+      ) => {
+        if (!value) return;
+        const host = findExistingHighlightHost(level, id);
+        if (!host) return;
+        // Headerless level: its only host is the synthetic placeholder the
+        // hover/selection path created, which outlives the interaction that
+        // made it. Show the label there ONLY while that level is actually
+        // hovered or selected, per explicit user instruction.
+        const header = host.closest(".page__header, .article__header, .block__header");
+        const isSyntheticHeader =
+          host.getAttribute("data-preview-injected") === "true" ||
+          header?.getAttribute("data-preview-injected") === "true";
+        if (isSyntheticHeader && host !== activeNode && host !== hoverNode) {
+          return;
+        }
+        applyColorLabelBorder(host, value);
+        labelled.add(host);
+      };
+
+      // Ids belonging to a page the iframe isn't currently showing simply
+      // resolve to null, so walking every page needs no selection state.
+      contentPagesRef.current.forEach((page) => {
+        stamp("topic", page.id, page.colorLabel);
+        page.articles.forEach((article) => {
+          stamp("section", article.id, article.colorLabel);
+          article.blocks.forEach((block) => {
+            stamp("group", block.id, block.colorLabel);
+            block.components.forEach((component) => stamp("component", component.id, component.colorLabel));
+          });
+        });
+      });
+
+      doc.querySelectorAll<HTMLElement>(".adapt-authoring-color-label-host").forEach((host) => {
+        if (!labelled.has(host)) clearColorLabelBorder(host);
+      });
+    };
+
+    // Same title-container/inner class names + placeholder copy
+    // syncPreviewInlineEditors uses for the SELECTED level's empty-title
+    // dimmed treatment — mirrored here so a hovered (not-yet-selected) empty
+    // level looks identical instead of showing a blank outline.
+    const findHoverTitlePreviewInfo = (
+      level: "menu" | "topic" | "section" | "group" | "component"
+    ): { title: string; placeholder: string; containerSelector: string; containerClassName: string; innerSelector: string; innerClassName: string } | null => {
+      const pages = contentPagesRef.current;
+      const page = pages.find((candidate) => candidate.id === previewHoverState.pageId);
+      if (level === "topic") {
+        if (!page) return null;
+        return { title: page.title || "", placeholder: "TOPIC TITLE", containerSelector: ".page__title", containerClassName: "page__title", innerSelector: ".page__title-inner", innerClassName: "page__title-inner" };
+      }
+      const article = page?.articles.find((candidate) => candidate.id === previewHoverState.articleId);
+      if (level === "section") {
+        if (!article) return null;
+        return { title: article.title || "", placeholder: "Section title", containerSelector: ".article__title", containerClassName: "article__title", innerSelector: ".article__title-inner", innerClassName: "article__title-inner" };
+      }
+      const block = article?.blocks.find((candidate) => candidate.id === previewHoverState.blockId);
+      if (level === "group") {
+        if (!block) return null;
+        return { title: block.title || "", placeholder: "Content Group title", containerSelector: ".block__title", containerClassName: "block__title", innerSelector: ".block__title-inner", innerClassName: "block__title-inner" };
+      }
+      if (level === "component") {
+        const component = block?.components.find((candidate) => candidate.id === previewHoverState.componentId);
+        if (!component) return null;
+        return { title: component.settings.title || "", placeholder: "Component title", containerSelector: ".component__title", containerClassName: "component__title", innerSelector: ".component__title-inner", innerClassName: "component__title-inner" };
+      }
+      return null;
+    };
+
+    const ensureHoverTitlePreview = (host: Element, info: NonNullable<ReturnType<typeof findHoverTitlePreviewInfo>>) => {
+      const existingInner = host.querySelector(info.innerSelector) as HTMLElement | null;
+      if (existingInner) {
+        // The real template always renders a title element for this level
+        // (e.g. Topic — subtitle/body/instruction share its wrapper), but
+        // hides it via adapt-authoring-preview-title-hidden when "Display
+        // title in preview" is off. Left alone, a headless Topic's hover
+        // box would look empty even though a real (just invisible) title
+        // node is sitting right there — show it dimmed on hover too,
+        // exactly mirroring the SAME hidden->dimmed swap makeEditable()
+        // already does once the node is actually selected. This is a REAL
+        // template node, never removed — only the two classes are ever
+        // toggled, reverted by the matching cleanup in
+        // applyPreviewSelectionStyles's top-of-run sweep.
+        const container = (existingInner.closest(info.containerSelector) as HTMLElement | null) ?? existingInner;
+        if (container.classList.contains("adapt-authoring-preview-title-hidden")) {
+          container.classList.remove("adapt-authoring-preview-title-hidden");
+          container.classList.add("adapt-authoring-preview-title-dimmed");
+          container.setAttribute("data-preview-hover-title-shown", "true");
+        }
+        return;
+      }
+
+      let container = host.querySelector(info.containerSelector) as HTMLElement | null;
+      if (!container) {
+        container = doc.createElement("div");
+        container.className = info.containerClassName;
+        container.setAttribute("data-preview-hover-title-injected", "true");
+        host.insertBefore(container, host.firstChild);
+      }
+
+      const inner = doc.createElement("div");
+      inner.className = `${info.innerClassName} adapt-authoring-preview-title-dimmed`;
+      inner.textContent = info.title.trim().length > 0 ? info.title : info.placeholder;
+      inner.setAttribute("data-preview-hover-title-injected", "true");
+      container.appendChild(inner);
+    };
+
+    const hoverLevel = previewHoverState.level;
+    const hoverTargetId =
+      previewHoverState.componentId ??
+      previewHoverState.blockId ??
+      previewHoverState.articleId ??
+      previewHoverState.pageId;
+
+    const activeLevel: "menu" | "topic" | "section" | "group" | "component" | null =
+      hasCanvasSelection
+        ? menuSelected
+          ? "menu"
+          : selectedComponentId
+            ? "component"
+            : selectedBlockId
+              ? "group"
+              : selectedArticleId
+                ? "section"
+                : "topic"
+        : null;
+
+    const activeTargetId =
+      hasCanvasSelection
+        ? selectedComponentId ??
+          selectedBlockId ??
+          selectedArticleId ??
+          (menuSelected ? null : selectedPageId)
+        : null;
+
+    if (menuSelected && hasCanvasSelection) {
+      const menuNode = resolveHighlightTarget("menu", null);
+      if (menuNode) {
+        menuNode.classList.add("adapt-authoring-preview-active");
+        (menuNode as Element).setAttribute("data-preview-bridge-label", toBadgeLabel("menu"));
+      }
+    }
+
+    const activeNode = activeLevel && (activeTargetId || activeLevel === "menu")
+      ? resolveHighlightTarget(activeLevel, activeTargetId)
+      : null;
+
+    let activeActionsHost: Element | null = null;
+    let hoverActionsHost: Element | null = null;
+    let hoverNode: Element | null = null;
+
+    if (hoverTargetId && hoverLevel) {
+      hoverNode = resolveHighlightTarget(hoverLevel, hoverTargetId);
+      // An active level owns its descendants while selected. Showing a
+      // second nested hover rectangle inside it creates the misaligned,
+      // competing outline seen for Components inside a selected Group.
+      if (hoverNode && hoverNode !== activeNode && !activeNode?.contains(hoverNode)) {
+        hoverNode.classList.add("adapt-authoring-preview-hover");
+        (hoverNode as Element).setAttribute("data-preview-bridge-label", toBadgeLabel(hoverLevel));
+
+        const hoverTitleInfo = findHoverTitlePreviewInfo(hoverLevel);
+        if (hoverTitleInfo) {
+          ensureHoverTitlePreview(hoverNode, hoverTitleInfo);
+        }
+
+        if (hoverLevel !== "menu" && previewHoverState.pageId) {
+          hoverActionsHost = ensureLevelActionIcons(hoverNode, hoverLevel, {
+            pageId: previewHoverState.pageId,
+            articleId: previewHoverState.articleId,
+            blockId: previewHoverState.blockId,
+            componentId: previewHoverState.componentId,
+          }, false);
+        }
+      }
+    }
+
+    if (activeLevel && (activeTargetId || activeLevel === "menu")) {
+      if (activeNode) {
+        activeNode.classList.add("adapt-authoring-preview-active");
+        (activeNode as Element).setAttribute("data-preview-bridge-label", toBadgeLabel(activeLevel));
+
+        if (activeLevel !== "menu" && selectedPageId) {
+          activeActionsHost = ensureLevelActionIcons(activeNode, activeLevel, {
+            pageId: selectedPageId,
+            articleId: selectedArticleId,
+            blockId: selectedBlockId,
+            componentId: selectedComponentId,
+          }, true);
+        }
+
+        // Dim everything nested inside the selected level — its own
+        // header stays fully normal, only what's underneath (not what's
+        // actually being edited via the right panel right now) is muted.
+        // Components have nothing nested under them, so nothing to dim.
+        // Queried from the OUTER container (resolveContainerTarget), never
+        // from activeNode itself — activeNode is now always the level's
+        // own small header (real or synthesized), which never contains
+        // descendants as DOM children (they're siblings under the outer
+        // .article/.block node), so querying activeNode here would always
+        // find nothing.
+        const unfocusedDescendantSelector: string | null =
+          activeLevel === "topic" ? ".article, .block, .component"
+          : activeLevel === "section" ? ".block, .component"
+          : activeLevel === "group" ? ".component"
+          : null;
+        if (unfocusedDescendantSelector) {
+          const dimContainer = resolveContainerTarget(activeLevel, activeTargetId);
+          dimContainer?.querySelectorAll(unfocusedDescendantSelector).forEach((node) => {
+            node.classList.add("adapt-authoring-preview-unfocused-descendant");
+          });
+        }
+      }
+
+      if (activeLevel === "topic") {
+        const topicContainer = resolveContainerTarget("topic", activeTargetId);
+        topicContainer?.classList.add("adapt-authoring-preview-topic-shell-active");
+      }
+    }
+
+    // Idempotent by construction — only removes a level-actions container
+    // whose host is NEITHER of this run's two qualifying nodes, so a run
+    // where nothing actually changed performs zero DOM mutations (avoids
+    // the same self-triggering MutationObserver churn documented on the
+    // swap-positions control above).
+    doc.querySelectorAll("[data-preview-level-actions]").forEach((node) => {
+      if (node !== activeActionsHost && node !== hoverActionsHost) {
+        node.remove();
+      }
+    });
+
+    syncColorLabelIndicators(activeNode, hoverNode);
+
+    // Topic/Section header insets (margin-left/right, CSS above) were
+    // originally hardcoded to 8px on the assumption that Content Group's
+    // own real inset (block__inner's theme padding minus the -0.5rem
+    // pull-back on .block__header-inner/.component__container) is always
+    // 8px too. That inset is NOT constant — it comes from the theme's own
+    // real (often responsive) CSS, so it can differ at different iframe
+    // widths. Since the canvas iframe's rendered width changes whenever a
+    // side panel is collapsed/expanded (no side panel resize event fires,
+    // but the iframe's own layout box genuinely changes size), a hardcoded
+    // value drifts out of sync with Content Group/Component's real inset
+    // at some widths — reported as "alignment fine at one screen size,
+    // off once panels are collapsed/expanded". Fixed by measuring the
+    // REAL, live inset each run from a full-width Content Group reference
+    // and applying that exact value to Topic/Section instead of trusting
+    // the CSS constant. Do not use an individual .component__inner here:
+    // once a Content Group has two components, that node is intentionally
+    // half-width and would squeeze Topic/Section to the left half too.
+    const insetContainer = doc.querySelector(".page__inner") as HTMLElement | null;
+    const insetReference = (doc.querySelector(".component__container") ??
+      doc.querySelector(".block__header-inner")) as HTMLElement | null;
+    if (insetContainer && insetReference) {
+      // Measure against the theme's own padding, never against whatever this
+      // same block added on a previous run.
+      insetContainer.style.removeProperty("padding-left");
+      insetContainer.style.removeProperty("padding-right");
+
+      const containerRect = insetContainer.getBoundingClientRect();
+      const refRect = insetReference.getBoundingClientRect();
+      const leftInset = Math.max(0, Math.round(refRect.left - containerRect.left));
+      const rightInset = Math.max(0, Math.round(containerRect.right - refRect.right));
+      doc.querySelectorAll(".page__header-inner, .article__header-inner").forEach((node) => {
+        const el = node as HTMLElement;
+        el.style.setProperty("margin-left", `${leftInset}px`, "important");
+        el.style.setProperty("margin-right", `${rightInset}px`, "important");
+      });
+
+      // At some iframe widths (notably once a side panel is collapsed) the
+      // theme lays the content column out flush against the canvas edge, so
+      // the hover/selection outline — drawn OUTSIDE the box — gets clipped on
+      // that side. Pad the shared container by only the few missing pixels:
+      // every level moves by the same amount, so their alignment is kept, and
+      // a theme that already leaves room is left untouched.
+      const ringRoom = PREVIEW_OUTLINE_RING_PX;
+      const levelBoxes = Array.from(
+        doc.querySelectorAll(".page__header-inner, .article__header-inner, .block__header-inner, .component__inner")
+      ).map((node) => node.getBoundingClientRect());
+      if (levelBoxes.length) {
+        const viewportWidth = doc.documentElement.clientWidth;
+        const leftMost = Math.min(...levelBoxes.map((r) => r.left));
+        const rightMost = Math.max(...levelBoxes.map((r) => r.right));
+        const deficitLeft = Math.max(0, Math.ceil(ringRoom - leftMost));
+        const deficitRight = Math.max(0, Math.ceil(ringRoom - (viewportWidth - rightMost)));
+        const containerStyle = getComputedStyle(insetContainer);
+        if (deficitLeft > 0) {
+          insetContainer.style.setProperty("padding-left", `${(parseFloat(containerStyle.paddingLeft) || 0) + deficitLeft}px`, "important");
+        }
+        if (deficitRight > 0) {
+          insetContainer.style.setProperty("padding-right", `${(parseFloat(containerStyle.paddingRight) || 0) + deficitRight}px`, "important");
+        }
+      }
+    }
+
+    // Reserve space for extension UI that paints below a fixed top nav's own box.
+    const navEl = doc.querySelector(".nav") as HTMLElement | null;
+    const pageHeaderInner = doc.querySelector(".page__header-inner") as HTMLElement | null;
+    if (navEl && pageHeaderInner) {
+      const navPosition = getComputedStyle(navEl).position;
+      let navOverflow = 0;
+      if (navPosition === "fixed" || navPosition === "sticky") {
+        const navRect = navEl.getBoundingClientRect();
+        let maxDescendantBottom = navRect.bottom;
+        navEl.querySelectorAll("*").forEach((descendant) => {
+          const descendantBottom = (descendant as HTMLElement).getBoundingClientRect().bottom;
+          if (descendantBottom > maxDescendantBottom) maxDescendantBottom = descendantBottom;
+        });
+        navOverflow = Math.max(0, Math.ceil(maxDescendantBottom - navRect.bottom));
+      }
+      if (navOverflow > 0) {
+        pageHeaderInner.style.setProperty("margin-top", `${navOverflow + 4}px`, "important");
+      } else {
+        pageHeaderInner.style.removeProperty("margin-top");
+      }
+    }
+  }, [
+    hasCanvasSelection,
+    isPointerOverCanvas,
+    menuSelected,
+    previewHoverState.articleId,
+    previewHoverState.blockId,
+    previewHoverState.componentId,
+    previewHoverState.level,
+    previewHoverState.pageId,
+    selectedArticleId,
+    selectedBlockId,
+    selectedComponentId,
+    selectedPageId,
+  ]);
+
+  // syncPreviewInlineEditors (and any other function whose OWN deps don't
+  // include hover state) closes over whatever applyPreviewSelectionStyles
+  // was current at ITS OWN last reconstruction — calling that stale copy
+  // reapplies STALE hover/active classes, undoing a same-tick hover update
+  // for a sibling component. Keeping a ref in sync lets every such nested
+  // call always run the CURRENT hover-aware version instead.
+  useEffect(() => {
+    applyPreviewSelectionStylesRef.current = applyPreviewSelectionStyles;
+  }, [applyPreviewSelectionStyles]);
+
+  const syncPreviewInlineEditors = useCallback(() => {
+    const iframe = previewFrameRef.current;
+    const doc = iframe?.contentDocument;
+    if (!doc) return;
+
+    if (inlineEditorSyncRetryFrameRef.current !== null) {
+      window.cancelAnimationFrame(inlineEditorSyncRetryFrameRef.current);
+      inlineEditorSyncRetryFrameRef.current = null;
+    }
+
+    // Disconnected up front, every run — re-created only for a selected
+    // component (see the end of the component branch below). Doing this
+    // BEFORE our own DOM patching (rather than trying to flag/ignore
+    // self-caused records after the fact) guarantees our own mutations can
+    // never be mistaken for the framework's.
+    componentMutationObserverRef.current?.disconnect();
+    componentMutationObserverRef.current = null;
+
+    if (hasCanvasSelection) {
+      const expectedRootSelector = selectedComponentId
+        ? `.component[data-adapt-id="${selectedComponentId}"]`
+        : selectedBlockId
+          ? `.block[data-adapt-id="${selectedBlockId}"]`
+          : selectedArticleId
+            ? `.article[data-adapt-id="${selectedArticleId}"]`
+            : selectedPageId && !menuSelected
+              ? `.page[data-adapt-id="${selectedPageId}"]`
+              : null;
+
+      // The selected node's real DOM root not existing yet almost always
+      // means the SPA hasn't finished rendering, not that the selection is
+      // invalid — retry a bounded number of frames instead of giving up, so
+      // the default initial selection doesn't end up permanently stuck
+      // non-editable just because it "arrived" before the iframe did.
+      if (expectedRootSelector && !doc.querySelector(expectedRootSelector)) {
+        if (inlineEditorSyncRetryCountRef.current < 90) {
+          inlineEditorSyncRetryCountRef.current += 1;
+          inlineEditorSyncRetryFrameRef.current = window.requestAnimationFrame(() => {
+            inlineEditorSyncRetryFrameRef.current = null;
+            syncPreviewInlineEditors();
+          });
+        } else {
+          inlineEditorSyncRetryCountRef.current = 0;
+        }
+        return;
+      }
+    }
+    inlineEditorSyncRetryCountRef.current = 0;
+
+    const restoreCompiledComponentInstruction = (element: HTMLElement) => {
+      if (element.getAttribute("data-preview-edit-field") !== "instruction") return;
+      const componentId = element.getAttribute("data-preview-component-id");
+      const pageId = element.getAttribute("data-preview-page-id");
+      const articleId = element.getAttribute("data-preview-article-id");
+      const blockId = element.getAttribute("data-preview-block-id");
+      if (!componentId || !pageId || !articleId || !blockId) return;
+
+      const page = contentPagesRef.current.find((candidate) => candidate.id === pageId);
+      const article = page?.articles.find((candidate) => candidate.id === articleId);
+      const block = article?.blocks.find((candidate) => candidate.id === blockId);
+      const component = block?.components.find((candidate) => candidate.id === componentId);
+      const template = component?.settings.properties && typeof component.settings.properties.instruction === "string"
+        ? component.settings.properties.instruction
+        : component?.settings.instruction || "";
+      const handlebars = (doc.defaultView as Window & { Handlebars?: { compile: (source: string) => (context: unknown) => string } }).Handlebars;
+      if (!handlebars?.compile || !template) return;
+
+      const properties = asRecord(component?.settings.properties);
+      const context = {
+        ...properties,
+        _isRadio: properties._isRadio ?? properties._selectable === 1,
+      };
+      try {
+        element.innerHTML = handlebars.compile(template)(context);
+      } catch {
+        element.textContent = template;
+      }
+    };
+
+    const clearEditable = () => {
+      // Only tear down an injected placeholder (title/subtitle/body/
+      // instruction container the real template didn't render because the
+      // field was empty at last build) when it's STILL empty. One typed
+      // into while selected is real content the user just added to this
+      // component — deselecting must not make it disappear just because
+      // the underlying template happened to omit an empty version of it.
+      //
+      // Never remove an element that is (or CONTAINS) the currently
+      // selected node's own active editable field
+      // ([data-preview-edit-enabled='true']), even if it's genuinely
+      // empty text-wise (e.g. a Content Group with a blank body). Doing so
+      // destroyed and recreated that field's real DOM node on literally
+      // every sync pass for any empty field — silently orphaning/
+      // re-initiating its CKEditor instance (see ensureCanvasBodyEditor)
+      // every single time, which under fast repeated selection changes
+      // could leave the async CKEditor5 creation permanently interrupted
+      // before it ever finished, appearing to "randomly" not render.
+      doc.querySelectorAll("[data-preview-injected='true']").forEach((node) => {
+        const element = node as HTMLElement;
+        if ((element.textContent || "").trim().length > 0) return;
+        if (element.matches("[data-preview-edit-enabled='true']") || element.querySelector("[data-preview-edit-enabled='true']")) return;
+        const parent = element.parentElement;
+        element.remove();
+        if (parent?.getAttribute("data-preview-injected") === "true" && !parent.textContent?.trim() && !parent.querySelector("*")) {
+          parent.remove();
+        }
+      });
+      doc.querySelectorAll(".adapt-authoring-preview-inline-structured-header").forEach((node) => {
+        node.classList.remove("adapt-authoring-preview-inline-structured-header", "adapt-authoring-preview-inline-structured-header--component");
+      });
+
+      doc.querySelectorAll("[data-preview-inline-container-empty='true']").forEach((node) => {
+        node.removeAttribute("data-preview-inline-container-empty");
+      });
+
+      doc.querySelectorAll("[data-preview-edit-enabled='true']").forEach((node) => {
+        const element = node as HTMLElement;
+        // The visible ClassicEditor editable surface carries these metadata
+        // attributes for the shared input/focus delegation. It is not a plain
+        // inline editor: stripping its contenteditable attribute here leaves
+        // its toolbar mounted but makes component bodies impossible to focus
+        // after the next selection sync. Its instance is explicitly destroyed
+        // below when the selected owner changes or selection clears.
+        if (element.classList.contains("ck-editor__editable")) return;
+        const isInjected = element.getAttribute("data-preview-injected") === "true";
+        const isEmpty = (element.textContent || "").trim().length === 0;
+
+        restoreCompiledComponentInstruction(element);
+
+        // On deselect, a title that was shown DIMMED (because "Display title
+        // in preview" is off) goes back to fully hidden — matching real
+        // preview, where an empty displayTitle renders nothing. The dimmed
+        // treatment is only for the currently-selected node being edited.
+        if (element.getAttribute("data-preview-edit-field") === "title") {
+          const container = element.closest(PREVIEW_INLINE_FIELD_CONTAINER_SELECTOR) as HTMLElement | null;
+          const titleTarget = container ?? element;
+          if (titleTarget.classList.contains("adapt-authoring-preview-title-dimmed")) {
+            titleTarget.classList.remove("adapt-authoring-preview-title-dimmed");
+            titleTarget.classList.add("adapt-authoring-preview-title-hidden");
+          }
+        }
+
+        node.removeAttribute("data-preview-edit-enabled");
+        node.removeAttribute("data-preview-edit-field");
+        node.removeAttribute("data-preview-node-level");
+        node.removeAttribute("data-preview-page-id");
+        node.removeAttribute("data-preview-article-id");
+        node.removeAttribute("data-preview-block-id");
+        node.removeAttribute("data-preview-component-id");
+        node.removeAttribute("data-preview-behaviour-path");
+        node.removeAttribute("contenteditable");
+        node.removeAttribute("spellcheck");
+        node.removeAttribute("data-placeholder");
+        node.classList.remove("adapt-authoring-preview-inline-editable", "adapt-authoring-preview-inline-empty");
+
+        if (isInjected && isEmpty) {
+          const parent = element.parentElement;
+          element.remove();
+          if (parent?.getAttribute("data-preview-injected") === "true" && !parent.textContent?.trim()) {
+            parent.remove();
+          }
+        }
+      });
+    };
+
+    const ensureHeaderInnerHost = (
+      root: Element | null,
+      containerSelector: string,
+      containerClassName: string,
+      innerSelector: string,
+      innerClassName: string,
+      insertBeforeSelectors: string[]
+    ): HTMLElement | null => {
+      if (!root) return null;
+
+      const existingInner = root.querySelector(innerSelector) as HTMLElement | null;
+      if (existingInner) {
+        return existingInner;
+      }
+
+      let container = root.querySelector(containerSelector) as HTMLElement | null;
+      if (!container) {
+        container = doc.createElement("div");
+        container.className = containerClassName;
+        container.setAttribute("data-preview-injected", "true");
+
+        const firstDirectChild = insertBeforeSelectors
+          .map((selector) => root.querySelector(selector))
+          .find((candidate) => candidate && candidate.parentElement === root);
+
+        if (firstDirectChild) {
+          root.insertBefore(container, firstDirectChild);
+        } else if (root.firstChild) {
+          root.insertBefore(container, root.firstChild);
+        } else {
+          root.appendChild(container);
+        }
+      }
+
+      const inner = doc.createElement("div");
+      inner.className = innerClassName;
+      inner.setAttribute("data-preview-injected", "true");
+      container.appendChild(inner);
+      return inner;
+    };
+
+    // Every level's title/subtitle/body/instruction placeholders are ensured
+    // and then forced into one fixed DOM order: title, subtitle (only where
+    // the level/component supports it), body, instruction — regardless of
+    // which of them the real rendered template already contains vs. which
+    // we have to inject as empty placeholders. This is the single shared
+    // ordering rule for all four levels (topic/section/content group/
+    // component); never special-case ordering per level — add/adjust field
+    // specs at the call site instead.
+    type OrderedInlineFieldSpec = {
+      key: "title" | "subtitle" | "body" | "instruction";
+      visible: boolean;
+      value: string;
+    } & (
+      | { kind: "pair"; containerSelector: string; containerClassName: string; innerSelector: string; innerClassName: string }
+      | { kind: "flat"; selector: string; className: string }
+    );
+
+    const ensureOrderedInlineFields = (
+      host: Element,
+      specs: OrderedInlineFieldSpec[]
+    ): Partial<Record<OrderedInlineFieldSpec["key"], HTMLElement>> => {
+      const result: Partial<Record<OrderedInlineFieldSpec["key"], HTMLElement>> = {};
+      const outerNodes: HTMLElement[] = [];
+
+      specs.forEach((spec) => {
+        if (!spec.visible) return;
+
+        if (spec.kind === "flat") {
+          let el = host.querySelector(spec.selector) as HTMLElement | null;
+          if (!el) {
+            el = doc.createElement("div");
+            el.className = spec.className;
+            el.textContent = spec.value;
+            el.setAttribute("data-preview-injected", "true");
+            host.appendChild(el);
+          }
+          result[spec.key] = el;
+          outerNodes.push(el);
+          return;
+        }
+
+        const existingInner = host.querySelector(spec.innerSelector) as HTMLElement | null;
+        if (existingInner) {
+          const container = (existingInner.closest(spec.containerSelector) as HTMLElement | null) ?? existingInner;
+          result[spec.key] = existingInner;
+          outerNodes.push(container);
+          return;
+        }
+
+        let container = host.querySelector(spec.containerSelector) as HTMLElement | null;
+        if (!container) {
+          container = doc.createElement("div");
+          container.className = spec.containerClassName;
+          container.setAttribute("data-preview-injected", "true");
+          host.appendChild(container);
+        }
+        const inner = doc.createElement("div");
+        inner.className = spec.innerClassName;
+        inner.textContent = spec.value;
+        inner.setAttribute("data-preview-injected", "true");
+        container.appendChild(inner);
+        result[spec.key] = inner;
+        outerNodes.push(container);
+      });
+
+      // Pin the whole ordered group to the front of `host`, in spec order —
+      // inserting in reverse at host.firstChild is what makes the final
+      // order match `specs` regardless of each node's prior position.
+      for (let i = outerNodes.length - 1; i >= 0; i--) {
+        host.insertBefore(outerNodes[i], host.firstChild);
+      }
+
+      return result;
+    };
+
+    const PREVIEW_INLINE_FIELD_CONTAINER_SELECTOR =
+      ".page__title, .page__subtitle, .page__body, .page__instruction, .article__title, .article__body, .article__instruction, .block__title, .block__body, .block__instruction, .component__title, .component__body, .component__instruction, .laerdal-text__subtitle";
+
+    // Real CKEditor 5 for canvas "body" fields (matches the old tool: every
+    // TextArea schema field gets CKEditor, body included — even when empty,
+    // just an empty editor canvas, no placeholder text). Created ONCE per
+    // source element and reused while typing. Like Quick Edit, it does not
+    // update React state on `change:data`: the existing focus-out handler is
+    // the soft-save boundary, avoiding a selection-effect rerun per key.
+    const ensureCanvasBodyEditor = (element: HTMLElement, options: { value: string; ownerKey: string; placeholder?: string; onCommit: (html: string) => void }) => {
+      // Lazily reclaim editors whose source node was torn down by the
+      // framework SPA's own re-render (e.g. navigated to a different page
+      // inside the same iframe document) — never done on a fixed timer/every
+      // effect run for ALL nodes, just piggybacked here so it can't fire
+      // mid-keystroke for a still-selected node.
+      canvasBodyEditorsRef.current.forEach((entry, sourceEl) => {
+        if (sourceEl !== element && !sourceEl.isConnected) {
+          entry.commit();
+          safeDestroyCanvasEditor(entry.editor);
+          canvasBodyEditorsRef.current.delete(sourceEl);
+        }
+      });
+
+      const existing = canvasBodyEditorsRef.current.get(element);
+      if (existing) {
+        // Behaviour/right-panel edits update `contentPages`, then this sync
+        // runs with the new `options.value`. ClassicEditor deliberately owns
+        // its own document, so update it explicitly when the change came
+        // from outside the focused editor. While it has focus, its unsaved
+        // document remains authoritative until the blur/teardown commit.
+        if (!existing.editor.ui.focusTracker.isFocused && existing.editor.getData() !== options.value) {
+          existing.editor.__applyingExternalValue = true;
+          try {
+            existing.editor.setData(options.value || "");
+          } finally {
+            existing.editor.__applyingExternalValue = false;
+          }
+        }
+        element.style.display = "none";
+        element.classList.remove("adapt-authoring-preview-inline-empty");
+        return;
+      }
+      if (element.dataset.ckeditorCreating === "true") return;
+      const iframeWindow = doc.defaultView;
+      if (!iframeWindow) return;
+      element.dataset.ckeditorCreating = "true";
+      loadCKEditor5In(iframeWindow)
+        .then(() => {
+          const CKEDITOR = (iframeWindow as any).CKEDITOR;
+          if (!CKEDITOR || !Array.isArray(CKEDITOR.pluginsConfig) || !element.isConnected || canvasBodyEditorsRef.current.has(element)) return;
+          return CKEDITOR.create(element, {
+            plugins: [...CKEDITOR.pluginsConfig, CKEDITOR.SamaritanPlugin, CKEDITOR.PasteToolsPlugin],
+            toolbar: { items: [...CKEDITOR_FULL_TOOLBAR_ITEMS.slice(0, -1), "pasteWithFormatting", "xmlToHtml", "|", "samaritan"], shouldNotGroupWhenFull: true },
+            fontColor: { colors: CKEDITOR_STANDARD_COLOUR_PALETTE },
+            fontBackgroundColor: { colors: CKEDITOR_STANDARD_COLOUR_PALETTE },
+            heading: CKEDITOR_HEADING_CONFIG,
+            list: CKEDITOR_LIST_CONFIG,
+            table: CKEDITOR_TABLE_CONFIG,
+            image: CKEDITOR_IMAGE_CONFIG,
+            link: CKEDITOR_LINK_CONFIG,
+            htmlSupport: { allow: [{ name: /.*/, attributes: true, classes: true, style: true, styles: true }] },
+            // On destroy() (deselecting this level), CKEditor writes its
+            // current data back into `element` and un-hides it itself —
+            // exactly the "revert to plain rendered content" behaviour
+            // needed when this is no longer the selected level.
+            updateSourceElementOnDestroy: true,
+            initialData: options.value || "",
+            // CKEditor owns the empty-body case itself: it renders this as
+            // `.ck-placeholder` INSIDE the editable and clears it on the
+            // first keystroke, matching how the plain-text instruction
+            // field's `data-placeholder` behaves.
+            placeholder: options.placeholder || "",
+            samaritanOnClick: (editor: any) => {
+              setCanvasSamaritanTarget({
+                editor,
+                seedText: getSamaritanSeedText(editor),
+              });
+            },
+          }).then((editor: any) => {
+            const editableEl = editor.ui.getEditableElement() as HTMLElement;
+            let lastCommittedHtml = options.value || "";
+            const commit = (): string | null => {
+              // Guards the same class of "iframe navigated out from under a
+              // still-referenced editor" failure as safeDestroyCanvasEditor -
+              // editor.getData() can throw once the underlying document/model
+              // is gone, and this runs unconditionally in several cleanup
+              // sweeps right before destroy.
+              try {
+                const html = editor.getData();
+                if (html === lastCommittedHtml) return html;
+                lastCommittedHtml = html;
+                options.onCommit(html);
+                return html;
+              } catch {
+                // Nothing left to commit to a torn-down editor.
+                return null;
+              }
+            };
+            editor.model.document.on("change:data", () => {
+              if (editor.__applyingExternalValue) {
+                lastCommittedHtml = editor.getData();
+                return;
+              }
+              if (options.ownerKey) {
+                setDirtyNodeKeys((prev) => (prev[options.ownerKey] ? prev : { ...prev, [options.ownerKey]: true }));
+              }
+              // Commit per keystroke, not just on blur, so the right panel's
+              // own editor for the same field stays in step while typing.
+              // The setData sync above is focus-guarded, so this can't echo
+              // back into the editor being typed in.
+              commit();
+            });
+            // CKEditor's focus tracker covers both its editable surface and
+            // toolbar, so this commits only after focus leaves the editor.
+            editor.ui.focusTracker.on("change:isFocused", (_event: unknown, _name: unknown, isFocused: boolean) => {
+              isInlineEditingRef.current = isFocused;
+              if (!isFocused) commit();
+            });
+            canvasBodyEditorsRef.current.set(element, { editor, editableEl, ownerKey: options.ownerKey, commit });
+            // CKEditor already hides its source element, but force it —
+            // this is also what stops the plain-text empty-placeholder
+            // `::before` (see makeEditable) from ever rendering a second,
+            // duplicate "Add ... body" behind/above the CKEditor box.
+            element.style.display = "none";
+            element.classList.remove("adapt-authoring-preview-inline-empty");
+            const h5pContainer = element.closest(".component.laerdal-h5p")?.querySelector<HTMLElement>(".laerdal-h5p__container");
+            h5pContainer?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+          });
+        })
+        .catch((err) => console.warn("Canvas CKEditor init failed", err))
+        .finally(() => {
+          delete element.dataset.ckeditorCreating;
+        });
+    };
+
+    const makeEditable = (
+      element: HTMLElement,
+      options: {
+        level: "topic" | "section" | "group" | "component";
+        field: "title" | "subtitle" | "body" | "instruction";
+        placeholder: string;
+        value: string;
+        pageId: string;
+        articleId?: string;
+        blockId?: string;
+        componentId?: string;
+        hiddenFromPreview?: boolean;
+      }
+    ) => {
+      const isRichTextField =
+        options.field === "body" ||
+        options.field === "instruction" ||
+        (options.level === "component" && options.field === "subtitle");
+      if (isRichTextField) {
+        if (element.innerHTML !== options.value) {
+          element.innerHTML = options.value;
+        }
+      } else if (element.textContent !== options.value) {
+        element.textContent = options.value;
+      }
+      element.setAttribute("data-preview-edit-enabled", "true");
+      element.setAttribute("data-preview-edit-field", options.field);
+      element.setAttribute("data-preview-node-level", options.level);
+      element.setAttribute("data-preview-page-id", options.pageId);
+      if (options.articleId) element.setAttribute("data-preview-article-id", options.articleId);
+      if (options.blockId) element.setAttribute("data-preview-block-id", options.blockId);
+      if (options.componentId) element.setAttribute("data-preview-component-id", options.componentId);
+      element.setAttribute("contenteditable", "true");
+      element.setAttribute("spellcheck", "false");
+      element.classList.add("adapt-authoring-preview-inline-editable");
+
+      const hasText = (options.value || "").trim().length > 0;
+      const container = element.closest(PREVIEW_INLINE_FIELD_CONTAINER_SELECTOR) as HTMLElement | null;
+
+      if (!hasText) {
+        // Body is an intentionally empty CKEditor canvas, not a text placeholder.
+        if (options.field !== "body") element.classList.add("adapt-authoring-preview-inline-empty");
+        container?.setAttribute("data-preview-inline-container-empty", "true");
+      } else {
+        element.classList.remove("adapt-authoring-preview-inline-empty");
+        container?.removeAttribute("data-preview-inline-container-empty");
+      }
+      element.setAttribute("data-placeholder", options.placeholder);
+
+      if (options.field === "body") {
+        const ownerKey = options.level === "component"
+          ? `component:${options.componentId}`
+          : options.level === "group"
+            ? `block:${options.blockId}`
+            : options.level === "section"
+              ? `article:${options.articleId}`
+              : `topic:${options.pageId}`;
+        const onCommit = (html: string) => {
+          if (options.level === "topic") {
+            updatePageData(options.pageId, topicCanvasBodyPatch(options.pageId, html));
+          } else if (options.level === "section" && options.articleId) {
+            updateArticle(options.pageId, options.articleId, { description: html });
+          } else if (options.level === "group" && options.articleId && options.blockId) {
+            updateBlock(options.pageId, options.articleId, options.blockId, { description: html });
+          } else if (options.level === "component" && options.articleId && options.blockId && options.componentId) {
+            updateComponent(options.pageId, options.articleId, options.blockId, options.componentId, {
+              settings: { description: html },
+            });
+          }
+        };
+        ensureCanvasBodyEditor(element, { value: options.value, ownerKey, placeholder: options.placeholder, onCommit });
+      }
+
+      if (options.field === "title") {
+        const titleTarget = container ?? element;
+        // While this node is selected (the only time makeEditable runs for
+        // it), a title that's excluded from the real preview is shown DIMMED
+        // rather than removed, so the editor can still see/edit it and get a
+        // visual cue that it won't render. "-title-hidden" (fully removed,
+        // matching real preview) is applied only on deselect, by clearEditable.
+        titleTarget.classList.remove("adapt-authoring-preview-title-hidden");
+        titleTarget.classList.toggle("adapt-authoring-preview-title-dimmed", !!options.hiddenFromPreview);
+      }
+    };
+
+    clearEditable();
+
+    // Selection styles can run before this synchronizer creates a missing
+    // page/article/block header. Reapply after this synchronous pass so the
+    // frame moves from the broad inner fallback onto that real header wrapper.
+    window.requestAnimationFrame(() => applyPreviewSelectionStylesRef.current());
+
+    if (!hasCanvasSelection) {
+      // ClassicEditor owns a sibling toolbar/wrapper that clearEditable cannot remove.
+      canvasBodyEditorsRef.current.forEach((entry, sourceEl) => {
+        entry.commit();
+        sourceEl.style.display = "";
+        safeDestroyCanvasEditor(entry.editor);
+        canvasBodyEditorsRef.current.delete(sourceEl);
+      });
+      return;
+    }
+
+    const selectedPage = selectedPageId
+      ? contentPages.find((page) => page.id === selectedPageId)
+      : null;
+    const selectedArticle = selectedPage && selectedArticleId
+      ? selectedPage.articles.find((article) => article.id === selectedArticleId)
+      : null;
+    const selectedBlock = selectedArticle && selectedBlockId
+      ? selectedArticle.blocks.find((block) => block.id === selectedBlockId)
+      : null;
+    const selectedComponent = selectedBlock && selectedComponentId
+      ? selectedBlock.components.find((component) => component.id === selectedComponentId)
+      : null;
+
+    // Body only ever gets a live CKEditor for the ONE deepest-selected level
+    // (component beats group beats section beats topic — same precedence as
+    // the mutually-exclusive if/return chain below). Every other body the
+    // user has previously visited this session must revert to plain
+    // rendered content — otherwise CKEditor's toolbar/border stays mounted
+    // on every component ever selected, looking "always on" instead of
+    // selection-scoped.
+    const currentBodyOwnerKey = selectedComponent
+      ? `component:${selectedComponent.id}`
+      : selectedBlock
+        ? `block:${selectedBlock.id}`
+        : selectedArticle
+          ? `article:${selectedArticle.id}`
+          : selectedPage
+            ? `topic:${selectedPage.id}`
+            : null;
+    canvasBodyEditorsRef.current.forEach((entry, sourceEl) => {
+      if (entry.ownerKey === currentBodyOwnerKey) return;
+      entry.commit();
+      sourceEl.style.display = "";
+      safeDestroyCanvasEditor(entry.editor);
+      canvasBodyEditorsRef.current.delete(sourceEl);
+    });
+
+    if (selectedComponent && selectedBlock && selectedArticle && selectedPage) {
+      const componentNode = doc.querySelector(`.component[data-adapt-id="${selectedComponent.id}"]`) as HTMLElement | null;
+      const componentHost = (componentNode?.querySelector(".component__inner") ?? componentNode) as HTMLElement | null;
+      if (!componentHost) return;
+
+      const componentKey = (selectedComponent.settings.componentKey || "").toLowerCase();
+
+      // Some component templates render their own widget (image, H5P
+      // iframe, etc.) as a SIBLING of .component__inner rather than a child
+      // of it (e.g. `.component > .component__widget, .component__inner`).
+      // Reordering only inside componentHost can't fix that — the header
+      // group has to be pinned ahead of its container's own siblings too.
+      // H5P owns a nested about:blank iframe and must keep its framework DOM
+      // order intact while its body field is upgraded to CKEditor.
+      if (
+        componentKey !== "laerdal-h5p" &&
+        componentNode &&
+        componentHost !== componentNode &&
+        componentHost.parentElement === componentNode
+      ) {
+        componentNode.insertBefore(componentHost, componentNode.firstChild);
+      }
+
+      componentHost.classList.add("adapt-authoring-preview-inline-structured-header", "adapt-authoring-preview-inline-structured-header--component");
+
+      // Note: component.settings.properties always carries `subtitle`/
+      // `instruction` keys (seeded as empty strings) for every component
+      // regardless of type — createComponent() in adaptAuthoring.ts seeds
+      // both unconditionally when a component is first added — so
+      // hasOwnProperty on those keys is never a reliable signal here. Only
+      // trust actual saved text or the real merged-schema check
+      // (componentSubtitleSchemaSupport / componentInstructionSchemaSupport).
+      const hasComponentInstruction =
+        ((selectedComponent.settings.instruction || "").trim().length > 0) ||
+        componentInstructionSchemaSupport[componentKey] === true;
+      const hasComponentSubtitle =
+        ((selectedComponent.settings.subtitle || "").trim().length > 0) ||
+        componentSubtitleSchemaSupport[componentKey] === true;
+
+      // Canonical order: title -> subtitle (laerdal-text-style components
+      // only) -> body -> instruction, then whatever component-specific
+      // markup (graphics, items, etc.) the real template renders after it.
+      const componentFields = ensureOrderedInlineFields(componentHost, [
+        {
+          key: "title", kind: "pair", visible: true,
+          value: selectedComponent.settings.title || "",
+          containerSelector: ".component__title", containerClassName: "component__title",
+          innerSelector: ".component__title-inner", innerClassName: "component__title-inner",
+        },
+        {
+          key: "subtitle", kind: "flat", visible: hasComponentSubtitle,
+          value: selectedComponent.settings.subtitle || "",
+          selector: ".laerdal-text__subtitle", className: "laerdal-text__subtitle",
+        },
+        {
+          key: "body", kind: "pair", visible: true,
+          value: selectedComponent.settings.description || "",
+          containerSelector: ".component__body", containerClassName: "component__body",
+          innerSelector: ".component__body-inner", innerClassName: "component__body-inner",
+        },
+        {
+          key: "instruction", kind: "pair", visible: hasComponentInstruction,
+          value: selectedComponent.settings.instruction || "",
+          containerSelector: ".component__instruction", containerClassName: "component__instruction",
+          innerSelector: ".component__instruction-inner", innerClassName: "component__instruction-inner",
+        },
+      ]);
+
+      if (componentFields.title) {
+        makeEditable(componentFields.title, {
+          level: "component",
+          field: "title",
+          placeholder: "Component title",
+          value: selectedComponent.settings.title || "",
+          pageId: selectedPage.id,
+          articleId: selectedArticle.id,
+          blockId: selectedBlock.id,
+          componentId: selectedComponent.id,
+          hiddenFromPreview: !selectedComponent.showDisplayTitleInPreview,
+        });
+      }
+      if (componentFields.subtitle) {
+        makeEditable(componentFields.subtitle, {
+          level: "component",
+          field: "subtitle",
+          placeholder: "Add component subtitle",
+          value: selectedComponent.settings.subtitle || "",
+          pageId: selectedPage.id,
+          articleId: selectedArticle.id,
+          blockId: selectedBlock.id,
+          componentId: selectedComponent.id,
+        });
+      }
+      if (componentFields.body) {
+        makeEditable(componentFields.body, {
+          level: "component",
+          field: "body",
+          placeholder: "Add component body",
+          value: selectedComponent.settings.description || "",
+          pageId: selectedPage.id,
+          articleId: selectedArticle.id,
+          blockId: selectedBlock.id,
+          componentId: selectedComponent.id,
+        });
+      }
+      if (componentFields.instruction) {
+        makeEditable(componentFields.instruction, {
+          level: "component",
+          field: "instruction",
+          placeholder: "Add component instruction",
+          value: selectedComponent.settings.instruction || "",
+          pageId: selectedPage.id,
+          articleId: selectedArticle.id,
+          blockId: selectedBlock.id,
+          componentId: selectedComponent.id,
+        });
+      }
+
+      const componentItems = Array.isArray(selectedComponent.settings.properties?._items)
+        ? selectedComponent.settings.properties._items as Array<Record<string, unknown>>
+        : [];
+      const applyItemTextAttrs = (element: HTMLElement, path: string) => {
+        element.setAttribute("data-preview-edit-enabled", "true");
+        element.setAttribute("data-preview-behaviour-path", path);
+        element.setAttribute("data-preview-page-id", selectedPage.id);
+        element.setAttribute("data-preview-article-id", selectedArticle.id);
+        element.setAttribute("data-preview-block-id", selectedBlock.id);
+        element.setAttribute("data-preview-component-id", selectedComponent.id);
+        element.setAttribute("contenteditable", "true");
+        element.setAttribute("spellcheck", "false");
+        element.classList.add("adapt-authoring-preview-inline-editable");
+      };
+
+      if (componentKey === "accordion") {
+        const accordionItems = Array.from(componentHost.querySelectorAll<HTMLElement>(".accordion-item"));
+        componentItems.forEach((item, index) => {
+          const itemBody = typeof item.body === "string" ? item.body : "";
+          const itemRoot = accordionItems[index];
+          if (!itemRoot) return;
+          const bodyHost = itemRoot.querySelector<HTMLElement>(".accordion-item__content-inner");
+          if (!bodyHost) return;
+          let bodyElement = bodyHost.querySelector<HTMLElement>(".accordion-item__body-inner");
+          if (!bodyElement) {
+            const bodyWrapper = doc.createElement("div");
+            bodyWrapper.className = "accordion-item__body";
+            bodyElement = doc.createElement("div");
+            bodyElement.className = "accordion-item__body-inner";
+            bodyWrapper.appendChild(bodyElement);
+            bodyHost.insertBefore(bodyWrapper, bodyHost.firstChild);
+          }
+          applyItemTextAttrs(bodyElement, `_items[${index}].body`);
+          // A collapsed Accordion body is intentionally hidden by the real
+          // component. The MutationObserver below re-runs this after expand,
+          // at which point CKEditor can measure its visible container.
+          if (bodyElement.offsetParent !== null) {
+            ensureCanvasBodyEditor(bodyElement, {
+              value: itemBody,
+              ownerKey: `component:${selectedComponent.id}`,
+              onCommit: (html) => updateComponentBehaviourProperty(
+                selectedPage.id,
+                selectedArticle.id,
+                selectedBlock.id,
+                selectedComponent.id,
+                `_items[${index}].body`,
+                html
+              ),
+            });
+          }
+        });
+      }
+
+      if (componentKey === "mcq" || componentKey === "gmcq") {
+        const textSelector = componentKey === "mcq" ? ".mcq-item__text-inner" : ".gmcq-item__text-inner";
+        const optionTexts = Array.from(componentHost.querySelectorAll<HTMLElement>(textSelector));
+        optionTexts.forEach((optionText, index) => {
+          if (typeof componentItems[index]?.text !== "string") return;
+          applyItemTextAttrs(optionText, `_items[${index}].text`);
+        });
+      }
+
+      // Checklist "Text Items" (`_texts[]`) can legitimately share the exact
+      // same current value across items (e.g. every item defaults its body
+      // to the same placeholder string) — matching by text content alone
+      // (the generic fallback below) can't tell two identical-value items
+      // apart. The real template DOES carry a stable per-item identifier
+      // here (`data-adapt-index`, set to each entry's own `placement.afterItem`),
+      // so use that directly instead of guessing from content.
+      if (componentKey === "laerdal-checklist") {
+        const componentTexts = Array.isArray(selectedComponent.settings.properties?._texts)
+          ? selectedComponent.settings.properties._texts as Array<Record<string, unknown>>
+          : [];
+        componentTexts.forEach((textItem, index) => {
+          const afterItem = (textItem.placement as Record<string, unknown> | undefined)?.afterItem;
+          if (afterItem === undefined || afterItem === null) return;
+          const textItemHost = componentHost.querySelector<HTMLElement>(
+            `.laerdal-checklist__text-item[data-adapt-index="${afterItem}"]`
+          );
+          if (!textItemHost) return;
+          if (typeof textItem.title === "string" && textItem.title.trim()) {
+            const titleEl = textItemHost.querySelector<HTMLElement>(".laerdal-checklist__text-item__title");
+            if (titleEl) applyItemTextAttrs(titleEl, `_texts[${index}].title`);
+          }
+          if (typeof textItem.body === "string" && textItem.body.trim()) {
+            const bodyEl = textItemHost.querySelector<HTMLElement>(".laerdal-checklist__text-item__body");
+            if (bodyEl) applyItemTextAttrs(bodyEl, `_texts[${index}].body`);
+          }
+        });
+      }
+
+      // Make every OTHER Behaviour text field (item labels/titles, an MCQ
+      // option's text, ...) directly editable in the canvas too — matched
+      // by literal text content since, unlike title/body/instruction, these
+      // have no canonical class to target. Editing here writes straight
+      // back to the same settings.properties path the Behaviour accordion
+      // itself edits (see the "data-preview-behaviour-path" branch in
+      // onInput/onFocusOut below), so canvas and panel stay in sync both
+      // ways. Only currently-VISIBLE items (their text literally present in
+      // the DOM right now) can be matched this way — an item hidden behind
+      // a "only one visible at a time" component (e.g. a narrative slide
+      // that isn't the active one) has nothing to match until it's brought
+      // into view.
+      const behaviourSchemaForEditing = componentBehaviourSchemas[componentKey] as
+        | Record<string, BehaviourFieldSchema>
+        | undefined;
+      if (behaviourSchemaForEditing) {
+        const behaviourTextFields = collectBehaviourTextPaths(
+          behaviourSchemaForEditing,
+          asRecord(selectedComponent.settings.properties)
+        );
+        // Two array items can share the identical current value (e.g. every
+        // Checklist "Text Item" defaults its body to the same placeholder
+        // string) — matching purely by text content would otherwise re-find
+        // and re-tag the SAME first DOM occurrence for every duplicate,
+        // leaving every later item unmatched and silently aliased onto the
+        // first one's element. Track which elements this pass has already
+        // claimed so a duplicate value walks PAST them to the next real
+        // occurrence in document order instead of re-claiming the first.
+        const claimedElements = new Set<HTMLElement>();
+        behaviourTextFields.forEach(({ path, value }) => {
+          if ((componentKey === "accordion" && /_items\[\d+\]\.body$/.test(path)) ||
+              ((componentKey === "mcq" || componentKey === "gmcq") && /_items\[\d+\]\.text$/.test(path)) ||
+              (componentKey === "laerdal-checklist" && /_texts\[\d+\]\.(title|body)$/.test(path))) {
+            return;
+          }
+          const trimmed = value.trim();
+          if (!trimmed) return;
+
+          const walker = doc.createTreeWalker(componentHost, NodeFilter.SHOW_TEXT);
+          let node = walker.nextNode();
+          let matchedElement: HTMLElement | null = null;
+          while (node) {
+            if (
+              node.textContent &&
+              node.textContent.trim() === trimmed &&
+              node.parentElement &&
+              !claimedElements.has(node.parentElement)
+            ) {
+              matchedElement = node.parentElement;
+              break;
+            }
+            node = walker.nextNode();
+          }
+          // Don't reclaim an element the header pipeline above already owns.
+          if (!matchedElement || matchedElement.hasAttribute("data-preview-edit-field")) return;
+          claimedElements.add(matchedElement);
+
+          matchedElement.setAttribute("data-preview-edit-enabled", "true");
+          matchedElement.setAttribute("data-preview-behaviour-path", path);
+          matchedElement.setAttribute("data-preview-page-id", selectedPage.id);
+          matchedElement.setAttribute("data-preview-article-id", selectedArticle.id);
+          matchedElement.setAttribute("data-preview-block-id", selectedBlock.id);
+          matchedElement.setAttribute("data-preview-component-id", selectedComponent.id);
+          matchedElement.setAttribute("contenteditable", "true");
+          matchedElement.setAttribute("spellcheck", "false");
+          matchedElement.classList.add("adapt-authoring-preview-inline-editable");
+        });
+      }
+
+      // Re-sync when the framework's OWN JS changes the DOM on its own —
+      // a narrative/accordion/tabs component swapping which item is
+      // visible when the user clicks its native nav/expand controls. That
+      // happens with no React state change on our side, so nothing would
+      // otherwise tell us the newly-visible item needs to become editable
+      // too. Debounced via the same retry-frame ref: a transition can fire
+      // a burst of mutations, so wait for them to settle before re-syncing.
+      const componentObserver = new MutationObserver((records) => {
+        // CKEditor mutates its own DOM on focus, selection and every typed
+        // character. Those are not framework item-visibility changes. A
+        // prior broad observer treated `ck-focused` as a component change,
+        // reran this synchronizer, and immediately removed CKEditor's focus.
+        const isInsideCkEditor = (node: Node) =>
+          node instanceof Element && !!node.closest(".ck-editor");
+        if (records.length > 0 && records.every((record) => isInsideCkEditor(record.target))) {
+          return;
+        }
+        // Never re-sync while the user is actively typing — e.g. a browser
+        // inserting/removing a stray <br> as a contenteditable field goes
+        // empty is itself a childList mutation, and re-syncing mid-edit
+        // would tear down and rebuild the very field that's focused,
+        // losing focus and leaving state like canvasTitleLiveOverride
+        // stuck (its clearing only happens on blur, which never fires
+        // cleanly for a field that gets destroyed out from under it).
+        if (isInlineEditingRef.current) return;
+        if (inlineEditorSyncRetryFrameRef.current !== null) return;
+        inlineEditorSyncRetryFrameRef.current = window.requestAnimationFrame(() => {
+          inlineEditorSyncRetryFrameRef.current = null;
+          syncPreviewInlineEditors();
+        });
+      });
+      componentObserver.observe(componentHost, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        // Class is too broad: both CKEditor and this selection synchronizer
+        // mutate classes as part of normal focus/rendering. The framework's
+        // actual item visibility/navigation changes expose ARIA/hidden state,
+        // which is enough to resync newly visible Accordion/Tabs/etc. items.
+        attributeFilter: ["aria-expanded", "aria-selected", "aria-hidden", "hidden"],
+      });
+      componentMutationObserverRef.current = componentObserver;
+
+      return;
+    }
+
+    if (selectedBlock && selectedArticle && selectedPage) {
+      const blockNode = doc.querySelector(`.block[data-adapt-id="${selectedBlock.id}"]`);
+      // The real template nests .block__header INSIDE .block__inner (as its
+      // first child, before .component__container) — NOT as a sibling
+      // before .block__inner. .block__inner is what actually carries the
+      // theme's horizontal padding, so a synthetic header built as a
+      // sibling of it never inherits that padding and renders flush-left
+      // instead of aligned with everything else. Root against .block__inner
+      // itself (falling back to blockNode if it's somehow missing) so the
+      // synthetic header lands in the exact same place a real one does.
+      const blockInnerNode = (blockNode?.querySelector(".block__inner") as HTMLElement | null) ?? blockNode;
+      const blockHeader = ensureHeaderInnerHost(
+        blockInnerNode,
+        ".block__header",
+        "block__header",
+        ".block__header-inner",
+        "block__header-inner",
+        [".component__container"]
+      );
+      if (!blockHeader) return;
+
+      blockHeader.classList.add("adapt-authoring-preview-inline-structured-header");
+      applyPreviewSelectionStylesRef.current();
+
+      const blockFields = ensureOrderedInlineFields(blockHeader, [
+        {
+          key: "title", kind: "pair", visible: true, value: selectedBlock.title || "",
+          containerSelector: ".block__title", containerClassName: "block__title",
+          innerSelector: ".block__title-inner", innerClassName: "block__title-inner",
+        },
+        {
+          key: "body", kind: "pair", visible: true, value: selectedBlock.description || "",
+          containerSelector: ".block__body", containerClassName: "block__body",
+          innerSelector: ".block__body-inner", innerClassName: "block__body-inner",
+        },
+        {
+          key: "instruction", kind: "pair", visible: true, value: selectedBlock.instruction || "",
+          containerSelector: ".block__instruction", containerClassName: "block__instruction",
+          innerSelector: ".block__instruction-inner", innerClassName: "block__instruction-inner",
+        },
+      ]);
+
+      if (blockFields.title) {
+        makeEditable(blockFields.title, {
+          level: "group",
+          field: "title",
+          placeholder: "Content Group title",
+          value: selectedBlock.title || "",
+          pageId: selectedPage.id,
+          articleId: selectedArticle.id,
+          blockId: selectedBlock.id,
+          hiddenFromPreview: !selectedBlock.showDisplayTitleInPreview,
+        });
+      }
+      if (blockFields.body) {
+        makeEditable(blockFields.body, {
+          level: "group",
+          field: "body",
+          placeholder: "Add content group body",
+          value: selectedBlock.description || "",
+          pageId: selectedPage.id,
+          articleId: selectedArticle.id,
+          blockId: selectedBlock.id,
+        });
+      }
+      if (blockFields.instruction) {
+        makeEditable(blockFields.instruction, {
+          level: "group",
+          field: "instruction",
+          placeholder: "Add content group instruction",
+          value: selectedBlock.instruction || "",
+          pageId: selectedPage.id,
+          articleId: selectedArticle.id,
+          blockId: selectedBlock.id,
+        });
+      }
+      return;
+    }
+
+    if (selectedArticle && selectedPage) {
+      const articleNode = doc.querySelector(`.article[data-adapt-id="${selectedArticle.id}"]`);
+      // Real template: .article__header is the ONLY thing inside
+      // .article__inner (the next level's .block__container is a SIBLING
+      // of .article__inner, not nested in it) — .article__inner is what
+      // carries the theme's horizontal padding, so root against it
+      // directly rather than the outer .article, or a synthetic header
+      // renders flush-left instead of matching a real one.
+      const articleInnerNode = (articleNode?.querySelector(".article__inner") as HTMLElement | null) ?? articleNode;
+      const articleHeader = ensureHeaderInnerHost(
+        articleInnerNode,
+        ".article__header",
+        "article__header",
+        ".article__header-inner",
+        "article__header-inner",
+        []
+      );
+      if (!articleHeader) return;
+
+      articleHeader.classList.add("adapt-authoring-preview-inline-structured-header");
+      applyPreviewSelectionStylesRef.current();
+
+      const articleFields = ensureOrderedInlineFields(articleHeader, [
+        {
+          key: "title", kind: "pair", visible: true, value: selectedArticle.title || "",
+          containerSelector: ".article__title", containerClassName: "article__title",
+          innerSelector: ".article__title-inner", innerClassName: "article__title-inner",
+        },
+        {
+          key: "body", kind: "pair", visible: true, value: selectedArticle.description || "",
+          containerSelector: ".article__body", containerClassName: "article__body",
+          innerSelector: ".article__body-inner", innerClassName: "article__body-inner",
+        },
+        {
+          key: "instruction", kind: "pair", visible: true, value: selectedArticle.instruction || "",
+          containerSelector: ".article__instruction", containerClassName: "article__instruction",
+          innerSelector: ".article__instruction-inner", innerClassName: "article__instruction-inner",
+        },
+      ]);
+
+      if (articleFields.title) {
+        makeEditable(articleFields.title, {
+          level: "section",
+          field: "title",
+          placeholder: "Section title",
+          value: selectedArticle.title || "",
+          pageId: selectedPage.id,
+          articleId: selectedArticle.id,
+          hiddenFromPreview: !selectedArticle.showDisplayTitleInPreview,
+        });
+      }
+      if (articleFields.body) {
+        makeEditable(articleFields.body, {
+          level: "section",
+          field: "body",
+          placeholder: "Add section body",
+          value: selectedArticle.description || "",
+          pageId: selectedPage.id,
+          articleId: selectedArticle.id,
+        });
+      }
+      if (articleFields.instruction) {
+        makeEditable(articleFields.instruction, {
+          level: "section",
+          field: "instruction",
+          placeholder: "Add section instruction",
+          value: selectedArticle.instruction || "",
+          pageId: selectedPage.id,
+          articleId: selectedArticle.id,
+        });
+      }
+      return;
+    }
+
+    if (selectedPage && !menuSelected) {
+      const pageNode = doc.querySelector(`.page[data-adapt-id="${selectedPage.id}"]`);
+      // Real template: .page__header is the ONLY thing inside .page__inner
+      // (the next level's .article__container is a SIBLING of .page__inner,
+      // not nested in it) — .page__inner is what carries the theme's
+      // horizontal padding, so root against it directly rather than the
+      // outer .page, or a synthetic header renders flush-left instead of
+      // matching a real one.
+      const pageInnerNode = (pageNode?.querySelector(".page__inner") as HTMLElement | null) ?? pageNode;
+      const pageHeader = ensureHeaderInnerHost(
+        pageInnerNode,
+        ".page__header",
+        "page__header",
+        ".page__header-inner",
+        "page__header-inner",
+        []
+      );
+      if (!pageHeader) return;
+
+      pageHeader.classList.add("adapt-authoring-preview-inline-structured-header");
+      applyPreviewSelectionStylesRef.current();
+
+      const pageFields = ensureOrderedInlineFields(pageHeader, [
+        {
+          key: "title", kind: "pair", visible: true, value: selectedPage.title || "",
+          containerSelector: ".page__title", containerClassName: "page__title",
+          innerSelector: ".page__title-inner", innerClassName: "page__title-inner",
+        },
+        {
+          key: "subtitle", kind: "pair", visible: true, value: selectedPage.subtitle || "",
+          containerSelector: ".page__subtitle", containerClassName: "page__subtitle",
+          innerSelector: ".page__subtitle-inner", innerClassName: "page__subtitle-inner",
+        },
+        {
+          key: "body", kind: "pair", visible: true, value: readTopicCanvasBody(selectedPage),
+          containerSelector: ".page__body", containerClassName: "page__body",
+          innerSelector: ".page__body-inner", innerClassName: "page__body-inner",
+        },
+        {
+          key: "instruction", kind: "pair", visible: true, value: selectedPage.instruction || "",
+          containerSelector: ".page__instruction", containerClassName: "page__instruction",
+          innerSelector: ".page__instruction-inner", innerClassName: "page__instruction-inner",
+        },
+      ]);
+
+      // The page title is hidden by default CSS until content exists —
+      // always reveal it while we're driving it as an editable placeholder.
+      if (pageFields.title) {
+        const titleContainer = pageFields.title.closest(".page__title") as HTMLElement | null;
+        (titleContainer ?? pageFields.title).style.display = "";
+      }
+
+      if (pageFields.title) {
+        makeEditable(pageFields.title, {
+          level: "topic",
+          field: "title",
+          placeholder: "TOPIC TITLE",
+          value: selectedPage.title || "",
+          pageId: selectedPage.id,
+          hiddenFromPreview: !selectedPage.showDisplayTitleInPreview,
+        });
+      }
+      if (pageFields.subtitle) {
+        makeEditable(pageFields.subtitle, {
+          level: "topic",
+          field: "subtitle",
+          placeholder: "Add subtitle",
+          value: selectedPage.subtitle || "",
+          pageId: selectedPage.id,
+        });
+      }
+      if (pageFields.body) {
+        makeEditable(pageFields.body, {
+          level: "topic",
+          field: "body",
+          placeholder: "Add topic body",
+          value: readTopicCanvasBody(selectedPage),
+          pageId: selectedPage.id,
+        });
+      }
+      if (pageFields.instruction) {
+        makeEditable(pageFields.instruction, {
+          level: "topic",
+          field: "instruction",
+          placeholder: "Add topic instruction",
+          value: selectedPage.instruction || "",
+          pageId: selectedPage.id,
+        });
+      }
+    }
+
+    syncPreviewScrollFromLeftPanelRef.current();
+  }, [
+    hasCanvasSelection,
+    componentBehaviourSchemas,
+    componentSubtitleSchemaSupport,
+    componentInstructionSchemaSupport,
+    contentPages,
+    menuSelected,
+    selectedArticleId,
+    selectedBlockId,
+    selectedComponentId,
+    selectedPageId,
+  ]);
+
+  const syncPreviewTopicSettings = useCallback(() => {
+    if (!selectedPageId) return;
+
+    const iframe = previewFrameRef.current;
+    const doc = iframe?.contentDocument;
+    if (!doc) return;
+
+    const selectedPage = contentPages.find((page) => page.id === selectedPageId);
+    if (!selectedPage) return;
+
+    const selectedArticle = selectedArticleId
+      ? selectedPage.articles.find((article) => article.id === selectedArticleId)
+      : null;
+    const selectedBlock = selectedArticle && selectedBlockId
+      ? selectedArticle.blocks.find((block) => block.id === selectedBlockId)
+      : null;
+    const selectedComponent = selectedBlock && selectedComponentId
+      ? selectedBlock.components.find((component) => component.id === selectedComponentId)
+      : null;
+
+    const pageNode = doc.querySelector(`.page[data-adapt-id="${selectedPage.id}"]`) as HTMLElement | null;
+    if (!pageNode) return;
+
+    const pageInner =
+      (pageNode.querySelector(".page__inner") as HTMLElement | null) ?? pageNode;
+    const pageHeader =
+      (pageNode.querySelector(".page__header") as HTMLElement | null) ??
+      (pageNode.querySelector(".page__header-inner") as HTMLElement | null);
+
+    const activeThemeSettings = getActiveThemeSettings(selectedPage.themeSettings, "contentobject");
+    const headerSettings = asRecord(activeThemeSettings._pageHeader);
+    const pageBackgroundImage = asRecord(activeThemeSettings._backgroundImage) as TopicResponsiveAssetMap;
+    const pageBackgroundStyles = asRecord(activeThemeSettings._backgroundStyles);
+    const headerBackgroundImage = asRecord(headerSettings._backgroundImage) as TopicResponsiveAssetMap;
+    const headerBackgroundStyles = asRecord(headerSettings._backgroundStyles);
+    const headerMinimumHeights = asRecord(headerSettings._minimumHeights);
+    const headerTextAlignment = asRecord(headerSettings._textAlignment);
+    const headerGraphic = asRecord(headerSettings._graphic);
+    const activeMenuSettings = getActiveMenuSettings(selectedPage.menuSettings, "contentobject");
+    const menuHeaderSettings = asRecord(activeMenuSettings._menuHeader);
+    const menuBackgroundImage = asRecord(activeMenuSettings._backgroundImage) as TopicResponsiveAssetMap;
+    const menuBackgroundStyles = asRecord(activeMenuSettings._backgroundStyles);
+    const menuHeaderBackgroundImage = asRecord(menuHeaderSettings._backgroundImage) as TopicResponsiveAssetMap;
+    const menuHeaderBackgroundStyles = asRecord(menuHeaderSettings._backgroundStyles);
+    const menuHeaderMinimumHeights = asRecord(menuHeaderSettings._minimumHeights);
+    const menuHeaderTextAlignment = asRecord(menuHeaderSettings._textAlignment);
+    const menuGraphic = asRecord(activeMenuSettings._graphic);
+
+    const getPreviewBreakpoint = (): BreakpointKey => {
+      const viewportWidth =
+        iframe?.contentWindow?.innerWidth ||
+        pageInner.clientWidth ||
+        0;
+
+      if (viewportWidth >= 1200) return "_xlarge";
+      if (viewportWidth >= 992) return "_large";
+      if (viewportWidth >= 768) return "_medium";
+      return "_small";
+    };
+
+    const activeBreakpoint = getPreviewBreakpoint();
+
+    const legacyBreakpoint = activeBreakpoint.replace(/^_/, "") as "xlarge" | "large" | "medium" | "small";
+
+    const pickBreakpointValue = (map?: Record<string, unknown>) => {
+      if (!map) return "";
+      return asString(map[activeBreakpoint] ?? map[legacyBreakpoint]);
+    };
+
+    const pickResponsiveValue = (map?: TopicResponsiveAssetMap) => {
+      return pickBreakpointValue(map as Record<string, unknown> | undefined);
+    };
+
+    const pickResponsiveClass = (map?: TopicResponsiveClasses) => {
+      return pickBreakpointValue(map as Record<string, unknown> | undefined);
+    };
+
+    const pickResponsiveNumber = (map?: TopicMinimumHeights) => {
+      if (!map) return "";
+      return asNumberOrEmpty((map as Record<string, unknown>)[activeBreakpoint] ?? (map as Record<string, unknown>)[legacyBreakpoint]);
+    };
+
+    const applyBackgroundStyles = (
+      element: HTMLElement | null,
+      backgroundUrl: string,
+      styles: Record<string, unknown>
+    ) => {
+      if (!element) return;
+
+      if (backgroundUrl) {
+        element.style.backgroundImage = `url("${backgroundUrl}")`;
+      } else {
+        element.style.removeProperty("background-image");
+      }
+
+      const repeat = asString(styles._backgroundRepeat);
+      const size = asString(styles._backgroundSize);
+      const position = asString(styles._backgroundPosition);
+
+      if (repeat) {
+        element.style.backgroundRepeat = repeat;
+      } else {
+        element.style.removeProperty("background-repeat");
+      }
+
+      if (size) {
+        element.style.backgroundSize = size;
+      } else {
+        element.style.removeProperty("background-size");
+      }
+
+      if (position) {
+        element.style.backgroundPosition = position;
+      } else {
+        element.style.removeProperty("background-position");
+      }
+    };
+
+    const applyTextAlign = (selector: string, alignValue: string) => {
+      const element = pageNode.querySelector(selector) as HTMLElement | null;
+      if (!element) return;
+      if (alignValue) {
+        element.style.textAlign = alignValue;
+      } else {
+        element.style.removeProperty("text-align");
+      }
+    };
+
+    const applyTextAlignWithin = (host: ParentNode | null, selector: string, alignValue: string) => {
+      if (!host) return;
+      const element = host.querySelector(selector) as HTMLElement | null;
+      if (!element) return;
+      if (alignValue) {
+        element.style.textAlign = alignValue;
+      } else {
+        element.style.removeProperty("text-align");
+      }
+    };
+
+    const parseClassTokens = (value: string) =>
+      value
+        .split(/\s+/)
+        .map((token) => token.trim())
+        .filter(Boolean);
+
+    const applyManagedClasses = (element: HTMLElement | null, managedClassString: string) => {
+      if (!element) return;
+
+      const previous = parseClassTokens(element.getAttribute("data-preview-managed-classes") || "");
+      previous.forEach((token) => element.classList.remove(token));
+
+      const next = parseClassTokens(managedClassString);
+      next.forEach((token) => element.classList.add(token));
+      element.setAttribute("data-preview-managed-classes", next.join(" "));
+    };
+
+    const resolveAssetForPreview = (source: string) => {
+      const resolved = resolveTopicAssetPreviewUrl(source);
+      if (resolved) return resolved;
+      return toRenderableAssetUrl(source) || "";
+    };
+
+    const upsertPreviewImage = (
+      host: HTMLElement | null,
+      selectors: string[],
+      src: string,
+      alt: string,
+      key: string,
+      // When set, a selector that isn't the exact data-preview-asset-key
+      // match is treated as shared across every item in an array (e.g.
+      // every narrative slide's image matches ".component__widget img") —
+      // querySelector's first match would always land on item 0 regardless
+      // of which item actually changed, so pick the Nth match instead.
+      itemIndex: number | null = null
+    ) => {
+      if (!host) return;
+
+      let image: HTMLImageElement | null = null;
+      for (const selector of selectors) {
+        if (itemIndex !== null && !selector.includes("data-preview-asset-key")) {
+          const candidate = host.querySelectorAll(selector)[itemIndex] as HTMLImageElement | undefined;
+          if (candidate) {
+            image = candidate;
+            break;
+          }
+          continue;
+        }
+        const candidate = host.querySelector(selector) as HTMLImageElement | null;
+        if (candidate) {
+          image = candidate;
+          break;
+        }
+      }
+
+      if (!image && src) {
+        const wrapper = doc.createElement("div");
+        wrapper.className = "adapt-authoring-preview-injected-asset";
+        wrapper.setAttribute("data-preview-injected", "true");
+        image = doc.createElement("img");
+        image.setAttribute("data-preview-injected", "true");
+        image.setAttribute("data-preview-asset-key", key);
+        image.style.maxWidth = "100%";
+        image.style.height = "auto";
+        wrapper.appendChild(image);
+        host.appendChild(wrapper);
+      }
+
+      if (!image) return;
+
+      if (!src) {
+        if (image.getAttribute("data-preview-injected") === "true") {
+          image.parentElement?.remove();
+        } else {
+          image.removeAttribute("src");
+          image.style.display = "none";
+        }
+        return;
+      }
+
+      image.src = src;
+      image.alt = alt;
+      image.style.removeProperty("display");
+    };
+
+    // Video/audio fields render as <video>/<audio> (often with a nested
+    // <source>), which the <img>-only path above can never reach.
+    const upsertPreviewMedia = (
+      host: HTMLElement | null,
+      kind: "video" | "audio",
+      src: string,
+      key: string,
+      previousSrc: string | undefined,
+      itemIndex: number | null
+    ) => {
+      if (!host) return;
+
+      const hasSrc = (element: HTMLMediaElement, candidate: string) =>
+        element.getAttribute("src") === candidate ||
+        Array.from(element.querySelectorAll("source")).some((source) => source.getAttribute("src") === candidate);
+
+      const existing = Array.from(host.querySelectorAll<HTMLMediaElement>(kind));
+      let element =
+        host.querySelector<HTMLMediaElement>(`${kind}[data-preview-asset-key="${key}"]`) ??
+        (previousSrc ? existing.find((candidate) => hasSrc(candidate, previousSrc)) ?? null : null) ??
+        (itemIndex !== null ? existing[itemIndex] ?? null : existing[0] ?? null);
+
+      if (!element && src) {
+        const wrapper = doc.createElement("div");
+        wrapper.className = "adapt-authoring-preview-injected-asset";
+        wrapper.setAttribute("data-preview-injected", "true");
+        element = doc.createElement(kind) as HTMLMediaElement;
+        element.setAttribute("data-preview-injected", "true");
+        element.setAttribute("data-preview-asset-key", key);
+        element.setAttribute("controls", "");
+        element.setAttribute("preload", "metadata");
+        element.style.maxWidth = "100%";
+        wrapper.appendChild(element);
+        host.appendChild(wrapper);
+      }
+
+      if (!element) return;
+
+      if (!src) {
+        if (element.getAttribute("data-preview-injected") === "true") {
+          element.parentElement?.remove();
+        } else {
+          element.removeAttribute("src");
+          element.style.display = "none";
+        }
+        return;
+      }
+
+      element.querySelectorAll("source").forEach((source) => source.setAttribute("src", src));
+      element.setAttribute("src", src);
+      element.style.removeProperty("display");
+      // Without an explicit reload the element keeps playing/showing the
+      // previously decoded file even though its src attribute changed.
+      try {
+        element.load();
+      } catch {
+        // Media element already detached from its document.
+      }
+    };
+
+    // Component-specific Behaviour text fields (an MCQ item's label, a
+    // Graphic's alt text, ...) have no canonical class the way
+    // title/body/instruction do, so there's no fixed selector to patch.
+    // Instead, find whichever text node still literally holds the OLD value
+    // and swap it for the new one — works regardless of the template, as
+    // long as the field is rendered as plain visible text somewhere within
+    // `host`. Returns false (a no-op, not an error) when nothing matches —
+    // e.g. the field isn't currently visible (a hidden narrative slide) or
+    // the real template renders it as HTML rather than plain text.
+    const replaceTextInHost = (host: Element, oldValue: string, newValue: string): boolean => {
+      const trimmedOld = oldValue.trim();
+      if (!trimmedOld) return false;
+      const walker = doc.createTreeWalker(host, NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode();
+      while (node) {
+        if (node.textContent && node.textContent.trim() === trimmedOld) {
+          node.textContent = newValue;
+          return true;
+        }
+        node = walker.nextNode();
+      }
+      return false;
+    };
+
+    const syncExtensionText = (
+      host: Element | null,
+      extensions: Record<string, unknown>,
+      schemas: Record<string, ExtensionFieldSchema>,
+      ownerKey: string
+    ) => {
+      const extensionTextPaths = Object.entries(schemas).flatMap(([extensionKey, extensionSchema]) =>
+        collectBehaviourTextPaths(
+          (extensionSchema.properties ?? {}) as Record<string, BehaviourFieldSchema>,
+          asRecord(extensions[extensionKey]),
+          extensionKey
+        )
+      ).filter(({ path }) => !path.startsWith("_additionalMaterial._items["));
+      const previousValues = previousExtensionTextValuesRef.current.ownerKey === ownerKey
+        ? previousExtensionTextValuesRef.current.values
+        : {};
+      const nextValues: Record<string, string> = {};
+      extensionTextPaths.forEach(({ path, value }) => {
+        nextValues[path] = value;
+        const previousValue = previousValues[path];
+        if (host && previousValue !== undefined && previousValue !== value) {
+          replaceTextInHost(host, previousValue, value);
+        }
+      });
+      previousExtensionTextValuesRef.current = { ownerKey, values: nextValues };
+    };
+
+    const pageBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(pageBackgroundImage));
+    const headerBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(headerBackgroundImage));
+    const themeHeaderGraphicUrl = resolveAssetForPreview(asString(headerGraphic._src));
+    const pageGraphicUrl = resolveAssetForPreview(asString(selectedPage.graphic?.src));
+    const menuBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(menuBackgroundImage));
+    const menuHeaderBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(menuHeaderBackgroundImage));
+    const menuGraphicUrl = resolveAssetForPreview(asString(menuGraphic._src));
+
+    applyBackgroundStyles(pageInner, pageBackgroundUrl, pageBackgroundStyles);
+    applyBackgroundStyles(pageHeader, headerBackgroundUrl, headerBackgroundStyles);
+    syncExtensionText(pageNode, selectedPage.extensions, extensionSchemasByLevel?.contentobject ?? {}, `page:${selectedPage.id}`);
+
+    const mergedTopicClasses = [
+      asString(selectedPage.classes),
+      asString(selectedPage.onScreen?._classes),
+      pickResponsiveClass(asRecord(activeThemeSettings._responsiveClasses) as TopicResponsiveClasses),
+    ]
+      .filter(Boolean)
+      .join(" ");
+    applyManagedClasses(pageNode, mergedTopicClasses);
+
+    const minHeight = pickResponsiveNumber(headerMinimumHeights as TopicMinimumHeights);
+
+    if (typeof minHeight === "number") {
+      pageHeader?.style.setProperty("min-height", `${minHeight}px`);
+    } else {
+      pageHeader?.style.removeProperty("min-height");
+    }
+
+    applyTextAlign(".page__title-inner", asString(headerTextAlignment._title));
+    applyTextAlign(".page__subtitle-inner", asString(headerTextAlignment._subtitle));
+    applyTextAlign(".page__body-inner", asString(headerTextAlignment._body));
+    applyTextAlign(".page__instruction-inner", asString(headerTextAlignment._instruction));
+
+    upsertPreviewImage(
+      pageHeader,
+      [
+        'img[data-preview-asset-key="theme-header-graphic"]',
+        ".page__header img",
+        ".page__graphic img",
+      ],
+      themeHeaderGraphicUrl,
+      asString(headerGraphic.alt),
+      "theme-header-graphic"
+    );
+
+    upsertPreviewImage(
+      pageNode,
+      [
+        'img[data-preview-asset-key="page-graphic"]',
+        ".page__graphic img",
+      ],
+      pageGraphicUrl,
+      asString(selectedPage.graphic?.alt),
+      "page-graphic"
+    );
+
+    // Applies an inline `color` (or clears it) across every element `selector`
+    // matches within `host` — mirrors the Life v2 theme's setBlockColor /
+    // setComponentColors, which use jQuery .css('color', …) against a fixed
+    // selector set rather than a single element.
+    const applyColorWithin = (host: ParentNode | null, selector: string, value: string) => {
+      if (!host) return;
+      host.querySelectorAll(selector).forEach((el) => {
+        if (value) {
+          (el as HTMLElement).style.color = value;
+        } else {
+          (el as HTMLElement).style.removeProperty("color");
+        }
+      });
+    };
+
+    if (selectedArticle) {
+      const articleNode = doc.querySelector(`.article[data-adapt-id="${selectedArticle.id}"]`) as HTMLElement | null;
+      const articleInner =
+        (articleNode?.querySelector(".article__inner") as HTMLElement | null) ??
+        (articleNode?.querySelector(".article__header-inner") as HTMLElement | null) ??
+        articleNode;
+      const articleHeaderNode =
+        (articleNode?.querySelector(".article__header") as HTMLElement | null) ?? articleInner;
+      const articleThemeSettings = getActiveThemeSettings(selectedArticle.themeSettings, "article");
+      syncExtensionText(articleNode, selectedArticle.extensions, extensionSchemasByLevel?.article ?? {}, `article:${selectedArticle.id}`);
+      const articleBackgroundImage = asRecord(articleThemeSettings._backgroundImage) as TopicResponsiveAssetMap;
+      const articleBackgroundStyles = asRecord(articleThemeSettings._backgroundStyles);
+      const articleBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(articleBackgroundImage));
+      applyBackgroundStyles(articleInner, articleBackgroundUrl, articleBackgroundStyles);
+
+      const articleTextAlignment = asRecord(articleThemeSettings._textAlignment);
+      applyTextAlignWithin(articleNode, ".article__title-inner", asString(articleTextAlignment._title));
+      applyTextAlignWithin(articleNode, ".article__body-inner", asString(articleTextAlignment._body));
+      applyTextAlignWithin(articleNode, ".article__instruction-inner", asString(articleTextAlignment._instruction));
+
+      const articleHeader = asRecord(articleThemeSettings._articleHeader);
+      const articleHeaderBackgroundImage = asRecord(articleHeader._backgroundImage) as TopicResponsiveAssetMap;
+      const articleHeaderBackgroundStyles = asRecord(articleHeader._backgroundStyles);
+      const articleHeaderBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(articleHeaderBackgroundImage));
+      applyBackgroundStyles(articleHeaderNode, articleHeaderBackgroundUrl, articleHeaderBackgroundStyles);
+      const articleHeaderTextAlignment = asRecord(articleHeader._textAlignment);
+      applyTextAlignWithin(articleHeaderNode, ".article__title-inner", asString(articleHeaderTextAlignment._title));
+      applyTextAlignWithin(articleHeaderNode, ".article__body-inner", asString(articleHeaderTextAlignment._body));
+      applyTextAlignWithin(articleHeaderNode, ".article__instruction-inner", asString(articleHeaderTextAlignment._instruction));
+      const articleHeaderMinHeight = pickResponsiveNumber(asRecord(articleHeader._minimumHeights) as TopicMinimumHeights);
+      if (typeof articleHeaderMinHeight === "number") {
+        articleHeaderNode?.style.setProperty("min-height", `${articleHeaderMinHeight}px`);
+      } else {
+        articleHeaderNode?.style.removeProperty("min-height");
+      }
+
+      const articleResponsiveClasses = asRecord(articleThemeSettings._responsiveClasses) as TopicResponsiveClasses;
+      const mergedArticleClasses = [
+        asString(selectedArticle.classes),
+        pickResponsiveClass(articleResponsiveClasses),
+      ].filter(Boolean).join(" ");
+      applyManagedClasses(articleNode, mergedArticleClasses);
+    }
+
+    if (selectedBlock) {
+      const blockNode = doc.querySelector(`.block[data-adapt-id="${selectedBlock.id}"]`) as HTMLElement | null;
+      const blockInner =
+        (blockNode?.querySelector(".block__inner") as HTMLElement | null) ??
+        (blockNode?.querySelector(".block__header-inner") as HTMLElement | null) ??
+        blockNode;
+      const blockThemeSettings = getActiveThemeSettings(selectedBlock.themeSettings, "block");
+      syncExtensionText(blockNode, selectedBlock.extensions, extensionSchemasByLevel?.block ?? {}, `block:${selectedBlock.id}`);
+      const blockBackgroundImage = asRecord(blockThemeSettings._backgroundImage) as TopicResponsiveAssetMap;
+      const blockBackgroundStyles = asRecord(blockThemeSettings._backgroundStyles);
+      const blockBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(blockBackgroundImage));
+      applyBackgroundStyles(blockInner, blockBackgroundUrl, blockBackgroundStyles);
+
+      // "Content Group minimum height" (top-level _minimumHeights, distinct
+      // from _blockHeader's own nested minimum height applied further below)
+      // - was previously only wired to the right-panel field, never synced.
+      const blockMinHeight = pickResponsiveNumber(asRecord(blockThemeSettings._minimumHeights) as TopicMinimumHeights);
+      if (typeof blockMinHeight === "number") {
+        blockInner?.style.setProperty("min-height", `${blockMinHeight}px`);
+      } else {
+        blockInner?.style.removeProperty("min-height");
+      }
+
+      const blockTextAlignment = asRecord(blockThemeSettings._textAlignment);
+      applyTextAlignWithin(blockNode, ".block__title-inner", asString(blockTextAlignment._title));
+      applyTextAlignWithin(blockNode, ".block__body-inner", asString(blockTextAlignment._body));
+      applyTextAlignWithin(blockNode, ".block__instruction-inner", asString(blockTextAlignment._instruction));
+
+      // Matches ThemeBlockView.setBlockColor exactly: background on the block
+      // root itself, font colour across title/body/instruction (+ the root),
+      // header colour on the title only (applied last so it wins there).
+      const blockColours = asRecord(blockThemeSettings._blockColors);
+      const blockBgColor = asString(blockColours["block-bg-color"]);
+      const blockFontColor = asString(blockColours["block-font-color"]);
+      const blockHeaderColor = asString(blockColours["block-header-color"]);
+      if (blockNode) {
+        if (blockBgColor) blockNode.style.background = blockBgColor;
+        else blockNode.style.removeProperty("background");
+      }
+      applyColorWithin(blockNode, ".block, .block__title, .block__body, .block__instruction", blockFontColor);
+      if (blockHeaderColor) applyColorWithin(blockNode, ".block__title", blockHeaderColor);
+
+      // Matches ThemeBlockView.processHeader: _blockHeader is the ONLY
+      // source the real theme actually renders from for a block's header
+      // text alignment/background/min-height — the top-level _textAlignment/
+      // _backgroundImage/_minimumHeights above exist in the schema but are
+      // never read by the theme. Applied last so it's what's actually
+      // visible, matching real behaviour.
+      const blockHeaderNode = (blockNode?.querySelector(".block__header") as HTMLElement | null) ?? blockInner;
+      const blockHeader = asRecord(blockThemeSettings._blockHeader);
+      const blockHeaderBackgroundImage = asRecord(blockHeader._backgroundImage) as TopicResponsiveAssetMap;
+      const blockHeaderBackgroundStyles = asRecord(blockHeader._backgroundStyles);
+      const blockHeaderBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(blockHeaderBackgroundImage));
+      applyBackgroundStyles(blockHeaderNode, blockHeaderBackgroundUrl, blockHeaderBackgroundStyles);
+      const blockHeaderTextAlignment = asRecord(blockHeader._textAlignment);
+      applyTextAlignWithin(blockHeaderNode, ".block__title-inner", asString(blockHeaderTextAlignment._title));
+      applyTextAlignWithin(blockHeaderNode, ".block__body-inner", asString(blockHeaderTextAlignment._body));
+      applyTextAlignWithin(blockHeaderNode, ".block__instruction-inner", asString(blockHeaderTextAlignment._instruction));
+      const blockHeaderMinHeight = pickResponsiveNumber(asRecord(blockHeader._minimumHeights) as TopicMinimumHeights);
+      if (typeof blockHeaderMinHeight === "number") {
+        blockHeaderNode?.style.setProperty("min-height", `${blockHeaderMinHeight}px`);
+      } else {
+        blockHeaderNode?.style.removeProperty("min-height");
+      }
+
+      const paddingTopRaw = asString(blockThemeSettings._paddingTop);
+      const paddingBottomRaw = asString(blockThemeSettings._paddingBottom);
+      const vertAlign = asString(blockThemeSettings._componentVerticalAlignment);
+      const horzAlign = asString(blockThemeSettings._componentHorizontalAlignment);
+      const blockResponsiveClasses = asRecord(blockThemeSettings._responsiveClasses) as TopicResponsiveClasses;
+      const mergedBlockClasses = [
+        asString(selectedBlock.classes),
+        pickResponsiveClass(blockResponsiveClasses),
+        blockThemeSettings._isDividerBlock ? "is-divider-block" : "",
+        paddingTopRaw && paddingTopRaw !== "default" ? `${paddingTopRaw}-padding-top` : "",
+        paddingBottomRaw && paddingBottomRaw !== "default" ? `${paddingBottomRaw}-padding-bottom` : "",
+        vertAlign === "center" ? "align-vert-center" : vertAlign === "bottom" ? "align-vert-bottom" : "",
+        horzAlign === "center" ? "align-horz-center" : horzAlign === "right" ? "align-horz-right" : "",
+      ].filter(Boolean).join(" ");
+      applyManagedClasses(blockNode, mergedBlockClasses);
+    }
+
+    if (selectedComponent) {
+      const componentNode = doc.querySelector(`.component[data-adapt-id="${selectedComponent.id}"]`) as HTMLElement | null;
+      const componentInner =
+        (componentNode?.querySelector(".component__inner") as HTMLElement | null) ??
+        componentNode;
+      const componentThemeSettings = getActiveThemeSettings(selectedComponent.themeSettings, "component");
+      syncExtensionText(
+        componentNode,
+        selectedComponent.extensions,
+        componentExtensionSchemas[(selectedComponent.settings.componentKey || "").toLowerCase()] ?? {},
+        `component:${selectedComponent.id}`
+      );
+      const componentBackgroundImage = asRecord(componentThemeSettings._backgroundImage) as TopicResponsiveAssetMap;
+      const componentBackgroundStyles = asRecord(componentThemeSettings._backgroundStyles);
+      const componentBackgroundUrl = resolveAssetForPreview(pickResponsiveValue(componentBackgroundImage));
+      applyBackgroundStyles(componentInner, componentBackgroundUrl, componentBackgroundStyles);
+
+      const componentTextAlignment = asRecord(componentThemeSettings._textAlignment);
+      applyTextAlignWithin(componentNode, ".component__title-inner", asString(componentTextAlignment._title));
+      applyTextAlignWithin(componentNode, ".component__body-inner", asString(componentTextAlignment._body));
+      applyTextAlignWithin(componentNode, ".component__instruction-inner", asString(componentTextAlignment._instruction));
+
+      // Matches ThemeComponentView.setComponentColors: background (+ its
+      // padding/border-radius side effect) on .component__inner; font colour
+      // (or an auto white/black contrast colour when unset) across
+      // component/title/body/instruction; header colour on the title only.
+      const componentColours = asRecord(componentThemeSettings._componentColors);
+      const componentBgColor = asString(componentColours["component-bg-color"]);
+      const componentFontColor = asString(componentColours["component-font-color"]);
+      const componentHeaderColor = asString(componentColours["component-header-color"]);
+      if (componentInner) {
+        if (componentBgColor) {
+          componentInner.style.background = componentBgColor;
+          componentInner.style.padding = "2rem";
+          componentInner.style.borderRadius = "8px";
+        } else {
+          componentInner.style.removeProperty("background");
+          componentInner.style.removeProperty("padding");
+          componentInner.style.removeProperty("border-radius");
+        }
+      }
+      const componentFontColorResolved =
+        componentFontColor || (componentBgColor ? (isPreviewColorDark(componentBgColor) ? "white" : "black") : "");
+      applyColorWithin(componentNode, ".component, .component__title, .component__body, .component__instruction", componentFontColorResolved);
+      if (componentHeaderColor) applyColorWithin(componentNode, ".component__title", componentHeaderColor);
+
+      const componentResponsiveClasses = asRecord(componentThemeSettings._responsiveClasses) as TopicResponsiveClasses;
+      const mergedComponentClasses = [
+        asString(selectedComponent.classes),
+        pickResponsiveClass(componentResponsiveClasses),
+      ].filter(Boolean).join(" ");
+      applyManagedClasses(componentNode, mergedComponentClasses);
+
+      // Live-patch any Behaviour-accordion asset field (graphic, poster,
+      // etc.) the same way topic/section image fields already are — an
+      // asset change should show up immediately, not only after a rebuild.
+      const behaviourComponentKey = (selectedComponent.settings.componentKey || "").toLowerCase();
+      const behaviourSchema = componentBehaviourSchemas[behaviourComponentKey] as
+        | Record<string, BehaviourFieldSchema>
+        | undefined;
+      if (behaviourSchema) {
+        const behaviourAssetPaths = collectBehaviourAssetPaths(
+          behaviourSchema,
+          asRecord(selectedComponent.settings.properties)
+        );
+        const previousAssetValues =
+          previousBehaviourAssetValuesRef.current.componentId === selectedComponent.id
+            ? previousBehaviourAssetValuesRef.current.values
+            : {};
+        const nextAssetValues: Record<string, string> = {};
+        behaviourAssetPaths.forEach(({ path, value }) => {
+          const resolvedUrl = value ? resolveAssetForPreview(value) : "";
+          nextAssetValues[path] = resolvedUrl;
+
+          const previousUrl = previousAssetValues[path];
+          const itemIndexMatch = path.match(/\[(\d+)\]/);
+          const itemIndex = itemIndexMatch ? Number(itemIndexMatch[1]) : null;
+          const assetKey = `behaviour-asset-${path}`;
+          const kind = detectAssetPreviewKind(value);
+
+          if (kind === "video" || kind === "audio") {
+            upsertPreviewMedia(componentInner, kind, resolvedUrl, assetKey, previousUrl, itemIndex);
+            return;
+          }
+
+          // Diff against THIS field's own previous src first — a generic
+          // class selector (".component__widget img") matches every item's
+          // image alike, so querySelector's first match would always land
+          // on item 0 regardless of which item actually changed. Finding
+          // the exact <img> that still shows the old URL targets the right
+          // one no matter its position.
+          if (componentInner && previousUrl && previousUrl !== resolvedUrl) {
+            const existingImage = Array.from(componentInner.querySelectorAll("img")).find(
+              (img) => img.getAttribute("src") === previousUrl
+            ) as HTMLImageElement | undefined;
+            if (existingImage) {
+              if (resolvedUrl) {
+                existingImage.src = resolvedUrl;
+                existingImage.style.removeProperty("display");
+              } else if (existingImage.getAttribute("data-preview-injected") === "true") {
+                existingImage.parentElement?.remove();
+              } else {
+                existingImage.removeAttribute("src");
+                existingImage.style.display = "none";
+              }
+              return;
+            }
+          }
+
+          // No previous src to diff against (a brand-new item, or this
+          // field never had an image before) — fall back to the generic
+          // selector, index-aware so at least the Nth item is targeted
+          // instead of always the first.
+          upsertPreviewImage(
+            componentInner,
+            [
+              `img[data-preview-asset-key="${assetKey}"]`,
+              ".graphic__widget img",
+              ".component__widget img",
+            ],
+            resolvedUrl,
+            "",
+            assetKey,
+            itemIndex
+          );
+        });
+        previousBehaviourAssetValuesRef.current = { componentId: selectedComponent.id, values: nextAssetValues };
+
+        // Any other plain-string Behaviour field (an MCQ item's label, a
+        // Graphic's alt text, ...) — diff against its previous value and
+        // find/replace the literal old text in the canvas. There's no fixed
+        // selector for these the way there is for title/body/instruction,
+        // so this is best-effort: it silently does nothing when the old
+        // text isn't currently visible in the DOM (see replaceTextInHost).
+        const behaviourTextPaths = collectBehaviourTextPaths(
+          behaviourSchema,
+          asRecord(selectedComponent.settings.properties)
+        );
+        const extensionTextPaths = Object.entries(componentExtensionSchemas[behaviourComponentKey] ?? {}).flatMap(([extensionKey, extensionSchema]) =>
+          collectBehaviourTextPaths(
+            (extensionSchema.properties ?? {}) as Record<string, BehaviourFieldSchema>,
+            asRecord(asRecord(selectedComponent.extensions)[extensionKey]),
+            extensionKey
+          )
+        ).filter(({ path }) => !path.startsWith("_additionalMaterial._items["));
+        const allBehaviourTextPaths = [...behaviourTextPaths, ...extensionTextPaths];
+        const previousTextValues =
+          previousBehaviourTextValuesRef.current.componentId === selectedComponent.id
+            ? previousBehaviourTextValuesRef.current.values
+            : {};
+        const nextTextValues: Record<string, string> = {};
+        allBehaviourTextPaths.forEach(({ path, value }) => {
+          nextTextValues[path] = value;
+          const previousValue = previousTextValues[path];
+          if (componentInner && previousValue !== undefined && previousValue !== value) {
+            replaceTextInHost(componentInner, previousValue, value);
+          }
+        });
+        previousBehaviourTextValuesRef.current = { componentId: selectedComponent.id, values: nextTextValues };
+
+        const additionalMaterialItems = asRecord(asRecord(selectedComponent.extensions)._additionalMaterial)._items;
+        if (componentInner && Array.isArray(additionalMaterialItems)) {
+          const buttonTextNodes = componentInner.querySelectorAll<HTMLElement>(".additional-material-btn__text");
+          additionalMaterialItems.forEach((item, index) => {
+            const text = asString(asRecord(item)._btnText);
+            if (buttonTextNodes[index] && buttonTextNodes[index].textContent !== text) {
+              buttonTextNodes[index].textContent = text;
+            }
+          });
+        }
+      }
+    }
+
+    const menuItemNode =
+      (doc.querySelector(`.menu-item[data-adapt-id="${selectedPage.id}"]`) as HTMLElement | null) ??
+      (doc.querySelector(`.menu__item[data-adapt-id="${selectedPage.id}"]`) as HTMLElement | null);
+    if (menuItemNode) {
+      const menuItemInner =
+        (menuItemNode.querySelector(".menu-item__inner") as HTMLElement | null) ??
+        (menuItemNode.querySelector(".menu__item-inner") as HTMLElement | null) ??
+        menuItemNode;
+      const menuHeader =
+        (menuItemNode.querySelector(".menu-item__header") as HTMLElement | null) ??
+        (menuItemNode.querySelector(".menu__item-header") as HTMLElement | null) ??
+        menuItemInner;
+
+      applyBackgroundStyles(menuItemInner, menuBackgroundUrl, menuBackgroundStyles);
+      applyBackgroundStyles(menuHeader, menuHeaderBackgroundUrl, menuHeaderBackgroundStyles);
+
+      const menuMinHeight = pickResponsiveNumber(menuHeaderMinimumHeights as TopicMinimumHeights);
+      if (typeof menuMinHeight === "number") {
+        menuHeader.style.setProperty("min-height", `${menuMinHeight}px`);
+      } else {
+        menuHeader.style.removeProperty("min-height");
+      }
+
+      applyTextAlignWithin(menuItemNode, ".menu-item__title, .menu__item-title", asString(menuHeaderTextAlignment._title));
+      applyTextAlignWithin(menuItemNode, ".menu-item__subtitle, .menu__item-subtitle", asString(menuHeaderTextAlignment._subtitle));
+      applyTextAlignWithin(menuItemNode, ".menu-item__body, .menu__item-body", asString(menuHeaderTextAlignment._body));
+      applyTextAlignWithin(menuItemNode, ".menu-item__instruction, .menu__item-instruction", asString(menuHeaderTextAlignment._instruction));
+
+      upsertPreviewImage(
+        menuItemInner,
+        [
+          'img[data-preview-asset-key="menu-graphic"]',
+          ".menu-item__graphic img",
+          ".menu__item-graphic img",
+        ],
+        menuGraphicUrl,
+        asString(menuGraphic.alt),
+        "menu-graphic"
+      );
+    }
+  }, [componentExtensionSchemas, contentPages, extensionSchemasByLevel, resolveTopicAssetPreviewUrl, selectedArticleId, selectedBlockId, selectedComponentId, selectedPageId]);
+
+  // Live-syncs the Navigation Footer's resolved button state (enabled + text)
+  // straight into the preview iframe's real course chrome — so editing
+  // "Navigation Footer" in the Topic Extensions accordion reflects immediately
+  // in the canvas, exactly like syncPreviewTopicSettings does for theme/text.
+  // The footer stays visible but non-interactive (pointer-events disabled via
+  // applyPreviewSelectionStyles) while editing. Nothing here is persisted —
+  // it only ever mutates the already-rendered DOM; the actual buttons are
+  // rebuilt from the real saved data on the next full preview rebuild/save.
+  const syncNavigationFooterPreview = useCallback(() => {
+    const iframe = previewFrameRef.current;
+    const doc = iframe?.contentDocument;
+    if (!doc) return;
+
+    const footerEl = doc.querySelector(".navigation-footer") as HTMLElement | null;
+    if (!footerEl) return;
+
+    const selectedPage = contentPages.find((page) => page.id === selectedPageId);
+    const storedButtons = asRecord(asRecord(selectedPage?.extensions?._navigationFooter)._buttons);
+    const container = (footerEl.querySelector(".navigation-footer__btn-container") as HTMLElement | null) ?? footerEl;
+
+    NAV_FOOTER_BUTTON_ORDER.forEach((buttonKey) => {
+      const btnClass = `btn-${buttonKey.slice(1)}`;
+      const { enabled, text } = resolveNavFooterButtonState(buttonKey, storedButtons, navFooterCourseButtons);
+      let btnEl = container.querySelector(`.${btnClass}`) as HTMLButtonElement | null;
+
+      if (!enabled) {
+        btnEl?.remove();
+        return;
+      }
+
+      if (!btnEl) {
+        btnEl = doc.createElement("button");
+        btnEl.className = `navigation-footer__btn-container__btn ${btnClass} btn-text js-navigation-footer-btn-click`;
+        if (buttonKey === "_home") btnEl.classList.add("icon", "icon-home");
+        if (buttonKey === "_home" || buttonKey === "_up" || buttonKey === "_previous") {
+          btnEl.classList.add("btn-secondary");
+        }
+      }
+      btnEl.textContent = text;
+      container.appendChild(btnEl); // re-appended in canonical order just below
+    });
+
+    // appendChild MOVES an already-attached node rather than duplicating it,
+    // so a second pass in fixed order corrects any button re-created/re-added
+    // out of sequence above without needing per-button position lookups.
+    NAV_FOOTER_BUTTON_ORDER.forEach((buttonKey) => {
+      const btnEl = container.querySelector(`.btn-${buttonKey.slice(1)}`);
+      if (btnEl) container.appendChild(btnEl);
+    });
+  }, [contentPages, navFooterCourseButtons, selectedPageId]);
+
+  // Old-tool parity (editorPageComponentView.js evaluateMove): a Content
+  // Group with exactly two components can swap which side each one renders
+  // on. The old tool exposes this as a move
+  // arrow on EACH component's own sidebar; here it's merged into a single
+  // "Swap positions" control injected once per qualifying block, permanently
+  // visible (not hover/selection-gated) — matches old tool's move arrows,
+  // which are equally always-on while editing. Rendered in normal flow
+  // between the Content Group header and its component row so it reserves
+  // vertical space instead of overlapping the selected group editor.
+  const syncSwapPositionsControls = useCallback(() => {
+    const iframe = previewFrameRef.current;
+    const doc = iframe?.contentDocument;
+    if (!doc || !selectedPageId) return;
+
+    const page = contentPages.find((candidate) => candidate.id === selectedPageId);
+    if (!page) return;
+
+    const qualifyingBlockIds = new Set<string>();
+
+    page.articles.forEach((article) => {
+      article.blocks.forEach((block) => {
+        if (block.components.length !== 2) return;
+        const explicitLeft = block.components.find((component) => component.layout === "left");
+        const explicitRight = block.components.find((component) => component.layout === "right");
+        const leftComponent = explicitLeft ?? block.components.find((component) => component.id !== explicitRight?.id) ?? block.components[0];
+        const rightComponent = explicitRight ?? block.components.find((component) => component.id !== leftComponent.id) ?? block.components[1];
+
+        qualifyingBlockIds.add(block.id);
+
+        const blockNode = doc.querySelector(`.block[data-adapt-id="${block.id}"]`) as HTMLElement | null;
+        const blockInner = (blockNode?.querySelector(".block__inner") as HTMLElement | null) ?? blockNode;
+        const componentContainer = blockInner?.querySelector(".component__container") as HTMLElement | null;
+        if (!blockInner || !componentContainer) return;
+
+        let row = doc.querySelector<HTMLElement>(`[data-preview-swap-positions-row][data-preview-swap-block-id="${block.id}"]`);
+        if (!row) {
+          row = doc.createElement("div");
+          row.className = "adapt-authoring-swap-positions-row";
+          row.setAttribute("data-preview-swap-positions-row", "true");
+          row.setAttribute("data-preview-swap-block-id", block.id);
+        }
+        if (componentContainer.firstElementChild !== row) {
+          componentContainer.insertBefore(row, componentContainer.firstChild);
+        }
+        const iframeRect = iframe.getBoundingClientRect();
+        const rightPanelRect = rightPanelScrollRef.current?.getBoundingClientRect();
+        const coveredRightWidth = rightPanelRect && rightPanelRect.left < iframeRect.right
+          ? Math.max(0, Math.ceil(iframeRect.right - rightPanelRect.left))
+          : 0;
+        const rowRightPadding = `${coveredRightWidth + 20}px`;
+        if (row.style.paddingRight !== rowRightPadding) {
+          row.style.paddingRight = rowRightPadding;
+        }
+
+        // Looked up by block id (not scoped to the current host) so a button
+        // created for the PREVIOUS right-hand component gets MOVED here
+        // instead of leaving a stale duplicate behind after a swap.
+        let btn = doc.querySelector<HTMLButtonElement>(
+          `[data-preview-swap-positions-btn][data-preview-swap-block-id="${block.id}"]`
+        );
+        if (!btn) {
+          btn = doc.createElement("button");
+          btn.type = "button";
+          btn.setAttribute("data-preview-swap-positions-btn", "true");
+          btn.className = "adapt-authoring-swap-positions-btn";
+          btn.textContent = "\u21c4 Swap positions";
+        }
+        // Only actually move it when it isn't already correctly placed —
+        // an unconditional insertBefore is a real DOM mutation even when
+        // it's a same-position no-op, which the MutationObserver-driven
+        // retry (below) would then react to, re-running this on every
+        // frame forever and continually resetting the browser's own
+        // :hover tracking on the button (so it could never sustain a
+        // hover, and clicks landed unreliably mid-churn).
+        if (btn.parentElement !== row) {
+          row.appendChild(btn);
+        }
+        btn.setAttribute("data-preview-swap-page-id", page.id);
+        btn.setAttribute("data-preview-swap-article-id", article.id);
+        btn.setAttribute("data-preview-swap-block-id", block.id);
+        btn.setAttribute("data-preview-swap-left-id", leftComponent.id);
+        btn.setAttribute("data-preview-swap-right-id", rightComponent.id);
+      });
+    });
+
+    doc.querySelectorAll("[data-preview-swap-positions-btn]").forEach((node) => {
+      const blockId = node.getAttribute("data-preview-swap-block-id");
+      if (!blockId || !qualifyingBlockIds.has(blockId)) node.remove();
+    });
+    doc.querySelectorAll("[data-preview-swap-positions-row]").forEach((node) => {
+      const blockId = node.getAttribute("data-preview-swap-block-id");
+      if (!blockId || !qualifyingBlockIds.has(blockId) || !node.querySelector("[data-preview-swap-positions-btn]")) node.remove();
+    });
+  }, [contentPages, selectedPageId]);
+
+
+  // Some component templates (e.g. assessment results) render their real
+  // DOM asynchronously well after the iframe's own load/contentPages sync —
+  // a block missing at the time this runs never gets a button, since
+  // nothing else re-triggers this sync once contentPages settles. Keeping
+  // the latest version in a ref lets a MutationObserver (installed once in
+  // handlePreviewFrameLoad, below) retry as soon as the real DOM changes,
+  // instead of only ever running once at load.
+  const syncSwapPositionsControlsRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    syncSwapPositionsControlsRef.current = syncSwapPositionsControls;
+  }, [syncSwapPositionsControls]);
+
+  // Old-tool parity (editorPasteZoneView.js showPasteZones), extended per
+  // explicit user instruction: a "Paste" bar at EVERY sibling gap in the
+  // copied node's own parent (before the first, between each, after the
+  // last) — not just immediately around the copied node — cleared entirely
+  // once clipboardEntry is null (pasted or cancelled).
+  const syncPasteZones = useCallback(() => {
+    const iframe = previewFrameRef.current;
+    const doc = iframe?.contentDocument;
+    if (!doc) return;
+
+    doc.querySelectorAll("[data-preview-paste-zone]").forEach((node) => node.remove());
+    if (!clipboardEntry) return;
+
+    const isSection = clipboardEntry.structureLevel === "section";
+    const label = isSection ? "Section" : "Content Group";
+    const parentId = isSection ? clipboardEntry.pageId : clipboardEntry.articleId;
+    if (!parentId) return;
+
+    const containerNode = isSection
+      ? doc.querySelector(`.page[data-adapt-id="${clipboardEntry.pageId}"]`)
+      : doc.querySelector(`.article[data-adapt-id="${clipboardEntry.articleId}"]`);
+    const siblingNodes = containerNode
+      ? Array.from(containerNode.querySelectorAll<Element>(isSection ? ".article" : ".block"))
+      : [];
+    if (!siblingNodes.length) return;
+
+    const makeZone = (sortOrder: number) => {
+      const zone = doc.createElement("div");
+      zone.setAttribute("data-preview-paste-zone", "true");
+      zone.className = "adapt-authoring-paste-zone";
+
+      const btn = doc.createElement("button");
+      btn.type = "button";
+      btn.setAttribute("data-preview-paste-zone-btn", "true");
+      btn.setAttribute("data-preview-paste-parent-id", parentId);
+      btn.setAttribute("data-preview-paste-sort-order", String(sortOrder));
+      btn.className = "adapt-authoring-paste-zone-btn";
+      btn.innerHTML = `${LEVEL_ACTION_COPY_ICON_SVG}<span>Paste ${label}</span>`;
+
+      const cancel = doc.createElement("button");
+      cancel.type = "button";
+      cancel.setAttribute("data-preview-paste-zone-cancel", "true");
+      cancel.className = "adapt-authoring-paste-zone-cancel";
+      cancel.textContent = "\u00d7";
+      cancel.title = "Cancel";
+
+      zone.appendChild(btn);
+      zone.appendChild(cancel);
+      return zone;
+    };
+
+    siblingNodes.forEach((node, index) => {
+      node.parentElement?.insertBefore(makeZone(index + 1), node);
+    });
+    const lastNode = siblingNodes[siblingNodes.length - 1];
+    lastNode.parentElement?.insertBefore(makeZone(siblingNodes.length + 1), lastNode.nextSibling);
+  }, [clipboardEntry]);
+
+
+  const syncPreviewScrollFromLeftPanel = useCallback((clearTarget = true) => {
+    const iframe = previewFrameRef.current;
+    const doc = iframe?.contentDocument;
+    if (!doc) return;
+
+    const pendingTarget = pendingLeftPanelScrollTargetRef.current;
+    if (!pendingTarget) return;
+
+    if (pendingTarget.level === "menu") {
+      const menuNode = doc.querySelector(".menu[data-adapt-id]") ?? doc.querySelector(".menu");
+      if (!menuNode) return;
+      menuNode.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+      if (clearTarget) pendingLeftPanelScrollTargetRef.current = null;
+      return;
+    }
+
+    if (!pendingTarget.id) return;
+
+    if (pendingTarget.level === "topic") {
+      const pageNode = doc.querySelector(`.page[data-adapt-id="${pendingTarget.id}"]`) ?? doc.querySelector(".page");
+      if (!pageNode) return;
+      pageNode.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+      if (clearTarget) pendingLeftPanelScrollTargetRef.current = null;
+      return;
+    }
+
+    if (pendingTarget.level === "section") {
+      const articleNode = doc.querySelector(`.article[data-adapt-id="${pendingTarget.id}"]`);
+      if (!articleNode) return;
+
+      const target = articleNode.querySelector(".article__header-inner") ??
+                     articleNode.querySelector(".article__header") ??
+                     articleNode;
+
+      target.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+      if (clearTarget) pendingLeftPanelScrollTargetRef.current = null;
+      return;
+    }
+
+    if (pendingTarget.level === "group") {
+      const blockNode = doc.querySelector(`.block[data-adapt-id="${pendingTarget.id}"]`);
+      if (!blockNode) return;
+
+      const target = blockNode.querySelector(".block__header-inner") ??
+                     blockNode.querySelector(".block__header") ??
+                     blockNode;
+
+      target.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+      if (clearTarget) pendingLeftPanelScrollTargetRef.current = null;
+      return;
+    }
+
+    if (pendingTarget.level === "component") {
+      const componentNode = doc.querySelector(`.component[data-adapt-id="${pendingTarget.id}"]`);
+      if (!componentNode) return;
+
+      // Selecting a component can expand its inline editor and push an
+      // embedded player below the canvas viewport. For H5P, keep the actual
+      // player container in view rather than stopping at the component
+      // header; other components retain the existing component-inner target.
+      const target = componentNode.querySelector(".laerdal-h5p__container") ??
+                     componentNode.querySelector(".component__inner") ??
+                     componentNode;
+      target.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+      if (clearTarget) pendingLeftPanelScrollTargetRef.current = null;
+      return;
+    }
+  }, []);
+
+  const syncPreviewScrollFromLeftPanelRef = useRef<(clearTarget?: boolean) => void>(() => {});
+  useEffect(() => {
+    syncPreviewScrollFromLeftPanelRef.current = syncPreviewScrollFromLeftPanel;
+  }, [syncPreviewScrollFromLeftPanel]);
+
+  const queuePreviewScrollFromLeftPanel = useCallback((target: PendingPreviewScrollTarget) => {
+    pendingLeftPanelScrollTargetRef.current = target;
+    syncPreviewScrollFromLeftPanel(false);
+    window.requestAnimationFrame(() => {
+      syncPreviewScrollFromLeftPanelRef.current?.(false);
+    });
+  }, [syncPreviewScrollFromLeftPanel]);
+
+  const clearCanvasSelection = useCallback(() => {
+    if (!menuPageCreated) return;
+
+    setMenuSelected(false);
+    setSelectedSubPageId(null);
+    setSelectedArticleId(null);
+    setSelectedBlockId(null);
+    setSelectedComponentId(null);
+    setHasCanvasSelection(false);
+    setRightPanelOpen(false);
+  }, [menuPageCreated]);
+
+  useEffect(() => {
+    if (!selectedPageId || !selectedArticleId || !selectedBlockId || !selectedComponentId) {
+      return;
+    }
+
+    const page = contentPages.find((p) => p.id === selectedPageId);
+    const article = page?.articles.find((a) => a.id === selectedArticleId);
+    const block = article?.blocks.find((b) => b.id === selectedBlockId);
+    const component = block?.components.find((c) => c.id === selectedComponentId);
+    const componentKey = (component?.settings?.componentKey || "").toLowerCase();
+    if (!componentKey) return;
+
+    if (componentSubtitleSchemaSupport[componentKey] !== undefined) {
+      return;
+    }
+
+    let cancelled = false;
+    void componentSchemaSupportsPropertiesField(componentKey, "subtitle")
+      .then((supported) => {
+        if (cancelled) return;
+        setComponentSubtitleSchemaSupport((prev) => ({
+          ...prev,
+          [componentKey]: supported,
+        }));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setComponentSubtitleSchemaSupport((prev) => ({
+          ...prev,
+          [componentKey]: false,
+        }));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    componentBehaviourSchemas,
+    componentSubtitleSchemaSupport,
+    contentPages,
+    selectedArticleId,
+    selectedBlockId,
+    selectedComponentId,
+    selectedPageId,
+  ]);
+
+  useEffect(() => {
+    if (!selectedPageId || !selectedArticleId || !selectedBlockId || !selectedComponentId) {
+      return;
+    }
+
+    const page = contentPages.find((p) => p.id === selectedPageId);
+    const article = page?.articles.find((a) => a.id === selectedArticleId);
+    const block = article?.blocks.find((b) => b.id === selectedBlockId);
+    const component = block?.components.find((c) => c.id === selectedComponentId);
+    const componentKey = (component?.settings?.componentKey || "").toLowerCase();
+    if (!componentKey) return;
+
+    if (componentInstructionSchemaSupport[componentKey] !== undefined) {
+      return;
+    }
+
+    let cancelled = false;
+    void componentSchemaSupportsPropertiesField(componentKey, "instruction")
+      .then((supported) => {
+        if (cancelled) return;
+        setComponentInstructionSchemaSupport((prev) => ({
+          ...prev,
+          [componentKey]: supported,
+        }));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setComponentInstructionSchemaSupport((prev) => ({
+          ...prev,
+          [componentKey]: false,
+        }));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    componentInstructionSchemaSupport,
+    contentPages,
+    selectedArticleId,
+    selectedBlockId,
+    selectedComponentId,
+    selectedPageId,
+  ]);
+
+  useEffect(() => {
+    if (!selectedPageId || !selectedArticleId || !selectedBlockId || !selectedComponentId) {
+      return;
+    }
+
+    const page = contentPages.find((p) => p.id === selectedPageId);
+    const article = page?.articles.find((a) => a.id === selectedArticleId);
+    const block = article?.blocks.find((b) => b.id === selectedBlockId);
+    const component = block?.components.find((c) => c.id === selectedComponentId);
+    const componentKey = (component?.settings?.componentKey || "").toLowerCase();
+    if (!componentKey || componentBehaviourSchemas[componentKey] !== undefined) {
+      return;
+    }
+
+    let cancelled = false;
+    void getComponentBehaviourSchema(componentKey)
+      .then((schema) => {
+        if (cancelled) return;
+        setComponentBehaviourSchemas((prev) => ({ ...prev, [componentKey]: schema }));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setComponentBehaviourSchemas((prev) => ({ ...prev, [componentKey]: {} }));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    componentBehaviourSchemas,
+    contentPages,
+    selectedArticleId,
+    selectedBlockId,
+    selectedComponentId,
+    selectedPageId,
+  ]);
+
+  // Component-level Extensions accordion: per-component-type schema (not the
+  // generic "component" level) so question-only extension attrs (e.g.
+  // _questionStateGraphic) only ever appear as "available" on question
+  // components (mcq, gmcq, ...) — see questionComponentHelper.js.
+  useEffect(() => {
+    if (!selectedPageId || !selectedArticleId || !selectedBlockId || !selectedComponentId) {
+      return;
+    }
+
+    const page = contentPages.find((p) => p.id === selectedPageId);
+    const article = page?.articles.find((a) => a.id === selectedArticleId);
+    const block = article?.blocks.find((b) => b.id === selectedBlockId);
+    const component = block?.components.find((c) => c.id === selectedComponentId);
+    const componentKey = (component?.settings?.componentKey || "").toLowerCase();
+    if (!componentKey || componentExtensionSchemas[componentKey] !== undefined) {
+      return;
+    }
+
+    let cancelled = false;
+    void getComponentExtensionSchema(componentKey)
+      .then((schema) => {
+        if (cancelled) return;
+        setComponentExtensionSchemas((prev) => ({ ...prev, [componentKey]: schema }));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setComponentExtensionSchemas((prev) => ({ ...prev, [componentKey]: {} }));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    componentExtensionSchemas,
+    contentPages,
+    selectedArticleId,
+    selectedBlockId,
+    selectedComponentId,
+    selectedPageId,
+  ]);
+
+  const handlePreviewFrameLoad = useCallback(() => {
+    const iframe = previewFrameRef.current;
+    const doc = iframe?.contentDocument;
+    if (!doc) return;
+
+    const resolvePreviewIds = (target: Element | null): PreviewHoverState => {
+      const isComponent = !!target?.closest(".component");
+      const isBlock = !!target?.closest(".block");
+      const isArticle = !!target?.closest(".article");
+      const isPage = !!target?.closest(".page");
+      const isMenu = !!target?.closest(".menu[data-adapt-id]");
+
+      const level = isComponent
+        ? "component"
+        : isBlock
+          ? "group"
+          : isArticle
+            ? "section"
+            : isPage
+              ? "topic"
+              : isMenu
+                ? "menu"
+                : null;
+
+      const pageId = target?.closest(".page")?.getAttribute("data-adapt-id") ?? null;
+      const articleId = target?.closest(".article")?.getAttribute("data-adapt-id") ?? null;
+      const blockId = target?.closest(".block")?.getAttribute("data-adapt-id") ?? null;
+      const componentId = target?.closest(".component")?.getAttribute("data-adapt-id") ?? null;
+
+      const noHover: PreviewHoverState = { pageId: null, articleId: null, blockId: null, componentId: null, level: null };
+
+      // Topic/Section/Content Group are hoverable ONLY through their own
+      // header. Their remaining area is mostly empty padding wrapped around
+      // a child level, so treating it as a hover target made the cursor
+      // flip between two levels while crossing that blank space.
+      // A level with no header element at all (headless, before a prior
+      // selection has injected a synthetic one) keeps its old behaviour —
+      // that padding is then its only hover surface.
+      if (level === "topic" || level === "section" || level === "group") {
+        const rootSelector = level === "topic" ? ".page" : level === "section" ? ".article" : ".block";
+        const headerSelector =
+          level === "topic"
+            ? ".page__header, .page__header-inner"
+            : level === "section"
+              ? ".article__header, .article__header-inner"
+              : ".block__header, .block__header-inner";
+        const root = target?.closest(rootSelector);
+        if (root?.querySelector(headerSelector) && !target?.closest(headerSelector)) {
+          return noHover;
+        }
+      }
+
+      // The component-container gap is never a Content Group target. For a
+      // normal block, blank block padding is also neutral; a headless block
+      // is different because that padding is its only hover surface before
+      // the synthetic header has been created by a prior selection.
+      if (level === "group" && target?.closest(".block__inner")) {
+        if (target.closest(".component__container")) {
+          return noHover;
+        }
+      }
+
+      if (level === "group" && selectedComponentId && selectedBlockId === blockId) {
+        const block = target?.closest(".block");
+        const header = block?.querySelector(".block__header-inner");
+        const isHeadlessSelectedParent =
+          header?.getAttribute("data-preview-injected") === "true" ||
+          header?.closest(".block__header")?.getAttribute("data-preview-injected") === "true";
+        if (isHeadlessSelectedParent) {
+          return noHover;
+        }
+      }
+
+      return {
+        pageId,
+        articleId,
+        blockId,
+        componentId,
+        level,
+      };
+    };
+
+    const findArticleParent = (pageId: string, articleId: string) => {
+      const page = contentPages.find((candidate) => candidate.id === pageId);
+      if (!page) return null;
+      return page.articles.find((candidate) => candidate.id === articleId) ?? null;
+    };
+
+    const resolveTopicField = (
+      editableNode: HTMLElement,
+      currentField: "title" | "subtitle" | "body" | "instruction" | null
+    ) => {
+      if (!currentField || (currentField !== "title" && currentField !== "subtitle")) {
+        return currentField;
+      }
+
+      if (editableNode.matches(".page__title-inner") || editableNode.closest(".page__title")) {
+        return "title" as const;
+      }
+
+      if (editableNode.matches(".page__subtitle-inner") || editableNode.closest(".page__subtitle")) {
+        return "subtitle" as const;
+      }
+
+      return currentField;
+    };
+
+    let hoverRafId: number | null = null;
+    let pendingHoverState: PreviewHoverState | null = null;
+
+    const applyHoverState = () => {
+      hoverRafId = null;
+      if (!pendingHoverState) return;
+      const nextState = pendingHoverState;
+      pendingHoverState = null;
+      setPreviewHoverState((previous) => {
+        if (
+          previous.level === nextState.level &&
+          previous.pageId === nextState.pageId &&
+          previous.articleId === nextState.articleId &&
+          previous.blockId === nextState.blockId &&
+          previous.componentId === nextState.componentId
+        ) {
+          return previous;
+        }
+        return nextState;
+      });
+    };
+
+    const queueHoverState = (state: PreviewHoverState) => {
+      pendingHoverState = state;
+      if (hoverRafId !== null) return;
+      hoverRafId = window.requestAnimationFrame(applyHoverState);
+    };
+
+    const clearPreviewHoverNow = () => {
+      pendingHoverState = null;
+      if (hoverRafId !== null) {
+        window.cancelAnimationFrame(hoverRafId);
+        hoverRafId = null;
+      }
+      doc.querySelectorAll(".adapt-authoring-preview-hover").forEach((node) => {
+        node.classList.remove("adapt-authoring-preview-hover");
+        if (!node.classList.contains("adapt-authoring-preview-active")) {
+          node.removeAttribute("data-preview-bridge-label");
+        }
+      });
+      setPreviewHoverState({ pageId: null, articleId: null, blockId: null, componentId: null, level: null });
+    };
+
+    const setSwapHoverHighlight = (swapBtn: HTMLElement, active: boolean) => {
+      const leftId = swapBtn.getAttribute("data-preview-swap-left-id");
+      const rightId = swapBtn.getAttribute("data-preview-swap-right-id");
+      [leftId, rightId].forEach((id) => {
+        if (!id) return;
+        const inner = doc.querySelector(`.component[data-adapt-id="${id}"] .component__inner`);
+        if (!inner) return;
+        inner.classList.toggle("adapt-authoring-swap-hover-highlight", active);
+        if (active) {
+          // Harmless if the real hover/active mechanism already owns this
+          // (same value); needed so the OTHER component — not the one the
+          // button itself lives inside — also shows the "Component" label.
+          inner.setAttribute("data-preview-bridge-label", "Component");
+        } else if (
+          !inner.classList.contains("adapt-authoring-preview-hover") &&
+          !inner.classList.contains("adapt-authoring-preview-active")
+        ) {
+          // Only clear it here if nothing else still needs it — the
+          // anchor component may genuinely be hover/active-managed already.
+          inner.removeAttribute("data-preview-bridge-label");
+        }
+      });
+    };
+
+    const getEventElement = (target: EventTarget | null): Element | null => {
+      if (!target) return null;
+      const candidate = target as Element;
+      if (typeof candidate.closest === "function") return candidate;
+      return (target as Node).parentElement ?? null;
+    };
+
+    const onMouseOver = (event: Event) => {
+      if (pointerLeaveTimerRef.current !== null) {
+        window.clearTimeout(pointerLeaveTimerRef.current);
+        pointerLeaveTimerRef.current = null;
+      }
+      if (!isPointerOverCanvasRef.current) {
+        isPointerOverCanvasRef.current = true;
+        setIsPointerOverCanvas(true);
+      }
+      const target = getEventElement(event.target);
+      const swapBtn = target?.closest("[data-preview-swap-positions-btn]") as HTMLElement | null;
+      if (swapBtn) {
+        clearPreviewHoverNow();
+        setSwapHoverHighlight(swapBtn, true);
+        return;
+      }
+      if (target?.closest("[data-preview-swap-positions-row]")) {
+        clearPreviewHoverNow();
+        return;
+      }
+      const state = resolvePreviewIds(target);
+      queueHoverState(state);
+    };
+
+    const onMouseOut = (event: MouseEvent) => {
+      const target = getEventElement(event.target);
+      const swapBtn = target?.closest("[data-preview-swap-positions-btn]") as HTMLElement | null;
+      if (swapBtn) {
+        const relatedTarget = event.relatedTarget as Node | null;
+        if (!relatedTarget || !swapBtn.contains(relatedTarget)) {
+          setSwapHoverHighlight(swapBtn, false);
+        }
+        if (getEventElement(relatedTarget)?.closest("[data-preview-swap-positions-row]")) {
+          clearPreviewHoverNow();
+          return;
+        }
+        if (relatedTarget && doc.contains(relatedTarget)) {
+          queueHoverState(resolvePreviewIds(relatedTarget as Element));
+        }
+        return;
+      }
+      if (target?.closest("[data-preview-swap-positions-row]")) {
+        const relatedTarget = event.relatedTarget as Node | null;
+        if (!relatedTarget || !doc.contains(relatedTarget)) {
+          clearPreviewHoverNow();
+        }
+        return;
+      }
+      const relatedTarget = event.relatedTarget as Node | null;
+      if (relatedTarget && doc.contains(relatedTarget)) return;
+      // A null relatedTarget also fires for momentary blips that are NOT a
+      // real exit (crossing the canvas scrollbar, sub-pixel gaps between
+      // nodes). Settling first keeps those from toggling the editing layout,
+      // which is what the cursor is sitting on.
+      if (isPointerOverCanvasRef.current && pointerLeaveTimerRef.current === null) {
+        pointerLeaveTimerRef.current = window.setTimeout(() => {
+          pointerLeaveTimerRef.current = null;
+          isPointerOverCanvasRef.current = false;
+          setIsPointerOverCanvas(false);
+        }, 200);
+      }
+      queueHoverState({ pageId: null, articleId: null, blockId: null, componentId: null, level: null });
+    };
+
+    const onClick = (event: Event) => {
+      const target = getEventElement(event.target);
+      if (!target) return;
+
+      // MediaElement's player surface is interactive in the published
+      // framework, but canvas clicks should select its component instead.
+      // Stop player click handlers here; continue through normal selection
+      // below so the component's Behaviour accordion is still opened.
+      if (target.closest("video, audio, .mejs__container")) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+
+      // A component's items (and the rest of its interactive body) render
+      // inside `.component__widget`, and their settings live in the
+      // Behaviour accordion — so any click in there surfaces that section.
+      // Returning `prev` unchanged when it is already open makes repeat
+      // clicks a no-op rather than a re-render.
+      const openBehaviourForWidgetClick = () => {
+        const componentEl = target.closest(".component");
+        const widgetEl = target.closest(PREVIEW_COMPONENT_WIDGET_SELECTOR);
+        if (!componentEl || !widgetEl || !componentEl.contains(widgetEl)) return;
+        setOpenComponentAccordions((prev) =>
+          prev.behaviour ? prev : { ...ALL_COMPONENT_ACCORDIONS_CLOSED, behaviour: true }
+        );
+      };
+
+      // Paste dialogs live inside the preview iframe document. Keep every
+      // click inside the dialog out of canvas selection/outside-click logic;
+      // only clicking the backdrop itself closes the dialog.
+      const pasteDialog = target.closest("[data-adapt-authoring-paste-dialog]") as HTMLElement | null;
+      if (pasteDialog) {
+        if (target === pasteDialog) pasteDialog.remove();
+        return;
+      }
+
+      // Let real course dialogs handle their own controls (especially the
+      // framework notify close button) instead of treating those clicks as
+      // canvas selection gestures.
+      if (target.closest(".notify, [role='dialog'], [aria-modal='true'], [data-modal], [data-overlay]")) {
+        return;
+      }
+
+      const swapBtn = target.closest("[data-preview-swap-positions-btn]") as HTMLElement | null;
+      if (swapBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const pageId = swapBtn.getAttribute("data-preview-swap-page-id");
+        const articleId = swapBtn.getAttribute("data-preview-swap-article-id");
+        const blockId = swapBtn.getAttribute("data-preview-swap-block-id");
+        const leftId = swapBtn.getAttribute("data-preview-swap-left-id");
+        const rightId = swapBtn.getAttribute("data-preview-swap-right-id");
+        if (pageId && articleId && blockId && leftId && rightId) {
+          const keepSwapHover = swapBtn.matches(":hover");
+          clearPreviewHoverNow();
+          setSwapHoverHighlight(swapBtn, false);
+          // Instant, glitch-free swap: reorder/reclass the REAL DOM nodes
+          // synchronously right here (no reload, no waiting on a React
+          // re-render) — persistence to the database only happens later,
+          // on Save (see saveDraftChanges' component _layout patch).
+          const leftNode = doc.querySelector(`.component[data-adapt-id="${leftId}"]`) as HTMLElement | null;
+          const rightNode = doc.querySelector(`.component[data-adapt-id="${rightId}"]`) as HTMLElement | null;
+          if (leftNode && rightNode && leftNode.parentElement === rightNode.parentElement) {
+            leftNode.classList.remove("is-left");
+            leftNode.classList.add("is-right");
+            rightNode.classList.remove("is-right");
+            rightNode.classList.add("is-left");
+            leftNode.parentElement!.insertBefore(rightNode, leftNode);
+
+            swapBtn.setAttribute("data-preview-swap-left-id", rightId);
+            swapBtn.setAttribute("data-preview-swap-right-id", leftId);
+          }
+          handleSwapComponentPositions(pageId, articleId, blockId, leftId, rightId);
+          if (keepSwapHover) {
+            iframe?.contentWindow?.requestAnimationFrame(() => {
+              clearPreviewHoverNow();
+              if (swapBtn.matches(":hover")) setSwapHoverHighlight(swapBtn, true);
+            });
+          }
+        }
+        return;
+      }
+
+      // Copy icon (topic/section/group — see ensureLevelActionIcons).
+      const copyBtn = target.closest("[data-preview-copy-node-btn]") as HTMLElement | null;
+      if (copyBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const actionsEl = copyBtn.closest("[data-preview-level-actions]") as HTMLElement | null;
+        if (actionsEl?.getAttribute("data-preview-actions-selected") !== "true") return;
+        const level = actionsEl?.getAttribute("data-preview-action-level");
+        const pageId = actionsEl?.getAttribute("data-preview-action-page-id");
+        const articleId = actionsEl?.getAttribute("data-preview-action-article-id") ?? null;
+        const blockId = actionsEl?.getAttribute("data-preview-action-block-id") ?? null;
+        if (level === "topic" && pageId) {
+          void handleCopyTopicNode(pageId);
+        } else if ((level === "section" || level === "group") && pageId) {
+          void handleStartClipboardCopy(level, pageId, articleId, blockId);
+        }
+        return;
+      }
+
+      // Save as template icon (all levels — see ensureLevelActionIcons).
+      const saveTemplateBtn = target.closest("[data-preview-save-template-btn]") as HTMLElement | null;
+      if (saveTemplateBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const actionsEl = saveTemplateBtn.closest("[data-preview-level-actions]") as HTMLElement | null;
+        if (actionsEl?.getAttribute("data-preview-actions-selected") !== "true") return;
+        const level = actionsEl?.getAttribute("data-preview-action-level") as
+          | "topic" | "section" | "group" | "component" | null;
+        const pageId = actionsEl?.getAttribute("data-preview-action-page-id");
+        const articleId = actionsEl?.getAttribute("data-preview-action-article-id") ?? null;
+        const blockId = actionsEl?.getAttribute("data-preview-action-block-id") ?? null;
+        const componentId = actionsEl?.getAttribute("data-preview-action-component-id") ?? null;
+        const objectId = level === "topic"
+          ? pageId
+          : level === "section"
+            ? articleId
+            : level === "group"
+              ? blockId
+              : componentId;
+        if (!level || !objectId) return;
+        handleOpenSaveAsTemplate(level, objectId);
+        return;
+      }
+
+      // Delete icon (all levels — see ensureLevelActionIcons).
+      const deleteNodeBtn = target.closest("[data-preview-delete-node-btn]") as HTMLElement | null;
+      if (deleteNodeBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const actionsEl = deleteNodeBtn.closest("[data-preview-level-actions]") as HTMLElement | null;
+        if (actionsEl?.getAttribute("data-preview-actions-selected") !== "true") return;
+        const level = actionsEl?.getAttribute("data-preview-action-level") as
+          | "topic" | "section" | "group" | "component" | null;
+        const pageId = actionsEl?.getAttribute("data-preview-action-page-id");
+        const articleId = actionsEl?.getAttribute("data-preview-action-article-id") ?? null;
+        const blockId = actionsEl?.getAttribute("data-preview-action-block-id") ?? null;
+        const componentId = actionsEl?.getAttribute("data-preview-action-component-id") ?? null;
+        if (!level || !pageId) return;
+        setCanvasDeleteTarget({
+          level,
+          pageId,
+          articleId,
+          blockId,
+          componentId,
+          name: getCanvasNodeTitle(level, pageId, articleId, blockId, componentId),
+        });
+        return;
+      }
+
+      // Color Label icon (section/group/component) — opens the Colour Label
+      // popover anchored to the button; a swatch just marks the pending
+      // selection (see the popover-swatch branch below) — Reset/Cancel/Apply
+      // (further below) are what actually commit or dismiss it.
+      const colorLabelBtn = target.closest("[data-preview-color-label-btn]") as HTMLElement | null;
+      if (colorLabelBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        doc.querySelectorAll("[data-preview-color-label-popover]").forEach((node) => node.remove());
+        const actionsEl = colorLabelBtn.closest("[data-preview-level-actions]") as HTMLElement | null;
+        if (actionsEl?.getAttribute("data-preview-actions-selected") !== "true") return;
+        const level = actionsEl?.getAttribute("data-preview-action-level");
+        const pageId = actionsEl?.getAttribute("data-preview-action-page-id");
+        if (!level || !pageId) return;
+        const articleId = actionsEl?.getAttribute("data-preview-action-article-id") ?? null;
+        const blockId = actionsEl?.getAttribute("data-preview-action-block-id") ?? null;
+        const componentId = actionsEl?.getAttribute("data-preview-action-component-id") ?? null;
+        const currentValue = colorLabelBtn.getAttribute("data-preview-color-label-current") ?? "";
+
+        const popover = doc.createElement("div");
+        popover.setAttribute("data-preview-color-label-popover", "true");
+        popover.setAttribute("data-preview-color-label-pending", currentValue);
+        popover.className = "adapt-authoring-color-label-popover";
+
+        const title = doc.createElement("div");
+        title.className = "adapt-authoring-color-label-popover-title";
+        title.textContent = "Colour Label";
+        popover.appendChild(title);
+
+        const desc = doc.createElement("p");
+        desc.className = "adapt-authoring-color-label-popover-desc";
+        desc.innerHTML = "The colours are <b>only</b> applied in the authoring tool and will <b>not affect the generated course</b>. The settings are synced with all users in the authoring tool.";
+        popover.appendChild(desc);
+
+        const grid = doc.createElement("div");
+        grid.className = "adapt-authoring-color-label-popover-grid";
+        COLOR_LABEL_VALUES.forEach((value) => {
+          const swatch = doc.createElement("button");
+          swatch.type = "button";
+          swatch.className = "adapt-authoring-color-label-swatch";
+          if (value === currentValue) swatch.classList.add("adapt-authoring-color-label-swatch--selected");
+          swatch.style.background = COLOR_LABEL_HEX[value] ?? "";
+          swatch.setAttribute("data-preview-color-label-value", value);
+          grid.appendChild(swatch);
+        });
+        popover.appendChild(grid);
+
+        const actions = doc.createElement("div");
+        actions.className = "adapt-authoring-color-label-popover-actions";
+
+        const resetBtn = doc.createElement("button");
+        resetBtn.type = "button";
+        resetBtn.setAttribute("data-preview-color-label-reset", "true");
+        resetBtn.className = "adapt-authoring-btn-secondary";
+        resetBtn.textContent = "Reset";
+        actions.appendChild(resetBtn);
+
+        const cancelBtn = doc.createElement("button");
+        cancelBtn.type = "button";
+        cancelBtn.setAttribute("data-preview-color-label-cancel", "true");
+        cancelBtn.className = "adapt-authoring-btn-secondary";
+        cancelBtn.textContent = "Cancel";
+        actions.appendChild(cancelBtn);
+
+        const applyBtn = doc.createElement("button");
+        applyBtn.type = "button";
+        applyBtn.setAttribute("data-preview-color-label-apply", "true");
+        applyBtn.className = "adapt-authoring-btn-primary";
+        applyBtn.textContent = "Apply";
+        actions.appendChild(applyBtn);
+
+        popover.appendChild(actions);
+
+        popover.setAttribute("data-preview-action-level", level);
+        popover.setAttribute("data-preview-action-page-id", pageId);
+        if (articleId) popover.setAttribute("data-preview-action-article-id", articleId);
+        if (blockId) popover.setAttribute("data-preview-action-block-id", blockId);
+        if (componentId) popover.setAttribute("data-preview-action-component-id", componentId);
+
+        doc.body.appendChild(popover);
+        const btnRect = colorLabelBtn.getBoundingClientRect();
+        const popoverRect = popover.getBoundingClientRect();
+        popover.style.top = `${btnRect.bottom + doc.defaultView!.scrollY + 4}px`;
+        popover.style.left = `${btnRect.right + doc.defaultView!.scrollX - popoverRect.width}px`;
+        return;
+      }
+
+      // A swatch inside the color-label popover — marks the pending
+      // selection only; Apply (below) is what actually commits it.
+      const swatchBtn = target.closest("[data-preview-color-label-value]") as HTMLElement | null;
+      if (swatchBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const popover = swatchBtn.closest("[data-preview-color-label-popover]") as HTMLElement | null;
+        if (!popover) return;
+        const value = swatchBtn.getAttribute("data-preview-color-label-value") ?? "";
+        popover.setAttribute("data-preview-color-label-pending", value);
+        popover.querySelectorAll("[data-preview-color-label-value]").forEach((node) => {
+          node.classList.toggle("adapt-authoring-color-label-swatch--selected", node === swatchBtn);
+        });
+        return;
+      }
+
+      const applyColorLabelBtn = target.closest("[data-preview-color-label-apply]") as HTMLElement | null;
+      const resetColorLabelBtn = target.closest("[data-preview-color-label-reset]") as HTMLElement | null;
+      const cancelColorLabelBtn = target.closest("[data-preview-color-label-cancel]") as HTMLElement | null;
+      if (applyColorLabelBtn || resetColorLabelBtn || cancelColorLabelBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const popover = target.closest("[data-preview-color-label-popover]") as HTMLElement | null;
+        const level = popover?.getAttribute("data-preview-action-level");
+        const pageId = popover?.getAttribute("data-preview-action-page-id");
+        const articleId = popover?.getAttribute("data-preview-action-article-id") ?? null;
+        const blockId = popover?.getAttribute("data-preview-action-block-id") ?? null;
+        const componentId = popover?.getAttribute("data-preview-action-component-id") ?? null;
+        const value = resetColorLabelBtn ? "" : (popover?.getAttribute("data-preview-color-label-pending") ?? "");
+        popover?.remove();
+        if (!cancelColorLabelBtn && (level === "topic" || level === "section" || level === "group" || level === "component") && pageId) {
+          handleSetColorLabel(level, pageId, articleId, blockId, componentId, value);
+        }
+        return;
+      }
+
+      // Paste zone buttons (Section/Content Group Copy — one at every
+      // sibling gap, see syncPasteZones).
+      const pasteBtn = target.closest("[data-preview-paste-zone-btn]") as HTMLElement | null;
+      if (pasteBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const parentId = pasteBtn.getAttribute("data-preview-paste-parent-id");
+        const sortOrder = Number(pasteBtn.getAttribute("data-preview-paste-sort-order"));
+        if (parentId && Number.isFinite(sortOrder)) {
+          void handlePasteFromClipboard(parentId, sortOrder);
+        }
+        return;
+      }
+      const pasteCancelBtn = target.closest("[data-preview-paste-zone-cancel]") as HTMLElement | null;
+      if (pasteCancelBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        handleCancelClipboardCopy();
+        return;
+      }
+
+      // Any other click closes an open color-label popover (outside click).
+      if (!target.closest("[data-preview-color-label-popover]")) {
+        doc.querySelectorAll("[data-preview-color-label-popover]").forEach((node) => node.remove());
+      }
+
+      // Any other click cancels a pending clipboard copy (paste zones stay
+      // up only until the user picks a slot, hits X, or clicks elsewhere) —
+      // the click itself still continues normally (e.g. selecting a
+      // different node), only the pending copy/paste is dropped.
+      if (clipboardEntryRef.current) {
+        setClipboardEntry(null);
+      }
+
+      // CKEditor owns its toolbar, selection, focus, and editable surface.
+      // Its instance exists only for the currently selected node, so this is
+      // never a selection gesture; cancelling this capture-phase click was
+      // preventing component-body text from accepting a cursor or typing.
+      // CKEditor balloon forms are mounted next to the editor in the iframe
+      // body, so they are outside `.ck-editor` even though their buttons
+      // belong to the active editor (for example, the Link form's Save).
+      if (target.closest(".ck-balloon-panel")) return;
+      if (target.closest(".ck-editor")) return;
+
+      // Real MCQ/Checklist/etc. item templates give each option a native
+      // checkbox/radio <input> ABSOLUTELY POSITIONED to cover the entire
+      // clickable row (label + text), so a genuine click's hit-test target
+      // is this <input> directly — the click event never actually bubbles
+      // through the item's own text node at all. Because of that, the
+      // <label>-based fix above (which only fires when an editable overlay
+      // IS the click target) never engages for this — the real click target
+      // is the sibling input, not our contenteditable text. Handle it
+      // separately here: if this input's OWN item row already has an
+      // editable overlay field (i.e. this item's text is already the
+      // currently-selected component's editable field), block the native
+      // checkbox/radio toggle and move focus there ourselves instead.
+      // Bounded ancestor walk (not a single parentElement hop) because some
+      // components nest the input one level deeper than others; stops at
+      // the first match so it can only ever find THIS item's own field,
+      // never a different sibling item's.
+      if (target.matches('input[type="checkbox"], input[type="radio"]')) {
+        let container: Element | null = target.parentElement;
+        let siblingEditableField: HTMLElement | null = null;
+        for (let depth = 0; depth < 4 && container && !siblingEditableField; depth += 1) {
+          siblingEditableField = container.querySelector("[data-preview-edit-enabled='true']");
+          container = container.parentElement;
+        }
+        if (siblingEditableField) {
+          // preventDefault alone stops the BROWSER's native checkbox/radio
+          // toggle, but MCQ (a React-rendered component) still separately
+          // fires its own React onChange from this same click regardless
+          // of defaultPrevented (React uses 'click' purely as a change-
+          // detection heuristic for checkbox/radio inputs, independent of
+          // whether the native default actually ran) — that still flips
+          // the model's _isActive and re-renders the controlled `checked`
+          // prop. stopPropagation during this CAPTURE-phase listener (see
+          // doc.addEventListener(..., true) below) stops the event from
+          // ever reaching React's own root-level listener at all, so its
+          // onChange never fires in the first place.
+          event.preventDefault();
+          event.stopPropagation();
+          siblingEditableField.focus();
+          // This branch returns before the selection logic below, so the
+          // widget rule has to be applied here too — an MCQ/Checklist item
+          // row IS the input, so without this a question's options would be
+          // the one widget that never opened Behaviour.
+          openBehaviourForWidgetClick();
+          return;
+        }
+      }
+
+      const clickedSelectableRegion = target.closest(
+        ".page__header-inner, .page__inner, .article__header-inner, .article__inner, .block__header-inner, .block__inner, .component__inner, .menu[data-adapt-id]"
+      );
+      if (!clickedSelectableRegion) {
+        event.preventDefault();
+        event.stopPropagation();
+        // The theme's own nav/footer is pointer-events:none here, so the click
+        // never targets it — hit-test its box instead to explain why nothing
+        // happened, rather than silently clearing the selection.
+        const pointer = event as MouseEvent;
+        const overCourseChrome = [".nav", ".navigation", ".navigation-footer"].some((selector) =>
+          Array.from(doc.querySelectorAll(selector)).some((el) => {
+            const rect = el.getBoundingClientRect();
+            if (!rect.width || !rect.height) return false;
+            return (
+              pointer.clientX >= rect.left && pointer.clientX <= rect.right &&
+              pointer.clientY >= rect.top && pointer.clientY <= rect.bottom
+            );
+          })
+        );
+        if (overCourseChrome) {
+          setEditorToast({
+            type: "info",
+            message: "This element is not accessible in the editor. Preview the course to use it.",
+          });
+        }
+        clearCanvasSelection();
+        return;
+      }
+
+      const componentId = target.closest(".component")?.getAttribute("data-adapt-id");
+      const blockId = target.closest(".block")?.getAttribute("data-adapt-id");
+      const articleId = target.closest(".article")?.getAttribute("data-adapt-id");
+      const pageId = target.closest(".page")?.getAttribute("data-adapt-id");
+      const isMenu = !!target.closest(".menu[data-adapt-id]");
+
+      // Item-level settings are rendered inside the Behaviour accordion, so
+      // a click landing in the component's widget (where its items render)
+      // opens that section instead of General. Scoped to the widget of THIS
+      // component so a nested one can never be mistaken for it.
+      const componentEl = componentId ? target.closest(".component") : null;
+      const widgetEl = componentEl ? target.closest(PREVIEW_COMPONENT_WIDGET_SELECTOR) : null;
+      const isComponentWidgetTarget = !!(widgetEl && componentEl?.contains(widgetEl));
+      const componentPreferredAccordion = isComponentWidgetTarget ? "behaviour" : "general";
+
+      if (!isMenu && !pageId && !articleId && !blockId && !componentId) {
+        return;
+      }
+
+      // Our own editable overlay (title/body/instruction/behaviour-path
+      // fields) always takes priority — clicking it must place a cursor,
+      // never trigger the real template's own click handling (e.g. an
+      // accordion/narrative header that toggles expand/collapse on click).
+      // Everything else that looks like a genuine interactive control
+      // (a nav/expand button, a tab, a real link — "js-" is the Adapt
+      // framework's own convention for marking JS-driven elements) is left
+      // completely alone: no preventDefault/stopPropagation, so the real
+      // framework's narrative/accordion/tabs navigation keeps working while
+      // a component is selected, instead of every click being swallowed by
+      // selection handling.
+      // A click landing on the empty/padding area of an item's <label>
+      // (icon column, right-hand whitespace, ...) hits the LABEL itself as
+      // target, never the editable text span it wraps — target.closest()
+      // only ever walks UP, so it can't see that DESCENDANT field. Also
+      // check the label's own bounded contents (mirrors the checkbox/radio
+      // branch's ancestor walk below) so the whole label counts as an
+      // editable overlay target, not just the exact text node's own box.
+      const editableOverlayAncestor = target.closest("[data-preview-edit-enabled='true']");
+      const containingLabel = target.closest("label");
+      const editableOverlayInLabel = !editableOverlayAncestor && containingLabel
+        ? containingLabel.querySelector("[data-preview-edit-enabled='true']")
+        : null;
+      const isEditableOverlayTarget = !!(editableOverlayAncestor || editableOverlayInLabel);
+      const isInteractiveControl =
+        !isEditableOverlayTarget &&
+        !!target.closest('button, [role="button"], [role="tab"], [class*="js-"], a[href], input, select, textarea, summary, [aria-expanded]');
+
+      // An editable overlay field (e.g. an MCQ/Checklist option's text) is
+      // frequently nested inside a <label> the real component template
+      // associates with its own hidden checkbox/radio <input> (the item's
+      // actual selection control) via htmlFor. Clicking anywhere in that
+      // label is native browser behavior that focuses + toggles that
+      // control, firing the framework's own 'change' handler (e.g.
+      // checklistView's onItemSelect) — completely independent of our own
+      // click handling below and NOT something stopPropagation touches.
+      // Left alone, that native focus-steal is why an editable option's
+      // text visibly "enters edit mode" (our contenteditable/cursor
+      // affordance appears for an instant) and then immediately reverts
+      // (real focus actually lands on the sibling input, not our
+      // contenteditable span, so it blurs right back out). Blocking only
+      // the DEFAULT action here (not propagation) stops that native
+      // toggle/focus-steal while leaving caret placement in the
+      // contenteditable span untouched (that's driven by mousedown, not
+      // this click's default action) and leaving every other real
+      // interactive control (accordion/narrative headers, nav buttons —
+      // anything NOT wrapped as one of our own editable overlays) exactly
+      // as before.
+      if (isEditableOverlayTarget && target.closest("label")) {
+        event.preventDefault();
+      }
+
+      // A click that lands in the label's own empty space (padding, icon
+      // column, whitespace past the end of the text — never actually on
+      // the editable field element itself) has no glyph under the pointer
+      // for the browser's own mousedown-time caret placement to resolve
+      // against, so nothing gets focused at all once the native
+      // label-activates-its-input default above is blocked. Explicitly
+      // focus the field and collapse the caret to its end (matching a
+      // real text editor's "clicked past the last character" behavior)
+      // instead of leaving the click with no effect.
+      if (editableOverlayInLabel) {
+        const editableField = editableOverlayInLabel as HTMLElement;
+        const fieldWindow = doc.defaultView;
+        editableField.focus();
+        // Focusing a contenteditable also schedules the browser's OWN
+        // default "collapse to start" caret placement — setting the range
+        // synchronously right after focus() gets silently clobbered by
+        // that default a moment later. Deferring to the next frame lets
+        // our placement win instead.
+        fieldWindow?.requestAnimationFrame(() => {
+          const range = doc.createRange();
+          // Collapse to the END OF THE LAST TEXT NODE specifically (not
+          // just selectNodeContents+collapse(false) on the wrapper
+          // element, which anchors the range's container/offset in
+          // CHILD-NODE units and can render with no visible caret at all
+          // for a single-text-node field) so the caret reliably renders
+          // right after the last real character.
+          const lastTextNode = (() => {
+            const walker = doc.createTreeWalker(editableField, NodeFilter.SHOW_TEXT);
+            let last: Text | null = null;
+            let current = walker.nextNode();
+            while (current) {
+              last = current as Text;
+              current = walker.nextNode();
+            }
+            return last;
+          })();
+          if (lastTextNode) {
+            range.setStart(lastTextNode, lastTextNode.length);
+            range.setEnd(lastTextNode, lastTextNode.length);
+          } else {
+            range.selectNodeContents(editableField);
+            range.collapse(false);
+          }
+          const fieldSelection = fieldWindow.getSelection();
+          fieldSelection?.removeAllRanges();
+          fieldSelection?.addRange(range);
+        });
+      }
+
+      // Plain inline fields and CKEditor must keep the browser's default
+      // click/focus behavior. Previously this also matched our own editable
+      // targets and called preventDefault in capture phase, which blocked
+      // caret placement most visibly inside component headers/items.
+      if (!isInteractiveControl && !isEditableOverlayTarget) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+
+      // Preserve the right-panel accordion exactly as-is when an editable
+      // field is clicked inside the node already selected. The editor is
+      // often opened specifically to compare its live canvas value against
+      // an expanded Theme/Behaviour/etc. accordion; forcing General open
+      // here used to discard that context. A genuinely different deepest
+      // selection retains the existing fresh-selection behaviour below.
+      const currentSelection = liveSelectionRef.current;
+      // clearCanvasSelection (click outside) keeps selectedPageId — it also
+      // tracks which page the canvas is showing — and only drops
+      // hasCanvasSelection. Without that flag here, the next click on that
+      // page's header still looked like a repeat click on an already
+      // selected node and was swallowed, so the topic could not be
+      // reselected at all until some other level was selected first.
+      const isSameCanvasSelection = !currentSelection.hasCanvasSelection
+        ? false
+        : componentId && blockId && articleId && pageId
+        ? currentSelection.selectedComponentId === componentId && currentSelection.selectedBlockId === blockId && currentSelection.selectedArticleId === articleId && currentSelection.selectedPageId === pageId
+        : blockId && articleId && pageId
+          ? currentSelection.selectedBlockId === blockId && currentSelection.selectedArticleId === articleId && currentSelection.selectedPageId === pageId && !currentSelection.selectedComponentId
+          : articleId && pageId
+            ? currentSelection.selectedArticleId === articleId && currentSelection.selectedPageId === pageId && !currentSelection.selectedBlockId && !currentSelection.selectedComponentId
+            : pageId
+              ? currentSelection.selectedPageId === pageId && !currentSelection.selectedArticleId && !currentSelection.selectedBlockId && !currentSelection.selectedComponentId && !currentSelection.menuSelected
+              : false;
+      if (target.closest("[data-preview-edit-field]") && !isSameCanvasSelection) {
+        if (componentId) setOpenComponentAccordions((prev) => ({ ...prev, [componentPreferredAccordion]: true }));
+        else if (blockId) setOpenBlockAccordions((prev) => ({ ...prev, general: true }));
+        else if (articleId) setOpenSectionAccordions((prev) => ({ ...prev, general: true }));
+        else if (pageId) setOpenTopicAccordions((prev) => ({ ...prev, general: true }));
+      }
+
+      // The iframe listener is installed at iframe load and its selection
+      // handler closures can be older than current React state. For an
+      // already selected node, there is no selection work to do at all;
+      // returning here keeps right-panel accordions stable and lets the
+      // target's own native editing behavior proceed unmodified.
+      if (isSameCanvasSelection) {
+        // Moving between widget areas of the ALREADY-selected component still
+        // has to surface Behaviour. Returning `prev` untouched when it is
+        // already open keeps this a no-op re-render-wise.
+        if (isComponentWidgetTarget) openBehaviourForWidgetClick();
+        return;
+      }
+
+      if (componentId && blockId && articleId && pageId) {
+        handleSelectComponent(pageId, articleId, blockId, componentId, "preview", componentPreferredAccordion);
+        return;
+      }
+
+      if (blockId && articleId && pageId) {
+        handleBlockSelect(pageId, articleId, blockId, "preview");
+        return;
+      }
+
+      if (articleId && pageId) {
+        const article = findArticleParent(pageId, articleId);
+        if (article) {
+          handleArticleSelect(pageId, article.id, "preview");
+          return;
+        }
+      }
+
+      if (pageId) {
+        handlePageSelect(pageId, "preview");
+        return;
+      }
+
+      if (isMenu) {
+        handleMenuSelect("preview");
+      }
+    };
+
+    const cancelTitleAutoRevert = () => {
+      if (titleAutoRevertTimeoutRef.current !== null) {
+        window.clearTimeout(titleAutoRevertTimeoutRef.current);
+        titleAutoRevertTimeoutRef.current = null;
+      }
+    };
+
+    // Restores the pre-edit title (text + state) for a blank title — shared
+    // by the immediate blur revert and the auto-revert timeout so both paths
+    // resolve identically. Doesn't touch titleValidationWarning: callers
+    // decide whether to show it (blur) or clear it (the timeout, whose job
+    // is to end the warning's standard on-screen duration).
+    const performTitleRevert = (
+      target: HTMLElement,
+      level: "topic" | "section" | "group" | "component",
+      pageId: string,
+      articleId: string | null,
+      blockId: string | null,
+      componentId: string | null
+    ) => {
+      cancelTitleAutoRevert();
+      const page = contentPages.find((p) => p.id === pageId);
+      const article = page && articleId ? page.articles.find((a) => a.id === articleId) : null;
+      const block = article && blockId ? article.blocks.find((b) => b.id === blockId) : null;
+      const component = block && componentId ? block.components.find((c) => c.id === componentId) : null;
+      const fallbackTitle =
+        level === "topic" ? page?.title ?? ""
+        : level === "section" ? article?.title ?? ""
+        : level === "group" ? block?.title ?? ""
+        : component?.settings.title ?? "";
+      const revertTitle = titleEditOriginalValueRef.current ?? fallbackTitle;
+
+      target.textContent = revertTitle;
+      target.classList.toggle("adapt-authoring-preview-inline-empty", revertTitle.trim().length === 0);
+      setCanvasTitleLiveOverride(null);
+
+      if (level === "topic" && pageId) {
+        updatePageData(pageId, { title: revertTitle });
+      } else if (level === "section" && pageId && articleId) {
+        updateArticle(pageId, articleId, { title: revertTitle });
+      } else if (level === "group" && pageId && articleId && blockId) {
+        updateBlock(pageId, articleId, blockId, { title: revertTitle });
+      } else if (level === "component" && pageId && articleId && blockId && componentId) {
+        updateComponent(pageId, articleId, blockId, componentId, { settings: { title: revertTitle } });
+      }
+
+      titleEditOriginalValueRef.current = null;
+    };
+
+    const onInput = (event: Event) => {
+      const origin = event.target as Element | null;
+      const target = origin?.closest("[data-preview-edit-enabled='true']") as HTMLElement | null;
+      if (!target) return;
+      isInlineEditingRef.current = true;
+
+      // A generic Behaviour item field (matched by text content, not a
+      // fixed class — see syncPreviewInlineEditors) writes straight back to
+      // its own settings.properties path, live, same as body/instruction.
+      const behaviourPath = target.getAttribute("data-preview-behaviour-path");
+      if (behaviourPath) {
+        const pageId = target.getAttribute("data-preview-page-id");
+        const articleId = target.getAttribute("data-preview-article-id");
+        const blockId = target.getAttribute("data-preview-block-id");
+        const componentId = target.getAttribute("data-preview-component-id");
+        if (pageId && articleId && blockId && componentId) {
+          const value = behaviourPath.endsWith(".body") ? target.innerHTML : target.textContent || "";
+          updateComponentBehaviourProperty(pageId, articleId, blockId, componentId, behaviourPath, value);
+        }
+        return;
+      }
+
+      const field = target.getAttribute("data-preview-edit-field") as
+        | "title"
+        | "subtitle"
+        | "body"
+        | "instruction"
+        | null;
+      const level = target.getAttribute("data-preview-node-level") as
+        | "topic"
+        | "section"
+        | "group"
+        | "component"
+        | null;
+      const pageId = target.getAttribute("data-preview-page-id");
+      const articleId = target.getAttribute("data-preview-article-id");
+      const blockId = target.getAttribute("data-preview-block-id");
+      const componentId = target.getAttribute("data-preview-component-id");
+      const isComponentSubtitle = level === "component" && field === "subtitle";
+      const value = field === "body" || field === "instruction" || isComponentSubtitle
+        ? target.innerHTML
+        : (target.textContent || "").trim();
+
+      const hasText = (target.textContent || "").trim().length > 0;
+      if (!hasText) {
+        target.classList.add("adapt-authoring-preview-inline-empty");
+      } else {
+        target.classList.remove("adapt-authoring-preview-inline-empty");
+      }
+
+      if (!field || !level || !pageId) return;
+
+      const resolvedField = level === "topic" ? resolveTopicField(target, field) : field;
+
+      if (resolvedField === "title") {
+        // Mirror the literal canvas text (including transient blank states)
+        // into the right panel's title field live — the panel field reads
+        // this in preference to real state, which never goes blank.
+        setCanvasTitleLiveOverride(value);
+        // Warn immediately, not just on blur — the user shouldn't have to
+        // defocus the field to find out the title can't be blank. If they
+        // leave it blank without blurring, auto-revert once the warning's
+        // standard on-screen duration elapses.
+        if (isBlankTitleValue(value)) {
+          setTitleValidationWarning(TITLE_MANDATORY_MESSAGE);
+          if (titleAutoRevertTimeoutRef.current === null) {
+            titleAutoRevertTimeoutRef.current = window.setTimeout(() => {
+              titleAutoRevertTimeoutRef.current = null;
+              setTitleValidationWarning(null);
+              performTitleRevert(target, level, pageId, articleId, blockId, componentId);
+            }, TITLE_WARNING_DURATION_MS);
+          }
+        } else {
+          setTitleValidationWarning(null);
+          cancelTitleAutoRevert();
+        }
+      }
+
+      if (level === "topic") {
+        if (resolvedField === "title" && !isBlankTitleValue(value)) updatePageData(pageId, { title: value });
+        if (resolvedField === "subtitle") updatePageData(pageId, { subtitle: value });
+        if (resolvedField === "body") updatePageData(pageId, topicCanvasBodyPatch(pageId, value));
+        if (resolvedField === "instruction") updatePageData(pageId, { instruction: value });
+        return;
+      }
+
+      if (level === "section" && articleId) {
+        if (field === "title" && !isBlankTitleValue(value)) updateArticle(pageId, articleId, { title: value });
+        if (field === "body") updateArticle(pageId, articleId, { description: value });
+        if (field === "instruction") updateArticle(pageId, articleId, { instruction: value });
+        return;
+      }
+
+      if (level === "group" && articleId && blockId) {
+        if (field === "title" && !isBlankTitleValue(value)) updateBlock(pageId, articleId, blockId, { title: value });
+        if (field === "body") updateBlock(pageId, articleId, blockId, { description: value });
+        if (field === "instruction") updateBlock(pageId, articleId, blockId, { instruction: value });
+        return;
+      }
+
+      if (level === "component" && articleId && blockId && componentId) {
+        if (field === "title" && !isBlankTitleValue(value)) {
+          updateComponent(pageId, articleId, blockId, componentId, {
+            settings: { title: value },
+          });
+        }
+        if (field === "body") {
+          updateComponent(pageId, articleId, blockId, componentId, {
+            settings: { description: value },
+          });
+        }
+        if (field === "instruction") {
+          updateComponent(pageId, articleId, blockId, componentId, {
+            settings: {
+              instruction: value,
+              properties: { instruction: value },
+            },
+          });
+        }
+        if (field === "subtitle") {
+          updateComponent(pageId, articleId, blockId, componentId, {
+            settings: {
+              subtitle: value,
+              properties: { subtitle: value },
+            },
+          });
+        }
+      }
+    };
+
+    const onPaste = (event: ClipboardEvent) => {
+      const origin = event.target as Element | null;
+      const target = origin?.closest("[data-preview-edit-enabled='true']") as HTMLElement | null;
+      if (!target) return;
+      // Body fields are CKEditor surfaces and retain their own rich paste
+      // behavior; inline title/subtitle/instruction fields must keep the
+      // styling already applied by the course template.
+      if (target.getAttribute("data-preview-edit-field") === "body") return;
+
+      const text = event.clipboardData?.getData("text/plain") ?? "";
+      event.preventDefault();
+      event.stopPropagation();
+      const selection = doc.defaultView?.getSelection();
+      if (!selection || !selection.rangeCount) return;
+      const range = selection.getRangeAt(0);
+      if (!target.contains(range.commonAncestorContainer)) return;
+      range.deleteContents();
+      const textNode = doc.createTextNode(text);
+      range.insertNode(textNode);
+      range.setStartAfter(textNode);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+      target.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
+    };
+
+    const onFocusIn = (event: FocusEvent) => {
+      const origin = event.target as Element | null;
+      const target = origin?.closest("[data-preview-edit-enabled='true']") as HTMLElement | null;
+      if (!target) return;
+      isInlineEditingRef.current = true;
+      // Starting a fresh edit session should never carry over a pending
+      // auto-revert from whatever was previously focused.
+      cancelTitleAutoRevert();
+
+      if (target.hasAttribute("data-preview-behaviour-path")) {
+        titleEditOriginalValueRef.current = null;
+        return;
+      }
+
+      const field = target.getAttribute("data-preview-edit-field");
+      const level = target.getAttribute("data-preview-node-level") as
+        | "topic"
+        | "section"
+        | "group"
+        | "component"
+        | null;
+      const resolvedField = level === "topic" ? resolveTopicField(target, field as "title" | "subtitle" | "body" | "instruction" | null) : field;
+      if (resolvedField !== "title" || !level) {
+        titleEditOriginalValueRef.current = null;
+        return;
+      }
+
+      const pageId = target.getAttribute("data-preview-page-id");
+      const articleId = target.getAttribute("data-preview-article-id");
+      const blockId = target.getAttribute("data-preview-block-id");
+      const componentId = target.getAttribute("data-preview-component-id");
+      const page = contentPages.find((p) => p.id === pageId);
+      const article = page && articleId ? page.articles.find((a) => a.id === articleId) : null;
+      const block = article && blockId ? article.blocks.find((b) => b.id === blockId) : null;
+      const component = block && componentId ? block.components.find((c) => c.id === componentId) : null;
+      titleEditOriginalValueRef.current =
+        level === "topic" ? page?.title ?? ""
+        : level === "section" ? article?.title ?? ""
+        : level === "group" ? block?.title ?? ""
+        : component?.settings.title ?? "";
+    };
+
+    const onFocusOut = (event: FocusEvent) => {
+      const origin = event.target as Element | null;
+      const target = origin?.closest("[data-preview-edit-enabled='true']") as HTMLElement | null;
+      if (!target) return;
+      isInlineEditingRef.current = false;
+
+      if (target.hasAttribute("data-preview-behaviour-path")) {
+        return;
+      }
+
+      const field = target.getAttribute("data-preview-edit-field") as
+        | "title"
+        | "subtitle"
+        | "body"
+        | "instruction"
+        | null;
+      const level = target.getAttribute("data-preview-node-level") as
+        | "topic"
+        | "section"
+        | "group"
+        | "component"
+        | null;
+      const pageId = target.getAttribute("data-preview-page-id");
+      const articleId = target.getAttribute("data-preview-article-id");
+      const blockId = target.getAttribute("data-preview-block-id");
+      const componentId = target.getAttribute("data-preview-component-id");
+      const value = (target.textContent || "").trim();
+      const isComponentSubtitle = level === "component" && field === "subtitle";
+      const normalizedValue = field === "body" || field === "instruction" || isComponentSubtitle
+        ? target.innerHTML
+        : value;
+
+      if (!field || !level || !pageId) return;
+
+      const resolvedField = level === "topic" ? resolveTopicField(target, field) : field;
+
+      if (resolvedField === "title" && isBlankTitleValue(normalizedValue)) {
+        // Blurring while blank reverts immediately — the warning still shows
+        // and fades on its own standard timer (see the titleValidationWarning
+        // auto-dismiss effect), it just no longer has to wait to also revert.
+        setTitleValidationWarning(TITLE_MANDATORY_MESSAGE);
+        performTitleRevert(target, level, pageId, articleId, blockId, componentId);
+        return;
+      }
+
+      if (resolvedField === "title") {
+        cancelTitleAutoRevert();
+        titleEditOriginalValueRef.current = null;
+        setCanvasTitleLiveOverride(null);
+      }
+
+      if (level === "topic") {
+        if (resolvedField === "title") {
+          updatePageData(pageId, { title: normalizedValue });
+          return;
+        }
+        if (resolvedField === "subtitle") {
+          updatePageData(pageId, { subtitle: normalizedValue });
+          return;
+        }
+        if (resolvedField === "body") {
+          updatePageData(pageId, topicCanvasBodyPatch(pageId, normalizedValue));
+          return;
+        }
+        if (resolvedField === "instruction") {
+          updatePageData(pageId, { instruction: normalizedValue });
+        }
+        return;
+      }
+
+      if (level === "section" && articleId) {
+        if (field === "title") {
+          updateArticle(pageId, articleId, { title: normalizedValue });
+          return;
+        }
+        if (field === "body") {
+          updateArticle(pageId, articleId, { description: normalizedValue });
+          return;
+        }
+        if (field === "instruction") {
+          updateArticle(pageId, articleId, { instruction: normalizedValue });
+        }
+        return;
+      }
+
+      if (level === "group" && articleId && blockId) {
+        if (field === "title") {
+          updateBlock(pageId, articleId, blockId, { title: normalizedValue });
+          return;
+        }
+        if (field === "body") {
+          updateBlock(pageId, articleId, blockId, { description: normalizedValue });
+          return;
+        }
+        if (field === "instruction") {
+          updateBlock(pageId, articleId, blockId, { instruction: normalizedValue });
+        }
+        return;
+      }
+
+      if (level === "component" && articleId && blockId && componentId) {
+        if (field === "title") {
+          updateComponent(pageId, articleId, blockId, componentId, {
+            settings: { title: normalizedValue },
+          });
+          return;
+        }
+        if (field === "body") {
+          updateComponent(pageId, articleId, blockId, componentId, {
+            settings: { description: normalizedValue },
+          });
+          return;
+        }
+        if (field === "instruction") {
+          updateComponent(pageId, articleId, blockId, componentId, {
+            settings: {
+              instruction: normalizedValue,
+              properties: { instruction: normalizedValue },
+            },
+          });
+        }
+        if (field === "subtitle") {
+          updateComponent(pageId, articleId, blockId, componentId, {
+            settings: {
+              subtitle: normalizedValue,
+              properties: { subtitle: normalizedValue },
+            },
+          });
+        }
+      }
+    };
+
+    cleanupPreviewListenersRef.current?.();
+    canvasBodyEditorsRef.current.forEach((entry, sourceEl) => {
+      entry.commit();
+      sourceEl.style.display = "";
+      safeDestroyCanvasEditor(entry.editor);
+    });
+    canvasBodyEditorsRef.current.clear();
+
+    doc.addEventListener("mouseover", onMouseOver);
+    doc.addEventListener("mouseout", onMouseOut);
+    doc.addEventListener("click", onClick, true);
+    doc.addEventListener("focusin", onFocusIn, true);
+    doc.addEventListener("paste", onPaste, true);
+    doc.addEventListener("input", onInput, true);
+    doc.addEventListener("focusout", onFocusOut, true);
+
+    applyPreviewSelectionStyles();
+    syncPreviewInlineEditorsRef.current();
+    syncPreviewTopicSettings();
+    syncNavigationFooterPreview();
+    syncSwapPositionsControls();
+    syncPasteZones();
+    primePreviewMediaFrames(doc);
+    if (!pendingLeftPanelScrollTargetRef.current && !menuSelected) {
+      pendingLeftPanelScrollTargetRef.current = selectedComponentId
+        ? { level: "component", id: selectedComponentId }
+        : selectedBlockId
+          ? { level: "group", id: selectedBlockId }
+          : selectedArticleId
+            ? { level: "section", id: selectedArticleId }
+            : selectedPageId
+              ? { level: "topic", id: selectedPageId }
+              : null;
+    }
+    syncPreviewScrollFromLeftPanel();
+
+    const selectedPreviewTarget = !menuSelected
+      ? selectedComponentId
+        ? { level: "component" as const, id: selectedComponentId }
+        : selectedBlockId
+          ? { level: "group" as const, id: selectedBlockId }
+          : selectedArticleId
+            ? { level: "section" as const, id: selectedArticleId }
+            : selectedPageId
+              ? { level: "topic" as const, id: selectedPageId }
+              : null
+      : null;
+    const selectionScrollTimers: number[] = [];
+    if (selectedPreviewTarget) {
+      const retrySelectionScroll = () => {
+        pendingLeftPanelScrollTargetRef.current = selectedPreviewTarget;
+        syncPreviewScrollFromLeftPanel();
+      };
+      selectionScrollTimers.push(
+        window.setTimeout(retrySelectionScroll, 250),
+        window.setTimeout(retrySelectionScroll, 750),
+        window.setTimeout(retrySelectionScroll, 1400)
+      );
+    }
+
+    // Retries syncSwapPositionsControls whenever the real framework DOM
+    // changes on its own (e.g. an assessment-results component finishing an
+    // async render well after this effect's own initial pass) — the qualifying
+    // block's own contentPages data never changes in that case, so nothing
+    // else would otherwise prompt a second attempt.
+    let swapObserverRafId: number | null = null;
+    const swapPositionsObserver = new MutationObserver(() => {
+      if (swapObserverRafId !== null) return;
+      swapObserverRafId = window.requestAnimationFrame(() => {
+        swapObserverRafId = null;
+        syncSwapPositionsControlsRef.current();
+        syncPreviewScrollFromLeftPanelRef.current();
+        primePreviewMediaFrames(doc);
+      });
+    });
+    swapPositionsObserver.observe(doc.body, { childList: true, subtree: true });
+
+    // Re-measures the Topic/Section header alignment insets (see the
+    // dynamic inset sync at the end of applyPreviewSelectionStyles above)
+    // whenever the iframe's OWN viewport actually changes size — this is
+    // what fires when a side panel is collapsed/expanded (the canvas
+    // <main> resizes, so the iframe element resizes, so its contentWindow
+    // gets a real native "resize" event), which can cross a theme
+    // breakpoint and change Content Group/Component's real inset without
+    // any selection/hover state changing at all.
+    let alignmentResizeRafId: number | null = null;
+    const onPreviewResize = () => {
+      if (alignmentResizeRafId !== null) return;
+      alignmentResizeRafId = window.requestAnimationFrame(() => {
+        alignmentResizeRafId = null;
+        applyPreviewSelectionStylesRef.current();
+        syncSwapPositionsControlsRef.current();
+      });
+    };
+    iframe.contentWindow?.addEventListener("resize", onPreviewResize);
+
+    cleanupPreviewListenersRef.current = () => {
+      if (hoverRafId !== null) {
+        window.cancelAnimationFrame(hoverRafId);
+      }
+      if (swapObserverRafId !== null) {
+        window.cancelAnimationFrame(swapObserverRafId);
+      }
+      if (alignmentResizeRafId !== null) {
+        window.cancelAnimationFrame(alignmentResizeRafId);
+      }
+      selectionScrollTimers.forEach((timerId) => window.clearTimeout(timerId));
+      swapPositionsObserver.disconnect();
+      iframe.contentWindow?.removeEventListener("resize", onPreviewResize);
+      cancelTitleAutoRevert();
+      doc.removeEventListener("mouseover", onMouseOver);
+      doc.removeEventListener("mouseout", onMouseOut);
+      doc.removeEventListener("click", onClick, true);
+      doc.removeEventListener("focusin", onFocusIn, true);
+      doc.removeEventListener("paste", onPaste, true);
+      doc.removeEventListener("input", onInput, true);
+      doc.removeEventListener("focusout", onFocusOut, true);
+    };
+
+    return cleanupPreviewListenersRef.current;
+  }, [
+    applyPreviewSelectionStyles,
+    clearCanvasSelection,
+    contentPages,
+    handleArticleSelect,
+    handleBlockSelect,
+    handleMenuSelect,
+    handlePageSelect,
+    handleSelectComponent,
+    handleSwapComponentPositions,
+    handleCopyTopicNode,
+    handleStartClipboardCopy,
+    handleCancelClipboardCopy,
+    handlePasteFromClipboard,
+    handleSetColorLabel,
+    syncPreviewInlineEditors,
+    syncPreviewTopicSettings,
+    syncNavigationFooterPreview,
+    syncSwapPositionsControls,
+    syncPasteZones,
+    syncPreviewScrollFromLeftPanel,
+    contentPages,
+    menuSelected,
+    selectedArticleId,
+    selectedBlockId,
+    selectedComponentId,
+    selectedPageId,
+  ]);
+
+  useEffect(() => {
+    applyPreviewSelectionStyles();
+  }, [applyPreviewSelectionStyles]);
+
+  useEffect(() => {
+    syncSwapPositionsControls();
+  }, [syncSwapPositionsControls]);
+
+  useEffect(() => {
+    syncPasteZones();
+  }, [syncPasteZones]);
+
+  // Defensive reset: canvasTitleLiveOverride is a single shared value (only
+  // one node's title can ever be live-edited at once), cleared on blur —
+  // but if a title's contenteditable element ever gets torn down without a
+  // clean blur (e.g. mid-edit while a mutation observer forces a rebuild),
+  // that clear can be skipped and the override would keep showing on
+  // whichever OTHER node's title field renders next, regardless of level.
+  // Selecting a different node should always start from real state.
+  useEffect(() => {
+    setCanvasTitleLiveOverride(null);
+  }, [selectedPageId, selectedArticleId, selectedBlockId, selectedComponentId, menuSelected]);
+
+  const syncPreviewInlineEditorsRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    syncPreviewInlineEditorsRef.current = syncPreviewInlineEditors;
+  }, [syncPreviewInlineEditors]);
+
+  useEffect(() => {
+    if (isInlineEditingRef.current) return;
+    syncPreviewInlineEditors();
+  }, [
+    syncPreviewInlineEditors,
+    selectedPageId,
+    selectedArticleId,
+    selectedBlockId,
+    selectedComponentId,
+    menuSelected,
+    hasCanvasSelection,
+    contentPages,
+  ]);
+
+  useEffect(() => {
+    syncPreviewTopicSettings();
+  }, [syncPreviewTopicSettings]);
+
+  useEffect(() => {
+    syncNavigationFooterPreview();
+  }, [syncNavigationFooterPreview]);
+
+  useEffect(() => {
+    syncPreviewScrollFromLeftPanel();
+  }, [
+    menuSelected,
+    selectedPageId,
+    selectedArticleId,
+    selectedBlockId,
+    selectedComponentId,
+    syncPreviewScrollFromLeftPanel,
+  ]);
+
+  useEffect(() => () => {
+    cleanupPreviewListenersRef.current?.();
+    if (inlineEditorSyncRetryFrameRef.current !== null) {
+      window.cancelAnimationFrame(inlineEditorSyncRetryFrameRef.current);
+      inlineEditorSyncRetryFrameRef.current = null;
+    }
+    componentMutationObserverRef.current?.disconnect();
+    componentMutationObserverRef.current = null;
+    if (copiedTopicIdResetTimerRef.current !== null) {
+      window.clearTimeout(copiedTopicIdResetTimerRef.current);
+      copiedTopicIdResetTimerRef.current = null;
+    }
+    if (copiedSectionIdResetTimerRef.current !== null) {
+      window.clearTimeout(copiedSectionIdResetTimerRef.current);
+      copiedSectionIdResetTimerRef.current = null;
+    }
+    if (copiedBlockIdResetTimerRef.current !== null) {
+      window.clearTimeout(copiedBlockIdResetTimerRef.current);
+      copiedBlockIdResetTimerRef.current = null;
+    }
+    if (copiedComponentIdResetTimerRef.current !== null) {
+      window.clearTimeout(copiedComponentIdResetTimerRef.current);
+      copiedComponentIdResetTimerRef.current = null;
+    }
+  }, []);
+
+  function handleCopyTopicId(topicId: string) {
+    if (!topicId) return;
+
+    const afterCopy = () => {
+      setCopiedTopicId(topicId);
+      if (copiedTopicIdResetTimerRef.current !== null) {
+        window.clearTimeout(copiedTopicIdResetTimerRef.current);
+      }
+      copiedTopicIdResetTimerRef.current = window.setTimeout(() => {
+        setCopiedTopicId((current) => (current === topicId ? null : current));
+        copiedTopicIdResetTimerRef.current = null;
+      }, 2000);
+    };
+
+    const fallbackCopy = () => {
+      const helperTextArea = document.createElement("textarea");
+      helperTextArea.value = topicId;
+      helperTextArea.style.position = "fixed";
+      helperTextArea.style.left = "-9999px";
+      document.body.appendChild(helperTextArea);
+      helperTextArea.focus();
+      helperTextArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(helperTextArea);
+      afterCopy();
+    };
+
+    if (navigator.clipboard?.writeText) {
+      void navigator.clipboard.writeText(topicId)
+        .then(afterCopy)
+        .catch(fallbackCopy);
+      return;
+    }
+
+    fallbackCopy();
+  }
+
+  function handleCopySectionId(sectionId: string) {
+    if (!sectionId) return;
+    const afterCopy = () => {
+      setCopiedSectionId(sectionId);
+      if (copiedSectionIdResetTimerRef.current !== null) {
+        window.clearTimeout(copiedSectionIdResetTimerRef.current);
+      }
+      copiedSectionIdResetTimerRef.current = window.setTimeout(() => {
+        setCopiedSectionId((current) => (current === sectionId ? null : current));
+        copiedSectionIdResetTimerRef.current = null;
+      }, 2000);
+    };
+    const fallbackCopy = () => {
+      const helperTextArea = document.createElement("textarea");
+      helperTextArea.value = sectionId;
+      helperTextArea.style.position = "fixed";
+      helperTextArea.style.left = "-9999px";
+      document.body.appendChild(helperTextArea);
+      helperTextArea.focus();
+      helperTextArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(helperTextArea);
+      afterCopy();
+    };
+    if (navigator.clipboard?.writeText) {
+      void navigator.clipboard.writeText(sectionId).then(afterCopy).catch(fallbackCopy);
+      return;
+    }
+    fallbackCopy();
+  }
+
+  function handleCopyBlockId(blockId: string) {
+    if (!blockId) return;
+    const afterCopy = () => {
+      setCopiedBlockId(blockId);
+      if (copiedBlockIdResetTimerRef.current !== null) {
+        window.clearTimeout(copiedBlockIdResetTimerRef.current);
+      }
+      copiedBlockIdResetTimerRef.current = window.setTimeout(() => {
+        setCopiedBlockId((current) => (current === blockId ? null : current));
+        copiedBlockIdResetTimerRef.current = null;
+      }, 2000);
+    };
+    const fallbackCopy = () => {
+      const helperTextArea = document.createElement("textarea");
+      helperTextArea.value = blockId;
+      helperTextArea.style.position = "fixed";
+      helperTextArea.style.left = "-9999px";
+      document.body.appendChild(helperTextArea);
+      helperTextArea.focus();
+      helperTextArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(helperTextArea);
+      afterCopy();
+    };
+    if (navigator.clipboard?.writeText) {
+      void navigator.clipboard.writeText(blockId).then(afterCopy).catch(fallbackCopy);
+      return;
+    }
+    fallbackCopy();
+  }
+
+  function handleCopyComponentId(componentId: string) {
+    if (!componentId) return;
+    const afterCopy = () => {
+      setCopiedComponentId(componentId);
+      if (copiedComponentIdResetTimerRef.current !== null) {
+        window.clearTimeout(copiedComponentIdResetTimerRef.current);
+      }
+      copiedComponentIdResetTimerRef.current = window.setTimeout(() => {
+        setCopiedComponentId((current) => (current === componentId ? null : current));
+        copiedComponentIdResetTimerRef.current = null;
+      }, 2000);
+    };
+    const fallbackCopy = () => {
+      const helperTextArea = document.createElement("textarea");
+      helperTextArea.value = componentId;
+      helperTextArea.style.position = "fixed";
+      helperTextArea.style.left = "-9999px";
+      document.body.appendChild(helperTextArea);
+      helperTextArea.focus();
+      helperTextArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(helperTextArea);
+      afterCopy();
+    };
+    if (navigator.clipboard?.writeText) {
+      void navigator.clipboard.writeText(componentId).then(afterCopy).catch(fallbackCopy);
+      return;
+    }
+    fallbackCopy();
+  }
+
+  function handleMenuPageCreate() {
+    setMenuPageCreated(true);
+    setMenuSelected(true);
+    setRightPanelOpen(true);
+  }
+
+  function updateMenuData(patch: Partial<MenuPageData>) {
+    setMenuData((prev) => ({ ...prev, ...patch }));
+  }
+
+  function toggleTopicAccordion(
+    id: "general" | "availability" | "accessibility" | "extensions" | "theme" | "menu" | "media" | "advanced",
+    triggerEl?: HTMLButtonElement
+  ) {
+    const container = rightPanelScrollRef.current;
+    const topBefore = container && triggerEl ? triggerEl.getBoundingClientRect().top : null;
+
+    // The canvas body editor only writes back on blur, so flush it before the
+    // General panel mounts its own editor from `page.body`.
+    if (id === "general") {
+      canvasBodyEditorsRef.current.forEach((entry) => entry.commit());
+    }
+
+    setOpenTopicAccordions((prev) => ({
+      general: false,
+      availability: false,
+      accessibility: false,
+      extensions: false,
+      theme: false,
+      menu: false,
+      media: false,
+      advanced: false,
+      [id]: !prev[id],
+    }));
+
+    if (container && triggerEl) {
+      requestAnimationFrame(() => {
+        if (!triggerEl.isConnected) return;
+
+        const topAfter = triggerEl.getBoundingClientRect().top;
+        if (topBefore !== null) {
+          container.scrollTop += topAfter - topBefore;
+        }
+
+        const padding = 10;
+        const containerRect = container.getBoundingClientRect();
+        const triggerRect = triggerEl.getBoundingClientRect();
+
+        if (triggerRect.top < containerRect.top + padding) {
+          container.scrollTop -= (containerRect.top + padding) - triggerRect.top;
+        } else if (triggerRect.bottom > containerRect.bottom - padding) {
+          container.scrollTop += triggerRect.bottom - (containerRect.bottom - padding);
+        }
+      });
+    }
+  }
+
+  function handleCanvasClick() {
+    clearCanvasSelection();
+  }
+
+  function toggleSectionAccordion(
+    id: "general" | "availability" | "accessibility" | "extensions" | "theme" | "advanced",
+    triggerEl?: HTMLButtonElement
+  ) {
+    const container = rightPanelScrollRef.current;
+    const topBefore = container && triggerEl ? triggerEl.getBoundingClientRect().top : null;
+
+    setOpenSectionAccordions((prev) => ({
+      general: false,
+      availability: false,
+      accessibility: false,
+      extensions: false,
+      theme: false,
+      advanced: false,
+      [id]: !prev[id],
+    }));
+
+    if (container && triggerEl) {
+      requestAnimationFrame(() => {
+        if (!triggerEl.isConnected) return;
+        const topAfter = triggerEl.getBoundingClientRect().top;
+        if (topBefore !== null) {
+          container.scrollTop += topAfter - topBefore;
+        }
+        const padding = 10;
+        const containerRect = container.getBoundingClientRect();
+        const triggerRect = triggerEl.getBoundingClientRect();
+        if (triggerRect.top < containerRect.top + padding) {
+          container.scrollTop -= (containerRect.top + padding) - triggerRect.top;
+        } else if (triggerRect.bottom > containerRect.bottom - padding) {
+          container.scrollTop += triggerRect.bottom - (containerRect.bottom - padding);
+        }
+      });
+    }
+  }
+
+  function toggleBlockAccordion(
+    id: "general" | "availability" | "accessibility" | "extensions" | "theme" | "advanced",
+    triggerEl?: HTMLButtonElement
+  ) {
+    const container = rightPanelScrollRef.current;
+    const topBefore = container && triggerEl ? triggerEl.getBoundingClientRect().top : null;
+
+    setOpenBlockAccordions((prev) => ({
+      general: false,
+      availability: false,
+      accessibility: false,
+      extensions: false,
+      theme: false,
+      advanced: false,
+      [id]: !prev[id],
+    }));
+
+    if (container && triggerEl) {
+      requestAnimationFrame(() => {
+        if (!triggerEl.isConnected) return;
+        const topAfter = triggerEl.getBoundingClientRect().top;
+        if (topBefore !== null) {
+          container.scrollTop += topAfter - topBefore;
+        }
+        const padding = 10;
+        const containerRect = container.getBoundingClientRect();
+        const triggerRect = triggerEl.getBoundingClientRect();
+        if (triggerRect.top < containerRect.top + padding) {
+          container.scrollTop -= (containerRect.top + padding) - triggerRect.top;
+        } else if (triggerRect.bottom > containerRect.bottom - padding) {
+          container.scrollTop += triggerRect.bottom - (containerRect.bottom - padding);
+        }
+      });
+    }
+  }
+
+  function toggleComponentAccordion(
+    id: "general" | "behaviour" | "availability" | "accessibility" | "extensions" | "theme" | "advanced",
+    triggerEl?: HTMLButtonElement
+  ) {
+    const container = rightPanelScrollRef.current;
+    const topBefore = container && triggerEl ? triggerEl.getBoundingClientRect().top : null;
+
+    setOpenComponentAccordions((prev) => ({
+      general: false,
+      behaviour: false,
+      availability: false,
+      accessibility: false,
+      extensions: false,
+      theme: false,
+      advanced: false,
+      [id]: !prev[id],
+    }));
+
+    if (container && triggerEl) {
+      requestAnimationFrame(() => {
+        if (!triggerEl.isConnected) return;
+        const topAfter = triggerEl.getBoundingClientRect().top;
+        if (topBefore !== null) {
+          container.scrollTop += topAfter - topBefore;
+        }
+        const padding = 10;
+        const containerRect = container.getBoundingClientRect();
+        const triggerRect = triggerEl.getBoundingClientRect();
+        if (triggerRect.top < containerRect.top + padding) {
+          container.scrollTop -= (containerRect.top + padding) - triggerRect.top;
+        } else if (triggerRect.bottom > containerRect.bottom - padding) {
+          container.scrollTop += triggerRect.bottom - (containerRect.bottom - padding);
+        }
+      });
+    }
+  }
+
+  function handleMenuSelect(source: SelectionSource = "internal") {
+    setMenuSelected(true);
+    setSelectedPageId(null);
+    setHasCanvasSelection(true);
+    setRightPanelOpen(true);
+    setRightPanelType("menu");
+    if (source === "leftPanel") {
+      queuePreviewScrollFromLeftPanel({ level: "menu", id: null });
+    }
+  }
+
+  async function handleAddModule(parentModuleId?: string) {
+    try {
+      const parentId = parentModuleId || courseId;
+      const childCount = parentModuleId
+        ? (() => {
+            const findMod = (mods: SModule[]): SModule | null => {
+              for (const m of mods) {
+                if (m.id === parentModuleId) return m;
+                const found = findMod(m.modules);
+                if (found) return found;
+              }
+              return null;
+            };
+            const targetMod = courseStructure ? findMod(courseStructure.modules) : null;
+            return (targetMod?.modules.length ?? 0) + (targetMod?.topics.length ?? 0);
+          })()
+        : (courseStructure?.modules.length ?? 0) + (courseStructure?.topics.length ?? 0);
+
+      const { topicId } = await seedDefaultModule(courseId, parentId, "New Module", childCount + 1);
+      await loadStructureFromDatabase({ pageId: topicId });
+      setEditorToast({ type: "success", message: `"New Module" added` });
+    } catch (error) {
+      console.error("Failed to add module", error);
+      setEditorToast({ type: "error", message: "Could not add module" });
+    }
+  }
+
+  async function handleDeleteModule(moduleId: string) {
+    try {
+      await deleteStructureNode("module", moduleId);
+      await loadStructureFromDatabase();
+    } catch (error) {
+      console.error("Failed to delete module", error);
+    }
+  }
+
+  async function handleAddPage(parentModuleId?: string) {
+    try {
+      const parentId = parentModuleId || courseId;
+      const siblingCount = parentModuleId
+        ? (() => {
+            const findMod = (mods: SModule[]): SModule | null => {
+              for (const m of mods) {
+                if (m.id === parentModuleId) return m;
+                const found = findMod(m.modules);
+                if (found) return found;
+              }
+              return null;
+            };
+            const targetMod = courseStructure ? findMod(courseStructure.modules) : null;
+            return targetMod?.topics.length ?? 0;
+          })()
+        : contentPages.length;
+
+      const newPageId = await seedDefaultTopic(courseId, parentId, NEW_TOPIC_TITLE, siblingCount + 1);
+      await loadStructureFromDatabase({ pageId: newPageId });
+      setEditorToast({ type: "success", message: `"${NEW_TOPIC_TITLE}" added` });
+    } catch (error) {
+      console.error("Failed to add topic", error);
+      setEditorToast({ type: "error", message: "Could not add topic" });
+    }
+  }
+
+  async function handleAddArticle(pageId: string) {
+    try {
+      const page = contentPages.find((item) => item.id === pageId);
+      const newArticleId = await seedDefaultSection(courseId, pageId, NEW_SECTION_TITLE, (page?.articles.length ?? 0) + 1);
+      await loadStructureFromDatabase({ pageId, articleId: newArticleId });
+      setEditorToast({ type: "success", message: `"${NEW_SECTION_TITLE}" added` });
+    } catch (error) {
+      console.error("Failed to add section", error);
+      setEditorToast({ type: "error", message: "Could not add section" });
+    }
+  }
+
+  function handleAddSubPage(pageId: string) {
+    const newSubPageId = `subpage-${Date.now()}`;
+    setContentPages(
+      contentPages.map((p) =>
+        p.id === pageId
+          ? {
+              ...p,
+              subPages: [
+                ...p.subPages,
+                { id: newSubPageId, title: "Untitled Sub Page", description: "" },
+              ],
+            }
+          : p
+      )
+    );
+    setSelectedPageId(pageId);
+    setSelectedSubPageId(newSubPageId);
+    setHasCanvasSelection(true);
+    setRightPanelOpen(true);
+    setRightPanelType("subpage");
+  }
+
+  function updateArticle(pageId: string, articleId: string, patch: Partial<ArticleData>) {
+    setContentPages((previousPages) =>
+      previousPages.map((p) =>
+        p.id === pageId
+          ? {
+              ...p,
+              articles: p.articles.map((a) =>
+                a.id === articleId ? { ...a, ...patch } : a
+              ),
+            }
+          : p
+      )
+    );
+    setDirtyNodeKeys((prev) => ({ ...prev, [`section:${articleId}`]: true }));
+  }
+
+  function updateSubPage(pageId: string, subPageId: string, patch: Partial<SubPageData>) {
+    setContentPages((previousPages) =>
+      previousPages.map((p) =>
+        p.id === pageId
+          ? {
+              ...p,
+              subPages: p.subPages.map((s) =>
+                s.id === subPageId ? { ...s, ...patch } : s
+              ),
+            }
+          : p
+      )
+    );
+  }
+
+  async function deleteArticle(pageId: string, articleId: string): Promise<boolean> {
+    try {
+      await deleteStructureNode("section", articleId);
+      await loadStructureFromDatabase({ pageId });
+      return true;
+    } catch (error) {
+      console.error("Failed to delete section", error);
+      return false;
+    }
+  }
+
+  function handleArticleSelect(pageId: string, articleId: string, source: SelectionSource = "internal") {
+    // Re-selecting the SAME article (e.g. clicking into its canvas text to
+    // edit it while it's already selected) must not reset the accordions —
+    // only a genuine change of selection should snap back to the defaults,
+    // otherwise whatever the user had expanded collapses every time they
+    // click to type.
+    const isSameSelection = selectedArticleId === articleId && selectedPageId === pageId;
+    setSelectedPageId(pageId);
+    setSelectedArticleId(articleId);
+    setSelectedSubPageId(null);
+    setSelectedBlockId(null);
+    setSelectedComponentId(null);
+    setHasCanvasSelection(true);
+    setRightPanelOpen(true);
+    setRightPanelType("article");
+    if (!isSameSelection) {
+      setOpenSectionAccordions(DEFAULT_SECTION_ACCORDIONS);
+    }
+    if (source === "leftPanel") {
+      queuePreviewScrollFromLeftPanel({ level: "section", id: articleId });
+    }
+  }
+
+  function handleBlockSelect(pageId: string, articleId: string, blockId: string, source: SelectionSource = "internal") {
+    const isSameSelection = selectedBlockId === blockId && selectedArticleId === articleId && selectedPageId === pageId;
+    setSelectedPageId(pageId);
+    setSelectedArticleId(articleId);
+    setSelectedSubPageId(null);
+    setSelectedBlockId(blockId);
+    setSelectedComponentId(null);
+    setHasCanvasSelection(true);
+    setRightPanelOpen(true);
+    setRightPanelType("block");
+    if (!isSameSelection) {
+      setOpenBlockAccordions(DEFAULT_BLOCK_ACCORDIONS);
+    }
+    if (source === "leftPanel") {
+      queuePreviewScrollFromLeftPanel({ level: "group", id: blockId });
+    }
+  }
+
+  function deleteSubPage(pageId: string, subPageId: string) {
+    setContentPages(
+      contentPages.map((p) =>
+        p.id === pageId
+          ? {
+              ...p,
+              subPages: p.subPages.filter((s) => s.id !== subPageId),
+            }
+          : p
+      )
+    );
+    if (selectedSubPageId === subPageId) {
+      setSelectedSubPageId(null);
+      setRightPanelType("page");
+      setRightPanelOpen(true);
+      setOpenTopicAccordions(DEFAULT_TOPIC_ACCORDIONS);
+    }
+  }
+
+  function handleSubPageSelect(pageId: string, subPageId: string, source: SelectionSource = "internal") {
+    setSelectedPageId(pageId);
+    setSelectedSubPageId(subPageId);
+    setHasCanvasSelection(true);
+    setRightPanelOpen(true);
+    setRightPanelType("subpage");
+    if (source === "leftPanel") {
+      queuePreviewScrollFromLeftPanel({ level: "topic", id: pageId });
+    }
+  }
+
+  function handlePageSelect(pageId: string, source: SelectionSource = "internal") {
+    const isSameSelection = selectedPageId === pageId && !menuSelected;
+    setSelectedPageId(pageId);
+    setMenuSelected(false);
+    setSelectedSubPageId(null);
+    setSelectedArticleId(null);
+    setSelectedBlockId(null);
+    setSelectedComponentId(null);
+    setHasCanvasSelection(true);
+    setRightPanelOpen(true);
+    setRightPanelType("page");
+    if (!isSameSelection) {
+      setOpenTopicAccordions(DEFAULT_TOPIC_ACCORDIONS);
+    }
+    if (source === "leftPanel") {
+      queuePreviewScrollFromLeftPanel({ level: "topic", id: pageId });
+    }
+  }
+
+  // Mirrors panel title keystrokes into the canvas instantly, including
+  // transient blank text — the real title state is only ever committed for
+  // non-blank values (see TopicTitleField), so without this the canvas would
+  // keep showing the last non-blank character typed instead of going blank
+  // in step with the panel field.
+  function writeLiveTitleDraftToCanvas(
+    level: "topic" | "section" | "group" | "component",
+    ids: { pageId: string; articleId?: string; blockId?: string; componentId?: string },
+    value: string
+  ) {
+    const doc = previewFrameRef.current?.contentDocument;
+    if (!doc) return;
+    const selector = [
+      `[data-preview-edit-field="title"]`,
+      `[data-preview-node-level="${level}"]`,
+      `[data-preview-page-id="${ids.pageId}"]`,
+      ids.articleId ? `[data-preview-article-id="${ids.articleId}"]` : "",
+      ids.blockId ? `[data-preview-block-id="${ids.blockId}"]` : "",
+      ids.componentId ? `[data-preview-component-id="${ids.componentId}"]` : "",
+    ].join("");
+    const target = doc.querySelector(selector) as HTMLElement | null;
+    if (!target) return;
+    target.textContent = value;
+    target.classList.toggle("adapt-authoring-preview-inline-empty", value.trim().length === 0);
+  }
+
+  function updatePageData(pageId: string, patch: Partial<ContentPageData>) {
+    setContentPages((previousPages) =>
+      previousPages.map((p) => (p.id === pageId ? { ...p, ...patch } : p))
+    );
+    setDirtyNodeKeys((prev) => ({ ...prev, [`topic:${pageId}`]: true }));
+  }
+
+  function updatePageGraphic(pageId: string, updater: (current: TopicGraphicSettings) => TopicGraphicSettings) {
+    setContentPages((previousPages) =>
+      previousPages.map((p) =>
+        p.id === pageId
+          ? { ...p, graphic: updater(p.graphic ?? { src: "", alt: "" }) }
+          : p
+      )
+    );
+    setDirtyNodeKeys((prev) => ({ ...prev, [`topic:${pageId}`]: true }));
+  }
+
+  // Schema-driven check mirroring the old tool's schemas.js `trimDisabledPlugins`:
+  // a Theme/Menu settings field should only render if the CURRENTLY APPLIED
+  // theme/menu's own schema (matched by its bower package `name`, e.g.
+  // "adapt-contrib-vanilla") actually declares that field at this level -
+  // e.g. Vanilla has no `_blockColors`/`_componentColors`, so those settings
+  // groups must not appear when Vanilla is the applied theme. Fails "open"
+  // (renders the field) if the schema hasn't loaded yet or no matching
+  // plugin entry is found, so nothing regresses while data is in flight.
+  function isThemeFieldSupported(level: ExtensionSchemaLevel, fieldKey: string): boolean {
+    const levelSchemas = themeSettingsSchemaByLevel?.[level];
+    if (!levelSchemas) return true;
+    const fields = findAppliedPluginSchemaFields(levelSchemas, courseTheme);
+    if (!fields) return true;
+    return Object.prototype.hasOwnProperty.call(fields, fieldKey);
+  }
+
+  function isMenuFieldSupported(level: ExtensionSchemaLevel, fieldKey: string): boolean {
+    const levelSchemas = menuSettingsSchemaByLevel?.[level];
+    if (!levelSchemas) return true;
+    const fields = findAppliedPluginSchemaFields(levelSchemas, courseMenu);
+    if (!fields) return true;
+    return Object.prototype.hasOwnProperty.call(fields, fieldKey);
+  }
+
+  type EditorContentSchemaLevel = "contentobject" | "article" | "block" | "component";
+
+  function getContentFieldSchema(level: EditorContentSchemaLevel, ...path: string[]) {
+    return getSchemaNode(contentSchemaByLevel[level], ...path);
+  }
+
+  function getContentFieldSchemaWithAliases(level: EditorContentSchemaLevel, ...candidatePaths: string[][]) {
+    for (const path of candidatePaths) {
+      const node = getContentFieldSchema(level, ...path);
+      if (node) return node;
+    }
+    return undefined;
+  }
+
+  function getThemeFieldSchema(level: ExtensionSchemaLevel, ...path: string[]) {
+    const fields = findAppliedPluginSchemaFields(themeSettingsSchemaByLevel?.[level], courseTheme);
+    return getSchemaNode(fields, ...path);
+  }
+
+  function getMenuFieldSchema(level: ExtensionSchemaLevel, ...path: string[]) {
+    const fields = findAppliedPluginSchemaFields(menuSettingsSchemaByLevel?.[level], courseMenu);
+    return getSchemaNode(fields, ...path);
+  }
+
+  function resolveThemeSettingsKey(settings: Record<string, unknown>, level?: ExtensionSchemaLevel) {
+    // Authoritative source first: the schema entry whose `.name` matches the
+    // currently applied theme carries its OWN real key (e.g. "_life-v2"),
+    // straight from the plugin's own `targetAttribute` - no guessing. Only
+    // fall back to the name-substring heuristic below while schema data
+    // hasn't loaded yet (or this level genuinely has no theme schema).
+    if (level) {
+      const schemaKey = findAppliedPluginSchemaKey(themeSettingsSchemaByLevel?.[level], courseTheme);
+      if (schemaKey) return schemaKey;
+    }
+
+    const normalizedThemeName = courseTheme.toLowerCase();
+    const preferredKey = normalizedThemeName.includes("custom")
+      ? "_custom"
+      : normalizedThemeName.includes("vanilla")
+        ? "_vanilla"
+        : "_life";
+
+    if (Object.prototype.hasOwnProperty.call(settings, preferredKey)) {
+      return preferredKey;
+    }
+
+    const firstNestedKey = Object.keys(settings).find((key) => {
+      if (!key.startsWith("_")) return false;
+      const value = asRecord(settings[key]);
+      return Object.keys(value).length > 0;
+    });
+
+    return firstNestedKey ?? preferredKey;
+  }
+
+  function resolveMenuSettingsKey(settings: Record<string, unknown>, level?: ExtensionSchemaLevel) {
+    if (level) {
+      const schemaKey = findAppliedPluginSchemaKey(menuSettingsSchemaByLevel?.[level], courseMenu);
+      if (schemaKey) return schemaKey;
+    }
+
+    const normalizedMenuName = courseMenu.toLowerCase();
+    const preferredKey = normalizedMenuName.includes("box")
+      ? "_boxMenu"
+      : normalizedMenuName.includes("overview")
+        ? "_overviewMenu"
+        : normalizedMenuName.includes("custom")
+          ? "_customMenu"
+          : "_lifeMenu";
+
+    if (Object.prototype.hasOwnProperty.call(settings, preferredKey)) {
+      return preferredKey;
+    }
+
+    const firstNestedKey = Object.keys(settings).find((key) => {
+      if (!key.startsWith("_")) return false;
+      const value = asRecord(settings[key]);
+      return Object.keys(value).length > 0;
+    });
+
+    return firstNestedKey ?? preferredKey;
+  }
+
+  function getActiveThemeSettings(settingsValue: unknown, level?: ExtensionSchemaLevel): TopicThemeSettings {
+    const settings = asRecord(settingsValue);
+    if (
+      Object.prototype.hasOwnProperty.call(settings, "_backgroundImage") ||
+      Object.prototype.hasOwnProperty.call(settings, "_backgroundStyles") ||
+      Object.prototype.hasOwnProperty.call(settings, "_pageHeader") ||
+      Object.prototype.hasOwnProperty.call(settings, "_htmlClasses") ||
+      Object.prototype.hasOwnProperty.call(settings, "_responsiveClasses")
+    ) {
+      return settings as TopicThemeSettings;
+    }
+
+    const key = resolveThemeSettingsKey(settings, level);
+    return asRecord(settings[key]) as TopicThemeSettings;
+  }
+
+  function getActiveMenuSettings(settingsValue: unknown, level?: ExtensionSchemaLevel): TopicMenuSettings {
+    const settings = asRecord(settingsValue);
+    if (
+      Object.prototype.hasOwnProperty.call(settings, "_graphic") ||
+      Object.prototype.hasOwnProperty.call(settings, "_backgroundImage") ||
+      Object.prototype.hasOwnProperty.call(settings, "_menuHeader")
+    ) {
+      return settings as TopicMenuSettings;
+    }
+
+    const key = resolveMenuSettingsKey(settings, level);
+    return asRecord(settings[key]) as TopicMenuSettings;
+  }
+
+  // Deep-merges plugin schema defaults under stored values: an unset leaf
+  // (undefined/null/"") falls back to the theme/menu's own schema `default`,
+  // matching the old tool's Backbone Forms scaffolding (a field always shows
+  // its schema default until the author explicitly overrides it). Booleans
+  // and non-empty values are never clobbered.
+  function deepMergeSchemaDefaults<T>(defaults: Record<string, unknown>, values: Record<string, unknown>): T {
+    const out: Record<string, unknown> = { ...values };
+    for (const key of Object.keys(defaults)) {
+      const defaultVal = defaults[key];
+      const storedVal = values[key];
+      if (defaultVal && typeof defaultVal === "object" && !Array.isArray(defaultVal)) {
+        const storedObj = storedVal && typeof storedVal === "object" && !Array.isArray(storedVal) ? (storedVal as Record<string, unknown>) : {};
+        out[key] = deepMergeSchemaDefaults(defaultVal as Record<string, unknown>, storedObj);
+      } else if (storedVal === undefined || storedVal === null || storedVal === "") {
+        out[key] = defaultVal;
+      }
+    }
+    return out as T;
+  }
+
+  function getThemeSchemaDefaultsForLevel(level: ExtensionSchemaLevel): Record<string, unknown> {
+    const fields = findAppliedPluginSchemaFields(themeSettingsSchemaByLevel?.[level], courseTheme);
+    return fields ? buildSchemaDefaults(fields) : {};
+  }
+
+  function getMenuSchemaDefaultsForLevel(level: ExtensionSchemaLevel): Record<string, unknown> {
+    const fields = findAppliedPluginSchemaFields(menuSettingsSchemaByLevel?.[level], courseMenu);
+    return fields ? buildSchemaDefaults(fields) : {};
+  }
+
+  // Right-panel display variants: same resolution as getActiveThemeSettings/
+  // getActiveMenuSettings, but with the applied theme/menu's schema defaults
+  // filled in for any unset field, so plugin defaults match the old tool
+  // exactly. Only used for panel reads — live-preview sync keeps reading the
+  // raw stored value so the preview never shows an un-saved implied value.
+  function getActiveThemeSettingsWithDefaults(settingsValue: unknown, level: ExtensionSchemaLevel): TopicThemeSettings {
+    const active = getActiveThemeSettings(settingsValue, level);
+    const defaults = getThemeSchemaDefaultsForLevel(level);
+    return deepMergeSchemaDefaults<TopicThemeSettings>(defaults, active as Record<string, unknown>);
+  }
+
+  function getActiveMenuSettingsWithDefaults(settingsValue: unknown, level: ExtensionSchemaLevel): TopicMenuSettings {
+    const active = getActiveMenuSettings(settingsValue, level);
+    const defaults = getMenuSchemaDefaultsForLevel(level);
+    return deepMergeSchemaDefaults<TopicMenuSettings>(defaults, active as Record<string, unknown>);
+  }
+
+  function updatePageThemeSettings(pageId: string, updater: (current: TopicThemeSettings) => TopicThemeSettings) {
+    setContentPages((previousPages) =>
+      previousPages.map((p) =>
+        p.id === pageId
+          ? (() => {
+              const rawThemeSettings = asRecord(p.themeSettings);
+              const isFlatThemeSettings =
+                Object.prototype.hasOwnProperty.call(rawThemeSettings, "_backgroundImage") ||
+                Object.prototype.hasOwnProperty.call(rawThemeSettings, "_backgroundStyles") ||
+                Object.prototype.hasOwnProperty.call(rawThemeSettings, "_pageHeader") ||
+                Object.prototype.hasOwnProperty.call(rawThemeSettings, "_htmlClasses") ||
+                Object.prototype.hasOwnProperty.call(rawThemeSettings, "_responsiveClasses");
+
+              if (isFlatThemeSettings) {
+                return { ...p, themeSettings: updater(rawThemeSettings as TopicThemeSettings) };
+              }
+
+              const themeKey = resolveThemeSettingsKey(rawThemeSettings, "contentobject");
+              const scopedThemeSettings = asRecord(rawThemeSettings[themeKey]) as TopicThemeSettings;
+              return {
+                ...p,
+                themeSettings: {
+                  ...rawThemeSettings,
+                  [themeKey]: updater(scopedThemeSettings),
+                } as TopicThemeSettings,
+              };
+            })()
+          : p
+      )
+    );
+    setDirtyNodeKeys((prev) => ({ ...prev, [`topic:${pageId}`]: true }));
+  }
+
+  function updateArticleThemeSettings(pageId: string, articleId: string, updater: (current: TopicThemeSettings) => TopicThemeSettings) {
+    setContentPages((previousPages) =>
+      previousPages.map((p) =>
+        p.id === pageId
+          ? {
+              ...p,
+              articles: p.articles.map((a) => {
+                if (a.id !== articleId) return a;
+
+                const rawThemeSettings = asRecord(a.themeSettings);
+                const isFlatThemeSettings =
+                  Object.prototype.hasOwnProperty.call(rawThemeSettings, "_backgroundImage") ||
+                  Object.prototype.hasOwnProperty.call(rawThemeSettings, "_backgroundStyles") ||
+                  Object.prototype.hasOwnProperty.call(rawThemeSettings, "_pageHeader") ||
+                  Object.prototype.hasOwnProperty.call(rawThemeSettings, "_htmlClasses") ||
+                  Object.prototype.hasOwnProperty.call(rawThemeSettings, "_responsiveClasses");
+
+                if (isFlatThemeSettings) {
+                  return { ...a, themeSettings: updater(rawThemeSettings as TopicThemeSettings) };
+                }
+
+                const themeKey = resolveThemeSettingsKey(rawThemeSettings, "article");
+                const scopedThemeSettings = asRecord(rawThemeSettings[themeKey]) as TopicThemeSettings;
+                return {
+                  ...a,
+                  themeSettings: {
+                    ...rawThemeSettings,
+                    [themeKey]: updater(scopedThemeSettings),
+                  } as TopicThemeSettings,
+                };
+              }),
+            }
+          : p
+      )
+    );
+    setDirtyNodeKeys((prev) => ({ ...prev, [`section:${articleId}`]: true }));
+  }
+
+  function updateBlockThemeSettings(
+    pageId: string,
+    articleId: string,
+    blockId: string,
+    updater: (current: TopicThemeSettings) => TopicThemeSettings
+  ) {
+    setContentPages((previousPages) =>
+      previousPages.map((p) =>
+        p.id === pageId
+          ? {
+              ...p,
+              articles: p.articles.map((a) =>
+                a.id === articleId
+                  ? {
+                      ...a,
+                      blocks: a.blocks.map((b) => {
+                        if (b.id !== blockId) return b;
+
+                        const rawThemeSettings = asRecord(b.themeSettings);
+                        const isFlatThemeSettings =
+                          Object.prototype.hasOwnProperty.call(rawThemeSettings, "_backgroundImage") ||
+                          Object.prototype.hasOwnProperty.call(rawThemeSettings, "_backgroundStyles") ||
+                          Object.prototype.hasOwnProperty.call(rawThemeSettings, "_pageHeader") ||
+                          Object.prototype.hasOwnProperty.call(rawThemeSettings, "_htmlClasses") ||
+                          Object.prototype.hasOwnProperty.call(rawThemeSettings, "_responsiveClasses");
+
+                        if (isFlatThemeSettings) {
+                          return { ...b, themeSettings: updater(rawThemeSettings as TopicThemeSettings) };
+                        }
+
+                        const themeKey = resolveThemeSettingsKey(rawThemeSettings, "block");
+                        const scopedThemeSettings = asRecord(rawThemeSettings[themeKey]) as TopicThemeSettings;
+                        return {
+                          ...b,
+                          themeSettings: {
+                            ...rawThemeSettings,
+                            [themeKey]: updater(scopedThemeSettings),
+                          } as TopicThemeSettings,
+                        };
+                      }),
+                    }
+                  : a
+              ),
+            }
+          : p
+      )
+    );
+    setDirtyNodeKeys((prev) => ({ ...prev, [`contentGroup:${blockId}`]: true }));
+  }
+
+  function updateComponentThemeSettings(
+    pageId: string,
+    articleId: string,
+    blockId: string,
+    componentId: string,
+    updater: (current: TopicThemeSettings) => TopicThemeSettings
+  ) {
+    setContentPages((previousPages) =>
+      previousPages.map((p) =>
+        p.id === pageId
+          ? {
+              ...p,
+              articles: p.articles.map((a) =>
+                a.id === articleId
+                  ? {
+                      ...a,
+                      blocks: a.blocks.map((b) =>
+                        b.id === blockId
+                          ? {
+                              ...b,
+                              components: b.components.map((c) => {
+                                if (c.id !== componentId) return c;
+
+                                const rawThemeSettings = asRecord(c.themeSettings);
+                                const isFlatThemeSettings =
+                                  Object.prototype.hasOwnProperty.call(rawThemeSettings, "_backgroundImage") ||
+                                  Object.prototype.hasOwnProperty.call(rawThemeSettings, "_backgroundStyles") ||
+                                  Object.prototype.hasOwnProperty.call(rawThemeSettings, "_pageHeader") ||
+                                  Object.prototype.hasOwnProperty.call(rawThemeSettings, "_htmlClasses") ||
+                                  Object.prototype.hasOwnProperty.call(rawThemeSettings, "_responsiveClasses");
+
+                                if (isFlatThemeSettings) {
+                                  return { ...c, themeSettings: updater(rawThemeSettings as TopicThemeSettings) };
+                                }
+
+                                const themeKey = resolveThemeSettingsKey(rawThemeSettings, "component");
+                                const scopedThemeSettings = asRecord(rawThemeSettings[themeKey]) as TopicThemeSettings;
+                                return {
+                                  ...c,
+                                  themeSettings: {
+                                    ...rawThemeSettings,
+                                    [themeKey]: updater(scopedThemeSettings),
+                                  } as TopicThemeSettings,
+                                };
+                              }),
+                            }
+                          : b
+                      ),
+                    }
+                  : a
+              ),
+            }
+          : p
+      )
+    );
+    setDirtyNodeKeys((prev) => ({ ...prev, [`component:${componentId}`]: true }));
+  }
+
+  function updatePageMenuSettings(pageId: string, updater: (current: TopicMenuSettings) => TopicMenuSettings) {
+    setContentPages((previousPages) =>
+      previousPages.map((p) =>
+        p.id === pageId
+          ? (() => {
+              const rawMenuSettings = asRecord(p.menuSettings);
+              const isFlatMenuSettings =
+                Object.prototype.hasOwnProperty.call(rawMenuSettings, "_graphic") ||
+                Object.prototype.hasOwnProperty.call(rawMenuSettings, "_backgroundImage") ||
+                Object.prototype.hasOwnProperty.call(rawMenuSettings, "_menuHeader");
+
+              if (isFlatMenuSettings) {
+                return { ...p, menuSettings: updater(rawMenuSettings as TopicMenuSettings) };
+              }
+
+              const menuKey = resolveMenuSettingsKey(rawMenuSettings, "contentobject");
+              const scopedMenuSettings = asRecord(rawMenuSettings[menuKey]) as TopicMenuSettings;
+              return {
+                ...p,
+                menuSettings: {
+                  ...rawMenuSettings,
+                  [menuKey]: updater(scopedMenuSettings),
+                } as TopicMenuSettings,
+              };
+            })()
+          : p
+      )
+    );
+    setDirtyNodeKeys((prev) => ({ ...prev, [`topic:${pageId}`]: true }));
+  }
+
+  function applyTopicAssetSelection(pageId: string, target: TopicAssetTarget, assetLink: string) {
+    if (target.scope === "pageGraphic") {
+      updatePageGraphic(pageId, (current) => ({ ...current, src: assetLink }));
+      return;
+    }
+
+    if (target.scope === "themeHeaderGraphic") {
+      updatePageThemeSettings(pageId, (current) => ({
+        ...current,
+        _pageHeader: {
+          ...asRecord(current._pageHeader),
+          _graphic: {
+            ...asRecord(asRecord(current._pageHeader)._graphic),
+            _src: assetLink,
+          },
+        },
+      }));
+      return;
+    }
+
+    if (target.scope === "themePageBackground") {
+      updatePageThemeSettings(pageId, (current) => ({
+        ...current,
+        _backgroundImage: {
+          ...asRecord(current._backgroundImage),
+          [target.bp]: assetLink,
+        },
+      }));
+      return;
+    }
+
+    if (target.scope === "sectionBackground") {
+      updateArticleThemeSettings(pageId, target.articleId, (current) => ({
+        ...current,
+        _backgroundImage: {
+          ...asRecord(current._backgroundImage),
+          [target.bp]: assetLink,
+        },
+      }));
+      return;
+    }
+
+    if (target.scope === "sectionArticleHeaderBackground") {
+      updateArticleThemeSettings(pageId, target.articleId, (current) => ({
+        ...current,
+        _articleHeader: {
+          ...asRecord(current._articleHeader),
+          _backgroundImage: {
+            ...asRecord(asRecord(current._articleHeader)._backgroundImage),
+            [target.bp]: assetLink,
+          },
+        },
+      }));
+      return;
+    }
+
+    if (target.scope === "contentGroupBackground") {
+      updateBlockThemeSettings(pageId, target.articleId, target.blockId, (current) => ({
+        ...current,
+        _backgroundImage: {
+          ...asRecord(current._backgroundImage),
+          [target.bp]: assetLink,
+        },
+      }));
+      return;
+    }
+
+    if (target.scope === "contentGroupHeaderBackground") {
+      updateBlockThemeSettings(pageId, target.articleId, target.blockId, (current) => ({
+        ...current,
+        _blockHeader: {
+          ...asRecord(current._blockHeader),
+          _backgroundImage: {
+            ...asRecord(asRecord(current._blockHeader)._backgroundImage),
+            [target.bp]: assetLink,
+          },
+        },
+      }));
+      return;
+    }
+
+    if (target.scope === "componentBackground") {
+      updateComponentThemeSettings(pageId, target.articleId, target.blockId, target.componentId, (current) => ({
+        ...current,
+        _backgroundImage: {
+          ...asRecord(current._backgroundImage),
+          [target.bp]: assetLink,
+        },
+      }));
+      return;
+    }
+
+    if (target.scope === "componentProperty") {
+      updateComponentBehaviourProperty(pageId, target.articleId, target.blockId, target.componentId, target.path, assetLink);
+      return;
+    }
+
+    if (target.scope === "extensionProperty") {
+      const updateExtensions = (extensions: Record<string, unknown>) => ({
+        ...extensions,
+        [target.extensionKey]: setBehaviourPath(asRecord(extensions[target.extensionKey]), target.path, assetLink),
+      });
+      if (target.level === "topic") {
+        const page = contentPages.find((item) => item.id === pageId);
+        updatePageData(pageId, { extensions: updateExtensions(asRecord(page?.extensions)) });
+        return;
+      }
+      if (target.level === "section" && target.articleId) {
+        const article = contentPages.find((item) => item.id === pageId)?.articles.find((item) => item.id === target.articleId);
+        updateArticle(pageId, target.articleId, { extensions: updateExtensions(asRecord(article?.extensions)) });
+        return;
+      }
+      if (target.level === "contentGroup" && target.articleId && target.blockId) {
+        const block = contentPages.find((item) => item.id === pageId)?.articles.find((item) => item.id === target.articleId)?.blocks.find((item) => item.id === target.blockId);
+        updateBlock(pageId, target.articleId, target.blockId, { extensions: updateExtensions(asRecord(block?.extensions)) });
+        return;
+      }
+      if (target.level === "component" && target.articleId && target.blockId && target.componentId) {
+        const component = contentPages.find((item) => item.id === pageId)?.articles.find((item) => item.id === target.articleId)?.blocks.find((item) => item.id === target.blockId)?.components.find((item) => item.id === target.componentId);
+        updateComponent(pageId, target.articleId, target.blockId, target.componentId, { extensions: updateExtensions(asRecord(component?.extensions)) });
+      }
+      return;
+    }
+
+    if (target.scope === "themeHeaderBackground") {
+      updatePageThemeSettings(pageId, (current) => ({
+        ...current,
+        _pageHeader: {
+          ...asRecord(current._pageHeader),
+          _backgroundImage: {
+            ...asRecord(asRecord(current._pageHeader)._backgroundImage),
+            [target.bp]: assetLink,
+          },
+        },
+      }));
+      return;
+    }
+
+    if (target.scope === "menuGraphic") {
+      updatePageMenuSettings(pageId, (current) => ({
+        ...current,
+        _graphic: {
+          ...asRecord(current._graphic),
+          _src: assetLink,
+        },
+      }));
+      return;
+    }
+
+    if (target.scope === "menuBackground") {
+      updatePageMenuSettings(pageId, (current) => ({
+        ...current,
+        _backgroundImage: {
+          ...asRecord(current._backgroundImage),
+          [target.bp]: assetLink,
+        },
+      }));
+      return;
+    }
+
+    updatePageMenuSettings(pageId, (current) => ({
+      ...current,
+      _menuHeader: {
+        ...asRecord(current._menuHeader),
+        _backgroundImage: {
+          ...asRecord(asRecord(current._menuHeader)._backgroundImage),
+          [target.bp]: assetLink,
+        },
+      },
+    }));
+  }
+
+  function clearTopicAssetSelection(pageId: string, target: TopicAssetTarget) {
+    applyTopicAssetSelection(pageId, target, "");
+  }
+
+  async function deletePage(pageId: string): Promise<boolean> {
+    try {
+      await deleteStructureNode("topic", pageId);
+      await loadStructureFromDatabase();
+      return true;
+    } catch (error) {
+      console.error("Failed to delete topic", error);
+      return false;
+    }
+  }
+
+  function handleOpenSaveAsTemplate(level: "topic" | "section" | "group" | "component", objectId: string) {
+    setSaveTemplateError(null);
+    setSaveTemplateTarget({ level, objectId });
+  }
+
+  async function handleConfirmSaveAsTemplate(data: {
+    title: string;
+    description: string;
+    isShared: boolean;
+    shareWithUsers: string[];
+  }) {
+    if (!saveTemplateTarget) return;
+    setIsSavingTemplate(true);
+    setSaveTemplateError(null);
+    try {
+      await saveContentAsTemplate({
+        level: saveTemplateTarget.level === "group" ? "contentGroup" : saveTemplateTarget.level,
+        objectId: saveTemplateTarget.objectId,
+        courseId,
+        title: data.title,
+        description: data.description,
+        isShared: data.isShared,
+        shareWithUsers: data.shareWithUsers,
+      });
+      setSaveTemplateTarget(null);
+      setEditorToast({ type: "success", message: `"${data.title}" saved as template` });
+    } catch (error) {
+      console.error("Failed to save template", error);
+      setSaveTemplateError(error instanceof Error ? error.message : "Failed to save template.");
+    } finally {
+      setIsSavingTemplate(false);
+    }
+  }
+
+  async function handleAddBlock(pageId: string, articleId: string) {
+    try {
+      const article = contentPages.find((item) => item.id === pageId)?.articles.find((item) => item.id === articleId);
+      const newBlockId = await seedDefaultContentGroup(courseId, articleId, NEW_CONTENT_GROUP_TITLE, (article?.blocks.length ?? 0) + 1);
+      await loadStructureFromDatabase({ pageId, articleId, blockId: newBlockId });
+      setEditorToast({ type: "success", message: `"${NEW_CONTENT_GROUP_TITLE}" added` });
+    } catch (error) {
+      console.error("Failed to add content group", error);
+      setEditorToast({ type: "error", message: "Could not add content group" });
+    }
+  }
+
+  function updateBlock(pageId: string, articleId: string, blockId: string, patch: Partial<BlockData>) {
+    setContentPages((previousPages) =>
+      previousPages.map((p) =>
+        p.id === pageId
+          ? {
+              ...p,
+              articles: p.articles.map((a) =>
+                a.id === articleId
+                  ? {
+                      ...a,
+                      blocks: a.blocks.map((b) =>
+                        b.id === blockId ? { ...b, ...patch } : b
+                      ),
+                    }
+                  : a
+              ),
+            }
+          : p
+      )
+    );
+    setDirtyNodeKeys((prev) => ({ ...prev, [`contentGroup:${blockId}`]: true }));
+  }
+
+  async function deleteBlock(pageId: string, articleId: string, blockId: string): Promise<boolean> {
+    try {
+      await deleteStructureNode("contentGroup", blockId);
+      await loadStructureFromDatabase({ pageId, articleId });
+      return true;
+    } catch (error) {
+      console.error("Failed to delete content group", error);
+      return false;
+    }
+  }
+
+  async function handleAddComponent(pageId: string, articleId: string, blockId: string, componentType: ComponentTypeOption) {
+    const targetPage = contentPages.find((p) => p.id === pageId);
+    const targetArticle = targetPage?.articles.find((a) => a.id === articleId);
+    const targetBlock = targetArticle?.blocks.find((b) => b.id === blockId);
+    if (!targetBlock || targetBlock.components.length >= 2) return;
+
+    try {
+      const componentCount = targetBlock.components.length;
+      const layout = componentCount === 0 ? "full" : "right";
+
+      if (componentCount === 1) {
+        await updateComponentLayout(targetBlock.components[0].id, "left");
+      }
+
+      const newComponentId = await createComponent(
+        courseId,
+        blockId,
+        componentType,
+        componentCount + 1,
+        layout
+      );
+      await loadStructureFromDatabase({ pageId, articleId, blockId, componentId: newComponentId });
+      setEditorToast({ type: "success", message: `"${componentType.displayName || componentType.component}" added` });
+    } catch (error) {
+      console.error("Failed to add component", error);
+      setEditorToast({ type: "error", message: "Could not add component" });
+    }
+  }
+
+  // Old-tool parity (editorPageComponentView.js evaluateMove): swap which
+  // side each of a Content Group's two half-width components renders on.
+  // The real canvas DOM is already swapped instantly by the click handler
+  // above. Old tool persists a move immediately (no separate Save step) —
+  // matched here via queued background PUTs for each component, WITHOUT any
+  // structure reload (loadStructureFromDatabase would re-fetch and re-mount
+  // the whole iframe, causing the exact refresh/flash this is meant to avoid).
+  function handleSwapComponentPositions(
+    pageId: string,
+    articleId: string,
+    blockId: string,
+    leftComponentId: string,
+    rightComponentId: string
+  ) {
+    setContentPages((previousPages) =>
+      previousPages.map((p) =>
+        p.id === pageId
+          ? {
+              ...p,
+              articles: p.articles.map((a) =>
+                a.id === articleId
+                  ? {
+                      ...a,
+                      blocks: a.blocks.map((b) =>
+                        b.id === blockId
+                          ? {
+                              ...b,
+                              components: b.components.map((c) => {
+                                if (c.id === leftComponentId) return { ...c, layout: "right" as const };
+                                if (c.id === rightComponentId) return { ...c, layout: "left" as const };
+                                return c;
+                              }),
+                            }
+                          : b
+                      ),
+                    }
+                  : a
+              ),
+            }
+          : p
+      )
+    );
+    const previousPersistence = swapPersistenceQueueRef.current.get(blockId) ?? Promise.resolve();
+    const persistence = previousPersistence
+      .catch(() => undefined)
+      .then(async () => {
+        await Promise.all([
+          updateComponentLayout(leftComponentId, "right"),
+          updateComponentLayout(rightComponentId, "left"),
+        ]);
+      });
+    swapPersistenceQueueRef.current.set(blockId, persistence);
+    void persistence
+      .catch((error) => {
+        console.error("Failed to save swapped component positions", error);
+      })
+      .finally(() => {
+        if (swapPersistenceQueueRef.current.get(blockId) === persistence) {
+          swapPersistenceQueueRef.current.delete(blockId);
+        }
+      });
+  }
+
+  function getCanvasNodeTitle(
+    level: "topic" | "section" | "group" | "component",
+    pageId: string,
+    articleId: string | null,
+    blockId: string | null,
+    componentId: string | null
+  ): string {
+    const page = contentPagesRef.current.find((item) => item.id === pageId);
+    if (level === "topic") return page?.title || "Untitled";
+    const article = articleId ? page?.articles.find((item) => item.id === articleId) : undefined;
+    if (level === "section") return article?.title || "Untitled";
+    const block = blockId ? article?.blocks.find((item) => item.id === blockId) : undefined;
+    if (level === "group") return block?.title || "Untitled";
+    return (componentId ? block?.components.find((item) => item.id === componentId)?.settings.title : "") || "Untitled";
+  }
+
+  async function confirmCanvasDelete() {
+    const target = canvasDeleteTarget;
+    setCanvasDeleteTarget(null);
+    if (!target) return;
+    const { level, pageId, articleId, blockId, componentId } = target;
+    let deleted = false;
+    if (level === "topic") {
+      deleted = await deletePage(pageId);
+    } else if (level === "section" && articleId) {
+      deleted = await deleteArticle(pageId, articleId);
+    } else if (level === "group" && articleId && blockId) {
+      deleted = await deleteBlock(pageId, articleId, blockId);
+    } else if (level === "component" && articleId && blockId && componentId) {
+      deleted = await deleteComponent(pageId, articleId, blockId, componentId);
+    } else {
+      return;
+    }
+    if (!deleted) {
+      setEditorToast({ type: "error", message: `Could not delete "${target.name}"` });
+      return;
+    }
+    setEditorToast({ type: "success", message: `"${target.name}" deleted` });
+  }
+
+  // Old-tool parity (editorOriginView.js onCopy -> editorView.js
+  // addToClipboard): Topic pastes immediately at the end of the page list
+  // (no separate paste-zone step, per explicit user instruction).
+  async function handleCopyTopicNode(pageId: string) {
+    try {
+      const sourceTitle = contentPagesRef.current.find((item) => item.id === pageId)?.title;
+      const clipboardId = await copyStructureNodeToClipboard("topic", pageId, courseId);
+      setTopicClipboardEntry({ clipboardId, sourceTitle: sourceTitle || "Topic" });
+    } catch (error) {
+      console.error("Failed to copy topic", error);
+      setEditorToast({ type: "error", message: "Could not copy topic" });
+    }
+  }
+
+  async function handlePasteTopicFromClipboard() {
+    const entry = topicClipboardEntry;
+    if (!entry) return;
+    setTopicClipboardEntry(null);
+    try {
+      const newId = await pasteStructureNodeFromClipboard(
+        entry.clipboardId,
+        courseId,
+        courseId,
+        contentPagesRef.current.length + 1
+      );
+      await loadStructureFromDatabase({ pageId: newId });
+      setEditorToast({ type: "success", message: `"${entry.sourceTitle}" pasted` });
+    } catch (error) {
+      console.error("Failed to paste topic", error);
+      setEditorToast({ type: "error", message: "Could not paste topic" });
+    }
+  }
+
+  // Section/Content Group: only the clipboard-COPY step happens here —
+  // pasting is deferred until the user picks a "Paste" zone (syncPasteZones,
+  // one at every sibling gap within the copied node's own parent) or
+  // cancels via an X / clicking elsewhere.
+  async function handleStartClipboardCopy(
+    level: "section" | "group",
+    pageId: string,
+    articleId: string | null,
+    blockId: string | null
+  ) {
+    try {
+      if (level === "section") {
+        if (!articleId) return;
+        const clipboardId = await copyStructureNodeToClipboard("section", articleId, courseId);
+        setClipboardEntry({ clipboardId, structureLevel: "section", pageId, articleId: null });
+      } else {
+        if (!articleId || !blockId) return;
+        const clipboardId = await copyStructureNodeToClipboard("contentGroup", blockId, courseId);
+        setClipboardEntry({ clipboardId, structureLevel: "contentGroup", pageId, articleId });
+      }
+    } catch (error) {
+      console.error("Failed to copy", error);
+    }
+  }
+
+  function handleCancelClipboardCopy() {
+    setClipboardEntry(null);
+  }
+
+  async function handlePasteFromClipboard(parentId: string, sortOrder: number) {
+    const entry = clipboardEntryRef.current;
+    if (!entry) return;
+    setClipboardEntry(null);
+    try {
+      const newId = await pasteStructureNodeFromClipboard(entry.clipboardId, courseId, parentId, sortOrder);
+      if (entry.structureLevel === "section") {
+        await loadStructureFromDatabase({ pageId: entry.pageId, articleId: newId });
+      } else {
+        await loadStructureFromDatabase({ pageId: entry.pageId, articleId: entry.articleId, blockId: newId });
+      }
+      setEditorToast({
+        type: "success",
+        message: entry.structureLevel === "section" ? "Section copied" : "Content group copied",
+      });
+    } catch (error) {
+      console.error("Failed to paste", error);
+      setEditorToast({ type: "error", message: "Could not paste copy" });
+    }
+  }
+
+  // Old-tool parity (colorLabelPopupView.js addItem/onReset): immediate
+  // persist, matching every other canvas-driven edit in this file.
+  function handleSetColorLabel(
+    level: "topic" | "section" | "group" | "component",
+    pageId: string,
+    articleId: string | null,
+    blockId: string | null,
+    componentId: string | null,
+    value: string
+  ) {
+    if (level === "topic") {
+      updatePageData(pageId, { colorLabel: value });
+      void updateStructureNode("topic", pageId, { _colorLabel: value }).catch((error) => {
+        console.error("Failed to save color label", error);
+      });
+    } else if (level === "section" && articleId) {
+      updateArticle(pageId, articleId, { colorLabel: value });
+      void updateStructureNode("section", articleId, { _colorLabel: value }).catch((error) => {
+        console.error("Failed to save color label", error);
+      });
+    } else if (level === "group" && articleId && blockId) {
+      updateBlock(pageId, articleId, blockId, { colorLabel: value });
+      void updateStructureNode("contentGroup", blockId, { _colorLabel: value }).catch((error) => {
+        console.error("Failed to save color label", error);
+      });
+    } else if (level === "component" && articleId && blockId && componentId) {
+      updateComponent(pageId, articleId, blockId, componentId, { colorLabel: value });
+      void updateStructureNode("component", componentId, { _colorLabel: value }).catch((error) => {
+        console.error("Failed to save color label", error);
+      });
+    }
+    window.requestAnimationFrame(() => applyPreviewSelectionStylesRef.current());
+  }
+
+
+  function updateComponent(pageId: string, articleId: string, blockId: string, componentId: string, patch: Partial<ComponentData>) {
+    setContentPages((previousPages) =>
+      previousPages.map((p) =>
+        p.id === pageId
+          ? {
+              ...p,
+              articles: p.articles.map((a) =>
+                a.id === articleId
+                  ? {
+                      ...a,
+                      blocks: a.blocks.map((b) =>
+                        b.id === blockId
+                          ? {
+                              ...b,
+                              components: b.components.map((c) =>
+                                c.id === componentId
+                                  ? {
+                                      ...c,
+                                      ...patch,
+                                      settings: (() => {
+                                        const mergedSettings = {
+                                          ...c.settings,
+                                          ...(patch.settings ?? {}),
+                                        };
+
+                                        const nextProperties = patch.settings?.properties;
+                                        if (
+                                          nextProperties &&
+                                          typeof nextProperties === "object" &&
+                                          !Array.isArray(nextProperties)
+                                        ) {
+                                          const currentProperties =
+                                            c.settings?.properties &&
+                                            typeof c.settings.properties === "object" &&
+                                            !Array.isArray(c.settings.properties)
+                                              ? c.settings.properties
+                                              : {};
+
+                                          mergedSettings.properties = {
+                                            ...currentProperties,
+                                            ...nextProperties,
+                                          };
+                                        }
+
+                                        return mergedSettings;
+                                      })(),
+                                    }
+                                  : c
+                              ),
+                            }
+                          : b
+                      ),
+                    }
+                  : a
+              ),
+            }
+          : p
+      )
+    );
+    setDirtyNodeKeys((prev) => ({ ...prev, [`component:${componentId}`]: true }));
+  }
+
+  // Writes a single schema-driven Behaviour field (arbitrary dotted/bracketed
+  // path into settings.properties) against the freshest state, the same way
+  // updateComponentThemeSettings does for themeSettings — used by both the
+  // Behaviour accordion's field editors and its asset-picker fields.
+  function updateComponentBehaviourProperty(
+    pageId: string,
+    articleId: string,
+    blockId: string,
+    componentId: string,
+    path: string,
+    value: unknown
+  ) {
+    setContentPages((previousPages) =>
+      previousPages.map((p) =>
+        p.id === pageId
+          ? {
+              ...p,
+              articles: p.articles.map((a) =>
+                a.id === articleId
+                  ? {
+                      ...a,
+                      blocks: a.blocks.map((b) =>
+                        b.id === blockId
+                          ? {
+                              ...b,
+                              components: b.components.map((c) => {
+                                if (c.id !== componentId) return c;
+                                const currentProperties = asRecord(c.settings.properties);
+                                const nextProperties = setBehaviourPath(currentProperties, path, value);
+                                return {
+                                  ...c,
+                                  settings: { ...c.settings, properties: nextProperties },
+                                };
+                              }),
+                            }
+                          : b
+                      ),
+                    }
+                  : a
+              ),
+            }
+          : p
+      )
+    );
+    setDirtyNodeKeys((prev) => ({ ...prev, [`component:${componentId}`]: true }));
+  }
+
+  async function saveDraftChanges(): Promise<boolean> {
+    const committedCanvasBodyValues = new Map<string, string>();
+    canvasBodyEditorsRef.current.forEach((entry) => {
+      const html = entry.commit();
+      if (html !== null) committedCanvasBodyValues.set(entry.ownerKey, html);
+    });
+
+    if (!hasUnsavedChanges && !pendingExtensionDisableNames.size && !committedCanvasBodyValues.size) {
+      return true;
+    }
+
+    // React state updates from commit() are asynchronous. Use the committed
+    // editor values directly for this save instead of the stale render
+    // snapshot captured when the Save handler was created.
+    const pages = cloneContentPages(contentPages);
+    committedCanvasBodyValues.forEach((html, ownerKey) => {
+      const [level, id] = ownerKey.split(":");
+      if (!id) return;
+      if (level === "topic") {
+        const page = pages.find((candidate) => candidate.id === id);
+        if (page) {
+          if (resolveTopicBodyTarget(page.id) === "pageBody") page.pageBody = html;
+          else page.body = html;
+        }
+      } else if (level === "article") {
+        for (const page of pages) {
+          const article = page.articles.find((candidate) => candidate.id === id);
+          if (article) { article.description = html; break; }
+        }
+      } else if (level === "block") {
+        for (const page of pages) {
+          for (const article of page.articles) {
+            const block = article.blocks.find((candidate) => candidate.id === id);
+            if (block) { block.description = html; return; }
+          }
+        }
+      } else if (level === "component") {
+        for (const page of pages) {
+          for (const article of page.articles) {
+            for (const block of article.blocks) {
+              const component = block.components.find((candidate) => candidate.id === id);
+              if (component) {
+                component.settings = { ...component.settings, description: html };
+                return;
+              }
+            }
+          }
+        }
+      }
+    });
+    const findPage = (pageId: string) => pages.find((page) => page.id === pageId);
+    const findArticle = (articleId: string) => {
+      for (const page of pages) {
+        const article = page.articles.find((candidate) => candidate.id === articleId);
+        if (article) return article;
+      }
+      return null;
+    };
+    const findBlock = (blockId: string) => {
+      for (const page of pages) {
+        for (const article of page.articles) {
+          const block = article.blocks.find((candidate) => candidate.id === blockId);
+          if (block) return block;
+        }
+      }
+      return null;
+    };
+    const findComponent = (componentId: string) => {
+      for (const page of pages) {
+        for (const article of page.articles) {
+          for (const block of article.blocks) {
+            const component = block.components.find((candidate) => candidate.id === componentId);
+            if (component) return component;
+          }
+        }
+      }
+      return null;
+    };
+
+    try {
+      setIsSavingSelection(true);
+
+      const currentFieldNames = collectCourseAssetFieldNames(pages);
+      const savedFieldNames = collectCourseAssetFieldNames(savedContentPages);
+
+      const removedFieldNames = [...savedFieldNames].filter((fieldName) => !currentFieldNames.has(fieldName));
+      if (removedFieldNames.length) {
+        await Promise.all(removedFieldNames.map((fieldName) => removeCourseAssetMappings(courseId, fieldName)));
+      }
+
+      const upserts: Array<Promise<void>> = [];
+      for (const fieldName of currentFieldNames) {
+        const normalizedLink = `course/assets/${fieldName}`;
+        const assetId =
+          assetLinkIdMap[normalizedLink] ||
+          assetLinkIdMap[`/${normalizedLink}`] ||
+          courseAssetMappings[fieldName];
+        if (!assetId) continue;
+
+        upserts.push(
+          removeCourseAssetMappings(courseId, fieldName).then(() =>
+            createCourseAssetMapping(courseId, fieldName, assetId)
+          )
+        );
+      }
+      if (upserts.length) {
+        await Promise.all(upserts);
+      }
+
+      const saveKeys = new Set([...Object.keys(dirtyNodeKeys), ...committedCanvasBodyValues.keys()]);
+      for (const key of saveKeys) {
+        const [level, id] = key.split(":");
+        if (!id) continue;
+
+        if (level === "topic") {
+          const page = findPage(id);
+          if (!page) continue;
+          const topicPatch: Record<string, unknown> = {
+            title: page.title,
+            subtitle: page.subtitle,
+            _subtitle: page.subtitle,
+            body: page.body,
+            pageBody: page.pageBody,
+            instruction: page.instruction,
+            linkText: page.linkText,
+            duration: page.duration,
+            _lockType: page.lockType,
+            _lockedBy: page.lockedBy,
+            _classes: page.classes,
+            _htmlClasses: page.htmlClasses,
+            _requireCompletionOf: isNaN(Number(page.requireCompletionOf)) ? -1 : Number(page.requireCompletionOf),
+            _isOptional: page.isOptional,
+            _isAvailable: page.isAvailable,
+            _isHidden: page.isHidden,
+            _isVisible: page.isVisible,
+            _onScreen: {
+              _isEnabled: !!page.onScreen?._isEnabled,
+              _classes: page.onScreen?._classes || "",
+              _percentInviewVertical:
+                typeof page.onScreen?._percentInviewVertical === "number"
+                  ? page.onScreen._percentInviewVertical
+                  : 50,
+            },
+            _ariaLevel: isNaN(Number(page.ariaLevel)) ? 0 : Number(page.ariaLevel),
+            _isA11yCompletionDescriptionEnabled: page.isA11yCompletionDescriptionEnabled,
+            _colorLabel: page.colorLabel,
+            _extensions: page.extensions ?? {},
+            _graphic: {
+              src: page.graphic?.src || "",
+              alt: page.graphic?.alt || "",
+            },
+            themeSettings: page.themeSettings ?? {},
+            menuSettings: page.menuSettings ?? {},
+          };
+
+          if (page.showDisplayTitleInPreview) {
+            topicPatch.displayTitle = page.title;
+          } else {
+            topicPatch.displayTitle = "";
+          }
+
+          await updateStructureNode("topic", id, topicPatch, { syncTitleDisplayTitle: false });
+          continue;
+        }
+
+        if (level === "section") {
+          const article = findArticle(id);
+          if (!article) continue;
+          const sectionPatch: Record<string, unknown> = {
+            title: article.title,
+            displayTitle: article.showDisplayTitleInPreview ? article.title : "",
+            body: article.description,
+            description: article.description,
+            instruction: article.instruction,
+            themeSettings: article.themeSettings ?? {},
+            _isOptional: article.isOptional,
+            _isAvailable: article.isAvailable,
+            _isHidden: article.isHidden,
+            _isVisible: article.isVisible,
+            _requireCompletionOf: isNaN(Number(article.requireCompletionOf)) ? -1 : Number(article.requireCompletionOf),
+            _classes: article.classes,
+            _colorLabel: article.colorLabel,
+            _onScreen: {
+              _isEnabled: !!article.onScreen?._isEnabled,
+              _classes: article.onScreen?._classes || "",
+              _percentInviewVertical:
+                typeof article.onScreen?._percentInviewVertical === "number"
+                  ? article.onScreen._percentInviewVertical
+                  : 50,
+            },
+            _ariaLevel: isNaN(Number(article.ariaLevel)) ? 0 : Number(article.ariaLevel),
+            _isA11yCompletionDescriptionEnabled: article.isA11yCompletionDescriptionEnabled,
+            _extensions: article.extensions ?? {},
+          };
+          await updateStructureNode("section", id, sectionPatch);
+          continue;
+        }
+
+        if (level === "contentGroup") {
+          const block = findBlock(id);
+          if (!block) continue;
+          await updateStructureNode("contentGroup", id, {
+            title: block.title,
+            displayTitle: block.showDisplayTitleInPreview ? block.title : "",
+            body: block.description,
+            description: block.description,
+            instruction: block.instruction,
+            themeSettings: block.themeSettings ?? {},
+            _isOptional: block.isOptional,
+            _isAvailable: block.isAvailable,
+            _isHidden: block.isHidden,
+            _isVisible: block.isVisible,
+            _requireCompletionOf: isNaN(Number(block.requireCompletionOf)) ? -1 : Number(block.requireCompletionOf),
+            _classes: block.classes,
+            _colorLabel: block.colorLabel,
+            _onScreen: {
+              _isEnabled: !!block.onScreen?._isEnabled,
+              _classes: block.onScreen?._classes || "",
+              _percentInviewVertical:
+                typeof block.onScreen?._percentInviewVertical === "number"
+                  ? block.onScreen._percentInviewVertical
+                  : 50,
+            },
+            _ariaLevel: isNaN(Number(block.ariaLevel)) ? 0 : Number(block.ariaLevel),
+            _isA11yCompletionDescriptionEnabled: block.isA11yCompletionDescriptionEnabled,
+            _extensions: block.extensions ?? {},
+          });
+          continue;
+        }
+
+        if (level === "component") {
+          const component = findComponent(id);
+          if (!component) continue;
+          const settings = component.settings ?? {};
+          const existingProperties =
+            settings.properties &&
+            typeof settings.properties === "object" &&
+            !Array.isArray(settings.properties)
+              ? (settings.properties as Record<string, unknown>)
+              : {};
+          // Instruction/subtitle can now be edited either via the Behaviour
+          // accordion (writes to settings.properties) or (for legacy data)
+          // via settings.instruction/subtitle directly — properties wins
+          // since that's what the Behaviour accordion's schema-driven fields
+          // read from and write to.
+          const instructionValue =
+            typeof existingProperties.instruction === "string"
+              ? existingProperties.instruction
+              : settings.instruction ?? "";
+          const subtitleValue =
+            typeof existingProperties.subtitle === "string" ? existingProperties.subtitle : settings.subtitle;
+          await updateStructureNode("component", id, {
+            title: settings.title ?? "",
+            displayTitle: component.showDisplayTitleInPreview ? settings.title ?? "" : "",
+            body: settings.description ?? "",
+            description: settings.description ?? "",
+            instruction: instructionValue,
+            themeSettings: component.themeSettings ?? {},
+            // Persists a Swap positions click (handleSwapComponentPositions
+            // only updates local draft state; this is what writes it to
+            // the database, same as every other canvas edit).
+            ...(component.layout ? { _layout: component.layout } : {}),
+            properties: {
+              ...existingProperties,
+              instruction: instructionValue,
+              ...(subtitleValue !== undefined ? { subtitle: subtitleValue } : {}),
+            },
+            _classes: component.classes,
+            _colorLabel: component.colorLabel,
+            _isOptional: component.isOptional,
+            _isAvailable: component.isAvailable,
+            _isHidden: component.isHidden,
+            _isVisible: component.isVisible,
+            _isResetOnRevisit: component.isResetOnRevisit || "false",
+            _ariaLevel: isNaN(Number(component.ariaLevel)) ? 0 : Number(component.ariaLevel),
+            _isA11yCompletionDescriptionEnabled: component.isA11yCompletionDescriptionEnabled,
+            _onScreen: {
+              _isEnabled: !!component.onScreen?._isEnabled,
+              _classes: component.onScreen?._classes || "",
+              _percentInviewVertical:
+                typeof component.onScreen?._percentInviewVertical === "number"
+                  ? component.onScreen._percentInviewVertical
+                  : 50,
+            },
+            _extensions: component.extensions ?? {},
+          });
+        }
+      }
+
+      const refreshedMappings = await getCourseAssetMappings(courseId);
+      const refreshedAssetLinkMap: Record<string, string> = {};
+      Object.entries(refreshedMappings || {}).forEach(([fieldName, assetId]) => {
+        addAssetLinkMapping(refreshedAssetLinkMap, fieldName, assetId);
+      });
+
+      setCourseAssetMappings(refreshedMappings);
+      setAssetLinkIdMap((prev) => ({ ...prev, ...refreshedAssetLinkMap }));
+      void getCourseAssetIdMap(courseId).then((map) => setContentAssetIdMap(map || {}));
+
+      // Extensions confirmed for removal this session: actually disable them
+      // for the course now (the single server call that cascades the removal
+      // across every course/topic/section/content-group/component document —
+      // see disableExtensionForCourse) — deferred until now per the
+      // draft-until-save requirement.
+      if (pendingExtensionDisableNames.size) {
+        const typeOptions = await getExtensionTypeOptions();
+        const idsToDisable = typeOptions
+          .filter((option) => pendingExtensionDisableNames.has(option.name))
+          .map((option) => option._id);
+        await Promise.all(idsToDisable.map((id) => disableExtensionForCourse(courseId, id)));
+        setPendingExtensionDisableNames(new Set());
+      }
+
+      setContentPages(pages);
+      setSavedContentPages(cloneContentPages(pages));
+      setDirtyNodeKeys({});
+      topicBodyTargetRef.current = null;
+      setPreviewRefreshToken((current) => current + 1);
+      return true;
+    } catch (error) {
+      console.error("Failed to save editor drafts", error);
+      return false;
+    } finally {
+      setIsSavingSelection(false);
+    }
+  }
+
+  function discardDraftChanges() {
+    setContentPages(cloneContentPages(savedContentPages));
+    setDirtyNodeKeys({});
+    topicBodyTargetRef.current = null;
+    setPendingExtensionDisableNames(new Set());
+    setPreviewRefreshToken((current) => current + 1);
+  }
+
+  function runPendingGuardedAction() {
+    const action = pendingGuardedActionRef.current;
+    pendingGuardedActionRef.current = null;
+    setShowUnsavedChangesModal(false);
+    action?.();
+  }
+
+  function requestUnsavedChangesGuard(action: () => void) {
+    pendingGuardedActionRef.current = action;
+    setShowUnsavedChangesModal(true);
+  }
+
+  function runWithEditorExitGuard(action: () => void) {
+    if (hasUnsavedChanges) {
+      requestUnsavedChangesGuard(action);
+      return;
+    }
+    action();
+  }
+
+  // Moving to another topic tears the canvas down and rebuilds it for the new
+  // page, so any edit that only lives in a canvas editor (committed on blur,
+  // not per keystroke) would be dropped without warning.
+  function runWithPageChangeGuard(nextPageId: string | null, action: () => void) {
+    if (hasUnsavedChanges && selectedPageId && nextPageId !== selectedPageId) {
+      requestUnsavedChangesGuard(action);
+      return;
+    }
+    action();
+  }
+
+  function openSetupPanel(panel?: "storyboarding" | "publish") {
+    if (!courseId || courseId === "new-course") return;
+    const suffix = panel ? `?panel=${panel}` : "";
+    runWithEditorExitGuard(() => navigate(`/course/${courseId}/setup${suffix}`));
+  }
+
+  function openPublishDialog() {
+    setPublishResult({});
+    setPublishDialogPhase("confirm");
+  }
+
+  function closePublishDialog() {
+    setPublishDialogPhase(null);
+  }
+
+  async function handleConfirmPublish() {
+    const tenantId = user?._tenantId;
+    if (!courseId || courseId === "new-course" || !tenantId) {
+      setPublishResult({ message: "No course or tenant context available." });
+      setPublishDialogPhase("error");
+      return;
+    }
+    setPublishDialogPhase("running");
+    try {
+      const result = await publishCoursePackage(tenantId, courseId);
+      if (result.success) {
+        setPublishResult({ zipName: result.zipName, downloadUrl: result.downloadUrl });
+        setPublishDialogPhase("success");
+      } else {
+        setPublishResult({ message: result.message });
+        setPublishDialogPhase("error");
+      }
+    } catch (err) {
+      setPublishResult({ message: err instanceof Error ? err.message : "Publish failed." });
+      setPublishDialogPhase("error");
+    }
+  }
+
+  function openEditorPreview(startFromCurrentPage: boolean) {
+    if (!courseId || courseId === "new-course") return;
+
+    const pageId = (selectedPageId || "").trim();
+    const previewUrl = startFromCurrentPage && pageId
+      ? `/course/${courseId}/preview?pageId=${encodeURIComponent(pageId)}`
+      : `/course/${courseId}/preview`;
+    runWithEditorExitGuard(() => navigate(previewUrl));
+  }
+
+  async function deleteComponent(pageId: string, articleId: string, blockId: string, componentId: string): Promise<boolean> {
+    try {
+      const targetPage = contentPages.find((p) => p.id === pageId);
+      const targetArticle = targetPage?.articles.find((a) => a.id === articleId);
+      const targetBlock = targetArticle?.blocks.find((b) => b.id === blockId);
+      const remainingComponent = targetBlock?.components.find((c) => c.id !== componentId);
+
+      await deleteStructureNode("component", componentId);
+
+      if (remainingComponent && (targetBlock?.components.length ?? 0) === 2) {
+        await updateComponentLayout(remainingComponent.id, "full");
+      }
+
+      await loadStructureFromDatabase({ pageId, articleId, blockId });
+      return true;
+    } catch (error) {
+      console.error("Failed to delete component", error);
+      return false;
+    }
+  }
+
+  function handleSelectComponent(
+    pageId: string,
+    articleId: string,
+    blockId: string,
+    componentId: string,
+    source: SelectionSource = "internal",
+    preferredAccordion: "general" | "behaviour" = "general"
+  ) {
+    const isSameSelection =
+      selectedComponentId === componentId &&
+      selectedBlockId === blockId &&
+      selectedArticleId === articleId &&
+      selectedPageId === pageId;
+    setSelectedPageId(pageId);
+    setSelectedArticleId(articleId);
+    setSelectedBlockId(blockId);
+    setSelectedComponentId(componentId);
+    setHasCanvasSelection(true);
+    setRightPanelOpen(true);
+    setRightPanelType("component");
+    if (!isSameSelection) {
+      // Written in ONE state update (not General first, then Behaviour) so
+      // the panel never renders an intermediate open section.
+      setOpenComponentAccordions(
+        preferredAccordion === "general"
+          ? DEFAULT_COMPONENT_ACCORDIONS
+          : { ...ALL_COMPONENT_ACCORDIONS_CLOSED, [preferredAccordion]: true }
+      );
+    } else if (preferredAccordion === "behaviour") {
+      setOpenComponentAccordions((prev) =>
+        prev.behaviour ? prev : { ...ALL_COMPONENT_ACCORDIONS_CLOSED, behaviour: true }
+      );
+    }
+    if (source === "leftPanel") {
+      queuePreviewScrollFromLeftPanel({ level: "component", id: componentId });
+    }
+  }
+
+  function handleAddComponentPanel(pageId: string, articleId: string, blockId: string) {
+    const targetPage = contentPages.find((p) => p.id === pageId);
+    const targetArticle = targetPage?.articles.find((a) => a.id === articleId);
+    const targetBlock = targetArticle?.blocks.find((b) => b.id === blockId);
+    if (!targetBlock || targetBlock.components.length >= 2) return;
+
+    setSelectedPageId(pageId);
+    setSelectedArticleId(articleId);
+    setSelectedBlockId(blockId);
+    setSelectedComponentId(null);
+    setHasCanvasSelection(true);
+    setRightPanelOpen(true);
+    setRightPanelType("block");
+    setAddComponentTarget({ pageId, articleId, blockId });
+  }
+
+  function handleOpenTemplateDrawer(target: {
+    level: "topic" | "section" | "group" | "component";
+    pageId: string;
+    articleId?: string;
+    blockId?: string;
+    moduleId?: string;
+  }) {
+    setAddTemplateTarget(target);
+  }
+
+  async function handleApplyTemplate(target: {
+    level: "topic" | "section" | "group" | "component";
+    pageId: string;
+    articleId?: string;
+    blockId?: string;
+    moduleId?: string;
+  }, template: DashboardTemplate) {
+    try {
+      const expectedType =
+        target.level === "topic"
+          ? "Topic"
+          : target.level === "section"
+            ? "Section"
+            : target.level === "group"
+              ? "Content Group"
+              : "Component";
+
+      if (template.type !== expectedType) {
+        return;
+      }
+
+      let parentId = courseId;
+      let sortOrder = contentPages.length + 1;
+      let layout: "full" | "left" | "right" | undefined;
+
+      if (target.level === "topic" && target.moduleId) {
+        parentId = target.moduleId;
+      }
+
+      if (target.level === "section") {
+        const page = contentPages.find((item) => item.id === target.pageId);
+        if (!page) return;
+        parentId = target.pageId;
+        sortOrder = page.articles.length + 1;
+      }
+
+      if (target.level === "group") {
+        const page = contentPages.find((item) => item.id === target.pageId);
+        const article = page?.articles.find((item) => item.id === target.articleId);
+        if (!article) return;
+        parentId = article.id;
+        sortOrder = article.blocks.length + 1;
+      }
+
+      if (target.level === "component") {
+        const page = contentPages.find((item) => item.id === target.pageId);
+        const article = page?.articles.find((item) => item.id === target.articleId);
+        const block = article?.blocks.find((item) => item.id === target.blockId);
+        if (!block || block.components.length >= 2) return;
+
+        parentId = block.id;
+        sortOrder = block.components.length + 1;
+        layout = block.components.length === 0 ? "full" : "right";
+
+        if (block.components.length === 1) {
+          await updateComponentLayout(block.components[0].id, "left");
+        }
+      }
+
+      await pasteTemplateIntoCourse({
+        objectId: template.backendId,
+        parentId,
+        courseId,
+        sortOrder,
+        layout,
+      });
+
+      await loadStructureFromDatabase({
+        pageId: selectedPageId,
+        articleId: selectedArticleId,
+        blockId: selectedBlockId,
+        componentId: selectedComponentId,
+      });
+      setAddTemplateTarget(null);
+    } catch (error) {
+      console.error("Failed to add template", error);
+    }
+  }
+
+  function copyPage(pageId: string) {
+    const page = contentPages.find((p) => p.id === pageId);
+    if (!page) return;
+    const newPageId = `page-${Date.now()}`;
+    const copiedPage: ContentPageData = {
+      ...page,
+      id: newPageId,
+      title: `${page.title} (Copy)`,
+      articles: page.articles.map((a) => ({
+        ...a,
+        id: `article-${Date.now()}-${Math.random()}`,
+        blocks: a.blocks.map((b) => ({
+          ...b,
+          id: `block-${Date.now()}-${Math.random()}`,
+          components: b.components.map((c) => ({
+            ...c,
+            id: `component-${Date.now()}-${Math.random()}`,
+          })),
+        })),
+      })),
+    };
+    setContentPages([...contentPages, copiedPage]);
+  }
+
+  function copyArticle(pageId: string, articleId: string) {
+    const page = contentPages.find((p) => p.id === pageId);
+    const article = page?.articles.find((a) => a.id === articleId);
+    if (!article) return;
+    const newArticleId = `article-${Date.now()}`;
+    const copiedArticle: ArticleData = {
+      ...article,
+      id: newArticleId,
+      title: `${article.title} (Copy)`,
+      blocks: article.blocks.map((b) => ({
+        ...b,
+        id: `block-${Date.now()}-${Math.random()}`,
+        components: b.components.map((c) => ({
+          ...c,
+          id: `component-${Date.now()}-${Math.random()}`,
+        })),
+      })),
+    };
+    setContentPages(
+      contentPages.map((p) =>
+        p.id === pageId
+          ? {
+              ...p,
+              articles: [...p.articles, copiedArticle],
+            }
+          : p
+      )
+    );
+  }
+
+  function copyBlock(pageId: string, articleId: string, blockId: string) {
+    const page = contentPages.find((p) => p.id === pageId);
+    const article = page?.articles.find((a) => a.id === articleId);
+    const block = article?.blocks.find((b) => b.id === blockId);
+    if (!block) return;
+    const newBlockId = `block-${Date.now()}`;
+    const copiedBlock: BlockData = {
+      ...block,
+      id: newBlockId,
+      title: `${block.title} (Copy)`,
+      components: block.components.map((c) => ({
+        ...c,
+        id: `component-${Date.now()}-${Math.random()}`,
+      })),
+    };
+    setContentPages(
+      contentPages.map((p) =>
+        p.id === pageId
+          ? {
+              ...p,
+              articles: p.articles.map((a) =>
+                a.id === articleId
+                  ? {
+                      ...a,
+                      blocks: [...a.blocks, copiedBlock],
+                    }
+                  : a
+              ),
+            }
+          : p
+      )
+    );
+  }
+
+  function copyComponent(pageId: string, articleId: string, blockId: string, componentId: string) {
+    const page = contentPages.find((p) => p.id === pageId);
+    const article = page?.articles.find((a) => a.id === articleId);
+    const block = article?.blocks.find((b) => b.id === blockId);
+    const component = block?.components.find((c) => c.id === componentId);
+    if (!component) return;
+    const newComponentId = `component-${Date.now()}`;
+    const copiedComponent: ComponentData = {
+      ...component,
+      id: newComponentId,
+      settings: {
+        ...component.settings,
+        title: component.settings.title ? `${component.settings.title} (Copy)` : undefined,
+      },
+    };
+    setContentPages(
+      contentPages.map((p) =>
+        p.id === pageId
+          ? {
+              ...p,
+              articles: p.articles.map((a) =>
+                a.id === articleId
+                  ? {
+                      ...a,
+                      blocks: a.blocks.map((b) =>
+                        b.id === blockId
+                          ? {
+                              ...b,
+                              components: [...b.components, copiedComponent],
+                            }
+                          : b
+                      ),
+                    }
+                  : a
+              ),
+            }
+          : p
+      )
+    );
+  }
+
+  const additionalMaterialItemDefaults = useCallback(
+    (extensionKey: string, path: string): Record<string, unknown> => {
+      if (extensionKey !== "_additionalMaterial" || path !== "_items") return {};
+      const schema = Object.values(extensionSchemasByLevel?.course ?? {}).find(
+        (candidate) => candidate.name === "adapt-additional-material"
+      );
+      const schemaDefaults = asRecord(buildSchemaDefaults(schema?.properties as Record<string, unknown> | undefined));
+      const schemaButton = asRecord(schemaDefaults._button);
+      const additionalMaterial = asRecord(courseExtensions._additionalMaterial);
+      const courseButton = asRecord(additionalMaterial._button);
+      return {
+        _btnText: asString(courseButton.text) || asString(schemaButton.text) || "Additional Material",
+        _btnType: asString(courseButton._btnType) || asString(schemaButton._btnType) || "primary",
+      };
+    },
+    [courseExtensions, extensionSchemasByLevel]
+  );
+
+  const courseData: Course = useMemo(() => ({
+    id: "editor-course",
+    title: courseTitle,
+    description: "In-editor course preview",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    status: "Draft",
+    menuPage: menuPageCreated ? {
+      logoUrl: menuData.logoUrl,
+      title: menuData.title,
+      subtitle: menuData.subtitle,
+      body: menuData.body,
+      menuStyle: (menuData.menuStyle === "Overview Menu" ? "Box Menu" : menuData.menuStyle) as "Box Menu" | "Linear Menu" | "Icon Menu",
+      menuLockType: menuData.menuLockType,
+      textAlign: menuData.textAlign,
+      bgType: menuData.bgType,
+      bgColor: menuData.bgColor,
+      bgImageUrl: menuData.bgImageUrl,
+    } : undefined,
+    pages: contentPages.map((page) => ({
+      id: page.id,
+      title: page.title,
+      description: page.description,
+      articles: page.articles || [],
+      subPages: page.subPages || [],
+    })),
+  }), [courseTitle, menuPageCreated, menuData, contentPages]);
+
+  const loginName = user?.username || user?.email || "Not signed in";
+
+  return (
+    <div className="flex flex-col h-screen bg-white overflow-hidden">
+      <PageEditorTopBar
+        courseTitle={courseTitle}
+        onCourseTitleChange={setCourseTitle}
+        onToggleLeftPanel={() => setLeftPanelOpen((o) => !o)}
+        onBack={() => runWithEditorExitGuard(() => window.history.length > 1 ? navigate(-1) : navigate("/"))}
+        onHome={() => runWithEditorExitGuard(() => navigate("/"))}
+        onOpenCourseSettings={() => openSetupPanel()}
+        onOpenStoryboard={() => openSetupPanel("storyboarding")}
+        onOpenPreview={(startFromCurrentPage) => openEditorPreview(startFromCurrentPage)}
+        loginName={loginName}
+        previewDisabled={!courseId || courseId === "new-course"}
+        onSave={() => {
+          void saveDraftChanges();
+        }}
+        onSelectPreflight={() => openSetupPanel("publish")}
+        onSelectPublish={openPublishDialog}
+        isSaving={isSavingSelection}
+        isSaveDisabled={!hasUnsavedChanges}
+      />
+
+      {/* ── Body ────────────────────────────────────────────── */}
+      <div className="flex flex-1 overflow-hidden relative min-w-0">
+        <PageEditorNavigation
+          courseId={courseId}
+          leftPanelOpen={leftPanelOpen}
+          onClosePanels={() => {
+            setLeftPanelOpen(false);
+          }}
+          onOpenPanels={() => {
+            setLeftPanelOpen(true);
+          }}
+          menuPageCreated={menuPageCreated}
+          menuSelected={menuSelected}
+          courseStructure={courseStructure}
+          contentPages={contentPages}
+          selectedPageId={selectedPageId}
+          selectedSubPageId={selectedSubPageId}
+          selectedArticleId={selectedArticleId}
+          selectedBlockId={selectedBlockId}
+          selectedComponentId={selectedComponentId}
+          onMenuSelect={() => runWithPageChangeGuard(null, () => handleMenuSelect("leftPanel"))}
+          onPageSelect={(pageId) => runWithPageChangeGuard(pageId, () => handlePageSelect(pageId, "leftPanel"))}
+          onSubPageSelect={(pageId, subPageId) => runWithPageChangeGuard(pageId, () => handleSubPageSelect(pageId, subPageId, "leftPanel"))}
+          onArticleSelect={(pageId, articleId) => runWithPageChangeGuard(pageId, () => handleArticleSelect(pageId, articleId, "leftPanel"))}
+          onBlockSelect={(pageId, articleId, blockId) => runWithPageChangeGuard(pageId, () => handleBlockSelect(pageId, articleId, blockId, "leftPanel"))}
+          onComponentSelect={(pageId, articleId, blockId, componentId) => runWithPageChangeGuard(pageId, () => handleSelectComponent(pageId, articleId, blockId, componentId, "leftPanel"))}
+          onAddModule={() => {
+            void handleAddModule();
+          }}
+          onAddSubModule={(modId) => {
+            void handleAddModule(modId);
+          }}
+          onDeleteModule={(modId) => {
+            void handleDeleteModule(modId);
+          }}
+          onAddPage={(moduleId) => {
+            void handleAddPage(moduleId);
+          }}
+          onDeletePage={deletePage}
+          onAddArticle={handleAddArticle}
+          onDeleteArticle={deleteArticle}
+          onAddSubPage={handleAddSubPage}
+          onAddBlock={handleAddBlock}
+          onDeleteBlock={deleteBlock}
+          onAddComponent={handleAddComponentPanel}
+          onDeleteComponent={deleteComponent}
+          onUseTemplate={handleOpenTemplateDrawer}
+        />
+
+        {/* Canvas */}
+        <main
+          ref={canvasRef}
+          className="flex-1 min-w-0 bg-[#F2F2F2] overflow-y-auto overflow-x-hidden relative"
+          onClick={handleCanvasClick}
+        >
+          {isLoadingStructure ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-sm text-[#6b7280]">Loading course structure...</div>
+            </div>
+          ) : !menuPageCreated ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="flex flex-col items-center gap-5 text-center px-6 select-none">
+                <div className="w-20 h-20 rounded-2xl bg-white border border-[#E5E5E5] flex items-center justify-center shadow-sm">
+                  <MaskIcon file="add-icon.svg" className="block w-[24px] h-[24px] shrink-0 bg-[#ababab]" />
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-2xl font-bold text-[#1A1A1A] font-[Lato]">Create Your Menu Page</h2>
+                  <p className="text-sm text-[#ABABAB] max-w-xs leading-relaxed font-[Lato]">
+                    Start by creating a menu page for your course. This will be the landing
+                    page where learners navigate through your content.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); handleMenuPageCreate(); }}
+                  className="flex items-center gap-2.5 px-6 py-3 bg-[#2E7FA1] hover:bg-[#266580] active:bg-[#1D4C60] text-white text-base font-bold rounded-lg transition-colors font-[Lato]"
+                >
+                  <MaskIcon file="add-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current" />
+                  Create Menu Page
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="h-full flex flex-col min-h-0 p-2">
+              <div className="relative flex-1 min-h-0 overflow-hidden rounded-[18px] border border-[#d8dee6] bg-white">
+                <div className="h-full w-full box-border p-2">
+                  {previewSrc ? (
+                    <iframe
+                      ref={previewFrameRef}
+                      src={previewSrc}
+                      title="Course preview"
+                      onLoad={handlePreviewFrameLoad}
+                      className="block h-full w-full border-0 bg-white"
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center px-6 text-center text-sm text-[#6b7280]">
+                      Preview is not available until this course and tenant are loaded.
+                    </div>
+                  )}
+                </div>
+
+                {isPreviewLoading && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-white/85 backdrop-blur-[2px]">
+                    <div className="rounded-xl border border-[#d8dee6] bg-white px-5 py-4 text-center shadow-sm">
+                      <p className="text-sm font-semibold text-[#1f2937]">Building course preview...</p>
+                      <p className="mt-1 text-xs text-[#6b7280]">The real preview will update when generation completes.</p>
+                    </div>
+                  </div>
+                )}
+
+                {titleValidationWarning && (
+                  <div className="absolute inset-x-4 top-4 rounded-xl border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b] shadow-sm flex items-start justify-between gap-3">
+                    <span>{titleValidationWarning}</span>
+                    <button
+                      type="button"
+                      onClick={() => setTitleValidationWarning(null)}
+                      className="shrink-0 text-[#991b1b] hover:opacity-70"
+                      aria-label="Dismiss"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </main>
+
+        {/* Structure Map Modal */}
+        {showStructureMap && (
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-lg max-w-4xl max-h-[90vh] overflow-auto w-full shadow-xl">
+              <div className="flex items-center justify-between p-6 border-b border-[#E5E5E5] sticky top-0 bg-white">
+                <h2 className="text-lg font-semibold text-[#1A1A1A]">Course Structure Map</h2>
+                <button
+                  type="button"
+                  onClick={() => setShowStructureMap(false)}
+                  className="text-[#ABABAB] hover:text-[#1A1A1A] text-xl font-semibold"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="p-6">
+                <CourseStructureMap
+                  course={courseData}
+                  onNodeClick={(pageId: string) => {
+                    if (pageId !== 'menu') {
+                      runWithPageChangeGuard(pageId, () => handlePageSelect(pageId));
+                      setShowStructureMap(false);
+                      return;
+                    }
+                    setShowStructureMap(false);
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Right properties panel — fixed until collapsed or preview mode */}
+        {menuPageCreated && (
+          <>
+            {isResizingRightPanel && (
+              <div
+                className="fixed inset-0 z-[100] cursor-col-resize touch-none"
+                onPointerMove={handleRightPanelResizeMove}
+                onPointerUp={finishRightPanelResize}
+                onPointerCancel={finishRightPanelResize}
+                aria-hidden="true"
+              />
+            )}
+            {rightPanelOpen && (
+              <div
+                className="md:hidden fixed inset-0 z-30 bg-black/40"
+                onClick={() => setRightPanelOpen(false)}
+                aria-hidden="true"
+              />
+            )}
+
+            {rightPanelOpen ? (
+              <aside
+                ref={rightPanelContainerRef}
+                className="fixed md:relative inset-y-0 right-0 z-40 md:z-auto h-full w-[min(300px,100vw)] md:w-[var(--properties-panel-width)] min-w-0 bg-white border-l border-[#d8dee6] overflow-hidden shrink-0 flex flex-col"
+                style={{ "--properties-panel-width": `${rightPanelWidth}px` } as CSSProperties}
+              >
+                <div
+                  role="separator"
+                  aria-label="Resize properties panel"
+                  aria-orientation="vertical"
+aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
+                  aria-valuemax={getRightPanelMaxWidth()}
+                  aria-valuenow={rightPanelWidth}
+                  tabIndex={0}
+                  title="Drag to resize properties panel"
+                  onPointerDown={handleRightPanelResizeStart}
+                  onDoubleClick={() => setRightPanelWidth(RIGHT_PANEL_MIN_WIDTH)}
+                  onKeyDown={(event) => {
+                    if (event.key === "ArrowLeft") {
+                      event.preventDefault();
+                      resizeRightPanelTo(rightPanelWidth + 20);
+                    } else if (event.key === "ArrowRight") {
+                      event.preventDefault();
+                      resizeRightPanelTo(rightPanelWidth - 20);
+                    } else if (event.key === "Home") {
+                      event.preventDefault();
+                      setRightPanelWidth(RIGHT_PANEL_MIN_WIDTH);
+                    }
+                  }}
+                  className={`group hidden md:flex absolute inset-y-0 left-0 z-30 w-2 cursor-col-resize touch-none items-center justify-center outline-none ${isResizingRightPanel ? "bg-[#2e7fa1]/10" : ""}`}
+                >
+                  <span className={`h-12 w-1 rounded-full transition-colors ${isResizingRightPanel ? "bg-[#2e7fa1]" : "bg-[#94a3b8] group-hover:bg-[#2e7fa1] group-focus-visible:bg-[#2e7fa1]"}`} />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setRightPanelOpen(false)}
+                  className="w-full h-[56px] shrink-0 border-b border-[#d8dee6] bg-white px-3.5 flex items-center gap-2 text-[#3b4753]"
+                  aria-label="Collapse properties"
+                  title="Collapse properties"
+                >
+                  <span className="w-8 h-8 rounded-[6px] flex items-center justify-center hover:bg-[#f2f5f8] transition-colors">
+                    <MaskIcon file="panel-toggle-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current -scale-x-100" />
+                  </span>
+                  <span className="text-xs tracking-[0.08em] font-semibold uppercase">Properties</span>
+                </button>
+                <div ref={rightPanelScrollRef} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+                {(() => {
+                const page = selectedPageId ? contentPages.find((p) => p.id === selectedPageId) : undefined;
+                const article = page && selectedArticleId ? page.articles.find((a) => a.id === selectedArticleId) : undefined;
+                const block = article && selectedBlockId ? article.blocks.find((b) => b.id === selectedBlockId) : undefined;
+                const component = block && selectedComponentId ? block.components.find((c) => c.id === selectedComponentId) : undefined;
+
+                const selectedDirtyKey = component?.id
+                  ? `component:${component.id}`
+                  : block?.id
+                    ? `contentGroup:${block.id}`
+                    : article?.id
+                      ? `section:${article.id}`
+                      : page?.id
+                        ? `topic:${page.id}`
+                        : null;
+                const hasUnsavedSelection = selectedDirtyKey ? !!dirtyNodeKeys[selectedDirtyKey] : false;
+
+                const activeLevel = rightPanelType === "component" || rightPanelType === "addComponent"
+                  ? "component"
+                  : rightPanelType === "block"
+                    ? "block"
+                    : rightPanelType === "article"
+                      ? "article"
+                      : "page";
+
+                const rowClass = (active: boolean) =>
+                  `w-full flex items-center gap-2 px-3.5 h-12 border-b border-[#e6ebf0] transition-colors ${
+                    active
+                      ? "bg-[#f2f8fc] text-[#1f2937]"
+                      : "bg-white text-[#9aa7b2] opacity-40 cursor-not-allowed"
+                  }`;
+
+                // Same tooltip treatment as InfoIcon. Rendered as a SIBLING of
+                // the row, not a child — the blocked row is opacity-40 and would
+                // fade the tooltip with it.
+                const rowTooltip = (active: boolean) =>
+                  active ? null : (
+                    <span
+                      role="tooltip"
+                      className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 z-[70] w-max max-w-[220px] rounded-[8px] bg-[#215369] px-3 py-1 text-[11px] font-medium text-[#ffffff] opacity-0 shadow-lg transition-opacity group-hover:opacity-100"
+                    >
+                      Use left/middle panel to change selection
+                    </span>
+                  );
+
+                const iconColorClass = (
+                  active: boolean,
+                  level: "topic" | "section" | "contentGroup" | "component"
+                ) => (active ? STRUCTURE_ICON_COLOR_CLASS[level] : "text-[#9aa7b2]");
+
+                return (
+                  <>
+                    <div className="relative group">
+                    <button type="button" className={rowClass(activeLevel === "page")}>
+                      <span className="flex items-center gap-2 text-[13px] font-semibold flex-1">
+                        <span className="w-6 h-6 rounded-[4px] flex items-center justify-center shrink-0">
+                          <StructureIcon
+                            level="topic"
+                            size={14}
+                            className={iconColorClass(activeLevel === "page", "topic")}
+                          />
+                        </span>
+                        Topic
+                      </span>
+                      <MaskIcon
+                        file="chevron-right.svg"
+                        className={`block w-[13px] h-[13px] shrink-0 bg-current transition-transform ${activeLevel === "page" ? "rotate-90" : ""}`}
+                      />
+                    </button>
+                    {rowTooltip(activeLevel === "page")}
+                    </div>
+                    {activeLevel === "page" && page && (() => {
+                      const themeSettings = getActiveThemeSettingsWithDefaults(page.themeSettings, "contentobject");
+                      const pageBackgroundImage = asRecord(themeSettings._backgroundImage);
+                      const pageBackgroundStyles = asRecord(themeSettings._backgroundStyles);
+                      const responsiveClasses = asRecord(themeSettings._responsiveClasses);
+                      const pageHeader = asRecord(themeSettings._pageHeader);
+                      const pageHeaderGraphic = asRecord(pageHeader._graphic);
+                      const pageHeaderTextAlignment = asRecord(pageHeader._textAlignment);
+                      const pageHeaderBackgroundImage = asRecord(pageHeader._backgroundImage);
+                      const pageHeaderBackgroundStyles = asRecord(pageHeader._backgroundStyles);
+                      const pageHeaderMinimumHeights = asRecord(pageHeader._minimumHeights);
+
+                      const menuSettings = getActiveMenuSettingsWithDefaults(page.menuSettings, "contentobject");
+
+                      return (
+                        <div className="px-4 py-4 border-b border-[#e6ebf0] space-y-2">
+                          <TopicAccordion title="General" open={!!openTopicAccordions.general} onToggle={(triggerEl) => toggleTopicAccordion("general", triggerEl)}>
+                            <div className="flex flex-col gap-1.5">
+                              <TopicFieldLabel>TOPIC ID</TopicFieldLabel>
+                              {(() => {
+                                const isCopied = copiedTopicId === page.id;
+                                return (
+                                  <div className="relative">
+                                    <button
+                                      type="button"
+                                      aria-label="Copy topic id"
+                                      title="Copy topic id"
+                                      onClick={() => handleCopyTopicId(page.id)}
+                                      className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors flex items-center justify-between gap-2 cursor-pointer ${isCopied ? "bg-[var(--life-positive-050)] border-[var(--life-positive-500)] text-[var(--life-positive-500)]" : "bg-white border-[var(--life-neutral-300)] text-[var(--life-base-black)] hover:bg-[#f8fafc] hover:border-[var(--life-primary-500)] hover:text-[var(--life-primary-500)]"}`}
+                                    >
+                                      <span className="truncate text-left">{page.id}</span>
+                                      {isCopied ? (
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                          <polyline points="20 6 9 17 4 12" />
+                                        </svg>
+                                      ) : (
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                        </svg>
+                                      )}
+                                    </button>
+                                    {isCopied ? (
+                                      <div className="absolute -top-8 right-0 px-2.5 py-1 rounded-[8px] border border-[var(--life-positive-500)] bg-[var(--life-positive-050)] text-[11px] font-semibold text-[var(--life-positive-500)] shadow-sm whitespace-nowrap">
+                                        Id copied to clipboard.
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                );
+                              })()}
+                              <p className="text-xs text-[#6b7280]">Unique identifier for this topic. Click to copy.</p>
+                            </div>
+                            <TopicTitleField
+                                  hint={getSchemaHint(getContentFieldSchema("contentobject", "title"))}
+                              value={canvasTitleLiveOverride ?? page.title}
+                              onChange={(value) => updatePageData(page.id, { title: value })}
+                              onDraftChange={(value) => writeLiveTitleDraftToCanvas("topic", { pageId: page.id }, value)}
+                            />
+                            <TopicCheckbox
+                              label="Display title in preview"
+                                  hint={getSchemaHint(getContentFieldSchema("contentobject", "displayTitle"))}
+                              checked={!!page.showDisplayTitleInPreview}
+                              onChange={(checked) => updatePageData(page.id, { showDisplayTitleInPreview: checked })}
+                            />
+                            <div className="flex flex-col gap-1.5">
+                              <TopicFieldLabel>Body</TopicFieldLabel>
+                              {/* Keyed per topic: RichTextEditor only reads `value` when it mounts. */}
+                              <RichTextEditor
+                                key={`topic-body-${page.id}`}
+                                value={page.body}
+                                syncExternalValue
+                                onChange={(html) => updatePageData(page.id, { body: html })}
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenSaveAsTemplate("topic", page.id)}
+                              className="mt-1 inline-flex items-center gap-2 px-3 py-1.5 text-[13px] font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-md hover:bg-[#f9fafb] transition-colors cursor-pointer self-start"
+                            >
+                              <MaskIcon file="template-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+                              Save as template
+                            </button>
+                          </TopicAccordion>
+
+                          <TopicAccordion title="Availability & Progression" open={!!openTopicAccordions.availability} onToggle={(triggerEl) => toggleTopicAccordion("availability", triggerEl)}>
+                            <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("contentobject", "_isOptional"), "Is this optional?")} hint={getSchemaHint(getContentFieldSchema("contentobject", "_isOptional"))} checked={!!page.isOptional} onChange={(checked) => updatePageData(page.id, { isOptional: checked })} />
+                            <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("contentobject", "_isAvailable"), "Is this available?")} hint={getSchemaHint(getContentFieldSchema("contentobject", "_isAvailable"))} checked={!!page.isAvailable} onChange={(checked) => updatePageData(page.id, { isAvailable: checked })} />
+                            <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("contentobject", "_isHidden"), "Is this hidden?")} hint={getSchemaHint(getContentFieldSchema("contentobject", "_isHidden"))} checked={!!page.isHidden} onChange={(checked) => updatePageData(page.id, { isHidden: checked })} />
+                            <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("contentobject", "_isVisible"), "Is this visible?")} hint={getSchemaHint(getContentFieldSchema("contentobject", "_isVisible"))} checked={!!page.isVisible} onChange={(checked) => updatePageData(page.id, { isVisible: checked })} />
+                            <TopicTextInput label={getSchemaLabel(getContentFieldSchema("contentobject", "duration"), "Duration")} hint={getSchemaHint(getContentFieldSchema("contentobject", "duration"))} value={page.duration} onChange={(value) => updatePageData(page.id, { duration: value })} />
+                            <TopicTextInput label={getSchemaLabel(getContentFieldSchema("contentobject", "linkText"), "Button link text")} hint={getSchemaHint(getContentFieldSchema("contentobject", "linkText"))} value={page.linkText} onChange={(value) => updatePageData(page.id, { linkText: value })} />
+                            <TopicSelect label={getSchemaLabel(getContentFieldSchema("contentobject", "_lockType"), "Menu lock type")} hint={getSchemaHint(getContentFieldSchema("contentobject", "_lockType"))} value={page.lockType} onChange={(value) => updatePageData(page.id, { lockType: value })} options={LOCK_TYPE_OPTIONS} emptyOptionLabel="" />
+                            <TopicNumberStepper label={getSchemaLabel(getContentFieldSchemaWithAliases("contentobject", ["_requireCompletionOf"], ["requireCompletionOf"], ["requirecompletionof"]), "Require completion of")} hint={getSchemaHint(getContentFieldSchemaWithAliases("contentobject", ["_requireCompletionOf"], ["requireCompletionOf"], ["requirecompletionof"]))} min={-1} value={page.requireCompletionOf} onChange={(value) => updatePageData(page.id, { requireCompletionOf: value })} />
+                            <TopicTextInput
+                              label="Locked by"
+                              value={page.lockedBy.join(", ")}
+                              onChange={(value) => updatePageData(page.id, {
+                                lockedBy: value.split(",").map((item) => item.trim()).filter(Boolean),
+                              })}
+                            />
+                          </TopicAccordion>
+
+                          <TopicAccordion title="Accessibility" open={!!openTopicAccordions.accessibility} onToggle={(triggerEl) => toggleTopicAccordion("accessibility", triggerEl)}>
+                            <TopicCheckbox
+                              label={getSchemaLabel(getContentFieldSchema("contentobject", "_isA11yCompletionDescriptionEnabled"), "Enable accessibility completion description")}
+                              hint={getSchemaHint(getContentFieldSchema("contentobject", "_isA11yCompletionDescriptionEnabled"))}
+                              checked={page.isA11yCompletionDescriptionEnabled}
+                              onChange={(checked) => updatePageData(page.id, { isA11yCompletionDescriptionEnabled: checked })}
+                            />
+                            <TopicNumberStepper label={getSchemaLabel(getContentFieldSchema("contentobject", "_ariaLevel"), "ARIA level")} hint={getSchemaHint(getContentFieldSchema("contentobject", "_ariaLevel"))} min={0} value={page.ariaLevel} onChange={(value) => updatePageData(page.id, { ariaLevel: value })} />
+                          </TopicAccordion>
+
+                          <TopicAccordion title="Extensions" open={!!openTopicAccordions.extensions} onToggle={(triggerEl) => toggleTopicAccordion("extensions", triggerEl)}>
+                            <ExtensionsAccordionBody
+                              levelLabel="topic"
+                              extensions={asRecord(page.extensions)}
+                              schemasForLevel={extensionSchemasByLevel?.contentobject ?? {}}
+                              extensionTypeOptions={extensionTypeOptions}
+                              onExtensionAdded={handleExtensionAdded}
+                              onRequestRemoveExtension={requestRemoveExtension}
+                              onChange={(next) => updatePageData(page.id, { extensions: next })}
+                              assetContext={createExtensionAssetContext("topic", page.id)}
+                              customFieldRenderer={({ extensionName, fieldKey, fieldSchema, value, onChange }) =>
+                                extensionName === "adapt-navigation-footer" && fieldKey === "_buttons" ? (
+                                  <NavigationFooterButtonsField
+                                    fieldSchema={fieldSchema}
+                                    value={value}
+                                    onChange={onChange}
+                                    courseButtons={navFooterCourseButtons}
+                                  />
+                                ) : extensionName === "adapt-scroll-navigator" && fieldKey === "_isAnimate" ? (
+                                  <div className="flex flex-col gap-1.5">
+                                    <TopicCheckbox
+                                      label="Is animated"
+                                      checked={Boolean(value)}
+                                      onChange={(checked) => onChange(fieldKey, checked)}
+                                    />
+                                    <p className="pl-6 text-[11px] leading-relaxed text-[#6b7280]">
+                                      Enable pulsing animation on both navigator buttons (runs for a limited time).
+                                    </p>
+                                  </div>
+                                ) : null
+                              }
+                              getInheritanceTag={(key) =>
+                                computeExtensionInheritanceTag(
+                                  extensionSchemasByLevel?.contentobject?.[key],
+                                  asRecord(asRecord(page.extensions)[key]),
+                                  countExtensionApplicableLevels(key)
+                                )
+                              }
+                            />
+                          </TopicAccordion>
+
+                          <TopicAccordion title="Theme settings" open={!!openTopicAccordions.theme} onToggle={(triggerEl) => toggleTopicAccordion("theme", triggerEl)}>
+                            <TopicNestedAccordion title="Topic background image">
+                              <div className="flex flex-col gap-1.5">
+                                <TopicAssetField
+                                  resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl}
+                                  label="_xlarge"
+                                  compact
+                                  value={asString(pageBackgroundImage._xlarge)}
+                                  onPickAsset={() => setTopicAssetPickerTarget({ scope: "themePageBackground", bp: "_xlarge" })}
+                                  onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "themePageBackground", bp: "_xlarge" }, initialValue: asString(pageBackgroundImage._xlarge), title: "Topic background image (_xlarge)" })}
+                                  onClear={() => clearTopicAssetSelection(page.id, { scope: "themePageBackground", bp: "_xlarge" })}
+                                />
+                                <TopicAssetField
+                                  resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl}
+                                  label="_large"
+                                  compact
+                                  value={asString(pageBackgroundImage._large)}
+                                  onPickAsset={() => setTopicAssetPickerTarget({ scope: "themePageBackground", bp: "_large" })}
+                                  onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "themePageBackground", bp: "_large" }, initialValue: asString(pageBackgroundImage._large), title: "Topic background image (_large)" })}
+                                  onClear={() => clearTopicAssetSelection(page.id, { scope: "themePageBackground", bp: "_large" })}
+                                />
+                                <TopicAssetField
+                                  resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl}
+                                  label="_medium"
+                                  compact
+                                  value={asString(pageBackgroundImage._medium)}
+                                  onPickAsset={() => setTopicAssetPickerTarget({ scope: "themePageBackground", bp: "_medium" })}
+                                  onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "themePageBackground", bp: "_medium" }, initialValue: asString(pageBackgroundImage._medium), title: "Topic background image (_medium)" })}
+                                  onClear={() => clearTopicAssetSelection(page.id, { scope: "themePageBackground", bp: "_medium" })}
+                                />
+                                <TopicAssetField
+                                  resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl}
+                                  label="_small"
+                                  compact
+                                  value={asString(pageBackgroundImage._small)}
+                                  onPickAsset={() => setTopicAssetPickerTarget({ scope: "themePageBackground", bp: "_small" })}
+                                  onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "themePageBackground", bp: "_small" }, initialValue: asString(pageBackgroundImage._small), title: "Topic background image (_small)" })}
+                                  onClear={() => clearTopicAssetSelection(page.id, { scope: "themePageBackground", bp: "_small" })}
+                                />
+                              </div>
+                            </TopicNestedAccordion>
+                            <TopicNestedAccordion title="Topic background image styles">
+                              <TopicSelect label={BG_REPEAT_LABEL} value={asString(pageBackgroundStyles._backgroundRepeat)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundRepeat: value } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
+                              <TopicSelect label={BG_SIZE_LABEL} value={asString(pageBackgroundStyles._backgroundSize)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundSize: value } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
+                              <TopicSelect label={BG_POSITION_LABEL} value={asString(pageBackgroundStyles._backgroundPosition)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundPosition: value } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
+                            </TopicNestedAccordion>
+
+                            {/* The Vanilla theme has no header-graphic support at all —
+                                only Life, Life v2 and Custom Theme render a page header
+                                image. Hiding it for Vanilla avoids exposing a setting
+                                that would silently do nothing in the real preview. */}
+                            {!courseTheme.toLowerCase().includes("vanilla") && (
+                              <TopicNestedAccordion title="Header image">
+                                <TopicAssetField
+                                  resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl}
+                                  label="Header image"
+                                  compact
+                                  showLabel={false}
+                                  value={asString(pageHeaderGraphic._src)}
+                                  onPickAsset={() => setTopicAssetPickerTarget({ scope: "themeHeaderGraphic" })}
+                                  onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "themeHeaderGraphic" }, initialValue: asString(pageHeaderGraphic._src), title: "Header image" })}
+                                  onClear={() => clearTopicAssetSelection(page.id, { scope: "themeHeaderGraphic" })}
+                                />
+                                <TopicTextInput label="Alternative text" value={asString(pageHeaderGraphic.alt)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _graphic: { ...asRecord(asRecord(current._pageHeader)._graphic), alt: value } } }))} />
+                              </TopicNestedAccordion>
+                            )}
+
+                            <TopicNestedAccordion title="Text alignment">
+                              <TopicSelect label={getSchemaLabel(getThemeFieldSchema("contentobject", "_pageHeader", "_textAlignment", "_title"), "Title alignment")} hint={getSchemaHint(getThemeFieldSchema("contentobject", "_pageHeader", "_textAlignment", "_title"))} value={asString(pageHeaderTextAlignment._title)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _textAlignment: { ...asRecord(asRecord(current._pageHeader)._textAlignment), _title: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                              <TopicSelect label={getSchemaLabel(getThemeFieldSchema("contentobject", "_pageHeader", "_textAlignment", "_body"), "Body alignment")} hint={getSchemaHint(getThemeFieldSchema("contentobject", "_pageHeader", "_textAlignment", "_body"))} value={asString(pageHeaderTextAlignment._body)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _textAlignment: { ...asRecord(asRecord(current._pageHeader)._textAlignment), _body: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                              <TopicSelect label={getSchemaLabel(getThemeFieldSchema("contentobject", "_pageHeader", "_textAlignment", "_instruction"), "Instruction alignment")} hint={getSchemaHint(getThemeFieldSchema("contentobject", "_pageHeader", "_textAlignment", "_instruction"))} value={asString(pageHeaderTextAlignment._instruction)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _textAlignment: { ...asRecord(asRecord(current._pageHeader)._textAlignment), _instruction: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                            </TopicNestedAccordion>
+
+                            <TopicNestedAccordion title="Topic header background image">
+                              <div className="flex flex-col gap-1.5">
+                                <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(pageHeaderBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "themeHeaderBackground", bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "themeHeaderBackground", bp: "_xlarge" }, initialValue: asString(pageHeaderBackgroundImage._xlarge), title: "Header background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "themeHeaderBackground", bp: "_xlarge" })} />
+                                <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(pageHeaderBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "themeHeaderBackground", bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "themeHeaderBackground", bp: "_large" }, initialValue: asString(pageHeaderBackgroundImage._large), title: "Header background image (_large)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "themeHeaderBackground", bp: "_large" })} />
+                                <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(pageHeaderBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "themeHeaderBackground", bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "themeHeaderBackground", bp: "_medium" }, initialValue: asString(pageHeaderBackgroundImage._medium), title: "Header background image (_medium)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "themeHeaderBackground", bp: "_medium" })} />
+                                <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(pageHeaderBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "themeHeaderBackground", bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "themeHeaderBackground", bp: "_small" }, initialValue: asString(pageHeaderBackgroundImage._small), title: "Header background image (_small)" })} onClear={() => clearTopicAssetSelection(page.id, { scope: "themeHeaderBackground", bp: "_small" })} />
+                              </div>
+                            </TopicNestedAccordion>
+                            <TopicNestedAccordion title="Topic header background image styles">
+                              <TopicSelect label={BG_REPEAT_LABEL} value={asString(pageHeaderBackgroundStyles._backgroundRepeat)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _backgroundStyles: { ...asRecord(asRecord(current._pageHeader)._backgroundStyles), _backgroundRepeat: value } } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
+                              <TopicSelect label={BG_SIZE_LABEL} value={asString(pageHeaderBackgroundStyles._backgroundSize)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _backgroundStyles: { ...asRecord(asRecord(current._pageHeader)._backgroundStyles), _backgroundSize: value } } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
+                              <TopicSelect label={BG_POSITION_LABEL} value={asString(pageHeaderBackgroundStyles._backgroundPosition)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _backgroundStyles: { ...asRecord(asRecord(current._pageHeader)._backgroundStyles), _backgroundPosition: value } } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
+                            </TopicNestedAccordion>
+                            <TopicNestedAccordion title="Topic header minimum height">
+                              <TopicTextInput label="_xlarge" type="number" value={String(asNumberOrEmpty(pageHeaderMinimumHeights._xlarge))} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _minimumHeights: { ...asRecord(asRecord(current._pageHeader)._minimumHeights), _xlarge: parseNumberishInput(value) } } }))} />
+                              <TopicTextInput label="_large" type="number" value={String(asNumberOrEmpty(pageHeaderMinimumHeights._large))} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _minimumHeights: { ...asRecord(asRecord(current._pageHeader)._minimumHeights), _large: parseNumberishInput(value) } } }))} />
+                              <TopicTextInput label="_medium" type="number" value={String(asNumberOrEmpty(pageHeaderMinimumHeights._medium))} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _minimumHeights: { ...asRecord(asRecord(current._pageHeader)._minimumHeights), _medium: parseNumberishInput(value) } } }))} />
+                              <TopicTextInput label="_small" type="number" value={String(asNumberOrEmpty(pageHeaderMinimumHeights._small))} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _pageHeader: { ...asRecord(current._pageHeader), _minimumHeights: { ...asRecord(asRecord(current._pageHeader)._minimumHeights), _small: parseNumberishInput(value) } } }))} />
+                            </TopicNestedAccordion>
+                            <TopicNestedAccordion title="On-screen classes">
+                              <TopicCheckbox
+                                label={getSchemaLabel(getContentFieldSchema("contentobject", "_onScreen", "_isEnabled"), "Enabled?")}
+                                hint={getSchemaHint(getContentFieldSchema("contentobject", "_onScreen", "_isEnabled"))}
+                                checked={asBoolean(page.onScreen?._isEnabled)}
+                                onChange={(checked) => updatePageData(page.id, {
+                                  onScreen: {
+                                    ...(page.onScreen ?? {}),
+                                    _isEnabled: checked,
+                                  },
+                                })}
+                              />
+                              <TopicSelect
+                                label={getSchemaLabel(getContentFieldSchema("contentobject", "_onScreen", "_classes"), "Classes")}
+                                hint={getSchemaHint(getContentFieldSchema("contentobject", "_onScreen", "_classes"))}
+                                value={asString(page.onScreen?._classes)}
+                                onChange={(value) => updatePageData(page.id, {
+                                  onScreen: {
+                                    ...(page.onScreen ?? {}),
+                                    _classes: value,
+                                  },
+                                })}
+                                options={ONSCREEN_CLASS_OPTIONS}
+                                emptyOptionLabel=""
+                              />
+                              <TopicTextInput
+                                label={getSchemaLabel(getContentFieldSchema("contentobject", "_onScreen", "_percentInviewVertical"), "Percent in view")}
+                                hint={getSchemaHint(getContentFieldSchema("contentobject", "_onScreen", "_percentInviewVertical"))}
+                                type="number"
+                                value={String(asNumberOrEmpty(page.onScreen?._percentInviewVertical))}
+                                onChange={(value) => updatePageData(page.id, {
+                                  onScreen: {
+                                    ...(page.onScreen ?? {}),
+                                    _percentInviewVertical: parseNumberishInput(value),
+                                  },
+                                })}
+                              />
+                            </TopicNestedAccordion>
+                          </TopicAccordion>
+
+                          <TopicAccordion title="Menu Appearance" open={!!openTopicAccordions.menu} onToggle={(triggerEl) => toggleTopicAccordion("menu", triggerEl)}>
+                            <TopicCheckbox
+                              label={getSchemaLabel(getMenuFieldSchema("contentobject", "_renderAsGroup"), "Enable as menu group?")}
+                              hint={getSchemaHint(getMenuFieldSchema("contentobject", "_renderAsGroup"))}
+                              checked={asBoolean(menuSettings._renderAsGroup)}
+                              onChange={(checked) => updatePageMenuSettings(page.id, (current) => ({ ...current, _renderAsGroup: checked }))}
+                            />
+                          </TopicAccordion>
+
+                          <TopicAccordion title="Media" open={!!openTopicAccordions.media} onToggle={(triggerEl) => toggleTopicAccordion("media", triggerEl)}>
+                            <TopicAssetField
+                              resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl}
+                              label="Graphic"
+                              compact
+                              value={page.graphic?.src || ""}
+                              onPickAsset={() => setTopicAssetPickerTarget({ scope: "pageGraphic" })}
+                              onPickExternal={() => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "pageGraphic" }, initialValue: page.graphic?.src || "", title: "Graphic" })}
+                              onClear={() => clearTopicAssetSelection(page.id, { scope: "pageGraphic" })}
+                            />
+                            <TopicTextInput label="Alternative text" value={page.graphic?.alt || ""} onChange={(value) => updatePageGraphic(page.id, (current) => ({ ...current, alt: value }))} />
+                          </TopicAccordion>
+
+                          <TopicAccordion title="Advanced Settings" open={!!openTopicAccordions.advanced} onToggle={(triggerEl) => toggleTopicAccordion("advanced", triggerEl)}>
+                            <TopicTextInput label={getSchemaLabel(getContentFieldSchema("contentobject", "_classes"), "Topic classes")} hint={getSchemaHint(getContentFieldSchema("contentobject", "_classes"))} value={page.classes} onChange={(value) => updatePageData(page.id, { classes: value })} />
+                            <TopicTextInput label={getSchemaLabel(getContentFieldSchema("contentobject", "_htmlClasses"), "HTML classes")} hint={getSchemaHint(getContentFieldSchema("contentobject", "_htmlClasses"))} value={page.htmlClasses} onChange={(value) => updatePageData(page.id, { htmlClasses: value })} />
+                            <TopicNestedAccordion title="Responsive classes">
+                              <TopicTextInput label="_xlarge" value={asString(responsiveClasses._xlarge)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _xlarge: value } }))} />
+                              <TopicTextInput label="_large" value={asString(responsiveClasses._large)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _large: value } }))} />
+                              <TopicTextInput label="_medium" value={asString(responsiveClasses._medium)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _medium: value } }))} />
+                              <TopicTextInput label="_small" value={asString(responsiveClasses._small)} onChange={(value) => updatePageThemeSettings(page.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _small: value } }))} />
+                            </TopicNestedAccordion>
+                          </TopicAccordion>
+                        </div>
+                      );
+                    })()}
+
+                    <div className="relative group">
+                    <button type="button" className={rowClass(activeLevel === "article")}>
+                      <span className="flex items-center gap-2 text-[13px] font-semibold flex-1">
+                        <span className="w-6 h-6 rounded-[4px] flex items-center justify-center shrink-0">
+                          <StructureIcon
+                            level="section"
+                            size={14}
+                            className={iconColorClass(activeLevel === "article", "section")}
+                          />
+                        </span>
+                        Section
+                      </span>
+                      <MaskIcon
+                        file="chevron-right.svg"
+                        className={`block w-[13px] h-[13px] shrink-0 bg-current transition-transform ${activeLevel === "article" ? "rotate-90" : ""}`}
+                      />
+                    </button>
+                    {rowTooltip(activeLevel === "article")}
+                    </div>
+                    {activeLevel === "article" && article && (
+                      <div className="px-4 py-4 border-b border-[#e6ebf0] space-y-2">
+                        {(() => {
+                          const articleThemeSettings = getActiveThemeSettingsWithDefaults(article.themeSettings, "article");
+                          const articleTextAlignment = asRecord(articleThemeSettings._textAlignment);
+                          const articleBackgroundImage = asRecord(articleThemeSettings._backgroundImage);
+                          const articleBackgroundStyles = asRecord(articleThemeSettings._backgroundStyles);
+                          const articleHeader = asRecord(articleThemeSettings._articleHeader);
+                          const articleHeaderTextAlignment = asRecord(articleHeader._textAlignment);
+                          const articleHeaderBackgroundImage = asRecord(articleHeader._backgroundImage);
+                          const articleHeaderBackgroundStyles = asRecord(articleHeader._backgroundStyles);
+                          const articleHeaderMinimumHeights = asRecord(articleHeader._minimumHeights);
+                          const articleResponsiveClasses = asRecord(articleThemeSettings._responsiveClasses);
+                          const isCopied = copiedSectionId === article.id;
+
+                          return (
+                            <>
+                              <TopicAccordion title="General" open={!!openSectionAccordions.general} onToggle={(triggerEl) => toggleSectionAccordion("general", triggerEl)}>
+                                <div className="flex flex-col gap-1.5">
+                                  <TopicFieldLabel>SECTION ID</TopicFieldLabel>
+                                  <div className="relative">
+                                    <button
+                                      type="button"
+                                      aria-label="Copy section id"
+                                      title="Copy section id"
+                                      onClick={() => handleCopySectionId(article.id)}
+                                      className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors flex items-center justify-between gap-2 cursor-pointer ${isCopied ? "bg-[var(--life-positive-050)] border-[var(--life-positive-500)] text-[var(--life-positive-500)]" : "bg-white border-[var(--life-neutral-300)] text-[var(--life-base-black)] hover:bg-[#f8fafc] hover:border-[var(--life-primary-500)] hover:text-[var(--life-primary-500)]"}`}
+                                    >
+                                      <span className="truncate text-left">{article.id}</span>
+                                      {isCopied ? (
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
+                                      ) : (
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+                                      )}
+                                    </button>
+                                    {isCopied && (
+                                      <div className="absolute -top-8 right-0 px-2.5 py-1 rounded-[8px] border border-[var(--life-positive-500)] bg-[var(--life-positive-050)] text-[11px] font-semibold text-[var(--life-positive-500)] shadow-sm whitespace-nowrap">
+                                        Id copied to clipboard.
+                                      </div>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-[#6b7280]">Unique identifier for this section. Click to copy.</p>
+                                </div>
+                                <TopicTitleField
+                                  hint={getSchemaHint(getContentFieldSchema("article", "title"))}
+                                  value={canvasTitleLiveOverride ?? article.title}
+                                  onChange={(value) => updateArticle(page!.id, article.id, { title: value })}
+                                  onDraftChange={(value) => writeLiveTitleDraftToCanvas("section", { pageId: page!.id, articleId: article.id }, value)}
+                                />
+                                <TopicCheckbox
+                                  label="Display title in preview"
+                                  hint={getSchemaHint(getContentFieldSchema("article", "displayTitle"))}
+                                  checked={!!article.showDisplayTitleInPreview}
+                                  onChange={(checked) => updateArticle(page!.id, article.id, { showDisplayTitleInPreview: checked })}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenSaveAsTemplate("section", article.id)}
+                                  className="mt-1 inline-flex items-center gap-2 px-3 py-1.5 text-[13px] font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-md hover:bg-[#f9fafb] transition-colors cursor-pointer self-start"
+                                >
+                                  <MaskIcon file="template-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+                                  Save as template
+                                </button>
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Availability & Progression" open={!!openSectionAccordions.availability} onToggle={(triggerEl) => toggleSectionAccordion("availability", triggerEl)}>
+                                <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("article", "_isOptional"), "Is this optional?")} hint={getSchemaHint(getContentFieldSchema("article", "_isOptional"))} checked={!!article.isOptional} onChange={(checked) => updateArticle(page!.id, article.id, { isOptional: checked })} />
+                                <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("article", "_isAvailable"), "Is this available?")} hint={getSchemaHint(getContentFieldSchema("article", "_isAvailable"))} checked={!!article.isAvailable} onChange={(checked) => updateArticle(page!.id, article.id, { isAvailable: checked })} />
+                                <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("article", "_isHidden"), "Is this hidden?")} hint={getSchemaHint(getContentFieldSchema("article", "_isHidden"))} checked={!!article.isHidden} onChange={(checked) => updateArticle(page!.id, article.id, { isHidden: checked })} />
+                                <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("article", "_isVisible"), "Is this visible?")} hint={getSchemaHint(getContentFieldSchema("article", "_isVisible"))} checked={!!article.isVisible} onChange={(checked) => updateArticle(page!.id, article.id, { isVisible: checked })} />
+                                <TopicNumberStepper label={getSchemaLabel(getContentFieldSchemaWithAliases("article", ["_requireCompletionOf"], ["requireCompletionOf"], ["requirecompletionof"]), "Require completion of")} hint={getSchemaHint(getContentFieldSchemaWithAliases("article", ["_requireCompletionOf"], ["requireCompletionOf"], ["requirecompletionof"]))} min={-1} value={article.requireCompletionOf} onChange={(value) => updateArticle(page!.id, article.id, { requireCompletionOf: value })} />
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Accessibility" open={!!openSectionAccordions.accessibility} onToggle={(triggerEl) => toggleSectionAccordion("accessibility", triggerEl)}>
+                                <TopicCheckbox
+                                  label={getSchemaLabel(getContentFieldSchema("article", "_isA11yCompletionDescriptionEnabled"), "Enable accessibility completion description")}
+                                  hint={getSchemaHint(getContentFieldSchema("article", "_isA11yCompletionDescriptionEnabled"))}
+                                  checked={article.isA11yCompletionDescriptionEnabled}
+                                  onChange={(checked) => updateArticle(page!.id, article.id, { isA11yCompletionDescriptionEnabled: checked })}
+                                />
+                                <TopicNumberStepper label={getSchemaLabel(getContentFieldSchema("article", "_ariaLevel"), "ARIA level")} hint={getSchemaHint(getContentFieldSchema("article", "_ariaLevel"))} min={0} value={article.ariaLevel} onChange={(value) => updateArticle(page!.id, article.id, { ariaLevel: value })} />
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Extensions" open={!!openSectionAccordions.extensions} onToggle={(triggerEl) => toggleSectionAccordion("extensions", triggerEl)}>
+                                <ExtensionsAccordionBody
+                                  levelLabel="section"
+                                  extensions={asRecord(article.extensions)}
+                                  schemasForLevel={extensionSchemasByLevel?.article ?? {}}
+                                  extensionTypeOptions={extensionTypeOptions}
+                                  onExtensionAdded={handleExtensionAdded}
+                                  onRequestRemoveExtension={requestRemoveExtension}
+                                  onChange={(next) => updateArticle(page!.id, article.id, { extensions: next })}
+                                  assetContext={createExtensionAssetContext("section", page!.id, { articleId: article.id })}
+                                  getInheritanceTag={(key) =>
+                                    computeExtensionInheritanceTag(
+                                      extensionSchemasByLevel?.article?.[key],
+                                      asRecord(asRecord(article.extensions)[key]),
+                                      countExtensionApplicableLevels(key)
+                                    )
+                                  }
+                                />
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Theme settings" open={!!openSectionAccordions.theme} onToggle={(triggerEl) => toggleSectionAccordion("theme", triggerEl)}>
+                                <TopicNestedAccordion title="Text alignment">
+                                  <TopicSelect label={getSchemaLabel(getThemeFieldSchema("article", "_textAlignment", "_title"), "Title alignment")} hint={getSchemaHint(getThemeFieldSchema("article", "_textAlignment", "_title"))} value={asString(articleTextAlignment._title)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _title: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                  <TopicSelect label={getSchemaLabel(getThemeFieldSchema("article", "_textAlignment", "_body"), "Body alignment")} hint={getSchemaHint(getThemeFieldSchema("article", "_textAlignment", "_body"))} value={asString(articleTextAlignment._body)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _body: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                  <TopicSelect label={getSchemaLabel(getThemeFieldSchema("article", "_textAlignment", "_instruction"), "Instruction alignment")} hint={getSchemaHint(getThemeFieldSchema("article", "_textAlignment", "_instruction"))} value={asString(articleTextAlignment._instruction)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _instruction: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                </TopicNestedAccordion>
+                                <TopicNestedAccordion title="Section background image">
+                                  <div className="flex flex-col gap-1.5">
+                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(articleBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionBackground", articleId: article.id, bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionBackground", articleId: article.id, bp: "_xlarge" }, initialValue: asString(articleBackgroundImage._xlarge), title: "Section background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionBackground", articleId: article.id, bp: "_xlarge" })} />
+                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(articleBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionBackground", articleId: article.id, bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionBackground", articleId: article.id, bp: "_large" }, initialValue: asString(articleBackgroundImage._large), title: "Section background image (_large)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionBackground", articleId: article.id, bp: "_large" })} />
+                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(articleBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionBackground", articleId: article.id, bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionBackground", articleId: article.id, bp: "_medium" }, initialValue: asString(articleBackgroundImage._medium), title: "Section background image (_medium)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionBackground", articleId: article.id, bp: "_medium" })} />
+                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(articleBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionBackground", articleId: article.id, bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionBackground", articleId: article.id, bp: "_small" }, initialValue: asString(articleBackgroundImage._small), title: "Section background image (_small)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionBackground", articleId: article.id, bp: "_small" })} />
+                                  </div>
+                                </TopicNestedAccordion>
+                                <TopicNestedAccordion title="Section background image styles">
+                                  <TopicSelect label={BG_REPEAT_LABEL} value={asString(articleBackgroundStyles._backgroundRepeat)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundRepeat: value } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
+                                  <TopicSelect label={BG_SIZE_LABEL} value={asString(articleBackgroundStyles._backgroundSize)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundSize: value } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
+                                  <TopicSelect label={BG_POSITION_LABEL} value={asString(articleBackgroundStyles._backgroundPosition)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundPosition: value } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
+                                </TopicNestedAccordion>
+                                {/* Vanilla has no article-header support at all — only Life,
+                                    Life v2 and Custom Theme render one. */}
+                                {!courseTheme.toLowerCase().includes("vanilla") && (
+                                  <TopicNestedAccordion title="Section header">
+                                    <TopicNestedAccordion title="Text alignment">
+                                      <TopicSelect label="Title alignment" value={asString(articleHeaderTextAlignment._title)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _textAlignment: { ...asRecord(asRecord(current._articleHeader)._textAlignment), _title: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                                      <TopicSelect label="Body alignment" value={asString(articleHeaderTextAlignment._body)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _textAlignment: { ...asRecord(asRecord(current._articleHeader)._textAlignment), _body: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                                      <TopicSelect label="Instruction alignment" value={asString(articleHeaderTextAlignment._instruction)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _textAlignment: { ...asRecord(asRecord(current._articleHeader)._textAlignment), _instruction: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                                    </TopicNestedAccordion>
+                                    <TopicNestedAccordion title="Section header background image">
+                                      <div className="flex flex-col gap-1.5">
+                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(articleHeaderBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_xlarge" }, initialValue: asString(articleHeaderBackgroundImage._xlarge), title: "Section header background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_xlarge" })} />
+                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(articleHeaderBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_large" }, initialValue: asString(articleHeaderBackgroundImage._large), title: "Section header background image (_large)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_large" })} />
+                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(articleHeaderBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_medium" }, initialValue: asString(articleHeaderBackgroundImage._medium), title: "Section header background image (_medium)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_medium" })} />
+                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(articleHeaderBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_small" }, initialValue: asString(articleHeaderBackgroundImage._small), title: "Section header background image (_small)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "sectionArticleHeaderBackground", articleId: article.id, bp: "_small" })} />
+                                      </div>
+                                    </TopicNestedAccordion>
+                                    <TopicNestedAccordion title="Section header background image styles">
+                                      <TopicSelect label={BG_REPEAT_LABEL} value={asString(articleHeaderBackgroundStyles._backgroundRepeat)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _backgroundStyles: { ...asRecord(asRecord(current._articleHeader)._backgroundStyles), _backgroundRepeat: value } } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
+                                      <TopicSelect label={BG_SIZE_LABEL} value={asString(articleHeaderBackgroundStyles._backgroundSize)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _backgroundStyles: { ...asRecord(asRecord(current._articleHeader)._backgroundStyles), _backgroundSize: value } } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
+                                      <TopicSelect label={BG_POSITION_LABEL} value={asString(articleHeaderBackgroundStyles._backgroundPosition)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _backgroundStyles: { ...asRecord(asRecord(current._articleHeader)._backgroundStyles), _backgroundPosition: value } } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
+                                    </TopicNestedAccordion>
+                                    <TopicNestedAccordion title="Section header minimum height">
+                                      <TopicTextInput label="_xlarge" type="number" value={String(asNumberOrEmpty(articleHeaderMinimumHeights._xlarge))} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _minimumHeights: { ...asRecord(asRecord(current._articleHeader)._minimumHeights), _xlarge: parseNumberishInput(value) } } }))} />
+                                      <TopicTextInput label="_large" type="number" value={String(asNumberOrEmpty(articleHeaderMinimumHeights._large))} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _minimumHeights: { ...asRecord(asRecord(current._articleHeader)._minimumHeights), _large: parseNumberishInput(value) } } }))} />
+                                      <TopicTextInput label="_medium" type="number" value={String(asNumberOrEmpty(articleHeaderMinimumHeights._medium))} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _minimumHeights: { ...asRecord(asRecord(current._articleHeader)._minimumHeights), _medium: parseNumberishInput(value) } } }))} />
+                                      <TopicTextInput label="_small" type="number" value={String(asNumberOrEmpty(articleHeaderMinimumHeights._small))} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _articleHeader: { ...asRecord(current._articleHeader), _minimumHeights: { ...asRecord(asRecord(current._articleHeader)._minimumHeights), _small: parseNumberishInput(value) } } }))} />
+                                    </TopicNestedAccordion>
+                                  </TopicNestedAccordion>
+                                )}
+                                <TopicNestedAccordion title="On-screen classes">
+                                  <TopicCheckbox
+                                    label={getSchemaLabel(getContentFieldSchema("article", "_onScreen", "_isEnabled"), "Enabled?")}
+                                    hint={getSchemaHint(getContentFieldSchema("article", "_onScreen", "_isEnabled"))}
+                                    checked={asBoolean(article.onScreen?._isEnabled)}
+                                    onChange={(checked) => updateArticle(page!.id, article.id, { onScreen: { ...(article.onScreen ?? {}), _isEnabled: checked } })}
+                                  />
+                                  <TopicSelect
+                                    label={getSchemaLabel(getContentFieldSchema("article", "_onScreen", "_classes"), "Classes")}
+                                    hint={getSchemaHint(getContentFieldSchema("article", "_onScreen", "_classes"))}
+                                    value={asString(article.onScreen?._classes)}
+                                    onChange={(value) => updateArticle(page!.id, article.id, { onScreen: { ...(article.onScreen ?? {}), _classes: value } })}
+                                    options={ONSCREEN_CLASS_OPTIONS}
+                                    emptyOptionLabel=""
+                                  />
+                                  <TopicTextInput
+                                    label={getSchemaLabel(getContentFieldSchema("article", "_onScreen", "_percentInviewVertical"), "Percent in view")}
+                                    hint={getSchemaHint(getContentFieldSchema("article", "_onScreen", "_percentInviewVertical"))}
+                                    type="number"
+                                    value={String(asNumberOrEmpty(article.onScreen?._percentInviewVertical))}
+                                    onChange={(value) => updateArticle(page!.id, article.id, { onScreen: { ...(article.onScreen ?? {}), _percentInviewVertical: parseNumberishInput(value) } })}
+                                  />
+                                </TopicNestedAccordion>
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Advanced Settings" open={!!openSectionAccordions.advanced} onToggle={(triggerEl) => toggleSectionAccordion("advanced", triggerEl)}>
+                                <TopicTextInput label={getSchemaLabel(getContentFieldSchema("article", "_classes"), "Section class")} hint={getSchemaHint(getContentFieldSchema("article", "_classes"))} value={article.classes} onChange={(value) => updateArticle(page!.id, article.id, { classes: value })} />
+                                <TopicNestedAccordion title="Responsive classes">
+                                  <TopicTextInput label="_xlarge" value={asString(articleResponsiveClasses._xlarge)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _xlarge: value } }))} />
+                                  <TopicTextInput label="_large" value={asString(articleResponsiveClasses._large)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _large: value } }))} />
+                                  <TopicTextInput label="_medium" value={asString(articleResponsiveClasses._medium)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _medium: value } }))} />
+                                  <TopicTextInput label="_small" value={asString(articleResponsiveClasses._small)} onChange={(value) => updateArticleThemeSettings(page!.id, article.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _small: value } }))} />
+                                </TopicNestedAccordion>
+                              </TopicAccordion>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    <div className="relative group">
+                    <button type="button" className={rowClass(activeLevel === "block")}>
+                      <span className="flex items-center gap-2 text-[13px] font-semibold flex-1">
+                        <span className="w-6 h-6 rounded-[4px] flex items-center justify-center shrink-0">
+                          <StructureIcon
+                            level="contentGroup"
+                            size={14}
+                            className={iconColorClass(activeLevel === "block", "contentGroup")}
+                          />
+                        </span>
+                        Content Group
+                      </span>
+                      <MaskIcon
+                        file="chevron-right.svg"
+                        className={`block w-[13px] h-[13px] shrink-0 bg-current transition-transform ${activeLevel === "block" ? "rotate-90" : ""}`}
+                      />
+                    </button>
+                    {rowTooltip(activeLevel === "block")}
+                    </div>
+                    {activeLevel === "block" && block && (
+                      <div className="px-4 py-4 border-b border-[#e6ebf0] space-y-2">
+                        {(() => {
+                          const blockThemeSettings = getActiveThemeSettingsWithDefaults(block.themeSettings, "block");
+                          const blockBackgroundImage = asRecord(blockThemeSettings._backgroundImage);
+                          const blockBackgroundStyles = asRecord(blockThemeSettings._backgroundStyles);
+                          const blockMinimumHeights = asRecord(blockThemeSettings._minimumHeights);
+                          const blockColours = asRecord(blockThemeSettings._blockColors);
+                          const blockResponsiveClasses = asRecord(blockThemeSettings._responsiveClasses);
+                          const blockHeader = asRecord(blockThemeSettings._blockHeader);
+                          const blockHeaderTextAlignment = asRecord(blockHeader._textAlignment);
+                          const blockHeaderBackgroundImage = asRecord(blockHeader._backgroundImage);
+                          const blockHeaderBackgroundStyles = asRecord(blockHeader._backgroundStyles);
+                          const blockHeaderMinimumHeights = asRecord(blockHeader._minimumHeights);
+                          const isCopied = copiedBlockId === block.id;
+
+                          return (
+                            <>
+                              <TopicAccordion title="General" open={!!openBlockAccordions.general} onToggle={(triggerEl) => toggleBlockAccordion("general", triggerEl)}>
+                                <div className="flex flex-col gap-1.5">
+                                  <TopicFieldLabel>CONTENT GROUP ID</TopicFieldLabel>
+                                  <div className="relative">
+                                    <button
+                                      type="button"
+                                      aria-label="Copy content group id"
+                                      title="Copy content group id"
+                                      onClick={() => handleCopyBlockId(block.id)}
+                                      className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors flex items-center justify-between gap-2 cursor-pointer ${isCopied ? "bg-[var(--life-positive-050)] border-[var(--life-positive-500)] text-[var(--life-positive-500)]" : "bg-white border-[var(--life-neutral-300)] text-[var(--life-base-black)] hover:bg-[#f8fafc] hover:border-[var(--life-primary-500)] hover:text-[var(--life-primary-500)]"}`}
+                                    >
+                                      <span className="truncate text-left">{block.id}</span>
+                                      {isCopied ? (
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
+                                      ) : (
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+                                      )}
+                                    </button>
+                                    {isCopied && (
+                                      <div className="absolute -top-8 right-0 px-2.5 py-1 rounded-[8px] border border-[var(--life-positive-500)] bg-[var(--life-positive-050)] text-[11px] font-semibold text-[var(--life-positive-500)] shadow-sm whitespace-nowrap">
+                                        Id copied to clipboard.
+                                      </div>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-[#6b7280]">Unique identifier for this content group. Click to copy.</p>
+                                </div>
+                                <TopicTitleField
+                                  hint={getSchemaHint(getContentFieldSchema("block", "title"))}
+                                  value={canvasTitleLiveOverride ?? block.title}
+                                  onChange={(value) => updateBlock(page!.id, article!.id, block.id, { title: value })}
+                                  onDraftChange={(value) => writeLiveTitleDraftToCanvas("group", { pageId: page!.id, articleId: article!.id, blockId: block.id }, value)}
+                                />
+                                <TopicCheckbox
+                                  label="Display title in preview"
+                                  hint={getSchemaHint(getContentFieldSchema("block", "displayTitle"))}
+                                  checked={!!block.showDisplayTitleInPreview}
+                                  onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { showDisplayTitleInPreview: checked })}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenSaveAsTemplate("group", block.id)}
+                                  className="mt-1 inline-flex items-center gap-2 px-3 py-1.5 text-[13px] font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-md hover:bg-[#f9fafb] transition-colors cursor-pointer self-start"
+                                >
+                                  <MaskIcon file="template-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+                                  Save as template
+                                </button>
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Availability & Progression" open={!!openBlockAccordions.availability} onToggle={(triggerEl) => toggleBlockAccordion("availability", triggerEl)}>
+                                <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("block", "_isOptional"), "Is this optional?")} hint={getSchemaHint(getContentFieldSchema("block", "_isOptional"))} checked={!!block.isOptional} onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { isOptional: checked })} />
+                                <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("block", "_isAvailable"), "Is this available?")} hint={getSchemaHint(getContentFieldSchema("block", "_isAvailable"))} checked={!!block.isAvailable} onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { isAvailable: checked })} />
+                                <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("block", "_isHidden"), "Is this hidden?")} hint={getSchemaHint(getContentFieldSchema("block", "_isHidden"))} checked={!!block.isHidden} onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { isHidden: checked })} />
+                                <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("block", "_isVisible"), "Is this visible?")} hint={getSchemaHint(getContentFieldSchema("block", "_isVisible"))} checked={!!block.isVisible} onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { isVisible: checked })} />
+                                <TopicNumberStepper label={getSchemaLabel(getContentFieldSchemaWithAliases("block", ["_requireCompletionOf"], ["requireCompletionOf"], ["requirecompletionof"]), "Require completion of")} hint={getSchemaHint(getContentFieldSchemaWithAliases("block", ["_requireCompletionOf"], ["requireCompletionOf"], ["requirecompletionof"]))} min={-1} value={block.requireCompletionOf} onChange={(value) => updateBlock(page!.id, article!.id, block.id, { requireCompletionOf: value })} />
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Accessibility" open={!!openBlockAccordions.accessibility} onToggle={(triggerEl) => toggleBlockAccordion("accessibility", triggerEl)}>
+                                <TopicCheckbox
+                                  label={getSchemaLabel(getContentFieldSchema("block", "_isA11yCompletionDescriptionEnabled"), "Enable accessibility completion description")}
+                                  hint={getSchemaHint(getContentFieldSchema("block", "_isA11yCompletionDescriptionEnabled"))}
+                                  checked={block.isA11yCompletionDescriptionEnabled}
+                                  onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { isA11yCompletionDescriptionEnabled: checked })}
+                                />
+                                <TopicNumberStepper label={getSchemaLabel(getContentFieldSchema("block", "_ariaLevel"), "ARIA level")} hint={getSchemaHint(getContentFieldSchema("block", "_ariaLevel"))} min={0} value={block.ariaLevel} onChange={(value) => updateBlock(page!.id, article!.id, block.id, { ariaLevel: value })} />
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Extensions" open={!!openBlockAccordions.extensions} onToggle={(triggerEl) => toggleBlockAccordion("extensions", triggerEl)}>
+                                <ExtensionsAccordionBody
+                                  levelLabel="content group"
+                                  extensions={asRecord(block.extensions)}
+                                  schemasForLevel={extensionSchemasByLevel?.block ?? {}}
+                                  extensionTypeOptions={extensionTypeOptions}
+                                  onExtensionAdded={handleExtensionAdded}
+                                  onRequestRemoveExtension={requestRemoveExtension}
+                                  onChange={(next) => updateBlock(page!.id, article!.id, block.id, { extensions: next })}
+                                  assetContext={createExtensionAssetContext("contentGroup", page!.id, { articleId: article!.id, blockId: block.id })}
+                                  getInheritanceTag={(key) =>
+                                    computeExtensionInheritanceTag(
+                                      extensionSchemasByLevel?.block?.[key],
+                                      asRecord(asRecord(block.extensions)[key]),
+                                      countExtensionApplicableLevels(key)
+                                    )
+                                  }
+                                />
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Theme settings" open={!!openBlockAccordions.theme} onToggle={(triggerEl) => toggleBlockAccordion("theme", triggerEl)}>
+                                <TopicNestedAccordion title="Text alignment">
+                                  <TopicSelect label={getSchemaLabel(getThemeFieldSchema("block", "_textAlignment", "_title"), "Title alignment")} hint={getSchemaHint(getThemeFieldSchema("block", "_textAlignment", "_title"))} value={asString(asRecord(blockThemeSettings._textAlignment)._title)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _title: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                  <TopicSelect label={getSchemaLabel(getThemeFieldSchema("block", "_textAlignment", "_body"), "Body alignment")} hint={getSchemaHint(getThemeFieldSchema("block", "_textAlignment", "_body"))} value={asString(asRecord(blockThemeSettings._textAlignment)._body)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _body: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                  <TopicSelect label={getSchemaLabel(getThemeFieldSchema("block", "_textAlignment", "_instruction"), "Instruction alignment")} hint={getSchemaHint(getThemeFieldSchema("block", "_textAlignment", "_instruction"))} value={asString(asRecord(blockThemeSettings._textAlignment)._instruction)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _instruction: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                </TopicNestedAccordion>
+                                <TopicNestedAccordion title="Content Group background image">
+                                  <div className="flex flex-col gap-1.5">
+                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(blockBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" }, initialValue: asString(blockBackgroundImage._xlarge), title: "Content Group background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" })} />
+                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(blockBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_large" }, initialValue: asString(blockBackgroundImage._large), title: "Content Group background image (_large)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_large" })} />
+                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(blockBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_medium" }, initialValue: asString(blockBackgroundImage._medium), title: "Content Group background image (_medium)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_medium" })} />
+                                    <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(blockBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_small" }, initialValue: asString(blockBackgroundImage._small), title: "Content Group background image (_small)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupBackground", articleId: article!.id, blockId: block.id, bp: "_small" })} />
+                                  </div>
+                                </TopicNestedAccordion>
+                                <TopicNestedAccordion title="Content Group background image styles">
+                                  <TopicSelect label={BG_REPEAT_LABEL} value={asString(blockBackgroundStyles._backgroundRepeat)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundRepeat: value } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
+                                  <TopicSelect label={BG_SIZE_LABEL} value={asString(blockBackgroundStyles._backgroundSize)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundSize: value } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
+                                  <TopicSelect label={BG_POSITION_LABEL} value={asString(blockBackgroundStyles._backgroundPosition)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _backgroundStyles: { ...asRecord(current._backgroundStyles), _backgroundPosition: value } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
+                                </TopicNestedAccordion>
+                                {/* Vanilla has no block-header support at all — only Life,
+                                    Life v2 and Custom Theme render one. */}
+                                {!courseTheme.toLowerCase().includes("vanilla") && (
+                                  <TopicNestedAccordion title="Content Group header">
+                                    <TopicNestedAccordion title="Text alignment">
+                                      <TopicSelect label="Title alignment" value={asString(blockHeaderTextAlignment._title)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _textAlignment: { ...asRecord(asRecord(current._blockHeader)._textAlignment), _title: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                                      <TopicSelect label="Body alignment" value={asString(blockHeaderTextAlignment._body)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _textAlignment: { ...asRecord(asRecord(current._blockHeader)._textAlignment), _body: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                                      <TopicSelect label="Instruction alignment" value={asString(blockHeaderTextAlignment._instruction)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _textAlignment: { ...asRecord(asRecord(current._blockHeader)._textAlignment), _instruction: value } } }))} options={TEXT_ALIGN_OPTIONS} />
+                                    </TopicNestedAccordion>
+                                    <TopicNestedAccordion title="Content Group header background image">
+                                      <div className="flex flex-col gap-1.5">
+                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_xlarge" compact value={asString(blockHeaderBackgroundImage._xlarge)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" }, initialValue: asString(blockHeaderBackgroundImage._xlarge), title: "Content Group header background image (_xlarge)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_xlarge" })} />
+                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_large" compact value={asString(blockHeaderBackgroundImage._large)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_large" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_large" }, initialValue: asString(blockHeaderBackgroundImage._large), title: "Content Group header background image (_large)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_large" })} />
+                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_medium" compact value={asString(blockHeaderBackgroundImage._medium)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_medium" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_medium" }, initialValue: asString(blockHeaderBackgroundImage._medium), title: "Content Group header background image (_medium)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_medium" })} />
+                                        <TopicAssetField resolveAssetPreviewUrl={resolveTopicAssetPreviewUrl} label="_small" compact value={asString(blockHeaderBackgroundImage._small)} onPickAsset={() => setTopicAssetPickerTarget({ scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_small" })} onPickExternal={() => setTopicExternalAssetTarget({ pageId: page!.id, target: { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_small" }, initialValue: asString(blockHeaderBackgroundImage._small), title: "Content Group header background image (_small)" })} onClear={() => clearTopicAssetSelection(page!.id, { scope: "contentGroupHeaderBackground", articleId: article!.id, blockId: block.id, bp: "_small" })} />
+                                      </div>
+                                    </TopicNestedAccordion>
+                                    <TopicNestedAccordion title="Content Group header background image styles">
+                                      <TopicSelect label={BG_REPEAT_LABEL} value={asString(blockHeaderBackgroundStyles._backgroundRepeat)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _backgroundStyles: { ...asRecord(asRecord(current._blockHeader)._backgroundStyles), _backgroundRepeat: value } } }))} options={BG_REPEAT_OPTIONS} emptyOptionLabel="" />
+                                      <TopicSelect label={BG_SIZE_LABEL} value={asString(blockHeaderBackgroundStyles._backgroundSize)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _backgroundStyles: { ...asRecord(asRecord(current._blockHeader)._backgroundStyles), _backgroundSize: value } } }))} options={BG_SIZE_OPTIONS} emptyOptionLabel="" />
+                                      <TopicSelect label={BG_POSITION_LABEL} value={asString(blockHeaderBackgroundStyles._backgroundPosition)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _backgroundStyles: { ...asRecord(asRecord(current._blockHeader)._backgroundStyles), _backgroundPosition: value } } }))} options={BG_POSITION_OPTIONS} emptyOptionLabel="" />
+                                    </TopicNestedAccordion>
+                                    <TopicNestedAccordion title="Content Group header minimum height">
+                                      <TopicTextInput label="_xlarge" type="number" value={String(asNumberOrEmpty(blockHeaderMinimumHeights._xlarge))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _minimumHeights: { ...asRecord(asRecord(current._blockHeader)._minimumHeights), _xlarge: parseNumberishInput(value) } } }))} />
+                                      <TopicTextInput label="_large" type="number" value={String(asNumberOrEmpty(blockHeaderMinimumHeights._large))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _minimumHeights: { ...asRecord(asRecord(current._blockHeader)._minimumHeights), _large: parseNumberishInput(value) } } }))} />
+                                      <TopicTextInput label="_medium" type="number" value={String(asNumberOrEmpty(blockHeaderMinimumHeights._medium))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _minimumHeights: { ...asRecord(asRecord(current._blockHeader)._minimumHeights), _medium: parseNumberishInput(value) } } }))} />
+                                      <TopicTextInput label="_small" type="number" value={String(asNumberOrEmpty(blockHeaderMinimumHeights._small))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockHeader: { ...asRecord(current._blockHeader), _minimumHeights: { ...asRecord(asRecord(current._blockHeader)._minimumHeights), _small: parseNumberishInput(value) } } }))} />
+                                    </TopicNestedAccordion>
+                                  </TopicNestedAccordion>
+                                )}
+                                <TopicNestedAccordion title="Content Group minimum height">
+                                  <TopicTextInput label="_xlarge" type="number" value={String(asNumberOrEmpty(blockMinimumHeights._xlarge))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _minimumHeights: { ...asRecord(current._minimumHeights), _xlarge: parseNumberishInput(value) } }))} />
+                                  <TopicTextInput label="_large" type="number" value={String(asNumberOrEmpty(blockMinimumHeights._large))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _minimumHeights: { ...asRecord(current._minimumHeights), _large: parseNumberishInput(value) } }))} />
+                                  <TopicTextInput label="_medium" type="number" value={String(asNumberOrEmpty(blockMinimumHeights._medium))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _minimumHeights: { ...asRecord(current._minimumHeights), _medium: parseNumberishInput(value) } }))} />
+                                  <TopicTextInput label="_small" type="number" value={String(asNumberOrEmpty(blockMinimumHeights._small))} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _minimumHeights: { ...asRecord(current._minimumHeights), _small: parseNumberishInput(value) } }))} />
+                                </TopicNestedAccordion>
+                                <TopicCheckbox
+                                  label={getSchemaLabel(getThemeFieldSchema("block", "_isDividerBlock"), "Divider content group?")}
+                                  hint={getSchemaHint(getThemeFieldSchema("block", "_isDividerBlock"))}
+                                  checked={asBoolean(blockThemeSettings._isDividerBlock)}
+                                  onChange={(checked) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _isDividerBlock: checked }))}
+                                />
+                                {/* Only themes whose schema declares _blockColors at block level
+                                    support this (e.g. Vanilla has no block colour overrides). */}
+                                {isThemeFieldSupported("block", "_blockColors") && (
+                                  <TopicNestedAccordion title="Content Group colours">
+                                    <TopicColorField label="Background colour" value={asString(blockColours["block-bg-color"])} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColors: { ...asRecord(current._blockColors), "block-bg-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
+                                    <TopicColorField label="Font colour" value={asString(blockColours["block-font-color"])} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColors: { ...asRecord(current._blockColors), "block-font-color": value } }))} paletteRows={FONT_HEADER_COLOUR_PALETTE_ROWS} />
+                                    <TopicColorField label="Header colour" value={asString(blockColours["block-header-color"])} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _blockColors: { ...asRecord(current._blockColors), "block-header-color": value } }))} paletteRows={FONT_HEADER_COLOUR_PALETTE_ROWS} />
+                                  </TopicNestedAccordion>
+                                )}
+                                <TopicSelect label={getSchemaLabel(getThemeFieldSchema("block", "_paddingTop"), "Spacing top")} hint={getSchemaHint(getThemeFieldSchema("block", "_paddingTop"))} value={asString(blockThemeSettings._paddingTop)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _paddingTop: value }))} options={SPACING_OPTIONS} emptyOptionLabel="Default" />
+                                <TopicSelect label={getSchemaLabel(getThemeFieldSchema("block", "_paddingBottom"), "Spacing bottom")} hint={getSchemaHint(getThemeFieldSchema("block", "_paddingBottom"))} value={asString(blockThemeSettings._paddingBottom)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _paddingBottom: value }))} options={SPACING_OPTIONS} emptyOptionLabel="Default" />
+                                <TopicSelect label={getSchemaLabel(getThemeFieldSchema("block", "_componentVerticalAlignment"), "Set the vertical alignment of the child component(s)")} hint={getSchemaHint(getThemeFieldSchema("block", "_componentVerticalAlignment"))} value={asString(blockThemeSettings._componentVerticalAlignment)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _componentVerticalAlignment: value }))} options={VERTICAL_ALIGN_OPTIONS} emptyOptionLabel="" />
+                                <TopicSelect label={getSchemaLabel(getThemeFieldSchema("block", "_componentHorizontalAlignment"), "Set the horizontal alignment of the child component(s)")} hint={getSchemaHint(getThemeFieldSchema("block", "_componentHorizontalAlignment"))} value={asString(blockThemeSettings._componentHorizontalAlignment)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _componentHorizontalAlignment: value }))} options={HORIZONTAL_ALIGN_OPTIONS} emptyOptionLabel="" />
+                                <TopicNestedAccordion title="On-screen classes">
+                                  <TopicCheckbox
+                                    label={getSchemaLabel(getContentFieldSchema("block", "_onScreen", "_isEnabled"), "Enabled?")}
+                                    hint={getSchemaHint(getContentFieldSchema("block", "_onScreen", "_isEnabled"))}
+                                    checked={asBoolean(block.onScreen?._isEnabled)}
+                                    onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { onScreen: { ...(block.onScreen ?? {}), _isEnabled: checked } })}
+                                  />
+                                  <TopicSelect
+                                    label={getSchemaLabel(getContentFieldSchema("block", "_onScreen", "_classes"), "Classes")}
+                                    hint={getSchemaHint(getContentFieldSchema("block", "_onScreen", "_classes"))}
+                                    value={asString(block.onScreen?._classes)}
+                                    onChange={(value) => updateBlock(page!.id, article!.id, block.id, { onScreen: { ...(block.onScreen ?? {}), _classes: value } })}
+                                    options={ONSCREEN_CLASS_OPTIONS}
+                                    emptyOptionLabel=""
+                                  />
+                                  <TopicTextInput
+                                    label={getSchemaLabel(getContentFieldSchema("block", "_onScreen", "_percentInviewVertical"), "Percent in view")}
+                                    hint={getSchemaHint(getContentFieldSchema("block", "_onScreen", "_percentInviewVertical"))}
+                                    type="number"
+                                    value={String(asNumberOrEmpty(block.onScreen?._percentInviewVertical))}
+                                    onChange={(value) => updateBlock(page!.id, article!.id, block.id, { onScreen: { ...(block.onScreen ?? {}), _percentInviewVertical: parseNumberishInput(value) } })}
+                                  />
+                                </TopicNestedAccordion>
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Advanced Settings" open={!!openBlockAccordions.advanced} onToggle={(triggerEl) => toggleBlockAccordion("advanced", triggerEl)}>
+                                <TopicTextInput label={getSchemaLabel(getContentFieldSchema("block", "_classes"), "Content group class")} hint={getSchemaHint(getContentFieldSchema("block", "_classes"))} value={block.classes} onChange={(value) => updateBlock(page!.id, article!.id, block.id, { classes: value })} />
+                                <TopicNestedAccordion title="Responsive classes">
+                                  <TopicTextInput label="_xlarge" value={asString(blockResponsiveClasses._xlarge)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _xlarge: value } }))} />
+                                  <TopicTextInput label="_large" value={asString(blockResponsiveClasses._large)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _large: value } }))} />
+                                  <TopicTextInput label="_medium" value={asString(blockResponsiveClasses._medium)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _medium: value } }))} />
+                                  <TopicTextInput label="_small" value={asString(blockResponsiveClasses._small)} onChange={(value) => updateBlockThemeSettings(page!.id, article!.id, block.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _small: value } }))} />
+                                </TopicNestedAccordion>
+                              </TopicAccordion>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    <div className="relative group">
+                    <button type="button" className={rowClass(activeLevel === "component")}>
+                      <span className="flex items-center gap-2 text-[13px] font-semibold flex-1">
+                        <span className="w-6 h-6 rounded-[4px] flex items-center justify-center shrink-0">
+                          <StructureIcon
+                            level="component"
+                            size={14}
+                            className={iconColorClass(activeLevel === "component", "component")}
+                          />
+                        </span>
+                        Component
+                      </span>
+                      <MaskIcon
+                        file="chevron-right.svg"
+                        className={`block w-[13px] h-[13px] shrink-0 bg-current transition-transform ${activeLevel === "component" ? "rotate-90" : ""}`}
+                      />
+                    </button>
+                    {rowTooltip(activeLevel === "component")}
+                    </div>
+                    {activeLevel === "component" && (
+                      <div className="px-4 py-4 border-b border-[#e6ebf0]">
+                        {component && page && article && block ? (() => {
+                          const componentThemeSettings = getActiveThemeSettingsWithDefaults(component.themeSettings, "component");
+                          const componentTextAlignment = asRecord(componentThemeSettings._textAlignment);
+                          const componentColours = asRecord(componentThemeSettings._componentColors);
+                          const componentResponsiveClasses = asRecord(componentThemeSettings._responsiveClasses);
+                          const componentProperties = asRecord(component.settings.properties);
+                          const behaviourSchema = componentBehaviourSchemas[(component.settings.componentKey || "").toLowerCase()];
+                          const isCopied = copiedComponentId === component.id;
+
+                          return (
+                            <div className="flex flex-col gap-2.5">
+                              <TopicAccordion title="General" open={!!openComponentAccordions.general} onToggle={(triggerEl) => toggleComponentAccordion("general", triggerEl)}>
+                                <div className="flex flex-col gap-1.5">
+                                  <TopicFieldLabel>COMPONENT ID</TopicFieldLabel>
+                                  <div className="relative">
+                                    <button
+                                      type="button"
+                                      aria-label="Copy component id"
+                                      title="Copy component id"
+                                      onClick={() => handleCopyComponentId(component.id)}
+                                      className={`w-full px-3 py-2 text-sm rounded-lg border transition-colors flex items-center justify-between gap-2 cursor-pointer ${isCopied ? "bg-[var(--life-positive-050)] border-[var(--life-positive-500)] text-[var(--life-positive-500)]" : "bg-white border-[var(--life-neutral-300)] text-[var(--life-base-black)] hover:bg-[#f8fafc] hover:border-[var(--life-primary-500)] hover:text-[var(--life-primary-500)]"}`}
+                                    >
+                                      <span className="truncate text-left">{component.id}</span>
+                                      {isCopied ? (
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
+                                      ) : (
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
+                                      )}
+                                    </button>
+                                    {isCopied && (
+                                      <div className="absolute -top-8 right-0 px-2.5 py-1 rounded-[8px] border border-[var(--life-positive-500)] bg-[var(--life-positive-050)] text-[11px] font-semibold text-[var(--life-positive-500)] shadow-sm whitespace-nowrap">
+                                        Id copied to clipboard.
+                                      </div>
+                                    )}
+                                  </div>
+                                  <p className="text-xs text-[#6b7280]">Unique identifier for this component. Click to copy.</p>
+                                </div>
+                                <TopicTitleField
+                                  hint={getSchemaHint(getContentFieldSchema("component", "title"))}
+                                  value={canvasTitleLiveOverride ?? component.settings.title ?? ""}
+                                  onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { settings: { ...component.settings, title: value } })}
+                                  onDraftChange={(value) => writeLiveTitleDraftToCanvas("component", { pageId: page.id, articleId: article.id, blockId: block.id, componentId: component.id }, value)}
+                                />
+                                <TopicCheckbox
+                                  label="Display title in preview"
+                                  hint={getSchemaHint(getContentFieldSchema("component", "displayTitle"))}
+                                  checked={!!component.showDisplayTitleInPreview}
+                                  onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { showDisplayTitleInPreview: checked })}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenSaveAsTemplate("component", component.id)}
+                                  className="mt-1 inline-flex items-center gap-2 px-3 py-1.5 text-[13px] font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-md hover:bg-[#f9fafb] transition-colors cursor-pointer self-start"
+                                >
+                                  <MaskIcon file="template-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
+                                  Save as template
+                                </button>
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Behaviour" open={!!openComponentAccordions.behaviour} onToggle={(triggerEl) => toggleComponentAccordion("behaviour", triggerEl)}>
+                                {(() => {
+                                  if (behaviourSchema === undefined) {
+                                    return <p className="text-[13px] text-[var(--life-neutral-300)]">Loading component properties…</p>;
+                                  }
+                                  const componentBehaviourContext = flattenBehaviourSchema(
+                                    behaviourSchema as Record<string, BehaviourFieldSchema>,
+                                    componentProperties
+                                  );
+                                  const fieldKeys = filterVisibleBehaviourFieldKeys(
+                                    Object.keys(behaviourSchema).filter((key) => {
+                                      const fieldSchema = behaviourSchema[key] as BehaviourFieldSchema;
+                                      return fieldSchema && !fieldSchema.editorOnly && !COMPONENT_BEHAVIOUR_EXCLUDED_FIELDS.has(key);
+                                    }),
+                                    componentBehaviourContext
+                                  );
+                                  if (!fieldKeys.length) {
+                                    return <p className="text-[13px] text-[var(--life-neutral-300)]">This component has no additional behaviour properties.</p>;
+                                  }
+                                  const handleBehaviourChange = (path: string, value: unknown) => {
+                                    updateComponentBehaviourProperty(page.id, article.id, block.id, component.id, path, value);
+                                  };
+                                  const behaviourAssetContext: BehaviourAssetContext = {
+                                    pageId: page.id,
+                                    articleId: article.id,
+                                    blockId: block.id,
+                                    componentId: component.id,
+                                    resolveAssetPreviewUrl: resolveTopicAssetPreviewUrl,
+                                    onPickAsset: (assetPath, assetType) => setTopicAssetPickerTarget({ scope: "componentProperty", articleId: article.id, blockId: block.id, componentId: component.id, path: assetPath, assetType }),
+                                    onPickExternal: (assetPath, currentValue) => setTopicExternalAssetTarget({ pageId: page.id, target: { scope: "componentProperty", articleId: article.id, blockId: block.id, componentId: component.id, path: assetPath }, initialValue: currentValue, title: "Select External Asset" }),
+                                    onClear: (assetPath) => clearTopicAssetSelection(page.id, { scope: "componentProperty", articleId: article.id, blockId: block.id, componentId: component.id, path: assetPath }),
+                                  };
+                                  return fieldKeys.map((key) => {
+                                    const fieldSchema = behaviourSchema[key] as BehaviourFieldSchema;
+                                    const fieldValue = resolveBehaviourFieldValue(fieldSchema, componentProperties[key]);
+                                    return (
+                                      <BehaviourField key={key} path={key} fieldName={key} fieldSchema={fieldSchema} value={fieldValue} onChange={handleBehaviourChange} assetContext={behaviourAssetContext} conditionalContext={componentBehaviourContext} />
+                                    );
+                                  });
+                                })()}
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Availability & Progression" open={!!openComponentAccordions.availability} onToggle={(triggerEl) => toggleComponentAccordion("availability", triggerEl)}>
+                                <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("component", "_isOptional"), "Is this optional?")} hint={getSchemaHint(getContentFieldSchema("component", "_isOptional"))} checked={!!component.isOptional} onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { isOptional: checked })} />
+                                <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("component", "_isAvailable"), "Is this available?")} hint={getSchemaHint(getContentFieldSchema("component", "_isAvailable"))} checked={!!component.isAvailable} onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { isAvailable: checked })} />
+                                <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("component", "_isHidden"), "Is this hidden?")} hint={getSchemaHint(getContentFieldSchema("component", "_isHidden"))} checked={!!component.isHidden} onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { isHidden: checked })} />
+                                <TopicCheckbox label={getSchemaLabel(getContentFieldSchema("component", "_isVisible"), "Is this visible?")} hint={getSchemaHint(getContentFieldSchema("component", "_isVisible"))} checked={!!component.isVisible} onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { isVisible: checked })} />
+                                <TopicSelect
+                                  label={getSchemaLabel(getContentFieldSchemaWithAliases("component", ["_isResetOnRevisit"], ["isResetOnRevisit"]), "Reset when revisited?")}
+                                  hint={getSchemaHint(getContentFieldSchemaWithAliases("component", ["_isResetOnRevisit"], ["isResetOnRevisit"]))}
+                                  value={component.isResetOnRevisit || "false"}
+                                  onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { isResetOnRevisit: value })}
+                                  options={RESET_ON_REVISIT_OPTIONS}
+                                />
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Accessibility" open={!!openComponentAccordions.accessibility} onToggle={(triggerEl) => toggleComponentAccordion("accessibility", triggerEl)}>
+                                <TopicCheckbox
+                                  label={getSchemaLabel(getContentFieldSchema("component", "_isA11yCompletionDescriptionEnabled"), "Enable accessibility completion description")}
+                                  hint={getSchemaHint(getContentFieldSchema("component", "_isA11yCompletionDescriptionEnabled"))}
+                                  checked={component.isA11yCompletionDescriptionEnabled}
+                                  onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { isA11yCompletionDescriptionEnabled: checked })}
+                                />
+                                <TopicNumberStepper label={getSchemaLabel(getContentFieldSchema("component", "_ariaLevel"), "ARIA level")} hint={getSchemaHint(getContentFieldSchema("component", "_ariaLevel"))} min={0} value={component.ariaLevel} onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { ariaLevel: value })} />
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Extensions" open={!!openComponentAccordions.extensions} onToggle={(triggerEl) => toggleComponentAccordion("extensions", triggerEl)}>
+                                <ExtensionsAccordionBody
+                                  levelLabel="component"
+                                  componentKey={(component.settings.componentKey || "").toLowerCase()}
+                                  extensions={asRecord(component.extensions)}
+                                  schemasForLevel={componentExtensionSchemas[(component.settings.componentKey || "").toLowerCase()] ?? {}}
+                                  extensionTypeOptions={extensionTypeOptions}
+                                  onExtensionAdded={handleExtensionAdded}
+                                  onRequestRemoveExtension={requestRemoveExtension}
+                                  onChange={(next) => updateComponent(page.id, article.id, block.id, component.id, { extensions: next })}
+                                  assetContext={createExtensionAssetContext("component", page.id, { articleId: article.id, blockId: block.id, componentId: component.id })}
+                                  getInheritanceTag={(key) =>
+                                    computeExtensionInheritanceTag(
+                                      componentExtensionSchemas[(component.settings.componentKey || "").toLowerCase()]?.[key],
+                                      asRecord(asRecord(component.extensions)[key]),
+                                      countExtensionApplicableLevels(key)
+                                    )
+                                  }
+                                  getArrayItemDefaults={additionalMaterialItemDefaults}
+                                />
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Theme settings" open={!!openComponentAccordions.theme} onToggle={(triggerEl) => toggleComponentAccordion("theme", triggerEl)}>
+                                <TopicNestedAccordion title="Text alignment">
+                                  <TopicSelect label={getSchemaLabel(getThemeFieldSchema("component", "_textAlignment", "_title"), "Title alignment")} hint={getSchemaHint(getThemeFieldSchema("component", "_textAlignment", "_title"))} value={asString(componentTextAlignment._title)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _title: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                  <TopicSelect label={getSchemaLabel(getThemeFieldSchema("component", "_textAlignment", "_body"), "Body alignment")} hint={getSchemaHint(getThemeFieldSchema("component", "_textAlignment", "_body"))} value={asString(componentTextAlignment._body)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _body: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                  <TopicSelect label={getSchemaLabel(getThemeFieldSchema("component", "_textAlignment", "_instruction"), "Instruction alignment")} hint={getSchemaHint(getThemeFieldSchema("component", "_textAlignment", "_instruction"))} value={asString(componentTextAlignment._instruction)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _textAlignment: { ...asRecord(current._textAlignment), _instruction: value } }))} options={TEXT_ALIGN_OPTIONS} />
+                                </TopicNestedAccordion>
+                                {/* Only themes whose schema declares _componentColors at component
+                                    level support this (e.g. Vanilla has no component colour overrides). */}
+                                {isThemeFieldSupported("component", "_componentColors") && (
+                                  <TopicNestedAccordion title="Component colours">
+                                    <TopicColorField label="Background colour" value={asString(componentColours["component-bg-color"])} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _componentColors: { ...asRecord(current._componentColors), "component-bg-color": value } }))} paletteRows={THEME_COLOUR_PALETTE_ROWS[courseTheme] ?? LIFE_PALETTE_ROWS} />
+                                    <TopicColorField label="Font colour" value={asString(componentColours["component-font-color"])} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _componentColors: { ...asRecord(current._componentColors), "component-font-color": value } }))} paletteRows={FONT_HEADER_COLOUR_PALETTE_ROWS} />
+                                    <TopicColorField label="Header colour" value={asString(componentColours["component-header-color"])} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _componentColors: { ...asRecord(current._componentColors), "component-header-color": value } }))} paletteRows={FONT_HEADER_COLOUR_PALETTE_ROWS} />
+                                  </TopicNestedAccordion>
+                                )}
+                                <TopicNestedAccordion title="On-screen classes">
+                                  <TopicCheckbox
+                                    label={getSchemaLabel(getContentFieldSchema("component", "_onScreen", "_isEnabled"), "Enabled?")}
+                                    hint={getSchemaHint(getContentFieldSchema("component", "_onScreen", "_isEnabled"))}
+                                    checked={asBoolean(component.onScreen?._isEnabled)}
+                                    onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { onScreen: { ...(component.onScreen ?? {}), _isEnabled: checked } })}
+                                  />
+                                  <TopicSelect
+                                    label={getSchemaLabel(getContentFieldSchema("component", "_onScreen", "_classes"), "Classes")}
+                                    hint={getSchemaHint(getContentFieldSchema("component", "_onScreen", "_classes"))}
+                                    value={asString(component.onScreen?._classes)}
+                                    onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { onScreen: { ...(component.onScreen ?? {}), _classes: value } })}
+                                    options={ONSCREEN_CLASS_OPTIONS}
+                                    emptyOptionLabel=""
+                                  />
+                                  <TopicTextInput
+                                    label={getSchemaLabel(getContentFieldSchema("component", "_onScreen", "_percentInviewVertical"), "Percent in view")}
+                                    hint={getSchemaHint(getContentFieldSchema("component", "_onScreen", "_percentInviewVertical"))}
+                                    type="number"
+                                    value={String(asNumberOrEmpty(component.onScreen?._percentInviewVertical))}
+                                    onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { onScreen: { ...(component.onScreen ?? {}), _percentInviewVertical: parseNumberishInput(value) } })}
+                                  />
+                                </TopicNestedAccordion>
+                              </TopicAccordion>
+
+                              <TopicAccordion title="Advanced Settings" open={!!openComponentAccordions.advanced} onToggle={(triggerEl) => toggleComponentAccordion("advanced", triggerEl)}>
+                                <TopicTextInput label={getSchemaLabel(getContentFieldSchema("component", "_classes"), "Component class")} hint={getSchemaHint(getContentFieldSchema("component", "_classes"))} value={component.classes} onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { classes: value })} />
+                                {/* No installed theme declares _responsiveClasses at component
+                                    level (unlike topic/section/content group, which all do). */}
+                                {isThemeFieldSupported("component", "_responsiveClasses") && (
+                                  <TopicNestedAccordion title="Responsive classes">
+                                    <TopicTextInput label="_xlarge" value={asString(componentResponsiveClasses._xlarge)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _xlarge: value } }))} />
+                                    <TopicTextInput label="_large" value={asString(componentResponsiveClasses._large)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _large: value } }))} />
+                                    <TopicTextInput label="_medium" value={asString(componentResponsiveClasses._medium)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _medium: value } }))} />
+                                    <TopicTextInput label="_small" value={asString(componentResponsiveClasses._small)} onChange={(value) => updateComponentThemeSettings(page.id, article.id, block.id, component.id, (current) => ({ ...current, _responsiveClasses: { ...asRecord(current._responsiveClasses), _small: value } }))} />
+                                  </TopicNestedAccordion>
+                                )}
+                              </TopicAccordion>
+                            </div>
+                          );
+                        })() : null}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+              <div className="h-10 shrink-0" aria-hidden="true" />
+              </div>
+              </aside>
+            ) : (
+              <aside className="hidden md:flex h-full w-[56px] bg-white border-l border-[#d8dee6] shrink-0 flex-col items-center py-3">
+                <div className="w-full flex flex-col items-center pb-3 border-b border-[#d8dee6]">
+                  <button
+                    type="button"
+                    onClick={() => setRightPanelOpen(true)}
+                    className="w-8 h-8 rounded-[6px] flex items-center justify-center text-[#5f6d79] hover:bg-[#f1f5f9] transition-colors"
+                    aria-label="Expand properties"
+                    title="Expand properties"
+                  >
+                    <MaskIcon file="panel-toggle-icon.svg" className="block w-[16px] h-[16px] shrink-0 bg-current -scale-x-100" />
+                  </button>
+                </div>
+              </aside>
+            )}
+          </>
+        )}
+
+        {topicAssetPickerTarget && selectedPageId ? (
+          <AssetPickerModal
+            assetType={resolveTopicAssetPickerType(topicAssetPickerTarget)}
+            onClose={() => setTopicAssetPickerTarget(null)}
+            onSelect={(asset) => {
+              const resolvedAssetLink = asset.assetLink || asset.url || asset.id;
+              applyTopicAssetSelection(selectedPageId, topicAssetPickerTarget, resolvedAssetLink);
+              setAssetLinkIdMap((prev) => ({
+                ...prev,
+                ...buildCourseAssetLinkCandidates(resolvedAssetLink).reduce<Record<string, string>>((next, key) => {
+                  next[key] = asset.id;
+                  return next;
+                }, {}),
+              }));
+              setTopicAssetPickerTarget(null);
+            }}
+          />
+        ) : null}
+
+        {canvasSamaritanTarget && (
+          <AiAssistPopover
+            initialText={canvasSamaritanTarget.seedText}
+            courseContext={courseTitle}
+            onInsert={(text) => {
+              applyCanvasSamaritanResult(canvasSamaritanTarget.editor, text, "insert");
+              setCanvasSamaritanTarget(null);
+            }}
+            onReplace={(text) => {
+              applyCanvasSamaritanResult(canvasSamaritanTarget.editor, text, "replace");
+              setCanvasSamaritanTarget(null);
+            }}
+            onClose={() => setCanvasSamaritanTarget(null)}
+          />
+        )}
+
+        <ExternalAssetModal
+          open={!!topicExternalAssetTarget}
+          title={topicExternalAssetTarget?.title || "Select External Asset"}
+          initialValue={topicExternalAssetTarget?.initialValue || ""}
+          onCancel={() => setTopicExternalAssetTarget(null)}
+          onSave={(value) => {
+            if (topicExternalAssetTarget) {
+              applyTopicAssetSelection(topicExternalAssetTarget.pageId, topicExternalAssetTarget.target, value);
+            }
+            setTopicExternalAssetTarget(null);
+          }}
+        />
+
+        {saveTemplateTarget && (
+          <SaveAsTemplateModal
+            levelLabel={SAVE_TEMPLATE_LEVEL_LABELS[saveTemplateTarget.level]}
+            isSaving={isSavingTemplate}
+            errorMessage={saveTemplateError}
+            onCancel={() => {
+              if (isSavingTemplate) return;
+              setSaveTemplateTarget(null);
+              setSaveTemplateError(null);
+            }}
+            onDone={handleConfirmSaveAsTemplate}
+          />
+        )}
+
+        {addComponentTarget && (
+          <AddComponentDrawer
+            onClose={() => setAddComponentTarget(null)}
+            onSelect={(componentType) => {
+              void handleAddComponent(
+                addComponentTarget.pageId,
+                addComponentTarget.articleId,
+                addComponentTarget.blockId,
+                componentType
+              );
+              setAddComponentTarget(null);
+            }}
+          />
+        )}
+
+        {addTemplateTarget && (
+          <AddTemplateDrawer
+            level={addTemplateTarget.level}
+            onClose={() => setAddTemplateTarget(null)}
+            onSelect={async (template) => {
+              await handleApplyTemplate(addTemplateTarget, template);
+            }}
+          />
+        )}
+
+        <UnsavedChangesModal
+          isOpen={showUnsavedChangesModal}
+          isSaving={isSavingSelection}
+          onClose={() => {
+            pendingGuardedActionRef.current = null;
+            setShowUnsavedChangesModal(false);
+          }}
+          onDiscard={() => {
+            discardDraftChanges();
+            runPendingGuardedAction();
+          }}
+          onSave={async () => {
+            const ok = await saveDraftChanges();
+            if (!ok) return;
+            runPendingGuardedAction();
+          }}
+          message="You have unsaved changes. Save before leaving this page?"
+        />
+
+        {/* Success / info / error toast — same treatment as the Course Settings pages. */}
+        {editorToast && (
+          <div className="fixed top-4 right-4 z-[60] pointer-events-none">
+            <div
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium border pointer-events-auto animate-fade-in-down min-w-[260px] max-w-sm ${
+                editorToast.type === "success"
+                  ? "bg-[var(--life-positive-050)] border-[var(--life-positive-100)] text-[var(--life-positive-500)]"
+                  : editorToast.type === "info"
+                    ? "bg-[var(--life-primary-020)] border-[var(--life-primary-100)] text-[var(--life-primary-500)]"
+                    : "bg-[var(--life-critical-050)] border-[var(--life-critical-100)] text-[var(--life-critical-500)]"
+              }`}
+              role="status"
+            >
+              {editorToast.type === "success" ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-positive-500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              ) : editorToast.type === "info" ? (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-primary-500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                  <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
+                </svg>
+              ) : (
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--life-critical-500)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0">
+                  <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                </svg>
+              )}
+              <span className="flex-1">{editorToast.message}</span>
+              <button
+                type="button"
+                onClick={() => setEditorToast(null)}
+                className="opacity-60 hover:opacity-100 transition-opacity ml-1"
+                aria-label="Dismiss"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        )}
+
+        <ErrorDialog
+          open={!!structureLoadError && dismissedStructureLoadError !== structureLoadError}
+          title="Error"
+          message={structureLoadError || ""}
+          onClose={() => setDismissedStructureLoadError(structureLoadError)}
+        />
+
+        <ErrorDialog
+          open={!!previewError && !isPreviewLoading && dismissedPreviewError !== previewError}
+          title="Error"
+          message="Error generating preview, please contact an administrator."
+          debugDetails={previewError || undefined}
+          secondaryLabel="Retry"
+          onSecondary={() => {
+            setDismissedPreviewError(previewError);
+            setPreviewRefreshToken((current) => current + 1);
+          }}
+          onClose={() => setDismissedPreviewError(previewError)}
+        />
+
+        <ConfirmDialog
+          open={!!extensionRemovalTarget}
+          title={`Remove ${extensionRemovalTarget?.displayName ?? "extension"}`}
+          message="Removing it will remove the extension from this course. Do you still want to proceed?"
+          onCancel={() => setExtensionRemovalTarget(null)}
+          onConfirm={confirmRemoveExtension}
+        />
+
+        {canvasDeleteTarget && (
+          <ConfirmDialog
+            open
+            title={`Delete ${CANVAS_LEVEL_LABELS[canvasDeleteTarget.level]}`}
+            message={getCanvasDeleteMessage(canvasDeleteTarget.level)}
+            onCancel={() => setCanvasDeleteTarget(null)}
+            onConfirm={() => void confirmCanvasDelete()}
+          />
+        )}
+
+        <ConfirmDialog
+          open={!!topicClipboardEntry}
+          title="Reuse copied topic"
+          message="Are you sure you want to paste it?"
+          variant="success"
+          confirmLabel="Paste"
+          cancelLabel="Cancel"
+          onCancel={() => setTopicClipboardEntry(null)}
+          onConfirm={() => void handlePasteTopicFromClipboard()}
+        />
+
+        {publishDialogPhase && (
+          <PublishCourseDialog
+            phase={publishDialogPhase}
+            courseTitle={courseTitle}
+            zipName={publishResult.zipName}
+            downloadUrl={publishResult.downloadUrl}
+            errorMessage={publishResult.message}
+            onConfirm={() => void handleConfirmPublish()}
+            onClose={closePublishDialog}
+          />
+        )}
+      </div>
+    </div>
+  );
+}

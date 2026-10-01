@@ -21,5 +21,9 @@
     "**/*.ts",
     "**/*.tsx"
   ],
-  "exclude": ["node_modules", "dist"]
+  // Test files (and vitest's own config) depend on the `vitest` devDependency
+  // and its types — excluded here so the production build (`tsc && vite
+  // build`, run on the server without devDependencies guaranteed present)
+  // never needs it. Tests are still fully type-checked when run via `vitest`.
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx", "vitest.config.ts"]
 }

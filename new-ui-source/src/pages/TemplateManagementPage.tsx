@@ -1,7 +1,10 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { getTemplates, deleteTemplate, updateTemplate, type TemplateScope } from '@/api/adaptAuthoring'
+import { usePageLoader } from '@/hooks'
+import AiAssistant from '@/components/common/AiAssistant'
+import ConfirmDialog from '@/components/common/ConfirmDialog'
 
-type TemplateType = 'Page' | 'Article' | 'Block' | 'Component'
+type TemplateType = 'Topic' | 'Section' | 'Content Group' | 'Component'
 
 interface Template {
   id: number
@@ -14,17 +17,17 @@ interface Template {
 }
 
 const INITIAL_TEMPLATES: Template[] = [
-  { id: 1, name: 'Hero Banner', type: 'Page', description: 'Full-width hero layout with image, headline and CTA.', timestamp: new Date('2026-06-15T09:30:00') },
-  { id: 2, name: 'Learning Article', type: 'Article', description: 'Long-form reading layout with sidebar navigation.', timestamp: new Date('2026-06-18T14:15:00') },
-  { id: 3, name: 'Card Grid', type: 'Block', description: 'Responsive grid of content cards with hover effects.', timestamp: new Date('2026-06-20T11:45:00') },
+  { id: 1, name: 'Hero Banner', type: 'Topic', description: 'Full-width hero layout with image, headline and CTA.', timestamp: new Date('2026-06-15T09:30:00') },
+  { id: 2, name: 'Learning Article', type: 'Section', description: 'Long-form reading layout with sidebar navigation.', timestamp: new Date('2026-06-18T14:15:00') },
+  { id: 3, name: 'Card Grid', type: 'Content Group', description: 'Responsive grid of content cards with hover effects.', timestamp: new Date('2026-06-20T11:45:00') },
   { id: 4, name: 'Progress Tracker', type: 'Component', description: 'Visual step indicator for multi-stage workflows.', timestamp: new Date('2026-06-22T08:00:00') },
-  { id: 5, name: 'Quiz Page', type: 'Page', description: 'Interactive quiz layout with scoring and feedback.', timestamp: new Date('2026-06-23T16:20:00') },
-  { id: 6, name: 'News Article', type: 'Article', description: 'Clean editorial layout with pull-quotes and image support.', timestamp: new Date('2026-06-24T10:05:00') },
-  { id: 7, name: 'Accordion FAQ', type: 'Block', description: 'Collapsible FAQ block with smooth animation.', timestamp: new Date('2026-06-25T13:30:00') },
+  { id: 5, name: 'Quiz Page', type: 'Topic', description: 'Interactive quiz layout with scoring and feedback.', timestamp: new Date('2026-06-23T16:20:00') },
+  { id: 6, name: 'News Article', type: 'Section', description: 'Clean editorial layout with pull-quotes and image support.', timestamp: new Date('2026-06-24T10:05:00') },
+  { id: 7, name: 'Accordion FAQ', type: 'Content Group', description: 'Collapsible FAQ block with smooth animation.', timestamp: new Date('2026-06-25T13:30:00') },
   { id: 8, name: 'Video Player', type: 'Component', description: 'Embedded video with controls and caption support.', timestamp: new Date('2026-06-26T09:00:00') },
 ]
 
-const FILTER_OPTIONS: ('All' | TemplateType)[] = ['All', 'Page', 'Article', 'Block', 'Component']
+const FILTER_OPTIONS: ('All' | TemplateType)[] = ['All', 'Topic', 'Section', 'Content Group', 'Component']
 const PAGE_SIZE_OPTIONS = [5, 10, 20]
 
 function formatTimestamp(date: Date): string {
@@ -39,18 +42,37 @@ function formatTimestamp(date: Date): string {
 }
 
 const TYPE_COLORS: Record<TemplateType, { bg: string; text: string }> = {
-  Page:      { bg: 'bg-[#dbeeff]', text: 'text-[#2d6fa8]' },
-  Article:   { bg: 'bg-[#dcfce7]', text: 'text-[#16a34a]' },
-  Block:     { bg: 'bg-[#fef9c3]', text: 'text-[#a16207]' },
-  Component: { bg: 'bg-[#f3e8ff]', text: 'text-[#7e22ce]' },
+  Topic:         { bg: 'bg-[#dbeeff]', text: 'text-[#2d6fa8]' },
+  Section:       { bg: 'bg-[#dcfce7]', text: 'text-[#16a34a]' },
+  'Content Group': { bg: 'bg-[#fef9c3]', text: 'text-[#a16207]' },
+  Component:     { bg: 'bg-[#f3e8ff]', text: 'text-[#7e22ce]' },
 }
 
 export default function TemplateManagementPage() {
   const [templates, setTemplates] = useState<Template[]>([])
+  const [loading, setLoading] = useState(true)
   const [scope, setScope] = useState<TemplateScope>('mine')
+  const templateRequestIdRef = useRef(0)
 
-  const loadTemplates = () => { getTemplates(scope).then(setTemplates).catch(() => setTemplates([])) }
-  useEffect(() => { loadTemplates() }, [scope])
+  usePageLoader(loading)
+
+  const loadTemplates = useCallback(async () => {
+    const requestId = ++templateRequestIdRef.current
+    setLoading(true)
+    try {
+      const rows = await getTemplates(scope)
+      if (templateRequestIdRef.current !== requestId) return
+      setTemplates(rows)
+    } catch {
+      if (templateRequestIdRef.current !== requestId) return
+      setTemplates([])
+    } finally {
+      if (templateRequestIdRef.current === requestId) {
+        setLoading(false)
+      }
+    }
+  }, [scope])
+  useEffect(() => { void loadTemplates() }, [loadTemplates])
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'All' | TemplateType>('All')
   const [page, setPage] = useState(1)
@@ -82,7 +104,8 @@ export default function TemplateManagementPage() {
     if (!target.backendId) return
     try {
       await updateTemplate(target.backendId, { title: name, description })
-    } finally {
+    } catch {
+      // Optimistic update above may be stale if the backend rejected it — resync.
       loadTemplates()
     }
   }
@@ -94,7 +117,8 @@ export default function TemplateManagementPage() {
     setTemplates((prev) => prev.filter((t) => t.id !== target.id))
     try {
       await deleteTemplate(target.backendId)
-    } finally {
+    } catch {
+      // Optimistic removal above may be wrong if the backend rejected it — resync.
       loadTemplates()
     }
   }
@@ -208,7 +232,7 @@ export default function TemplateManagementPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="bg-[#f9fafb] border-b border-[#e5e7eb]">
-                  <th className="text-left px-4 py-3 font-medium text-[#6b7280] w-[28%]">Template Name</th>
+                  <th className="text-left px-4 py-3 font-medium text-[#6b7280] w-[28%]">Template Title</th>
                   <th className="text-left px-4 py-3 font-medium text-[#6b7280] w-[12%]">Type</th>
                   <th className="text-left px-4 py-3 font-medium text-[#6b7280]">Description</th>
                   <th className="text-left px-4 py-3 font-medium text-[#6b7280] w-[18%] whitespace-nowrap">Time Stamp</th>
@@ -393,8 +417,8 @@ export default function TemplateManagementPage() {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md flex flex-col overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b border-[#e5e7eb]">
               <div>
-                <h2 className="font-semibold text-[#111827] text-base">Edit Template</h2>
-                <p className="text-xs text-[#6b7280] mt-0.5">Update the name and description</p>
+                <h2 className="font-semibold text-[#111827] text-base">Edit Template Details</h2>
+                <p className="text-xs text-[#6b7280] mt-0.5">Update the title and description</p>
               </div>
               <button
                 type="button"
@@ -411,7 +435,7 @@ export default function TemplateManagementPage() {
             <div className="px-6 py-5 flex flex-col gap-5">
               <div>
                 <label className="block text-sm font-medium text-[#374151] mb-1.5">
-                  Template Name <span className="text-[#ef4444]">*</span>
+                  Template Title <span className="text-[#ef4444]">*</span>
                 </label>
                 <input
                   type="text"
@@ -454,45 +478,17 @@ export default function TemplateManagementPage() {
       )}
 
       {/* Delete Confirmation Modal */}
-      {deleteTarget && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
-          onClick={(e) => { if (e.target === e.currentTarget) setDeleteTarget(null) }}
-        >
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm flex flex-col overflow-hidden">
-            <div className="px-6 pt-6 pb-4 flex flex-col items-center text-center">
-              <div className="w-12 h-12 rounded-full bg-[#fee2e2] flex items-center justify-center mb-4">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#dc2626" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
-                  <path d="M10 11v6M14 11v6" />
-                  <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2" />
-                </svg>
-              </div>
-              <h2 className="font-semibold text-[#111827] text-base mb-1">Delete Template</h2>
-              <p className="text-sm text-[#6b7280]">
-                Are you sure you want to delete <span className="font-medium text-[#111827]">"{deleteTarget.name}"</span>? This action cannot be undone.
-              </p>
-            </div>
+      <AiAssistant context="Template Management" />
 
-            <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#e5e7eb]">
-              <button
-                type="button"
-                onClick={() => setDeleteTarget(null)}
-                className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmDelete}
-                className="px-5 py-2 text-sm font-semibold text-white bg-[#dc2626] hover:bg-[#b91c1c] rounded-lg transition-colors"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
+      {deleteTarget && (
+        <ConfirmDialog
+          open
+          title="Delete Template"
+          message="Are you sure you want to delete this template?"
+          note="This will delete the template from the list but will not affect the course(s) where the template is used."
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={confirmDelete}
+        />
       )}
     </>
   )

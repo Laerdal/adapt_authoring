@@ -19,7 +19,7 @@ server.get('/download/:tenant/:course', function(req, res, next) {
   var course = req.params.course;
   var tenant = req.params.tenant;
   var currentUser = usermanager.getCurrentUser();
-  var mode = this.Constants.Modes.Publish;
+  var mode = Constants.Modes.Publish;
 
   if (currentUser && (currentUser.tenant._id === tenant)) {
 
