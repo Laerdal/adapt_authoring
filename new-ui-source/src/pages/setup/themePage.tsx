@@ -54,6 +54,16 @@ const PAGE_TITLE_SIZE_REM: Record<string, number> = {
   H1: 3.5, H2: 3, H3: 2.5, H4: 2, H5: 1.5, Paragraph: 1.125,
 };
 
+export const THEME_PREVIEW_INFO = {
+  title: "Info",
+  livePreviewLabel: "Live Preview",
+  livePreviewText:
+    "The live preview shows how heading and paragraph fonts, text colours (including font, heading, instruction, and link styles), and background colours for pages, articles, blocks, and components will appear. It also reflects navigation background settings and progress fill colours. Please note that preview colours may differ slightly from the final rendered output, as text colours are adjusted during course preview to ensure optimal visual consistency.",
+  accessibilityLabel: "Accessibility",
+  accessibilityText:
+    "Colour contrast is automatically checked across navigation elements, menus, notify pop‑ups, and drawers to ensure accessibility compliance. During course preview, text colours may be modified to maintain proper contrast ratios, which can result in slight variations from the initial preview.",
+};
+
 function calcDesktopSizes(baseRem: number) {
   const MIN_INSTRUCTION_REM = 0.875;
   const MIN_FONT_STEP_REM = 0.0625;
@@ -302,6 +312,35 @@ function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
               <button type="button" className="px-4 py-1.5 rounded text-xs font-medium border" style={{ borderColor: cfg.primaryColor, color: cfg.primaryColor, fontFamily: cfg.paragraphFont }}>Previous</button>
               <button type="button" className="px-4 py-1.5 rounded text-xs font-semibold text-white" style={{ backgroundColor: cfg.primaryColor, fontFamily: cfg.paragraphFont }}>Next</button>
             </div>
+          </div>
+        </div>
+
+        <div
+          className="mt-4 rounded-xl p-4 shadow-sm"
+          style={{
+            background: '#FFFBEB',
+            border: '1px solid #FEE685',
+            color: '#973C00',
+          }}
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <div
+              className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold"
+              style={{ background: '#FDE68A', color: '#973C00' }}
+            >
+              i
+            </div>
+            <span className="text-sm font-bold" style={{ color: '#973C00' }}>{THEME_PREVIEW_INFO.title}</span>
+          </div>
+
+          <div className="mb-4">
+            <div className="text-sm font-semibold mb-1.5" style={{ color: '#7A3000' }}>{THEME_PREVIEW_INFO.livePreviewLabel}</div>
+            <p className="text-xs leading-relaxed" style={{ color: '#973C00' }}>{THEME_PREVIEW_INFO.livePreviewText}</p>
+          </div>
+
+          <div>
+            <div className="text-sm font-semibold mb-1.5" style={{ color: '#7A3000' }}>{THEME_PREVIEW_INFO.accessibilityLabel}</div>
+            <p className="text-xs leading-relaxed" style={{ color: '#973C00' }}>{THEME_PREVIEW_INFO.accessibilityText}</p>
           </div>
         </div>
       </div>
@@ -2116,6 +2155,35 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
+
+          <div
+            className="mt-4 rounded-xl p-4 shadow-sm"
+            style={{
+              background: '#FFFBEB',
+              border: '1px solid #FEE685',
+              color: '#973C00',
+            }}
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <div
+                className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold"
+                style={{ background: '#FDE68A', color: '#973C00' }}
+              >
+                i
+              </div>
+              <span className="text-sm font-bold" style={{ color: '#973C00' }}>{THEME_PREVIEW_INFO.title}</span>
+            </div>
+
+            <div className="mb-4">
+              <div className="text-sm font-semibold mb-1.5" style={{ color: '#7A3000' }}>{THEME_PREVIEW_INFO.livePreviewLabel}</div>
+              <p className="text-xs leading-relaxed" style={{ color: '#973C00' }}>{THEME_PREVIEW_INFO.livePreviewText}</p>
+            </div>
+
+            <div>
+              <div className="text-sm font-semibold mb-1.5" style={{ color: '#7A3000' }}>{THEME_PREVIEW_INFO.accessibilityLabel}</div>
+              <p className="text-xs leading-relaxed" style={{ color: '#973C00' }}>{THEME_PREVIEW_INFO.accessibilityText}</p>
             </div>
           </div>
         </div>
