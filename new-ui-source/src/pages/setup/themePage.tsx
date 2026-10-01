@@ -2078,7 +2078,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       <div className="min-h-0 flex-1 overflow-y-auto p-0" style={{ fontSize: '13px' }}>
         <div style={{ maxWidth: '760px', margin: '0 auto' }}>
           <div className="overflow-hidden rounded-xl border border-[#e5e7eb]" style={{ backgroundColor: previewBg }}>
-            <div style={{ height: '4px', borderTop: `1px solid ${progressBorder}`, borderBottom: `1px solid ${progressBorder}`, background: `linear-gradient(to right, ${progressFill} 60%, ${progressBackground} 60%)` }} />
             <div style={{ background: navBg, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', borderBottom: darkMode ? '1px solid #374151' : '1px solid #f3f4f6' }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={navIconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M19 12H5M12 19l-7-7 7-7" />
@@ -2096,6 +2095,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
               </svg>
             </div>
+            <div style={{ height: '4px', borderTop: `1px solid ${progressBorder}`, borderBottom: `1px solid ${progressBorder}`, background: `linear-gradient(to right, ${progressFill} 60%, ${progressBackground} 60%)` }} />
             <div style={{ backgroundColor: previewBg, padding: '18px' }}>
               <div style={{ maxWidth: '560px', margin: '0 auto' }}>
                 <div style={{ padding: '6px 0 14px' }}>
@@ -2107,51 +2107,65 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                   </div>
                 </div>
 
-                <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.84rem', color: linkColor, textDecoration: 'underline', cursor: 'pointer', marginBottom: '12px' }}>
-                  This is a sample link
-                </div>
+                <div style={{ border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: '10px', background: articleBgColor, padding: `${articleTop}px 12px ${articleBottom}px`, marginTop: '10px' }}>
+                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '1rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '10px' }}>
+                    New Article Title
+                  </div>
 
-                <div style={{ border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`, borderRadius: '10px', background: articleBgColor, padding: '12px' }}>
-                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.9rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '8px' }}>
-                    New Component Title
-                  </div>
-                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: instructionColor, fontStyle: 'italic', marginBottom: '10px' }}>
-                    Choose one option then select Submit.
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {[{ label: 'Correct', selected: true }, { label: 'Incorrect', selected: false }].map((opt) => (
-                      <div
-                        key={opt.label}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '10px',
-                          border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
-                          borderRadius: '999px',
-                          padding: '8px 12px',
-                          background: opt.selected ? `${secondaryColor}1F` : articleBgColor,
-                        }}
-                      >
-                        <div style={{ width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0, border: `2px solid ${opt.selected ? secondaryColor : (darkMode ? '#6b7280' : '#cbd5e1')}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: componentBgColor }}>
-                          {opt.selected && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: secondaryColor }} />}
-                        </div>
-                        <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.8rem', fontWeight: 600, color: textColor }}>{opt.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-start' }}>
-                    <div style={{ display: 'inline-block', background: primaryColor, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
-                      Submit
+                  <div style={{ border: `1px solid ${darkMode ? '#4b5563' : '#9fc9dd'}`, borderRadius: '10px', background: blockBgColor, padding: `${blockTop}px 12px ${blockBottom}px`, marginTop: '10px' }}>
+                    <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.92rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '10px' }}>
+                      New Block Title
                     </div>
-                  </div>
-                </div>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '14px' }}>
-                  <div style={{ display: 'inline-block', border: `1px solid ${primaryColor}`, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 600, color: primaryColor }}>
-                    Previous
-                  </div>
-                  <div style={{ display: 'inline-block', background: primaryColor, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
-                    Next
+                    <div style={{ border: `1px solid ${darkMode ? '#6b7280' : '#d1d5db'}`, borderRadius: '10px', background: componentBgColor, padding: '12px', marginTop: '10px', boxShadow: darkMode ? 'none' : '0 1px 2px rgba(0, 0, 0, 0.05)' }}>
+                      <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.9rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '8px' }}>
+                        New Component Title
+                      </div>
+                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: textColor, marginBottom: '6px' }}>
+                        Body text
+                      </div>
+                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.84rem', color: linkColor, textDecoration: 'underline', cursor: 'pointer', marginBottom: '10px' }}>
+                        This is a sample link
+                      </div>
+                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: instructionColor, fontStyle: 'italic', marginBottom: '10px' }}>
+                        Choose one option then select Submit.
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {[{ label: 'Correct', selected: true }, { label: 'Incorrect', selected: false }].map((opt) => (
+                          <div
+                            key={opt.label}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px',
+                              border: `1px solid ${darkMode ? '#9ca3af' : '#e5e7eb'}`,
+                              borderRadius: '999px',
+                              padding: '8px 12px',
+                              background: opt.selected ? `${secondaryColor}1F` : componentBgColor,
+                            }}
+                          >
+                            <div style={{ width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0, border: `2px solid ${opt.selected ? secondaryColor : (darkMode ? '#d1d5db' : '#cbd5e1')}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: componentBgColor }}>
+                              {opt.selected && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: secondaryColor }} />}
+                            </div>
+                            <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.8rem', fontWeight: 600, color: textColor }}>{opt.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-start' }}>
+                        <div style={{ display: 'inline-block', background: primaryColor, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
+                          Submit
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '14px' }}>
+                        <div style={{ display: 'inline-block', border: `1px solid ${primaryColor}`, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 600, color: primaryColor }}>
+                          Previous
+                        </div>
+                        <div style={{ display: 'inline-block', background: primaryColor, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
+                          Next
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
