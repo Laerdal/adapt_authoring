@@ -2798,6 +2798,7 @@ function CourseCreationCenterContent() {
             courseId={courseId}
             courseTitle={title}
             onBack={() => setActiveNav("overview")}
+            showBackButton={false}
             onTitleChange={setTitle}
           />
         );

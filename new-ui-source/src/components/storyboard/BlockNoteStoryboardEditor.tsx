@@ -31,6 +31,7 @@ import {
   INSERT_META,
   isAssessmentKind,
   type ActiveBlockInfo,
+  type AssessmentKind,
   type PlaceholderCategory,
   type StoryboardDocument,
   type StoryboardEditorHandle,
@@ -40,7 +41,8 @@ import {
   type StoryboardSummary,
 } from '@/types/storyboard';
 import { storyboardSchema } from './schema';
-import { makeComponentBlock, isComponentKind, type ComponentKind } from './blocks/componentBlock';
+import { makeComponentBlock, isComponentKind, COMPONENT_META, type ComponentKind } from './blocks/componentBlock';
+import { ASSESSMENT_LABELS } from './blocks/assessmentBlock';
 import { inlineText, resolveCommentAnchor, resolveInsertionAnchor } from './commentAnchor';
 
 // Toggle button for the subscript/superscript styles added to storyboardSchema
@@ -96,7 +98,6 @@ const COMPONENT_CARD_KINDS = new Set<StoryboardInsertKind>([
   'audio',
   'h5p',
   'laerdalForm',
-  'assessmentResult',
 ]);
 
 const DEFAULT_CONTENT: PartialBlock[] = [
@@ -142,19 +143,66 @@ function BlockNoteStoryboardEditorImpl(
         : DEFAULT_CONTENT,
   });
 
+  // Badge + label for a content-item block (sbComponent/sbAssessment/
+  // sbPlaceholder/native asset) — used to give it a Structure-panel row of its
+  // own. Without this, the Structure panel can only navigate to the enclosing
+  // Content Group heading: several MCQ/Image cards in the same group would
+  // share that one row, so clicking it scrolls to the group but leaves every
+  // item inside it visually indistinguishable from its siblings.
+  const itemRowInfo = useCallback((block: (typeof editor.document)[number]): { badge: string; text: string } | null => {
+    if (block.type === 'sbComponent') {
+      const kind = (block.props as { kind?: string }).kind as ComponentKind | undefined;
+      const title = String((block.props as { title?: string }).title || '');
+      const badge = (kind && COMPONENT_META[kind]?.badge) || kind || 'Content';
+      return { badge, text: title || badge };
+    }
+    if (block.type === 'sbAssessment') {
+      const kind = (block.props as { kind?: string }).kind as AssessmentKind | undefined;
+      const title = String((block.props as { title?: string }).title || '');
+      const badge = (kind && ASSESSMENT_LABELS[kind]) || kind || 'Assessment';
+      return { badge, text: title || badge };
+    }
+    if (block.type === 'sbPlaceholder') {
+      const label = String((block.props as { label?: string }).label || 'Content');
+      const title = String((block.props as { title?: string }).title || '');
+      return { badge: label, text: title || label };
+    }
+    if (ASSET_TYPES.has(block.type)) {
+      const badge = block.type.charAt(0).toUpperCase() + block.type.slice(1);
+      return { badge, text: inlineText(block.content) || badge };
+    }
+    return null;
+  }, []);
+
   const getHeadings = useCallback((): StoryboardHeading[] => {
-    return editor.document
-      .filter((block) => block.type === 'heading')
-      .map((block) => {
+    const out: StoryboardHeading[] = [];
+    let currentLevel = 0;
+    for (const block of editor.document) {
+      if (block.type === 'heading') {
         const level = Number((block.props as { level?: number }).level ?? 1);
-        return {
+        currentLevel = level;
+        out.push({
           id: block.id,
           level,
           text: inlineText(block.content),
           adaptType: adaptTypeForLevel(level),
-        };
+        });
+        continue;
+      }
+      const item = itemRowInfo(block);
+      if (!item) continue;
+      const level = Math.min(4, Math.max(2, currentLevel + 1));
+      out.push({
+        id: block.id,
+        level,
+        text: item.text,
+        adaptType: 'component',
+        isItem: true,
+        itemBadge: item.badge,
       });
-  }, [editor]);
+    }
+    return out;
+  }, [editor, itemRowInfo]);
 
   const getSummary = useCallback((): StoryboardSummary => {
     let topics = 0;

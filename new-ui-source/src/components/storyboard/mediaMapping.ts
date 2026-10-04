@@ -283,6 +283,7 @@ function trackSrc(track: unknown, key: string): string {
 export function imageFromGraphic(graphic: GraphicShape | undefined, idByFilename: Record<string, string>): ImageData {
   const link = (graphic && (graphic.large || graphic.small)) || "";
   return {
+    assetId: idByFilename[filenameFromLink(link)] || undefined,
     link,
     url: resolveAssetUrl(link, idByFilename),
     alt: (graphic && graphic.alt) || "",
@@ -306,6 +307,7 @@ export function classifyLaerdalMedia(media: MediaShape | undefined): "image" | "
 export function imageFromMediaPoster(media: MediaShape | undefined, idByFilename: Record<string, string>): ImageData {
   const link = (media && media.poster) || "";
   return {
+    assetId: idByFilename[filenameFromLink(link)] || undefined,
     link,
     url: resolveAssetUrl(link, idByFilename),
     alt: "",
@@ -325,10 +327,19 @@ export function mediaFromComponent(
   const external = !!m.source && !m.mp4 && !m.mp3;
   const data = emptyMediaData();
   if (link) {
-    data.asset = { link, url: resolveAssetUrl(link, idByFilename), external };
+    data.asset = {
+      assetId: idByFilename[filenameFromLink(link)] || undefined,
+      link,
+      url: resolveAssetUrl(link, idByFilename),
+      external,
+    };
   }
   if (m.poster) {
-    data.poster = { link: m.poster, url: resolveAssetUrl(m.poster, idByFilename) };
+    data.poster = {
+      assetId: idByFilename[filenameFromLink(m.poster)] || undefined,
+      link: m.poster,
+      url: resolveAssetUrl(m.poster, idByFilename),
+    };
   }
   const tracks = Array.isArray(m.cc) ? m.cc : [];
   for (const rawTrack of tracks) {

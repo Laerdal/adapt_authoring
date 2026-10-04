@@ -162,6 +162,24 @@ function escapeHtml(s: string): string {
   return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// Plain-text fallback for a title field — `data.question` is a
+// BasicRichTextEditor (HTML) value, and a title/displayTitle is rendered
+// as-is (not HTML-safe) by Adapt, so deriving a title straight from it
+// leaked literal tags ("<p><strong>...") into the learner-facing heading.
+function stripHtmlToPlainText(html: string): string {
+  return (html || "")
+    .replace(/<\s*br\s*\/?>/gi, " ")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 // A BlockNote block's inline content → safe HTML, preserving bold/italic/
 // underline/strike run styling as real tags — mirrors inlineToRuns' docx-
 // export equivalent (documentConvert.js) so a Text component's formatting is
@@ -362,11 +380,21 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
         continue;
       }
       ensureGroup();
+      // No title here — this Text component was never given one (no H4
+      // heading authored it; it's a bare paragraph the author just typed).
+      // Previously this stamped the first 40 chars of the paragraph's OWN
+      // body text as the title, which persisted into the component's real
+      // `title`/`displayTitle` fields on every Generate/Save — i.e. content
+      // the author only ever entered as body showed up duplicated as the
+      // title in the Editor. Leaving it empty here and letting the write-
+      // back loop (below) skip an empty title lets either createComponent's
+      // own sensible default ("Text") or whatever title already exists on
+      // the component stand, instead of a synthetic copy of the body.
       const comp: GenComponent = {
         sourceBlockId: id,
         existingId,
         componentKey: "text",
-        title: text.slice(0, 40) || "Text",
+        title: "",
         body: html,
       };
       group!.components.push(comp);
@@ -432,17 +460,11 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
       const kind = (raw.props && raw.props.kind) || "text";
       const data = safeParseJson<{
         description?: string;
+        instruction?: string;
         image?: ImageData;
         media?: MediaData;
         items?: Array<{ title?: string; body?: string; image?: string }>;
         fields?: Array<{ control?: string; label?: string; placeholder?: string; mandatory?: boolean }>;
-        result?: {
-          assessmentId?: string;
-          completionBody?: string;
-          retryButton?: string;
-          retryFeedback?: string;
-          bands?: Array<{ score?: number; feedback?: string; allowRetry?: boolean }>;
-        };
       }>(raw.props && raw.props.data, {});
       // `componentKey` now holds the STORYBOARD KIND; the Adapt _component is
       // resolved later via resolveAdaptComponent against installed types.
@@ -452,6 +474,7 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
         componentKey: kind,
         title: ((raw.props && raw.props.title) || "").trim() || "Component",
         body: data.description || "",
+        instruction: data.instruction || "",
       };
       if (kind === "image") {
         comp.pendingKind = "image";
@@ -472,7 +495,7 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
         // picked DAM assets write the course-relative link AND record a
         // courseasset link below so publish can resolve it.
         const asset = data.media?.asset;
-        const patch: Record<string, unknown> = { instruction: "" };
+        const patch: Record<string, unknown> = {};
         if (asset?.external || (asset?.link && /^https?:\/\//i.test(asset.link))) {
           patch._h5pExternalAsset = asset.link || asset.url || "";
         } else if (asset?.link) {
@@ -514,44 +537,23 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
             _label: f.label || "",
             _name: slugify(f.label || "", i),
             _isRequired: !!f.mandatory,
-            _placeholder: f.placeholder || "",
           };
-          if (_inputType === "options" && (f.control || "").toLowerCase() === "checkbox") {
-            item.options = [{ text: f.placeholder || "Yes", value: "yes" }];
+          // The installed adapt-laerdal-form schema nests placeholder/options
+          // per input type (`_inputTypeText._placeholder`, `_inputTypeChoice.
+          // options`, etc.) rather than on the item itself — a flat
+          // `_placeholder`/`options` here lands nowhere the real component (or
+          // its Page Editor / course renderer) ever reads.
+          if (_inputType === "text") item._inputTypeText = { _placeholder: f.placeholder || "" };
+          else if (_inputType === "textarea") item._inputTypeTextArea = { _placeholder: f.placeholder || "" };
+          else if (_inputType === "number") item._inputTypeNumber = { _placeholder: f.placeholder || "" };
+          else if (_inputType === "options") {
+            item._inputTypeChoice = {
+              options: (f.control || "").toLowerCase() === "checkbox" ? [{ label: f.placeholder || "Yes" }] : [],
+            };
           }
           return item;
         });
         comp.assessmentPatch = { _items: items };
-      } else if (kind === "assessmentResult") {
-        // adapt-contrib-assessmentResults: bind to an article-level assessment
-        // (`_assessmentId`), emit bands sorted ascending by `_score` (the
-        // plugin walks the array and picks the highest band whose `_score`
-        // ≤ the learner's score, so ascending order is the required contract),
-        // offer retry, and template the completion body with
-        // `{{scoreAsPercent}}` etc.
-        const r = data.result || {};
-        const bands = Array.isArray(r.bands) ? r.bands : [];
-        comp.assessmentPatch = {
-          _assessmentId: (r.assessmentId || "").trim() || undefined,
-          _completionBody: r.completionBody || "",
-          _isVisibleBeforeCompletion: false,
-          _setCompletionOn: "pass",
-          _resetType: "hard",
-          _retry: {
-            button: r.retryButton || "Try again",
-            feedback: r.retryFeedback || "",
-            _routeToAssessment: true,
-          },
-          _bands: bands
-            .slice()
-            .sort((a, b) => (Number(a.score) || 0) - (Number(b.score) || 0))
-            .map((b) => ({
-              _score: Math.max(0, Math.min(100, Number(b.score) || 0)),
-              feedback: b.feedback || "",
-              feedbackNotFinal: b.feedback || "",
-              _allowRetry: !!b.allowRetry,
-            })),
-        };
       }
     } else if (type === "sbAssessment") {
       const kind = ((raw.props && raw.props.kind) || "mcq") as AssessmentKind;
@@ -568,9 +570,17 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
       // the question body).
       const blockTitle = ((raw.props && (raw.props.title as string)) || "").trim();
       const questionText = (data.question || "").trim();
+      // Title/displayTitle are plain-text fields — never seed them from the
+      // raw (possibly HTML) question itself, only from a stripped fallback.
+      const questionPlainText = stripHtmlToPlainText(questionText);
       const isMcqShaped = kind === "mcq" || kind === "gmcq";
-      const resolvedTitle = blockTitle || (isMcqShaped ? "Check your understanding" : questionText || "Question");
-      const bodyText = isMcqShaped ? questionText : questionText && questionText !== resolvedTitle ? questionText : "";
+      const resolvedTitle = blockTitle || (isMcqShaped ? "Check your understanding" : questionPlainText || "Question");
+      // The question always goes in body as real HTML — including non-MCQ
+      // kinds, which previously only wrote it there when it happened to
+      // differ from resolvedTitle; since resolvedTitle is now always plain
+      // text (never the HTML itself), that comparison always held true and
+      // silently dropped the question body for every non-MCQ assessment.
+      const bodyText = questionText;
       const showTitle = data.showTitle !== false;
       comp = {
         sourceBlockId: id,
@@ -1001,22 +1011,38 @@ export async function generateStoryboardCourse(
           if (resolvedType) buildPatchFor(c, resolvedType.component);
           let compId = c.existingId;
           if (compId) {
-            // Existing node: always keep title/body; only write plugin fields
-            // when the kind resolves to an installed component.
-            const upd: Record<string, unknown> = { title: c.title, displayTitle: c.displayTitle ?? c.title, _parentId: grpId, _sortOrder: cSort, _layout: layout };
+            // Existing node: always keep body; only write plugin fields when
+            // the kind resolves to an installed component. title/displayTitle
+            // are written only when there's a real, author-provided title —
+            // an empty `c.title` (e.g. a bare-paragraph Text component with
+            // no H4 heading) must NOT overwrite whatever title the component
+            // already has (its createComponent default, or one set directly
+            // in the Page Editor) with a blank.
+            const upd: Record<string, unknown> = { _parentId: grpId, _sortOrder: cSort, _layout: layout };
+            if (c.title) {
+              upd.title = c.title;
+              upd.displayTitle = c.displayTitle ?? c.title;
+            }
             if (bodyHtml !== undefined) upd.body = bodyHtml;
-            if (c.instruction !== undefined) upd.instruction = c.instruction;
             // Seed from what's actually live on the document BEFORE merging —
             // mergeProperties merges onto `upd.properties` if already present,
             // so this preserves any property the storyboard doesn't model
             // instead of replacing the whole object with just the new patch.
-            if (resolvedType && (c.mediaPatch || c.assessmentPatch)) {
+            if (resolvedType && (c.mediaPatch || c.assessmentPatch || c.instruction !== undefined)) {
               upd.properties = { ...(existingComponentProps.get(compId) || {}) };
             }
-            // Plugin fields (_graphic/_media/_items/_feedback) nest under
-            // `properties` — top-level would be dropped by the content model.
+            // Plugin fields (_graphic/_media/_items/_feedback) AND `instruction`
+            // nest under `properties` — every installed component declares its
+            // own `instruction` in its OWN properties.schema (there is no
+            // generic top-level `instruction` in the content model's
+            // model.schema), and the publish pipeline's sanitizeCourseJSON
+            // flattens `properties.*` onto the top level, overwriting whatever
+            // (if anything) is already there — so a top-level-only write here
+            // is invisible to Preview/Publish even though it round-trips fine
+            // through the Storyboard's own direct GET of the raw component.
             if (resolvedType && c.mediaPatch) mergeProperties(upd, c.mediaPatch);
             if (resolvedType && c.assessmentPatch) mergeProperties(upd, c.assessmentPatch);
+            if (resolvedType && c.instruction !== undefined) mergeProperties(upd, { instruction: c.instruction });
             await put("component", compId, upd);
             updated += 1;
           } else {
@@ -1027,11 +1053,36 @@ export async function generateStoryboardCourse(
               continue;
             }
             compId = await createComponent(courseId, grpId, resolvedType.type, cSort, layout);
-            const upd: Record<string, unknown> = { title: c.title, displayTitle: c.displayTitle ?? c.title, _layout: layout };
+            // See the matching comment in the existing-component branch above
+            // — an empty `c.title` leaves createComponent's own default
+            // title (the installed component type's display name) standing,
+            // rather than blanking it out.
+            const upd: Record<string, unknown> = { _layout: layout };
+            if (c.title) {
+              upd.title = c.title;
+              upd.displayTitle = c.displayTitle ?? c.title;
+            }
             if (bodyHtml !== undefined) upd.body = bodyHtml;
-            if (c.instruction !== undefined) upd.instruction = c.instruction;
+            // Seed from what createComponent() just wrote (its own defensive PUT
+            // applies the schema defaults) BEFORE merging — same reason as the
+            // existing-component branch above: mergeProperties only replaces the
+            // keys it's given, so without this seed, properties createComponent
+            // just set (e.g. `_supportedLayout`, other plugin defaults this patch
+            // doesn't touch) would be silently wiped by this follow-up PUT.
+            if (c.mediaPatch || c.assessmentPatch || c.instruction !== undefined) {
+              try {
+                const fresh = await apiClient.get<{ properties?: Record<string, unknown> }>(`/api/content/component/${compId}`);
+                upd.properties = { ...(fresh?.properties || {}) };
+              } catch {
+                /* best effort — fall through to mergeProperties seeding {} */
+              }
+            }
+            // See the matching comment in the existing-component branch above —
+            // `instruction` nests under `properties` like every other plugin
+            // field; it is never a generic top-level model field.
             if (c.mediaPatch) mergeProperties(upd, c.mediaPatch);
             if (c.assessmentPatch) mergeProperties(upd, c.assessmentPatch);
+            if (c.instruction !== undefined) mergeProperties(upd, { instruction: c.instruction });
             await put("component", compId, upd);
             created += 1;
           }

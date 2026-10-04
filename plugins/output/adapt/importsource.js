@@ -1091,7 +1091,9 @@ function ImportSource(req, done) {
       case 'course':
         assetData._courseId = assetData._contentTypeId = assetData._contentTypeParentId = contentData._id;
         break;
-      case 'article', 'block', 'config':
+      case 'article':
+      case 'block':
+      case 'config':
         assetData._contentTypeId = contentData._componentType;
         break;
       default:

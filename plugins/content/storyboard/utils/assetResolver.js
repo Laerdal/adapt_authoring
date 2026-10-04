@@ -378,6 +378,217 @@ function sizeFromBuffer(buffer) {
   return { width: FALLBACK_WIDTH, height: FALLBACK_HEIGHT };
 }
 
+// ── External URL fetch ──────────────────────────────────────────────────────
+// Storyboard authors can paste ANY external image/video/audio URL — there is
+// no fixed allowlist that fits (unlike plugins/output/cdn's checkLinkStatus.js,
+// which only ever checks a small set of known CDN hosts). Fetching arbitrary
+// author-supplied URLs server-side is an SSRF vector, so every connection
+// attempt — including each individual redirect hop — is validated against
+// this private/loopback/link-local blocklist before connecting. No existing
+// SSRF-guard utility exists anywhere else in this codebase to reuse.
+
+const dns = require('dns');
+const net = require('net');
+const http = require('http');
+const https = require('https');
+const { URL } = require('url');
+
+const EXTERNAL_FETCH_TIMEOUT_MS = 10000;
+const EXTERNAL_FETCH_MAX_REDIRECTS = 3;
+// Shared ceiling with documentConvert.js's PDF_EMBED_MAX_BYTES, so "fetched
+// from an external URL" and "read from an internal DAM asset" behave
+// consistently rather than having two different arbitrary limits.
+const EXTERNAL_FETCH_MAX_BYTES = 15 * 1024 * 1024;
+
+function ipv4ToInt(parts) {
+  return ((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]) >>> 0;
+}
+
+function isPrivateIPv4(address) {
+  const parts = String(address).split('.').map(Number);
+  if (parts.length !== 4 || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return true; // malformed — reject
+  const n = ipv4ToInt(parts);
+  const inRange = (base, bits) => {
+    const mask = bits === 0 ? 0 : (~0 << (32 - bits)) >>> 0;
+    return (n & mask) === (ipv4ToInt(base) & mask);
+  };
+  return (
+    inRange([0, 0, 0, 0], 8) || // 0.0.0.0/8
+    inRange([10, 0, 0, 0], 8) || // 10.0.0.0/8 (private)
+    inRange([100, 64, 0, 0], 10) || // 100.64.0.0/10 (carrier-grade NAT)
+    inRange([127, 0, 0, 0], 8) || // loopback
+    inRange([169, 254, 0, 0], 16) || // link-local
+    inRange([172, 16, 0, 0], 12) || // 172.16.0.0/12 (private)
+    inRange([192, 168, 0, 0], 16) || // 192.168.0.0/16 (private)
+    inRange([224, 0, 0, 0], 4) || // multicast
+    inRange([240, 0, 0, 0], 4) // reserved
+  );
+}
+
+// WHATWG URL.hostname keeps the brackets around an IPv6 literal (the
+// hostname of `http://[::1]/` is the literal string `[::1]`) — strip them
+// before classifying, otherwise isPrivateIPv6's hextet match never fires
+// and bracketed private/loopback IPv6 literals sail straight through.
+function stripIPv6Brackets(address) {
+  const s = String(address);
+  return s.startsWith('[') && s.endsWith(']') ? s.slice(1, -1) : s;
+}
+
+function isPrivateIPv6(address) {
+  const a = stripIPv6Brackets(address).toLowerCase();
+  if (a === '::1' || a === '::') return true;
+  const firstHextet = a.split(':')[0];
+  if (/^fe[89ab]/.test(firstHextet)) return true; // link-local fe80::/10
+  if (/^f[cd]/.test(firstHextet)) return true; // unique local fc00::/7
+  const mapped = a.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/); // IPv4-mapped — check the embedded address too
+  if (mapped) return isPrivateIPv4(mapped[1]);
+  return false;
+}
+
+function isPrivateAddress(address) {
+  const a = stripIPv6Brackets(address);
+  return a.includes(':') ? isPrivateIPv6(a) : isPrivateIPv4(a);
+}
+
+// Resolves `hostname` once and returns an http(s).request-compatible
+// `lookup` callback pinned to that single validated address, so the actual
+// TCP connection cannot land anywhere except the address we just checked.
+// Handing the hostname to `fetch`/http.request and letting IT resolve
+// separately (as a plain SSRF-guard-then-fetch does) leaves a DNS-rebinding
+// window open: an attacker-controlled name can answer the validation lookup
+// with a public address and the connection's own later lookup with a
+// loopback/private one. Every resolved record is still checked (not just
+// the one we pin) since a round-robin hostname could validate against a
+// public record while a later retry still lands on a private one.
+async function resolvePinnedLookup(hostname) {
+  const stripped = stripIPv6Brackets(hostname);
+  if (stripped.toLowerCase() === 'localhost') {
+    throw new Error('Refusing to fetch a private/internal address');
+  }
+  const ipFamily = net.isIP(stripped);
+  if (ipFamily) {
+    if (isPrivateAddress(stripped)) throw new Error('Refusing to fetch a private/internal address');
+    return (_host, _opts, cb) => cb(null, stripped, ipFamily);
+  }
+  const records = await dns.promises.lookup(hostname, { all: true, verbatim: true });
+  if (!records.length) throw new Error('Could not resolve host');
+  for (const rec of records) {
+    if (isPrivateAddress(rec.address)) throw new Error('Refusing to fetch a private/internal address');
+  }
+  const pinned = records[0];
+  return (_host, _opts, cb) => cb(null, pinned.address, pinned.family);
+}
+
+// Issues a single GET over node's own `http`/`https` modules — not global
+// `fetch`, which doesn't exist at all on Node 16 (the oldest runtime this
+// repo's package.json `engines` still declares support for) and whose
+// `AbortSignal.timeout` helper is newer still. The request's `lookup` option
+// is the address `resolvePinnedLookup` already validated, so DNS plays no
+// further part in where the socket actually connects; `hostname` is passed
+// through unchanged for the Host header / TLS SNI so virtual hosting and
+// certificate validation behave exactly as they would for a normal request.
+function requestOnce(url, lookup, maxBytes) {
+  return new Promise((resolve) => {
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch (e) {
+      return resolve(null);
+    }
+    const mod = parsed.protocol === 'https:' ? https : http;
+    const req = mod.request(
+      {
+        protocol: parsed.protocol,
+        hostname: parsed.hostname,
+        port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+        path: `${parsed.pathname}${parsed.search}`,
+        method: 'GET',
+        lookup,
+        timeout: EXTERNAL_FETCH_TIMEOUT_MS,
+        headers: { 'User-Agent': 'adapt-storyboard-export' },
+      },
+      (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400) {
+          res.resume();
+          const location = res.headers.location;
+          return resolve(location ? { redirect: location } : null);
+        }
+        if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+          res.resume();
+          return resolve(null);
+        }
+        const lengthHeader = res.headers['content-length'];
+        if (lengthHeader && Number(lengthHeader) > maxBytes) {
+          res.resume();
+          return resolve(null);
+        }
+        const contentType = res.headers['content-type'] || '';
+        const chunks = [];
+        let total = 0;
+        res.on('data', (chunk) => {
+          total += chunk.length;
+          if (total > maxBytes) {
+            req.destroy();
+            resolve(null);
+            return;
+          }
+          chunks.push(chunk);
+        });
+        res.on('end', () => resolve({ buffer: Buffer.concat(chunks), contentType }));
+        res.on('error', () => resolve(null));
+      },
+    );
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', () => resolve(null));
+    req.end();
+  });
+}
+
+// Fetch arbitrary bytes from an external URL, following redirects manually
+// (re-validating + re-pinning each hop against the SSRF guard above) and
+// enforcing a timeout + size cap. Returns `{ buffer, contentType }` or
+// `null` on ANY failure — never throws, since every caller treats "couldn't
+// fetch" the same as "not a DAM asset" and falls back to the existing
+// link-only rendering that already works today.
+async function fetchExternalBytes(rawUrl, maxBytes = EXTERNAL_FETCH_MAX_BYTES) {
+  let url = rawUrl;
+  try {
+    for (let hop = 0; hop <= EXTERNAL_FETCH_MAX_REDIRECTS; hop += 1) {
+      let parsed;
+      try {
+        parsed = new URL(url);
+      } catch (e) {
+        return null;
+      }
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+      // eslint-disable-next-line no-await-in-loop
+      const lookup = await resolvePinnedLookup(parsed.hostname);
+      // eslint-disable-next-line no-await-in-loop
+      const result = await requestOnce(url, lookup, maxBytes);
+      if (!result) return null;
+      if (result.redirect) {
+        url = new URL(result.redirect, url).toString();
+        continue;
+      }
+      return result;
+    }
+    return null; // too many redirects
+  } catch (e) {
+    return null;
+  }
+}
+
+// Fetch an external image URL into the same `{ buffer, type, width, height,
+// alt }` shape the DAM/data-URI paths return, so callers don't need to know
+// or care where the bytes came from.
+async function fetchExternalImage(link, alt) {
+  const result = await fetchExternalBytes(link);
+  if (!result || !result.buffer.length) return null;
+  const { width, height } = sizeFromBuffer(result.buffer);
+  const type = docxImageType(result.contentType, link);
+  return { buffer: result.buffer, type, width, height, alt: String(alt || '') };
+}
+
 // A freshly-imported image (picked in the Storyboard editor but not yet
 // Saved/Generated into the course, so it has no DAM asset record yet) is a
 // self-contained `data:image/<type>;base64,<data>` URI — decode it directly.
@@ -456,7 +667,12 @@ async function resolveImageRef(ref, ctx) {
   } else if (!assetRec && link.startsWith('/' + COURSE_ASSETS_PREFIX)) {
     assetRec = await findCourseAssetRecord(link.replace(/^\/+/, ''), ctx);
   }
-  if (!assetRec) return null;
+  if (!assetRec) {
+    // Not a DAM asset — if it's an external URL, fetch and embed it directly
+    // instead of leaving the caller to fall back to a plain clickable link.
+    if (/^https?:\/\//i.test(link)) return fetchExternalImage(link, ref.alt);
+    return null;
+  }
 
   const buffer = await readAssetBuffer(assetRec, ctx);
   if (!buffer || !buffer.length) return null;
@@ -475,28 +691,39 @@ async function resolveImageRef(ref, ctx) {
 // Accept either a full ref object (`{ link, assetId, alt }`) or a bare link
 // string — the emitCard-side data has been through a couple of iterations so
 // keep back-compat.
+// Escapes bare '&' that aren't already part of a valid XML entity reference
+// (&amp; &lt; &gt; &apos; &quot; or a numeric/hex &#…;). This is the single
+// most common defect in hand-edited or externally-exported SVGs (e.g. a
+// label reading "Q&A" or "Terms & Conditions") and is enough on its own to
+// make librsvg's strict XML parser reject an otherwise-valid image.
+function sanitizeSvgMarkup(svgText) {
+  return String(svgText).replace(/&(?!(?:amp|lt|gt|apos|quot|#\d+|#x[0-9a-fA-F]+);)/g, '&amp;');
+}
+
 async function normalizeImageForEmbedding(resolved) {
   if (!resolved || !resolved.buffer) return resolved;
   const type = String(resolved.type || '').toLowerCase();
   if (type !== 'svg' && type !== 'svg+xml') return resolved;
+  const sharp = require('sharp');
+  const width = Math.max(1, Number(resolved.width) || FALLBACK_WIDTH);
+  const height = Math.max(1, Number(resolved.height) || FALLBACK_HEIGHT);
   try {
-    const sharp = require('sharp');
     const png = await sharp(resolved.buffer).png().toBuffer();
-    return {
-      ...resolved,
-      buffer: png,
-      type: 'png',
-      width: Math.max(1, Number(resolved.width) || FALLBACK_WIDTH),
-      height: Math.max(1, Number(resolved.height) || FALLBACK_HEIGHT),
-    };
+    return { ...resolved, buffer: png, type: 'png', width, height };
   } catch (e) {
-    return {
-      ...resolved,
-      buffer: Buffer.from(resolved.buffer),
-      type: 'svg',
-      width: Math.max(1, Number(resolved.width) || FALLBACK_WIDTH),
-      height: Math.max(1, Number(resolved.height) || FALLBACK_HEIGHT),
-    };
+    // Retry against a sanitized copy before giving up — covers the common
+    // real-world defect above without silently dropping the image.
+    try {
+      const repaired = sanitizeSvgMarkup(resolved.buffer.toString('utf8'));
+      const png = await sharp(Buffer.from(repaired, 'utf8')).png().toBuffer();
+      return { ...resolved, buffer: png, type: 'png', width, height };
+    } catch (e2) {
+      // Unrecoverable — return null so callers fall back to their text
+      // placeholder. A `type: 'svg'` object isn't actually usable here:
+      // docx's ImageRun requires a raster `fallback` we can't supply, and
+      // pdfkit cannot draw SVG at all.
+      return null;
+    }
   }
 }
 
@@ -506,4 +733,42 @@ async function resolveAnyImage(input, ctx) {
   return resolveImageRef(input, ctx);
 }
 
-module.exports = { resolveImageRef, resolveAnyImage, normalizeImageForEmbedding };
+// Resolve an internal `course/assets/<filename>` link (or `{ link, assetId }`
+// ref) to its DB asset record, WITHOUT reading the file bytes — used where the
+// caller only needs the record's `_id`/`size`/`mimeType` (e.g. to build a
+// servable URL, or to decide whether a file is small enough to embed) and
+// doesn't want to pay for a full read when it won't use the buffer. Shares
+// the same lookup logic as `resolveImageRef` (assetId first, then filename
+// lookup via `findCourseAssetRecord`) but isn't image-specific — usable for
+// any asset type (video/audio/etc.).
+async function resolveAnyAssetRecord(input, ctx) {
+  if (!input) return null;
+  const ref = typeof input === 'string' ? { link: input } : input;
+  const link = String(ref.link || ref.url || '');
+  const assetId = ref.assetId || ref._assetId || '';
+  if (!assetId && !link) return null;
+
+  let assetRec = null;
+  if (assetId) assetRec = await retrieveAsset({ _id: assetId }, ctx);
+  if (!assetRec && link && !/^https?:\/\//i.test(link)) {
+    assetRec = await findCourseAssetRecord(link, ctx);
+  }
+  return assetRec || null;
+}
+
+// Thin wrapper so callers that only have an asset record (from
+// `resolveAnyAssetRecord` above) don't need to import `readAssetBuffer`
+// directly — keeps the asset-reading internals private to this module.
+async function readResolvedAssetBuffer(assetRec, ctx) {
+  if (!assetRec) return null;
+  return readAssetBuffer(assetRec, ctx);
+}
+
+module.exports = {
+  resolveImageRef,
+  resolveAnyImage,
+  normalizeImageForEmbedding,
+  resolveAnyAssetRecord,
+  readResolvedAssetBuffer,
+  fetchExternalBytes,
+};

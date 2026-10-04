@@ -77,11 +77,23 @@ function computeBodySize(allLines) {
   return mode || 11;
 }
 
+// Thresholds calibrated against this exporter's own PDF_HEADING_SIZE
+// (documentConvert.js: {1:20, 2:16, 3:14, 4:12}) against a body size of 10 or
+// 11pt (the two sizes actually used for body/option/feedback text elsewhere
+// in that file) — the two body sizes give ratios of 2.0/1.6/1.4/1.2 and
+// 1.818/1.455/1.273/1.091 respectively. Breakpoints sit strictly between the
+// lowest ratio of one level and the highest ratio of the next, so round-
+// tripping an exported storyboard PDF classifies all 4 levels distinctly.
+// Previously this only had 3 buckets (level 4 - the Component/content-item
+// heading - could never be returned), which either dropped every re-imported
+// component heading into the surrounding paragraph text or misclassified it
+// as a sibling level-3 Content Group, flattening the hierarchy.
 function classifyHeadingLevel(size, bodySize) {
   const ratio = size / bodySize;
   if (ratio >= 1.8) return 1;
   if (ratio >= 1.45) return 2;
-  if (ratio >= 1.2) return 3;
+  if (ratio >= 1.25) return 3;
+  if (ratio >= 1.08) return 4;
   return 0;
 }
 

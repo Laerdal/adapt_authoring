@@ -118,6 +118,256 @@ function isEntirelyBold(inline) {
   return visible.length > 0 && visible.every((r) => r.bold);
 }
 
+// Mirrors documentConvert.js's COMPONENT_KIND_LABEL / ASSESSMENT_KIND_LABEL —
+// used below only to strip the "{label} — " prefix off a card's rendered
+// title/header line. Duplicated rather than shared, same as other small
+// constant maps split across the storyboard import/export pair (e.g.
+// inputTypeFor in storyboardGeneration.ts vs. adaptAuthoring.ts).
+const RECONCILE_COMPONENT_LABEL = {
+  text: 'Text', groupedContent: 'Grouped Content', image: 'Image', video: 'Video',
+  audio: 'Audio', h5p: 'H5P', laerdalForm: 'Laerdal Form', assessmentResult: 'Assessment Result',
+};
+const RECONCILE_ASSESSMENT_LABEL = {
+  mcq: 'MCQ', gmcq: 'Graphic MCQ', matching: 'Matching', reorder: 'Sentence Reordering',
+  textInput: 'Text Input', slider: 'Slider', checklist: 'Checklist',
+};
+
+function escapeHtmlText(text) {
+  return String(text || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+// Converts a NormalizedInlineRun[] (the {text, bold, italic, underline,
+// strike, subscript, superscript, link} shape docxNormalizer.js produces)
+// into an HTML string preserving formatting. `description`/`instruction`/
+// `question` are rich-text (BasicRichTextEditor) fields stored as HTML —
+// re-deriving them as PLAIN text (as an earlier version of this function
+// did) silently dropped bold/italic/underline/strike/subscript/superscript
+// on every reimport. A literal '\n' run (a manual Word line break WITHIN one
+// paragraph, from extractInline's <br> handling) becomes a real <br>.
+function inlineRunsToHtml(inline) {
+  return (inline || [])
+    .map((run) => {
+      if (!run) return '';
+      if (run.text === '\n') return '<br>';
+      let html = escapeHtmlText(run.text || '');
+      if (!html) return '';
+      if (run.subscript) html = `<sub>${html}</sub>`;
+      if (run.superscript) html = `<sup>${html}</sup>`;
+      if (run.strike) html = `<s>${html}</s>`;
+      if (run.underline) html = `<u>${html}</u>`;
+      if (run.italic) html = `<em>${html}</em>`;
+      if (run.bold) html = `<strong>${html}</strong>`;
+      return html;
+    })
+    .join('');
+}
+
+// Wraps each paragraph's rich-formatted HTML in <p>...</p>, matching the
+// rich-text editor's own multi-paragraph convention — a literal '\n' joining
+// paragraphs (as an earlier version of this function did) is NOT a real
+// paragraph break once it reaches dangerouslySetInnerHTML: HTML collapses
+// bare whitespace, so the break was silently lost on redisplay even though
+// the underlying string still "looked" multi-line in raw JSON.
+function paragraphsToHtml(paragraphItems) {
+  return paragraphItems
+    .map((p) => inlineRunsToHtml(p.inline))
+    .filter((html) => html.trim())
+    .map((html) => `<p>${html}</p>`)
+    .join('');
+}
+
+// A STRUCTURAL line in an sbComponent card's visible prose (mirrors
+// sbComponentToDocxParagraphs) — used to recognize where the description
+// paragraphs end, by the LITERAL label text the exporter writes, not by
+// formatting. An earlier version of this used "fully bold"/"fully italic"/
+// "contains a link" as the signal, but all three are formatting an author
+// can legitimately apply inside their own description (a bolded opening
+// sentence, an italicized aside, an inline link) — treating them as
+// structural silently discarded the real edit and kept the frozen marker
+// value instead. `altText`, when given, additionally recognizes the italic
+// alt-text caption pushImageRef writes after an image/poster (compared by
+// exact value, not by its italic styling, since that's the one place this
+// exporter still relies on styling rather than a label).
+function isComponentStructuralLine(text, altText) {
+  if (/^(?:Video|Audio) URL:/.test(text)) return true;
+  if (/^Transcript:/.test(text)) return true;
+  if (/^Instruction:/.test(text)) return true;
+  if (text.indexOf('•') === 0) return true;
+  if (altText && text === altText) return true;
+  return false;
+}
+
+// Collects every paragraph from `startIndex` that belongs to the question
+// body — NOT an option/feedback/etc. line (isAssessmentStructuralLine) —
+// mirroring the sbComponent description loop above: pushRichTextParagraphs
+// can write an arbitrary number of paragraphs for a multi-paragraph or
+// richly-formatted question, and peeking at only `paragraphs[startIndex]`
+// (an earlier version of this code) truncated every paragraph after the
+// first and ignored bold/italic within it.
+function collectAssessmentQuestionParagraphs(paragraphs, startIndex) {
+  const out = [];
+  for (let i = startIndex; i < paragraphs.length; i += 1) {
+    const p = paragraphs[i];
+    const text = inlineToPlainText(p.inline).trim();
+    if (!text) continue;
+    if (isAssessmentStructuralLine(text)) break;
+    out.push(p);
+  }
+  return out;
+}
+
+// A per-kind STRUCTURAL line in an sbAssessment card's visible prose (mirrors
+// sbAssessmentToDocxParagraphs) — used only to recognize where a free-text
+// question paragraph would NOT be (so it's never mistaken for one).
+function isAssessmentStructuralLine(text) {
+  return (
+    /^[●○]\s/.test(text) || // mcq/gmcq/checklist option
+    /^•\s/.test(text) || // matching pair / textInput accepted answer
+    /^\d+\.\s/.test(text) || // reorder item
+    /^(Correct|Incorrect|Incorrect — not final|Partly correct — final|Partly correct — not final):/i.test(text)
+  );
+}
+
+// Re-derive the handful of plain free-text fields a user can meaningfully
+// edit in Word — title/description/instruction for a component card,
+// title/question for an assessment card — from the card's VISIBLE, possibly-
+// edited prose (`visibleItems`, captured by docxNormalizer.js instead of
+// being discarded). Everything else (options, correct-answer flags,
+// per-option feedback, whole-question feedback, asset refs) still comes from
+// the hidden marker's frozen `props`: those aren't reliably recoverable from
+// prose alone, and guessing wrong there is worse than leaving them as
+// exported (see the scoping discussion that led to this function — ADAPT-
+// 3760 reimport staleness fix, "common text fields only").
+//
+// Conservative throughout: any paragraph shape that doesn't clearly match
+// what the exporter is known to produce leaves the corresponding field
+// untouched rather than guessing. Never mutates `props`.
+function reconcileCardProps(blockType, props, visibleItems) {
+  if (!Array.isArray(visibleItems) || !visibleItems.length) return props;
+  const paragraphs = visibleItems.filter((it) => it && it.kind === 'paragraph');
+  if (!paragraphs.length) return props;
+
+  const originalTitle = String(props.title || '').trim();
+  const headerText = inlineToPlainText(paragraphs[0].inline).trim();
+  if (!headerText) return props;
+
+  if (blockType === 'sbComponent') {
+    const kind = props.kind || 'text';
+    const label = RECONCILE_COMPONENT_LABEL[kind] || kind;
+    const prefix = `${label} — `;
+    let nextTitle = originalTitle;
+    if (headerText.indexOf(prefix) === 0) nextTitle = headerText.slice(prefix.length).trim();
+    else if (headerText === label) nextTitle = '';
+    else if (!originalTitle) return props; // unexpected shape — don't guess
+
+    let data;
+    try {
+      data = JSON.parse(props.data || '{}');
+    } catch (e) {
+      return props;
+    }
+
+    // Description: paragraphs immediately after the header, up to the first
+    // one recognized as this kind's structural content (media-URL label,
+    // image/poster alt caption, Laerdal Form field bullet, or the trailing
+    // "Instruction:"/"Transcript:" block) via isComponentStructuralLine's
+    // literal-label check — NOT by formatting, so an author's own bold/
+    // italic/linked text within the description survives reimport instead
+    // of being mistaken for a structural boundary and discarded. Grouped
+    // Content is the one kind whose item titles have no literal label
+    // (documentConvert.js writes them as a bare bold paragraph), so it alone
+    // still uses "fully bold" as its boundary signal.
+    const altText = String((data.image && data.image.alt) || (data.media && data.media.poster && data.media.poster.alt) || '').trim();
+    const descParagraphs = [];
+    for (let i = 1; i < paragraphs.length; i += 1) {
+      const p = paragraphs[i];
+      const text = inlineToPlainText(p.inline).trim();
+      if (!text) continue;
+      if (isComponentStructuralLine(text, altText)) break;
+      if (kind === 'groupedContent' && isEntirelyBold(p.inline)) break;
+      descParagraphs.push(p);
+    }
+
+    // Instruction: everything after a literal, bold-only "Instruction:"
+    // label paragraph (mirrors the "Transcript:" label convention — see
+    // sbComponentToDocxParagraphs). An unambiguous marker, unlike an earlier
+    // version of this code that inferred the instruction block from "the
+    // trailing run of fully-italic paragraphs" — that forced EVERY
+    // instruction run italic at export time to make it detectable, which
+    // then made an author's OWN <em> formatting indistinguishable from the
+    // convention (OOXML runs can't represent "italic for two different
+    // reasons") and required special-casing an image's alt-text caption to
+    // avoid misreading it as instruction content. A literal label has
+    // neither problem.
+    const instrLabelIndex = paragraphs.findIndex((p) => isEntirelyBold(p.inline) && inlineToPlainText(p.inline).trim() === 'Instruction:');
+    const instrParagraphs = instrLabelIndex === -1 ? [] : paragraphs.slice(instrLabelIndex + 1);
+
+    // Assign unconditionally (not just when non-empty) — both regions were
+    // positively recognized by the scans above (the description loop always
+    // runs; the instruction label is either found or, per
+    // sbComponentToDocxParagraphs, was never written because there was
+    // nothing to label), so an author deleting all the visible text in
+    // either region is a real edit to round-trip, not an unrecognized shape
+    // to leave alone. Only assigning when non-empty (an earlier version of
+    // this code) meant a deletion silently kept the frozen marker's old
+    // value forever.
+    const nextData = { ...data };
+    nextData.description = descParagraphs.length ? paragraphsToHtml(descParagraphs) : '';
+    nextData.instruction = instrParagraphs.length ? paragraphsToHtml(instrParagraphs) : '';
+
+    return { ...props, title: nextTitle, data: JSON.stringify(nextData) };
+  }
+
+  if (blockType === 'sbAssessment') {
+    const kind = props.kind || 'mcq';
+    const label = RECONCILE_ASSESSMENT_LABEL[kind] || 'Question';
+    const prefix = `${label} — `;
+    let headerValue = null;
+    if (headerText.indexOf(prefix) === 0) headerValue = headerText.slice(prefix.length).trim();
+    else if (headerText === label) headerValue = '';
+    if (headerValue === null) return props; // unexpected shape — don't guess
+
+    let data;
+    try {
+      data = JSON.parse(props.data || '{}');
+    } catch (e) {
+      return props;
+    }
+    const nextData = { ...data };
+
+    // Mirrors the exporter's own header precedence (sbAssessmentToDocxParagraphs:
+    // `headerText = title || question`): a non-empty original title means the
+    // header IS the title, with `question` (if shown) as its own paragraph
+    // right after; an empty original title means the header IS the question.
+    if (!originalTitle) {
+      // `headerValue` is itself a collapsed, single-line, PLAIN-TEXT echo of
+      // `question` — sbAssessmentToDocxParagraphs always writes the header
+      // as plain text, then additionally writes the full rich `question` as
+      // its own paragraph(s) below whenever it isn't already fully captured
+      // by that collapsed line (multi-paragraph or any formatting). Prefer
+      // reconstructing those richer paragraphs when present, so bold/
+      // italic/paragraph breaks survive; only fall back to the plain header
+      // when there's nothing more (a simple single-line, unformatted
+      // question, where the header already IS the full content).
+      const questionParagraphs = collectAssessmentQuestionParagraphs(paragraphs, 1);
+      nextData.question = questionParagraphs.length ? paragraphsToHtml(questionParagraphs) : headerValue;
+      return { ...props, data: JSON.stringify(nextData) };
+    }
+    // Assign unconditionally, same reasoning as the sbComponent
+    // description/instruction fix above — an author deleting the whole
+    // question paragraph (keeping only the title) is a real edit to
+    // round-trip, not an unrecognized shape to leave alone.
+    const questionParagraphs = collectAssessmentQuestionParagraphs(paragraphs, 1);
+    nextData.question = questionParagraphs.length ? paragraphsToHtml(questionParagraphs) : '';
+    return { ...props, title: headerValue, data: JSON.stringify(nextData) };
+  }
+
+  return props;
+}
+
 // Looks for a Q+options run starting at blocks[startIndex]. Returns null if
 // there's no question there, or fewer than 2 options, or no option is marked
 // correct (bold) — any of those means this isn't confidently a quiz and the
@@ -315,11 +565,17 @@ function blockToBlockNote(block, warnings) {
       return [makeSbComponent('image', { image: { link: block.src, alt: block.alt || '' } })];
     }
     case 'richCard': {
-      // Reconstructed verbatim from a hidden export marker (see
-      // docxNormalizer.js) — the exact original sbComponent/sbAssessment
-      // block, not re-derived from lossy prose.
+      // Reconstructed from a hidden export marker (see docxNormalizer.js) —
+      // structure (kind, options, correct-answer flags, feedback, asset
+      // refs) comes from the marker's frozen `props` verbatim, since none of
+      // that is reliably recoverable from prose. But the marker is a FROZEN
+      // copy from export time — if the user edited the VISIBLE title/
+      // description/instruction/question text in Word, this reconciles those
+      // specific fields back in from what's actually on the page now (see
+      // reconcileCardProps) so the edit isn't silently discarded.
       if (!block.blockType || !block.props) return [];
-      return [{ id: nextId('rc'), type: block.blockType, props: block.props, children: [] }];
+      const props = reconcileCardProps(block.blockType, block.props, block.visibleItems);
+      return [{ id: nextId('rc'), type: block.blockType, props, children: [] }];
     }
     case 'unsupported': {
       // Never silently drop content (spec: nothing skipped) — fall back to
