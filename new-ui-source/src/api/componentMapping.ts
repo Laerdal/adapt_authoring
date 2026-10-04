@@ -28,7 +28,8 @@ export type StoryboardComponentKind =
   | 'hotgraphic'
   | 'hotgrid'
   | 'actionplan'
-  | 'instruction';
+  | 'instruction'
+  | 'assessmentResult';
 
 // Ordered candidate `_component` values per storyboard kind.
 export const COMPONENT_CANDIDATES: Record<StoryboardComponentKind, string[]> = {
@@ -50,6 +51,7 @@ export const COMPONENT_CANDIDATES: Record<StoryboardComponentKind, string[]> = {
   hotgrid: ['hotgrid'],
   actionplan: ['actionplan', 'laerdal-actionplan'],
   instruction: ['text', 'laerdal-text'],
+  assessmentResult: ['assessmentResults'],
 };
 
 // Resolve a storyboard kind to an installed Adapt `_component`, or null if none
@@ -94,6 +96,7 @@ const REVERSE: Record<string, StoryboardComponentKind | 'media'> = {
   hotgrid: 'hotgrid',
   actionplan: 'actionplan',
   'laerdal-actionplan': 'actionplan',
+  assessmentResults: 'assessmentResult',
 };
 
 export function reverseKind(component?: string): StoryboardComponentKind | 'media' | null {

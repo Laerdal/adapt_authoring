@@ -18,6 +18,7 @@ import {
   AudioLines,
   Puzzle,
   ClipboardList,
+  Award,
   RefreshCw,
   Pencil,
   Sparkles,
@@ -69,7 +70,8 @@ export type ComponentKind =
   | 'video'
   | 'audio'
   | 'h5p'
-  | 'laerdalForm';
+  | 'laerdalForm'
+  | 'assessmentResult';
 
 export const COMPONENT_KINDS: ComponentKind[] = [
   'text',
@@ -79,6 +81,7 @@ export const COMPONENT_KINDS: ComponentKind[] = [
   'audio',
   'h5p',
   'laerdalForm',
+  'assessmentResult',
 ];
 
 export const COMPONENT_META: Record<ComponentKind, { badge: string; Icon: typeof Type; comp: string; suggest: ComponentKind[] }> = {
@@ -89,6 +92,7 @@ export const COMPONENT_META: Record<ComponentKind, { badge: string; Icon: typeof
   audio: { badge: 'Audio', Icon: AudioLines, comp: 'media', suggest: ['video', 'text'] },
   h5p: { badge: 'H5P', Icon: Puzzle, comp: 'h5p', suggest: ['video', 'groupedContent'] },
   laerdalForm: { badge: 'Laerdal Form', Icon: ClipboardList, comp: 'text', suggest: ['text'] },
+  assessmentResult: { badge: 'Assessment Result', Icon: Award, comp: 'assessmentResults', suggest: ['text'] },
 };
 
 const LABEL_TO_KIND: Record<string, ComponentKind> = Object.fromEntries(
@@ -110,6 +114,22 @@ interface FormField {
   placeholder: string;
   mandatory: boolean;
 }
+// adapt-contrib-assessmentResults: bands + retry + completion body. Bound to an
+// Adapt article-level assessment via `_assessmentId` — the user picks the
+// article id (visible in the Page Editor) or leaves it blank to use the first
+// assessment in the course at runtime.
+interface ResultBand {
+  score: number;
+  feedback: string;
+  allowRetry: boolean;
+}
+interface AssessmentResultConfig {
+  assessmentId: string;
+  completionBody: string;
+  retryButton: string;
+  retryFeedback: string;
+  bands: ResultBand[];
+}
 interface ComponentData {
   showTitle: boolean;
   description: string;
@@ -118,6 +138,7 @@ interface ComponentData {
   image?: ImageData; // image card (→ _graphic)
   media?: MediaData; // video/audio card (→ _media)
   fields?: FormField[];
+  result?: AssessmentResultConfig; // assessmentResult card
 }
 
 const FORM_CONTROLS = ['Single-Line Text', 'Multi-Line Text', 'Number', 'Checkbox', 'Dropdown'];
@@ -135,6 +156,20 @@ export function defaultComponentData(kind: ComponentKind): ComponentData {
       return { ...base, media: emptyMediaData() };
     case 'laerdalForm':
       return { ...base, fields: [{ control: 'Single-Line Text', label: 'Your answer', placeholder: 'Type here', mandatory: false }] };
+    case 'assessmentResult':
+      return {
+        ...base,
+        result: {
+          assessmentId: '',
+          completionBody: 'You scored {{scoreAsPercent}}%.',
+          retryButton: 'Try again',
+          retryFeedback: 'Take another go and see if you can improve your score.',
+          bands: [
+            { score: 0, feedback: 'You did not pass. Please review the material and try again.', allowRetry: true },
+            { score: 80, feedback: 'Well done — you passed!', allowRetry: false },
+          ],
+        },
+      };
     default:
       return base;
   }
@@ -166,12 +201,15 @@ function parseData(kind: ComponentKind, raw: string): ComponentData {
 export type RichTextEditableField =
   | 'description'
   | 'instruction'
-  | 'itemBody';
+  | 'itemBody'
+  | 'completionBody'
+  | 'bandFeedback';
 
 export function getRichTextEditableFields(kind: ComponentKind): RichTextEditableField[] {
   const fields: RichTextEditableField[] = ['instruction'];
   if (kind === 'text') fields.unshift('description');
   if (kind === 'groupedContent') fields.push('itemBody');
+  if (kind === 'assessmentResult') fields.push('completionBody', 'bandFeedback');
   return fields;
 }
 
@@ -193,6 +231,8 @@ function hasComponentContent(kind: ComponentKind, data: ComponentData, title: st
       return !!(data.media?.asset?.link || data.media?.asset?.url);
     case 'laerdalForm':
       return (data.fields || []).some((f) => f.label.trim());
+    case 'assessmentResult':
+      return !!(data.result?.assessmentId.trim() || (data.result?.bands || []).some((b) => b.feedback.trim()));
     default:
       return false;
   }
@@ -232,6 +272,8 @@ function instructionPlaceholder(kind: ComponentKind): string {
       return 'e.g. Complete the form before continuing.';
     case 'groupedContent':
       return 'e.g. Explore each content item before continuing.';
+    case 'assessmentResult':
+      return 'e.g. Review the result before continuing.';
     default:
       return 'e.g. Read the content before continuing.';
   }
@@ -577,6 +619,112 @@ function ComponentBody({ kind, data, set, blockId }: { kind: ComponentKind; data
     );
   }
 
+  if (kind === 'assessmentResult') {
+    const r = data.result ?? {
+      assessmentId: '',
+      completionBody: '',
+      retryButton: 'Try again',
+      retryFeedback: '',
+      bands: [] as ResultBand[],
+    };
+    const setR = (patch: Partial<AssessmentResultConfig>) => set({ ...data, result: { ...r, ...patch } });
+    const setBands = (bands: ResultBand[]) => setR({ bands });
+    const bands = r.bands ?? [];
+    return (
+      <div className="space-y-2">
+        <label className="block">
+          <span className={labelCls}>Assessment ID (article id)</span>
+          <input
+            value={r.assessmentId}
+            placeholder="Leave blank to bind to the first assessment on the page"
+            onKeyDown={stop}
+            onChange={(e) => setR({ assessmentId: e.target.value })}
+            className={inputCls}
+          />
+        </label>
+        <div>
+          <RichTextField
+            label="Completion body"
+            value={r.completionBody}
+            onChange={(html) => setR({ completionBody: html })}
+            placeholder="e.g. You scored {{scoreAsPercent}}%."
+            minHeight={90}
+            ariaLabel="Assessment completion body"
+            resetKey={`${blockId}-completion-body`}
+          />
+          <span className="mt-0.5 block text-[11px] italic text-muted-foreground">
+            Supports {'{{score}}'}, {'{{scoreAsPercent}}'}, {'{{maxScore}}'}, {'{{correct}}'}, {'{{questionCount}}'}.
+          </span>
+        </div>
+        <div className="rounded border border-border p-2">
+          <div className={labelCls}>Score bands</div>
+          {bands.map((b, i) => (
+            <div key={i} className="mb-2 grid grid-cols-[80px_1fr_auto] gap-2 rounded border border-border p-2">
+              <label className="block">
+                <span className={labelCls}>Min %</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={b.score}
+                  onKeyDown={stop}
+                  onChange={(e) => setBands(bands.map((x, j) => (j === i ? { ...x, score: Math.max(0, Math.min(100, Number(e.target.value) || 0)) } : x)))}
+                  className={inputCls}
+                />
+              </label>
+              <div>
+                <RichTextField
+                  label="Feedback"
+                  value={b.feedback}
+                  onChange={(html) => setBands(bands.map((x, j) => (j === i ? { ...x, feedback: html } : x)))}
+                  minHeight={80}
+                  ariaLabel={`Score band ${i + 1} feedback`}
+                  resetKey={`${blockId}-band-${i}`}
+                />
+                <label className="mt-1 flex items-center gap-1.5 text-xs text-foreground cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={b.allowRetry}
+                    onChange={(e) => setBands(bands.map((x, j) => (j === i ? { ...x, allowRetry: e.target.checked } : x)))}
+                    aria-label="Allow retry"
+                    className="sr-only peer"
+                  />
+                  <CheckboxIndicator checked={b.allowRetry} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
+                  Allow retry
+                </label>
+              </div>
+              <button
+                type="button"
+                aria-label="Remove band"
+                onClick={() => setBands(bands.filter((_, j) => j !== i))}
+                className="self-start text-muted-foreground hover:text-foreground"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => setBands([...bands, { score: 0, feedback: '', allowRetry: false }])}
+            className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+          >
+            <Plus className="h-3 w-3" /> Add band
+          </button>
+        </div>
+        <div className="grid grid-cols-2 gap-2 rounded border border-border p-2">
+          <label className="block">
+            <span className={labelCls}>Retry button label</span>
+            <input value={r.retryButton} onKeyDown={stop} onChange={(e) => setR({ retryButton: e.target.value })} className={inputCls} />
+          </label>
+          <label className="block">
+            <span className={labelCls}>Retry feedback</span>
+            <input value={r.retryFeedback} onKeyDown={stop} onChange={(e) => setR({ retryFeedback: e.target.value })} className={inputCls} />
+          </label>
+        </div>
+      </div>
+    );
+  }
+
   return null;
 }
 
@@ -729,6 +877,51 @@ const instructionHtml = sanitizeEditorHtml(data.instruction);
               )}
             </label>
           ))}
+        </div>
+        {instruction}
+      </div>
+    );
+  }
+
+  if (kind === 'assessmentResult') {
+    const r = data.result;
+    const bands = r?.bands ?? [];
+    const completionHtml = sanitizeEditorHtml(r?.completionBody ?? '');
+    return (
+      <div>
+        {heading}
+        <div className="rounded-lg border border-dashed border-border bg-muted/40 p-3">
+          <div className="mb-2 inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <Award className="h-3.5 w-3.5" /> Assessment result
+          </div>
+          {completionHtml ? (
+            <div className="text-sm text-foreground" dangerouslySetInnerHTML={{ __html: completionHtml }} />
+          ) : (
+            <p className="text-sm italic text-muted-foreground">Completion body not set.</p>
+          )}
+          {bands.length > 0 && (
+            <ul className="mt-2 space-y-1 text-xs">
+              {bands.map((b, i) => {
+                const feedbackHtml = sanitizeEditorHtml(b.feedback || '');
+                return (
+                  <li key={i} className="flex items-baseline gap-2">
+                    <span className="min-w-[3rem] rounded bg-background px-1 py-0.5 text-[10px] font-semibold text-muted-foreground">≥ {b.score}%</span>
+                    <span className="text-foreground">
+                      {feedbackHtml ? (
+                        <span dangerouslySetInnerHTML={{ __html: feedbackHtml }} />
+                      ) : (
+                        <span className="italic text-muted-foreground">(no feedback)</span>
+                      )}
+                    </span>
+                    {b.allowRetry && <span className="text-muted-foreground">· retry</span>}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {r?.assessmentId && (
+            <div className="mt-2 text-[11px] text-muted-foreground">Bound to assessment id: <code>{r.assessmentId}</code></div>
+          )}
         </div>
         {instruction}
       </div>

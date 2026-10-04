@@ -3142,6 +3142,31 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       });
       return;
     }
+    // Assessment Results → dedicated card that round-trips its bands and
+    // retry. Not a real assessment/question component on the Adapt side
+    // (sbKind resolves via assessmentResult, not isAssessmentComponentKind),
+    // but listed under the Storyboard's Assessment section by design.
+    if (sbKind === "assessmentResult") {
+      const rawBands = Array.isArray(props._bands) ? (props._bands as Array<Record<string, unknown>>) : [];
+      const retry = (props._retry as Record<string, unknown>) || {};
+      emitCard(comp, "assessmentResult", {
+        showTitle: true,
+        description: "",
+        instruction: "",
+        result: {
+          assessmentId: String(props._assessmentId || ""),
+          completionBody: String(props._completionBody || ""),
+          retryButton: String(retry.button || "Try again"),
+          retryFeedback: String(retry.feedback || ""),
+          bands: rawBands.map((b) => ({
+            score: Math.max(0, Math.min(100, Number(b._score) || 0)),
+            feedback: String(b.feedback || ""),
+            allowRetry: !!b._allowRetry,
+          })),
+        },
+      });
+      return;
+    }
     // Plain text (Adapt's "text" / "laerdal-text" component) → sbComponent
     // "text" card — the SAME clickable card (Show title / Description /
     // Instruction / AI / Delete) the "Add Content" flow already creates for a
@@ -3383,6 +3408,13 @@ export async function saveStoryboardToCourse(
         instruction?: string;
         items?: Array<{ title?: string; body?: string; image?: string; imageAssetId?: string }>;
         fields?: Array<{ control?: string; label?: string; placeholder?: string; mandatory?: boolean }>;
+        result?: {
+          assessmentId?: string;
+          completionBody?: string;
+          retryButton?: string;
+          retryFeedback?: string;
+          bands?: Array<{ score?: number; feedback?: string; allowRetry?: boolean }>;
+        };
       } = {};
       try {
         parsed = raw.props?.data ? JSON.parse(raw.props.data) : {};
@@ -3514,6 +3546,31 @@ export async function saveStoryboardToCourse(
         });
         patch.body = parsed.description || "";
         mergeProperties(patch, { instruction: parsed.instruction || "" });
+      } else if (kind === "assessmentResult" && info.component === "assessmentResults") {
+        seedProperties();
+        const result = parsed.result || {};
+        const bands = Array.isArray(result.bands) ? result.bands : [];
+        mergeProperties(patch, {
+          _assessmentId: (result.assessmentId || "").trim() || undefined,
+          _completionBody: result.completionBody || "",
+          _isVisibleBeforeCompletion: false,
+          _setCompletionOn: "pass",
+          _resetType: "hard",
+          _retry: {
+            button: result.retryButton || "Try again",
+            feedback: result.retryFeedback || "",
+            _routeToAssessment: true,
+          },
+          _bands: bands
+            .slice()
+            .sort((a, b) => (Number(a?.score) || 0) - (Number(b?.score) || 0))
+            .map((band) => ({
+              _score: Math.max(0, Math.min(100, Number(band?.score) || 0)),
+              feedback: band?.feedback || "",
+              feedbackNotFinal: band?.feedback || "",
+              _allowRetry: !!band?.allowRetry,
+            })),
+        });
       } else if (kind === "text" && (info.component === "text" || info.component === "laerdal-text")) {
         // Plain text component — write the edited description back onto
         // `body` and the instruction field, so the sbComponent "text" card
