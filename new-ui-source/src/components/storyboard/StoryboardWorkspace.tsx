@@ -140,12 +140,15 @@ export default function StoryboardWorkspace({
   courseTitle = '',
   initialDocument,
   onBack,
+  showBackButton = true,
   onTitleChange,
 }: {
   courseId?: string;
   courseTitle?: string;
   initialDocument?: StoryboardDocument;
   onBack?: () => void;
+  /** Forwarded to StoryboardTopBar's own `showBack` — see its doc comment. */
+  showBackButton?: boolean;
   /** Called with the new title after a successful edit here, so callers whose
    *  own state feeds `courseTitle` (StoryboardPage, SetupPage's embedded
    *  panel) stay in sync without needing a full refetch. */
@@ -694,6 +697,7 @@ export default function StoryboardWorkspace({
       <StoryboardTopBar
         status={sb.status}
         onBack={() => onBack?.()}
+        showBack={showBackButton}
         onImport={handleImport}
         onExport={handleExport}
         onGenerate={generate}

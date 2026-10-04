@@ -388,6 +388,9 @@ function sizeFromBuffer(buffer) {
 // SSRF-guard utility exists anywhere else in this codebase to reuse.
 
 const dns = require('dns');
+const net = require('net');
+const http = require('http');
+const https = require('https');
 const { URL } = require('url');
 
 const EXTERNAL_FETCH_TIMEOUT_MS = 10000;
@@ -422,8 +425,17 @@ function isPrivateIPv4(address) {
   );
 }
 
+// WHATWG URL.hostname keeps the brackets around an IPv6 literal (the
+// hostname of `http://[::1]/` is the literal string `[::1]`) — strip them
+// before classifying, otherwise isPrivateIPv6's hextet match never fires
+// and bracketed private/loopback IPv6 literals sail straight through.
+function stripIPv6Brackets(address) {
+  const s = String(address);
+  return s.startsWith('[') && s.endsWith(']') ? s.slice(1, -1) : s;
+}
+
 function isPrivateIPv6(address) {
-  const a = String(address).toLowerCase();
+  const a = stripIPv6Brackets(address).toLowerCase();
   if (a === '::1' || a === '::') return true;
   const firstHextet = a.split(':')[0];
   if (/^fe[89ab]/.test(firstHextet)) return true; // link-local fe80::/10
@@ -434,80 +446,131 @@ function isPrivateIPv6(address) {
 }
 
 function isPrivateAddress(address) {
-  return String(address).includes(':') ? isPrivateIPv6(address) : isPrivateIPv4(address);
+  const a = stripIPv6Brackets(address);
+  return a.includes(':') ? isPrivateIPv6(a) : isPrivateIPv4(a);
 }
 
-// Resolves the hostname and rejects if ANY resolved address is private — a
-// hostname that round-robins between a public and a private address would
-// otherwise be able to slip through on a later connection.
-async function assertUrlIsFetchable(rawUrl) {
-  let parsed;
-  try {
-    parsed = new URL(rawUrl);
-  } catch (e) {
-    throw new Error('Invalid URL');
+// Resolves `hostname` once and returns an http(s).request-compatible
+// `lookup` callback pinned to that single validated address, so the actual
+// TCP connection cannot land anywhere except the address we just checked.
+// Handing the hostname to `fetch`/http.request and letting IT resolve
+// separately (as a plain SSRF-guard-then-fetch does) leaves a DNS-rebinding
+// window open: an attacker-controlled name can answer the validation lookup
+// with a public address and the connection's own later lookup with a
+// loopback/private one. Every resolved record is still checked (not just
+// the one we pin) since a round-robin hostname could validate against a
+// public record while a later retry still lands on a private one.
+async function resolvePinnedLookup(hostname) {
+  const stripped = stripIPv6Brackets(hostname);
+  if (stripped.toLowerCase() === 'localhost') {
+    throw new Error('Refusing to fetch a private/internal address');
   }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    throw new Error('Only http(s) URLs can be fetched');
-  }
-  const hostname = parsed.hostname;
-  if (hostname === 'localhost') throw new Error('Refusing to fetch a private/internal address');
-  if (/^[\d.]+$/.test(hostname) || hostname.includes(':')) {
-    // A literal IP in the URL — check it directly, no DNS lookup needed.
-    if (isPrivateAddress(hostname)) throw new Error('Refusing to fetch a private/internal address');
-    return;
+  const ipFamily = net.isIP(stripped);
+  if (ipFamily) {
+    if (isPrivateAddress(stripped)) throw new Error('Refusing to fetch a private/internal address');
+    return (_host, _opts, cb) => cb(null, stripped, ipFamily);
   }
   const records = await dns.promises.lookup(hostname, { all: true, verbatim: true });
   if (!records.length) throw new Error('Could not resolve host');
   for (const rec of records) {
     if (isPrivateAddress(rec.address)) throw new Error('Refusing to fetch a private/internal address');
   }
+  const pinned = records[0];
+  return (_host, _opts, cb) => cb(null, pinned.address, pinned.family);
+}
+
+// Issues a single GET over node's own `http`/`https` modules — not global
+// `fetch`, which doesn't exist at all on Node 16 (the oldest runtime this
+// repo's package.json `engines` still declares support for) and whose
+// `AbortSignal.timeout` helper is newer still. The request's `lookup` option
+// is the address `resolvePinnedLookup` already validated, so DNS plays no
+// further part in where the socket actually connects; `hostname` is passed
+// through unchanged for the Host header / TLS SNI so virtual hosting and
+// certificate validation behave exactly as they would for a normal request.
+function requestOnce(url, lookup, maxBytes) {
+  return new Promise((resolve) => {
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch (e) {
+      return resolve(null);
+    }
+    const mod = parsed.protocol === 'https:' ? https : http;
+    const req = mod.request(
+      {
+        protocol: parsed.protocol,
+        hostname: parsed.hostname,
+        port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+        path: `${parsed.pathname}${parsed.search}`,
+        method: 'GET',
+        lookup,
+        timeout: EXTERNAL_FETCH_TIMEOUT_MS,
+        headers: { 'User-Agent': 'adapt-storyboard-export' },
+      },
+      (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400) {
+          res.resume();
+          const location = res.headers.location;
+          return resolve(location ? { redirect: location } : null);
+        }
+        if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+          res.resume();
+          return resolve(null);
+        }
+        const lengthHeader = res.headers['content-length'];
+        if (lengthHeader && Number(lengthHeader) > maxBytes) {
+          res.resume();
+          return resolve(null);
+        }
+        const contentType = res.headers['content-type'] || '';
+        const chunks = [];
+        let total = 0;
+        res.on('data', (chunk) => {
+          total += chunk.length;
+          if (total > maxBytes) {
+            req.destroy();
+            resolve(null);
+            return;
+          }
+          chunks.push(chunk);
+        });
+        res.on('end', () => resolve({ buffer: Buffer.concat(chunks), contentType }));
+        res.on('error', () => resolve(null));
+      },
+    );
+    req.on('timeout', () => req.destroy(new Error('timeout')));
+    req.on('error', () => resolve(null));
+    req.end();
+  });
 }
 
 // Fetch arbitrary bytes from an external URL, following redirects manually
-// (re-validating each hop against the SSRF guard above) and enforcing a
-// timeout + size cap. Returns `{ buffer, contentType }` or `null` on ANY
-// failure — never throws, since every caller treats "couldn't fetch" the
-// same as "not a DAM asset" and falls back to the existing link-only
-// rendering that already works today.
+// (re-validating + re-pinning each hop against the SSRF guard above) and
+// enforcing a timeout + size cap. Returns `{ buffer, contentType }` or
+// `null` on ANY failure — never throws, since every caller treats "couldn't
+// fetch" the same as "not a DAM asset" and falls back to the existing
+// link-only rendering that already works today.
 async function fetchExternalBytes(rawUrl, maxBytes = EXTERNAL_FETCH_MAX_BYTES) {
   let url = rawUrl;
   try {
     for (let hop = 0; hop <= EXTERNAL_FETCH_MAX_REDIRECTS; hop += 1) {
+      let parsed;
+      try {
+        parsed = new URL(url);
+      } catch (e) {
+        return null;
+      }
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
       // eslint-disable-next-line no-await-in-loop
-      await assertUrlIsFetchable(url);
+      const lookup = await resolvePinnedLookup(parsed.hostname);
       // eslint-disable-next-line no-await-in-loop
-      const res = await fetch(url, { redirect: 'manual', signal: AbortSignal.timeout(EXTERNAL_FETCH_TIMEOUT_MS) });
-      if (res.status >= 300 && res.status < 400) {
-        const location = res.headers.get('location');
-        if (!location) return null;
-        url = new URL(location, url).toString();
+      const result = await requestOnce(url, lookup, maxBytes);
+      if (!result) return null;
+      if (result.redirect) {
+        url = new URL(result.redirect, url).toString();
         continue;
       }
-      if (!res.ok) return null;
-      const lengthHeader = res.headers.get('content-length');
-      if (lengthHeader && Number(lengthHeader) > maxBytes) return null;
-      const contentType = res.headers.get('content-type') || '';
-      const reader = res.body && typeof res.body.getReader === 'function' ? res.body.getReader() : null;
-      if (!reader) {
-        // eslint-disable-next-line no-await-in-loop
-        const buf = Buffer.from(await res.arrayBuffer());
-        return buf.length > maxBytes ? null : { buffer: buf, contentType };
-      }
-      const chunks = [];
-      let total = 0;
-      for (;;) {
-        // eslint-disable-next-line no-await-in-loop
-        const { done, value } = await reader.read();
-        if (done) break;
-        total += value.length;
-        if (total > maxBytes) {
-          try { await reader.cancel(); } catch (e) { /* best effort */ }
-          return null;
-        }
-        chunks.push(value);
-      }
-      return { buffer: Buffer.concat(chunks.map((c) => Buffer.from(c))), contentType };
+      return result;
     }
     return null; // too many redirects
   } catch (e) {

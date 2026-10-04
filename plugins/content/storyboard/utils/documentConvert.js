@@ -1157,10 +1157,19 @@ function findUnicodeFontPath() {
 function registerPdfFonts(doc) {
   const fontPath = findUnicodeFontPath();
   if (fontPath) {
+    // Only one weight/style of this TTF ships with adapt-output-preflight —
+    // there's no bold/italic/bold-italic face to register. Registering all
+    // four style names against that same single file used to make pdfkit
+    // render bold/italic/bold-italic runs visually identical to regular
+    // (a TTF has no variant data pdfkit can synthesize from an alias).
+    // Use it for regular text, where non-ASCII glyph coverage matters most,
+    // and fall back to pdfkit's built-in Helvetica variants — genuinely
+    // distinct bold/italic/bold-italic outlines, at the cost of WinAnsi-only
+    // coverage — for the styled runs so bold/italic are visibly different.
     doc.registerFont(PDF_FONT_REGULAR, fontPath);
-    doc.registerFont(PDF_FONT_BOLD, fontPath);
-    doc.registerFont(PDF_FONT_ITALIC, fontPath);
-    doc.registerFont(PDF_FONT_BOLD_ITALIC, fontPath);
+    doc.registerFont(PDF_FONT_BOLD, 'Helvetica-Bold');
+    doc.registerFont(PDF_FONT_ITALIC, 'Helvetica-Oblique');
+    doc.registerFont(PDF_FONT_BOLD_ITALIC, 'Helvetica-BoldOblique');
   } else {
     // Font file missing, register names with PDFKit built-in fonts as fallback
     try {
@@ -1195,16 +1204,36 @@ function pdfRunFont(styles) {
 }
 
 function pdfWriteStyledRuns(doc, runs, baseFontSize, fillColor) {
-  const visible = (runs || []).filter((r) => r && r.text && r.text !== '\n');
-  if (!visible.length) return;
+  const all = (runs || []).filter((r) => r && r.text);
+  if (!all.length) return;
   if (fillColor) doc.fillColor(fillColor);
-  visible.forEach((run, i) => {
-    const styles = run.styles || {};
-    const size = styles.subscript || styles.superscript ? Math.max(6, baseFontSize * 0.7) : baseFontSize;
-    doc.font(pdfRunFont(styles)).fontSize(size).text(run.text, {
-      continued: i < visible.length - 1,
-      underline: !!styles.underline,
-      strike: !!styles.strike,
+  // A manual `<br>` is represented as its own run with `text: '\n'` (see
+  // parseRichTextHtml). Simply excluding it from the continued-text chain
+  // (as before) discarded the break entirely — "A<br>B" rendered as "AB" on
+  // one line. Split into per-line groups on these markers instead, ending
+  // the continued chain at each break so the next group starts on a new
+  // line, same as a `continued: false` call naturally does in pdfkit.
+  const lines = [[]];
+  for (const run of all) {
+    if (run.text === '\n') {
+      lines.push([]);
+      continue;
+    }
+    lines[lines.length - 1].push(run);
+  }
+  lines.forEach((lineRuns, lineIndex) => {
+    if (!lineRuns.length) {
+      if (lineIndex < lines.length - 1) doc.text('', { continued: false });
+      return;
+    }
+    lineRuns.forEach((run, i) => {
+      const styles = run.styles || {};
+      const size = styles.subscript || styles.superscript ? Math.max(6, baseFontSize * 0.7) : baseFontSize;
+      doc.font(pdfRunFont(styles)).fontSize(size).text(run.text, {
+        continued: i < lineRuns.length - 1,
+        underline: !!styles.underline,
+        strike: !!styles.strike,
+      });
     });
   });
 }

@@ -126,6 +126,7 @@ function Dropdown({
 export default function StoryboardTopBar({
   status,
   onBack,
+  showBack = true,
   onImport,
   onExport,
   onGenerate,
@@ -136,6 +137,12 @@ export default function StoryboardTopBar({
 }: {
   status: ReviewStatus;
   onBack: () => void;
+  /** Hide this bar's own Back button when the host screen already renders
+   *  its own (e.g. SetupPage's embedded Storyboard panel sits under
+   *  CommonCourseTopBarRow, which has a Back of its own) — defaults to
+   *  shown, since the standalone `/course/:id/storyboard` route has no
+   *  other Back control at all. */
+  showBack?: boolean;
   onImport: () => void;
   onExport: (format: string) => void;
   onGenerate: () => void;
@@ -155,6 +162,11 @@ export default function StoryboardTopBar({
         fontFamily: 'var(--font-family-primary)',
       }}
     >
+      {showBack && (
+        <button type="button" onClick={onBack} className="sb-toolbar-btn" title="Back">
+          <ArrowLeft className="h-3.5 w-3.5" /> Back
+        </button>
+      )}
 
       <span title={meta.hint} className={`sb-status-pill ${meta.pillClass}`}>
         {meta.label}

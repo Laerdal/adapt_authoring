@@ -3580,7 +3580,15 @@ export async function saveStoryboardToCourse(
           updatedTitles += 1;
         }
         patch.displayTitle = showTitle ? nextTitle : "";
-        patch.body = data.question ? `<p>${escapeHtml(data.question)}</p>` : "";
+        // `data.question` is a BasicRichTextEditor field — real HTML, same as
+        // description/instruction elsewhere in this file (see the ::body and
+        // sbComponent-description branches above). Unconditionally
+        // escape+wrap here turned authored formatting into visible escaped
+        // text (literal "&lt;strong&gt;") on every save; mirror the same
+        // `alreadyHtml` check instead.
+        const rawQuestion = (data.question || "").trim();
+        const alreadyHtmlQuestion = rawQuestion.startsWith("<");
+        patch.body = !rawQuestion ? "" : alreadyHtmlQuestion ? rawQuestion : `<p>${escapeHtml(rawQuestion)}</p>`;
         const assessmentFields = buildAssessmentFields(kind as AssessmentKind, data);
         const hasTutorFeedback = Object.values(data.feedback ?? emptyFeedback()).some(
           (value) => typeof value === "string" && value.trim().length > 0

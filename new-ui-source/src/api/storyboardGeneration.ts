@@ -162,6 +162,24 @@ function escapeHtml(s: string): string {
   return (s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// Plain-text fallback for a title field — `data.question` is a
+// BasicRichTextEditor (HTML) value, and a title/displayTitle is rendered
+// as-is (not HTML-safe) by Adapt, so deriving a title straight from it
+// leaked literal tags ("<p><strong>...") into the learner-facing heading.
+function stripHtmlToPlainText(html: string): string {
+  return (html || "")
+    .replace(/<\s*br\s*\/?>/gi, " ")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 // A BlockNote block's inline content → safe HTML, preserving bold/italic/
 // underline/strike run styling as real tags — mirrors inlineToRuns' docx-
 // export equivalent (documentConvert.js) so a Text component's formatting is
@@ -552,9 +570,17 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
       // the question body).
       const blockTitle = ((raw.props && (raw.props.title as string)) || "").trim();
       const questionText = (data.question || "").trim();
+      // Title/displayTitle are plain-text fields — never seed them from the
+      // raw (possibly HTML) question itself, only from a stripped fallback.
+      const questionPlainText = stripHtmlToPlainText(questionText);
       const isMcqShaped = kind === "mcq" || kind === "gmcq";
-      const resolvedTitle = blockTitle || (isMcqShaped ? "Check your understanding" : questionText || "Question");
-      const bodyText = isMcqShaped ? questionText : questionText && questionText !== resolvedTitle ? questionText : "";
+      const resolvedTitle = blockTitle || (isMcqShaped ? "Check your understanding" : questionPlainText || "Question");
+      // The question always goes in body as real HTML — including non-MCQ
+      // kinds, which previously only wrote it there when it happened to
+      // differ from resolvedTitle; since resolvedTitle is now always plain
+      // text (never the HTML itself), that comparison always held true and
+      // silently dropped the question body for every non-MCQ assessment.
+      const bodyText = questionText;
       const showTitle = data.showTitle !== false;
       comp = {
         sourceBlockId: id,
