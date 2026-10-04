@@ -180,13 +180,23 @@ function initialize () {
 
 
   app.contentmanager.addContentHook('update', 'course', { when: 'pre' }, function (data, next) {
-    if (data[1].hasOwnProperty('themeSettings') || data[1].hasOwnProperty('customStyle')) {
-      var tenantId = usermanager.getCurrentUser().tenant._id;
-
-      app.emit('rebuildCourse', tenantId, data[0]._id);
+    var delta = data[1];
+    if (!['themeSettings', 'customStyle', 'themeVariables'].some(function(key) { return delta.hasOwnProperty(key); })) {
+      return next(null, data);
     }
-
-    next(null, data);
+    var tenantId = usermanager.getCurrentUser().tenant._id;
+    app.contentmanager.retrieve('course', data[0], function(err, courses) {
+      if (err) return next(err);
+      var stored = courses && courses[0];
+      if (!stored) return next(null, data);
+      var updated = _.extend({}, stored, delta);
+      var fingerprint = require('../../../lib/outputmanager').OutputPlugin.prototype.computeCompiledStyleFingerprint;
+      if (!_.isEqual(stored.themeSettings || {}, updated.themeSettings || {}) ||
+          fingerprint({ course: [stored] }) !== fingerprint({ course: [updated] })) {
+        app.emit('rebuildCourse', tenantId, data[0]._id);
+      }
+      next(null, data);
+    });
   });
 
   ['component'].forEach(function (contentType) {

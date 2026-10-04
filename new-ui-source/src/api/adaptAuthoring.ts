@@ -2516,6 +2516,14 @@ export async function getCourseStructure(
   };
   const childrenOf = (rows: EngineContentNode[], parentId: string) =>
     rows.filter((r) => r._parentId === parentId).sort(bySortOrder);
+  const componentsOf = (parentId: string) => {
+    const blockComponents = childrenOf(components, parentId);
+    if (blockComponents.length !== 2) return blockComponents;
+
+    const left = blockComponents.find((component) => component._layout === "left");
+    const right = blockComponents.find((component) => component._layout === "right");
+    return left && right ? [left, right] : blockComponents;
+  };
 
   const menus = contentObjects.filter((c) => c._type === "menu");
   const pages = contentObjects.filter((c) => c._type === "page");
@@ -2624,7 +2632,7 @@ export async function getCourseStructure(
               ariaLevel: scalarString(block._ariaLevel),
               isA11yCompletionDescriptionEnabled: block._isA11yCompletionDescriptionEnabled !== false,
               extensions: objectValue(block._extensions),
-              components: childrenOf(components, block._id).map(
+              components: componentsOf(block._id).map(
                 (comp): SComponent => {
                   const componentProperties = objectValue(comp.properties);
                   const componentOnScreen = objectValue(comp._onScreen);

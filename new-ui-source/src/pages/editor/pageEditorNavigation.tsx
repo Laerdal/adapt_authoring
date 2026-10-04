@@ -54,7 +54,7 @@ interface PageEditorNavigationProps {
   onAddSubPage: (pageId: string) => void;
   onAddBlock: (pageId: string, articleId: string) => void;
   onDeleteBlock: (pageId: string, articleId: string, blockId: string) => void;
-  onAddComponent: (pageId: string, articleId: string, blockId: string) => void;
+  onAddComponent: (pageId: string, articleId: string, blockId: string, componentId?: string) => void;
   onDeleteComponent: (pageId: string, articleId: string, blockId: string, componentId: string) => void;
   onUseTemplate?: (target: {
     level: "topic" | "section" | "group" | "component";
@@ -62,6 +62,7 @@ interface PageEditorNavigationProps {
     articleId?: string;
     blockId?: string;
     moduleId?: string;
+    componentId?: string;
   }) => void;
 }
 
