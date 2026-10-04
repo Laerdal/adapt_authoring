@@ -330,7 +330,7 @@ function toDashboardCourse(doc: EngineCourse, index: number): DashboardCourse {
   return {
     id: index + 1,
     backendId: doc._id,
-    title: doc.displayTitle || doc.title || "Untitled Course",
+    title: doc.displayTitle?.trim() || doc.title?.trim() || "Untitled Course",
     description: doc.description || "",
     savedDate: ts
       ? new Date(ts).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
