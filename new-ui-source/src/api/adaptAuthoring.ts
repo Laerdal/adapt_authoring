@@ -2919,8 +2919,17 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
   // + body paragraph (keeps the text write-back contract intact).
   const emitMediaCard = (comp: EngineContentNode, mediaKind: "image" | "video" | "audio") => {
     const props = (comp.properties as Record<string, unknown>) || {};
-    const description = stripHtml(comp.body || "");
-    const instruction = comp.instruction || (typeof props.instruction === "string" ? props.instruction : "");
+    // `description` is an HTML string everywhere it's actually consumed
+    // (BasicRichTextEditor, dangerouslySetInnerHTML via sanitizeEditorHtml in
+    // componentBlock.tsx) — stripHtml() here used to delete every tag
+    // (bold/italic/lists/paragraph breaks) on every single reload/reseed of
+    // the Storyboard from the live course, which is what actually destroyed
+    // formatting after Generate/Save (not the render templates, which pass
+    // body through untouched). `comp.body` is trusted, already-stored
+    // content — sanitization (if ever needed) belongs at the render/edit
+    // boundary, which already sanitizes before display.
+    const description = comp.body || "";
+    const instruction = (typeof props.instruction === "string" ? props.instruction : "") || comp.instruction;
     if (mediaKind === "image") {
       const image = imageFromMediaPoster(propOf(comp, "_media"), assetIdMap);
       out.push({
@@ -2975,7 +2984,14 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
     // Graphic → Image card.
     if (kindOf === "graphic") {
       const image = imageFromGraphic(propOf(comp, "_graphic"), assetIdMap);
-      emitCard(comp, "image", { showTitle: true, description: "", instruction: "", image });
+      emitCard(comp, "image", {
+        showTitle: true,
+        // See the matching comment in emitMediaCard — description is HTML,
+        // not plain text; stripHtml() here destroyed formatting on reload.
+        description: comp.body || "",
+        instruction: (typeof props.instruction === "string" ? props.instruction : "") || comp.instruction,
+        image,
+      });
       return;
     }
     // Accordion / Narrative → Grouped Content card. Items round-trip via
@@ -2987,15 +3003,17 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
         const link = g.src || g.small || "";
         return {
           title: String(it.title || ""),
-          body: stripHtml(String(it.body || "")),
+          // `itemBody` is also an HTML rich-text field (componentBlock.tsx's
+          // getRichTextEditableFields) — same fix as description above.
+          body: String(it.body || ""),
           image: link, // persisted link (course/assets/<file> or external URL)
           imageUrl: resolveAssetUrl(link, assetIdMap), // servable preview
         };
       });
       emitCard(comp, "groupedContent", {
         showTitle: true,
-        description: stripHtml(comp.body || ""),
-        instruction: comp.instruction || (typeof props.instruction === "string" ? props.instruction : ""),
+        description: comp.body || "",
+        instruction: (typeof props.instruction === "string" ? props.instruction : "") || comp.instruction,
         items,
       });
       return;
@@ -3019,7 +3037,9 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       const rawTitle = ((comp.title as string) || "").trim();
       const cleanDisplayTitle = isGenericOrDefaultTitle(displayTitle) ? "" : displayTitle;
       const cleanTitle = isGenericOrDefaultTitle(rawTitle) ? "" : rawTitle;
-      const bodyText = stripHtml(comp.body || "");
+      // `data.question` is HTML (BasicRichTextEditor) — same fix as
+      // description above; this used to strip all formatting on reload.
+      const bodyText = comp.body || "";
       const questionSeed = isMcqShaped
         ? bodyText || cleanDisplayTitle || cleanTitle
         : cleanDisplayTitle || cleanTitle || bodyText;
@@ -3031,7 +3051,7 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
         sbKind as AssessmentKind,
         props,
         questionSeed,
-        comp.instruction || (typeof props.instruction === 'string' ? props.instruction : '')
+        (typeof props.instruction === 'string' ? props.instruction : '') || comp.instruction
       );
       out.push({
         id: comp._id,
@@ -3057,8 +3077,9 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
         : undefined;
       emitCard(comp, "h5p", {
         showTitle: true,
-        description: stripHtml(comp.body || ""),
-        instruction: comp.instruction || (typeof props.instruction === "string" ? props.instruction : ""),
+        // See the matching comment in emitMediaCard above.
+        description: comp.body || "",
+        instruction: (typeof props.instruction === "string" ? props.instruction : "") || comp.instruction,
         media,
       });
       return;
@@ -3088,40 +3109,36 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
             return "Single-Line Text";
         }
       };
+      // Placeholder/options live nested per input type on the real component
+      // (`_inputTypeText._placeholder`, `_inputTypeChoice.options`, etc.) —
+      // see the matching write-side comment in storyboardGeneration.ts. Fall
+      // back to a flat `_placeholder`/`options` on the item itself so content
+      // saved before this fix (which wrote the flat shape) still round-trips.
+      const placeholderOf = (it: Record<string, unknown>): string => {
+        const text = it._inputTypeText as { _placeholder?: string } | undefined;
+        const textarea = it._inputTypeTextArea as { _placeholder?: string } | undefined;
+        const number = it._inputTypeNumber as { _placeholder?: string } | undefined;
+        return String(
+          text?._placeholder ?? textarea?._placeholder ?? number?._placeholder ?? it._placeholder ?? ""
+        );
+      };
+      const optionsOf = (it: Record<string, unknown>): unknown => {
+        const choice = it._inputTypeChoice as { options?: unknown } | undefined;
+        return Array.isArray(choice?.options) ? choice.options : it.options;
+      };
       const rawItems = Array.isArray(props._items) ? (props._items as Array<Record<string, unknown>>) : [];
       const fields = rawItems.map((it) => ({
-        control: controlFor(String(it._inputType || "text"), it.options),
+        control: controlFor(String(it._inputType || "text"), optionsOf(it)),
         label: String(it._label || ""),
-        placeholder: String(it._placeholder || ""),
+        placeholder: placeholderOf(it),
         mandatory: !!it._isRequired,
       }));
       emitCard(comp, "laerdalForm", {
         showTitle: true,
-        description: stripHtml(comp.body || ""),
-        instruction: comp.instruction || (typeof props.instruction === "string" ? props.instruction : ""),
+        // See the matching comment in emitMediaCard above.
+        description: comp.body || "",
+        instruction: (typeof props.instruction === "string" ? props.instruction : "") || comp.instruction,
         fields,
-      });
-      return;
-    }
-    // Assessment Results → dedicated card that round-trips its bands and retry.
-    if (sbKind === "assessmentResult") {
-      const rawBands = Array.isArray(props._bands) ? (props._bands as Array<Record<string, unknown>>) : [];
-      const retry = (props._retry as Record<string, unknown>) || {};
-      emitCard(comp, "assessmentResult", {
-        showTitle: true,
-        description: "",
-        instruction: "",
-        result: {
-          assessmentId: String(props._assessmentId || ""),
-          completionBody: String(props._completionBody || ""),
-          retryButton: String(retry.button || "Try again"),
-          retryFeedback: String(retry.feedback || ""),
-          bands: rawBands.map((b) => ({
-            score: Math.max(0, Math.min(100, Number(b._score) || 0)),
-            feedback: String(b.feedback || ""),
-            allowRetry: !!b._allowRetry,
-          })),
-        },
       });
       return;
     }
@@ -3138,8 +3155,16 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
       const compTitle = label(comp);
       emitCard(comp, "text", {
         showTitle: !!compTitle,
-        description: stripHtml(comp.body || ""),
-        instruction: comp.instruction || (typeof props.instruction === "string" ? props.instruction : ""),
+        // This is THE primary case the reported "Generate Course → Preview
+        // strips all formatting" bug traces to: a plain BlockNote paragraph
+        // authored in the Storyboard generates into exactly this component
+        // type (storyboardGeneration.ts), so every reload/reseed after
+        // Generate/Save ran the author's real multi-paragraph/bold/list HTML
+        // through stripHtml() here, deleting it — then the degraded result
+        // got saved back as the new "clean" baseline on the very next
+        // Save/Generate. See the matching comment in emitMediaCard above.
+        description: comp.body || "",
+        instruction: (typeof props.instruction === "string" ? props.instruction : "") || comp.instruction,
       });
       return;
     }
@@ -3255,7 +3280,14 @@ export async function saveStoryboardToCourse(
       level: "component",
       title: label(c),
       body: c.body || "",
-      instruction: c.instruction || "",
+      // `properties.instruction` is the real field (every installed component
+      // declares its own `instruction` in its OWN properties.schema — there is
+      // no generic top-level `instruction` in the content model). `c.instruction`
+      // is only a fallback for components a pre-fix Storyboard save wrote to
+      // the wrong (inert, publish-ignored) top-level location.
+      instruction: (typeof (c.properties as Record<string, unknown> | undefined)?.instruction === "string"
+        ? ((c.properties as Record<string, unknown>).instruction as string)
+        : c.instruction) || "",
       component: c._component,
       parentId: c._parentId,
       // Kept so an update can seed `patch.properties` from what's actually on
@@ -3351,13 +3383,6 @@ export async function saveStoryboardToCourse(
         instruction?: string;
         items?: Array<{ title?: string; body?: string; image?: string; imageAssetId?: string }>;
         fields?: Array<{ control?: string; label?: string; placeholder?: string; mandatory?: boolean }>;
-        result?: {
-          assessmentId?: string;
-          completionBody?: string;
-          retryButton?: string;
-          retryFeedback?: string;
-          bands?: Array<{ score?: number; feedback?: string; allowRetry?: boolean }>;
-        };
       } = {};
       try {
         parsed = raw.props?.data ? JSON.parse(raw.props.data) : {};
@@ -3396,7 +3421,7 @@ export async function saveStoryboardToCourse(
         assetLink = parsed.image?.link;
         assetId = parsed.image?.assetId;
         patch.body = parsed.description || "";
-        patch.instruction = parsed.instruction || "";
+        mergeProperties(patch, { instruction: parsed.instruction || "" });
       } else if ((kind === "video" || kind === "audio") && (isLaerdalMedia || info.component === "media")) {
         seedProperties();
         const originalMedia = (info.properties?._media as Record<string, unknown> | undefined) || {};
@@ -3404,7 +3429,7 @@ export async function saveStoryboardToCourse(
         assetLink = parsed.media?.asset?.link;
         assetId = parsed.media?.asset?.assetId;
         patch.body = parsed.description || "";
-        patch.instruction = parsed.instruction || "";
+        mergeProperties(patch, { instruction: parsed.instruction || "" });
       } else if (kind === "groupedContent" && isGrouped) {
         // Grouped Content → accordion / narrative `properties._items` with
         // `_graphic.src` (matches the installed schemas). Persist any link
@@ -3424,7 +3449,7 @@ export async function saveStoryboardToCourse(
           }),
         });
         patch.body = parsed.description || "";
-        patch.instruction = parsed.instruction || "";
+        mergeProperties(patch, { instruction: parsed.instruction || "" });
         // Each item image needs its own courseasset link for publish.
         for (const it of items) {
           const fn = filenameFromLink((it?.image || "").trim());
@@ -3442,7 +3467,7 @@ export async function saveStoryboardToCourse(
         assetLink = asset?.link;
         assetId = asset?.assetId;
         patch.body = parsed.description || "";
-        patch.instruction = parsed.instruction || "";
+        mergeProperties(patch, { instruction: parsed.instruction || "" });
       } else if (kind === "laerdalForm" && info.component === "laerdal-form") {
         seedProperties();
         const inputTypeFor = (control: string): string => {
@@ -3473,59 +3498,53 @@ export async function saveStoryboardToCourse(
               _label: field?.label || "",
               _name: slugify(field?.label || "", index),
               _isRequired: !!field?.mandatory,
-              _placeholder: field?.placeholder || "",
             };
-            if (_inputType === "options" && control.toLowerCase() === "checkbox") {
-              item.options = [{ text: field?.placeholder || "Yes", value: "yes" }];
+            // See the matching comment in storyboardGeneration.ts — the installed
+            // adapt-laerdal-form schema nests placeholder/options per input type.
+            if (_inputType === "text") item._inputTypeText = { _placeholder: field?.placeholder || "" };
+            else if (_inputType === "textarea") item._inputTypeTextArea = { _placeholder: field?.placeholder || "" };
+            else if (_inputType === "number") item._inputTypeNumber = { _placeholder: field?.placeholder || "" };
+            else if (_inputType === "options") {
+              item._inputTypeChoice = {
+                options: control.toLowerCase() === "checkbox" ? [{ label: field?.placeholder || "Yes" }] : [],
+              };
             }
             return item;
           }),
         });
         patch.body = parsed.description || "";
-        patch.instruction = parsed.instruction || "";
-      } else if (kind === "assessmentResult" && info.component === "assessmentResults") {
-        seedProperties();
-        const result = parsed.result || {};
-        const bands = Array.isArray(result.bands) ? result.bands : [];
-        mergeProperties(patch, {
-          _assessmentId: (result.assessmentId || "").trim() || undefined,
-          _completionBody: result.completionBody || "",
-          _isVisibleBeforeCompletion: false,
-          _setCompletionOn: "pass",
-          _resetType: "hard",
-          _retry: {
-            button: result.retryButton || "Try again",
-            feedback: result.retryFeedback || "",
-            _routeToAssessment: true,
-          },
-          _bands: bands
-            .slice()
-            .sort((a, b) => (Number(a?.score) || 0) - (Number(b?.score) || 0))
-            .map((band) => ({
-              _score: Math.max(0, Math.min(100, Number(band?.score) || 0)),
-              feedback: band?.feedback || "",
-              feedbackNotFinal: band?.feedback || "",
-              _allowRetry: !!band?.allowRetry,
-            })),
-        });
+        mergeProperties(patch, { instruction: parsed.instruction || "" });
       } else if (kind === "text" && (info.component === "text" || info.component === "laerdal-text")) {
         // Plain text component — write the edited description back onto
-        // `body` (matches the ::body branch's HTML-wrapping convention above)
-        // and the instruction field, so the sbComponent "text" card (used for
-        // every text component, including the default one — ADAPT-3902)
-        // round-trips exactly like the legacy heading+paragraph contract did.
-        // The description here is always plain user/AI-authored text (never an
-        // imported-HTML payload), so it must be escaped unconditionally —
-        // trusting a leading "<" as "already HTML" would let raw markup typed
-        // or pasted by a user/AI flow straight into the course body.
+        // `body` and the instruction field, so the sbComponent "text" card
+        // (used for every text component, including the default one —
+        // ADAPT-3902) round-trips exactly like the legacy heading+paragraph
+        // contract did.
+        // `data.description` for this card is a BasicRichTextEditor field —
+        // real HTML (<p>/<strong>/<ul>/etc.), the same as every other card's
+        // description — NOT always-plain-text as a previous version of this
+        // comment assumed. Unconditionally escaping it turned any formatting
+        // the author applied (or any literal tag that survived a reload —
+        // see the emitMediaCard-side fix for the cause) into VISIBLE escaped
+        // text (e.g. a literal "&lt;br&gt;"), and collapsed every paragraph
+        // into one. Mirror the ::body branch's own `alreadyHtml` check above
+        // instead: treat a leading "<" as real HTML and pass it through;
+        // only escape+wrap when it's genuinely plain text (e.g. typed
+        // directly without going through the rich editor).
         const rawDescription = (parsed.description || "").trim();
-        const nextBodyHtml = rawDescription ? `<p>${escapeHtml(rawDescription)}</p>` : "";
-        if (stripHtml(nextBodyHtml) !== stripHtml(info.body || "")) {
+        const alreadyHtmlDescription = rawDescription.startsWith("<");
+        const nextBodyHtml = !rawDescription
+          ? ""
+          : alreadyHtmlDescription
+            ? rawDescription
+            : `<p>${escapeHtml(rawDescription)}</p>`;
+        if (stripHtml(nextBodyHtml) !== stripHtml(info.body || "") || nextBodyHtml !== (info.body || "")) {
           patch.body = nextBodyHtml;
         }
         const nextInstruction = (parsed.instruction || "").trim();
         if (nextInstruction !== (info.instruction || "")) {
-          patch.instruction = nextInstruction;
+          seedProperties();
+          mergeProperties(patch, { instruction: nextInstruction });
         }
       }
       if (Object.keys(patch).length) {
@@ -3562,7 +3581,6 @@ export async function saveStoryboardToCourse(
         }
         patch.displayTitle = showTitle ? nextTitle : "";
         patch.body = data.question ? `<p>${escapeHtml(data.question)}</p>` : "";
-        patch.instruction = data.instruction || "";
         const assessmentFields = buildAssessmentFields(kind as AssessmentKind, data);
         const hasTutorFeedback = Object.values(data.feedback ?? emptyFeedback()).some(
           (value) => typeof value === "string" && value.trim().length > 0
@@ -3576,11 +3594,15 @@ export async function saveStoryboardToCourse(
         if (hasAnswerSpecificFeedback) {
           needsAnswerSpecificFeedbackExtension = true;
         }
-        if (Object.keys(assessmentFields).length) {
+        if (Object.keys(assessmentFields).length || data.instruction !== undefined) {
           // Seed from live properties first — same reasoning as the
           // sbComponent branch above (ADAPT-3760 properties-wipe fix).
+          // `instruction` nests under `properties` like every other plugin
+          // field (see the matching comment on the sbComponent branch) — it
+          // is never a generic top-level model field.
           patch.properties = { ...(info.properties || {}) };
-          mergeProperties(patch, assessmentFields);
+          if (Object.keys(assessmentFields).length) mergeProperties(patch, assessmentFields);
+          mergeProperties(patch, { instruction: data.instruction || "" });
         }
         if (Object.keys(patch).length) {
           tasks.push(apiClient.put(`/api/content/component/${id}`, patch));

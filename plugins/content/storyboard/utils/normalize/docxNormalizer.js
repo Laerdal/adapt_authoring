@@ -176,12 +176,26 @@ function extractItems(dom) {
   const items = [];
   let docTitleFromStyle;
   let swallowing = false; // inside a rich-card marker region — see CARD_MARKER_BEGIN/END
+  let pendingCard = null; // the richCard item currently being swallowed, so its visible (possibly edited) prose can be captured alongside the hidden marker's original props — see toBlockNote.js's richCard handling
   for (const node of dom) {
     if (isElement(node) && node.name === 'p') {
       const text = textOf(node);
       if (swallowing) {
-        if (text === CARD_MARKER_END) swallowing = false;
-        continue; // everything between BEGIN/END is this card's own prose rendering — discard it
+        if (text === CARD_MARKER_END) {
+          swallowing = false;
+          pendingCard = null;
+        } else if (pendingCard) {
+          // Capture the card's rendered prose (title/description/instruction/
+          // question/etc.) instead of discarding it — a user editing this
+          // VISIBLE text in Word is editing exactly this, and the hidden
+          // marker's `props` is a frozen copy from export time that never
+          // reflects such edits. toBlockNote.js re-derives the common text
+          // fields from this array; everything else (options, correct-answer
+          // flags, feedback, asset refs) still comes from the marker, since
+          // those aren't safely recoverable from prose alone.
+          pendingCard.visibleItems.push(...itemsFromParagraph(node));
+        }
+        continue;
       }
       if (text.indexOf(CARD_MARKER_BEGIN) === 0) {
         let parsed;
@@ -194,7 +208,9 @@ function extractItems(dom) {
         // invalid one must not hide subsequent content until a stray END
         // marker or heading happens to show up.
         if (parsed && parsed.type && parsed.props) {
-          items.push({ kind: 'richCard', blockType: parsed.type, props: parsed.props });
+          const card = { kind: 'richCard', blockType: parsed.type, props: parsed.props, visibleItems: [] };
+          items.push(card);
+          pendingCard = card;
           swallowing = true;
         }
         continue;
@@ -206,6 +222,7 @@ function extractItems(dom) {
       // end-of-swallow and process it normally rather than skipping it.
       if (isElement(node) && HEADING_TAGS.has(node.name)) {
         swallowing = false;
+        pendingCard = null;
       } else {
         continue;
       }
@@ -308,11 +325,20 @@ async function parseDocxToNormalizedDocument(buffer, meta) {
     { buffer },
     {
       convertImage: mammoth.images.dataUri,
-      // Word's "Title" style (used by blocksToDocx for the course title) is
-      // otherwise indistinguishable from a plain paragraph on the way back
-      // in — remap it to a recognizable class so extractItems can treat it
-      // as the document title instead of stray body content.
-      styleMap: ['p.Title => p.sb-doc-title:fresh'],
+      styleMap: [
+        // Word's "Title" style (used by blocksToDocx for the course title) is
+        // otherwise indistinguishable from a plain paragraph on the way back
+        // in — remap it to a recognizable class so extractItems can treat it
+        // as the document title instead of stray body content.
+        'p.Title => p.sb-doc-title:fresh',
+        // Mammoth does NOT map manual/direct underline formatting to <u> by
+        // default (only named Word styles are style-mapped out of the box;
+        // underline is deliberately excluded since mammoth otherwise treats
+        // it as non-semantic) — without this, every underlined run an author
+        // applies in Word (including in a round-tripped description/
+        // instruction/question field) silently disappeared on reimport.
+        'u => u',
+      ],
     },
   );
 

@@ -24,7 +24,6 @@ import {
   ArrowUpDown,
   ListChecks,
   SlidersHorizontal,
-  Trophy,
   ChevronDown,
 } from 'lucide-react';
 import type { StoryboardInsertKind } from '@/types/storyboard';

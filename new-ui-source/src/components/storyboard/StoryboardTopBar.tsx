@@ -155,9 +155,6 @@ export default function StoryboardTopBar({
         fontFamily: 'var(--font-family-primary)',
       }}
     >
-      <button type="button" onClick={onBack} className="sb-toolbar-btn" title="Back">
-        <ArrowLeft className="h-3.5 w-3.5" /> Back
-      </button>
 
       <span title={meta.hint} className={`sb-status-pill ${meta.pillClass}`}>
         {meta.label}

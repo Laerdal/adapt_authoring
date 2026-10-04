@@ -25,7 +25,6 @@ export type StoryboardComponentKind =
   | 'textInput'
   | 'slider'
   | 'checklist'
-  | 'assessmentResult'
   | 'hotgraphic'
   | 'hotgrid'
   | 'actionplan'
@@ -47,7 +46,6 @@ export const COMPONENT_CANDIDATES: Record<StoryboardComponentKind, string[]> = {
   textInput: ['textinput'],
   slider: ['slider', 'laerdal-slider'],
   checklist: ['laerdal-checklist'],
-  assessmentResult: ['assessmentResults'],
   hotgraphic: ['laerdal-hotgraphic', 'hotgraphic'],
   hotgrid: ['hotgrid'],
   actionplan: ['actionplan', 'laerdal-actionplan'],
@@ -91,7 +89,6 @@ const REVERSE: Record<string, StoryboardComponentKind | 'media'> = {
   slider: 'slider',
   'laerdal-slider': 'slider',
   'laerdal-checklist': 'checklist',
-  assessmentResults: 'assessmentResult',
   'laerdal-hotgraphic': 'hotgraphic',
   hotgraphic: 'hotgraphic',
   hotgrid: 'hotgrid',
