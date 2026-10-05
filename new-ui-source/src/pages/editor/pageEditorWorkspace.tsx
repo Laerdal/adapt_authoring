@@ -4433,11 +4433,6 @@ export default function CourseEditor({
     // while actively selecting or hovering something, so a fully
     // deselected, un-hovered canvas renders as a pristine normal preview
     // with none of that extra space, per explicit user request.
-    // Keyed on the pointer merely BEING in the canvas, never on which level
-    // is hovered: these rules resize headers, so tying them to the hovered
-    // level made hover change the layout, which moved the element out from
-    // under a stationary cursor, which changed the hovered level — a
-    // mouseover/mouseout oscillation (measured: 23 flips in one slow sweep).
     doc.documentElement.classList.toggle(
       "adapt-authoring-editing-active",
       hasCanvasSelection || isPointerOverCanvas
@@ -4518,9 +4513,14 @@ export default function CourseEditor({
          matching the inset Article already uses. */
       .adapt-authoring-editing-active .page__header-inner {
         margin-top: 8px !important;
+        margin-bottom: 8px !important;
         margin-left: 8px !important;
         margin-right: 8px !important;
         padding: 0.5rem !important;
+      }
+
+      .adapt-authoring-editing-active .adapt-authoring-preview-first-surface {
+        margin-top: 8px !important;
       }
 
       /* Selecting a node calls scrollIntoView({block:"start"}), which parks
@@ -4552,19 +4552,6 @@ export default function CourseEditor({
       .adapt-authoring-preview-hover.menu,
       .adapt-authoring-preview-active.menu {
         padding: 0.5rem !important;
-      }
-
-      /* Vertical gutter for a Section/Content Group that renders NO header
-         of its own. Hover now resolves through headers only, so a level
-         that has one needs no gutter at all — its header box is already
-         held apart from its neighbours by the theme's own spacing, and the
-         gutter was only ever adding dead space between levels. A headerless
-         level still needs it: with nothing to point at, this margin is its
-         only hover surface, exactly as before. */
-      .adapt-authoring-editing-active .article:not(:has(> .article__inner > .article__header)),
-      .adapt-authoring-editing-active .block:not(:has(> .block__inner > .block__header)) {
-        margin-top: 10px !important;
-        margin-bottom: 10px !important;
       }
 
       /* Two half-width (left/right) components in the same Content Group
@@ -4624,8 +4611,10 @@ export default function CourseEditor({
          (before any hover has ever set data-preview-bridge-label) collapses
          a content-less block box to zero height in some engines — line-
          height alone isn't a reliable floor without real content present. */
+      .adapt-authoring-editing-active .page__header-inner::before,
       .adapt-authoring-editing-active .article__header-inner::before,
-      .adapt-authoring-editing-active .block__header-inner::before {
+      .adapt-authoring-editing-active .block__header-inner::before,
+      .adapt-authoring-editing-active .component__inner::before {
         content: attr(data-preview-bridge-label);
         display: block;
         min-height: 11px;
@@ -4678,61 +4667,13 @@ export default function CourseEditor({
         cursor: pointer !important;
       }
 
-      html:not(.adapt-authoring-editing-active) .page__header[data-preview-injected="true"]:has(> .adapt-authoring-preview-headless-header),
-      html:not(.adapt-authoring-editing-active) .article__header[data-preview-injected="true"]:has(> .adapt-authoring-preview-headless-header),
-      html:not(.adapt-authoring-editing-active) .block__header[data-preview-injected="true"]:has(> .adapt-authoring-preview-headless-header) {
+      .page__header[data-preview-injected="true"]:has(> .adapt-authoring-preview-headless-header:not(.adapt-authoring-preview-active)),
+      .article__header[data-preview-injected="true"]:has(> .adapt-authoring-preview-headless-header:not(.adapt-authoring-preview-active)),
+      .block__header[data-preview-injected="true"]:has(> .adapt-authoring-preview-headless-header:not(.adapt-authoring-preview-active)),
+      .adapt-authoring-preview-headless-header:not(.adapt-authoring-preview-active) {
         display: none !important;
       }
 
-      .adapt-authoring-editing-active .adapt-authoring-preview-headless-header:not(.adapt-authoring-preview-active) {
-        display: flex !important;
-        align-items: center !important;
-        gap: 12px !important;
-        height: 20px !important;
-        min-height: 0 !important;
-        padding: 0 4px !important;
-        margin-top: 8px !important;
-        margin-bottom: 8px !important;
-      }
-      .adapt-authoring-editing-active .adapt-authoring-preview-headless-header:not(.adapt-authoring-preview-active)::before {
-        position: static;
-        flex: 0 1 auto;
-        min-width: 0;
-        min-height: 0;
-        margin: 0;
-        overflow: hidden;
-        white-space: nowrap;
-        text-overflow: ellipsis;
-        line-height: 14px;
-      }
-      .adapt-authoring-editing-active .adapt-authoring-preview-headless-header:not(.adapt-authoring-preview-active) > [data-preview-hover-title-injected="true"],
-      .adapt-authoring-editing-active .adapt-authoring-preview-headless-header:not(.adapt-authoring-preview-active) [data-preview-hover-title-shown="true"] {
-        position: static !important;
-        flex: 1 1 0 !important;
-        min-width: 0 !important;
-        height: 16px !important;
-        box-sizing: border-box !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow: hidden !important;
-        white-space: nowrap !important;
-        text-overflow: ellipsis !important;
-        font-size: 12px !important;
-        line-height: 16px !important;
-      }
-      .adapt-authoring-editing-active .adapt-authoring-preview-headless-header:not(.adapt-authoring-preview-active) [data-preview-hover-title-injected="true"] *,
-      .adapt-authoring-editing-active .adapt-authoring-preview-headless-header:not(.adapt-authoring-preview-active) [data-preview-hover-title-shown="true"] * {
-        font-size: inherit !important;
-        line-height: inherit !important;
-      }
-      .adapt-authoring-preview-headless-header:not(.adapt-authoring-preview-active) .adapt-authoring-level-actions {
-        position: static !important;
-        flex: 0 0 auto;
-        order: 2;
-        top: auto !important;
-        right: auto !important;
-        margin-left: auto;
-      }
       @media (max-width: 619px) {
         [data-preview-hover-title-injected="true"],
         [data-preview-hover-title-shown="true"] {
@@ -5247,19 +5188,6 @@ export default function CourseEditor({
       });
     });
 
-    // When a level's title is hidden/empty, the real template renders NO
-    // header markup at all — falling back to the level's whole content
-    // container (.article__inner/.block__inner) as the hover/active target
-    // wraps every child underneath it too (e.g. a Content Group's hover box
-    // engulfing its Component). Quick Edit and syncPreviewInlineEditors'
-    // own selection path (ensureHeaderInnerHost) both avoid this by
-    // creating a small, real, permanent header placeholder to frame
-    // instead — mirrored here so HOVER gets the same small frame, not just
-    // Selection. Idempotent/safe to call from both hover and active
-    // resolution: checks for an existing header first, matches the exact
-    // classnames ensureHeaderInnerHost (syncPreviewInlineEditors) already
-    // uses, so whichever runs first is transparently reused by the other
-    // with no duplicate headers ever created.
     const ensureLevelHeaderHost = (
       level: "topic" | "section" | "group",
       root: Element | null
@@ -5290,13 +5218,6 @@ export default function CourseEditor({
       return inner;
     };
 
-    if (doc.documentElement.classList.contains("adapt-authoring-editing-active")) {
-      doc.querySelectorAll(".page, .article, .block").forEach((root) => {
-        const level = root.classList.contains("page") ? "topic" : root.classList.contains("article") ? "section" : "group";
-        const innerSelector = level === "topic" ? ".page__inner" : level === "section" ? ".article__inner" : ".block__inner";
-        ensureLevelHeaderHost(level, root.querySelector(innerSelector) ?? root);
-      });
-    }
     doc.querySelectorAll(".page__header-inner, .article__header-inner, .block__header-inner").forEach((host) => {
       const hasVisibleContent = Array.from(host.children).some((child) => {
         if (child.hasAttribute("data-preview-level-actions") || child.hasAttribute("data-preview-hover-title-injected")) return false;
@@ -5675,7 +5596,7 @@ export default function CourseEditor({
       // An active level owns its descendants while selected. Showing a
       // second nested hover rectangle inside it creates the misaligned,
       // competing outline seen for Components inside a selected Group.
-      if (hoverNode && hoverNode !== activeNode && !activeNode?.contains(hoverNode)) {
+      if (hoverNode && !hoverNode.classList.contains("adapt-authoring-preview-headless-header") && hoverNode !== activeNode && !activeNode?.contains(hoverNode)) {
         hoverNode.classList.add("adapt-authoring-preview-hover");
         (hoverNode as Element).setAttribute("data-preview-bridge-label", toBadgeLabel(hoverLevel));
 
@@ -5751,6 +5672,15 @@ export default function CourseEditor({
 
     syncColorLabelIndicators(activeNode, hoverNode);
 
+    const visibleSurfaces = Array.from(
+      doc.querySelectorAll<HTMLElement>(".page__header-inner, .article__header-inner, .block__header-inner, .component__inner")
+    ).filter((node) => node.getBoundingClientRect().height > 0);
+    const firstSurface = visibleSurfaces[0];
+    doc.querySelectorAll(".adapt-authoring-preview-first-surface").forEach((node) => {
+      if (node !== firstSurface) node.classList.remove("adapt-authoring-preview-first-surface");
+    });
+    firstSurface?.classList.add("adapt-authoring-preview-first-surface");
+
     // Topic/Section header insets (margin-left/right, CSS above) were
     // originally hardcoded to 8px on the assumption that Content Group's
     // own real inset (block__inner's theme padding minus the -0.5rem
@@ -5794,9 +5724,7 @@ export default function CourseEditor({
       // every level moves by the same amount, so their alignment is kept, and
       // a theme that already leaves room is left untouched.
       const ringRoom = PREVIEW_OUTLINE_RING_PX;
-      const levelBoxes = Array.from(
-        doc.querySelectorAll(".page__header-inner, .article__header-inner, .block__header-inner, .component__inner")
-      ).map((node) => node.getBoundingClientRect());
+      const levelBoxes = visibleSurfaces.map((node) => node.getBoundingClientRect());
       if (levelBoxes.length) {
         const viewportWidth = doc.documentElement.clientWidth;
         const leftMost = Math.min(...levelBoxes.map((r) => r.left));
@@ -8300,9 +8228,6 @@ export default function CourseEditor({
       // header. Their remaining area is mostly empty padding wrapped around
       // a child level, so treating it as a hover target made the cursor
       // flip between two levels while crossing that blank space.
-      // A level with no header element at all (headless, before a prior
-      // selection has injected a synthetic one) keeps its old behaviour —
-      // that padding is then its only hover surface.
       if (level === "topic" || level === "section" || level === "group") {
         const rootSelector = level === "topic" ? ".page" : level === "section" ? ".article" : ".block";
         const headerSelector =
@@ -8312,7 +8237,10 @@ export default function CourseEditor({
               ? ".article__header, .article__header-inner"
               : ".block__header, .block__header-inner";
         const root = target?.closest(rootSelector);
-        if (root?.querySelector(headerSelector) && !target?.closest(headerSelector)) {
+        const header = root?.querySelector(headerSelector);
+        const headerInnerSelector = ".page__header-inner, .article__header-inner, .block__header-inner";
+        const headerInner = header?.matches(headerInnerSelector) ? header : header?.querySelector(headerInnerSelector);
+        if (!header || headerInner?.classList.contains("adapt-authoring-preview-headless-header") || !target?.closest(headerSelector)) {
           return noHover;
         }
       }
@@ -8323,17 +8251,6 @@ export default function CourseEditor({
       // the synthetic header has been created by a prior selection.
       if (level === "group" && target?.closest(".block__inner")) {
         if (target.closest(".component__container")) {
-          return noHover;
-        }
-      }
-
-      if (level === "group" && selectedComponentId && selectedBlockId === blockId) {
-        const block = target?.closest(".block");
-        const header = block?.querySelector(".block__header-inner");
-        const isHeadlessSelectedParent =
-          header?.getAttribute("data-preview-injected") === "true" ||
-          header?.closest(".block__header")?.getAttribute("data-preview-injected") === "true";
-        if (isHeadlessSelectedParent && !target?.closest(".block__header, .block__header-inner")) {
           return noHover;
         }
       }
