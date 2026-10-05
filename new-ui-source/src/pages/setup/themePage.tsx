@@ -2174,7 +2174,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           </div>
 
           <div
-            className="mt-4 rounded-xl p-4 shadow-sm"
+            className="mt-4 mb-6 rounded-xl p-4 shadow-sm"
             style={{
               background: '#FFFBEB',
               border: '1px solid #FEE685',
@@ -2208,12 +2208,12 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     const expandedPreview = isExpanded && typeof document !== 'undefined'
       ? createPortal(
         <div
-          className="fixed inset-0 overflow-y-auto p-4"
+          className="fixed inset-0 overflow-y-auto px-4 pb-8"
           style={{ zIndex: 9999, backgroundColor: 'rgba(248, 250, 252, 0.99)', paddingTop: '72px' }}
           onClick={() => setIsExpanded(false)}
         >
           <div
-            className="mx-auto flex min-h-full w-full max-w-6xl min-h-0 flex-col overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-2xl"
+            className="mx-auto flex w-full max-w-6xl min-h-0 flex-col overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-2xl"
             style={{ position: 'relative', zIndex: 10000 }}
             role="dialog"
             aria-modal="true"
