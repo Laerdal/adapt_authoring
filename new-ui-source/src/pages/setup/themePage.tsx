@@ -2612,7 +2612,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         {/* Configuration: Content Groups - LIFE only */}
         {isLifeTheme && (
           <ThemeAccordion
-            label={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks'), 'title') ?? 'Configuration: Content Groups'}
+            label="Configuration: Content Groups"
             hint={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks'), 'help')}
             isOpen={isLifeTheme || activeAccordion === "Configuration: Content Groups"}
             onToggle={() => {
