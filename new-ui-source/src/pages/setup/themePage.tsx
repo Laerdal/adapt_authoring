@@ -2010,6 +2010,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   const LivePreview = () => {
     const [previewDarkMode, setPreviewDarkMode] = useState(false);
     const [isPreviewExpanded, setIsPreviewExpanded] = useState(false);
+    const triggerRef = useRef<HTMLButtonElement | null>(null);
+    const dialogRef = useRef<HTMLDivElement | null>(null);
 
     const primaryColor = getCustomSetting('_global', '_primaryBrandColor') || '#2e7fa1';
     const secondaryColor = getCustomSetting('_global', '_secondaryBrandColor') || '#25837e';
@@ -2075,8 +2077,39 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
       const previousOverflow = document.body.style.overflow;
       const onKeyDown = (event: KeyboardEvent) => {
-        if (event.key === 'Escape') setIsPreviewExpanded(false);
+        if (event.key === 'Escape') {
+          setIsPreviewExpanded(false);
+          return;
+        }
+
+        const dialog = dialogRef.current;
+        if (!dialog || event.key !== 'Tab') return;
+
+        const focusable = dialog.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+
+        if (!focusable.length) {
+          event.preventDefault();
+          return;
+        }
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
       };
+
+      const dialog = dialogRef.current;
+      if (dialog) {
+        dialog.focus();
+      }
 
       document.body.style.overflow = 'hidden';
       window.addEventListener('keydown', onKeyDown);
@@ -2084,6 +2117,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       return () => {
         document.body.style.overflow = previousOverflow;
         window.removeEventListener('keydown', onKeyDown);
+        requestAnimationFrame(() => triggerRef.current?.focus());
       };
     }, [isPreviewExpanded]);
 
@@ -2225,11 +2259,13 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           onClick={() => setIsPreviewExpanded(false)}
         >
           <div
+            ref={dialogRef}
             className="mx-auto flex w-full max-w-6xl min-h-0 flex-col overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-2xl"
             style={{ position: 'relative', zIndex: 10000 }}
             role="dialog"
             aria-modal="true"
             aria-label="Live Preview"
+            tabIndex={-1}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-[#e5e7eb] shrink-0 sticky top-0 z-10">
@@ -2302,6 +2338,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
             </div>
             <div className="flex gap-1.5">
               <button
+                ref={triggerRef}
                 onClick={() => setPreviewDarkMode(!previewDarkMode)}
                 className="w-8 h-8 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
                 title={darkModeTitle}
@@ -2327,6 +2364,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                 )}
               </button>
               <button
+                ref={triggerRef}
                 onClick={() => setIsPreviewExpanded(true)}
                 className="w-8 h-8 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
                 title="Expand preview"
