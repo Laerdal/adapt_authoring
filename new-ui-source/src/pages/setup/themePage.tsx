@@ -1452,8 +1452,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   const [vanillaColors, setVanillaColors] = useState<Record<string, string>>({});
   const [activeCustomAccordion, setActiveCustomAccordion] = useState<string | null>('_global');
   const [customSettings, setCustomSettings] = useState<Record<string, string>>(CUSTOM_FIELD_DEFAULTS);
-  const [previewDarkMode, setPreviewDarkMode] = useState(false);
-  const [isPreviewExpanded, setIsPreviewExpanded] = useState(false);
   const [selectedThemeSchema, setSelectedThemeSchema] = useState<Record<string, unknown> | undefined>(undefined);
   const isLifeTheme = selected === 'life';
 
@@ -2010,6 +2008,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
   // Live Preview Component
   const LivePreview = () => {
+    const [previewDarkMode, setPreviewDarkMode] = useState(false);
+    const [isPreviewExpanded, setIsPreviewExpanded] = useState(false);
+
     const primaryColor = getCustomSetting('_global', '_primaryBrandColor') || '#2e7fa1';
     const secondaryColor = getCustomSetting('_global', '_secondaryBrandColor') || '#25837e';
     const paragraphFont = getCustomSetting('_global', 'paragraph-font-family') || 'Lato';
