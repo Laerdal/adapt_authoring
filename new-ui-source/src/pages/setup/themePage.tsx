@@ -2050,6 +2050,14 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     const canvasBg = darkMode ? '#111827' : '#f0f4f8';
     const textColor = darkMode ? '#e8e8e8' : fontColor;
     const headingColor = darkMode ? '#ffffff' : headingColorTheme;
+    const articlePreviewBg = darkMode ? '#232323' : articleBgColor;
+    const blockPreviewBg = darkMode ? '#2b2b2b' : blockBgColor;
+    const componentPreviewBg = darkMode ? '#333333' : componentBgColor;
+    const itemPreviewBg = darkMode ? '#3a3a3a' : componentBgColor;
+    const infoPanelBg = darkMode ? '#1f2937' : '#FFFBEB';
+    const infoPanelBorder = darkMode ? '#4b5563' : '#FEE685';
+    const infoPanelText = darkMode ? '#f9fafb' : '#973C00';
+    const infoPanelHeading = darkMode ? '#ffffff' : '#7A3000';
     const navIconColor = (pageHeaderTitleColor && pageHeaderTitleColor !== 'transparent') ? pageHeaderTitleColor : '#ffffff';
     const navTextColor = (pageHeaderBodyColor && pageHeaderBodyColor !== 'transparent') ? pageHeaderBodyColor : navIconColor;
     const titleSize = titleSizeRaw;
@@ -2108,17 +2116,17 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                   </div>
                 </div>
 
-                <div style={{ border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: '10px', background: articleBgColor, padding: `${articleTop}px 12px ${articleBottom}px`, marginTop: '10px' }}>
+                <div style={{ border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: '10px', background: articlePreviewBg, padding: `${articleTop}px 12px ${articleBottom}px`, marginTop: '10px' }}>
                   <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '1rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '10px' }}>
                     New Article Title
                   </div>
 
-                  <div style={{ border: `1px solid ${darkMode ? '#4b5563' : '#9fc9dd'}`, borderRadius: '10px', background: blockBgColor, padding: `${blockTop}px 12px ${blockBottom}px`, marginTop: '10px' }}>
+                  <div style={{ border: `1px solid ${darkMode ? '#4b5563' : '#9fc9dd'}`, borderRadius: '10px', background: blockPreviewBg, padding: `${blockTop}px 12px ${blockBottom}px`, marginTop: '10px' }}>
                     <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.92rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '10px' }}>
                       New Block Title
                     </div>
 
-                    <div style={{ border: `1px solid ${darkMode ? '#6b7280' : '#d1d5db'}`, borderRadius: '10px', background: componentBgColor, padding: '12px', marginTop: '10px', boxShadow: darkMode ? 'none' : '0 1px 2px rgba(0, 0, 0, 0.05)' }}>
+                    <div style={{ border: `1px solid ${darkMode ? '#6b7280' : '#d1d5db'}`, borderRadius: '10px', background: componentPreviewBg, padding: '12px', marginTop: '10px', boxShadow: darkMode ? 'none' : '0 1px 2px rgba(0, 0, 0, 0.05)' }}>
                       <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.9rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '8px' }}>
                         New Component Title
                       </div>
@@ -2142,10 +2150,10 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                               border: `1px solid ${darkMode ? '#9ca3af' : '#e5e7eb'}`,
                               borderRadius: '999px',
                               padding: '8px 12px',
-                              background: opt.selected ? `${secondaryColor}1F` : componentBgColor,
+                              background: opt.selected ? `${secondaryColor}1F` : itemPreviewBg,
                             }}
                           >
-                            <div style={{ width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0, border: `2px solid ${opt.selected ? secondaryColor : (darkMode ? '#d1d5db' : '#cbd5e1')}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: componentBgColor }}>
+                            <div style={{ width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0, border: `2px solid ${opt.selected ? secondaryColor : (darkMode ? '#d1d5db' : '#cbd5e1')}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: componentPreviewBg }}>
                               {opt.selected && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: secondaryColor }} />}
                             </div>
                             <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.8rem', fontWeight: 600, color: textColor }}>{opt.label}</span>
@@ -2176,29 +2184,29 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <div
             className="mt-4 mb-6 rounded-xl p-4 shadow-sm"
             style={{
-              background: '#FFFBEB',
-              border: '1px solid #FEE685',
-              color: '#973C00',
+              background: infoPanelBg,
+              border: `1px solid ${infoPanelBorder}`,
+              color: infoPanelText,
             }}
           >
             <div className="flex items-center gap-2 mb-3">
               <div
                 className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold"
-                style={{ background: '#FDE68A', color: '#973C00' }}
+                style={{ background: darkMode ? '#374151' : '#FDE68A', color: infoPanelText }}
               >
                 i
               </div>
-              <span className="text-sm font-bold" style={{ color: '#973C00' }}>{THEME_PREVIEW_INFO.title}</span>
+              <span className="text-sm font-bold" style={{ color: infoPanelText }}>{THEME_PREVIEW_INFO.title}</span>
             </div>
 
             <div className="mb-4">
-              <div className="text-sm font-semibold mb-1.5" style={{ color: '#7A3000' }}>{THEME_PREVIEW_INFO.livePreviewLabel}</div>
-              <p className="text-xs leading-relaxed" style={{ color: '#973C00' }}>{THEME_PREVIEW_INFO.livePreviewText}</p>
+              <div className="text-sm font-semibold mb-1.5" style={{ color: infoPanelHeading }}>{THEME_PREVIEW_INFO.livePreviewLabel}</div>
+              <p className="text-xs leading-relaxed" style={{ color: infoPanelText }}>{THEME_PREVIEW_INFO.livePreviewText}</p>
             </div>
 
             <div>
-              <div className="text-sm font-semibold mb-1.5" style={{ color: '#7A3000' }}>{THEME_PREVIEW_INFO.accessibilityLabel}</div>
-              <p className="text-xs leading-relaxed" style={{ color: '#973C00' }}>{THEME_PREVIEW_INFO.accessibilityText}</p>
+              <div className="text-sm font-semibold mb-1.5" style={{ color: infoPanelHeading }}>{THEME_PREVIEW_INFO.accessibilityLabel}</div>
+              <p className="text-xs leading-relaxed" style={{ color: infoPanelText }}>{THEME_PREVIEW_INFO.accessibilityText}</p>
             </div>
           </div>
         </div>
@@ -2232,14 +2240,14 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                 <button
                   onClick={() => setDarkMode(!darkMode)}
                   className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#d1d5db] bg-white px-3 text-sm font-medium text-[#374151] shadow-sm hover:bg-[#f9fafb]"
-                  title="Toggle dark mode"
-                  aria-label="Toggle dark mode"
+                  title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+                  aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
                   type="button"
                 >
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
                   </svg>
-                  <span>Dark mode</span>
+                  <span>{darkMode ? 'Light mode' : 'Dark mode'}</span>
                 </button>
                 <button
                   onClick={() => setIsExpanded(false)}
@@ -2278,8 +2286,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
               <button
                 onClick={() => setDarkMode(!darkMode)}
                 className="w-8 h-8 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
-                title="Toggle dark mode"
-                aria-label="Toggle dark mode"
+                title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+                aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
                 type="button"
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
