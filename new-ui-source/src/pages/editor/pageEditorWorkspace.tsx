@@ -4678,6 +4678,68 @@ export default function CourseEditor({
         cursor: pointer !important;
       }
 
+      html:not(.adapt-authoring-editing-active) .page__header[data-preview-injected="true"]:has(> .adapt-authoring-preview-headless-header),
+      html:not(.adapt-authoring-editing-active) .article__header[data-preview-injected="true"]:has(> .adapt-authoring-preview-headless-header),
+      html:not(.adapt-authoring-editing-active) .block__header[data-preview-injected="true"]:has(> .adapt-authoring-preview-headless-header) {
+        display: none !important;
+      }
+
+      .adapt-authoring-editing-active .adapt-authoring-preview-headless-header:not(.adapt-authoring-preview-active) {
+        display: flex !important;
+        align-items: center !important;
+        gap: 12px !important;
+        height: 20px !important;
+        min-height: 0 !important;
+        padding: 0 4px !important;
+        margin-top: 8px !important;
+        margin-bottom: 8px !important;
+      }
+      .adapt-authoring-editing-active .adapt-authoring-preview-headless-header:not(.adapt-authoring-preview-active)::before {
+        position: static;
+        flex: 0 1 auto;
+        min-width: 0;
+        min-height: 0;
+        margin: 0;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        line-height: 14px;
+      }
+      .adapt-authoring-editing-active .adapt-authoring-preview-headless-header:not(.adapt-authoring-preview-active) > [data-preview-hover-title-injected="true"],
+      .adapt-authoring-editing-active .adapt-authoring-preview-headless-header:not(.adapt-authoring-preview-active) [data-preview-hover-title-shown="true"] {
+        position: static !important;
+        flex: 1 1 0 !important;
+        min-width: 0 !important;
+        height: 16px !important;
+        box-sizing: border-box !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        white-space: nowrap !important;
+        text-overflow: ellipsis !important;
+        font-size: 12px !important;
+        line-height: 16px !important;
+      }
+      .adapt-authoring-editing-active .adapt-authoring-preview-headless-header:not(.adapt-authoring-preview-active) [data-preview-hover-title-injected="true"] *,
+      .adapt-authoring-editing-active .adapt-authoring-preview-headless-header:not(.adapt-authoring-preview-active) [data-preview-hover-title-shown="true"] * {
+        font-size: inherit !important;
+        line-height: inherit !important;
+      }
+      .adapt-authoring-preview-headless-header:not(.adapt-authoring-preview-active) .adapt-authoring-level-actions {
+        position: static !important;
+        flex: 0 0 auto;
+        order: 2;
+        top: auto !important;
+        right: auto !important;
+        margin-left: auto;
+      }
+      @media (max-width: 619px) {
+        [data-preview-hover-title-injected="true"],
+        [data-preview-hover-title-shown="true"] {
+          display: none !important;
+        }
+      }
+
       .adapt-authoring-preview-inline-editable:not(.ck-editor__editable) {
         outline: none !important;
         border: 0 !important;
@@ -5227,6 +5289,23 @@ export default function CourseEditor({
       container.appendChild(inner);
       return inner;
     };
+
+    if (doc.documentElement.classList.contains("adapt-authoring-editing-active")) {
+      doc.querySelectorAll(".page, .article, .block").forEach((root) => {
+        const level = root.classList.contains("page") ? "topic" : root.classList.contains("article") ? "section" : "group";
+        const innerSelector = level === "topic" ? ".page__inner" : level === "section" ? ".article__inner" : ".block__inner";
+        ensureLevelHeaderHost(level, root.querySelector(innerSelector) ?? root);
+      });
+    }
+    doc.querySelectorAll(".page__header-inner, .article__header-inner, .block__header-inner").forEach((host) => {
+      const hasVisibleContent = Array.from(host.children).some((child) => {
+        if (child.hasAttribute("data-preview-level-actions") || child.hasAttribute("data-preview-hover-title-injected")) return false;
+        const computed = doc.defaultView?.getComputedStyle(child);
+        if (computed?.display === "none" || computed?.visibility === "hidden") return false;
+        return !!child.textContent?.trim() || !!child.querySelector("img, video, audio, iframe, .ck-editor");
+      });
+      host.classList.toggle("adapt-authoring-preview-headless-header", !hasVisibleContent);
+    });
 
     const resolveHighlightTarget = (
       level: "menu" | "topic" | "section" | "group" | "component",
@@ -5880,6 +5959,7 @@ export default function CourseEditor({
       doc.querySelectorAll("[data-preview-injected='true']").forEach((node) => {
         const element = node as HTMLElement;
         if ((element.textContent || "").trim().length > 0) return;
+        if (element.matches(".adapt-authoring-preview-headless-header") || element.querySelector(".adapt-authoring-preview-headless-header")) return;
         if (element.matches("[data-preview-edit-enabled='true']") || element.querySelector("[data-preview-edit-enabled='true']")) return;
         const parent = element.parentElement;
         element.remove();
@@ -6154,6 +6234,12 @@ export default function CourseEditor({
               return;
             }
             const editableEl = editor.ui.getEditableElement() as HTMLElement;
+            // Sticky toggling inserts a toolbar-height placeholder, which made the page jump/oscillate while typing near the viewport edge.
+            const stickyPanel = editor.ui.view?.stickyPanel;
+            if (stickyPanel) {
+              stickyPanel.unbind?.("isActive");
+              stickyPanel.isActive = false;
+            }
             let lastCommittedHtml = options.value || "";
             const commit = (): string | null => {
               // Guards the same class of "iframe navigated out from under a
@@ -8247,7 +8333,7 @@ export default function CourseEditor({
         const isHeadlessSelectedParent =
           header?.getAttribute("data-preview-injected") === "true" ||
           header?.closest(".block__header")?.getAttribute("data-preview-injected") === "true";
-        if (isHeadlessSelectedParent) {
+        if (isHeadlessSelectedParent && !target?.closest(".block__header, .block__header-inner")) {
           return noHover;
         }
       }

@@ -59,11 +59,14 @@ export function loadCKEditor5In(targetWindow: Window): Promise<void> {
         const style = targetDocument.createElement("style");
         style.id = "adapt-authoring-ckeditor-fit-style";
         style.textContent = `
-          .ck.ck-editor { display: block !important; width: 100% !important; max-width: 100% !important; }
+          .ck.ck-editor { --ck-color-focus-border: var(--ck-color-base-border); display: block !important; width: 100% !important; max-width: 100% !important; }
           .ck-sticky-panel, .ck-sticky-panel__content { position: static !important; top: auto !important; width: 100% !important; }
+          .ck-sticky-panel__placeholder { display: none !important; }
           .ck.ck-editor__main, .ck.ck-editor__editable, .ck.ck-content {
             display: block !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box !important;
           }
+          .ck.ck-editor__main, .ck.ck-editor__editable,
+          .ck-editor .ck-source-editing-area, .ck-editor .ck-source-editing-area textarea { border-radius: 0 !important; }
           .ck.ck-editor__editable:not(.ck-source-editing-area), .ck.ck-source-editing-area {
             min-height: 120px !important;
             max-height: min(420px, calc(100vh - 64px)) !important;
@@ -91,6 +94,7 @@ export function loadCKEditor5In(targetWindow: Window): Promise<void> {
           .ck.ck-toolbar .ck-button__icon[viewBox="0 0 115.28 122.88"] path { fill: #333333 !important; }
           .ck.ck-content { word-break: break-word; }
           .ck.ck-editor__editable.ck-focused:not(.ck-editor__nested-editable) {
+            border-color: var(--ck-color-base-border) !important;
             outline: 0 !important;
             box-shadow: none !important;
           }
@@ -218,6 +222,47 @@ export function loadCKEditor5In(targetWindow: Window): Promise<void> {
           }
         }
 
+        class NarrowEditorPoweredByPlugin extends Plugin {
+          init() {
+            const editor = this.editor;
+            editor.ui.view.body.on('add', (_event, view) => {
+              if (view.class !== 'ck-powered-by-balloon') return;
+              const pin = view.pin.bind(view);
+              view.pin = (options) => {
+                const target = options.target;
+                const width = target.getBoundingClientRect().width;
+                const label = view.element.querySelector('.ck-powered-by__label');
+                const logo = view.element.querySelector('.ck-powered-by svg');
+                if (width < 130) {
+                  label.style.setProperty('font-size', '8px', 'important');
+                  logo.style.width = '42px';
+                  logo.style.height = '8px';
+                } else {
+                  label.style.removeProperty('font-size');
+                  logo.style.width = '53px';
+                  logo.style.height = '10px';
+                }
+                if (width >= 350) return pin(options);
+                return pin({
+                  ...options,
+                  positions: [(_targetRect, balloonRect) => {
+                    const rect = target.getBoundingClientRect();
+                    if (rect.width < balloonRect.width + 10 || rect.height < balloonRect.height + 10) return null;
+                    const top = rect.bottom - balloonRect.height / 2;
+                    if (top < Math.max(rect.top, 0)) return null;
+                    return {
+                      top,
+                      left: editor.locale.contentLanguageDirection === 'rtl' ? rect.left + 5 : rect.right - balloonRect.width - 5,
+                      name: 'position_border-side_' + (editor.locale.contentLanguageDirection === 'rtl' ? 'left' : 'right'),
+                      config: { withArrow: false },
+                    };
+                  }],
+                });
+              };
+            });
+          }
+        }
+
         class BasicClipboardPastePlugin extends Plugin {
           init() {
             const editor = this.editor;
@@ -263,7 +308,7 @@ export function loadCKEditor5In(targetWindow: Window): Promise<void> {
           SpecialCharactersLatin, SpecialCharactersMathematical, SpecialCharactersText,
           Strikethrough, Subscript, Superscript, TextTransformation,
           Table, TableCaption, TableCellProperties, TableProperties, TableToolbar,
-          Underline, Undo, BasicClipboardPastePlugin
+          Underline, Undo, BasicClipboardPastePlugin, NarrowEditorPoweredByPlugin
         ];
         window.CKEDITOR.instances = window.CKEDITOR.instances || [];
         window.CKEDITOR_LOADED = true;
