@@ -301,6 +301,17 @@ function AssetPreview({ assetType, value }: { assetType: AssetKind; value: Asset
   return <VideoView src={src} className="max-h-64 w-full rounded" />;
 }
 
+// Asset-type-specific hint for the external-URL input — a bare "https://…"
+// placeholder read the same for an image field as a video field, which made
+// authors unsure what kind of link was actually expected.
+const EXTERNAL_ASSET_PLACEHOLDER: Record<AssetKind, string> = {
+  image: 'https://… (direct image link)',
+  audio: 'https://… (direct audio file link)',
+  video: 'https://… (or YouTube / Vimeo link)',
+  h5p: 'https://… (direct .h5p package link)',
+  other: 'https://…',
+};
+
 // The Lovable asset field: "Select an Asset" (DAM picker) / "Select an External
 // Asset" (URL) when empty; asset preview + path + Change/Remove when set.
 function AssetField({
@@ -352,7 +363,7 @@ function AssetField({
               e.stopPropagation();
               if (e.key === 'Enter') applyExternal();
             }}
-            placeholder="https://… (or YouTube / Vimeo link)"
+            placeholder={EXTERNAL_ASSET_PLACEHOLDER[assetType]}
             className={inputCls}
           />
           <button type="button" onClick={applyExternal} className="rounded bg-primary px-2.5 py-1 text-xs font-medium text-primary-foreground">
