@@ -2050,6 +2050,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     const canvasBg = previewDarkMode ? '#111827' : '#f0f4f8';
     const textColor = previewDarkMode ? '#e8e8e8' : fontColor;
     const headingColor = previewDarkMode ? '#ffffff' : headingColorTheme;
+    const instructionPreviewColor = previewDarkMode ? '#f3f4f6' : instructionColor;
     const articlePreviewBg = previewDarkMode ? '#232323' : articleBgColor;
     const blockPreviewBg = previewDarkMode ? '#2b2b2b' : blockBgColor;
     const componentPreviewBg = previewDarkMode ? '#333333' : componentBgColor;
@@ -2138,7 +2139,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                       <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.84rem', color: linkColor, textDecoration: 'underline', cursor: 'pointer', marginBottom: '10px' }}>
                         This is a sample link
                       </div>
-                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: instructionColor, fontStyle: 'italic', marginBottom: '10px' }}>
+                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: instructionPreviewColor, fontStyle: 'italic', marginBottom: '10px' }}>
                         Choose one option then select Submit.
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
