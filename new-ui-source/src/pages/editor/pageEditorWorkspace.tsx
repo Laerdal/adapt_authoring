@@ -9483,10 +9483,12 @@ export default function CourseEditor({
     // else would otherwise prompt a second attempt.
     let swapObserverRafId: number | null = null;
     let initializedEditorRoot: Element | null = null;
+    let initializedEditorFields: Element[] = [];
     const syncRenderedSelectionEditors = () => {
       const selection = liveSelectionRef.current;
       if (!selection.hasCanvasSelection || selection.menuSelected) {
         initializedEditorRoot = null;
+        initializedEditorFields = [];
         return;
       }
       const level = selection.selectedComponentId ? "component"
@@ -9498,13 +9500,18 @@ export default function CourseEditor({
       const root = id ? doc.querySelector(`${selector}[data-adapt-id="${id}"]`) : null;
       if (!root) {
         initializedEditorRoot = null;
+        initializedEditorFields = [];
         return;
       }
       const editableTitle = root.querySelector(`[data-preview-node-level="${level}"][data-preview-edit-field="title"][data-preview-edit-enabled="true"]`);
-      if (initializedEditorRoot !== root || !editableTitle) {
+      const replacedField = initializedEditorFields.some((field) =>
+        !root.contains(field) || field.getAttribute("data-preview-edit-enabled") !== "true"
+      );
+      if (initializedEditorRoot !== root || !editableTitle || replacedField) {
         initializedEditorRoot = root;
         syncPreviewInlineEditorsRef.current();
       }
+      initializedEditorFields = Array.from(root.querySelectorAll('[data-preview-edit-enabled="true"]'));
     };
     const swapPositionsObserver = new MutationObserver(() => {
       if (swapObserverRafId !== null) return;
