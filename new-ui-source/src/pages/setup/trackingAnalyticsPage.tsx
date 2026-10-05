@@ -1241,7 +1241,7 @@ export function TrackingAnalyticsPage({
         </div>
 
         <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="max-w-2xl px-6 py-6 pb-24 flex flex-col gap-4">
+        <div className="max-w-2xl px-6 py-6 flex flex-col gap-4">
         <AccordionCard
           title="Tracking"
           hint={getSchemaHint(spoorSchema) ?? getSchemaHint(xapiSchema) ?? getSchemaHint(hyperSchema)}
@@ -1586,7 +1586,7 @@ export function TrackingAnalyticsPage({
         </AccordionCard>
       </div>
 
-      <div className="flex items-start gap-2.5 rounded-lg bg-[#fff7ed] border border-[#fed7aa] px-4 py-3 mt-2">
+      <div className="mx-6 flex items-start gap-2.5 rounded-lg bg-[#fff7ed] border border-[#fed7aa] px-4 py-3 mt-2">
         <span className="text-base leading-none mt-0.5" aria-hidden="true">💡</span>
         <p className="text-sm text-[#9a3412] leading-snug">
           <span className="font-semibold">Tip:</span> Tracking standards report learner progress back to the LMS, while analytics providers give you aggregate usage insights. You can enable both.
