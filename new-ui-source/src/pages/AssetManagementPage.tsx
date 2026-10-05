@@ -937,12 +937,17 @@ export function AssetManagementWorkspace({
     }, 120);
 
     try {
-      await uploadAsset(file, title, { description, tags });
+      const assetId = await uploadAsset(file, title, { description, tags });
       if (progressTimer.current) {
         clearInterval(progressTimer.current);
         progressTimer.current = null;
       }
       await fetchAssetsPage(true);
+      if (pickerMode) {
+        setSelectedAssetId(assetId);
+        setLastDeletedAsset(null);
+        setRestoreError(null);
+      }
       setToast({ type: "success", message: "Your asset has been added to the Asset Library and is ready to use." });
       closeUpload();
     } catch (error) {
