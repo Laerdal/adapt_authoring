@@ -20,9 +20,9 @@ permissions:
 
 env:
   NODE_VERSION: '18'
-  STUDIO_E2E_REPO: Laerdal/adapt-e2e-test
+  STUDIO_E2E_REPO: Laerdal-Medical/adapt-studio-e2e-test
   STUDIO_E2E_WORKFLOW: playwright.yml
-  STUDIO_E2E_BRANCH: develop
+  STUDIO_E2E_BRANCH: main
 
 jobs:
   backend-tests:
