@@ -1452,6 +1452,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   const [vanillaColors, setVanillaColors] = useState<Record<string, string>>({});
   const [activeCustomAccordion, setActiveCustomAccordion] = useState<string | null>('_global');
   const [customSettings, setCustomSettings] = useState<Record<string, string>>(CUSTOM_FIELD_DEFAULTS);
+  const [previewDarkMode, setPreviewDarkMode] = useState(false);
+  const [isPreviewExpanded, setIsPreviewExpanded] = useState(false);
   const [selectedThemeSchema, setSelectedThemeSchema] = useState<Record<string, unknown> | undefined>(undefined);
   const isLifeTheme = selected === 'life';
 
@@ -2008,8 +2010,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
   // Live Preview Component
   const LivePreview = () => {
-    const [darkMode, setDarkMode] = useState(false);
-    const [isExpanded, setIsExpanded] = useState(false);
     const primaryColor = getCustomSetting('_global', '_primaryBrandColor') || '#2e7fa1';
     const secondaryColor = getCustomSetting('_global', '_secondaryBrandColor') || '#25837e';
     const paragraphFont = getCustomSetting('_global', 'paragraph-font-family') || 'Lato';
@@ -2046,18 +2046,18 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       double: 24,
     };
 
-    const previewBg = darkMode ? '#1a1a1a' : pageBgColor;
-    const canvasBg = darkMode ? '#111827' : '#f0f4f8';
-    const textColor = darkMode ? '#e8e8e8' : fontColor;
-    const headingColor = darkMode ? '#ffffff' : headingColorTheme;
-    const articlePreviewBg = darkMode ? '#232323' : articleBgColor;
-    const blockPreviewBg = darkMode ? '#2b2b2b' : blockBgColor;
-    const componentPreviewBg = darkMode ? '#333333' : componentBgColor;
-    const itemPreviewBg = darkMode ? '#3a3a3a' : componentBgColor;
-    const infoPanelBg = darkMode ? '#1f2937' : '#FFFBEB';
-    const infoPanelBorder = darkMode ? '#4b5563' : '#FEE685';
-    const infoPanelText = darkMode ? '#f9fafb' : '#973C00';
-    const infoPanelHeading = darkMode ? '#ffffff' : '#7A3000';
+    const previewBg = previewDarkMode ? '#1a1a1a' : pageBgColor;
+    const canvasBg = previewDarkMode ? '#111827' : '#f0f4f8';
+    const textColor = previewDarkMode ? '#e8e8e8' : fontColor;
+    const headingColor = previewDarkMode ? '#ffffff' : headingColorTheme;
+    const articlePreviewBg = previewDarkMode ? '#232323' : articleBgColor;
+    const blockPreviewBg = previewDarkMode ? '#2b2b2b' : blockBgColor;
+    const componentPreviewBg = previewDarkMode ? '#333333' : componentBgColor;
+    const itemPreviewBg = previewDarkMode ? '#3a3a3a' : componentBgColor;
+    const infoPanelBg = previewDarkMode ? '#1f2937' : '#FFFBEB';
+    const infoPanelBorder = previewDarkMode ? '#4b5563' : '#FEE685';
+    const infoPanelText = previewDarkMode ? '#f9fafb' : '#973C00';
+    const infoPanelHeading = previewDarkMode ? '#ffffff' : '#7A3000';
     const navIconColor = (pageHeaderTitleColor && pageHeaderTitleColor !== 'transparent') ? pageHeaderTitleColor : '#ffffff';
     const navTextColor = (pageHeaderBodyColor && pageHeaderBodyColor !== 'transparent') ? pageHeaderBodyColor : navIconColor;
     const titleSize = titleSizeRaw;
@@ -2065,13 +2065,15 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     const articleBottom = spacingScale[articleBottomPadding] ?? spacingScale.standard;
     const blockTop = spacingScale[blockTopPadding] ?? spacingScale.standard;
     const blockBottom = spacingScale[blockBottomPadding] ?? spacingScale.standard;
+    const darkModeLabel = previewDarkMode ? 'Light mode' : 'Dark mode';
+    const darkModeTitle = previewDarkMode ? 'Switch to light mode' : 'Switch to dark mode';
 
     useEffect(() => {
-      if (!isExpanded) return;
+      if (!isPreviewExpanded) return;
 
       const previousOverflow = document.body.style.overflow;
       const onKeyDown = (event: KeyboardEvent) => {
-        if (event.key === 'Escape') setIsExpanded(false);
+        if (event.key === 'Escape') setIsPreviewExpanded(false);
       };
 
       document.body.style.overflow = 'hidden';
@@ -2081,13 +2083,13 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         document.body.style.overflow = previousOverflow;
         window.removeEventListener('keydown', onKeyDown);
       };
-    }, [isExpanded]);
+    }, [isPreviewExpanded]);
 
     const previewContent = (
       <div className="min-h-0 flex-1 overflow-y-auto p-0" style={{ fontSize: '13px' }}>
         <div style={{ maxWidth: '760px', margin: '0 auto' }}>
           <div className="overflow-hidden rounded-xl border border-[#e5e7eb]" style={{ backgroundColor: previewBg }}>
-            <div style={{ background: navBg, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', borderBottom: darkMode ? '1px solid #374151' : '1px solid #f3f4f6' }}>
+            <div style={{ background: navBg, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', borderBottom: previewDarkMode ? '1px solid #374151' : '1px solid #f3f4f6' }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={navIconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M19 12H5M12 19l-7-7 7-7" />
               </svg>
@@ -2116,17 +2118,17 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                   </div>
                 </div>
 
-                <div style={{ border: `1px solid ${darkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: '10px', background: articlePreviewBg, padding: `${articleTop}px 12px ${articleBottom}px`, marginTop: '10px' }}>
+                <div style={{ border: `1px solid ${previewDarkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: '10px', background: articlePreviewBg, padding: `${articleTop}px 12px ${articleBottom}px`, marginTop: '10px' }}>
                   <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '1rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '10px' }}>
                     New Article Title
                   </div>
 
-                  <div style={{ border: `1px solid ${darkMode ? '#4b5563' : '#9fc9dd'}`, borderRadius: '10px', background: blockPreviewBg, padding: `${blockTop}px 12px ${blockBottom}px`, marginTop: '10px' }}>
+                  <div style={{ border: `1px solid ${previewDarkMode ? '#4b5563' : '#9fc9dd'}`, borderRadius: '10px', background: blockPreviewBg, padding: `${blockTop}px 12px ${blockBottom}px`, marginTop: '10px' }}>
                     <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.92rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '10px' }}>
                       New Block Title
                     </div>
 
-                    <div style={{ border: `1px solid ${darkMode ? '#6b7280' : '#d1d5db'}`, borderRadius: '10px', background: componentPreviewBg, padding: '12px', marginTop: '10px', boxShadow: darkMode ? 'none' : '0 1px 2px rgba(0, 0, 0, 0.05)' }}>
+                    <div style={{ border: `1px solid ${previewDarkMode ? '#6b7280' : '#d1d5db'}`, borderRadius: '10px', background: componentPreviewBg, padding: '12px', marginTop: '10px', boxShadow: previewDarkMode ? 'none' : '0 1px 2px rgba(0, 0, 0, 0.05)' }}>
                       <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.9rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '8px' }}>
                         New Component Title
                       </div>
@@ -2147,13 +2149,13 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                               display: 'flex',
                               alignItems: 'center',
                               gap: '10px',
-                              border: `1px solid ${darkMode ? '#9ca3af' : '#e5e7eb'}`,
+                              border: `1px solid ${previewDarkMode ? '#9ca3af' : '#e5e7eb'}`,
                               borderRadius: '999px',
                               padding: '8px 12px',
                               background: opt.selected ? `${secondaryColor}1F` : itemPreviewBg,
                             }}
                           >
-                            <div style={{ width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0, border: `2px solid ${opt.selected ? secondaryColor : (darkMode ? '#d1d5db' : '#cbd5e1')}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: componentPreviewBg }}>
+                            <div style={{ width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0, border: `2px solid ${opt.selected ? secondaryColor : (previewDarkMode ? '#d1d5db' : '#cbd5e1')}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: componentPreviewBg }}>
                               {opt.selected && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: secondaryColor }} />}
                             </div>
                             <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.8rem', fontWeight: 600, color: textColor }}>{opt.label}</span>
@@ -2192,7 +2194,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
             <div className="flex items-center gap-2 mb-3">
               <div
                 className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold"
-                style={{ background: darkMode ? '#374151' : '#FDE68A', color: infoPanelText }}
+                style={{ background: previewDarkMode ? '#374151' : '#FDE68A', color: infoPanelText }}
               >
                 i
               </div>
@@ -2213,12 +2215,12 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       </div>
     );
 
-    const expandedPreview = isExpanded && typeof document !== 'undefined'
+    const expandedPreview = isPreviewExpanded && typeof document !== 'undefined'
       ? createPortal(
         <div
           className="fixed inset-0 overflow-y-auto px-4 pb-8"
           style={{ zIndex: 9999, backgroundColor: 'rgba(248, 250, 252, 0.99)', paddingTop: '72px' }}
-          onClick={() => setIsExpanded(false)}
+          onClick={() => setIsPreviewExpanded(false)}
         >
           <div
             className="mx-auto flex w-full max-w-6xl min-h-0 flex-col overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-2xl"
@@ -2238,19 +2240,33 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
               <div className="flex items-center gap-2">
                 <span className="text-xs text-[#6b7280] mr-1">Press Esc to close</span>
                 <button
-                  onClick={() => setDarkMode(!darkMode)}
+                  onClick={() => setPreviewDarkMode(!previewDarkMode)}
                   className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#d1d5db] bg-white px-3 text-sm font-medium text-[#374151] shadow-sm hover:bg-[#f9fafb]"
-                  title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
-                  aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+                  title={darkModeTitle}
+                  aria-label={darkModeTitle}
                   type="button"
                 >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                  </svg>
-                  <span>{darkMode ? 'Light mode' : 'Dark mode'}</span>
+                  {previewDarkMode ? (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="4" />
+                      <path d="M12 2v2" />
+                      <path d="M12 20v2" />
+                      <path d="m4.93 4.93 1.41 1.41" />
+                      <path d="m17.66 17.66 1.41 1.41" />
+                      <path d="M2 12h2" />
+                      <path d="M20 12h2" />
+                      <path d="m6.34 17.66-1.41 1.41" />
+                      <path d="m19.07 4.93-1.41 1.41" />
+                    </svg>
+                  ) : (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                    </svg>
+                  )}
+                  <span>{darkModeLabel}</span>
                 </button>
                 <button
-                  onClick={() => setIsExpanded(false)}
+                  onClick={() => setIsPreviewExpanded(false)}
                   className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#d1d5db] bg-white px-3 text-sm font-medium text-[#374151] shadow-sm hover:bg-[#f9fafb]"
                   title="Minimize preview"
                   aria-label="Minimize preview"
@@ -2284,18 +2300,32 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
             </div>
             <div className="flex gap-1.5">
               <button
-                onClick={() => setDarkMode(!darkMode)}
+                onClick={() => setPreviewDarkMode(!previewDarkMode)}
                 className="w-8 h-8 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
-                title={darkMode ? "Switch to light mode" : "Switch to dark mode"}
-                aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+                title={darkModeTitle}
+                aria-label={darkModeTitle}
                 type="button"
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                </svg>
+                {previewDarkMode ? (
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="4" />
+                    <path d="M12 2v2" />
+                    <path d="M12 20v2" />
+                    <path d="m4.93 4.93 1.41 1.41" />
+                    <path d="m17.66 17.66 1.41 1.41" />
+                    <path d="M2 12h2" />
+                    <path d="M20 12h2" />
+                    <path d="m6.34 17.66-1.41 1.41" />
+                    <path d="m19.07 4.93-1.41 1.41" />
+                  </svg>
+                ) : (
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                  </svg>
+                )}
               </button>
               <button
-                onClick={() => setIsExpanded(true)}
+                onClick={() => setIsPreviewExpanded(true)}
                 className="w-8 h-8 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
                 title="Expand preview"
                 aria-label="Expand preview"
