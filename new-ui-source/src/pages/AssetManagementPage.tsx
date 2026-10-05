@@ -1247,7 +1247,7 @@ export function AssetManagementWorkspace({
 
       {/* ── Content ── */}
       <div className="flex-1 overflow-x-hidden overflow-y-auto px-4 pb-4 sm:px-6 sm:pb-6 md:px-8">
-        <div className="grid grid-cols-[minmax(0,1fr)_168px] items-start gap-3 sm:grid-cols-[minmax(0,1fr)_220px] sm:gap-4 md:grid-cols-[minmax(0,1fr)_280px] md:gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="grid grid-cols-[minmax(0,1fr)_168px] items-start gap-3 sm:grid-cols-[minmax(0,1fr)_220px] sm:gap-4 md:grid-cols-[minmax(0,1fr)_280px] md:gap-6 xl:grid-cols-[minmax(0,1fr)_340px] mt-2">
           <div className="min-w-0">
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
