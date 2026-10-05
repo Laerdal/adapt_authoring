@@ -41,6 +41,10 @@ const SORT_OPTIONS = [
 const FALLBACK_THEME_OPTIONS: Theme[] = ['LIFE Theme']
 const FALLBACK_MENU_OPTIONS = ['LIFE Menu']
 
+export function getCourseClipboardId(course: Pick<Course, 'id' | 'backendId'>): string {
+  return course.backendId ?? String(course.id)
+}
+
 function normalizeOption(v: string): string {
   return v.toLowerCase().replace(/[^a-z0-9]/g, '')
 }
@@ -333,8 +337,11 @@ export default function HomePage() {
   }
 
   function handleCopyId(id: number) {
-    navigator.clipboard.writeText(String(id)).catch(() => {})
-    showToast(`Course ID ${id} copied to clipboard`, 'info')
+    const source = courses.find((c) => c.id === id)
+    const courseId = source ? getCourseClipboardId(source) : String(id)
+
+    navigator.clipboard.writeText(courseId).catch(() => {})
+    showToast(`Course ID ${courseId} copied to clipboard`, 'info')
   }
 
   async function handleDelete(id: number) {
