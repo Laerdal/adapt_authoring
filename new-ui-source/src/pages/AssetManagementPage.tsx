@@ -457,7 +457,7 @@ function AssetPreviewPanel({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto space-y-6 p-5 text-center pb-10">
-          <AssetPreviewMedia asset={asset} onImageMeasure={setImageDimensions} />
+          <AssetPreviewMedia key={asset.backendId} asset={asset} onImageMeasure={setImageDimensions} />
 
           <div className="space-y-4">
             <div>
