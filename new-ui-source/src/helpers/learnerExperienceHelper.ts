@@ -1,4 +1,5 @@
 import { apiClient } from "../api/client";
+import { createCourseAssetMapping, removeCourseAssetMappings } from "../api/adaptAuthoring";
 
 type AnyRecord = Record<string, unknown>;
 
@@ -321,6 +322,15 @@ export interface LearningResourceItem {
   assetValue: string;
   urlValue: string;
   displayOnEveryPage: boolean;
+  /**
+   * DB id of the asset just picked via the asset picker (UI-only, not persisted
+   * to `_link`). Used to create the course/assets courseasset mapping that the
+   * publish pipeline (writeCourseAssets) needs in order to resolve
+   * `course/assets/<file>` to `course/<lang>/assets/<file>` and copy the file
+   * into the build output. Without it, resources added via Adapt Studio never
+   * get linked and the resource ends up with a broken link after publish.
+   */
+  assetId?: string;
 }
 
 export interface LearningResourceFilterText {
@@ -384,6 +394,13 @@ function parseLinkField(link: string): Pick<LearningResourceItem, "sourceType" |
     return { sourceType: "url", assetValue: "", urlValue: link };
   }
   return { sourceType: "asset", assetValue: link, urlValue: "" };
+}
+
+/** Extract the `_fieldName` the courseasset collection keys on from a `course/assets/<file>` link. */
+function courseAssetFieldNameFromLink(link: string): string | null {
+  const normalized = (link || "").trim().replace(/^\/+/, "");
+  if (!normalized.startsWith("course/assets/")) return null;
+  return normalized.replace(/^course\/assets\//, "") || null;
 }
 
 function filterTextFromSchema(buttons: AnyRecord, suffix: string): LearningResourceFilterText {
@@ -531,6 +548,39 @@ export async function saveLearningResourcesSettings(courseId: string, settings: 
       _resources: payload,
     },
   });
+
+  // Keep the courseasset collection in sync so the publish pipeline
+  // (writeCourseAssets) can resolve `course/assets/<file>` links to their
+  // final `course/<lang>/assets/<file>` path and copy the file into the build.
+  const previousItems = Array.isArray(existing._resourcesItems) ? existing._resourcesItems : [];
+  const previousFieldNames = new Set(
+    previousItems
+      .map((item) => courseAssetFieldNameFromLink(str(obj(item)._link)))
+      .filter((v): v is string => !!v)
+  );
+  const currentFieldNames = new Set(
+    settings.resources
+      .map((r) => (r.sourceType === "asset" ? courseAssetFieldNameFromLink(r.assetValue) : null))
+      .filter((v): v is string => !!v)
+  );
+  const removedFieldNames = [...previousFieldNames].filter((f) => !currentFieldNames.has(f));
+  if (removedFieldNames.length) {
+    await Promise.all(removedFieldNames.map((fieldName) => removeCourseAssetMappings(courseId, fieldName)));
+  }
+
+  const upserts = settings.resources
+    .filter((r) => r.sourceType === "asset" && r.assetId)
+    .map((r) => {
+      const fieldName = courseAssetFieldNameFromLink(r.assetValue);
+      if (!fieldName) return null;
+      return removeCourseAssetMappings(courseId, fieldName).then(() =>
+        createCourseAssetMapping(courseId, fieldName, r.assetId as string)
+      );
+    })
+    .filter((p): p is Promise<void> => !!p);
+  if (upserts.length) {
+    await Promise.all(upserts);
+  }
 }
 export async function getLearnerSearchSettings(courseId: string): Promise<LearnerSearchSettings> {
   const [course, config] = await Promise.all([

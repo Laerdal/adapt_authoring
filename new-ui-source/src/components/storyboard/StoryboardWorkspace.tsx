@@ -323,7 +323,10 @@ export default function StoryboardWorkspace({
   // moves focus out of the editor, and BlockNote can then no longer resolve
   // "where the cursor is" reliably, which previously caused new content to
   // land in the wrong place instead of right after the last active component.
-  const insert = (kind: StoryboardInsertKind) => editorRef.current?.insert(kind, { afterId: activeBlock?.id });
+  const insert = (kind: StoryboardInsertKind) => {
+    const result = editorRef.current?.insert(kind, { afterId: activeBlock?.id });
+    if (result && !result.ok && result.warning) flash(result.warning);
+  };
   const insertHeading = (level: number) => editorRef.current?.insert('heading', { level, afterId: activeBlock?.id });
 
   // Pull the latest backend course structure into the storyboard silently
@@ -596,12 +599,18 @@ export default function StoryboardWorkspace({
       // every export, regardless of the `dirty` flag: content projected from
       // the course on load is marked "saved" for the UI (no false "unsaved
       // changes" pill) without ever having been PUT to the backend record.
-      // Pull straight from the live editor and scrub any placeholder-title
-      // headings so the persisted document (and therefore the export) matches
-      // exactly what Preview shows, not the legacy scaffolding.
-      const liveDoc = stripPlaceholderHeadings(
-        (editorRef.current?.getDocument() as unknown[] | undefined) ?? [],
-      );
+      // Pull straight from the live editor as-is — do NOT run
+      // stripPlaceholderHeadings here. That helper removes the whole heading
+      // BLOCK (not just its text), which is a real structural boundary
+      // (Topic/Section/Content Group); Preview/TOC only blanks the text for a
+      // still-default title and keeps the row (see TableOfContents.tsx), and
+      // documentConvert.js's blocksToPdf/blocksToDocx already render a
+      // level-appropriate fallback for a blank/default heading rather than
+      // dropping it. Stripping it here instead deleted real structure from
+      // the saved document before export ever ran (ADAPT-3760 bug: default
+      // Topic/Section/Content Group headings missing from exported PDF/Word,
+      // only their content items surviving).
+      const liveDoc = (editorRef.current?.getDocument() as unknown[] | undefined) ?? [];
       await sb.save(liveDoc);
       const titleForExport = resolvedCourseTitle;
       const { filename, mime, dataBase64 } = isPdf

@@ -105,7 +105,11 @@ function newResource(): LearningResource {
     sourceType: "asset",
     assetValue: "",
     urlValue: "",
-    displayOnEveryPage: false,
+    // Matches the `_isGlobal` schema default (true). The Adapt framework's
+    // resources extension filters out any item with `_isGlobal === false`
+    // when the drawer is opened from a page (i.e. always, in practice), so
+    // defaulting this to false silently hid every newly added resource.
+    displayOnEveryPage: true,
   };
 }
 
@@ -244,6 +248,7 @@ function AddResourceDialog({
   onAdd: (r: LearningResource) => void;
   onCancel: () => void;
 }) {
+  const isEditing = !!initial;
   const [res, setRes] = useState<LearningResource>(initial ?? newResource());
   const [assetPickerOpen, setAssetPickerOpen] = useState(false);
   const [errors, setErrors] = useState<{ title?: string; format?: string; source?: string }>({});
@@ -276,7 +281,7 @@ function AddResourceDialog({
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col max-h-[90vh] overflow-hidden">
         {/* header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#f3f4f6] shrink-0">
-          <h3 className="text-base font-bold text-[#111827]">Add Resource</h3>
+          <h3 className="text-base font-bold text-[#111827]">{isEditing ? "Edit Resource" : "Add Resource"}</h3>
           <button type="button" onClick={onCancel} className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#f3f4f6] transition-colors">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -427,7 +432,7 @@ function AddResourceDialog({
             onClick={handleAddClick}
             className="px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors"
           >
-            Add
+            {isEditing ? "Save" : "Add"}
           </button>
         </div>
       </div>
@@ -438,6 +443,7 @@ function AddResourceDialog({
         assetType={learningResourcePickerType(res.format)}
         onSelect={(asset) => {
           set("assetValue", asset.assetLink);
+          set("assetId", asset.id);
           setErrors((prev) => ({ ...prev, source: undefined }));
           setAssetPickerOpen(false);
         }}
@@ -710,6 +716,7 @@ export function LearnerExperiencePanel({
   const [lrLoading, setLrLoading] = useState(false);
   const [lrSaving, setLrSaving] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [editingResource, setEditingResource] = useState<LearningResource | null>(null);
   const [openAccordion, setOpenAccordion] = useState<LearnerExperienceAccordion | "">("");
   const toggleAccordion = (accordion: LearnerExperienceAccordion) => {
     setOpenAccordion((current) => (current === accordion ? "" : accordion));
@@ -729,6 +736,14 @@ export function LearnerExperiencePanel({
   function handleAddResource(r: LearningResource) {
     setLrState((prev) => ({ ...prev, resources: [...prev.resources, r] }));
     setShowAddDialog(false);
+  }
+
+  function handleUpdateResource(r: LearningResource) {
+    setLrState((prev) => ({
+      ...prev,
+      resources: prev.resources.map((existing) => (existing.id === r.id ? r : existing)),
+    }));
+    setEditingResource(null);
   }
 
   function handleRemoveResource(id: string) {
@@ -1259,10 +1274,25 @@ export function LearnerExperiencePanel({
                   {lrState.resources.map((r) => (
                     <div key={r.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-[#e5e7eb] bg-[#f9fafb]">
                       <ResourceFormatIcon format={r.format} />
-                      <div className="flex-1 min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => setEditingResource(r)}
+                        className="flex-1 min-w-0 text-left"
+                        title="Edit resource"
+                      >
                         <p className="text-sm font-medium text-[#111827] truncate">{r.title || <span className="text-[#9ca3af] font-normal">Untitled resource</span>}</p>
                         <p className="text-xs text-[#6b7280]">{getResourceFormatLabel(r.format)}{r.displayOnEveryPage ? " · Every page" : ""}</p>
-                      </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingResource(r)}
+                        className="p-1 rounded text-[#9ca3af] hover:text-[#2d6fa8] hover:bg-[#eaf3fb] transition-colors shrink-0"
+                        title="Edit resource"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                        </svg>
+                      </button>
                       <button
                         type="button"
                         onClick={() => handleRemoveResource(r.id)}
@@ -1907,6 +1937,14 @@ export function LearnerExperiencePanel({
         <AddResourceDialog
           onAdd={handleAddResource}
           onCancel={() => setShowAddDialog(false)}
+        />
+      )}
+
+      {editingResource && (
+        <AddResourceDialog
+          initial={editingResource}
+          onAdd={handleUpdateResource}
+          onCancel={() => setEditingResource(null)}
         />
       )}
 

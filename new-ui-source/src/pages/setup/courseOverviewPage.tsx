@@ -666,29 +666,27 @@ export function CourseOverviewPage({
 
         {/* Description */}
         <div>
-          {renderFieldLabel("Description", ["description"])}
-          <textarea
-            rows={4}
-            value={formDesc}
-            onChange={(e) => { setFormDesc(e.target.value); markDirty();}}
-            placeholder="Describe what this course is about and what learners will gain"
+          {renderFieldLabel("Description", ["body"])}
+          <BasicRichTextEditor
+            key={bodyEditorKey}
+            html={formBody}
+            onChange={(next) => { setFormBody(next); markDirty(); }}
             disabled={loading}
-            style={textareaBase}
-            onFocus={focusIn}
-            onBlur={focusOut}
+            placeholder="Describe what this course is about and what learners will gain"
+            ariaLabel="description"
           />
         </div>
 
           {/* Body */}
         <div>
-          {renderFieldLabel("Course Metadata", ["body"], {
+          {renderFieldLabel("Course Metadata", ["description"], {
             labelOverride: "Course Metadata",
             hint: "This information is not currently displayed within the course",
           })}
           <BasicRichTextEditor
             key={bodyEditorKey}
-            html={formBody}
-            onChange={(next) => { setFormBody(next); markDirty(); }}
+            html={formDesc}
+            onChange={(next) => { setFormDesc(next); markDirty(); }}
             disabled={loading}
             placeholder="Provide description to be added to the course manifest metadata"
             ariaLabel="Course Metadata"

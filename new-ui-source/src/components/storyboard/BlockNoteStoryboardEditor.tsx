@@ -40,10 +40,12 @@ import {
   type StoryboardInsertKind,
   type StoryboardSummary,
 } from '@/types/storyboard';
+import { NEW_TOPIC_TITLE, NEW_SECTION_TITLE, NEW_CONTENT_GROUP_TITLE } from '@/constants/structureDefaults';
 import { storyboardSchema } from './schema';
 import { makeComponentBlock, isComponentKind, COMPONENT_META, type ComponentKind } from './blocks/componentBlock';
 import { ASSESSMENT_LABELS } from './blocks/assessmentBlock';
 import { inlineText, resolveCommentAnchor, resolveInsertionAnchor } from './commentAnchor';
+import { MAX_COMPONENTS_PER_BLOCK } from '@/api/storyboardGeneration';
 
 // Toggle button for the subscript/superscript styles added to storyboardSchema
 // (schema.ts) — BlockNote's own BasicTextStyleButton can't be reused here: its
@@ -108,14 +110,30 @@ const DEFAULT_CONTENT: PartialBlock[] = [
 
 const ASSET_TYPES = new Set(['image', 'video', 'audio']);
 
+// Strip literal/stray HTML tag markup (e.g. a `<br>`/`</br>` a Word import or
+// paste carried over as literal text) from TOC labels — the Contents panel
+// renders plain text, so a tag string shows up verbatim as visible junk
+// instead of ever being interpreted as markup.
+function stripTagLikeText(text: string): string {
+  return text.replace(/<\/?[a-zA-Z][^>]*>/g, '').trim();
+}
+
 // Neutral insert kind → a concrete BlockNote block. Returns a loose shape; the
 // call site casts to the editor's block type.
 //   heading                     → heading block
 //   text/grouped/image/…/form   → rich component card (sbComponent, AC3)
 //   mcq/gmcq/…                   → assessment card (sbAssessment, AC5)
 //   hotgraphic/…/instruction    → metadata placeholder (sbPlaceholder, AC6)
+const DEFAULT_HEADING_TITLE_BY_LEVEL: Record<number, string> = {
+  1: NEW_TOPIC_TITLE,
+  2: NEW_SECTION_TITLE,
+  3: NEW_CONTENT_GROUP_TITLE,
+};
+
 function blockForKind(kind: StoryboardInsertKind, level = 1): Record<string, unknown> {
-  if (kind === 'heading') return { type: 'heading', props: { level }, content: 'New heading' };
+  if (kind === 'heading') {
+    return { type: 'heading', props: { level }, content: DEFAULT_HEADING_TITLE_BY_LEVEL[level] || 'New heading' };
+  }
   if (COMPONENT_CARD_KINDS.has(kind)) return makeComponentBlock(kind as ComponentKind);
 
   const meta = INSERT_META[kind as keyof typeof INSERT_META];
@@ -174,6 +192,48 @@ function BlockNoteStoryboardEditorImpl(
     return null;
   }, []);
 
+  // Per spec, a Content Group (or whatever heading currently contains the
+  // insertion point) holds at most MAX_COMPONENTS_PER_GROUP components —
+  // generation (storyboardGeneration.ts enforceMaxComponentsPerBlock) will
+  // split an overflowing group into extra Adapt blocks rather than reject it,
+  // but that split isn't reflected back into the storyboard document itself,
+  // which is what produced the "Storyboard says 1 group, Editor shows 2
+  // blocks" mismatch. Enforcing the limit here, at insert time, keeps the
+  // document's own structure truthful to what will actually get generated.
+  const countItemsInContainer = useCallback(
+    (anchorBlockId: string): number => {
+      const doc = editor.document;
+      const idx = doc.findIndex((b) => b.id === anchorBlockId);
+      if (idx < 0) return 0;
+
+      const levelOf = (block: (typeof doc)[number]): number | null => {
+        if (block.type !== 'heading') return null;
+        const level = Number((block.props as { level?: number } | undefined)?.level ?? 1);
+        return Number.isFinite(level) && level > 0 ? level : null;
+      };
+
+      let containerStart = 0;
+      let containerLevel = 1;
+      for (let i = idx; i >= 0; i -= 1) {
+        const level = levelOf(doc[i]);
+        if (level !== null) {
+          containerStart = i;
+          containerLevel = level;
+          break;
+        }
+      }
+
+      let count = 0;
+      for (let i = containerStart + 1; i < doc.length; i += 1) {
+        const level = levelOf(doc[i]);
+        if (level !== null && level <= containerLevel) break;
+        if (itemRowInfo(doc[i])) count += 1;
+      }
+      return count;
+    },
+    [editor, itemRowInfo]
+  );
+
   const getHeadings = useCallback((): StoryboardHeading[] => {
     const out: StoryboardHeading[] = [];
     let currentLevel = 0;
@@ -184,7 +244,7 @@ function BlockNoteStoryboardEditorImpl(
         out.push({
           id: block.id,
           level,
-          text: inlineText(block.content),
+          text: stripTagLikeText(inlineText(block.content)),
           adaptType: adaptTypeForLevel(level),
         });
         continue;
@@ -195,7 +255,7 @@ function BlockNoteStoryboardEditorImpl(
       out.push({
         id: block.id,
         level,
-        text: item.text,
+        text: stripTagLikeText(item.text),
         adaptType: 'component',
         isItem: true,
         itemBadge: item.badge,
@@ -255,7 +315,7 @@ function BlockNoteStoryboardEditorImpl(
   }, [editor]);
 
   const insert = useCallback(
-    (kind: StoryboardInsertKind, opts?: { level?: number; afterId?: string }) => {
+    (kind: StoryboardInsertKind, opts?: { level?: number; afterId?: string }): { ok: boolean; warning?: string } => {
       // Anchor to the end of the current structural section (Topic/Section/
       // Content Group) instead of the raw cursor block. The preferred anchor is
       // the workspace's last active block; when it is stale or absent, the
@@ -266,6 +326,17 @@ function BlockNoteStoryboardEditorImpl(
       const anchorId = resolveInsertionAnchor(editor.document, preferredAnchorId);
       const cursorBlock = editor.getTextCursorPosition().block;
       const anchorBlock = anchorId ? editor.getBlock(anchorId) ?? cursorBlock : cursorBlock;
+
+      if (kind !== 'heading' && countItemsInContainer(anchorBlock.id) >= MAX_COMPONENTS_PER_BLOCK) {
+        return {
+          ok: false,
+          warning:
+            MAX_COMPONENTS_PER_BLOCK === 1
+              ? 'This Content Group already has a component. Add a new Content Group (H3) for more.'
+              : `A Content Group can hold up to ${MAX_COMPONENTS_PER_BLOCK} components. Add a new Content Group (H3) for more.`,
+        };
+      }
+
       const inserted = editor.insertBlocks(
         [blockForKind(kind, opts?.level) as never],
         anchorBlock,
@@ -273,8 +344,9 @@ function BlockNoteStoryboardEditorImpl(
       );
       const first = inserted[0];
       if (first) editor.setTextCursorPosition(first, 'end');
+      return { ok: true };
     },
-    [editor]
+    [editor, countItemsInContainer]
   );
 
   // Insert a pre-populated component card (AI Assistance → Insert). Only
