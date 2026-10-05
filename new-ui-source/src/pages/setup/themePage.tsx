@@ -2092,7 +2092,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       double: 24,
     };
 
-    const previewBg = previewDarkMode ? '#1a1a1a' : pageBgColor;
+    const previewBg = previewDarkMode ? 'var(--life-base-black)' : pageBgColor;
     const canvasBg = previewDarkMode ? '#111827' : '#f0f4f8';
     const textColor = previewDarkMode ? '#e8e8e8' : fontColor;
     const headingColor = previewDarkMode ? '#ffffff' : headingColorTheme;
