@@ -2249,7 +2249,11 @@ function TopicCheckbox({
         className="sr-only peer"
       />
       <CheckboxIndicator checked={checked} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
-      <span className="inline-flex items-center gap-1.5">{label}{hint ? <InfoIcon label={label} hint={hint} /> : null}{required && <span className="text-[#dc2626] ml-0.5">*</span>}</span>
+      <span className="min-w-0 leading-snug">
+        {label}
+        {hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}
+        {required && <span className="text-[#dc2626] ml-0.5">*</span>}
+      </span>
     </label>
   );
 }
