@@ -6154,6 +6154,12 @@ export default function CourseEditor({
               return;
             }
             const editableEl = editor.ui.getEditableElement() as HTMLElement;
+            // Sticky toggling inserts a toolbar-height placeholder, which made the page jump/oscillate while typing near the viewport edge.
+            const stickyPanel = editor.ui.view?.stickyPanel;
+            if (stickyPanel) {
+              stickyPanel.unbind?.("isActive");
+              stickyPanel.isActive = false;
+            }
             let lastCommittedHtml = options.value || "";
             const commit = (): string | null => {
               // Guards the same class of "iframe navigated out from under a
@@ -9482,49 +9488,16 @@ export default function CourseEditor({
     // block's own contentPages data never changes in that case, so nothing
     // else would otherwise prompt a second attempt.
     let swapObserverRafId: number | null = null;
-    let initializedEditorRoot: Element | null = null;
-    let initializedEditorFields: Element[] = [];
-    const syncRenderedSelectionEditors = () => {
-      const selection = liveSelectionRef.current;
-      if (!selection.hasCanvasSelection || selection.menuSelected) {
-        initializedEditorRoot = null;
-        initializedEditorFields = [];
-        return;
-      }
-      const level = selection.selectedComponentId ? "component"
-        : selection.selectedBlockId ? "group"
-        : selection.selectedArticleId ? "section"
-        : "topic";
-      const id = selection.selectedComponentId || selection.selectedBlockId || selection.selectedArticleId || selection.selectedPageId;
-      const selector = level === "component" ? ".component" : level === "group" ? ".block" : level === "section" ? ".article" : ".page";
-      const root = id ? doc.querySelector(`${selector}[data-adapt-id="${id}"]`) : null;
-      if (!root) {
-        initializedEditorRoot = null;
-        initializedEditorFields = [];
-        return;
-      }
-      const editableTitle = root.querySelector(`[data-preview-node-level="${level}"][data-preview-edit-field="title"][data-preview-edit-enabled="true"]`);
-      const replacedField = initializedEditorFields.some((field) =>
-        !root.contains(field) || field.getAttribute("data-preview-edit-enabled") !== "true"
-      );
-      if (initializedEditorRoot !== root || !editableTitle || replacedField) {
-        initializedEditorRoot = root;
-        syncPreviewInlineEditorsRef.current();
-      }
-      initializedEditorFields = Array.from(root.querySelectorAll('[data-preview-edit-enabled="true"]'));
-    };
     const swapPositionsObserver = new MutationObserver(() => {
       if (swapObserverRafId !== null) return;
       swapObserverRafId = window.requestAnimationFrame(() => {
         swapObserverRafId = null;
-        syncRenderedSelectionEditors();
         syncSwapPositionsControlsRef.current();
         syncPreviewScrollFromLeftPanelRef.current();
         primePreviewMediaFrames(doc);
       });
     });
     swapPositionsObserver.observe(doc.body, { childList: true, subtree: true });
-    syncRenderedSelectionEditors();
 
     // Re-measures the Topic/Section header alignment insets (see the
     // dynamic inset sync at the end of applyPreviewSelectionStyles above)

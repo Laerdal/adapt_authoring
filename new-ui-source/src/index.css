@@ -352,7 +352,19 @@ html, body {
   min-width: 0;
 }
 .rich-text-editor-field .ck.ck-editor {
+  --ck-color-focus-border: var(--ck-color-base-border);
   width: 100%;
+}
+.rich-text-editor-field .ck.ck-editor__main,
+.rich-text-editor-field .ck.ck-editor__editable,
+.rich-text-editor-field .ck-source-editing-area,
+.rich-text-editor-field .ck-source-editing-area textarea {
+  border-radius: 0 !important;
+}
+.rich-text-editor-field .ck.ck-editor__editable.ck-focused:not(.ck-editor__nested-editable) {
+  border-color: var(--ck-color-base-border) !important;
+  outline: none !important;
+  box-shadow: none !important;
 }
 /* Right-panel editors live inside the panel's own scroll container. Keep the
    toolbar in normal flow so focusing the editable area cannot make it detach
