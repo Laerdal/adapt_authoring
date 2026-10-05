@@ -9482,16 +9482,42 @@ export default function CourseEditor({
     // block's own contentPages data never changes in that case, so nothing
     // else would otherwise prompt a second attempt.
     let swapObserverRafId: number | null = null;
+    let initializedEditorRoot: Element | null = null;
+    const syncRenderedSelectionEditors = () => {
+      const selection = liveSelectionRef.current;
+      if (!selection.hasCanvasSelection || selection.menuSelected) {
+        initializedEditorRoot = null;
+        return;
+      }
+      const level = selection.selectedComponentId ? "component"
+        : selection.selectedBlockId ? "group"
+        : selection.selectedArticleId ? "section"
+        : "topic";
+      const id = selection.selectedComponentId || selection.selectedBlockId || selection.selectedArticleId || selection.selectedPageId;
+      const selector = level === "component" ? ".component" : level === "group" ? ".block" : level === "section" ? ".article" : ".page";
+      const root = id ? doc.querySelector(`${selector}[data-adapt-id="${id}"]`) : null;
+      if (!root) {
+        initializedEditorRoot = null;
+        return;
+      }
+      const editableTitle = root.querySelector(`[data-preview-node-level="${level}"][data-preview-edit-field="title"][data-preview-edit-enabled="true"]`);
+      if (initializedEditorRoot !== root || !editableTitle) {
+        initializedEditorRoot = root;
+        syncPreviewInlineEditorsRef.current();
+      }
+    };
     const swapPositionsObserver = new MutationObserver(() => {
       if (swapObserverRafId !== null) return;
       swapObserverRafId = window.requestAnimationFrame(() => {
         swapObserverRafId = null;
+        syncRenderedSelectionEditors();
         syncSwapPositionsControlsRef.current();
         syncPreviewScrollFromLeftPanelRef.current();
         primePreviewMediaFrames(doc);
       });
     });
     swapPositionsObserver.observe(doc.body, { childList: true, subtree: true });
+    syncRenderedSelectionEditors();
 
     // Re-measures the Topic/Section header alignment insets (see the
     // dynamic inset sync at the end of applyPreviewSelectionStyles above)
