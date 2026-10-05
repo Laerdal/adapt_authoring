@@ -590,6 +590,22 @@ function normalizeName(v?: string): string {
   return (v ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+export function getThemeSchemaDefaults(fields: Record<string, unknown>): Record<string, unknown> {
+  const defaults: Record<string, unknown> = {};
+  Object.entries(fields).forEach(([key, value]) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+    const field = value as Record<string, unknown>;
+    if (field.default !== undefined) {
+      defaults[key] = structuredClone(field.default);
+    } else if (field.properties && typeof field.properties === 'object' && !Array.isArray(field.properties)) {
+      defaults[key] = getThemeSchemaDefaults(field.properties as Record<string, unknown>);
+    } else if (field.type === 'array') {
+      defaults[key] = [];
+    }
+  });
+  return defaults;
+}
+
 function mapThemeNameToId(themeName?: string): string | null {
   const n = normalizeName(themeName);
   if (!n) return null;
@@ -1317,7 +1333,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   }
 
   async function handleSave() {
-    if (!courseId || !selected) return;
+    if (!courseId || !selected || selectedThemeSchemaFamily !== selected) return;
     const labelMap: Record<string, string> = { life: 'LIFE Theme', vanilla: 'Vanilla Theme', custom: 'Custom Theme' };
     const themeLabel = labelMap[selected];
     if (!themeLabel) return;
@@ -1345,10 +1361,16 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       }
       // Build themeVariables payload - keep schema nesting to preserve old/new UI parity.
       let vars: Record<string, unknown> = {};
-      if (selected === 'custom') vars = buildMergedCustomThemeVariables(dbThemeVariables);
-      else if (selected === 'vanilla') vars = buildMergedVanillaThemeVariables(dbThemeVariables);
+      const baseVariables = selected === initialSelectedThemeId
+        ? dbThemeVariables
+        : {
+            ...getThemeSchemaDefaults(selectedThemeSchema ?? {}),
+            ...(presets.find((preset) => preset._id === selectedPresetId)?.properties ?? {}),
+          };
+      if (selected === 'custom') vars = buildMergedCustomThemeVariables(baseVariables);
+      else if (selected === 'vanilla') vars = buildMergedVanillaThemeVariables(baseVariables);
       else if (selected === 'life') {
-        vars = buildMergedLifeThemeVariables(dbThemeVariables);
+        vars = buildMergedLifeThemeVariables(baseVariables);
       }
       // LIFE uses _components; Custom uses _componentConfig (handled in builder).
       if (selected === 'life') {
@@ -1453,10 +1475,13 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   const [activeCustomAccordion, setActiveCustomAccordion] = useState<string | null>('_global');
   const [customSettings, setCustomSettings] = useState<Record<string, string>>(CUSTOM_FIELD_DEFAULTS);
   const [selectedThemeSchema, setSelectedThemeSchema] = useState<Record<string, unknown> | undefined>(undefined);
+  const [selectedThemeSchemaFamily, setSelectedThemeSchemaFamily] = useState<string | null>(null);
+  const initializedThemeFamilyRef = useRef<string | null>(null);
   const isLifeTheme = selected === 'life';
 
   useEffect(() => {
     let cancelled = false;
+    setSelectedThemeSchemaFamily(null);
     if (!selected) {
       setSelectedThemeSchema(undefined);
       return () => {
@@ -1479,7 +1504,10 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
     void getThemeTypeVariablesSchemaByLabel(themeLabel)
       .then((schema) => {
-        if (!cancelled) setSelectedThemeSchema(schema ?? undefined);
+        if (!cancelled) {
+          setSelectedThemeSchema(schema ?? undefined);
+          if (schema) setSelectedThemeSchemaFamily(selected);
+        }
       })
       .catch((error) => {
         console.warn('Failed to load theme type schema', error);
@@ -1958,9 +1986,24 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
   // Load saved themeVariables into customSettings / vanillaColors / checkboxes.
   useEffect(() => {
-    hydrateThemeVariablesIntoEditors(initialThemeVariables ?? {});
+    if (!selected || selectedThemeSchemaFamily !== selected || !selectedThemeSchema) return;
+    const defaults = getThemeSchemaDefaults(selectedThemeSchema);
+    const variables = selected === initialSelectedThemeId ? initialThemeVariables ?? {} : {};
+    const hydrated = { ...defaults };
+    Object.entries(variables).forEach(([key, value]) => {
+      const defaultValue = defaults[key];
+      hydrated[key] = value && typeof value === 'object' && !Array.isArray(value) &&
+        defaultValue && typeof defaultValue === 'object' && !Array.isArray(defaultValue)
+        ? { ...defaultValue as Record<string, unknown>, ...value as Record<string, unknown> }
+        : value;
+    });
+    if (initializedThemeFamilyRef.current !== selected) {
+      initializedThemeFamilyRef.current = selected;
+      setSelectedPresetId(selected === initialSelectedThemeId ? initialPresetId ?? '' : '');
+    }
+    hydrateThemeVariablesIntoEditors(hydrated);
     setInitialHydrationComplete(true);
-  }, [hydrateThemeVariablesIntoEditors, initialThemeVariables]);
+  }, [hydrateThemeVariablesIntoEditors, initialThemeVariables, initialPresetId, initialSelectedThemeId, selected, selectedThemeSchema, selectedThemeSchemaFamily]);
 
   // When selecting a preset, apply that preset's own properties into editor state.
   useEffect(() => {
@@ -2468,7 +2511,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <p className="text-sm text-[#6b7280] mt-0.5 mb-0">Choose and configure the visual theme for your course.</p>
         </div>
         <div className="ml-auto">
-          <SaveChangesButton dirty={hasChanges} saving={saving} disabled={!courseId || !selected} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+          <SaveChangesButton dirty={hasChanges} saving={saving} disabled={!courseId || !selected || selectedThemeSchemaFamily !== selected} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
         </div>
       </div>
       <div className="flex-1 overflow-y-auto min-h-0">

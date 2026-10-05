@@ -63,6 +63,7 @@ import {
   findAppliedPluginSchemaKey,
   type PluginSettingsFieldSchema,
   pasteTemplateIntoCourse,
+  reorderStructureNodes,
   publishCoursePackage,
   removeCourseAssetMappings,
   saveContentAsTemplate,
@@ -1097,7 +1098,7 @@ function BehaviourField({
       <div className="flex flex-col gap-1.5">
         <TopicFieldLabel required={isRequired}>{label}</TopicFieldLabel>
         {hint ? <div className="-mt-1"><span className="inline-flex items-center gap-1.5 text-[11px] text-[#64748b]">More info<InfoIcon label={label} hint={hint} /></span></div> : null}
-        <RichTextEditor value={asString(value)} onChange={(html) => onChange(path, html)} />
+        <RichTextEditor value={asString(value)} onChange={(html) => onChange(path, html)} syncExternalValue />
       </div>
     );
   }
@@ -3662,6 +3663,7 @@ export default function CourseEditor({
     pageId: string;
     articleId: string;
     blockId: string;
+    componentId?: string;
   } | null>(null);
   const [addTemplateTarget, setAddTemplateTarget] = useState<{
     level: "topic" | "section" | "group" | "component";
@@ -3669,6 +3671,7 @@ export default function CourseEditor({
     articleId?: string;
     blockId?: string;
     moduleId?: string;
+    componentId?: string;
   } | null>(null);
   const previewBuildRequestIdRef = useRef(0);
   const copiedTopicIdResetTimerRef = useRef<number | null>(null);
@@ -3692,7 +3695,7 @@ export default function CourseEditor({
   // keyed by the source element so re-running syncPreviewInlineEditors on
   // every keystroke (it depends on contentPages) reuses the same instance
   // instead of recreating it and losing focus/cursor position.
-  const canvasBodyEditorsRef = useRef<Map<HTMLElement, { editor: any; editableEl: HTMLElement; ownerKey: string; commit: () => string | null }>>(new Map());
+  const canvasBodyEditorsRef = useRef<Map<HTMLElement, { editor: any; editableEl: HTMLElement; ownerKey: string; fieldPath?: string; commit: () => string | null }>>(new Map());
 
   // CKEditor5's own destroy() can throw SYNCHRONOUSLY ("Right-hand side of
   // 'instanceof' is not an object", inside its updateSourceElement) when the
@@ -4446,12 +4449,6 @@ export default function CourseEditor({
     const style = doc.createElement("style");
     style.id = "adapt-authoring-preview-bridge-style";
     style.textContent = `
-      /* In the editor canvas, media playback belongs in the Behaviour panel. */
-      .mejs__container,
-      .mejs__container * {
-        pointer-events: none !important;
-      }
-
       /* Ported directly from Quick Edit's own CSS
          (adapt-preview-edit/less/page.less .editable / .page__header-inner.editable /
          .article__header-inner.editable / .block__header-inner.editable /
@@ -5822,7 +5819,7 @@ export default function CourseEditor({
           inlineEditorSyncRetryCountRef.current += 1;
           inlineEditorSyncRetryFrameRef.current = window.requestAnimationFrame(() => {
             inlineEditorSyncRetryFrameRef.current = null;
-            syncPreviewInlineEditors();
+            syncPreviewInlineEditorsRef.current();
           });
         } else {
           inlineEditorSyncRetryCountRef.current = 0;
@@ -5938,7 +5935,7 @@ export default function CourseEditor({
         node.removeAttribute("data-placeholder");
         node.classList.remove("adapt-authoring-preview-inline-editable", "adapt-authoring-preview-inline-empty");
 
-        if (isInjected && isEmpty) {
+        if (isInjected && isEmpty && !canvasBodyEditorsRef.current.has(element) && element.dataset.ckeditorCreating !== "true") {
           const parent = element.parentElement;
           element.remove();
           if (parent?.getAttribute("data-preview-injected") === "true" && !parent.textContent?.trim()) {
@@ -6073,7 +6070,7 @@ export default function CourseEditor({
     // source element and reused while typing. Like Quick Edit, it does not
     // update React state on `change:data`: the existing focus-out handler is
     // the soft-save boundary, avoiding a selection-effect rerun per key.
-    const ensureCanvasBodyEditor = (element: HTMLElement, options: { value: string; ownerKey: string; placeholder?: string; onCommit: (html: string) => void }) => {
+    const ensureCanvasBodyEditor = (element: HTMLElement, options: { value: string; ownerKey: string; fieldPath?: string; placeholder?: string; onCommit: (html: string) => void }) => {
       // Lazily reclaim editors whose source node was torn down by the
       // framework SPA's own re-render (e.g. navigated to a different page
       // inside the same iframe document) — never done on a fixed timer/every
@@ -6109,11 +6106,20 @@ export default function CourseEditor({
       if (element.dataset.ckeditorCreating === "true") return;
       const iframeWindow = doc.defaultView;
       if (!iframeWindow) return;
+      const [ownerLevel, ownerId] = options.ownerKey.split(":");
+      const ownerAttribute = ownerLevel === "topic" ? "page" : ownerLevel;
+      const isCurrentBinding = () =>
+        element.isConnected &&
+        element.getAttribute("data-preview-edit-enabled") === "true" &&
+        element.getAttribute(`data-preview-${ownerAttribute}-id`) === ownerId &&
+        (options.fieldPath
+          ? element.getAttribute("data-preview-behaviour-path") === options.fieldPath
+          : element.getAttribute("data-preview-edit-field") === "body");
       element.dataset.ckeditorCreating = "true";
       loadCKEditor5In(iframeWindow)
         .then(() => {
           const CKEDITOR = (iframeWindow as any).CKEDITOR;
-          if (!CKEDITOR || !Array.isArray(CKEDITOR.pluginsConfig) || !element.isConnected || canvasBodyEditorsRef.current.has(element)) return;
+          if (!CKEDITOR || !Array.isArray(CKEDITOR.pluginsConfig) || !isCurrentBinding() || canvasBodyEditorsRef.current.has(element)) return;
           return CKEDITOR.create(element, {
             plugins: [...CKEDITOR.pluginsConfig, CKEDITOR.SamaritanPlugin, CKEDITOR.PasteToolsPlugin],
             toolbar: { items: [...CKEDITOR_FULL_TOOLBAR_ITEMS.slice(0, -1), "pasteWithFormatting", "xmlToHtml", "|", "samaritan"], shouldNotGroupWhenFull: true },
@@ -6143,6 +6149,10 @@ export default function CourseEditor({
               });
             },
           }).then((editor: any) => {
+            if (!isCurrentBinding()) {
+              safeDestroyCanvasEditor(editor);
+              return;
+            }
             const editableEl = editor.ui.getEditableElement() as HTMLElement;
             let lastCommittedHtml = options.value || "";
             const commit = (): string | null => {
@@ -6182,7 +6192,13 @@ export default function CourseEditor({
               isInlineEditingRef.current = isFocused;
               if (!isFocused) commit();
             });
-            canvasBodyEditorsRef.current.set(element, { editor, editableEl, ownerKey: options.ownerKey, commit });
+            canvasBodyEditorsRef.current.set(element, {
+              editor,
+              editableEl,
+              ownerKey: options.ownerKey,
+              fieldPath: options.fieldPath,
+              commit,
+            });
             // CKEditor already hides its source element, but force it —
             // this is also what stops the plain-text empty-placeholder
             // `::before` (see makeEditable) from ever rendering a second,
@@ -6191,11 +6207,16 @@ export default function CourseEditor({
             element.classList.remove("adapt-authoring-preview-inline-empty");
             const h5pContainer = element.closest(".component.laerdal-h5p")?.querySelector<HTMLElement>(".laerdal-h5p__container");
             h5pContainer?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+            const mediaPlayer = element.closest(".component")?.querySelector<HTMLElement>(".mejs__container, .mejs-container, .plyr, .video-js");
+            mediaPlayer?.scrollIntoView({ behavior: "instant", block: "center", inline: "nearest" });
           });
         })
         .catch((err) => console.warn("Canvas CKEditor init failed", err))
         .finally(() => {
           delete element.dataset.ckeditorCreating;
+          if (canvasBodyEditorsRef.current.has(element) && isCurrentBinding() && !isInlineEditingRef.current) {
+            window.requestAnimationFrame(() => syncPreviewInlineEditorsRef.current());
+          }
         });
     };
 
@@ -6357,7 +6378,8 @@ export default function CourseEditor({
         componentKey !== "laerdal-h5p" &&
         componentNode &&
         componentHost !== componentNode &&
-        componentHost.parentElement === componentNode
+        componentHost.parentElement === componentNode &&
+        componentNode.firstChild !== componentHost
       ) {
         componentNode.insertBefore(componentHost, componentNode.firstChild);
       }
@@ -6497,6 +6519,7 @@ export default function CourseEditor({
             ensureCanvasBodyEditor(bodyElement, {
               value: itemBody,
               ownerKey: `component:${selectedComponent.id}`,
+              fieldPath: `_items[${index}].body`,
               onCommit: (html) => updateComponentBehaviourProperty(
                 selectedPage.id,
                 selectedArticle.id,
@@ -6629,9 +6652,11 @@ export default function CourseEditor({
         // character. Those are not framework item-visibility changes. A
         // prior broad observer treated `ck-focused` as a component change,
         // reran this synchronizer, and immediately removed CKEditor's focus.
-        const isInsideCkEditor = (node: Node) =>
-          node instanceof Element && !!node.closest(".ck-editor");
-        if (records.length > 0 && records.every((record) => isInsideCkEditor(record.target))) {
+        const isInsideManagedEditor = (node: Node) => {
+          const element = node.nodeType === 1 ? node as Element : node.parentElement;
+          return !!element?.closest(".ck-editor, .mejs__container, .mejs-container, .plyr, .video-js, video, audio");
+        };
+        if (records.length > 0 && records.every((record) => isInsideManagedEditor(record.target))) {
           return;
         }
         // Never re-sync while the user is actively typing — e.g. a browser
@@ -6645,7 +6670,7 @@ export default function CourseEditor({
         if (inlineEditorSyncRetryFrameRef.current !== null) return;
         inlineEditorSyncRetryFrameRef.current = window.requestAnimationFrame(() => {
           inlineEditorSyncRetryFrameRef.current = null;
-          syncPreviewInlineEditors();
+          syncPreviewInlineEditorsRef.current();
         });
       });
       componentObserver.observe(componentHost, {
@@ -7193,13 +7218,17 @@ export default function CourseEditor({
         return;
       }
 
-      element.querySelectorAll("source").forEach((source) => source.setAttribute("src", src));
-      element.setAttribute("src", src);
+      const sourceChanged = !hasSrc(element, src) &&
+        ((previousSrc !== undefined && previousSrc !== src) || element.getAttribute("data-preview-injected") === "true");
+      if (sourceChanged) {
+        element.querySelectorAll("source").forEach((source) => source.setAttribute("src", src));
+        element.setAttribute("src", src);
+      }
       element.style.removeProperty("display");
       // Without an explicit reload the element keeps playing/showing the
       // previously decoded file even though its src attribute changed.
       try {
-        element.load();
+        if (sourceChanged) element.load();
       } catch {
         // Media element already detached from its document.
       }
@@ -8399,13 +8428,19 @@ export default function CourseEditor({
       const target = getEventElement(event.target);
       if (!target) return;
 
-      // MediaElement's player surface is interactive in the published
-      // framework, but canvas clicks should select its component instead.
-      // Stop player click handlers here; continue through normal selection
-      // below so the component's Behaviour accordion is still opened.
-      if (target.closest("video, audio, .mejs__container")) {
-        event.preventDefault();
-        event.stopPropagation();
+      const mediaTarget = target.closest("video, audio, .mejs__container, .mejs-container, .plyr, .video-js, iframe");
+      if (mediaTarget) {
+        const owner = resolvePreviewIds(target);
+        if (owner.pageId && owner.articleId && owner.blockId && owner.componentId) {
+          const { pageId, articleId, blockId, componentId } = owner;
+          queueMicrotask(() => {
+            handleSelectComponent(pageId, articleId, blockId, componentId, "preview", "behaviour");
+            window.requestAnimationFrame(() => {
+              if (mediaTarget.isConnected) mediaTarget.scrollIntoView({ behavior: "instant", block: "center", inline: "nearest" });
+            });
+          });
+        }
+        return;
       }
 
       // A component's items (and the rest of its interactive body) render
@@ -9421,6 +9456,16 @@ export default function CourseEditor({
     const selectionScrollTimers: number[] = [];
     if (selectedPreviewTarget) {
       const retrySelectionScroll = () => {
+        const selection = liveSelectionRef.current;
+        const currentLevel = selection.selectedComponentId ? "component"
+          : selection.selectedBlockId ? "group"
+          : selection.selectedArticleId ? "section"
+          : "topic";
+        const currentId = selectedPreviewTarget.level === "component" ? selection.selectedComponentId
+          : selectedPreviewTarget.level === "group" ? selection.selectedBlockId
+          : selectedPreviewTarget.level === "section" ? selection.selectedArticleId
+          : selection.selectedPageId;
+        if (!selection.hasCanvasSelection || selection.menuSelected || currentLevel !== selectedPreviewTarget.level || currentId !== selectedPreviewTarget.id) return;
         pendingLeftPanelScrollTargetRef.current = selectedPreviewTarget;
         syncPreviewScrollFromLeftPanel();
       };
@@ -9463,9 +9508,39 @@ export default function CourseEditor({
         alignmentResizeRafId = null;
         applyPreviewSelectionStylesRef.current();
         syncSwapPositionsControlsRef.current();
+        const componentId = liveSelectionRef.current.selectedComponentId;
+        const component = componentId ? doc.querySelector(`.component[data-adapt-id="${componentId}"]`) : null;
+        const player = component?.querySelector(".mejs__container, .mejs-container, .plyr, .video-js");
+        const media = player?.querySelector<HTMLMediaElement>("video, audio");
+        if (media && !media.paused) {
+          player?.scrollIntoView({ behavior: "instant", block: "center", inline: "nearest" });
+        }
       });
     };
     iframe.contentWindow?.addEventListener("resize", onPreviewResize);
+
+    let fullscreenOwner: PreviewHoverState | null = null;
+    let fullscreenPlayer: Element | null = null;
+    const onFullscreenChange = () => {
+      if (doc.fullscreenElement) {
+        fullscreenOwner = resolvePreviewIds(doc.fullscreenElement);
+        fullscreenPlayer = doc.fullscreenElement;
+        return;
+      }
+      const owner = fullscreenOwner;
+      const player = fullscreenPlayer;
+      fullscreenOwner = null;
+      fullscreenPlayer = null;
+      if (!owner?.pageId || !owner.articleId || !owner.blockId || !owner.componentId) return;
+      const selection = liveSelectionRef.current;
+      if (!selection.hasCanvasSelection || selection.selectedComponentId !== owner.componentId) {
+        handleSelectComponent(owner.pageId, owner.articleId, owner.blockId, owner.componentId, "preview", "behaviour");
+      }
+      window.requestAnimationFrame(() => {
+        if (player?.isConnected) player.scrollIntoView({ behavior: "instant", block: "nearest", inline: "nearest" });
+      });
+    };
+    doc.addEventListener("fullscreenchange", onFullscreenChange);
 
     cleanupPreviewListenersRef.current = () => {
       if (hoverRafId !== null) {
@@ -9480,6 +9555,7 @@ export default function CourseEditor({
       selectionScrollTimers.forEach((timerId) => window.clearTimeout(timerId));
       swapPositionsObserver.disconnect();
       iframe.contentWindow?.removeEventListener("resize", onPreviewResize);
+      doc.removeEventListener("fullscreenchange", onFullscreenChange);
       cancelTitleAutoRevert();
       doc.removeEventListener("mouseover", onMouseOver);
       doc.removeEventListener("mouseout", onMouseOut);
@@ -9549,18 +9625,20 @@ export default function CourseEditor({
   }, [syncPreviewInlineEditors]);
 
   useEffect(() => {
-    if (isInlineEditingRef.current) return;
-    syncPreviewInlineEditors();
+    syncPreviewInlineEditorsRef.current();
   }, [
-    syncPreviewInlineEditors,
     selectedPageId,
     selectedArticleId,
     selectedBlockId,
     selectedComponentId,
     menuSelected,
     hasCanvasSelection,
-    contentPages,
   ]);
+
+  useEffect(() => {
+    if (isInlineEditingRef.current) return;
+    syncPreviewInlineEditors();
+  }, [syncPreviewInlineEditors]);
 
   useEffect(() => {
     syncPreviewTopicSettings();
@@ -10852,17 +10930,30 @@ export default function CourseEditor({
     }
   }
 
-  async function handleAddComponent(pageId: string, articleId: string, blockId: string, componentType: ComponentTypeOption) {
+  async function handleAddComponent(
+    pageId: string,
+    articleId: string,
+    blockId: string,
+    componentType: ComponentTypeOption,
+    replaceComponentId?: string
+  ) {
     const targetPage = contentPages.find((p) => p.id === pageId);
     const targetArticle = targetPage?.articles.find((a) => a.id === articleId);
     const targetBlock = targetArticle?.blocks.find((b) => b.id === blockId);
-    if (!targetBlock || targetBlock.components.length >= 2) return;
+    const replacementIndex = targetBlock?.components.findIndex((component) => component.id === replaceComponentId) ?? -1;
+    const componentToReplace = replacementIndex >= 0 ? targetBlock?.components[replacementIndex] : undefined;
+    if (!targetBlock || (replaceComponentId ? !componentToReplace : targetBlock.components.length >= 2)) return;
 
     try {
       const componentCount = targetBlock.components.length;
-      const layout = componentCount === 0 ? "full" : "right";
+      let layout: "full" | "left" | "right" = componentCount === 0 ? "full" : "right";
+      let sortOrder = componentCount + 1;
 
-      if (componentCount === 1) {
+      if (componentToReplace) {
+        layout = componentToReplace.layout ?? "full";
+        sortOrder = replacementIndex + 1;
+        await deleteStructureNode("component", componentToReplace.id);
+      } else if (componentCount === 1) {
         await updateComponentLayout(targetBlock.components[0].id, "left");
       }
 
@@ -10870,14 +10961,30 @@ export default function CourseEditor({
         courseId,
         blockId,
         componentType,
-        componentCount + 1,
+        sortOrder,
         layout
       );
+      if (componentToReplace) {
+        await reorderStructureNodes(
+          "component",
+          targetBlock.components.map((component) =>
+            component.id === componentToReplace.id ? newComponentId : component.id
+          )
+        );
+      }
       await loadStructureFromDatabase({ pageId, articleId, blockId, componentId: newComponentId });
-      setEditorToast({ type: "success", message: `"${componentType.displayName || componentType.component}" added` });
+      setEditorToast({
+        type: "success",
+        message: componentToReplace
+          ? `Component replaced with "${componentType.displayName || componentType.component}"`
+          : `"${componentType.displayName || componentType.component}" added`,
+      });
     } catch (error) {
       console.error("Failed to add component", error);
-      setEditorToast({ type: "error", message: "Could not add component" });
+      setEditorToast({
+        type: "error",
+        message: componentToReplace ? "Could not replace component" : "Could not add component",
+      });
     }
   }
 
@@ -11212,13 +11319,15 @@ export default function CourseEditor({
   }
 
   async function saveDraftChanges(): Promise<boolean> {
-    const committedCanvasBodyValues = new Map<string, string>();
+    const committedCanvasBodyValues: Array<{ ownerKey: string; fieldPath?: string; html: string }> = [];
     canvasBodyEditorsRef.current.forEach((entry) => {
       const html = entry.commit();
-      if (html !== null) committedCanvasBodyValues.set(entry.ownerKey, html);
+      if (html !== null) {
+        committedCanvasBodyValues.push({ ownerKey: entry.ownerKey, fieldPath: entry.fieldPath, html });
+      }
     });
 
-    if (!hasUnsavedChanges && !pendingExtensionDisableNames.size && !committedCanvasBodyValues.size) {
+    if (!hasUnsavedChanges && !pendingExtensionDisableNames.size && !committedCanvasBodyValues.length) {
       return true;
     }
 
@@ -11226,7 +11335,7 @@ export default function CourseEditor({
     // editor values directly for this save instead of the stale render
     // snapshot captured when the Save handler was created.
     const pages = cloneContentPages(contentPages);
-    committedCanvasBodyValues.forEach((html, ownerKey) => {
+    committedCanvasBodyValues.forEach(({ html, ownerKey, fieldPath }) => {
       const [level, id] = ownerKey.split(":");
       if (!id) return;
       if (level === "topic") {
@@ -11253,7 +11362,14 @@ export default function CourseEditor({
             for (const block of article.blocks) {
               const component = block.components.find((candidate) => candidate.id === id);
               if (component) {
-                component.settings = { ...component.settings, description: html };
+                if (fieldPath) {
+                  component.settings = {
+                    ...component.settings,
+                    properties: setBehaviourPath(asRecord(component.settings.properties), fieldPath, html),
+                  };
+                } else {
+                  component.settings = { ...component.settings, description: html };
+                }
                 return;
               }
             }
@@ -11320,7 +11436,10 @@ export default function CourseEditor({
         await Promise.all(upserts);
       }
 
-      const saveKeys = new Set([...Object.keys(dirtyNodeKeys), ...committedCanvasBodyValues.keys()]);
+      const saveKeys = new Set([
+        ...Object.keys(dirtyNodeKeys),
+        ...committedCanvasBodyValues.map((value) => value.ownerKey),
+      ]);
       for (const key of saveKeys) {
         const [level, id] = key.split(":");
         if (!id) continue;
@@ -11684,11 +11803,12 @@ export default function CourseEditor({
     }
   }
 
-  function handleAddComponentPanel(pageId: string, articleId: string, blockId: string) {
+  function handleAddComponentPanel(pageId: string, articleId: string, blockId: string, componentId?: string) {
     const targetPage = contentPages.find((p) => p.id === pageId);
     const targetArticle = targetPage?.articles.find((a) => a.id === articleId);
     const targetBlock = targetArticle?.blocks.find((b) => b.id === blockId);
-    if (!targetBlock || targetBlock.components.length >= 2) return;
+    const isReplacingComponent = !!componentId && targetBlock?.components.some((component) => component.id === componentId);
+    if (!targetBlock || (!isReplacingComponent && targetBlock.components.length >= 2)) return;
 
     setSelectedPageId(pageId);
     setSelectedArticleId(articleId);
@@ -11697,7 +11817,7 @@ export default function CourseEditor({
     setHasCanvasSelection(true);
     setRightPanelOpen(true);
     setRightPanelType("block");
-    setAddComponentTarget({ pageId, articleId, blockId });
+    setAddComponentTarget({ pageId, articleId, blockId, ...(componentId ? { componentId } : {}) });
   }
 
   function handleOpenTemplateDrawer(target: {
@@ -11706,6 +11826,7 @@ export default function CourseEditor({
     articleId?: string;
     blockId?: string;
     moduleId?: string;
+    componentId?: string;
   }) {
     setAddTemplateTarget(target);
   }
@@ -11716,6 +11837,7 @@ export default function CourseEditor({
     articleId?: string;
     blockId?: string;
     moduleId?: string;
+    componentId?: string;
   }, template: DashboardTemplate) {
     try {
       const expectedType =
@@ -11734,6 +11856,9 @@ export default function CourseEditor({
       let parentId = courseId;
       let sortOrder = contentPages.length + 1;
       let layout: "full" | "left" | "right" | undefined;
+      let componentIdsBeforeReplacement: Set<string> | null = null;
+      let componentOrderBeforeReplacement: string[] | null = null;
+      let replacementComponentId: string | null = null;
 
       if (target.level === "topic" && target.moduleId) {
         parentId = target.moduleId;
@@ -11758,13 +11883,25 @@ export default function CourseEditor({
         const page = contentPages.find((item) => item.id === target.pageId);
         const article = page?.articles.find((item) => item.id === target.articleId);
         const block = article?.blocks.find((item) => item.id === target.blockId);
-        if (!block || block.components.length >= 2) return;
+        if (!block) return;
+
+        const replacementIndex = target.componentId
+          ? block.components.findIndex((component) => component.id === target.componentId)
+          : -1;
+        const componentToReplace = replacementIndex >= 0 ? block.components[replacementIndex] : undefined;
+        if (target.componentId ? !componentToReplace : block.components.length >= 2) return;
 
         parentId = block.id;
-        sortOrder = block.components.length + 1;
-        layout = block.components.length === 0 ? "full" : "right";
+        sortOrder = componentToReplace ? replacementIndex + 1 : block.components.length + 1;
+        layout = componentToReplace
+          ? componentToReplace.layout ?? "full"
+          : block.components.length === 0 ? "full" : "right";
 
-        if (block.components.length === 1) {
+        if (componentToReplace) {
+          componentIdsBeforeReplacement = new Set(block.components.map((component) => component.id));
+          componentOrderBeforeReplacement = block.components.map((component) => component.id);
+          await deleteStructureNode("component", componentToReplace.id);
+        } else if (block.components.length === 1) {
           await updateComponentLayout(block.components[0].id, "left");
         }
       }
@@ -11777,15 +11914,52 @@ export default function CourseEditor({
         layout,
       });
 
-      await loadStructureFromDatabase({
-        pageId: selectedPageId,
-        articleId: selectedArticleId,
-        blockId: selectedBlockId,
-        componentId: selectedComponentId,
-      });
+      if (target.level === "component" && componentIdsBeforeReplacement) {
+        const refreshedStructure = await getCourseStructure(courseId, courseTitle);
+        const refreshedPages = mapStructureToPages(refreshedStructure);
+        const refreshedBlock = refreshedPages
+          .find((item) => item.id === target.pageId)
+          ?.articles.find((item) => item.id === target.articleId)
+          ?.blocks.find((item) => item.id === target.blockId);
+        replacementComponentId =
+          refreshedBlock?.components.find((component) => !componentIdsBeforeReplacement?.has(component.id))?.id ?? null;
+        if (!replacementComponentId || !componentOrderBeforeReplacement) {
+          throw new Error("Could not identify the replacement component");
+        }
+        await reorderStructureNodes(
+          "component",
+          componentOrderBeforeReplacement.map((componentId) =>
+            componentId === target.componentId ? replacementComponentId! : componentId
+          )
+        );
+      }
+
+      await loadStructureFromDatabase(
+        target.level === "component"
+          ? {
+              pageId: target.pageId,
+              articleId: target.articleId,
+              blockId: target.blockId,
+              componentId: target.componentId ? replacementComponentId : selectedComponentId,
+            }
+          : {
+              pageId: selectedPageId,
+              articleId: selectedArticleId,
+              blockId: selectedBlockId,
+              componentId: selectedComponentId,
+            }
+      );
+      if (target.componentId) {
+        setEditorToast({ type: "success", message: `Component replaced with "${template.name}"` });
+      }
       setAddTemplateTarget(null);
     } catch (error) {
       console.error("Failed to add template", error);
+      if (target.componentId && target.articleId && target.blockId) {
+        setEditorToast({ type: "error", message: "Could not replace component" });
+        await loadStructureFromDatabase({ pageId: target.pageId, articleId: target.articleId, blockId: target.blockId });
+        setAddTemplateTarget(null);
+      }
     }
   }
 
@@ -12079,6 +12253,8 @@ export default function CourseEditor({
                       ref={previewFrameRef}
                       src={previewSrc}
                       title="Course preview"
+                      allow="autoplay; fullscreen; picture-in-picture"
+                      allowFullScreen
                       onLoad={handlePreviewFrameLoad}
                       className="block h-full w-full border-0 bg-white"
                     />
@@ -13373,7 +13549,8 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                 addComponentTarget.pageId,
                 addComponentTarget.articleId,
                 addComponentTarget.blockId,
-                componentType
+                componentType,
+                addComponentTarget.componentId
               );
               setAddComponentTarget(null);
             }}

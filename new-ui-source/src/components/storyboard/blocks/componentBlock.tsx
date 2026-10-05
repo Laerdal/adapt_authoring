@@ -84,7 +84,7 @@ export const COMPONENT_KINDS: ComponentKind[] = [
   'assessmentResult',
 ];
 
-const META: Record<ComponentKind, { badge: string; Icon: typeof Type; comp: string; suggest: ComponentKind[] }> = {
+export const COMPONENT_META: Record<ComponentKind, { badge: string; Icon: typeof Type; comp: string; suggest: ComponentKind[] }> = {
   text: { badge: 'Text', Icon: Type, comp: 'text', suggest: ['groupedContent', 'image'] },
   groupedContent: { badge: 'Grouped Content', Icon: Layers, comp: 'text', suggest: ['image', 'text'] },
   image: { badge: 'Image', Icon: ImageIcon, comp: 'graphic', suggest: ['groupedContent', 'video'] },
@@ -96,7 +96,7 @@ const META: Record<ComponentKind, { badge: string; Icon: typeof Type; comp: stri
 };
 
 const LABEL_TO_KIND: Record<string, ComponentKind> = Object.fromEntries(
-  COMPONENT_KINDS.map((k) => [META[k].badge, k])
+  COMPONENT_KINDS.map((k) => [COMPONENT_META[k].badge, k])
 ) as Record<string, ComponentKind>;
 
 // ── Data model ───────────────────────────────────────────────────────────────
@@ -182,7 +182,7 @@ export function makeComponentBlock(
   const data = { ...defaultComponentData(kind), ...(opts?.data as Partial<ComponentData>) };
   return {
     type: 'sbComponent',
-    props: { kind, title: opts?.title ?? '', adaptComponent: META[kind].comp, data: JSON.stringify(data) },
+    props: { kind, title: opts?.title ?? '', adaptComponent: COMPONENT_META[kind].comp, data: JSON.stringify(data) },
   };
 }
 
@@ -957,7 +957,7 @@ export const componentBlock = createReactBlockSpec(
     meta: { selectable: false },
     render: ({ block, editor }) => {
       const kind = (COMPONENT_KINDS.includes(block.props.kind as ComponentKind) ? block.props.kind : 'text') as ComponentKind;
-      const meta = META[kind];
+      const meta = COMPONENT_META[kind];
       console.log('[DEBUG] Resolved meta:', { kind, metaBadge: meta.badge, hasIcon: !!meta.Icon });
       const [model, setModel] = useState<ComponentData>(() => parseData(kind, block.props.data as string));
       // content already on the page opens in read-only Preview —
@@ -1072,7 +1072,7 @@ export const componentBlock = createReactBlockSpec(
               </span>
               {meta.suggest.map((k) => (
                 <button key={k} type="button" onClick={() => insertSuggestion(k)} className="rounded-full border px-2 py-0.5 hover:bg-muted">
-                  {META[k].badge}
+                  {COMPONENT_META[k].badge}
                 </button>
               ))}
               <button type="button" onClick={() => setDismissed(true)} className="ml-auto text-muted-foreground hover:text-foreground">

@@ -125,7 +125,7 @@ function computeFingerprint(tenantId, courseId, cb) {
           menu: cfg._menu || null,
           components: sortedNames(cfg._enabledComponents),
           extensions: sortedNames(cfg._enabledExtensions),
-          customStyle: plugin.computeCustomStyleFingerprint(raw)
+          compiledStyle: plugin.computeCompiledStyleFingerprint(raw)
         });
         cb(null, crypto.createHash('sha1').update(key).digest('hex').slice(0, 16));
       });
@@ -386,12 +386,13 @@ server.post('/studio/ensure/:tenant/:course', (req, res, next) => {
       const indexPath = path.join(buildRoot, Constants.Filenames.Main);
 
       fsx.readFile(path.join(buildRoot, FP_MARKER), 'utf8', (_e, marker) => {
+        const rebuildRequired = force || fsx.existsSync(path.join(buildRoot, Constants.Filenames.Rebuild));
         // 1) Already materialised for this fingerprint.
-        if (!force && marker === fp && fsx.existsSync(indexPath)) {
+        if (!rebuildRequired && marker === fp && fsx.existsSync(indexPath)) {
           return res.json({ success: true, built: false, cached: true, fingerprint: fp });
         }
         // 2) Shell cached AND this course already has a build folder (its assets) → restore, no grunt.
-        if (!force && fsx.existsSync(path.join(shellCacheDir(fp), Constants.Filenames.Main)) && fsx.existsSync(buildRoot)) {
+        if (!rebuildRequired && fsx.existsSync(path.join(shellCacheDir(fp), Constants.Filenames.Main)) && fsx.existsSync(buildRoot)) {
           return restoreShell(fp, buildRoot, (rErr) => {
             if (rErr) return next(rErr);
             logger.log('info', `Studio: restored cached shell ${fp} for course ${courseId} (no build)`);

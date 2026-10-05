@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { Replace } from "lucide-react";
 import { StructureIcon, STRUCTURE_ICON_COLOR_CLASS } from "@/components/course/StructureIcons";
 import { ConfirmDialog } from "@/components/common";
 import type { ContentPageData } from "@/pages/editor/pageEditorWorkspace";
@@ -57,7 +58,7 @@ interface CourseOutlinePanelProps {
   onAddSubPage: (pageId: string) => void;
   onAddBlock: (pageId: string, articleId: string) => void;
   onDeleteBlock: (pageId: string, articleId: string, blockId: string) => void;
-  onAddComponent: (pageId: string, articleId: string, blockId: string) => void;
+  onAddComponent: (pageId: string, articleId: string, blockId: string, componentId?: string) => void;
   onDeleteComponent: (pageId: string, articleId: string, blockId: string, componentId: string) => void;
   onUseTemplate?: (target: {
     level: "topic" | "section" | "group" | "component";
@@ -65,6 +66,7 @@ interface CourseOutlinePanelProps {
     articleId?: string;
     blockId?: string;
     moduleId?: string;
+    componentId?: string;
   }) => void;
 }
 
@@ -74,6 +76,7 @@ type AddMenuTarget = {
   moduleId?: string;
   articleId?: string;
   blockId?: string;
+  componentId?: string;
 };
 
 type DeleteTarget = {
@@ -87,7 +90,7 @@ type DeleteTarget = {
 };
 
 function getTargetKey(target: AddMenuTarget) {
-  return `${target.level}:${target.moduleId ?? ""}:${target.pageId ?? ""}:${target.articleId ?? ""}:${target.blockId ?? ""}`;
+  return `${target.level}:${target.moduleId ?? ""}:${target.pageId ?? ""}:${target.articleId ?? ""}:${target.blockId ?? ""}:${target.componentId ?? ""}`;
 }
 
 function TreeRow({
@@ -101,6 +104,8 @@ function TreeRow({
   onToggleExpand,
   showAdd = false,
   onAdd,
+  showReplace = false,
+  onReplace,
   showDelete = false,
   onDelete,
   menuOpen = false,
@@ -120,6 +125,8 @@ function TreeRow({
   onToggleExpand?: () => void;
   showAdd?: boolean;
   onAdd?: () => void;
+  showReplace?: boolean;
+  onReplace?: () => void;
   showDelete?: boolean;
   onDelete?: () => void;
   menuOpen?: boolean;
@@ -206,6 +213,21 @@ function TreeRow({
             title={`Add ${addLabel}`}
           >
             <MaskIcon file="add-icon.svg" className="block w-[12px] h-[12px] shrink-0 bg-current" />
+          </button>
+        )}
+
+        {showReplace && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onReplace?.();
+            }}
+            className="w-6 h-6 rounded-[4px] flex items-center justify-center text-[#2E7FA1] hover:bg-[#e8f3f8] active:bg-[#d4e9f2]"
+            aria-label="Replace component"
+            title="Replace component"
+          >
+            <Replace size={14} strokeWidth={1.8} />
           </button>
         )}
 
@@ -667,6 +689,19 @@ export default function CourseOutlinePanel({
                           onComponentSelect(page.id, article.id, block.id, component.id);
                         }}
                         icon={<StructureIcon level="component" size={14} className={STRUCTURE_ICON_COLOR_CLASS.component} />}
+                        showReplace={true}
+                        onReplace={() => {
+                          const target: AddMenuTarget = {
+                            level: "component",
+                            pageId: page.id,
+                            articleId: article.id,
+                            blockId: block.id,
+                            componentId: component.id,
+                          };
+                          setActiveAddMenu((previous) =>
+                            previous && getTargetKey(previous) === getTargetKey(target) ? null : target
+                          );
+                        }}
                         showDelete={true}
                         onDelete={() => {
                           setActiveAddMenu(null);
@@ -679,6 +714,31 @@ export default function CourseOutlinePanel({
                             componentId: component.id,
                           });
                         }}
+                          menuOpen={activeAddKey === getTargetKey({
+                            level: "component",
+                            pageId: page.id,
+                            articleId: article.id,
+                            blockId: block.id,
+                            componentId: component.id,
+                          })}
+                          onAddStartFresh={() => {
+                            setActiveAddMenu(null);
+                            onAddComponent(page.id, article.id, block.id, component.id);
+                          }}
+                          onAddTemplate={() => {
+                            const target = {
+                              level: "component" as const,
+                              pageId: page.id,
+                              articleId: article.id,
+                              blockId: block.id,
+                              componentId: component.id,
+                            };
+                            if (onUseTemplate) {
+                              onUseTemplate(target);
+                              setActiveAddMenu(null);
+                            }
+                          }}
+                          addLabel="component"
                       />
                     ))}
 
