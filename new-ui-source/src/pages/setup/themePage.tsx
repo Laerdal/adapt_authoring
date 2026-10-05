@@ -2609,8 +2609,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           </ThemeAccordion>
         )}
 
-        {/* Configuration: Content Groups - LIFE and Custom */}
-        {selected !== "vanilla" && (
+        {/* Configuration: Content Groups - LIFE only */}
+        {isLifeTheme && (
           <ThemeAccordion
             label={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks'), 'title') ?? 'Configuration: Content Groups'}
             hint={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks'), 'help')}
