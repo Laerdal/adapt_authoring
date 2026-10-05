@@ -1160,9 +1160,9 @@ function LifeListField({
       <div>
         <InfoFieldLabel
           label={title}
+          hint={description}
           className="mb-1.5"
         />
-        <p className="text-xs text-[#6b7280] leading-relaxed">{description}</p>
       </div>
       <div className="space-y-3">
         {items.map((item, index) => {
