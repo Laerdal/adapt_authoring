@@ -580,16 +580,21 @@ export function CourseOverviewPage({
   function renderFieldLabel(
     label: string,
     schemaPath: string[],
-    options?: { required?: boolean; schemaRoot?: SetupSchemaNode | null; hint?: string; labelOverride?: string }
+    options?: { required?: boolean; schemaRoot?: SetupSchemaNode | null; hint?: string; labelOverride?: string; showInfoIcon?: boolean }
   ) {
     const schemaRoot = options?.schemaRoot ?? courseSchema;
     const schemaNode = getSchemaNode(schemaRoot, ...schemaPath);
     const displayLabel = options?.labelOverride ?? getSchemaLabel(schemaNode, label);
     const hint = options?.hint ?? getSchemaHint(schemaNode);
+    const showInfoIcon = options?.showInfoIcon ?? true;
 
     return (
       <div style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 4, flexWrap: "nowrap" }}>
-        <InfoFieldLabel label={displayLabel} hint={hint} className="text-[#374151] !mb-0" />
+        {showInfoIcon ? (
+          <InfoFieldLabel label={displayLabel} hint={hint} className="text-[#374151] !mb-0" />
+        ) : (
+          <span style={{ ...labelStyle, marginBottom: 0, lineHeight: 1.2 }}>{displayLabel}</span>
+        )}
         {options?.required ? <span style={{ color: "var(--life-critical-500)", fontWeight: 400, lineHeight: 1 }}>*</span> : null}
       </div>
     );
@@ -651,7 +656,7 @@ export function CourseOverviewPage({
 
         {/* Sub-Title */}
         <div>
-          {renderFieldLabel("Subtitle", ["subtitle"])}
+          {renderFieldLabel("Subtitle", ["subtitle"], { showInfoIcon: false })}
           <input
             value={formSubtitle}
             onChange={(e) => { setFormSubtitle(e.target.value); markDirty(); }}
@@ -798,7 +803,7 @@ export function CourseOverviewPage({
 
         {/* Tags */}
         <div>
-          {renderFieldLabel("Tags", ["tags"])}
+          {renderFieldLabel("Tags", ["tags"], { showInfoIcon: false })}
           <div style={{ display: "flex", gap: 8, marginBottom: tags.length > 0 ? 10 : 0 }}>
             <input
               value={tagInput}
