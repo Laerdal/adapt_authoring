@@ -552,22 +552,18 @@ export async function saveLearningResourcesSettings(courseId: string, settings: 
   // Keep the courseasset collection in sync so the publish pipeline
   // (writeCourseAssets) can resolve `course/assets/<file>` links to their
   // final `course/<lang>/assets/<file>` path and copy the file into the build.
-  const previousItems = Array.isArray(existing._resourcesItems) ? existing._resourcesItems : [];
-  const previousFieldNames = new Set(
-    previousItems
-      .map((item) => courseAssetFieldNameFromLink(str(obj(item)._link)))
-      .filter((v): v is string => !!v)
-  );
-  const currentFieldNames = new Set(
-    settings.resources
-      .map((r) => (r.sourceType === "asset" ? courseAssetFieldNameFromLink(r.assetValue) : null))
-      .filter((v): v is string => !!v)
-  );
-  const removedFieldNames = [...previousFieldNames].filter((f) => !currentFieldNames.has(f));
-  if (removedFieldNames.length) {
-    await Promise.all(removedFieldNames.map((fieldName) => removeCourseAssetMappings(courseId, fieldName)));
-  }
-
+  //
+  // Intentionally does NOT clean up mappings for resources that were removed
+  // or switched to a different asset. A courseasset mapping is keyed only by
+  // (courseId, fieldName) — there is no per-owner scoping — and the exact
+  // same (courseId, fieldName) row is what Menu (menuPage.tsx) and other
+  // asset pickers write for the SAME shared filename. Deleting "this
+  // resource no longer uses it" would also delete a Menu logo/background
+  // mapping for that same file if one happened to share the filename,
+  // breaking something this code has no visibility into. An orphaned mapping
+  // left behind here is harmless: writeCourseAssets only copies/rewrites
+  // assets that are actually referenced in the course JSON, so an unused
+  // mapping is simply never read.
   const upserts = settings.resources
     .filter((r) => r.sourceType === "asset" && r.assetId)
     .map((r) => {

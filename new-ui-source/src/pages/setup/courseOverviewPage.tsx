@@ -683,13 +683,20 @@ export function CourseOverviewPage({
             labelOverride: "Course Metadata",
             hint: "This information is not currently displayed within the course",
           })}
-          <BasicRichTextEditor
-            key={bodyEditorKey}
-            html={formDesc}
-            onChange={(next) => { setFormDesc(next); markDirty(); }}
-            disabled={loading}
+          {/* Plain text, not rich text: `description` is a plain Text schema
+              field and CourseCard renders it as literal text — a rich editor
+              here would save HTML tags that show up unrendered on course
+              cards. The rich editor is only correct for `body` (Description,
+              above), which is an actual HTML field. */}
+          <textarea
+            rows={4}
+            value={formDesc}
+            onChange={(e) => { setFormDesc(e.target.value); markDirty(); }}
             placeholder="Provide description to be added to the course manifest metadata"
-            ariaLabel="Course Metadata"
+            disabled={loading}
+            style={textareaBase}
+            onFocus={focusIn}
+            onBlur={focusOut}
           />
         </div>
 

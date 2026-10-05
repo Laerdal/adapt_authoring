@@ -372,10 +372,11 @@ export default function StoryboardWorkspace({
     setAiConfig({
       initialText: activeBlock?.text || editorRef.current?.getActiveText() || '',
       onInsert: (text) => {
-        editorRef.current?.insertComponent('text', {
+        const result = editorRef.current?.insertComponent('text', {
           data: { description: text, showTitle: false },
           afterId: activeBlock?.id,
         });
+        if (result && !result.id && result.warning) flash(result.warning);
         setHeadings(editorRef.current?.getHeadings() ?? []);
         setSummary(editorRef.current?.getSummary() ?? EMPTY_SUMMARY);
       },
@@ -798,6 +799,7 @@ export default function StoryboardWorkspace({
                     setActiveBlock(block);
                     setCommentAnchor(editorRef.current?.getCommentAnchor() ?? null);
                   }}
+                  onWarning={flash}
                 />
               ) : (
                 <div className="flex items-center gap-2 py-16 text-sm text-muted-foreground">

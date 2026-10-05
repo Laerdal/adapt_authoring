@@ -549,6 +549,21 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
     };
   }, [activeTab, courseId, currentStep, mediaLocateDetails]);
 
+  // Reset per-course Smartling/MediaLocate state whenever the course changes.
+  // This panel isn't remounted per course (SetupPage renders it without a
+  // course-keyed `key`), so without this, navigating from Course A to Course
+  // B left both "already loaded" flags true from A — B's load effects below
+  // then skip their fetch entirely, leaving A's project id/details on screen,
+  // and the next Smartling/MediaLocate action would save A's leftover values
+  // onto B's course record.
+  useEffect(() => {
+    setSmartlingConfigLoaded(false);
+    setMediaLocateConfigLoaded(false);
+    setSmartlingProjectId("");
+    setMediaLocateProjectName("");
+    setMediaLocateDescription("");
+  }, [courseId]);
+
   // Pre-fill the Smartling/MediaLocate fields from whatever was previously saved for this
   // course (see handleSmartlingUpload/handleMediaLocateUpload), so returning to this tab
   // doesn't require re-typing project details already stored in the backend.
@@ -1188,7 +1203,10 @@ export function TranslationPage({ courseId, courseTitle }: { courseId?: string; 
 
             {currentStep === 2 ? (
               <>
-                <section className="flex overflow-hidden rounded-[16px] border border-[#e5e7eb] bg-white">
+                {/* overflow-x-auto (not overflow-hidden): each tab has a 180px min-width and
+                    the row doesn't wrap, so on a panel narrower than 3*180=540px the later
+                    tabs need to scroll into view rather than being clipped out of reach. */}
+                <section className="flex overflow-x-auto overflow-y-hidden rounded-[16px] border border-[#e5e7eb] bg-white">
                   <TabButton
                     active={activeTab === "partners"}
                     description="Use Smartling or MediaLocate for vendor-managed translation."
