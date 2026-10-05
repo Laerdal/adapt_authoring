@@ -4,7 +4,7 @@
 // blocks/*. Everything else depends on the engine-agnostic
 // `StoryboardEditorHandle` from `@/types/storyboard`.
 
-import { forwardRef, useCallback, useEffect, useImperativeHandle } from 'react';
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from 'react';
 import { filterSuggestionItems, type PartialBlock } from '@blocknote/core';
 import { BlockNoteView } from '@blocknote/mantine';
 import {
@@ -40,10 +40,12 @@ import {
   type StoryboardInsertKind,
   type StoryboardSummary,
 } from '@/types/storyboard';
+import { NEW_TOPIC_TITLE, NEW_SECTION_TITLE, NEW_CONTENT_GROUP_TITLE } from '@/constants/structureDefaults';
 import { storyboardSchema } from './schema';
 import { makeComponentBlock, isComponentKind, COMPONENT_META, type ComponentKind } from './blocks/componentBlock';
 import { ASSESSMENT_LABELS } from './blocks/assessmentBlock';
 import { inlineText, resolveCommentAnchor, resolveInsertionAnchor } from './commentAnchor';
+import { MAX_COMPONENTS_PER_BLOCK, parseDocToTree } from '@/api/storyboardGeneration';
 
 // Toggle button for the subscript/superscript styles added to storyboardSchema
 // (schema.ts) — BlockNote's own BasicTextStyleButton can't be reused here: its
@@ -108,14 +110,30 @@ const DEFAULT_CONTENT: PartialBlock[] = [
 
 const ASSET_TYPES = new Set(['image', 'video', 'audio']);
 
+// Strip literal/stray HTML tag markup (e.g. a `<br>`/`</br>` a Word import or
+// paste carried over as literal text) from TOC labels — the Contents panel
+// renders plain text, so a tag string shows up verbatim as visible junk
+// instead of ever being interpreted as markup.
+function stripTagLikeText(text: string): string {
+  return text.replace(/<\/?[a-zA-Z][^>]*>/g, '').trim();
+}
+
 // Neutral insert kind → a concrete BlockNote block. Returns a loose shape; the
 // call site casts to the editor's block type.
 //   heading                     → heading block
 //   text/grouped/image/…/form   → rich component card (sbComponent, AC3)
 //   mcq/gmcq/…                   → assessment card (sbAssessment, AC5)
 //   hotgraphic/…/instruction    → metadata placeholder (sbPlaceholder, AC6)
+const DEFAULT_HEADING_TITLE_BY_LEVEL: Record<number, string> = {
+  1: NEW_TOPIC_TITLE,
+  2: NEW_SECTION_TITLE,
+  3: NEW_CONTENT_GROUP_TITLE,
+};
+
 function blockForKind(kind: StoryboardInsertKind, level = 1): Record<string, unknown> {
-  if (kind === 'heading') return { type: 'heading', props: { level }, content: 'New heading' };
+  if (kind === 'heading') {
+    return { type: 'heading', props: { level }, content: DEFAULT_HEADING_TITLE_BY_LEVEL[level] || 'New heading' };
+  }
   if (COMPONENT_CARD_KINDS.has(kind)) return makeComponentBlock(kind as ComponentKind);
 
   const meta = INSERT_META[kind as keyof typeof INSERT_META];
@@ -132,7 +150,7 @@ function blockForKind(kind: StoryboardInsertKind, level = 1): Record<string, unk
 }
 
 function BlockNoteStoryboardEditorImpl(
-  { initialDocument, editable = true, onChange, onActiveBlock }: StoryboardEditorProps,
+  { initialDocument, editable = true, onChange, onActiveBlock, onWarning }: StoryboardEditorProps,
   ref: React.Ref<StoryboardEditorHandle>
 ) {
   const editor = useCreateBlockNote({
@@ -174,6 +192,63 @@ function BlockNoteStoryboardEditorImpl(
     return null;
   }, []);
 
+  // Per spec, a Content Group (or whatever heading currently contains the
+  // insertion point) holds at most MAX_COMPONENTS_PER_BLOCK components —
+  // generation (storyboardGeneration.ts enforceMaxComponentsPerBlock) will
+  // split an overflowing group into extra Adapt blocks rather than reject it,
+  // but that split isn't reflected back into the storyboard document itself,
+  // which is what produced the "Storyboard says 1 group, Editor shows 2
+  // blocks" mismatch. Enforcing the limit here, at insert time, keeps the
+  // document's own structure truthful to what will actually get generated.
+  //
+  // This MUST count using parseDocToTree's own aggregation rules, not a
+  // simplified re-implementation — an H3 group's "component count" at
+  // generation time isn't "one per sbComponent/sbAssessment/asset row": a
+  // native paragraph/list/table with real text also becomes a Text
+  // component, an H4 heading starts a new one, and consecutive
+  // paragraphs/lists/tables under one open H4 (or under no heading at all)
+  // fold into that SAME component rather than each counting separately. A
+  // row-counting approximation (e.g. only counting Contents-panel rows)
+  // undercounts native paragraph/list/table/H4 content, silently allowing
+  // the exact overflow this check exists to prevent. Reusing parseDocToTree
+  // directly keeps this in lockstep with generation by construction instead
+  // of by two hand-maintained implementations staying in sync.
+  const componentsInContainer = useCallback(
+    (anchorBlockId: string, doc: unknown[] = editor.document as unknown[]): number => {
+      const tree = parseDocToTree(doc, () => undefined);
+      for (const topic of tree) {
+        for (const section of topic.sections) {
+          for (const group of section.groups) {
+            if (group.sourceBlockId === anchorBlockId) return group.components.length;
+            if (group.components.some((c: { sourceBlockId?: string }) => c.sourceBlockId === anchorBlockId)) {
+              return group.components.length;
+            }
+          }
+        }
+      }
+      return 0;
+    },
+    [editor]
+  );
+
+  // Shared by every path that can add a generated component to a Content
+  // Group (Add Content, AI Assistance → Insert, the H4 slash-menu item) so a
+  // capacity rejection can never drift between them (Copilot review finding:
+  // insertComponent/the H4 command bypassed this check entirely before).
+  const checkGroupCapacity = useCallback(
+    (anchorBlockId: string): { ok: boolean; warning?: string } => {
+      if (componentsInContainer(anchorBlockId) < MAX_COMPONENTS_PER_BLOCK) return { ok: true };
+      return {
+        ok: false,
+        warning:
+          MAX_COMPONENTS_PER_BLOCK === 1
+            ? 'This Content Group already has a component. Add a new Content Group (H3) for more.'
+            : `A Content Group can hold up to ${MAX_COMPONENTS_PER_BLOCK} components. Add a new Content Group (H3) for more.`,
+      };
+    },
+    [componentsInContainer]
+  );
+
   const getHeadings = useCallback((): StoryboardHeading[] => {
     const out: StoryboardHeading[] = [];
     let currentLevel = 0;
@@ -184,7 +259,7 @@ function BlockNoteStoryboardEditorImpl(
         out.push({
           id: block.id,
           level,
-          text: inlineText(block.content),
+          text: stripTagLikeText(inlineText(block.content)),
           adaptType: adaptTypeForLevel(level),
         });
         continue;
@@ -195,7 +270,7 @@ function BlockNoteStoryboardEditorImpl(
       out.push({
         id: block.id,
         level,
-        text: item.text,
+        text: stripTagLikeText(item.text),
         adaptType: 'component',
         isItem: true,
         itemBadge: item.badge,
@@ -255,7 +330,7 @@ function BlockNoteStoryboardEditorImpl(
   }, [editor]);
 
   const insert = useCallback(
-    (kind: StoryboardInsertKind, opts?: { level?: number; afterId?: string }) => {
+    (kind: StoryboardInsertKind, opts?: { level?: number; afterId?: string }): { ok: boolean; warning?: string } => {
       // Anchor to the end of the current structural section (Topic/Section/
       // Content Group) instead of the raw cursor block. The preferred anchor is
       // the workspace's last active block; when it is stale or absent, the
@@ -266,6 +341,12 @@ function BlockNoteStoryboardEditorImpl(
       const anchorId = resolveInsertionAnchor(editor.document, preferredAnchorId);
       const cursorBlock = editor.getTextCursorPosition().block;
       const anchorBlock = anchorId ? editor.getBlock(anchorId) ?? cursorBlock : cursorBlock;
+
+      if (kind !== 'heading') {
+        const capacity = checkGroupCapacity(anchorBlock.id);
+        if (!capacity.ok) return capacity;
+      }
+
       const inserted = editor.insertBlocks(
         [blockForKind(kind, opts?.level) as never],
         anchorBlock,
@@ -273,19 +354,31 @@ function BlockNoteStoryboardEditorImpl(
       );
       const first = inserted[0];
       if (first) editor.setTextCursorPosition(first, 'end');
+      return { ok: true };
     },
-    [editor]
+    [editor, checkGroupCapacity]
   );
 
   // Insert a pre-populated component card (AI Assistance → Insert). Only
-  // component-card kinds are supported; others no-op. Returns the new block id.
+  // component-card kinds are supported; others no-op. Returns the new block id,
+  // or null with `warning` set when the target Content Group is already at
+  // capacity (shares checkGroupCapacity with `insert` — Copilot review finding:
+  // this path used to insert unconditionally, bypassing the limit `insert`
+  // enforced).
   const insertComponent = useCallback(
-    (kind: StoryboardInsertKind, opts?: { title?: string; data?: Record<string, unknown>; afterId?: string }): string | null => {
-      if (!isComponentKind(kind)) return null;
+    (
+      kind: StoryboardInsertKind,
+      opts?: { title?: string; data?: Record<string, unknown>; afterId?: string }
+    ): { id: string | null; warning?: string } => {
+      if (!isComponentKind(kind)) return { id: null };
       const preferredAnchorId = opts?.afterId && editor.getBlock(opts.afterId) ? opts.afterId : undefined;
       const anchorId = resolveInsertionAnchor(editor.document, preferredAnchorId);
       const cursorBlock = editor.getTextCursorPosition().block;
       const anchorBlock = anchorId ? editor.getBlock(anchorId) ?? cursorBlock : cursorBlock;
+
+      const capacity = checkGroupCapacity(anchorBlock.id);
+      if (!capacity.ok) return { id: null, warning: capacity.warning };
+
       const inserted = editor.insertBlocks(
         [makeComponentBlock(kind as ComponentKind, opts) as never],
         anchorBlock,
@@ -293,9 +386,9 @@ function BlockNoteStoryboardEditorImpl(
       );
       const first = inserted[0];
       if (first) editor.setTextCursorPosition(first, 'end');
-      return first?.id ?? null;
+      return { id: first?.id ?? null };
     },
-    [editor]
+    [editor, checkGroupCapacity]
   );
 
   const focusBlock = useCallback(
@@ -378,6 +471,42 @@ function BlockNoteStoryboardEditorImpl(
     return editor.onChange(() => onChange(editor.document as StoryboardDocument, getHeadings()));
   }, [editor, onChange, getHeadings]);
 
+  // Catch-all safety net for mutation paths that can't cleanly be gated
+  // up front — chiefly BlockNote's own formatting-toolbar block-type dropdown
+  // (its H4 option updates the block via BlockNote's internal Select
+  // handling, not a click handler this file owns), plus paste and
+  // drag-reorder across groups. `insert`/`insertComponent`/the H4 slash item
+  // already reject the specific action that would cause an overflow; this
+  // reactively flags any group that ends up over capacity by whatever route,
+  // so an author is never left with a silently-mismatched document. Only
+  // warns when a group newly crosses the limit (tracked by a stable key), not
+  // on every keystroke while already-known-overflowing content just sits
+  // there (e.g. a legacy/imported doc).
+  const warnedGroupsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!onWarning) return;
+    return editor.onChange(() => {
+      const tree = parseDocToTree(editor.document as unknown[], () => undefined);
+      const currentlyOverflowing = new Set<string>();
+      for (const topic of tree) {
+        for (const section of topic.sections) {
+          for (const group of section.groups) {
+            if (group.components.length <= MAX_COMPONENTS_PER_BLOCK) continue;
+            const key = group.sourceBlockId ?? group.components[0]?.sourceBlockId ?? '';
+            if (!key) continue;
+            currentlyOverflowing.add(key);
+            if (!warnedGroupsRef.current.has(key)) {
+              onWarning(
+                `"${group.title || 'A Content Group'}" has more than ${MAX_COMPONENTS_PER_BLOCK} component(s) — it will be split into extra blocks on Generate.`
+              );
+            }
+          }
+        }
+      }
+      warnedGroupsRef.current = currentlyOverflowing;
+    });
+  }, [editor, onWarning]);
+
   // Report the cursor's block so the Review panel can anchor comments (AC9).
   useEffect(() => {
     if (!onActiveBlock) return;
@@ -407,6 +536,26 @@ function BlockNoteStoryboardEditorImpl(
       subtext: 'Component-level heading',
       onItemClick: () => {
         const block = editor.getTextCursorPosition().block;
+        // Converting a block to H4 starts a NEW generated Text component at
+        // that position (parseDocToTree's heading-level-4 branch) — unlike
+        // `insert`, this mutates an existing block rather than adding one, so
+        // whether it actually increases the group's component count depends
+        // on whether that block was previously merged into a sibling
+        // paragraph's body. Simulate the conversion and recount with the
+        // SAME generator function rather than assuming "already at the
+        // limit" always blocks it (a lone paragraph becoming the group's
+        // only H4 doesn't change the count at all).
+        const simulatedDoc = (editor.document as Array<{ id: string; type: string; props?: unknown }>).map((b) =>
+          b.id === block.id ? { ...b, type: 'heading', props: { ...(b.props as object), level: 4 } } : b
+        );
+        if (componentsInContainer(block.id, simulatedDoc) > MAX_COMPONENTS_PER_BLOCK) {
+          onWarning?.(
+            MAX_COMPONENTS_PER_BLOCK === 1
+              ? 'This Content Group already has a component. Add a new Content Group (H3) for more.'
+              : `A Content Group can hold up to ${MAX_COMPONENTS_PER_BLOCK} components. Add a new Content Group (H3) for more.`
+          );
+          return;
+        }
         editor.updateBlock(block, { type: 'heading', props: { level: 4 } } as never);
       },
     };

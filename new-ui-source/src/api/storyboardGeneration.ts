@@ -642,7 +642,11 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
 // against the existing course's OWN continuation blocks (same real parent
 // section id + same title, ordered by _sortOrder) so a later run UPDATES the
 // same block instead of creating a new one.
-const MAX_COMPONENTS_PER_BLOCK = 1;
+// Exported so the Storyboard editor can enforce the identical limit at
+// insert time (BlockNoteStoryboardEditor.tsx) instead of silently letting the
+// author exceed it in the document and only finding out the hierarchy
+// changed once generation splits it — single source of truth for both.
+export const MAX_COMPONENTS_PER_BLOCK = 1;
 
 export function enforceMaxComponentsPerBlock(topics: GenTopic[], existingBlocks: ContentNode[] = []): void {
   for (const t of topics) {
