@@ -5,6 +5,7 @@ import { usePageLoader } from "@/hooks";
 import AiAssistant from "@/components/common/AiAssistant";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import type { AssetPickerResult, AssetPickerType } from "@/types/assetPicker";
+import { SaveStatusToast } from "./setup/SaveStatusToast";
 
 type Asset = DashboardAsset;
 
@@ -57,7 +58,7 @@ const THUMBNAIL_COLORS: Record<AssetFormat, string> = {
 
 // ── Upload types ─────────────────────────────────────────────────────────────
 
-type UploadStep = "pick" | "details" | "uploading" | "done" | "error";
+type UploadStep = "pick" | "details" | "uploading" | "error";
 
 interface FileValidation {
   ok: boolean;
@@ -79,8 +80,12 @@ interface UploadState {
   formErrors: UploadFormErrors;
   uploadError: string | null;
   progress: number;
-  uploadedAssetId: string | null;
 }
+
+type ToastState = {
+  type: "success" | "error";
+  message: string;
+};
 
 interface EditModalState {
   asset: Asset | null;
@@ -219,7 +224,6 @@ const EMPTY_UPLOAD: UploadState = {
   formErrors: {},
   uploadError: null,
   progress: 0,
-  uploadedAssetId: null,
 };
 
 const EMPTY_EDIT = (a: Asset): EditModalState => ({
@@ -664,6 +668,7 @@ export function AssetManagementWorkspace({
   const [uploadOpen, setUploadOpen]     = useState(false);
   const [upload, setUpload]             = useState<UploadState>(EMPTY_UPLOAD);
   const [uploadDrag, setUploadDrag]     = useState(false);
+  const [toast, setToast]               = useState<ToastState | null>(null);
 
   const [editState, setEditState]       = useState<EditModalState | null>(null);
 
@@ -932,13 +937,14 @@ export function AssetManagementWorkspace({
     }, 120);
 
     try {
-      const assetId = await uploadAsset(file, title, { description, tags });
+      await uploadAsset(file, title, { description, tags });
       if (progressTimer.current) {
         clearInterval(progressTimer.current);
         progressTimer.current = null;
       }
       await fetchAssetsPage(true);
-      setUpload((prev) => ({ ...prev, step: "done", progress: 100, uploadedAssetId: assetId }));
+      setToast({ type: "success", message: "Your asset has been added to the Asset Library and is ready to use." });
+      closeUpload();
     } catch (error) {
       if (progressTimer.current) {
         clearInterval(progressTimer.current);
@@ -1522,43 +1528,11 @@ export function AssetManagementWorkspace({
               </div>
             )}
 
-            {/* ══════════════ Done ══════════════ */}
-            {upload.step === "done" && (
-              <>
-                <div className="px-6 py-10 flex flex-col items-center gap-4">
-                  <div className="w-16 h-16 rounded-full bg-[#dcfce7] flex items-center justify-center">
-                    <svg width="30" height="30" fill="none" viewBox="0 0 24 24" stroke="#16a34a" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-base font-bold text-[#111827]">
-                      Your asset has been added to the Asset Library and is ready to use.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center justify-end gap-2.5 px-6 py-4 border-t border-[#e5e7eb] shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => { setUpload(EMPTY_UPLOAD); }}
-                    className="px-4 py-2 text-sm font-medium text-[#374151] bg-white border border-[#d1d5db] rounded-lg hover:bg-[#f9fafb] transition-colors"
-                  >
-                    Upload New Asset
-                  </button>
-                  <button
-                    type="button"
-                    onClick={closeUpload}
-                    className="px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors"
-                  >
-                    Use Asset
-                  </button>
-                </div>
-              </>
-            )}
-
           </div>
         </div>
       )}
+
+      <SaveStatusToast toast={toast} onDismiss={() => setToast(null)} autoHideMs={3500} />
 
       {/* ════════════════════════════════════════════════════════════════
           Edit Modal
