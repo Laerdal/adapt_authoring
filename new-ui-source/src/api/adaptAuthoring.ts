@@ -866,7 +866,7 @@ export async function createCourse(input: CreateCourseInput): Promise<CreatedCou
   return created;
 }
 
-export function getCourseBodyValue(course: Pick<EngineCourseDetails, "body" | "description"> | null | undefined): string {
+export function getCourseBodyValue(course: Pick<EngineCourseDetails, "body"> | null | undefined): string {
   if (!course) return "";
   const bodyValue = typeof course.body === "string" ? course.body : "";
   return bodyValue.trim();
