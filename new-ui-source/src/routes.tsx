@@ -50,11 +50,11 @@ function DashboardSectionGate({
   }
 
   if (!user) {
-    return <Navigate to="/my-courses" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   if (!canAccessDashboardSection(user, section)) {
-    return <Navigate to="/my-courses" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;
@@ -68,7 +68,7 @@ function CourseSetupRouteGate({ children }: { children: React.ReactNode }) {
   }
 
   if (!user || !canAccessCourseSettings(user)) {
-    return <Navigate to="/my-courses" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;
@@ -82,7 +82,7 @@ function CourseWorkspaceRouteGate({ children }: { children: React.ReactNode }) {
   }
 
   if (!user || !canAccessCourseSettings(user)) {
-    return <Navigate to="/my-courses" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;
@@ -97,8 +97,8 @@ export const router = createBrowserRouter([
         // Dashboard shell — Sidebar + Header shared across these routes
         element: <DashboardLayout />,
         children: [
-          { path: '/', element: <Navigate to="/my-courses" replace /> },
-          { path: '/my-courses', element: <DashboardSectionGate section="my-courses"><HomePage /></DashboardSectionGate> },
+          { path: '/', element: <Navigate to="/dashboard" replace /> },
+          { path: '/dashboard', element: <DashboardSectionGate section="my-courses"><HomePage /></DashboardSectionGate> },
           { path: '/shared', element: <DashboardSectionGate section="shared"><HomePage /></DashboardSectionGate> },
           { path: '/users', element: <DashboardSectionGate section="user-management"><UserManagementPage /></DashboardSectionGate> },
           { path: '/plugins', element: <DashboardSectionGate section="plugin-management"><PluginManagementPage /></DashboardSectionGate> },
