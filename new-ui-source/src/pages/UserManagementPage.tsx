@@ -373,7 +373,7 @@ export default function UserManagementPage() {
 
                   {/* Role — click to change */}
                   <td className={`px-4 py-3 text-center relative ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>
-                    {isCurrentUser ? (
+                    {isCurrentUser || isUserDisabled ? (
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${ROLE_COLORS[user.role]}`}>
                         {user.role}
                       </span>
@@ -389,7 +389,7 @@ export default function UserManagementPage() {
                         </svg>
                       </button>
                     )}
-                    {!isCurrentUser && roleMenuTarget === user.id && (
+                    {!isCurrentUser && !isUserDisabled && roleMenuTarget === user.id && (
                       <div className="absolute left-3 top-full mt-1 w-44 bg-white border border-[#e5e7eb] rounded-lg shadow-xl z-30 py-1">
                         <p className="px-3 py-1.5 text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">Change role</p>
                         {ROLES.map((r) => (
