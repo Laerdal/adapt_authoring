@@ -942,7 +942,7 @@ export function AssetManagementWorkspace({
     }, 120);
 
     try {
-      const assetId = await uploadAsset(file, title, { description, tags });
+      const assetId = await uploadAsset(file, title, { description, tags, aiTutorCourseId });
       if (progressTimer.current) {
         clearInterval(progressTimer.current);
         progressTimer.current = null;
