@@ -105,6 +105,22 @@ function sortedNames(value) {
   return [];
 }
 
+// AI Tutor's attached-document list (config._extensions._aiTutor._sourceDocuments,
+// see adapt-authoring-plugins/plugins/services/ai-tutor/utils/tutorAssets.js) isn't
+// otherwise part of the fingerprint - it doesn't change which extensions are
+// enabled. Without it here, attaching/changing a document after a shell is
+// already cached never invalidates that cache, so plugin.publish() (and the
+// 'aitutor:ensureIngested' event it fires) never runs again, and the tutor's
+// vector store silently never picks up the new document.
+function sortedAiTutorDocRefs(cfg) {
+  const aiTutor = cfg._extensions && cfg._extensions._aiTutor;
+  const docs = (aiTutor && aiTutor._sourceDocuments) || [];
+  return docs
+    .map(entry => (entry && typeof entry === 'object' ? entry._document : entry))
+    .filter(ref => typeof ref === 'string' && ref.length)
+    .sort();
+}
+
 // Compute the shell fingerprint for a course from its assembled config + framework version.
 function computeFingerprint(tenantId, courseId, cb) {
   origin().outputmanager.getOutputPlugin('adapt', (err, plugin) => {
@@ -125,6 +141,7 @@ function computeFingerprint(tenantId, courseId, cb) {
           menu: cfg._menu || null,
           components: sortedNames(cfg._enabledComponents),
           extensions: sortedNames(cfg._enabledExtensions),
+          aiTutorDocs: sortedAiTutorDocRefs(cfg),
           compiledStyle: plugin.computeCompiledStyleFingerprint(raw)
         });
         cb(null, crypto.createHash('sha1').update(key).digest('hex').slice(0, 16));

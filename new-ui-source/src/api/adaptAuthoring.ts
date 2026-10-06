@@ -397,7 +397,7 @@ export async function fetchDashboardCourses(
     }
   }
   const term = query.search?.trim();
-  if (term) params.set("search[title]", escapeRegExp(term));
+  if (term) params.set("search[title]", escapeRegExp(term)); // title search
   for (const tagId of query.tags ?? []) {
     params.append("search[tags][$all][]", tagId);
   }
@@ -519,6 +519,7 @@ export function deleteCourse(backendId: string): Promise<unknown> {
 export interface CreateCourseInput {
   title: string;
   description?: string;
+  body?: string;
   instanceId?: string;
   theme?: string;
   menuStyle?: string;
@@ -865,6 +866,12 @@ export async function createCourse(input: CreateCourseInput): Promise<CreatedCou
   return created;
 }
 
+export function getCourseBodyValue(course: Pick<EngineCourseDetails, "body"> | null | undefined): string {
+  if (!course) return "";
+  const bodyValue = typeof course.body === "string" ? course.body : "";
+  return bodyValue.trim();
+}
+
 export async function getCourseBootstrapData(courseId: string): Promise<CourseBootstrapData> {
   const [course, config] = await Promise.all([
       apiClient.get<EngineCourseDetails>(`/api/content/course/${courseId}`),
@@ -878,14 +885,16 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
         .map((t) => (typeof t === "string" ? t : t?.title ?? ""))
         .filter((s): s is string => !!s && !OBJECT_ID.test(s))
     : [];
+  const body = getCourseBodyValue(course);
+  const description = (course.description ?? "").trim();
 
   return {
     courseId,
     title: course.title || "Untitled Course",
     displayTitle: course.displayTitle ?? "",
     subtitle: course.subtitle ?? course._subtitle ?? "",
-    body: course.body ?? "",
-    description: course.description || "",
+    body,
+    description,
     instruction: course.instruction ?? "",
     heroAssetId,
     tags,
@@ -5068,6 +5077,7 @@ export interface DashboardUser {
   roleIds: string[];
   failedLogins: number;
   lastAccess: string;
+  isDeleted: boolean;
 }
 
 interface EngineUser {
@@ -5077,6 +5087,7 @@ interface EngineUser {
   _tenantId?: { name?: string } | string | null;
   failedLoginCount?: number;
   lastAccess?: string;
+  _isDeleted?: boolean;
 }
 
 export async function getRoles(): Promise<AdaptRole[]> {
@@ -5098,8 +5109,17 @@ export async function getUsers(): Promise<DashboardUser[]> {
       roleIds: roles.map((r) => r._id),
       failedLogins: u.failedLoginCount ?? 0,
       lastAccess: fmtDate(u.lastAccess),
+      isDeleted: !!u._isDeleted,
     };
   });
+}
+
+export function disableUser(userBackendId: string): Promise<unknown> {
+  return apiClient.put(`/api/user/${userBackendId}`, { _isDeleted: true });
+}
+
+export function restoreUser(userBackendId: string): Promise<unknown> {
+  return apiClient.put(`/api/user/${userBackendId}`, { _isDeleted: false });
 }
 
 // Change a user's role: unassign existing roles, then assign the chosen one.
@@ -5322,6 +5342,10 @@ export interface AssetQueryOptions {
   search?: string;
   format?: AssetFormat | "All";
   tagIds?: string[];
+  // Scopes the query to one course's AI Tutor source documents (lib/assetmanager.js
+  // queryAssets -> _resolveAiTutorTags), mirroring the classic UI's scaffoldAssetView.js.
+  // Omitting this hides tutor-tagged docs from the general list instead of showing them.
+  aiTutorCourseId?: string;
 }
 
 export interface AssetPage {
@@ -5367,6 +5391,7 @@ export async function getAssets(options: AssetQueryOptions = {}): Promise<AssetP
     search,
     format,
     tagIds,
+    aiTutorCourseId,
   } = options;
   const cappedLimit = Math.min(limit, MAX_ASSET_PAGE_SIZE);
 
@@ -5388,6 +5413,9 @@ export async function getAssets(options: AssetQueryOptions = {}): Promise<AssetP
   if (tagIds && tagIds.length) {
     tagIds.forEach((id) => params.append("search[tags][$all][]", id));
   }
+  if (aiTutorCourseId) {
+    params.append("aiTutorCourseId", aiTutorCourseId);
+  }
   params.append("operators[skip]", String(skip));
   params.append("operators[limit]", String(cappedLimit + 1));
   params.append("operators[sort][createdAt]", "-1");
@@ -5402,6 +5430,18 @@ export async function getAssets(options: AssetQueryOptions = {}): Promise<AssetP
     items: active.map((a, i) => mapEngineAsset(a, skip + i + 1)),
     hasMore,
   };
+}
+
+// Mirrors classic's scaffoldAssetView.js: tag an asset as an AI Tutor source for a
+// specific course at add time (upload or select), so it's immediately hidden from
+// the general asset list and scoped to this course's own picker - no dependency on
+// a later preview/publish. Best-effort; failure shouldn't block attaching the document.
+export async function tagAssetForAiTutor(assetId: string, courseId: string): Promise<void> {
+  try {
+    await apiClient.post("/api/asset/aitutor-tag", { assetId, courseId });
+  } catch {
+    // best-effort, see comment above
+  }
 }
 
 export function trashAsset(backendId: string): Promise<unknown> {
