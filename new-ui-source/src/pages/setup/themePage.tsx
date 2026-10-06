@@ -2583,7 +2583,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                   className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md bg-white text-[#111827] cursor-pointer outline-none focus:border-[var(--life-primary-500)]"
                   style={{ minWidth: "110px" }}
                 >
-                  <option value=""></option>
                   <option value="double">Double</option>
                   <option value="half">Half</option>
                   <option value="remove">Remove</option>
@@ -2602,7 +2601,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                   className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md bg-white text-[#111827] cursor-pointer outline-none focus:border-[var(--life-primary-500)]"
                   style={{ minWidth: "110px" }}
                 >
-                  <option value=""></option>
                   <option value="double">Double</option>
                   <option value="half">Half</option>
                   <option value="remove">Remove</option>
