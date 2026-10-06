@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { getUsers, setUserRole, deleteUser } from "@/api/adaptAuthoring";
+import { getUsers, setUserRole, deleteUser, disableUser, restoreUser } from "@/api/adaptAuthoring";
 import { usePageLoader } from "@/hooks";
 import { useAuth } from "@/context/AuthContext";
 import AiAssistant from "@/components/common/AiAssistant";
@@ -16,6 +16,7 @@ interface User {
   role: Role;
   failedLogins: number;
   lastAccess: string; // DD-MM-YY
+  isDeleted?: boolean;
 }
 
 const INITIAL_USERS: User[] = [
@@ -53,6 +54,10 @@ function isValidEmailQuery(value: string): boolean {
 
 function isCompleteEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
+}
+
+export function getUserActionLabel(isDeleted: boolean): string {
+  return isDeleted ? "Restore user" : "Disable user";
 }
 
 export default function UserManagementPage() {
@@ -167,11 +172,35 @@ export default function UserManagementPage() {
     }
   }
 
+  async function toggleUserDisabledState(id: number) {
+    const target = users.find((u) => u.id === id);
+    setActionMenuTarget(null);
+    if (!target?.backendId) return;
+
+    const nextState = !target.isDeleted;
+    setUsers((prev) => prev.map((u) => u.id === id ? { ...u, isDeleted: nextState } : u));
+
+    try {
+      if (nextState) {
+        await disableUser(target.backendId);
+      } else {
+        await restoreUser(target.backendId);
+      }
+    } finally {
+      loadUsers();
+    }
+  }
+
   function handleActionMenu(id: number, action: string) {
     setActionMenuTarget(null);
     if (action === "delete") {
       const user = users.find((u) => u.id === id);
       if (user) setDeleteTarget(user);
+      return;
+    }
+    if (action === "disable-user" || action === "restore-user") {
+      void toggleUserDisabledState(id);
+      return;
     }
     // "transfer", "delete-unshared", "share-all" — handled silently for now (backend ops)
   }
@@ -321,9 +350,10 @@ export default function UserManagementPage() {
                 </tr>
               ) : paginated.map((user) => {
                 const isCurrentUser = user.email.toLowerCase() === currentUser?.email.toLowerCase();
+                const isUserDisabled = !!user.isDeleted;
 
                 return (
-                <tr key={user.id} className={`border-b border-[#f3f4f6] hover:bg-[#fafafa] transition-colors group/row ${isCurrentUser ? "font-bold" : ""}`}>
+                <tr key={user.id} className={`border-b border-[#f3f4f6] hover:bg-[#fafafa] transition-colors group/row ${isCurrentUser ? "font-bold" : ""} ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>
                   {/* Email */}
                   <td className={`px-4 py-3 text-[#111827] ${isCurrentUser ? "font-bold" : "font-normal"}`}>{user.email}</td>
 
@@ -415,6 +445,16 @@ export default function UserManagementPage() {
 
                       {actionMenuTarget === user.id && (
                         <div className="absolute right-0 top-full mt-1 w-52 bg-white border border-[#e5e7eb] rounded-lg shadow-xl z-30 py-1">
+                          <button
+                            type="button"
+                            onClick={() => handleActionMenu(user.id, user.isDeleted ? "restore-user" : "disable-user")}
+                            className="w-full text-left px-3 py-2 text-sm text-[#374151] hover:bg-[#f9fafb] flex items-center gap-2.5"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M3 12a9 9 0 0115.42-6.42M21 12a9 9 0 01-15.42 6.42" /><path d="M9 12l2 2 4-4" />
+                            </svg>
+                            {getUserActionLabel(!!user.isDeleted)}
+                          </button>
                           <button
                             type="button"
                             onClick={() => handleActionMenu(user.id, "transfer")}

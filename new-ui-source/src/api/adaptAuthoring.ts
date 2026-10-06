@@ -397,7 +397,7 @@ export async function fetchDashboardCourses(
     }
   }
   const term = query.search?.trim();
-  if (term) params.set("search[title]", escapeRegExp(term));
+  if (term) params.set("search[title]", escapeRegExp(term)); // title search
   for (const tagId of query.tags ?? []) {
     params.append("search[tags][$all][]", tagId);
   }
@@ -5068,6 +5068,7 @@ export interface DashboardUser {
   roleIds: string[];
   failedLogins: number;
   lastAccess: string;
+  isDeleted: boolean;
 }
 
 interface EngineUser {
@@ -5077,6 +5078,7 @@ interface EngineUser {
   _tenantId?: { name?: string } | string | null;
   failedLoginCount?: number;
   lastAccess?: string;
+  _isDeleted?: boolean;
 }
 
 export async function getRoles(): Promise<AdaptRole[]> {
@@ -5098,8 +5100,17 @@ export async function getUsers(): Promise<DashboardUser[]> {
       roleIds: roles.map((r) => r._id),
       failedLogins: u.failedLoginCount ?? 0,
       lastAccess: fmtDate(u.lastAccess),
+      isDeleted: !!u._isDeleted,
     };
   });
+}
+
+export function disableUser(userBackendId: string): Promise<unknown> {
+  return apiClient.put(`/api/user/${userBackendId}`, { _isDeleted: true });
+}
+
+export function restoreUser(userBackendId: string): Promise<unknown> {
+  return apiClient.put(`/api/user/${userBackendId}`, { _isDeleted: false });
 }
 
 // Change a user's role: unassign existing roles, then assign the chosen one.
