@@ -124,7 +124,7 @@ function TextField({
 }: { label: string; hint?: string; value: string; onChange: (v: string) => void; placeholder?: string; error?: string; maxLength?: number; sanitize?: (v: string) => string }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <InfoFieldLabel label={label} hint={hint} description={hint} className="text-[var(--life-base-black)]" />
+      {/* <InfoFieldLabel label={label} hint={hint} description={hint} className="text-[var(--life-base-black)]" /> */}
       <input
         type="text"
         value={value}
@@ -148,7 +148,7 @@ function SelectField({
 }: { label: string; hint?: string; value: string; onChange: (v: string) => void; options: readonly string[] }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <InfoFieldLabel label={label} hint={hint} description={hint} className="text-[var(--life-base-black)]" />
+      {/* <InfoFieldLabel label={label} hint={hint} description={hint} className="text-[var(--life-base-black)]" /> */}
       <div className="relative">
         <select
           value={value}
