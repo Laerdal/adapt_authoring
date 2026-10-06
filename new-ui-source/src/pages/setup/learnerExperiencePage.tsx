@@ -1143,7 +1143,6 @@ export function LearnerExperiencePanel({
               checked={lrState.enabled}
               onChange={(v) => setLr("enabled", v)}
               label={getSchemaLabel(getSchemaNode(resourcesFieldsSchema, "_isEnabled"), "Enable Learning Resources")}
-              hint={getSchemaHint(getSchemaNode(resourcesFieldsSchema, "_isEnabled"))}
               align="right"
             />
           </div>
@@ -1316,7 +1315,6 @@ export function LearnerExperiencePanel({
               checked={lnState.enabled}
               onChange={(v) => setLn("enabled", v)}
               label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "_isEnabled"), "Enable Notes")}
-              hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "_isEnabled"))}
               align="right"
             />
           </div>
@@ -1598,7 +1596,6 @@ export function LearnerExperiencePanel({
               checked={atState.enabled}
               onChange={(v) => setAt("enabled", v)}
               label={getSchemaLabel(getSchemaNode(aiTutorFieldsSchema, "_isEnabled"), "Enable AI Tutor")}
-              hint={getSchemaHint(getSchemaNode(aiTutorFieldsSchema, "_isEnabled"))}
               align="right"
             />
           </div>
@@ -1702,7 +1699,6 @@ export function LearnerExperiencePanel({
               checked={cfState.enabled}
               onChange={(v) => setCf("enabled", v)}
               label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_isEnabled"), "Enable Laerdal Course Feedback")}
-              hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_isEnabled"))}
               align="right"
             />
           </div>

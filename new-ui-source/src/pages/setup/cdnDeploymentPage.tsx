@@ -644,7 +644,7 @@ export function CdnDeploymentPage({
                   </svg>
                 }
               >
-                <ToggleSwitch checked={cfg.isEnabled} onChange={(v) => set({ isEnabled: v })} label={getSchemaLabel(getSchemaNode(cdnSchema, "_isEnabled"), "Enable CDN settings")} hint={getSchemaHint(getSchemaNode(cdnSchema, "_isEnabled"))} />
+                <ToggleSwitch checked={cfg.isEnabled} onChange={(v) => set({ isEnabled: v })} label={getSchemaLabel(getSchemaNode(cdnSchema, "_isEnabled"), "Enable CDN settings")} />
 
                 {cfg.isEnabled && (
                   <div className="flex flex-col gap-3 mt-1">

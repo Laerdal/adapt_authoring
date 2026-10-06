@@ -513,7 +513,7 @@ export function NavigationPage({
             <>
               {/* ── Start settings ── */}
               <NavAccordion {...acc("start")} title={getSchemaLabel(startSchema, "Start settings")} subtitle="Choose which page(s) learners land on when they open the course.">
-                <ToggleSwitch checked={s.start._isEnabled} onChange={(v) => setStart({ _isEnabled: v })} label={getSchemaLabel(getSchemaNode(startSchema, "_isEnabled"), "Enabled?")} hint={getSchemaHint(startSchema) ?? getSchemaHint(getSchemaNode(startSchema, "_isEnabled"))} />
+                <ToggleSwitch checked={s.start._isEnabled} onChange={(v) => setStart({ _isEnabled: v })} label={getSchemaLabel(getSchemaNode(startSchema, "_isEnabled"), "Enabled?")} />
 
                 {s.start._isEnabled && (
                   <div className="flex flex-col gap-3">
@@ -585,7 +585,7 @@ export function NavigationPage({
 
               {/* ── Course menu ── */}
               <NavAccordion {...acc("courseMenu")} title={getSchemaLabel(courseMenuSchema, "Course menu")} hint={getSchemaHint(courseMenuSchema)} subtitle="Controls whether the top bar exposes the course menu.">
-                <ToggleSwitch checked={s.courseMenu.enabled} onChange={(v) => setCourseMenu({ enabled: v })} label={getSchemaLabel(getSchemaNode(courseMenuSchema, "_isEnabled"), "Enable Course Menu")} hint={getSchemaHint(getSchemaNode(courseMenuSchema, "_isEnabled"))} />
+                <ToggleSwitch checked={s.courseMenu.enabled} onChange={(v) => setCourseMenu({ enabled: v })} label={getSchemaLabel(getSchemaNode(courseMenuSchema, "_isEnabled"), "Enable Course Menu")} />
                 <div className="ml-7">
                   <CheckboxRow
                     checked={s.courseMenu.includeSubmenuInNavigation}
