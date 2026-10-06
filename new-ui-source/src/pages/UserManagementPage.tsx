@@ -4,6 +4,7 @@ import { usePageLoader } from "@/hooks";
 import { useAuth } from "@/context/AuthContext";
 import AiAssistant from "@/components/common/AiAssistant";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import ErrorDialog from "@/components/common/ErrorDialog";
 
 type Role = "Super Admin" | "Authenticated User" | "Course Creator";
 
@@ -64,6 +65,7 @@ export default function UserManagementPage() {
   const { user: currentUser } = useAuth();
   const [users, setUsers]             = useState<User[]>([]);
   const [loading, setLoading]         = useState(true);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   usePageLoader(loading);
 
@@ -152,9 +154,12 @@ export default function UserManagementPage() {
     setRoleMenuTarget(null);
     if (!target?.backendId) return;
     // optimistic update, then persist + reload from the engine
+    setActionError(null);
     setUsers((prev) => prev.map((u) => u.id === id ? { ...u, role } : u));
     try {
       await setUserRole(target.backendId, target.roleIds ?? [], role);
+    } catch {
+      setActionError(`Failed to change the role for ${target.email}. Please try again.`);
     } finally {
       loadUsers();
     }
@@ -164,9 +169,12 @@ export default function UserManagementPage() {
     const target = deleteTarget;
     setDeleteTarget(null);
     if (!target?.backendId) return;
+    setActionError(null);
     setUsers((prev) => prev.filter((u) => u.id !== target.id));
     try {
       await deleteUser(target.backendId);
+    } catch {
+      setActionError(`Failed to delete ${target.email}. Please try again.`);
     } finally {
       loadUsers();
     }
@@ -178,6 +186,7 @@ export default function UserManagementPage() {
     if (!target?.backendId) return;
 
     const nextState = !target.isDeleted;
+    setActionError(null);
     setUsers((prev) => prev.map((u) => u.id === id ? { ...u, isDeleted: nextState } : u));
 
     try {
@@ -186,6 +195,8 @@ export default function UserManagementPage() {
       } else {
         await restoreUser(target.backendId);
       }
+    } catch {
+      setActionError(`Failed to ${nextState ? "disable" : "restore"} ${target.email}. Please try again.`);
     } finally {
       loadUsers();
     }
@@ -608,6 +619,13 @@ export default function UserManagementPage() {
           onConfirm={confirmDelete}
         />
       )}
+
+      <ErrorDialog
+        open={Boolean(actionError)}
+        title="User action failed"
+        message={actionError ?? "The requested user action could not be completed."}
+        onClose={() => setActionError(null)}
+      />
 
     </div>
   );
