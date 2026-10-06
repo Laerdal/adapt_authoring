@@ -353,15 +353,15 @@ export default function UserManagementPage() {
                 const isUserDisabled = !!user.isDeleted;
 
                 return (
-                <tr key={user.id} className={`border-b border-[#f3f4f6] hover:bg-[#fafafa] transition-colors group/row ${isCurrentUser ? "font-bold" : ""} ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>
+                <tr key={user.id} className={`border-b border-[#f3f4f6] hover:bg-[#fafafa] transition-colors group/row ${isCurrentUser ? "font-bold" : ""}`}>
                   {/* Email */}
-                  <td className={`px-4 py-3 text-[#111827] ${isCurrentUser ? "font-bold" : "font-normal"}`}>{user.email}</td>
+                  <td className={`px-4 py-3 text-[#111827] ${isCurrentUser ? "font-bold" : "font-normal"} ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>{user.email}</td>
 
                   {/* Tenant */}
-                  <td className={`px-4 py-3 text-center ${isCurrentUser ? "font-bold text-[#111827]" : "text-[#6b7280]"}`}>{user.tenant}</td>
+                  <td className={`px-4 py-3 text-center ${isCurrentUser ? "font-bold text-[#111827]" : "text-[#6b7280]"} ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>{user.tenant}</td>
 
                   {/* Role — click to change */}
-                  <td className="px-4 py-3 text-center relative">
+                  <td className={`px-4 py-3 text-center relative ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>
                     {isCurrentUser ? (
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${ROLE_COLORS[user.role]}`}>
                         {user.role}
@@ -401,14 +401,14 @@ export default function UserManagementPage() {
                   </td>
 
                   {/* Failed logins */}
-                  <td className="px-4 py-3 text-center">
+                  <td className={`px-4 py-3 text-center ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>
                     <span className={`${isCurrentUser ? "font-bold text-[#111827]" : `font-medium ${user.failedLogins >= 5 ? "text-[#ef4444]" : user.failedLogins >= 1 ? "text-[#f59e0b]" : "text-[#6b7280]"}`}`}>
                       {user.failedLogins}
                     </span>
                   </td>
 
                   {/* Last access */}
-                  <td className={`px-4 py-3 text-center tabular-nums ${isCurrentUser ? "font-bold text-[#111827]" : "text-[#6b7280]"}`}>{user.lastAccess}</td>
+                  <td className={`px-4 py-3 text-center tabular-nums ${isCurrentUser ? "font-bold text-[#111827]" : "text-[#6b7280]"} ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>{user.lastAccess}</td>
 
                   {/* Actions */}
                   <td className="px-4 py-3 text-center">
