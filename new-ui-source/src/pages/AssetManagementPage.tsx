@@ -1071,6 +1071,9 @@ export function AssetManagementWorkspace({
       <div className="px-6 md:px-8 pt-6 pb-4 flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-[#111827] leading-tight">{pickerMode ? (pickerTitle || "Select Asset") : "Asset Management"}</h1>
+          {!pickerMode ? (
+            <p className="mt-1 text-sm text-[#6b7280]">Upload, organize, and manage your course assets</p>
+          ) : null}
         </div>
         <button
           type="button"

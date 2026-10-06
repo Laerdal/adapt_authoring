@@ -2521,6 +2521,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <h2 className="text-base font-semibold text-[var(--life-base-black)]">
             Select Theme <span className="text-red-500">*</span>
           </h2>
+          <p className="text-sm text-[var(--life-neutral-300)] mt-0.5"> Changing the theme options will replace any unsaved selections you've made in the form below; make sure there's nothing you want to keep! </p>
         </div>
       </div>
 
