@@ -519,6 +519,7 @@ export function deleteCourse(backendId: string): Promise<unknown> {
 export interface CreateCourseInput {
   title: string;
   description?: string;
+  body?: string;
   instanceId?: string;
   theme?: string;
   menuStyle?: string;
@@ -865,6 +866,12 @@ export async function createCourse(input: CreateCourseInput): Promise<CreatedCou
   return created;
 }
 
+export function getCourseBodyValue(course: Pick<EngineCourseDetails, "body" | "description"> | null | undefined): string {
+  if (!course) return "";
+  const bodyValue = typeof course.body === "string" ? course.body : "";
+  return bodyValue.trim();
+}
+
 export async function getCourseBootstrapData(courseId: string): Promise<CourseBootstrapData> {
   const [course, config] = await Promise.all([
       apiClient.get<EngineCourseDetails>(`/api/content/course/${courseId}`),
@@ -878,14 +885,16 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
         .map((t) => (typeof t === "string" ? t : t?.title ?? ""))
         .filter((s): s is string => !!s && !OBJECT_ID.test(s))
     : [];
+  const body = getCourseBodyValue(course);
+  const description = (course.description ?? "").trim();
 
   return {
     courseId,
     title: course.title || "Untitled Course",
     displayTitle: course.displayTitle ?? "",
     subtitle: course.subtitle ?? course._subtitle ?? "",
-    body: course.body ?? "",
-    description: course.description || "",
+    body,
+    description,
     instruction: course.instruction ?? "",
     heroAssetId,
     tags,

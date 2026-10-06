@@ -274,7 +274,8 @@ export default function HomePage() {
       setIsCreatingCourse(true)
       const created = await createCourse({
         title,
-        description: newDesc,
+        body: newDesc,
+        description: '',
         theme: newTheme,
         menuStyle: newMenu,
       })
