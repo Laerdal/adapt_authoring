@@ -45,12 +45,14 @@ function DashboardSectionGate({
 }) {
   const { user, loading } = useAuth();
 
-  if (loading) {
+  // Not-yet-resolved and not-logged-in-at-all get the same blank screen: the
+  // actual "not authenticated" escape is AuthContext's own redirectToLogin()
+  // (a real full-page nav, already firing from its effect) - navigating to
+  // /dashboard here too would be a no-op when this gate IS /dashboard's own,
+  // and a pointless extra hop everywhere else. This gate only needs to act
+  // once a user is confirmed, for the permission check below.
+  if (loading || !user) {
     return <div className="h-screen w-full bg-[#f8fafc]" />;
-  }
-
-  if (!user) {
-    return <Navigate to="/dashboard" replace />;
   }
 
   if (!canAccessDashboardSection(user, section)) {
@@ -63,11 +65,11 @@ function DashboardSectionGate({
 function CourseSetupRouteGate({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
 
-  if (loading) {
+  if (loading || !user) {
     return <div className="h-screen w-full bg-[#f8fafc]" />;
   }
 
-  if (!user || !canAccessCourseSettings(user)) {
+  if (!canAccessCourseSettings(user)) {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -77,11 +79,11 @@ function CourseSetupRouteGate({ children }: { children: React.ReactNode }) {
 function CourseWorkspaceRouteGate({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
 
-  if (loading) {
+  if (loading || !user) {
     return <div className="h-screen w-full bg-[#f8fafc]" />;
   }
 
-  if (!user || !canAccessCourseSettings(user)) {
+  if (!canAccessCourseSettings(user)) {
     return <Navigate to="/dashboard" replace />;
   }
 
