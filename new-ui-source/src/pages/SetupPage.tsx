@@ -302,7 +302,7 @@ function CourseStructurePanel({
       <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-start gap-4">
         <div>
           <h2 className="text-xl font-bold text-[#111827]">Course Structure</h2>
-          <p className="text-sm text-[#6b7280] mt-0.5">Build your structure before editing.</p>
+          <p className="text-sm text-[#6b7280] mt-0.5">Create and organize the learning journey using the tree view. Click any field to edit content directly.</p>
         </div>
 
         <div className="ml-auto flex items-center gap-3 shrink-0">
@@ -357,19 +357,7 @@ function CourseStructurePanel({
 
       {/* Rules banner (top) */}
       <div className="mb-3 p-3.5 rounded-lg bg-[#f0faf8] border border-[#99e6de] text-sm text-[#0d7377]">
-        Organize your course into modules, topics, sections, content groups and components. At least one topic
-        is mandatory at the course level, and every module must contain at least one topic.
-      </div>
-
-      {/* Tip (top) - view-specific info text, styled like the app's Tip callouts */}
-      <div className="mb-5 flex items-start gap-2.5 rounded-lg bg-[#fff7ed] border border-[#fed7aa] px-4 py-3">
-        <span className="text-base leading-none mt-0.5" aria-hidden="true">💡</span>
-        <p className="text-sm text-[#9a3412] leading-snug">
-          <span className="font-semibold">Tip:</span>{" "}
-          {viewMode === "tree"
-            ? "Create and organize the learning journey using the tree view. Click any field to edit content directly, and open a topic in the Page Editor (→) for advanced editing and settings."
-            : "Explore the entire course structure in a visual format. Use Map View to review content coverage and learning flow across topics. To create, edit, or reorganize content, switch to Tree View."}
-        </p>
+        At least one topic is mandatory at the course level, and every module must contain at least one topic.
       </div>
 
       <ErrorDialog

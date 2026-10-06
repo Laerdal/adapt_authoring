@@ -239,14 +239,13 @@ type AssetTarget =
   | { scope: "headerImage"; bp: BreakpointKey }
   | { scope: "backgroundImage"; bp: BreakpointKey };
 
-function mergeConfigFromCourseMenuSettings(base: MenuPageConfig, settings: CourseMenuSettings): MenuPageConfig {
+export function mergeConfigFromCourseMenuSettings(base: MenuPageConfig, settings: CourseMenuSettings): MenuPageConfig {
   const box = getMenuSettingsEntryForStyle(settings, base.menuStyle);
   const header = box?._menuHeader;
   const textAlign = header?._textAlignment;
   const headerStyles = header?._backgroundStyles;
   const bgStyles = box?._backgroundStyles;
   const minHeights = header?._minimumHeights;
-  const readSubtitleAlign = base.menuStyle === "box";
   const hasSubmenuControls = base.menuStyle === "life" || base.menuStyle === "overview";
   const hasDisplayAboveHeaderSetting = hasSubmenuControls && typeof header?._displayAboveHeader === "boolean";
 
@@ -260,7 +259,7 @@ function mergeConfigFromCourseMenuSettings(base: MenuPageConfig, settings: Cours
     logoAltText: box?._graphic?.alt || "",
     logoSrc: box?._graphic?._src || "",
     titleAlign: coerceAlign(textAlign?._title, base.titleAlign),
-    subtitleAlign: readSubtitleAlign ? coerceAlign(textAlign?._subtitle, base.subtitleAlign) : base.subtitleAlign,
+    subtitleAlign: coerceAlign(textAlign?._subtitle, base.subtitleAlign),
     instructionAlign: coerceAlign(textAlign?._instruction, base.instructionAlign),
     bodyAlign: coerceAlign(textAlign?._body, base.bodyAlign),
     headerImageSrc: {
@@ -290,22 +289,18 @@ function mergeConfigFromCourseMenuSettings(base: MenuPageConfig, settings: Cours
   };
 }
 
-function buildCourseMenuSettingsPayload(config: MenuPageConfig, currentSettings: CourseMenuSettings): CourseMenuSettings {
+export function buildCourseMenuSettingsPayload(config: MenuPageConfig, currentSettings: CourseMenuSettings): CourseMenuSettings {
   const textAlignment: {
     _title: Align;
     _body: Align;
     _instruction: Align;
-    _subtitle?: Align;
+    _subtitle: Align;
   } = {
     _title: config.titleAlign,
     _body: config.bodyAlign,
     _instruction: config.instructionAlign,
+    _subtitle: config.subtitleAlign,
   };
-
-  // Subtitle alignment is currently persisted for Box menu only.
-  if (config.menuStyle === "box") {
-    textAlignment._subtitle = config.subtitleAlign;
-  }
 
   const nextEntry: NonNullable<CourseMenuSettings["_boxMenu"]> = {
       _graphic: {

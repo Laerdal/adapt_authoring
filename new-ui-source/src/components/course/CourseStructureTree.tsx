@@ -15,6 +15,14 @@ import {
 } from '../../types/structure';
 import { StructureIcon, STRUCTURE_ICON_COLOR_CLASS } from './StructureIcons';
 
+const LEGACY_TOPIC_TITLE = 'New Topic Title';
+const DISPLAY_TOPIC_TITLE = 'New Topic Title (Page)';
+
+function getDisplayedRowTitle(level: StructureLevel, title: string) {
+  if (level === 'topic' && title === LEGACY_TOPIC_TITLE) return DISPLAY_TOPIC_TITLE;
+  return title;
+}
+
 // ─── Props ────────────────────────────────────────────────────────────────────
 
 export interface CourseStructureTreeProps {
@@ -163,6 +171,7 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
   function renderRow(p: RowProps): React.ReactNode {
     const editing = inlineId === p.id;
     const isModule = p.level === 'module';
+    const displayTitle = getDisplayedRowTitle(p.level, p.title);
     const rowRef: RowRef = { level: p.level, id: p.id, parentId: p.parentId, parentLevel: p.parentLevel };
     const isDropInto = dropTarget?.rowId === p.id && dropTarget.mode === 'into';
     const isDropBefore = dropTarget?.rowId === p.id && dropTarget.mode === 'before';
@@ -218,9 +227,9 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
           }}
           onDragEnd={clearDrag}
           className={`group flex items-center gap-1.5 px-2 py-2 rounded-lg transition-colors ${isModule ? 'border-l-2 border-[#3d8f7c]' : ''} ${isDropInto ? 'ring-2 ring-[#2d6fa8] bg-[#f0f7ff]' : 'hover:bg-[#f9fafb]'}`}
-          aria-label={`${labels[p.level]}: ${p.title}`}
+          aria-label={`${labels[p.level]}: ${displayTitle}`}
         >
-          <button type="button" aria-label={`Drag ${p.title}`} className="shrink-0 cursor-grab active:cursor-grabbing p-0.5 rounded hover:bg-[#e5e7eb] opacity-0 group-hover:opacity-100 transition-opacity">
+          <button type="button" aria-label={`Drag ${displayTitle}`} className="shrink-0 cursor-grab active:cursor-grabbing p-0.5 rounded hover:bg-[#e5e7eb] opacity-0 group-hover:opacity-100 transition-opacity">
             <Grip />
           </button>
 
@@ -254,7 +263,7 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
                 title="Click to rename"
                 className={`min-w-0 truncate text-left text-sm hover:text-[#2d6fa8] ${isModule ? 'font-bold uppercase tracking-wide text-[#374151]' : p.level === 'topic' ? 'font-semibold text-[#111827]' : 'text-[#374151]'}`}
               >
-                {p.title}
+                {displayTitle}
               </button>
             )}
 

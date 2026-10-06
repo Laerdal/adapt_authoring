@@ -542,9 +542,9 @@ export function CourseOverviewPage({
 
   const labelStyle: React.CSSProperties = {
     fontFamily: '"Lato", sans-serif',
-    fontSize: 13,
-    fontWeight: 700,
-    color: "var(--life-base-black)",   // #1A1A1A
+    fontSize: 12,
+    fontWeight: 600,
+    color: "#374151",
     display: "block",
     marginBottom: 6,
   };

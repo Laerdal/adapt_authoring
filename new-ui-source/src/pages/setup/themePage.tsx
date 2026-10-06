@@ -2521,7 +2521,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <h2 className="text-base font-semibold text-[var(--life-base-black)]">
             Select Theme <span className="text-red-500">*</span>
           </h2>
-          <p className="text-sm text-[var(--life-neutral-300)] mt-0.5"> Select the base theme for your course </p>
         </div>
       </div>
 
@@ -2647,10 +2646,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <ThemeAccordion
             label={getSchemaText(getSchemaField(selectedThemeSchema, '_course'), 'title') ?? 'Configuration: Course'}
             hint={getSchemaText(getSchemaField(selectedThemeSchema, '_course'), 'help')}
-            isOpen={isLifeTheme || activeAccordion === "Configuration: Course"}
+            isOpen={activeAccordion === "Configuration: Course"}
             onToggle={() => {
-              if (isLifeTheme) return;
-              setActiveAccordion(activeAccordion === "Configuration: Course" ? null : "Configuration: Course");
+              setActiveAccordion((current) => current === "Configuration: Course" ? null : "Configuration: Course");
             }}
           >
             <div className="space-y-6">
@@ -2735,17 +2733,18 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <ThemeAccordion
             label="Configuration: Content Groups"
             hint={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks'), 'help')}
-            isOpen={isLifeTheme || activeAccordion === "Configuration: Content Groups"}
+            isOpen={activeAccordion === "Configuration: Content Groups"}
             onToggle={() => {
-              if (isLifeTheme) return;
-              setActiveAccordion(activeAccordion === "Configuration: Content Groups" ? null : "Configuration: Content Groups");
+              setActiveAccordion((current) => current === "Configuration: Content Groups" ? null : "Configuration: Content Groups");
             }}
           >
             <div className="space-y-5">
+              <p className="text-xs text-[#6b7280] leading-relaxed" >
+                Content Groups - Adjust the spacing above and below the content group: Double, Standard, Half, or Remove.
+              </p>
               <div>
                 <InfoFieldLabel
                   label={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks', '_paddingTop'), 'title') ?? 'Spacing top'}
-                  hint={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks', '_paddingTop'), 'help')}
                   className="mb-2"
                 />
                 <select
@@ -2763,7 +2762,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
               <div>
                 <InfoFieldLabel
                   label={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks', '_paddingBottom'), 'title') ?? 'Spacing bottom'}
-                  hint={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks', '_paddingBottom'), 'help')}
                   className="mb-2"
                 />
                 <select
@@ -2786,10 +2784,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         {selected !== "vanilla" && (
           <ThemeAccordion
             label={getSchemaText(selectedThemeComponentSchema, 'title') ?? 'Configuration: Components'}
-            isOpen={isLifeTheme || activeAccordion === "Configuration: Components"}
+            isOpen={activeAccordion === "Configuration: Components"}
             onToggle={() => {
-              if (isLifeTheme) return;
-              setActiveAccordion(activeAccordion === "Configuration: Components" ? null : "Configuration: Components");
+              setActiveAccordion((current) => current === "Configuration: Components" ? null : "Configuration: Components");
             }}
           >
             <div className="space-y-5">
@@ -3177,6 +3174,15 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           </div>
         </div>
       )}
+
+      <div className="mt-6 w-full">
+        <div className="flex items-start gap-2.5 rounded-lg bg-[#fff7ed] border border-[#fed7aa] px-4 py-3 mb-5">
+          <span className="text-base leading-none mt-0.5" aria-hidden="true">💡</span>
+          <p className="text-sm text-[#9a3412] leading-snug">
+            <span className="font-semibold">Tip:</span> Once you’ve set up your theme, choose the menu you want to use for your course.
+          </p>
+        </div>
+      </div>
       </div>
       </div>
 
