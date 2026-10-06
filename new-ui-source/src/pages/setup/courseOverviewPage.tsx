@@ -671,32 +671,37 @@ export function CourseOverviewPage({
 
         {/* Description */}
         <div>
-          {renderFieldLabel("Description", ["description"])}
-          <textarea
-            rows={4}
-            value={formDesc}
-            onChange={(e) => { setFormDesc(e.target.value); markDirty();}}
-            placeholder="Describe what this course is about and what learners will gain"
-            disabled={loading}
-            style={textareaBase}
-            onFocus={focusIn}
-            onBlur={focusOut}
-          />
-        </div>
-
-          {/* Body */}
-        <div>
-          {renderFieldLabel("Course Metadata", ["body"], {
-            labelOverride: "Course Metadata",
-            hint: "This information is not currently displayed within the course",
-          })}
+          {renderFieldLabel("Description", ["body"])}
           <BasicRichTextEditor
             key={bodyEditorKey}
             html={formBody}
             onChange={(next) => { setFormBody(next); markDirty(); }}
             disabled={loading}
+            placeholder="Describe what this course is about and what learners will gain"
+            ariaLabel="description"
+          />
+        </div>
+
+          {/* Body */}
+        <div>
+          {renderFieldLabel("Course Metadata", ["description"], {
+            labelOverride: "Course Metadata",
+            hint: "This information is not currently displayed within the course",
+          })}
+          {/* Plain text, not rich text: `description` is a plain Text schema
+              field and CourseCard renders it as literal text — a rich editor
+              here would save HTML tags that show up unrendered on course
+              cards. The rich editor is only correct for `body` (Description,
+              above), which is an actual HTML field. */}
+          <textarea
+            rows={4}
+            value={formDesc}
+            onChange={(e) => { setFormDesc(e.target.value); markDirty(); }}
             placeholder="Provide description to be added to the course manifest metadata"
-            ariaLabel="Course Metadata"
+            disabled={loading}
+            style={textareaBase}
+            onFocus={focusIn}
+            onBlur={focusOut}
           />
         </div>
 

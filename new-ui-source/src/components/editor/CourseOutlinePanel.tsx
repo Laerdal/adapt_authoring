@@ -484,7 +484,7 @@ export default function CourseOutlinePanel({
     if (level === "module") return "Module";
     if (level === "topic") return "Topic";
     if (level === "section") return "Section";
-    if (level === "group") return "Group";
+    if (level === "group") return "Content Group";
     return "Component";
   }
 

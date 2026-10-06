@@ -555,17 +555,23 @@ export interface StoryboardEditorHandle {
    *  `opts.afterId`, when given and still present in the document, anchors the
    *  insertion right after that block instead of the editor's live text-cursor
    *  position (which goes stale once focus leaves the editor for a toolbar
-   *  menu — use the last known active/selected block id here). */
-  insert(kind: StoryboardInsertKind, opts?: { level?: number; afterId?: string }): void;
+   *  menu — use the last known active/selected block id here).
+   *  Returns `{ ok: false, warning }` instead of inserting when `kind` is a
+   *  content item and the target Content Group is already at the per-block
+   *  component limit (see MAX_COMPONENTS_PER_BLOCK in storyboardGeneration.ts)
+   *  — the caller should surface `warning` to the author. */
+  insert(kind: StoryboardInsertKind, opts?: { level?: number; afterId?: string }): { ok: boolean; warning?: string };
   /** Insert a pre-populated component card at the cursor (AI Assistance →
    *  Insert). `title` seeds the card title; `data` is merged into the card's
    *  default data (e.g. `{ description }` for a Text component). `afterId`
-   *  behaves as in `insert` above. Returns the new
-   *  block id so the caller can anchor follow-up actions (comments). */
+   *  behaves as in `insert` above. Returns `{ id }` (for anchoring follow-up
+   *  actions, e.g. comments) or `{ id: null, warning }` when the target
+   *  Content Group is already at the per-block component limit — shares the
+   *  same capacity check as `insert` above. */
   insertComponent(
     kind: StoryboardInsertKind,
     opts?: { title?: string; data?: Record<string, unknown>; afterId?: string }
-  ): string | null;
+  ): { id: string | null; warning?: string };
   /** Plain text of the block at the cursor (for AI actions, AC7). */
   getActiveText(): string;
   /** Replace the cursor block's content with `text` (Improve / Rewrite). */
@@ -595,4 +601,9 @@ export interface StoryboardEditorProps {
   onChange?: (doc: StoryboardDocument, headings: StoryboardHeading[]) => void;
   /** Reports the active (cursor) block so the Review panel can anchor comments. */
   onActiveBlock?: (block: ActiveBlockInfo | null) => void;
+  /** Reports a non-fatal authoring warning (e.g. a Content Group capacity
+   *  rejection triggered from inside the editor itself, like the H4
+   *  slash-menu item, rather than via `insert`/`insertComponent`'s own
+   *  return value) for the host to surface — e.g. as a toast. */
+  onWarning?: (message: string) => void;
 }

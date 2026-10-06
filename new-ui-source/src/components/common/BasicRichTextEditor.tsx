@@ -315,6 +315,21 @@ export default function BasicRichTextEditor({
   const [samaritanOpen, setSamaritanOpen] = useState(false);
   const [samaritanSeedText, setSamaritanSeedText] = useState("");
   const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set());
+  // Drives the placeholder instead of the CSS `:empty` pseudo-class — a
+  // contentEditable div very commonly holds a stray `<br>` (left behind by
+  // the browser after typing-then-deleting, or even just from focusing an
+  // empty field) while still being visually/semantically empty. `:empty`
+  // requires literally zero child nodes, so it stopped matching the moment
+  // that `<br>` appeared and the placeholder silently vanished for good —
+  // confirmed by screenshotting both DOM shapes in isolation. `isEditorEmpty`
+  // already exists in this file specifically to treat that browser noise as
+  // empty, so drive the placeholder from it instead of `:empty`.
+  const [isEmpty, setIsEmpty] = useState(() => isEditorEmpty(html));
+
+  const syncEmptyState = useCallback(() => {
+    const editor = editorRef.current;
+    if (editor) setIsEmpty(isEditorEmpty(editor.innerHTML));
+  }, []);
 
   const initRef = useCallback((node: HTMLDivElement | null) => {
     editorRef.current = node;
@@ -322,6 +337,7 @@ export default function BasicRichTextEditor({
       node.dataset.editorInitialized = "true";
       node.innerHTML = normalizeHtmlForEditor(html);
       normalizeEditorDom(node);
+      setIsEmpty(isEditorEmpty(node.innerHTML));
     }
   }, []);
 
@@ -337,6 +353,8 @@ export default function BasicRichTextEditor({
       editor.innerHTML = normalizedHtml;
       normalizeEditorDom(editor);
     }
+
+    setIsEmpty(isEditorEmpty(editor.innerHTML));
 
     if (resetKey !== undefined) {
       lastResetKeyRef.current = resetKey;
@@ -360,8 +378,9 @@ export default function BasicRichTextEditor({
     if (editorRef.current) {
       normalizeEditorDom(editorRef.current);
       onChange(editorRef.current.innerHTML);
+      syncEmptyState();
     }
-  }, [onChange]);
+  }, [onChange, syncEmptyState]);
 
   const applyFormat = useCallback((cmd: string) => {
     if (disabled) return;
@@ -646,6 +665,7 @@ export default function BasicRichTextEditor({
         aria-label={ariaLabel}
         dir="ltr"
         data-placeholder={placeholder}
+        data-empty={isEmpty}
         onMouseDownCapture={(e) => e.stopPropagation()}
         onPointerDownCapture={(e) => e.stopPropagation()}
         onKeyDownCapture={(e) => e.stopPropagation()}
@@ -665,7 +685,7 @@ export default function BasicRichTextEditor({
           setFocused(false);
           setToolbarVisible(containsFocus);
         }}
-        className="empty:before:content-[attr(data-placeholder)] empty:before:text-[var(--life-neutral-400)]"
+        className="data-[empty=true]:before:content-[attr(data-placeholder)] data-[empty=true]:before:text-[var(--life-neutral-400)]"
         style={{
           minHeight,
           padding: "10px 14px",
