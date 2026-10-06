@@ -5342,6 +5342,10 @@ export interface AssetQueryOptions {
   search?: string;
   format?: AssetFormat | "All";
   tagIds?: string[];
+  // Scopes the query to one course's AI Tutor source documents (lib/assetmanager.js
+  // queryAssets -> _resolveAiTutorTags), mirroring the classic UI's scaffoldAssetView.js.
+  // Omitting this hides tutor-tagged docs from the general list instead of showing them.
+  aiTutorCourseId?: string;
 }
 
 export interface AssetPage {
@@ -5387,6 +5391,7 @@ export async function getAssets(options: AssetQueryOptions = {}): Promise<AssetP
     search,
     format,
     tagIds,
+    aiTutorCourseId,
   } = options;
   const cappedLimit = Math.min(limit, MAX_ASSET_PAGE_SIZE);
 
@@ -5408,6 +5413,9 @@ export async function getAssets(options: AssetQueryOptions = {}): Promise<AssetP
   if (tagIds && tagIds.length) {
     tagIds.forEach((id) => params.append("search[tags][$all][]", id));
   }
+  if (aiTutorCourseId) {
+    params.append("aiTutorCourseId", aiTutorCourseId);
+  }
   params.append("operators[skip]", String(skip));
   params.append("operators[limit]", String(cappedLimit + 1));
   params.append("operators[sort][createdAt]", "-1");
@@ -5422,6 +5430,18 @@ export async function getAssets(options: AssetQueryOptions = {}): Promise<AssetP
     items: active.map((a, i) => mapEngineAsset(a, skip + i + 1)),
     hasMore,
   };
+}
+
+// Mirrors classic's scaffoldAssetView.js: tag an asset as an AI Tutor source for a
+// specific course at add time (upload or select), so it's immediately hidden from
+// the general asset list and scoped to this course's own picker - no dependency on
+// a later preview/publish. Best-effort; failure shouldn't block attaching the document.
+export async function tagAssetForAiTutor(assetId: string, courseId: string): Promise<void> {
+  try {
+    await apiClient.post("/api/asset/aitutor-tag", { assetId, courseId });
+  } catch {
+    // best-effort, see comment above
+  }
 }
 
 export function trashAsset(backendId: string): Promise<unknown> {

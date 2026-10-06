@@ -17,6 +17,9 @@ interface AssetManagementWorkspaceProps {
   onPickAsset?: (asset: AssetPickerResult) => void;
   onCancelPick?: () => void;
   hideAssistant?: boolean;
+  // Scopes the picker to one course's AI Tutor source documents - see getAssets'
+  // aiTutorCourseId in adaptAuthoring.ts for what this does server-side.
+  aiTutorCourseId?: string;
 }
 
 const FORMAT_COLORS: Record<AssetFormat, string> = {
@@ -638,6 +641,7 @@ export function AssetManagementWorkspace({
   onPickAsset,
   onCancelPick,
   hideAssistant = false,
+  aiTutorCourseId,
 }: AssetManagementWorkspaceProps) {
   const [assets, setAssets]             = useState<Asset[]>([]);
   const [isLoadingAssets, setIsLoadingAssets] = useState(true);
@@ -788,6 +792,7 @@ export function AssetManagementWorkspace({
         search: debouncedSearch,
         format: effectiveFormatFilter,
         tagIds: selectedTagIds,
+        aiTutorCourseId,
       });
       if (gen !== loadGenRef.current) return; // superseded by a newer reset
       setAssets((prev) => (reset ? items : [...prev, ...items]));
@@ -804,7 +809,7 @@ export function AssetManagementWorkspace({
       }
       if (!reset) loadingMoreRef.current = false;
     }
-  }, [pickerMode, debouncedSearch, effectiveFormatFilter, selectedTagIds, hasMore]);
+  }, [pickerMode, debouncedSearch, effectiveFormatFilter, selectedTagIds, hasMore, aiTutorCourseId]);
 
   useEffect(() => {
     void fetchAssetsPage(true);
