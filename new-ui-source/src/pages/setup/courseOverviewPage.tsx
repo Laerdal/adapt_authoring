@@ -89,12 +89,13 @@ export function CourseOverviewPage({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [loading, setLoading] = useState(!!courseId);
+  const initialBodyValue = initialDescription || "";
 
   // Committed values (server state)
   const [savedTitle, setSavedTitle] = useState(initialTitle);
   const [savedSubtitle, setSavedSubtitle] = useState("");
-  const [savedBody, setSavedBody] = useState("");
-  const [savedDesc, setSavedDesc] = useState(initialDescription);
+  const [savedBody, setSavedBody] = useState(initialBodyValue);
+  const [savedDesc, setSavedDesc] = useState("");
   const [savedInstruction, setSavedInstruction] = useState("");
   const [savedTags, setSavedTags] = useState<string[]>([]);
   const [savedHeroAssetId, setSavedHeroAssetId] = useState<string | null>(null);
@@ -105,8 +106,8 @@ export function CourseOverviewPage({
   // Live form values
   const [formTitle, setFormTitle] = useState(initialTitle);
   const [formSubtitle, setFormSubtitle] = useState("");
-  const [formBody, setFormBody] = useState(""); 
-  const [formDesc, setFormDesc] = useState(initialDescription);
+  const [formBody, setFormBody] = useState(initialBodyValue);
+  const [formDesc, setFormDesc] = useState("");
   const [formInstruction, setFormInstruction] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");

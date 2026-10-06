@@ -397,7 +397,7 @@ export async function fetchDashboardCourses(
     }
   }
   const term = query.search?.trim();
-  if (term) params.set("search[title]", escapeRegExp(term));
+  if (term) params.set("search[title]", escapeRegExp(term)); // title search
   for (const tagId of query.tags ?? []) {
     params.append("search[tags][$all][]", tagId);
   }
@@ -519,6 +519,7 @@ export function deleteCourse(backendId: string): Promise<unknown> {
 export interface CreateCourseInput {
   title: string;
   description?: string;
+  body?: string;
   instanceId?: string;
   theme?: string;
   menuStyle?: string;
@@ -865,6 +866,12 @@ export async function createCourse(input: CreateCourseInput): Promise<CreatedCou
   return created;
 }
 
+export function getCourseBodyValue(course: Pick<EngineCourseDetails, "body"> | null | undefined): string {
+  if (!course) return "";
+  const bodyValue = typeof course.body === "string" ? course.body : "";
+  return bodyValue.trim();
+}
+
 export async function getCourseBootstrapData(courseId: string): Promise<CourseBootstrapData> {
   const [course, config] = await Promise.all([
       apiClient.get<EngineCourseDetails>(`/api/content/course/${courseId}`),
@@ -878,14 +885,16 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
         .map((t) => (typeof t === "string" ? t : t?.title ?? ""))
         .filter((s): s is string => !!s && !OBJECT_ID.test(s))
     : [];
+  const body = getCourseBodyValue(course);
+  const description = (course.description ?? "").trim();
 
   return {
     courseId,
     title: course.title || "Untitled Course",
     displayTitle: course.displayTitle ?? "",
     subtitle: course.subtitle ?? course._subtitle ?? "",
-    body: course.body ?? "",
-    description: course.description || "",
+    body,
+    description,
     instruction: course.instruction ?? "",
     heroAssetId,
     tags,
@@ -5068,6 +5077,7 @@ export interface DashboardUser {
   roleIds: string[];
   failedLogins: number;
   lastAccess: string;
+  isDeleted: boolean;
 }
 
 interface EngineUser {
@@ -5077,6 +5087,7 @@ interface EngineUser {
   _tenantId?: { name?: string } | string | null;
   failedLoginCount?: number;
   lastAccess?: string;
+  _isDeleted?: boolean;
 }
 
 export async function getRoles(): Promise<AdaptRole[]> {
@@ -5098,8 +5109,17 @@ export async function getUsers(): Promise<DashboardUser[]> {
       roleIds: roles.map((r) => r._id),
       failedLogins: u.failedLoginCount ?? 0,
       lastAccess: fmtDate(u.lastAccess),
+      isDeleted: !!u._isDeleted,
     };
   });
+}
+
+export function disableUser(userBackendId: string): Promise<unknown> {
+  return apiClient.put(`/api/user/${userBackendId}`, { _isDeleted: true });
+}
+
+export function restoreUser(userBackendId: string): Promise<unknown> {
+  return apiClient.put(`/api/user/${userBackendId}`, { _isDeleted: false });
 }
 
 // Change a user's role: unassign existing roles, then assign the chosen one.

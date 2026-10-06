@@ -1,9 +1,10 @@
 import { useState, useMemo, useEffect, useRef } from "react";
-import { getUsers, setUserRole, deleteUser } from "@/api/adaptAuthoring";
+import { getUsers, setUserRole, deleteUser, disableUser, restoreUser } from "@/api/adaptAuthoring";
 import { usePageLoader } from "@/hooks";
 import { useAuth } from "@/context/AuthContext";
 import AiAssistant from "@/components/common/AiAssistant";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
+import ErrorDialog from "@/components/common/ErrorDialog";
 
 type Role = "Super Admin" | "Authenticated User" | "Course Creator";
 
@@ -16,6 +17,7 @@ interface User {
   role: Role;
   failedLogins: number;
   lastAccess: string; // DD-MM-YY
+  isDeleted?: boolean;
 }
 
 const INITIAL_USERS: User[] = [
@@ -55,10 +57,15 @@ function isCompleteEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 }
 
+export function getUserActionLabel(isDeleted: boolean): string {
+  return isDeleted ? "Restore user" : "Disable user";
+}
+
 export default function UserManagementPage() {
   const { user: currentUser } = useAuth();
   const [users, setUsers]             = useState<User[]>([]);
   const [loading, setLoading]         = useState(true);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   usePageLoader(loading);
 
@@ -147,9 +154,12 @@ export default function UserManagementPage() {
     setRoleMenuTarget(null);
     if (!target?.backendId) return;
     // optimistic update, then persist + reload from the engine
+    setActionError(null);
     setUsers((prev) => prev.map((u) => u.id === id ? { ...u, role } : u));
     try {
       await setUserRole(target.backendId, target.roleIds ?? [], role);
+    } catch {
+      setActionError(`Failed to change the role for ${target.email}. Please try again.`);
     } finally {
       loadUsers();
     }
@@ -159,9 +169,34 @@ export default function UserManagementPage() {
     const target = deleteTarget;
     setDeleteTarget(null);
     if (!target?.backendId) return;
+    setActionError(null);
     setUsers((prev) => prev.filter((u) => u.id !== target.id));
     try {
       await deleteUser(target.backendId);
+    } catch {
+      setActionError(`Failed to delete ${target.email}. Please try again.`);
+    } finally {
+      loadUsers();
+    }
+  }
+
+  async function toggleUserDisabledState(id: number) {
+    const target = users.find((u) => u.id === id);
+    setActionMenuTarget(null);
+    if (!target?.backendId) return;
+
+    const nextState = !target.isDeleted;
+    setActionError(null);
+    setUsers((prev) => prev.map((u) => u.id === id ? { ...u, isDeleted: nextState } : u));
+
+    try {
+      if (nextState) {
+        await disableUser(target.backendId);
+      } else {
+        await restoreUser(target.backendId);
+      }
+    } catch {
+      setActionError(`Failed to ${nextState ? "disable" : "restore"} ${target.email}. Please try again.`);
     } finally {
       loadUsers();
     }
@@ -172,6 +207,11 @@ export default function UserManagementPage() {
     if (action === "delete") {
       const user = users.find((u) => u.id === id);
       if (user) setDeleteTarget(user);
+      return;
+    }
+    if (action === "disable-user" || action === "restore-user") {
+      void toggleUserDisabledState(id);
+      return;
     }
     // "transfer", "delete-unshared", "share-all" — handled silently for now (backend ops)
   }
@@ -321,18 +361,19 @@ export default function UserManagementPage() {
                 </tr>
               ) : paginated.map((user) => {
                 const isCurrentUser = user.email.toLowerCase() === currentUser?.email.toLowerCase();
+                const isUserDisabled = !!user.isDeleted;
 
                 return (
                 <tr key={user.id} className={`border-b border-[#f3f4f6] hover:bg-[#fafafa] transition-colors group/row ${isCurrentUser ? "font-bold" : ""}`}>
                   {/* Email */}
-                  <td className={`px-4 py-3 text-[#111827] ${isCurrentUser ? "font-bold" : "font-normal"}`}>{user.email}</td>
+                  <td className={`px-4 py-3 text-[#111827] ${isCurrentUser ? "font-bold" : "font-normal"} ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>{user.email}</td>
 
                   {/* Tenant */}
-                  <td className={`px-4 py-3 text-center ${isCurrentUser ? "font-bold text-[#111827]" : "text-[#6b7280]"}`}>{user.tenant}</td>
+                  <td className={`px-4 py-3 text-center ${isCurrentUser ? "font-bold text-[#111827]" : "text-[#6b7280]"} ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>{user.tenant}</td>
 
                   {/* Role — click to change */}
-                  <td className="px-4 py-3 text-center relative">
-                    {isCurrentUser ? (
+                  <td className={`px-4 py-3 text-center relative ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>
+                    {isCurrentUser || isUserDisabled ? (
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold ${ROLE_COLORS[user.role]}`}>
                         {user.role}
                       </span>
@@ -348,7 +389,7 @@ export default function UserManagementPage() {
                         </svg>
                       </button>
                     )}
-                    {!isCurrentUser && roleMenuTarget === user.id && (
+                    {!isCurrentUser && !isUserDisabled && roleMenuTarget === user.id && (
                       <div className="absolute left-3 top-full mt-1 w-44 bg-white border border-[#e5e7eb] rounded-lg shadow-xl z-30 py-1">
                         <p className="px-3 py-1.5 text-xs font-semibold text-[#9ca3af] uppercase tracking-wide">Change role</p>
                         {ROLES.map((r) => (
@@ -371,14 +412,14 @@ export default function UserManagementPage() {
                   </td>
 
                   {/* Failed logins */}
-                  <td className="px-4 py-3 text-center">
+                  <td className={`px-4 py-3 text-center ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>
                     <span className={`${isCurrentUser ? "font-bold text-[#111827]" : `font-medium ${user.failedLogins >= 5 ? "text-[#ef4444]" : user.failedLogins >= 1 ? "text-[#f59e0b]" : "text-[#6b7280]"}`}`}>
                       {user.failedLogins}
                     </span>
                   </td>
 
                   {/* Last access */}
-                  <td className={`px-4 py-3 text-center tabular-nums ${isCurrentUser ? "font-bold text-[#111827]" : "text-[#6b7280]"}`}>{user.lastAccess}</td>
+                  <td className={`px-4 py-3 text-center tabular-nums ${isCurrentUser ? "font-bold text-[#111827]" : "text-[#6b7280]"} ${isUserDisabled ? "opacity-60 grayscale-[0.25] saturate-50" : ""}`}>{user.lastAccess}</td>
 
                   {/* Actions */}
                   <td className="px-4 py-3 text-center">
@@ -415,6 +456,16 @@ export default function UserManagementPage() {
 
                       {actionMenuTarget === user.id && (
                         <div className="absolute right-0 top-full mt-1 w-52 bg-white border border-[#e5e7eb] rounded-lg shadow-xl z-30 py-1">
+                          <button
+                            type="button"
+                            onClick={() => handleActionMenu(user.id, user.isDeleted ? "restore-user" : "disable-user")}
+                            className="w-full text-left px-3 py-2 text-sm text-[#374151] hover:bg-[#f9fafb] flex items-center gap-2.5"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M3 12a9 9 0 0115.42-6.42M21 12a9 9 0 01-15.42 6.42" /><path d="M9 12l2 2 4-4" />
+                            </svg>
+                            {getUserActionLabel(!!user.isDeleted)}
+                          </button>
                           <button
                             type="button"
                             onClick={() => handleActionMenu(user.id, "transfer")}
@@ -568,6 +619,13 @@ export default function UserManagementPage() {
           onConfirm={confirmDelete}
         />
       )}
+
+      <ErrorDialog
+        open={Boolean(actionError)}
+        title="User action failed"
+        message={actionError ?? "The requested user action could not be completed."}
+        onClose={() => setActionError(null)}
+      />
 
     </div>
   );
