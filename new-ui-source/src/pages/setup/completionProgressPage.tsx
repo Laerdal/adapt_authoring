@@ -564,7 +564,6 @@ function CompletionRulesContent({
         <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
           <CpToggle
             label={getSchemaLabel(getSchemaNode(assessmentSchema, "_isEnabled"), "Enable Assessment Completion")}
-            hint={getSchemaHint(getSchemaNode(assessmentSchema, "_isEnabled"))}
             checked={cfg.assessmentCompletionEnabled}
             onChange={(v) => set("assessmentCompletionEnabled", v)}
           />
@@ -603,7 +602,6 @@ function CompletionRulesContent({
         <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
           <CpToggle
             label={getSchemaLabel(getSchemaNode(adaptiveContentSchema, "_isEnabled"), "Enable Adaptive Content")}
-            hint={getSchemaHint(getSchemaNode(adaptiveContentSchema, "_isEnabled"))}
             checked={cfg.adaptiveContentEnabled}
             onChange={(v) => set("adaptiveContentEnabled", v)}
           />
@@ -651,7 +649,6 @@ function CompletionFeedbackContent({
         <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
           <CpToggle
             label={getSchemaLabel(getSchemaNode(completionNotifierSchema, "_isEnabled"), "Enable Completion Notifier")}
-            hint={getSchemaHint(getSchemaNode(completionNotifierSchema, "_isEnabled"))}
             checked={cfg.completionNotifierEnabled}
             onChange={(v) => set("completionNotifierEnabled", v)}
           />
@@ -704,7 +701,7 @@ function ResumeBookmarkingContent({
     <>
       <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
         <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
-          <CpToggle label={getSchemaLabel(getSchemaNode(effectiveBookmarkingSchema, "_isEnabled"), "Enable Bookmarking")} hint={getSchemaHint(getSchemaNode(effectiveBookmarkingSchema, "_isEnabled"))} checked={cfg.bookmarkingEnabled} onChange={(v) => set("bookmarkingEnabled", v)} />
+          <CpToggle label={getSchemaLabel(getSchemaNode(effectiveBookmarkingSchema, "_isEnabled"), "Enable Bookmarking")} checked={cfg.bookmarkingEnabled} onChange={(v) => set("bookmarkingEnabled", v)} />
         </div>
         {cfg.bookmarkingEnabled && (
           <div className="px-4 py-4 flex flex-col gap-4">
@@ -952,7 +949,6 @@ function ProgressIndicatorsContent({
         <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
           <CpToggle
             label={getSchemaLabel(getSchemaNode(progressionSchema, "_isEnabled"), "Enable Progression Indicator")}
-            hint={getSchemaHint(getSchemaNode(progressionSchema, "_isEnabled"))}
             checked={cfg.progressIndicatorEnabled}
             onChange={(v) => set("progressIndicatorEnabled", v)}
           />
@@ -1017,7 +1013,7 @@ function TimeEstimateContent({
     <>
       <div className="rounded-xl border border-[#e5e7eb] bg-white overflow-hidden">
         <div className="px-4 py-3.5 border-b border-[#f3f4f6] bg-[#f9fafb]">
-          <CpToggle label={getSchemaLabel(getSchemaNode(estimatedTimeSchema, "_isEnabled"), "Enable Time Estimate")} hint={getSchemaHint(getSchemaNode(estimatedTimeSchema, "_isEnabled"))} checked={cfg.timeEnabled} onChange={(v) => set("timeEnabled", v)} />
+          <CpToggle label={getSchemaLabel(getSchemaNode(estimatedTimeSchema, "_isEnabled"), "Enable Time Estimate")} checked={cfg.timeEnabled} onChange={(v) => set("timeEnabled", v)} />
         </div>
         {cfg.timeEnabled && (
           <div className="px-4 py-4 flex flex-col gap-4">

@@ -12,7 +12,23 @@ interface PublicConfig {
   externalAuthUrl?: string;
 }
 
-export async function redirectToLogin(): Promise<void> {
+// Several independent call sites can all decide "not authenticated" around
+// the same time on a single page load (the initial auth check plus whatever
+// else was fetching data in parallel) - each would otherwise run its own
+// fetch("/config/config.json") + window.location.assign, and the resulting
+// flurry of navigations gets throttled by Chrome ("Throttling navigation to
+// prevent the browser from hanging"), leaving the page looking stuck instead
+// of redirecting. This guard collapses all of that into a single redirect.
+let redirecting = false;
+
+export async function redirectToLogin(alertMessage?: string): Promise<void> {
+  if (redirecting) return;
+  redirecting = true;
+
+  if (alertMessage) {
+    alert(alertMessage);
+  }
+
   let target = "/classic";
   try {
     const res = await fetch("/config/config.json", { credentials: "same-origin" });

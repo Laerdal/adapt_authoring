@@ -2249,7 +2249,11 @@ function TopicCheckbox({
         className="sr-only peer"
       />
       <CheckboxIndicator checked={checked} className="w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
-      <span className="inline-flex items-center gap-1.5">{label}{hint ? <InfoIcon label={label} hint={hint} /> : null}{required && <span className="text-[#dc2626] ml-0.5">*</span>}</span>
+      <span className="min-w-0 leading-snug">
+        {label}
+        {hint ? <InfoIcon label={label} hint={hint} className="ml-1 inline-flex align-middle" /> : null}
+        {required && <span className="text-[#dc2626] ml-0.5">*</span>}
+      </span>
     </label>
   );
 }
@@ -3617,16 +3621,7 @@ export default function CourseEditor({
   // same: the warning stays up for TITLE_WARNING_DURATION_MS, then the title
   // is restored automatically even if the user never leaves the field.
   const titleAutoRevertTimeoutRef = useRef<number | null>(null);
-  // The iframe's course-preview SPA can still be mid-render for a moment
-  // after its own `load` event fires (or after a React selection/content
-  // update) — querying for the selected node's root can transiently miss it.
-  // Without a retry, the default initial selection (the topic, selected
-  // before the user has ever "changed" selection) can end up stuck
-  // non-editable until some later selection change happens to re-trigger a
-  // sync after the SPA has caught up. These back the bounded rAF retry in
-  // syncPreviewInlineEditors.
-  const inlineEditorSyncRetryFrameRef = useRef<number | null>(null);
-  const inlineEditorSyncRetryCountRef = useRef(0);
+  const componentMutationSyncFrameRef = useRef<number | null>(null);
   // Previous Behaviour text-field values for the currently selected
   // component, keyed by path — lets syncPreviewTopicSettings diff old vs
   // new value and find/replace the literal old text in the canvas, since
@@ -5792,9 +5787,9 @@ export default function CourseEditor({
     const doc = iframe?.contentDocument;
     if (!doc) return;
 
-    if (inlineEditorSyncRetryFrameRef.current !== null) {
-      window.cancelAnimationFrame(inlineEditorSyncRetryFrameRef.current);
-      inlineEditorSyncRetryFrameRef.current = null;
+    if (componentMutationSyncFrameRef.current !== null) {
+      window.cancelAnimationFrame(componentMutationSyncFrameRef.current);
+      componentMutationSyncFrameRef.current = null;
     }
 
     // Disconnected up front, every run — re-created only for a selected
@@ -5816,25 +5811,10 @@ export default function CourseEditor({
               ? `.page[data-adapt-id="${selectedPageId}"]`
               : null;
 
-      // The selected node's real DOM root not existing yet almost always
-      // means the SPA hasn't finished rendering, not that the selection is
-      // invalid — retry a bounded number of frames instead of giving up, so
-      // the default initial selection doesn't end up permanently stuck
-      // non-editable just because it "arrived" before the iframe did.
       if (expectedRootSelector && !doc.querySelector(expectedRootSelector)) {
-        if (inlineEditorSyncRetryCountRef.current < 90) {
-          inlineEditorSyncRetryCountRef.current += 1;
-          inlineEditorSyncRetryFrameRef.current = window.requestAnimationFrame(() => {
-            inlineEditorSyncRetryFrameRef.current = null;
-            syncPreviewInlineEditorsRef.current();
-          });
-        } else {
-          inlineEditorSyncRetryCountRef.current = 0;
-        }
         return;
       }
     }
-    inlineEditorSyncRetryCountRef.current = 0;
 
     const restoreCompiledComponentInstruction = (element: HTMLElement) => {
       if (element.getAttribute("data-preview-edit-field") !== "instruction") return;
@@ -6116,13 +6096,21 @@ export default function CourseEditor({
       if (!iframeWindow) return;
       const [ownerLevel, ownerId] = options.ownerKey.split(":");
       const ownerAttribute = ownerLevel === "topic" ? "page" : ownerLevel;
-      const isCurrentBinding = () =>
+      const isCurrentBinding = () => {
+        const selection = liveSelectionRef.current;
+        const currentOwnerKey = selection.selectedComponentId ? `component:${selection.selectedComponentId}`
+          : selection.selectedBlockId ? `block:${selection.selectedBlockId}`
+          : selection.selectedArticleId ? `article:${selection.selectedArticleId}`
+          : `topic:${selection.selectedPageId}`;
+        return selection.hasCanvasSelection && !selection.menuSelected &&
+        previewFrameRef.current?.contentDocument === doc && currentOwnerKey === options.ownerKey &&
         element.isConnected &&
         element.getAttribute("data-preview-edit-enabled") === "true" &&
         element.getAttribute(`data-preview-${ownerAttribute}-id`) === ownerId &&
         (options.fieldPath
           ? element.getAttribute("data-preview-behaviour-path") === options.fieldPath
           : element.getAttribute("data-preview-edit-field") === "body");
+      };
       element.dataset.ckeditorCreating = "true";
       loadCKEditor5In(iframeWindow)
         .then(() => {
@@ -6144,7 +6132,7 @@ export default function CourseEditor({
             // exactly the "revert to plain rendered content" behaviour
             // needed when this is no longer the selected level.
             updateSourceElementOnDestroy: true,
-            initialData: options.value || "",
+            initialData: element.innerHTML,
             // CKEditor owns the empty-body case itself: it renders this as
             // `.ck-placeholder` INSIDE the editable and clears it on the
             // first keystroke, matching how the plain-text instruction
@@ -6161,6 +6149,9 @@ export default function CourseEditor({
               safeDestroyCanvasEditor(editor);
               return;
             }
+            if (editor.getData() !== element.innerHTML) {
+              editor.setData(element.innerHTML);
+            }
             const editableEl = editor.ui.getEditableElement() as HTMLElement;
             // Sticky toggling inserts a toolbar-height placeholder, which made the page jump/oscillate while typing near the viewport edge.
             const stickyPanel = editor.ui.view?.stickyPanel;
@@ -6168,7 +6159,7 @@ export default function CourseEditor({
               stickyPanel.unbind?.("isActive");
               stickyPanel.isActive = false;
             }
-            let lastCommittedHtml = options.value || "";
+            let lastCommittedHtml = editor.getData();
             const commit = (): string | null => {
               // Guards the same class of "iframe navigated out from under a
               // still-referenced editor" failure as safeDestroyCanvasEditor -
@@ -6681,9 +6672,9 @@ export default function CourseEditor({
         // stuck (its clearing only happens on blur, which never fires
         // cleanly for a field that gets destroyed out from under it).
         if (isInlineEditingRef.current) return;
-        if (inlineEditorSyncRetryFrameRef.current !== null) return;
-        inlineEditorSyncRetryFrameRef.current = window.requestAnimationFrame(() => {
-          inlineEditorSyncRetryFrameRef.current = null;
+        if (componentMutationSyncFrameRef.current !== null) return;
+        componentMutationSyncFrameRef.current = window.requestAnimationFrame(() => {
+          componentMutationSyncFrameRef.current = null;
           syncPreviewInlineEditorsRef.current();
         });
       });
@@ -9445,46 +9436,73 @@ export default function CourseEditor({
     }
     syncPreviewScrollFromLeftPanel();
 
-    const selectedPreviewTarget = !menuSelected
-      ? selectedComponentId
-        ? { level: "component" as const, id: selectedComponentId }
-        : selectedBlockId
-          ? { level: "group" as const, id: selectedBlockId }
-          : selectedArticleId
-            ? { level: "section" as const, id: selectedArticleId }
-            : selectedPageId
-              ? { level: "topic" as const, id: selectedPageId }
-              : null
-      : null;
-    const selectionScrollTimers: number[] = [];
-    if (selectedPreviewTarget) {
-      const retrySelectionScroll = () => {
-        const selection = liveSelectionRef.current;
-        const currentLevel = selection.selectedComponentId ? "component"
-          : selection.selectedBlockId ? "group"
-          : selection.selectedArticleId ? "section"
-          : "topic";
-        const currentId = selectedPreviewTarget.level === "component" ? selection.selectedComponentId
-          : selectedPreviewTarget.level === "group" ? selection.selectedBlockId
-          : selectedPreviewTarget.level === "section" ? selection.selectedArticleId
-          : selection.selectedPageId;
-        if (!selection.hasCanvasSelection || selection.menuSelected || currentLevel !== selectedPreviewTarget.level || currentId !== selectedPreviewTarget.id) return;
-        pendingLeftPanelScrollTargetRef.current = selectedPreviewTarget;
-        syncPreviewScrollFromLeftPanel();
-      };
-      selectionScrollTimers.push(
-        window.setTimeout(retrySelectionScroll, 250),
-        window.setTimeout(retrySelectionScroll, 750),
-        window.setTimeout(retrySelectionScroll, 1400)
-      );
-    }
-
     // Retries syncSwapPositionsControls whenever the real framework DOM
     // changes on its own (e.g. an assessment-results component finishing an
     // async render well after this effect's own initial pass) — the qualifying
     // block's own contentPages data never changes in that case, so nothing
     // else would otherwise prompt a second attempt.
     let swapObserverRafId: number | null = null;
+    let initializedSelectionRoot: Element | null = null;
+    let initializedSelectionKey: string | null = null;
+    let initializedSelectionFields: Element[] = [];
+    const syncRenderedSelectionEditors = () => {
+      if (previewFrameRef.current?.contentDocument !== doc) return;
+      const selection = liveSelectionRef.current;
+      if (!selection.hasCanvasSelection || selection.menuSelected) {
+        initializedSelectionRoot = null;
+        initializedSelectionKey = null;
+        initializedSelectionFields = [];
+        return;
+      }
+      const level = selection.selectedComponentId ? "component"
+        : selection.selectedBlockId ? "group"
+        : selection.selectedArticleId ? "section" : "topic";
+      const id = selection.selectedComponentId ?? selection.selectedBlockId ?? selection.selectedArticleId ?? selection.selectedPageId;
+      if (!id) return;
+      const selectionKey = `${level}:${id}`;
+      const ownerAttribute = level === "topic" ? "page" : level === "section" ? "article" : level === "group" ? "block" : "component";
+      const fieldSelector = `[data-preview-edit-enabled="true"][data-preview-node-level="${level}"][data-preview-${ownerAttribute}-id="${id}"]`;
+      const rootSelector = selection.selectedComponentId
+        ? `.component[data-adapt-id="${selection.selectedComponentId}"]`
+        : selection.selectedBlockId
+          ? `.block[data-adapt-id="${selection.selectedBlockId}"]`
+          : selection.selectedArticleId
+            ? `.article[data-adapt-id="${selection.selectedArticleId}"]`
+            : `.page[data-adapt-id="${selection.selectedPageId}"]`;
+      const root = doc.querySelector(rootSelector);
+      if (!root) {
+        initializedSelectionRoot = null;
+        initializedSelectionFields = [];
+        return;
+      }
+        if (selectionKey === initializedSelectionKey && root === initializedSelectionRoot &&
+          root.querySelector(".adapt-authoring-preview-active") && initializedSelectionFields.length &&
+          initializedSelectionFields.every((field) => root.contains(field) &&
+            field.matches(fieldSelector) && field.getAttribute("contenteditable") === "true")) return;
+      syncPreviewInlineEditorsRef.current();
+      applyPreviewSelectionStylesRef.current();
+      initializedSelectionRoot = root;
+      initializedSelectionKey = selectionKey;
+      initializedSelectionFields = Array.from(root.querySelectorAll(fieldSelector));
+      pendingLeftPanelScrollTargetRef.current = { level, id };
+      syncPreviewScrollFromLeftPanelRef.current();
+    };
+    const selectionReadinessObserver = new MutationObserver(() => {
+      if (selectionReadinessRafId !== null) return;
+      selectionReadinessRafId = window.requestAnimationFrame(() => {
+        selectionReadinessRafId = null;
+        syncRenderedSelectionEditors();
+      });
+    });
+    let selectionReadinessRafId: number | null = null;
+    selectionReadinessObserver.observe(doc.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["data-preview-edit-enabled", "contenteditable", "data-adapt-id", "class",
+        "data-preview-node-level", "data-preview-page-id", "data-preview-article-id",
+        "data-preview-block-id", "data-preview-component-id"],
+    });
     const swapPositionsObserver = new MutationObserver(() => {
       if (swapObserverRafId !== null) return;
       swapObserverRafId = window.requestAnimationFrame(() => {
@@ -9494,6 +9512,7 @@ export default function CourseEditor({
         primePreviewMediaFrames(doc);
       });
     });
+    syncRenderedSelectionEditors();
     swapPositionsObserver.observe(doc.body, { childList: true, subtree: true });
 
     // Re-measures the Topic/Section header alignment insets (see the
@@ -9555,7 +9574,10 @@ export default function CourseEditor({
       if (alignmentResizeRafId !== null) {
         window.cancelAnimationFrame(alignmentResizeRafId);
       }
-      selectionScrollTimers.forEach((timerId) => window.clearTimeout(timerId));
+      if (selectionReadinessRafId !== null) {
+        window.cancelAnimationFrame(selectionReadinessRafId);
+      }
+      selectionReadinessObserver.disconnect();
       swapPositionsObserver.disconnect();
       iframe.contentWindow?.removeEventListener("resize", onPreviewResize);
       doc.removeEventListener("fullscreenchange", onFullscreenChange);
@@ -9664,9 +9686,9 @@ export default function CourseEditor({
 
   useEffect(() => () => {
     cleanupPreviewListenersRef.current?.();
-    if (inlineEditorSyncRetryFrameRef.current !== null) {
-      window.cancelAnimationFrame(inlineEditorSyncRetryFrameRef.current);
-      inlineEditorSyncRetryFrameRef.current = null;
+    if (componentMutationSyncFrameRef.current !== null) {
+      window.cancelAnimationFrame(componentMutationSyncFrameRef.current);
+      componentMutationSyncFrameRef.current = null;
     }
     componentMutationObserverRef.current?.disconnect();
     componentMutationObserverRef.current = null;

@@ -320,7 +320,7 @@ function AddResourceDialog({
             checked={res.forceDownload}
             onChange={(v) => set("forceDownload", v)}
             label="Force download"
-            help={<LrHelp>Forces the resource to be downloaded rather than opened in the browser. Only supported in browsers that support the 'download' attribute and for resources that are part of the course content/hosted on the same URL.</LrHelp>}
+            hint="Forces the resource to be downloaded rather than opened in the browser. Only supported in browsers that support the 'download' attribute and for resources that are part of the course content/hosted on the same URL."
           />
 
           {/* Title */}
@@ -339,7 +339,7 @@ function AddResourceDialog({
           </LrField>
 
           {/* File Name */}
-          <LrField label="File Name" help={<LrHelp>Used to set the name of the downloaded file to something different to the source filename. Only supported in browsers that support the 'download' attribute and for resources that are part of the course content/hosted on the same URL. Forces the file to be downloaded regardless of what 'Force download' is set to.</LrHelp>}>
+          <LrField label="File Name" hint="Used to set the name of the downloaded file to something different to the source filename. Only supported in browsers that support the 'download' attribute and for resources that are part of the course content/hosted on the same URL. Forces the file to be downloaded regardless of what 'Force download' is set to.">
             <input
               type="text"
               value={res.fileName}
@@ -1158,7 +1158,6 @@ export function LearnerExperiencePanel({
               checked={lrState.enabled}
               onChange={(v) => setLr("enabled", v)}
               label={getSchemaLabel(getSchemaNode(resourcesFieldsSchema, "_isEnabled"), "Enable Learning Resources")}
-              hint={getSchemaHint(getSchemaNode(resourcesFieldsSchema, "_isEnabled"))}
               align="right"
             />
           </div>
@@ -1346,7 +1345,6 @@ export function LearnerExperiencePanel({
               checked={lnState.enabled}
               onChange={(v) => setLn("enabled", v)}
               label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "_isEnabled"), "Enable Notes")}
-              hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "_isEnabled"))}
               align="right"
             />
           </div>
@@ -1628,7 +1626,6 @@ export function LearnerExperiencePanel({
               checked={atState.enabled}
               onChange={(v) => setAt("enabled", v)}
               label={getSchemaLabel(getSchemaNode(aiTutorFieldsSchema, "_isEnabled"), "Enable AI Tutor")}
-              hint={getSchemaHint(getSchemaNode(aiTutorFieldsSchema, "_isEnabled"))}
               align="right"
             />
           </div>
@@ -1732,7 +1729,6 @@ export function LearnerExperiencePanel({
               checked={cfState.enabled}
               onChange={(v) => setCf("enabled", v)}
               label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_isEnabled"), "Enable Laerdal Course Feedback")}
-              hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_isEnabled"))}
               align="right"
             />
           </div>
