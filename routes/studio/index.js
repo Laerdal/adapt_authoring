@@ -485,9 +485,21 @@ server.get('/studio/:tenant/:course/*', (req, res, next) => {
   function sendStatic(file) {
     res.sendFile(file, { root: buildRoot() }, error => {
       if (!error) return;
+      // res.sendFile's error callback can fire AFTER the response has already
+      // been sent (or partially flushed) — e.g. the client disconnected
+      // mid-transfer. Attempting any further response (redirect/status/end)
+      // at that point throws ERR_HTTP_HEADERS_SENT and crashes the request
+      // (confirmed via a real server log). Nothing more can be sent once
+      // that's happened, so just log and stop.
+      if (res.headersSent) {
+        logger.log('warn', `Studio: sendFile error after headers were already sent for ${file}: ${error.message}`);
+        return;
+      }
       const filename = requestedCourseAssetFilename(file);
       if (!filename) return res.status(error.status || 404).end();
       findCourseAssetId(courseId, filename, (lookupErr, assetId) => {
+        // Re-check — headers can become sent during this async DB round-trip too.
+        if (res.headersSent) return;
         if (assetId) {
           return res.redirect(`/api/asset/serve/${assetId}`);
         }
@@ -499,7 +511,7 @@ server.get('/studio/:tenant/:course/*', (req, res, next) => {
       // is referenced by the page while its file is still missing here. Fall
       // back to the asset record the course already links, keeping the preview
       // in step with the editor without forcing a rebuild.
-        serveLiveCourseAsset(file, () => res.status(error.status || 404).end());
+        serveLiveCourseAsset(file, () => { if (!res.headersSent) res.status(error.status || 404).end(); });
       });
     });
   }
@@ -523,6 +535,7 @@ server.get('/studio/:tenant/:course/*', (req, res, next) => {
         if (findError || !records || !records.length) return onUnavailable();
         const assetId = records[0]._assetId;
         if (!assetId) return onUnavailable();
+        if (res.headersSent) return;
         res.redirect(302, '/api/asset/serve/' + assetId);
       });
     });

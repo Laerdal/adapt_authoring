@@ -20,13 +20,45 @@ const STATUSES = ['draft', 'in_review', 'approved'];
 const AUDIT_EVENTS = ['status_change', 'generated', 'imported', 'shared'];
 const AI_ACTIONS = ['improve', 'rewrite', 'summarize', 'suggest', 'shorten', 'lengthen', 'spelling', 'custom'];
 
-// Resolve the current user + tenant. Prefer passport's req.user, fall back to
-// the usermanager (same convention as the templating plugin).
+// Resolve the current user + tenant.
+//
+// Root-caused a real "legitimate course owner gets 404" regression: `req.user`
+// (passport's deserialized session user — see lib/usermanager.js's
+// deserializeUser, which re-fetches the raw 'user' DB record) has a flat
+// `_tenantId` field (lib/dml/schema/system/tenantObject.schema), never a
+// nested `.tenant` object — `.tenant` only exists on the SERIALIZED session
+// payload (usermanager.js's serializeUser) and on usermanager.getCurrentUser()
+// (which reads that payload back via process.domain.session.passport.user,
+// not from req.user at all). Checking `req.user.tenant._id` here was always
+// undefined, silently, for this feature's whole life; it only surfaced once
+// getCourseAccessLevel added a STRICT tenant-match comparison against it,
+// which then always failed and denied every course-level fallback check.
+// Falls back to req.user._tenantId (the field that's actually there), then to
+// the usermanager session shape as a last resort — this runs synchronously at
+// the top of every handler, before any `await`, so process.domain is still
+// intact here (unlike the deep-async-chain cases documented elsewhere in this
+// codebase, e.g. assetResolver.js's ADAPT-3785 fix).
 function userCtx(req) {
-  const user = req && req.user && req.user._id ? req.user : app.usermanager.getCurrentUser();
+  const reqUser = req && req.user && req.user._id ? req.user : null;
+  const tenantFromReqUser = reqUser && ((reqUser.tenant && reqUser.tenant._id) || reqUser._tenantId);
+  // Only reach for usermanager.getCurrentUser() when req.user can't resolve a
+  // tenant on its own — it depends on process.domain.session, which doesn't
+  // exist at all in unit tests that call these handlers directly (no live
+  // Express/session context), and getCurrentUser() itself only guards against
+  // a missing SESSION, not against `app.usermanager` itself being unavailable.
+  let sessionUser = null;
+  if (!reqUser || !tenantFromReqUser) {
+    try {
+      sessionUser = app.usermanager.getCurrentUser() || null;
+    } catch (e) {
+      sessionUser = null;
+    }
+  }
+  const user = reqUser || sessionUser || null;
+  const tenantId = tenantFromReqUser || (sessionUser && sessionUser.tenant && sessionUser.tenant._id) || undefined;
   return {
     userId: user && user._id,
-    tenantId: user && user.tenant && user.tenant._id,
+    tenantId,
   };
 }
 
@@ -86,11 +118,21 @@ async function isSuperCourseUser(userId, tenantId) {
   return results.every(Boolean);
 }
 
-async function fetchCourseRaw(courseId) {
+async function fetchCourseRaw(courseId, tenantId) {
   if (!courseId) return null;
   try {
     const rawDb = await new Promise((resolve, reject) => {
-      rawDatabase.getDatabase((err, instance) => (err ? reject(err) : resolve(instance)));
+      // Explicit tenantId — without it, database.getDatabase() falls back to
+      // usermanager.getCurrentUser().tenant._id via process.domain, which is
+      // fragile this deep in an async/await chain (same class of bug already
+      // worked around elsewhere in this codebase, e.g. assetResolver.js's ctx
+      // param). Confirmed as a real regression: this function is now on the
+      // hot path for every storyboard view/create by a non-creator/non-
+      // reviewer, and losing the domain context meant the course lookup
+      // silently missed (wrong/no tenant DB), making getCourseAccessLevel
+      // return null and the legitimate course owner get a false "Storyboard
+      // not found" for courses that otherwise worked fine moments earlier.
+      rawDatabase.getDatabase((err, instance) => (err ? reject(err) : resolve(instance)), tenantId);
     });
     return await new Promise((resolve, reject) => {
       rawDb.retrieve('course', { _id: courseId }, { jsonOnly: true }, (err, results) => {
@@ -111,7 +153,7 @@ async function fetchCourseRaw(courseId) {
 // fallback in getStoryboardAccessLevel so a course owner/collaborator who
 // didn't personally create the storyboard still gets edit access.
 async function getCourseAccessLevel(courseId, userId, tenantId) {
-  const course = await fetchCourseRaw(courseId);
+  const course = await fetchCourseRaw(courseId, tenantId);
   if (!course) return null;
   if (String(course._tenantId) !== String(tenantId)) return null;
   if (await isSuperCourseUser(userId, tenantId)) return 'edit';
