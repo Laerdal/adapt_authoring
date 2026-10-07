@@ -1160,7 +1160,10 @@ export function LearnerExperiencePanel({
           }
         >
           {/* Enable toggle */}
-          <DemoVideoPlaceholder label="See how Learning Resources works" />
+          <DemoVideoPlaceholder
+            label="See how Learning Resources works"
+            src="https://cdn-esim.contentservice.net/DEV/Resource_Help_9dc10de290-muxs5jn5.mp4"
+          />
           {lrLoading && (
             <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-sm text-[#6b7280]">
               Loading Learning Resources settings...
@@ -1347,7 +1350,10 @@ export function LearnerExperiencePanel({
             </svg>
           }
         >
-          <DemoVideoPlaceholder label="See how Learner Notes works" />
+          <DemoVideoPlaceholder
+            label="See how Learner Notes works"
+            src="https://cdn-esim.contentservice.net/DEV/course_notes_e4decc897c-muxs5x00.mp4"
+          />
           {lnLoading && (
             <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-sm text-[#6b7280]">
               Loading Learner Notes settings...
@@ -1545,7 +1551,10 @@ export function LearnerExperiencePanel({
             </svg>
           }
         >
-          <DemoVideoPlaceholder label="See how Learner Search works" />
+          <DemoVideoPlaceholder
+            label="See how Learner Search works"
+            src="https://cdn-esim.contentservice.net/DEV/Search_video_11c7429678-muxs6p06.mp4"
+          />
           {lsLoading && (
             <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-sm text-[#6b7280]">
               Loading Learner Search settings...
