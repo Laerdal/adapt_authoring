@@ -5585,6 +5585,11 @@ export interface StoryboardRecord {
   createdBy?: string;
   createdAt?: string;
   updatedAt?: string;
+  /** The CURRENT user's access to this record — 'edit' (owner/admin/course-shared,
+   *  full access) or 'review' (invited via Share for Review only: view + comment,
+   *  no edit/import/share/generate/delete). Absent on records the server didn't
+   *  stamp (treat as 'edit' for backwards compatibility with older responses). */
+  _viewerAccessLevel?: "edit" | "review";
 }
 
 export interface StoryboardComment {

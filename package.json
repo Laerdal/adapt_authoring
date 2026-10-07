@@ -107,6 +107,7 @@
     "semver": "^6.3.0",
     "serve-favicon": "^2.5.0",
     "sharp": "^0.34.5",
+    "svg-to-pdfkit": "^0.1.8",
     "traverse": "^0.6.7",
     "underscore": "^1.13.8",
     "unzipper": "^0.10.11",

@@ -715,6 +715,7 @@ export default function StoryboardWorkspace({
         onShareForReview={() => setShareOpen(true)}
         dirty={sb.dirty}
         saving={sb.saving || saveRunning}
+        readOnly={sb.viewerAccessLevel === 'review'}
       />
 
       {sb.error && (
@@ -753,6 +754,7 @@ export default function StoryboardWorkspace({
             onInsert={insert}
             onInsertHeading={insertHeading}
             onEnrichAI={openEnrichAi}
+            readOnly={sb.viewerAccessLevel === 'review'}
           />
           <div className="flex-1 overflow-y-auto">
             {/* Authoring canvas ~60% of the viewport (Lovable proportions),
@@ -794,6 +796,15 @@ export default function StoryboardWorkspace({
                   key={sb.storyboardId ?? 'sb'}
                   ref={editorRef}
                   initialDocument={initialContent.current}
+                  // Best-effort in-canvas lockdown for a review-only invitee —
+                  // blocks direct typing into BlockNote-native text (headings/
+                  // paragraphs/lists). Card-level fields (componentBlock.tsx)
+                  // are separate React inputs outside BlockNote's editable
+                  // surface, so this alone doesn't guarantee they're inert too;
+                  // the backend (requestHandlers.js loadStoryboardAccess) is
+                  // the actual enforcement boundary regardless of what the
+                  // canvas allows a reviewer to type.
+                  editable={sb.viewerAccessLevel !== 'review'}
                   onChange={handleChange}
                   onActiveBlock={(block) => {
                     setActiveBlock(block);
