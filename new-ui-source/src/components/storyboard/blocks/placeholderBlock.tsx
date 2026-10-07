@@ -44,9 +44,6 @@ export const placeholderBlock = createReactBlockSpec(
       const category = block.props.category as PlaceholderCategory;
       const style = CATEGORY_STYLE[category] ?? CATEGORY_STYLE.group;
       const label = block.props.label as string;
-      // See componentBlock.tsx's matching comment — editable={false} on the
-      // surrounding BlockNoteView doesn't reach this plain React <input>.
-      const readOnly = !editor.isEditable;
 
       const setTitle = (title: string) => editor.updateBlock(block, { props: { title } });
 
@@ -62,8 +59,7 @@ export const placeholderBlock = createReactBlockSpec(
             value={block.props.title as string}
             onChange={(e) => setTitle(e.target.value)}
             placeholder={`${label} title…`}
-            disabled={readOnly}
-            className="mt-2 w-full border-0 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
+            className="mt-2 w-full border-0 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
           />
           <p className="mt-1 text-xs text-muted-foreground">
             Placeholder → <code>{block.props.adaptComponent as string}</code>. Configure in the Page Editor.

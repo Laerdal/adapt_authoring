@@ -22,10 +22,6 @@ export interface UseStoryboardResult {
   version: number;
   /** User ids the storyboard is currently shared with for review. */
   shareWithUsers: string[];
-  /** The current user's access to this storyboard — 'edit' (full) or 'review'
-   *  (view + comment only, invited via Share for Review). Defaults to 'edit'
-   *  before the record loads so the UI doesn't flash into read-only mode. */
-  viewerAccessLevel: "edit" | "review";
   loading: boolean;
   saving: boolean;
   dirty: boolean;
@@ -153,7 +149,6 @@ export function useStoryboard(courseId?: string): UseStoryboardResult {
     status,
     version: record?.version ?? 1,
     shareWithUsers: record?._shareWithUsers ?? [],
-    viewerAccessLevel: record?._viewerAccessLevel ?? "edit",
     loading,
     saving,
     dirty,
