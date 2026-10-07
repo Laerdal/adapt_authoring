@@ -261,7 +261,10 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
             {!editing && (isModule ? (
               <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[#3d8f7c] bg-[#e6f4f1] rounded px-1.5 py-0.5">{labels.module}</span>
             ) : (
-              <span className="shrink-0 text-[11px] uppercase tracking-wide text-[#c5cad1]">{labels[p.level]}</span>
+              <span className="shrink-0 text-[11px] uppercase tracking-wide text-[#c5cad1]">
+                {labels[p.level]}
+                {p.level === 'topic' ? ' (Page)' : p.level === 'section' ? ' (Article)' : p.level === 'contentGroup' ? ' (Block)' : ''}
+              </span>
             ))}
           </div>
 
