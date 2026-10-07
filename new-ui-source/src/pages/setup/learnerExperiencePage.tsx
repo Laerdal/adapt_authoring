@@ -226,14 +226,26 @@ const LR_INPUT = "w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg
 const LR_TEXTAREA = `${LR_INPUT} resize-none`;
 
 /* Demo video placeholder shown at top of each accordion section */
-function DemoVideoPlaceholder({ label }: { label?: string }) {
+function DemoVideoPlaceholder({ label, src }: { label?: string; src?: string }) {
   return (
     <div className="rounded-lg overflow-hidden border border-[#e5e7eb]">
-      <div className="relative bg-[#1b3a4b] flex flex-col items-center justify-center gap-2.5" style={{ aspectRatio: '16/9' }}>
-        <div className="w-12 h-12 rounded-full bg-white/15 border-2 border-white/35 flex items-center justify-center backdrop-blur-sm">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="rgba(255,255,255,0.8)"><polygon points="5,3 19,12 5,21"/></svg>
-        </div>
-        <span className="text-xs text-white/50 font-medium">{label ?? 'Demo video coming soon'}</span>
+      <div className="relative bg-[#1b3a4b] flex flex-col items-center justify-center gap-2.5 overflow-hidden" style={{ aspectRatio: '16/9' }}>
+        {src ? (
+          <video
+            src={src}
+            muted
+            playsInline
+            controls
+            className="block w-full h-full object-cover"
+          />
+        ) : (
+          <>
+            <div className="w-12 h-12 rounded-full bg-white/15 border-2 border-white/35 flex items-center justify-center backdrop-blur-sm">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="rgba(255,255,255,0.8)"><polygon points="5,3 19,12 5,21"/></svg>
+            </div>
+            <span className="text-xs text-white/50 font-medium">{label ?? 'Demo video coming soon'}</span>
+          </>
+        )}
       </div>
     </div>
   );
@@ -1724,7 +1736,10 @@ export function LearnerExperiencePanel({
           }
         >
           {/* Enable toggle */}
-          <DemoVideoPlaceholder label="See how Laerdal Course Feedback works" />
+          <DemoVideoPlaceholder
+            label="See how Laerdal Course Feedback works"
+            src="https://cdn-esim.contentservice.net/DEV/course_Feedback_4_e8eaa74e92-muxs7da9.mp4"
+          />
           <div className={`pt-3${cfState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
             <LrToggle
               checked={cfState.enabled}
