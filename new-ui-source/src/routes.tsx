@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react'
-import { createBrowserRouter, Navigate, RouterProvider, useParams, useRouteError, useSearchParams } from 'react-router-dom'
+import { createBrowserRouter, Navigate, RouterProvider, useRouteError } from 'react-router-dom'
 import RootLayout from './components/layout/RootLayout'
 import DashboardLayout from './components/layout/DashboardLayout'
 import HomePage from './pages/HomePage'
@@ -14,7 +13,6 @@ import AssetManagementPage from './pages/AssetManagementPage'
 import TemplateManagementPage from './pages/TemplateManagementPage'
 import PluginManagementPage from './pages/PluginManagementPage'
 import { canAccessCourseSettings, canAccessDashboardSection, type DashboardSection, useAuth } from '@/context/AuthContext'
-import { getStoryboardByCourse } from '@/api/adaptAuthoring'
 import ErrorDialog from './components/common/ErrorDialog'
 
 function RootRouteError() {
@@ -66,25 +64,12 @@ function DashboardSectionGate({
 
 function CourseSetupRouteGate({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
-  const { id } = useParams<{ id: string }>();
-  const [searchParams] = useSearchParams();
 
   if (loading || !user) {
     return <div className="h-screen w-full bg-[#f8fafc]" />;
   }
 
   if (!canAccessCourseSettings(user)) {
-    // The in-app "Open Storyboard" action (e.g. CoursePreviewPage) links here
-    // with ?panel=storyboarding rather than the standalone /storyboard route —
-    // a reviewer invited via Share for Review (not a Course Creator) hitting
-    // THIS link would otherwise get hard-blocked to /dashboard before
-    // StoryboardRouteGate's review-access check ever runs. Redirect to the
-    // standalone route instead, which performs that check; every other Setup
-    // panel (CDN, Translation, etc.) still hard-blocks as before — those
-    // genuinely are author-only.
-    if (id && searchParams.get('panel') === 'storyboarding') {
-      return <Navigate to={`/course/${id}/storyboard`} replace />;
-    }
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -99,60 +84,6 @@ function CourseWorkspaceRouteGate({ children }: { children: React.ReactNode }) {
   }
 
   if (!canAccessCourseSettings(user)) {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  return <>{children}</>;
-}
-
-// The Storyboard route needs a more permissive gate than the rest of the
-// course workspace: "Share for Review" (ADAPT-3760 follow-up) invites a
-// specific user to review+comment on a storyboard WITHOUT making them a
-// Course Creator — the whole point is inviting someone outside the course's
-// normal author list. `CourseWorkspaceRouteGate`'s role-only check (Super
-// Admin / Course Creator) redirected every such reviewer straight back to
-// /dashboard before the page ever mounted, regardless of being listed in the
-// storyboard's own _shareWithUsers — confirmed as the actual cause of
-// "shared user can't see the shared course" (the backend's per-record check,
-// added earlier, never even got a chance to run). Falls back to an API check
-// (getStoryboardByCourse — now 404s for no access per requestHandlers.js's
-// getStoryboardAccessLevel) only when the fast role-based path fails, so
-// normal authors/admins see no extra request or delay.
-function StoryboardRouteGate({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
-  const { id } = useParams<{ id: string }>();
-  const [reviewAccess, setReviewAccess] = useState<'checking' | 'granted' | 'denied'>('checking');
-  const roleAllowed = !loading && !!user && canAccessCourseSettings(user);
-
-  useEffect(() => {
-    if (roleAllowed || !user || !id) return;
-    let cancelled = false;
-    setReviewAccess('checking');
-    getStoryboardByCourse(id)
-      .then((record) => {
-        if (!cancelled) setReviewAccess(record ? 'granted' : 'denied');
-      })
-      .catch(() => {
-        if (!cancelled) setReviewAccess('denied');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [roleAllowed, user, id]);
-
-  if (loading || !user) {
-    return <div className="h-screen w-full bg-[#f8fafc]" />;
-  }
-
-  if (roleAllowed) {
-    return <>{children}</>;
-  }
-
-  if (reviewAccess === 'checking') {
-    return <div className="h-screen w-full bg-[#f8fafc]" />;
-  }
-
-  if (reviewAccess === 'denied') {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -182,7 +113,7 @@ export const router = createBrowserRouter([
       { path: '/course/new/setup', element: <CourseSetupRouteGate><SetupPage /></CourseSetupRouteGate> },
       { path: '/course/:id/setup', element: <CourseSetupRouteGate><SetupPage /></CourseSetupRouteGate> },
       { path: '/course/:id', element: <CourseWorkspaceRouteGate><PageEditorPage /></CourseWorkspaceRouteGate> },
-      { path: '/course/:id/storyboard', element: <StoryboardRouteGate><StoryboardPage /></StoryboardRouteGate> },
+      { path: '/course/:id/storyboard', element: <CourseWorkspaceRouteGate><StoryboardPage /></CourseWorkspaceRouteGate> },
       { path: '/course/:id/preview', element: <CoursePreviewPage /> },
       { path: '/course-structure-demo', element: <CourseStructureDemoPage /> },
     ],

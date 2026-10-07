@@ -10,8 +10,6 @@ const formidable = require('formidable');
 const bytes = require('bytes');
 const app = require('../../../../')();
 const configuration = require('../../../../lib/configuration');
-const rawDatabase = require('../../../../lib/database');
-const permissions = require('../../../../lib/permissions');
 const db = require('../utils/database');
 const ai = require('../utils/aiClient');
 const convert = require('../utils/documentConvert');
@@ -20,180 +18,14 @@ const STATUSES = ['draft', 'in_review', 'approved'];
 const AUDIT_EVENTS = ['status_change', 'generated', 'imported', 'shared'];
 const AI_ACTIONS = ['improve', 'rewrite', 'summarize', 'suggest', 'shorten', 'lengthen', 'spelling', 'custom'];
 
-// Resolve the current user + tenant.
-//
-// Root-caused a real "legitimate course owner gets 404" regression: `req.user`
-// (passport's deserialized session user — see lib/usermanager.js's
-// deserializeUser, which re-fetches the raw 'user' DB record) has a flat
-// `_tenantId` field (lib/dml/schema/system/tenantObject.schema), never a
-// nested `.tenant` object — `.tenant` only exists on the SERIALIZED session
-// payload (usermanager.js's serializeUser) and on usermanager.getCurrentUser()
-// (which reads that payload back via process.domain.session.passport.user,
-// not from req.user at all). Checking `req.user.tenant._id` here was always
-// undefined, silently, for this feature's whole life; it only surfaced once
-// getCourseAccessLevel added a STRICT tenant-match comparison against it,
-// which then always failed and denied every course-level fallback check.
-// Falls back to req.user._tenantId (the field that's actually there), then to
-// the usermanager session shape as a last resort — this runs synchronously at
-// the top of every handler, before any `await`, so process.domain is still
-// intact here (unlike the deep-async-chain cases documented elsewhere in this
-// codebase, e.g. assetResolver.js's ADAPT-3785 fix).
+// Resolve the current user + tenant. Prefer passport's req.user, fall back to
+// the usermanager (same convention as the templating plugin).
 function userCtx(req) {
-  const reqUser = req && req.user && req.user._id ? req.user : null;
-  const tenantFromReqUser = reqUser && ((reqUser.tenant && reqUser.tenant._id) || reqUser._tenantId);
-  // Only reach for usermanager.getCurrentUser() when req.user can't resolve a
-  // tenant on its own — it depends on process.domain.session, which doesn't
-  // exist at all in unit tests that call these handlers directly (no live
-  // Express/session context), and getCurrentUser() itself only guards against
-  // a missing SESSION, not against `app.usermanager` itself being unavailable.
-  let sessionUser = null;
-  if (!reqUser || !tenantFromReqUser) {
-    try {
-      sessionUser = app.usermanager.getCurrentUser() || null;
-    } catch (e) {
-      sessionUser = null;
-    }
-  }
-  const user = reqUser || sessionUser || null;
-  const tenantId = tenantFromReqUser || (sessionUser && sessionUser.tenant && sessionUser.tenant._id) || undefined;
+  const user = req && req.user && req.user._id ? req.user : app.usermanager.getCurrentUser();
   return {
     userId: user && user._id,
-    tenantId,
+    tenantId: user && user.tenant && user.tenant._id,
   };
-}
-
-// ── Access control (ADAPT-3760 follow-up: "Share for Review" must actually
-// restrict who can review) ──────────────────────────────────────────────────
-//
-// Every route here previously ran with NO per-record check at all — `rest.js`
-// is a bare Express wrapper with no built-in permission layer (unlike the
-// `ContentPlugin`-based content types, which get hasPermission auto-wired by
-// lib/contentmanager.js), so any authenticated user who knew/guessed a
-// storyboard or course id could read/edit/delete/export it. `_shareWithUsers`
-// was write-only: the "Share for Review" dialog saved it, but nothing ever
-// read it back to gate access, so sharing with specific reviewers didn't
-// actually keep anyone else out.
-//
-// Deliberately self-contained — does NOT call lib/helpers.js's
-// hasCoursePermission/evalCoursePermission. That function compares
-// `creatorId === userId` and `course._tenantId.toString() !== tenantId`
-// without coercing BOTH sides to the same type; `userId`/`tenantId` here come
-// straight from `req.user._id`/`req.user.tenant._id`, which on this app's
-// session user is a Mongoose ObjectId, not a string. A string is never `===`
-// an ObjectId (no coercion on strict equality), so that check silently denies
-// the course's own non-admin owner — confirmed by a real "Storyboard not
-// found" regression for the storyboard's own creator once this file started
-// relying on it. Comparing everything below via `String(...)` on both sides
-// avoids that failure mode entirely rather than risking a fix to a
-// shared/core permission function this feature doesn't own.
-//
-// Two tiers:
-//  'edit'   — full access (view/comment AND update/delete/status/share/export).
-//             Granted to the storyboard's own creator, a course owner/
-//             collaborator, or a platform super admin (see
-//             getCourseAccessLevel) — i.e. everyone who could already fully
-//             use the course before Share-for-Review's access gating existed.
-//  'review' — view + comment only. Granted to anyone listed in
-//             storyboard._shareWithUsers — the actual point of "Share for
-//             Review": invite someone to look at and comment on it without
-//             handing them edit/export/delete/re-share rights.
-// Neither tier existing (`null`) means no access.
-
-// Self-contained, safely-coerced equivalent of lib/helpers.js's
-// hasSuperCoursePermission — reimplemented here (rather than exported from
-// lib/helpers.js) purely to avoid changing a shared/core file for this
-// feature; the logic (and the permissions primitives it calls) is identical.
-async function isSuperCourseUser(userId, tenantId) {
-  if (!userId || !tenantId) return false;
-  const actions = ['create', 'read', 'update', 'delete'];
-  const resource = permissions.buildResourceString(tenantId, '/api/content/course');
-  const results = await Promise.all(
-    actions.map(
-      (action) =>
-        new Promise((resolve) => {
-          permissions.hasPermission(userId, action, resource, (err, allowed) => resolve(!err && !!allowed));
-        }),
-    ),
-  );
-  return results.every(Boolean);
-}
-
-async function fetchCourseRaw(courseId, tenantId) {
-  if (!courseId) return null;
-  try {
-    const rawDb = await new Promise((resolve, reject) => {
-      // Explicit tenantId — without it, database.getDatabase() falls back to
-      // usermanager.getCurrentUser().tenant._id via process.domain, which is
-      // fragile this deep in an async/await chain (same class of bug already
-      // worked around elsewhere in this codebase, e.g. assetResolver.js's ctx
-      // param). Confirmed as a real regression: this function is now on the
-      // hot path for every storyboard view/create by a non-creator/non-
-      // reviewer, and losing the domain context meant the course lookup
-      // silently missed (wrong/no tenant DB), making getCourseAccessLevel
-      // return null and the legitimate course owner get a false "Storyboard
-      // not found" for courses that otherwise worked fine moments earlier.
-      rawDatabase.getDatabase((err, instance) => (err ? reject(err) : resolve(instance)), tenantId);
-    });
-    return await new Promise((resolve, reject) => {
-      rawDb.retrieve('course', { _id: courseId }, { jsonOnly: true }, (err, results) => {
-        if (err) return reject(err);
-        resolve(Array.isArray(results) && results.length ? results[0] : null);
-      });
-    });
-  } catch (error) {
-    console.error('[storyboard] failed to look up course for access check:', error && error.message);
-    return null;
-  }
-}
-
-// Self-contained, safely-coerced equivalent of lib/helpers.js's
-// hasCoursePermission/evalCoursePermission (see the file-level comment above
-// for why that shared function isn't called directly). Used both to gate
-// storyboard creation against the target course, and as the course-level
-// fallback in getStoryboardAccessLevel so a course owner/collaborator who
-// didn't personally create the storyboard still gets edit access.
-async function getCourseAccessLevel(courseId, userId, tenantId) {
-  const course = await fetchCourseRaw(courseId, tenantId);
-  if (!course) return null;
-  if (String(course._tenantId) !== String(tenantId)) return null;
-  if (await isSuperCourseUser(userId, tenantId)) return 'edit';
-  const creatorId = course.createdBy && course.createdBy._id ? course.createdBy._id : course.createdBy;
-  if (creatorId && String(creatorId) === String(userId)) return 'edit';
-  if (course._isShared) return 'edit';
-  const shared = Array.isArray(course._shareWithUsers) ? course._shareWithUsers.map(String) : [];
-  if (shared.includes(String(userId))) return 'edit';
-  return null;
-}
-
-async function getStoryboardAccessLevel(record, userId, tenantId) {
-  if (!record) return null;
-  const creatorId = record.createdBy && record.createdBy._id ? record.createdBy._id : record.createdBy;
-  if (creatorId && String(creatorId) === String(userId)) return 'edit';
-  // Resolve course-level access BEFORE falling back to the reviewer list. A
-  // user can be both a course owner/collaborator/admin AND listed in this
-  // storyboard's own reviewer array (e.g. added to Share for Review before —
-  // or regardless of — already having course access); checking the reviewer
-  // list first would downgrade their real edit rights to review-only,
-  // making the UI read-only and every mutation endpoint 404 for them.
-  const courseLevel = await getCourseAccessLevel(record._courseId, userId, tenantId);
-  if (courseLevel === 'edit') return 'edit';
-  const shared = Array.isArray(record._shareWithUsers) ? record._shareWithUsers.map(String) : [];
-  return shared.includes(String(userId)) ? 'review' : null;
-}
-
-// Fetches a storyboard by id and resolves the current user's access level in
-// one go. `record` comes back null when either the id doesn't exist OR the
-// user has no access to it — deliberately indistinguishable, so a 404 never
-// leaks whether a given id exists to someone who isn't allowed to see it.
-async function loadStoryboardAccess(id, userId, tenantId) {
-  const results = await db.retrieve('storyboard', { _id: id });
-  const record = Array.isArray(results) && results.length ? toPlain(results[0]) : null;
-  const level = await getStoryboardAccessLevel(record, userId, tenantId);
-  return { record: level ? record : null, level };
-}
-
-function denyStoryboardAccess(res) {
-  return res.status(404).json({ error: 'Storyboard not found' });
 }
 
 function safeParse(value, fallback) {
@@ -209,20 +41,13 @@ function toPlain(doc) {
   return doc && typeof doc.toObject === 'function' ? doc.toObject() : doc;
 }
 
-// `accessLevel`, when given, is stamped onto the response as
-// `_viewerAccessLevel` so the frontend can tell a view+comment-only reviewer
-// apart from full edit access and adjust its UI accordingly (read-only
-// editor, hidden Save/Import/Share/Generate) instead of rendering the full
-// authoring UI and only discovering the restriction when an edit silently
-// gets rejected.
-function serializeStoryboard(doc, accessLevel) {
+function serializeStoryboard(doc) {
   const o = toPlain(doc);
   if (!o) return o;
   return {
     ...o,
     documentJson: safeParse(o.documentJson, []),
     _generatedContentMap: safeParse(o._generatedContentMap, {}),
-    ...(accessLevel ? { _viewerAccessLevel: accessLevel } : null),
   };
 }
 
@@ -244,17 +69,6 @@ async function createStoryboard(req, res) {
     const { userId, tenantId } = userCtx(req);
     const body = req.body || {};
     if (!body._courseId) return res.status(400).json({ error: '_courseId is required' });
-    // Require real edit access to the TARGET course before allowing a
-    // storyboard to be created for it. Without this, any authenticated
-    // tenant user could create a storyboard for a courseId they merely know
-    // (not own), becoming its 'edit' owner via getStoryboardAccessLevel's
-    // creator check, and from there call shareStoryboard — a real reported
-    // gap, since the storyboard itself has no other owner/collaborator yet
-    // to contend with.
-    const courseAccess = await getCourseAccessLevel(body._courseId, userId, tenantId);
-    if (courseAccess !== 'edit') {
-      return res.status(403).json({ error: 'You do not have permission to create a storyboard for this course' });
-    }
 
     const data = {
       _courseId: body._courseId,
@@ -267,7 +81,7 @@ async function createStoryboard(req, res) {
       _generatedContentMap: JSON.stringify(body._generatedContentMap != null ? body._generatedContentMap : {}),
     };
     const created = await db.create('storyboard', data);
-    return res.status(201).json(serializeStoryboard(created, 'edit'));
+    return res.status(201).json(serializeStoryboard(created));
   } catch (error) {
     return fail(res, error, 'Failed to create storyboard');
   }
@@ -275,21 +89,9 @@ async function createStoryboard(req, res) {
 
 async function getStoryboardByCourse(req, res) {
   try {
-    const { userId, tenantId } = userCtx(req);
     const results = await db.retrieve('storyboard', { _courseId: req.params.courseId });
     const rec = Array.isArray(results) && results.length ? toPlain(results[0]) : null;
-    if (rec) {
-      const level = await getStoryboardAccessLevel(rec, userId, tenantId);
-      if (!level) return denyStoryboardAccess(res);
-      return res.status(200).json(serializeStoryboard(rec, level));
-    }
-    // No storyboard exists yet for this course — gate on course-level access
-    // the same way createStoryboard does, since a client in this state is
-    // either about to create one or (StoryboardRouteGate's fallback check)
-    // probing for review access that can't exist yet anyway.
-    const courseAccess = await getCourseAccessLevel(req.params.courseId, userId, tenantId);
-    if (courseAccess !== 'edit') return denyStoryboardAccess(res);
-    return res.status(200).json(null);
+    return res.status(200).json(rec ? serializeStoryboard(rec) : null);
   } catch (error) {
     return fail(res, error, 'Failed to retrieve storyboard by course');
   }
@@ -297,10 +99,11 @@ async function getStoryboardByCourse(req, res) {
 
 async function getStoryboard(req, res) {
   try {
-    const { userId, tenantId } = userCtx(req);
-    const { record, level } = await loadStoryboardAccess(req.params.id, userId, tenantId);
-    if (!record) return denyStoryboardAccess(res);
-    return res.status(200).json(serializeStoryboard(record, level));
+    const results = await db.retrieve('storyboard', { _id: req.params.id });
+    if (!Array.isArray(results) || !results.length) {
+      return res.status(404).json({ error: 'Storyboard not found' });
+    }
+    return res.status(200).json(serializeStoryboard(results[0]));
   } catch (error) {
     return fail(res, error, 'Failed to retrieve storyboard');
   }
@@ -308,9 +111,7 @@ async function getStoryboard(req, res) {
 
 async function updateStoryboard(req, res) {
   try {
-    const { userId, tenantId } = userCtx(req);
-    const { level } = await loadStoryboardAccess(req.params.id, userId, tenantId);
-    if (level !== 'edit') return denyStoryboardAccess(res);
+    const { userId } = userCtx(req);
     const body = req.body || {};
     const delta = { updatedBy: userId };
     if (typeof body.title === 'string') delta.title = body.title;
@@ -323,7 +124,7 @@ async function updateStoryboard(req, res) {
 
     await db.update('storyboard', { _id: req.params.id }, delta);
     const results = await db.retrieve('storyboard', { _id: req.params.id });
-    return res.status(200).json(serializeStoryboard(results[0], 'edit'));
+    return res.status(200).json(serializeStoryboard(results[0]));
   } catch (error) {
     return fail(res, error, 'Failed to update storyboard');
   }
@@ -337,9 +138,11 @@ async function setStoryboardStatus(req, res) {
     if (!STATUSES.includes(status)) {
       return res.status(400).json({ error: `status must be one of ${STATUSES.join(', ')}` });
     }
-    const { record: current, level } = await loadStoryboardAccess(req.params.id, userId, tenantId);
-    if (!current) return denyStoryboardAccess(res);
-    if (level !== 'edit') return denyStoryboardAccess(res);
+    const existing = await db.retrieve('storyboard', { _id: req.params.id });
+    if (!Array.isArray(existing) || !existing.length) {
+      return res.status(404).json({ error: 'Storyboard not found' });
+    }
+    const current = toPlain(existing[0]);
     const fromStatus = current.status;
 
     await db.update('storyboard', { _id: req.params.id }, { status, updatedBy: userId });
@@ -355,7 +158,7 @@ async function setStoryboardStatus(req, res) {
     });
 
     const updated = await db.retrieve('storyboard', { _id: req.params.id });
-    return res.status(200).json(serializeStoryboard(updated[0], 'edit'));
+    return res.status(200).json(serializeStoryboard(updated[0]));
   } catch (error) {
     return fail(res, error, 'Failed to change storyboard status');
   }
@@ -401,30 +204,17 @@ async function recomputeStatus(storyboardId, ctx) {
 // Share the storyboard with reviewers (users of this instance) and append a
 // 'shared' audit event. Replaces the reviewer list wholesale — the client
 // always sends the full desired set, same convention as course _shareWithUsers.
-//
-// Deliberately does NOT write the invited user ids anywhere on the COURSE
-// record (it used to, additively, into course._shareWithUsers, purely so an
-// invited reviewer could discover the course under the Dashboard's "Shared
-// with Me" listing). That field is also what lib/helpers.js's
-// evalCoursePermission treats as a full course co-author grant — ANY action
-// (create/read/update/delete), not read-only — so a review-only invitee
-// ended up with full course mutation rights, a real privilege escalation.
-// Discovery for "Shared with Me" is handled instead by querying storyboards
-// shared with the user directly (see plugins/content/course/index.js's
-// `/shared/course` route), without touching the course record or its
-// permission-bearing fields at all.
 async function shareStoryboard(req, res) {
   try {
     const { userId, tenantId } = userCtx(req);
     const body = req.body || {};
     const userIds = Array.isArray(body.userIds) ? body.userIds : [];
 
-    const { record: current, level } = await loadStoryboardAccess(req.params.id, userId, tenantId);
-    if (!current) return denyStoryboardAccess(res);
-    // Only edit-level (owner/admin/course-shared) can manage WHO is invited —
-    // a reviewer invited for review shouldn't be able to add/remove other
-    // reviewers or revoke their own access.
-    if (level !== 'edit') return denyStoryboardAccess(res);
+    const existing = await db.retrieve('storyboard', { _id: req.params.id });
+    if (!Array.isArray(existing) || !existing.length) {
+      return res.status(404).json({ error: 'Storyboard not found' });
+    }
+    const current = toPlain(existing[0]);
 
     await db.update('storyboard', { _id: req.params.id }, { _shareWithUsers: userIds, updatedBy: userId });
     await db.create('storyboardaudit', {
@@ -437,7 +227,7 @@ async function shareStoryboard(req, res) {
     });
 
     const updated = await db.retrieve('storyboard', { _id: req.params.id });
-    return res.status(200).json(serializeStoryboard(updated[0], 'edit'));
+    return res.status(200).json(serializeStoryboard(updated[0]));
   } catch (error) {
     return fail(res, error, 'Failed to share storyboard');
   }
@@ -445,9 +235,6 @@ async function shareStoryboard(req, res) {
 
 async function deleteStoryboard(req, res) {
   try {
-    const { userId, tenantId } = userCtx(req);
-    const { level } = await loadStoryboardAccess(req.params.id, userId, tenantId);
-    if (level !== 'edit') return denyStoryboardAccess(res);
     await db.destroy('storyboard', { _id: req.params.id });
     return res.status(200).json({ success: true });
   } catch (error) {
@@ -459,9 +246,6 @@ async function deleteStoryboard(req, res) {
 
 async function listComments(req, res) {
   try {
-    const { userId, tenantId } = userCtx(req);
-    const { level } = await loadStoryboardAccess(req.params.id, userId, tenantId);
-    if (!level) return denyStoryboardAccess(res);
     const results = (await db.retrieve('storyboardcomment', { _storyboardId: req.params.id })) || [];
     const sorted = results
       .map(toPlain)
@@ -505,8 +289,6 @@ async function findCommentableHeading(storyboardId, blockId) {
 async function addComment(req, res) {
   try {
     const { userId, tenantId } = userCtx(req);
-    const { level } = await loadStoryboardAccess(req.params.id, userId, tenantId);
-    if (!level) return denyStoryboardAccess(res);
     const body = req.body || {};
     if (!body.blockId) return res.status(400).json({ error: 'blockId is required' });
     if (!body.body) return res.status(400).json({ error: 'body is required' });
@@ -538,14 +320,6 @@ async function addComment(req, res) {
 async function updateComment(req, res) {
   try {
     const { userId, tenantId } = userCtx(req);
-    const existing = await db.retrieve('storyboardcomment', { _id: req.params.commentId });
-    if (!Array.isArray(existing) || !existing.length) {
-      return res.status(404).json({ error: 'Comment not found' });
-    }
-    const existingComment = toPlain(existing[0]);
-    const { level } = await loadStoryboardAccess(existingComment._storyboardId, userId, tenantId);
-    if (!level) return denyStoryboardAccess(res);
-
     const body = req.body || {};
     const delta = { updatedBy: userId };
     if (typeof body.body === 'string') delta.body = body.body;
@@ -568,10 +342,6 @@ async function deleteComment(req, res) {
     // recomputeStatus needs it, and it's gone once the record is destroyed.
     const existing = await db.retrieve('storyboardcomment', { _id: req.params.commentId });
     const storyboardId = Array.isArray(existing) && existing.length ? toPlain(existing[0])._storyboardId : undefined;
-    if (storyboardId) {
-      const { level } = await loadStoryboardAccess(storyboardId, userId, tenantId);
-      if (!level) return denyStoryboardAccess(res);
-    }
     await db.destroy('storyboardcomment', { _id: req.params.commentId });
     if (storyboardId) await recomputeStatus(storyboardId, { userId, tenantId });
     return res.status(200).json({ success: true });
@@ -584,18 +354,6 @@ async function deleteComment(req, res) {
 
 async function listAudit(req, res) {
   try {
-    const { userId, tenantId } = userCtx(req);
-    const { level } = await loadStoryboardAccess(req.params.id, userId, tenantId);
-    // No access at all (not even review) — 404 same as every other route.
-    if (!level) return denyStoryboardAccess(res);
-    // Review-only: the audit trail is an authoring/management concern the
-    // reviewer shouldn't see the contents of, but the frontend's
-    // useStoryboardReview.refresh() fetches comments and audit together via
-    // Promise.all — a 404 here rejected that ENTIRE call, so a review-only
-    // invitee couldn't see or add comments either, even though they're
-    // allowed to. Returning an empty list keeps the "reviewers don't see
-    // audit history" intent without breaking comment loading.
-    if (level !== 'edit') return res.status(200).json([]);
     const results = (await db.retrieve('storyboardaudit', { _storyboardId: req.params.id })) || [];
     const sorted = results
       .map(serializeAudit)
@@ -609,8 +367,6 @@ async function listAudit(req, res) {
 async function addAudit(req, res) {
   try {
     const { userId, tenantId } = userCtx(req);
-    const { level } = await loadStoryboardAccess(req.params.id, userId, tenantId);
-    if (level !== 'edit') return denyStoryboardAccess(res);
     const body = req.body || {};
     if (!AUDIT_EVENTS.includes(body.event)) {
       return res.status(400).json({ error: `event must be one of ${AUDIT_EVENTS.join(', ')}` });
@@ -668,8 +424,11 @@ async function handleAi(req, res) {
 async function exportWord(req, res) {
   try {
     const { userId, tenantId } = userCtx(req);
-    const { record: rec, level } = await loadStoryboardAccess(req.params.id, userId, tenantId);
-    if (!level) return denyStoryboardAccess(res);
+    const results = await db.retrieve('storyboard', { _id: req.params.id });
+    if (!Array.isArray(results) || !results.length) {
+      return res.status(404).json({ error: 'Storyboard not found' });
+    }
+    const rec = toPlain(results[0]);
     // Prefer the course title (passed by the client) so the document heading
     // and filename match the course, not the internal storyboard record title.
     const docTitle = (req.query && req.query.title) || rec.title || 'Storyboard';
@@ -697,8 +456,11 @@ async function exportWord(req, res) {
 async function exportPdf(req, res) {
   try {
     const { userId, tenantId } = userCtx(req);
-    const { record: rec, level } = await loadStoryboardAccess(req.params.id, userId, tenantId);
-    if (!level) return denyStoryboardAccess(res);
+    const results = await db.retrieve('storyboard', { _id: req.params.id });
+    if (!Array.isArray(results) || !results.length) {
+      return res.status(404).json({ error: 'Storyboard not found' });
+    }
+    const rec = toPlain(results[0]);
     const docTitle = (req.query && req.query.title) || rec.title || 'Storyboard';
     const blocks = safeParse(rec.documentJson, []);
     const ctx = { user: req.user, userId, tenantId };
