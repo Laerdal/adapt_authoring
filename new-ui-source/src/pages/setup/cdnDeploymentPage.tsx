@@ -124,7 +124,7 @@ function TextField({
 }: { label: string; hint?: string; value: string; onChange: (v: string) => void; placeholder?: string; error?: string; maxLength?: number; sanitize?: (v: string) => string }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <InfoFieldLabel label={label} hint={hint} description={hint} className="text-[var(--life-base-black)]" />
+      {/* <InfoFieldLabel label={label} hint={hint} description={hint} className="text-[var(--life-base-black)]" /> */}
       <input
         type="text"
         value={value}
@@ -138,8 +138,6 @@ function TextField({
         <p className="text-[11px] text-[var(--life-error-500)] leading-snug">{error}</p>
        
       ) : null}
-      {hint && <p className="text-[11px] text-[var(--life-neutral-300)] leading-snug">{hint}</p>}
-
     </div>
   );
 }
@@ -149,7 +147,7 @@ function SelectField({
 }: { label: string; hint?: string; value: string; onChange: (v: string) => void; options: readonly string[] }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <InfoFieldLabel label={label} hint={hint} description={hint} className="text-[var(--life-base-black)]" />
+      {/* <InfoFieldLabel label={label} hint={hint} description={hint} className="text-[var(--life-base-black)]" /> */}
       <div className="relative">
         <select
           value={value}
@@ -162,7 +160,6 @@ function SelectField({
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </div>
-      {hint && <p className="text-[11px] text-[var(--life-neutral-300)] leading-snug">{hint}</p>}
     
     </div>
   );
