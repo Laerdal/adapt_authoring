@@ -168,6 +168,10 @@ export default function StoryboardWorkspace({
 
   const commitTitle = async () => {
     setEditingTitle(false);
+    if (sb.viewerAccessLevel === 'review') {
+      setTitleDraft(resolvedCourseTitle); // reviewers can't rename the course — revert any stray edit
+      return;
+    }
     const next = titleDraft.trim();
     if (!courseId || !next || next === resolvedCourseTitle) {
       setTitleDraft(resolvedCourseTitle);
@@ -715,6 +719,7 @@ export default function StoryboardWorkspace({
         onShareForReview={() => setShareOpen(true)}
         dirty={sb.dirty}
         saving={sb.saving || saveRunning}
+        readOnly={sb.viewerAccessLevel === 'review'}
       />
 
       {sb.error && (
@@ -753,6 +758,7 @@ export default function StoryboardWorkspace({
             onInsert={insert}
             onInsertHeading={insertHeading}
             onEnrichAI={openEnrichAi}
+            readOnly={sb.viewerAccessLevel === 'review'}
           />
           <div className="flex-1 overflow-y-auto">
             {/* Authoring canvas ~60% of the viewport (Lovable proportions),
@@ -784,7 +790,7 @@ export default function StoryboardWorkspace({
                       e.currentTarget.blur();
                     }
                   }}
-                  disabled={savingTitle}
+                  disabled={savingTitle || sb.viewerAccessLevel === 'review'}
                   aria-label="Course title"
                   className="mt-1 w-full border-0 border-b border-transparent bg-transparent text-[2.6rem] font-bold leading-tight tracking-tight text-foreground outline-none focus:border-border disabled:opacity-60"
                 />
@@ -794,6 +800,17 @@ export default function StoryboardWorkspace({
                   key={sb.storyboardId ?? 'sb'}
                   ref={editorRef}
                   initialDocument={initialContent.current}
+                  // In-canvas lockdown for a review-only invitee — blocks
+                  // direct typing into BlockNote-native text (headings/
+                  // paragraphs/lists). Card-level fields (componentBlock.tsx,
+                  // assessmentBlock.tsx, placeholderBlock.tsx) are separate
+                  // React inputs outside BlockNote's editable surface, so each
+                  // of those reads `!editor.isEditable` itself and disables
+                  // its own native inputs/buttons accordingly. The backend
+                  // (requestHandlers.js loadStoryboardAccess) remains the
+                  // actual enforcement boundary regardless of what the canvas
+                  // allows — this is defense in depth, not the source of truth.
+                  editable={sb.viewerAccessLevel !== 'review'}
                   onChange={handleChange}
                   onActiveBlock={(block) => {
                     setActiveBlock(block);

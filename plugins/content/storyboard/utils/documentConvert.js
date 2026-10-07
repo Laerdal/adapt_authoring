@@ -217,7 +217,13 @@ function parseRichTextHtml(html) {
     if (!current) current = [];
     return current;
   };
-  const walk = (node, styles) => {
+  // `<li>` is a recognized block tag (its own paragraph), but without this a
+  // list rendered no differently from a run of plain paragraphs — the bullet/
+  // number marker was dropped entirely, not just the <ul>/<ol> wrapper, so
+  // the export still didn't read as a list even once the raw tags were gone.
+  // `listCtx` threads the enclosing <ul>/<ol> (and an order counter for <ol>)
+  // down through the recursion so each <li> can prefix itself.
+  const walk = (node, styles, listCtx) => {
     if (!node) return;
     if (node.type === 'text') {
       if (node.data) ensure().push({ text: node.data, styles });
@@ -229,13 +235,22 @@ function parseRichTextHtml(html) {
       ensure().push({ text: '\n', styles });
       return;
     }
+    if (tag === 'ul' || tag === 'ol') {
+      const childListCtx = { type: tag, counter: 0 };
+      for (const child of domutils.getChildren(node) || []) walk(child, styles, childListCtx);
+      return;
+    }
     const nextStyles = RICH_TEXT_MARK_TAGS[tag] ? { ...styles, [RICH_TEXT_MARK_TAGS[tag]]: true } : styles;
     const isBlock = RICH_TEXT_BLOCK_TAGS.has(tag);
     if (isBlock) flush();
-    for (const child of domutils.getChildren(node) || []) walk(child, nextStyles);
+    if (tag === 'li' && listCtx) {
+      listCtx.counter += 1;
+      ensure().push({ text: listCtx.type === 'ol' ? `${listCtx.counter}. ` : '• ', styles: {} });
+    }
+    for (const child of domutils.getChildren(node) || []) walk(child, nextStyles, listCtx);
     if (isBlock) flush();
   };
-  for (const node of dom) walk(node, {});
+  for (const node of dom) walk(node, {}, null);
   flush();
 
   if (paragraphs.length) return paragraphs;
@@ -392,7 +407,14 @@ async function pushImageRef(children, ref, label, ctx) {
   try {
     let resolved = await assetResolver.resolveAnyImage(ref, ctx);
     if (resolved) {
-      resolved = await assetResolver.normalizeImageForEmbedding(resolved) || resolved;
+      // See assetResolver.js's normalizeImageForEmbedding comment: for an
+      // SVG this returns a `{ type: 'svg', fallback }` shape (never null) —
+      // Word 2016+ renders the SVG natively via docx's asvg:svgBlip
+      // extension, so the embed doesn't depend on sharp/librsvg succeeding.
+      resolved = await assetResolver.normalizeImageForEmbedding(resolved);
+    }
+    if (resolved) {
+      const isSvg = String(resolved.type || '').toLowerCase() === 'svg';
       children.push(
         new Paragraph({
           spacing: { before: 120, after: 120 },
@@ -401,6 +423,7 @@ async function pushImageRef(children, ref, label, ctx) {
               data: resolved.buffer,
               type: resolved.type,
               transformation: { width: resolved.width, height: resolved.height },
+              ...(isSvg ? { fallback: { type: resolved.fallback.type, data: resolved.fallback.buffer } } : {}),
               altText: resolved.alt
                 ? { title: resolved.alt, description: resolved.alt, name: resolved.alt }
                 : undefined,
@@ -419,7 +442,12 @@ async function pushImageRef(children, ref, label, ctx) {
       return true;
     }
   } catch (e) {
-    /* fall through to text reference */
+    // Logged (not silently swallowed) so a genuine embedding failure — e.g.
+    // docx's ImageRun rejecting an SVG that slipped through un-rasterized —
+    // is distinguishable in server logs from "this ref just isn't a DAM
+    // asset", which is the far more common, expected reason this falls
+    // through to the text-reference placeholder below.
+    console.error('[storyboard] image embed failed, falling back to a text reference:', e && e.message);
   }
   // Reference-only fallback (external URL / permission denied / deleted).
   const link = (ref && (ref.link || ref.url)) || '';
@@ -557,7 +585,12 @@ async function sbComponentToDocxParagraphs(children, props, ctx) {
           }),
         );
       }
-      if (b) pushTextParagraphs(children, b);
+      // `item.body` is rich-text HTML from the grouped-content card's editor
+      // (same shape as description/instruction) — pushTextParagraphs only
+      // splits on literal newline characters, which raw HTML never contains,
+      // so the whole "<p>...</p>" string was landing in the document as one
+      // literal, unparsed line of tags instead of formatted paragraphs.
+      if (b) pushRichTextParagraphs(children, b);
       if (item.image) {
         // eslint-disable-next-line no-await-in-loop
         await pushImageRef(
@@ -1040,6 +1073,45 @@ function pdfMcqBullet(correct) {
   return correct ? '[X] ' : '[ ] ';
 }
 
+// pdfkit's own `doc.image()` only ever understands raster JPEG/PNG — it has
+// no SVG support at all. `svg-to-pdfkit` draws an SVG's paths directly onto
+// the document using pdfkit's own vector primitives (pure JS, no native
+// dependency), so an SVG renders as a real vector — not a sharp/librsvg
+// rasterization — matching the Word export's native-SVG embed and no longer
+// depending on sharp succeeding at all. Falls back to the rasterized
+// `resolved.fallback` image (present whenever normalizeImageForEmbedding
+// processed an SVG) only if svg-to-pdfkit itself can't parse this particular
+// SVG (e.g. a feature it doesn't support) — same safety net as Word's.
+function pdfDrawImageAt(doc, resolved, x, y, w, h) {
+  if (String(resolved.type || '').toLowerCase() === 'svg') {
+    try {
+      const SVGtoPDF = require('svg-to-pdfkit');
+      SVGtoPDF(doc, resolved.buffer.toString('utf8'), x, y, {
+        width: w,
+        height: h,
+        preserveAspectRatio: 'xMidYMid meet',
+        assumePt: true,
+      });
+      return true;
+    } catch (e) {
+      const fallbackBuffer = resolved.fallback && resolved.fallback.buffer;
+      if (!fallbackBuffer) return false;
+      try {
+        doc.image(fallbackBuffer, x, y, { width: w, height: h });
+        return true;
+      } catch (e2) {
+        return false;
+      }
+    }
+  }
+  try {
+    doc.image(resolved.buffer, x, y, { width: w, height: h });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 // Draw an image into the PDF, capped to the page's content width, aspect-
 // preserving, page-break aware, and — critically — advance `doc.y` past the
 // drawn image. pdfkit's `doc.image(buf, { fit: [w, h] })` does NOT move the
@@ -1081,17 +1153,14 @@ function pdfDrawImage(doc, resolved, opts) {
       const w2 = w * scale;
       const h2 = h * scale;
       doc.addPage();
-      try { doc.image(resolved.buffer, marginL, doc.y, { width: w2, height: h2 }); }
-      catch (e) { return false; }
+      if (!pdfDrawImageAt(doc, resolved, marginL, doc.y, w2, h2)) return false;
       doc.y += h2 + 8;
       doc.x = marginL;
       return true;
     }
     doc.addPage();
   }
-  try {
-    doc.image(resolved.buffer, marginL, doc.y, { width: w, height: h });
-  } catch (e) {
+  if (!pdfDrawImageAt(doc, resolved, marginL, doc.y, w, h)) {
     return false;
   }
   // Advance the text cursor PAST the image with a comfortable gap so the next
@@ -1335,7 +1404,14 @@ async function pdfWriteComponent(doc, props, ctx) {
       if (!t && !b && !item.image) continue;
       doc.moveDown(0.2);
       if (t) doc.font(PDF_FONT_BOLD).fontSize(10).text(t);
-      if (b) doc.font(PDF_FONT_REGULAR).fontSize(10).text(b);
+      // See the matching DOCX-side comment: `item.body` is rich-text HTML,
+      // not plain text — printing it verbatim via doc.text() rendered the
+      // literal "<p>...</p>" tags instead of formatted paragraphs.
+      if (b) {
+        pdfResetText(doc);
+        pdfWriteRichText(doc, b, { fontSize: 10 });
+        pdfResetText(doc);
+      }
       if (item.image) {
         // eslint-disable-next-line no-await-in-loop
         const resolved = await resolveForPdf({ link: item.image, assetId: item.imageAssetId }, ctx);
