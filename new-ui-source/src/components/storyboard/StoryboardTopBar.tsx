@@ -134,7 +134,6 @@ export default function StoryboardTopBar({
   onShareForReview,
   dirty,
   saving,
-  readOnly = false,
 }: {
   status: ReviewStatus;
   onBack: () => void;
@@ -151,13 +150,6 @@ export default function StoryboardTopBar({
   onShareForReview: () => void;
   dirty: boolean;
   saving: boolean;
-  /** True for a reviewer invited via Share for Review who isn't otherwise a
-   *  course author/admin — the server now rejects edit/import/share/generate
-   *  for them (ADAPT-3760 follow-up), so hide those controls here too rather
-   *  than let a reviewer click them and get a confusing failure. Export stays
-   *  available — reviewers are allowed to read/download, just not change
-   *  anything. */
-  readOnly?: boolean;
 }) {
   const meta = STATUS_META[status];
 
@@ -189,43 +181,30 @@ export default function StoryboardTopBar({
         </span>
       )}
 
-      {readOnly && (
-        <span
-          className="text-xs"
-          style={{ color: 'var(--life-color-text-subtle)', fontWeight: 500 }}
-        >
-          Reviewing — you can comment, but can't edit this course
-        </span>
-      )}
-
       <div className="ml-auto flex items-center gap-2">
-        {!readOnly && (
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={!dirty || saving}
-            className="sb-toolbar-btn"
-            title="Save storyboard"
-          >
-            {saving ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Save className="h-3.5 w-3.5" />
-            )}
-            {saving ? 'Saving…' : 'Save'}
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={!dirty || saving}
+          className="sb-toolbar-btn"
+          title="Save storyboard"
+        >
+          {saving ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Save className="h-3.5 w-3.5" />
+          )}
+          {saving ? 'Saving…' : 'Save'}
+        </button>
 
-        {!readOnly && (
-          <button
-            type="button"
-            onClick={onImport}
-            title="Import Word, PDF or PowerPoint"
-            className="sb-toolbar-btn"
-          >
-            <Upload className="h-3.5 w-3.5" /> Import
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={onImport}
+          title="Import Word, PDF or PowerPoint"
+          className="sb-toolbar-btn"
+        >
+          <Upload className="h-3.5 w-3.5" /> Import
+        </button>
 
         <Dropdown
           label="Export"
@@ -234,26 +213,22 @@ export default function StoryboardTopBar({
           onSelect={onExport}
         />
 
-        {!readOnly && (
-          <button
-            type="button"
-            onClick={onShareForReview}
-            className="sb-toolbar-btn"
-          >
-            <Users className="h-3.5 w-3.5" /> Share for Review
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={onShareForReview}
+          className="sb-toolbar-btn"
+        >
+          <Users className="h-3.5 w-3.5" /> Share for Review
+        </button>
 
-        {!readOnly && (
-          <button
-            type="button"
-            onClick={onGenerate}
-            className="sb-toolbar-btn sb-toolbar-btn-primary"
-            title="Generate the Adapt course from this storyboard"
-          >
-            Generate Course <ArrowRight className="h-3.5 w-3.5" />
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={onGenerate}
+          className="sb-toolbar-btn sb-toolbar-btn-primary"
+          title="Generate the Adapt course from this storyboard"
+        >
+          Generate Course <ArrowRight className="h-3.5 w-3.5" />
+        </button>
       </div>
     </header>
   );

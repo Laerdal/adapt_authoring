@@ -41,7 +41,6 @@ import { sanitizeEditorHtml } from '@/components/common/BasicRichTextEditor';
 import { CheckboxIndicator } from '@/components/common/Checkbox';
 import { emptyMediaData, safePreviewSrc, toEmbedUrl, type AssetRef, type ImageData, type MediaData } from '../mediaMapping';
 import SamaritanIcon from '../SamaritanIcon';
-import { StoryboardReadOnlyContext, useStoryboardReadOnly } from './storyboardReadOnlyContext';
 
 // YouTube/Vimeo → iframe embed; direct file URLs → <video>. Matches Lovable.
 function VideoView({ src, poster, className }: { src: string; poster?: string; className?: string }) {
@@ -426,7 +425,6 @@ function RichTextField({
   ariaLabel?: string;
   resetKey?: string | number;
 }) {
-  const readOnly = useStoryboardReadOnly();
   return (
     <div>
       <span className={labelCls}>{label}</span>
@@ -437,7 +435,6 @@ function RichTextField({
         minHeight={minHeight}
         ariaLabel={ariaLabel ?? label}
         resetKey={resetKey}
-        disabled={readOnly}
       />
     </div>
   );
@@ -970,12 +967,6 @@ export const componentBlock = createReactBlockSpec(
     // mousedown stopEvent handling.
     meta: { selectable: false },
     render: ({ block, editor }) => {
-      // A review-only Share-for-Review invitee (useStoryboard's editable prop
-      // on the surrounding BlockNoteView) must not be able to edit a card's
-      // own native inputs either — `editable={false}` on BlockNoteView only
-      // locks its own ProseMirror-native text, not these plain React
-      // inputs/buttons rendered inside a custom block (ADAPT-3760 UAT fix).
-      const readOnly = !editor.isEditable;
       const kind = (COMPONENT_KINDS.includes(block.props.kind as ComponentKind) ? block.props.kind : 'text') as ComponentKind;
       const meta = COMPONENT_META[kind];
       console.log('[DEBUG] Resolved meta:', { kind, metaBadge: meta.badge, hasIcon: !!meta.Icon });
@@ -1044,89 +1035,77 @@ export const componentBlock = createReactBlockSpec(
       }
 
       return (
-        <StoryboardReadOnlyContext.Provider value={readOnly}>
-          <div className="my-2 rounded-lg border p-3" contentEditable={false}>
-            {/* Header */}
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                <meta.Icon className="h-3 w-3" /> {meta.badge}
-              </span>
-              {/* `<fieldset>` (display:contents so it doesn't disturb this flex
-                  row) disables every native input/button inside it in one
-                  shot when read-only — everything EXCEPT Comment, which stays
-                  usable: reviewers can view + comment, just not edit. */}
-              <fieldset disabled={readOnly} className="contents">
-                <input value={title} placeholder={`${meta.badge} title *`} onKeyDown={stop} onChange={(e) => setTitle(e.target.value)} className="min-w-0 flex-1 border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60" />
-                <HeaderBtn onClick={() => setData({ ...model, showTitle: !model.showTitle })} active={model.showTitle} title="Show the title to learners">
-                  <Check className="h-3 w-3" /> Show title
-                </HeaderBtn>
-                <HeaderBtn onClick={openAi} title="AI Assistance">
-                  <SamaritanIcon className="h-3 w-3" /> AI
-                </HeaderBtn>
-              </fieldset>
-              <HeaderBtn onClick={openComment} title="Comment on this component">
-                <MessageSquare className="h-3 w-3" /> Comment
-              </HeaderBtn>
-              <fieldset disabled={readOnly} className="contents">
-                <HeaderBtn onClick={() => setConfirmDeleteOpen(true)} title="Delete content">
-                  <Trash2 className="h-3 w-3" /> Delete
-                </HeaderBtn>
-              </fieldset>
-              <HeaderBtn onClick={() => setCollapsed(true)} title="Collapse">
-                <Check className="h-3 w-3" /> Done
-              </HeaderBtn>
-            </div>
+        <div className="my-2 rounded-lg border p-3" contentEditable={false}>
+          {/* Header */}
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <meta.Icon className="h-3 w-3" /> {meta.badge}
+            </span>
+            <input value={title} placeholder={`${meta.badge} title *`} onKeyDown={stop} onChange={(e) => setTitle(e.target.value)} className="min-w-0 flex-1 border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground" />
+            <HeaderBtn onClick={() => setData({ ...model, showTitle: !model.showTitle })} active={model.showTitle} title="Show the title to learners">
+              <Check className="h-3 w-3" /> Show title
+            </HeaderBtn>
+            <HeaderBtn onClick={openAi} title="AI Assistance">
+              <SamaritanIcon className="h-3 w-3" /> AI
+            </HeaderBtn>
+            <HeaderBtn onClick={openComment} title="Comment on this component">
+              <MessageSquare className="h-3 w-3" /> Comment
+            </HeaderBtn>
+            <HeaderBtn onClick={() => setConfirmDeleteOpen(true)} title="Delete content">
+              <Trash2 className="h-3 w-3" /> Delete
+            </HeaderBtn>
+            <HeaderBtn onClick={() => setCollapsed(true)} title="Collapse">
+              <Check className="h-3 w-3" /> Done
+            </HeaderBtn>
+          </div>
 
-            <fieldset disabled={readOnly} className="contents">
-              {/* Body */}
-              <ComponentBody kind={kind} data={model} set={setData} blockId={block.id} />
+          {/* Body */}
+          <ComponentBody kind={kind} data={model} set={setData} blockId={block.id} />
 
-              {/* Instruction */}
-              <div className="mt-2">
-                <RichTextField
-                  label="Instruction text (optional)"
-                  value={model.instruction}
-                  onChange={(html) => setData({ ...model, instruction: html })}
-                  placeholder={instructionPlaceholder(kind)}
-                  minHeight={80}
-                  ariaLabel="Instruction text"
-                  resetKey={`${block.id}-instruction`}
-                />
-              </div>
-            </fieldset>
-
-            {/* Suggested components — inserts new content, a pure edit action */}
-            {!dismissed && !readOnly && (
-              <div className="mt-2 flex items-center gap-2 rounded-md border border-dashed border-samaritan/30 bg-samaritan/5 px-2 py-1.5 text-xs">
-                <span className="inline-flex items-center gap-1 font-medium" style={{ color: 'var(--samaritan)' }}>
-                  <Sparkles className="h-3 w-3" /> Suggested
-                </span>
-                {meta.suggest.map((k) => (
-                  <button key={k} type="button" onClick={() => insertSuggestion(k)} className="rounded-full border px-2 py-0.5 hover:bg-muted">
-                    {COMPONENT_META[k].badge}
-                  </button>
-                ))}
-                <button type="button" onClick={() => setDismissed(true)} className="ml-auto text-muted-foreground hover:text-foreground">
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            )}
-
-            <ConfirmDialog
-              open={confirmDeleteOpen}
-              title="Delete this content item?"
-              message="This content item will be removed from the storyboard."
-              note="This action cannot be undone from the storyboard."
-              confirmLabel="Delete"
-              cancelLabel="Cancel"
-              onCancel={() => setConfirmDeleteOpen(false)}
-              onConfirm={() => {
-                setConfirmDeleteOpen(false);
-                editor.removeBlocks([block]);
-              }}
+          {/* Instruction */}
+          <div className="mt-2">
+            <RichTextField
+              label="Instruction text (optional)"
+              value={model.instruction}
+              onChange={(html) => setData({ ...model, instruction: html })}
+              placeholder={instructionPlaceholder(kind)}
+              minHeight={80}
+              ariaLabel="Instruction text"
+              resetKey={`${block.id}-instruction`}
             />
           </div>
-        </StoryboardReadOnlyContext.Provider>
+
+          {/* Suggested components */}
+          {!dismissed && (
+            <div className="mt-2 flex items-center gap-2 rounded-md border border-dashed border-samaritan/30 bg-samaritan/5 px-2 py-1.5 text-xs">
+              <span className="inline-flex items-center gap-1 font-medium" style={{ color: 'var(--samaritan)' }}>
+                <Sparkles className="h-3 w-3" /> Suggested
+              </span>
+              {meta.suggest.map((k) => (
+                <button key={k} type="button" onClick={() => insertSuggestion(k)} className="rounded-full border px-2 py-0.5 hover:bg-muted">
+                  {COMPONENT_META[k].badge}
+                </button>
+              ))}
+              <button type="button" onClick={() => setDismissed(true)} className="ml-auto text-muted-foreground hover:text-foreground">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          )}
+
+          <ConfirmDialog
+            open={confirmDeleteOpen}
+            title="Delete this content item?"
+            message="This content item will be removed from the storyboard."
+            note="This action cannot be undone from the storyboard."
+            confirmLabel="Delete"
+            cancelLabel="Cancel"
+            onCancel={() => setConfirmDeleteOpen(false)}
+            onConfirm={() => {
+              setConfirmDeleteOpen(false);
+              editor.removeBlocks([block]);
+            }}
+          />
+        </div>
       );
     },
   }
