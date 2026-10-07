@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import InfoIcon, { InfoFieldLabel, shouldRenderFieldInfoIcon } from "../../components/common/InfoIcon";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
 import RichTextEditor from "../../components/common/RichTextEditor";
+import { tagAssetForAiTutor } from "../../api/adaptAuthoring";
 import { SaveChangesButton } from "./SaveChangesButton";
 import { SaveStatusToast } from "./SaveStatusToast";
 import {
@@ -1952,6 +1953,7 @@ export function LearnerExperiencePanel({
       {assetPickerOpen && (
         <AssetPickerModal
           assetType="other"
+          aiTutorCourseId={courseId}
           onSelect={(asset) => {
             const name = asset.assetLink.split("/").pop() ?? asset.assetLink;
             setAtState((prev) => ({
@@ -1959,6 +1961,7 @@ export function LearnerExperiencePanel({
               documents: [...prev.documents, { id: asset.id, name, document: asset.assetLink }],
             }));
             setAssetPickerOpen(false);
+            void tagAssetForAiTutor(asset.id, courseId);
           }}
           onClose={() => setAssetPickerOpen(false)}
         />

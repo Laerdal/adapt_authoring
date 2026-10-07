@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { logout } from "@/api/adaptAuthoring";
 import { redirectToLogin } from "@/utils/authRedirect";
-import { toClassicUrl } from "@/utils/classicLink";
 import EditorMaskIcon from "@/components/editor/EditorMaskIcon";
 
 function getInitials(firstName?: string, lastName?: string, email?: string) {
@@ -58,7 +57,7 @@ export default function ProfileMenu() {
 
   function switchToClassic() {
     setProfileOpen(false);
-    window.location.href = toClassicUrl(window.location.pathname);
+    window.location.href = "/classic";
   }
 
   return (

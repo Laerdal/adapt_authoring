@@ -5,6 +5,9 @@ interface AssetPickerModalProps {
   onSelect: (asset: { id: string; url: string; assetLink: string }) => void;
   onClose: () => void;
   assetType?: AssetPickerType;
+  // Scopes the picker to one course's AI Tutor source documents - see
+  // AssetManagementWorkspace's aiTutorCourseId.
+  aiTutorCourseId?: string;
 }
 
 const KIND_TEXT: Record<AssetPickerType, { title: string; description: string }> = {
@@ -17,7 +20,7 @@ const KIND_TEXT: Record<AssetPickerType, { title: string; description: string }>
   h5p: { title: "Select an H5P File", description: "Choose an H5P package from Asset Management to continue." },
 };
 
-export default function AssetPickerModal({ onSelect, onClose, assetType }: AssetPickerModalProps) {
+export default function AssetPickerModal({ onSelect, onClose, assetType, aiTutorCourseId }: AssetPickerModalProps) {
   const resolvedAssetType: AssetPickerType = assetType ?? "all";
   const text = KIND_TEXT[resolvedAssetType];
 
@@ -31,6 +34,7 @@ export default function AssetPickerModal({ onSelect, onClose, assetType }: Asset
         hideAssistant
         onCancelPick={onClose}
         onPickAsset={onSelect}
+        aiTutorCourseId={aiTutorCourseId}
       />
     </div>
   );
