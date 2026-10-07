@@ -127,10 +127,11 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
   const isOpen = (id: string) => collapsed[id] !== true;
   const toggle = (id: string) => setCollapsed((p) => ({ ...p, [id]: p[id] ? false : true }));
 
-  function startRename(id: string, title: string) {
+  function startRename(level: StructureLevel, id: string, title: string) {
+    const displayTitle = getDisplayedRowTitle(level, title);
     setInlineId(id);
-    setInlineValue(title);
-    setInlineOriginalValue(title);
+    setInlineValue(displayTitle);
+    setInlineOriginalValue(displayTitle);
   }
   function handleInlineChange(level: StructureLevel, id: string, value: string) {
     setInlineValue(value);
@@ -259,7 +260,7 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
             ) : (
               <button
                 type="button"
-                onClick={() => startRename(p.id, p.title)}
+                onClick={() => startRename(p.level, p.id, p.title)}
                 title="Click to rename"
                 className={`min-w-0 truncate text-left text-sm hover:text-[#2d6fa8] ${isModule ? 'font-bold uppercase tracking-wide text-[#374151]' : p.level === 'topic' ? 'font-semibold text-[#111827]' : 'text-[#374151]'}`}
               >
