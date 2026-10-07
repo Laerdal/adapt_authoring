@@ -1,5 +1,69 @@
+import { useState } from "react";
+import { Lightbulb } from "lucide-react";
+import GuideDialog, { type GuidePanel, type GuideSection } from "../../components/common/GuideDialog";
 import CommonCourseTopBarRow from "../../components/course/CommonCourseTopBarRow";
 import PublishMenuButton from "../../components/publish/PublishMenuButton";
+
+const PAGE_EDITOR_GUIDE_PANELS: GuidePanel[] = [
+  {
+    title: "Left panel · Structure",
+    description: "Browse the course hierarchy, add or reorder levels, and select the part you want to work on.",
+  },
+  {
+    title: "Middle panel · Preview",
+    description: "See the learner-facing page. Select content here to bring its settings into focus.",
+  },
+  {
+    title: "Right panel · Properties",
+    description: "Edit the selected level's title, content, appearance, and available behaviour settings.",
+  },
+];
+
+const PAGE_EDITOR_GUIDE_SECTIONS: GuideSection[] = [
+  {
+    title: "How the levels fit together",
+    items: [
+      "Module: an optional course-level grouping for related Topics.",
+      "Topic: a learner-facing page; Sections and Components live inside it.",
+      "Section: groups related material within a Topic.",
+      "Content Group: arranges Components together inside a Section.",
+      "Component: the learning content itself, such as text, media, or a question.",
+    ],
+  },
+  {
+    title: "A useful working flow",
+    description: "Build from the outline, then check the result in context.",
+    items: [
+      "Select or create a Topic, then add Sections and Content Groups where they help organize the page.",
+      "Add Components, edit their content and settings, and review the middle preview as you go.",
+      "Save when the outline and preview are ready; use the outline to move items into a clearer order.",
+    ],
+  },
+  {
+    title: "Recommendations",
+    items: [
+      "Give each Topic one clear purpose and use Sections to make longer pages easier to scan.",
+      "Choose a Component that fits the learning task, rather than adding layout levels by default.",
+      "Select the exact level before editing; the Properties panel changes with your selection.",
+    ],
+  },
+  {
+    title: "Best practices",
+    items: [
+      "Use short, descriptive titles so the outline remains easy to navigate.",
+      "Keep related Components together and preview the page after substantial changes.",
+      "Save regularly; unsaved edits are drafts until you save them.",
+    ],
+  },
+  {
+    title: "Linking content",
+    items: [
+      "Use the rich-text Link control when text should point learners to a web destination.",
+      "Use the asset picker for course media so selected files are managed as course assets.",
+      "Check links and media in the preview before saving and sharing the course.",
+    ],
+  },
+];
 
 interface PageEditorTopBarProps {
   courseTitle: string;
@@ -58,6 +122,8 @@ export default function PageEditorTopBar({
   isSaving = false,
   isSaveDisabled = false,
 }: PageEditorTopBarProps) {
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
+
   const leadingSlot = (
     <button
       type="button"
@@ -73,6 +139,16 @@ export default function PageEditorTopBar({
 
   const trailingActions = (
     <div className="ml-auto flex items-center gap-3">
+      <button
+        type="button"
+        onClick={() => setIsGuideOpen(true)}
+        aria-haspopup="dialog"
+        aria-expanded={isGuideOpen}
+        className="inline-flex items-center gap-1.5 rounded-[8px] px-2.5 py-2 text-[13px] font-medium text-[#40515e] transition-colors hover:bg-[#f1f5f8] hover:text-[#1d3547] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2d6fa8]"
+      >
+        <Lightbulb size={16} strokeWidth={1.8} aria-hidden="true" />
+        <span>How-To Guide</span>
+      </button>
       <button
         type="button"
         onClick={onSave}
@@ -108,6 +184,15 @@ export default function PageEditorTopBar({
         onOpenPreview={onOpenPreview}
         previewDisabled={previewDisabled}
         leadingSlot={leadingSlot}
+      />
+
+      <GuideDialog
+        open={isGuideOpen}
+        title="Page Editor How-To Guide"
+        description="A quick overview of the editor panels, content levels, and a few practices for building a clear learner experience."
+        panels={PAGE_EDITOR_GUIDE_PANELS}
+        sections={PAGE_EDITOR_GUIDE_SECTIONS}
+        onClose={() => setIsGuideOpen(false)}
       />
 
       <div className="h-[56px] bg-white border-b border-[#d8dde6] flex items-center px-4 md:px-6 gap-3">

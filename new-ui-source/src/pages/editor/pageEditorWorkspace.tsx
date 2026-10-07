@@ -34,6 +34,9 @@ import { UnsavedChangesModal } from "../setup/unsavedChangesModal";
 import PublishCourseDialog, { type PublishCoursePhase } from "../../components/publish/PublishCourseDialog";
 import PageEditorTopBar from "./pageEditorTopBar";
 import PageEditorNavigation from "./pageEditorNavigation";
+import { projectEditorStructure, structureWithCanvasOrder } from "./editorStructureMoves";
+import { flattenStructure, moveCourseStructure } from "../../hooks/useCourseStructure";
+import type { StructureLevel } from "../../types/structure";
 import { useNavigate } from "react-router-dom";
 import { usePageLoader } from "@/hooks";
 import { apiClient } from "../../api/client";
@@ -64,6 +67,7 @@ import {
   type PluginSettingsFieldSchema,
   pasteTemplateIntoCourse,
   reorderStructureNodes,
+  moveContentNode,
   publishCoursePackage,
   removeCourseAssetMappings,
   saveContentAsTemplate,
@@ -108,7 +112,11 @@ interface PreviewBuildResponse {
 
 const ICON_BASE = "/new/assets/icons";
 const RIGHT_PANEL_MIN_WIDTH = 300;
-const RIGHT_PANEL_MAX_EXPANSION_RATIO = 0.5;
+const RIGHT_PANEL_MAX_EXPANSION_RATIO = 0.25;
+const LEFT_PANEL_MAX_EXPANSION_RATIO = 0.25;
+const LEFT_PANEL_DEFAULT_WIDTH = 280;
+const LEFT_PANEL_MIN_WIDTH = LEFT_PANEL_DEFAULT_WIDTH;
+const MIN_EDITOR_CANVAS_WIDTH = 280;
 
 function MaskIcon({ file, className }: { file: string; className?: string }) {
   const iconPath = `${ICON_BASE}/${file}`;
@@ -1592,6 +1600,8 @@ const NAV_FOOTER_BUTTON_ORDER = ["_home", "_up", "_previous", "_next", "_close",
 const LEVEL_ACTION_COPY_ICON_SVG =
   '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
 const LEVEL_ACTION_COLOR_LABEL_ICON_SVG = colorLabelIconSvgRaw.replace(/stroke="#[0-9a-fA-F]{3,6}"/g, 'stroke="currentColor"');
+const LEVEL_ACTION_REPLACE_ICON_SVG =
+  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4a1 1 0 0 1 1-1"></path><path d="M15 10a1 1 0 0 1-1-1"></path><path d="M21 4a1 1 0 0 0-1-1"></path><path d="M21 9a1 1 0 0 1-1 1"></path><path d="m3 7 3 3 3-3"></path><path d="M6 10V5a2 2 0 0 1 2-2h2"></path><rect x="3" y="14" width="7" height="7" rx="1"></rect></svg>';
 // Matches the structure panel's own delete affordance.
 const LEVEL_ACTION_DELETE_ICON_SVG =
   '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>';
@@ -3390,6 +3400,8 @@ export default function CourseEditor({
   const { user } = useAuth();
   const navigate = useNavigate();
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
+  const [leftPanelWidth, setLeftPanelWidth] = useState(LEFT_PANEL_DEFAULT_WIDTH);
+  const [isResizingLeftPanel, setIsResizingLeftPanel] = useState(false);
   const [courseTitle, setCourseTitle] = useState(initialTitle);
   const [courseDescription] = useState(initialDescription);
   // initialTheme/initialMenu arrive via React Router navigation state
@@ -3435,6 +3447,9 @@ export default function CourseEditor({
   const [showStructureMap, setShowStructureMap] = useState(false);
   const [menuData, setMenuData] = useState<MenuPageData>(defaultMenuPage);
   const [courseStructure, setCourseStructure] = useState<CourseStructure | null>(null);
+  const savedCourseStructureRef = useRef<CourseStructure | null>(null);
+  const structureDraftRef = useRef(false);
+  const [hasStructureDraft, setHasStructureDraft] = useState(false);
   const [isLoadingStructure, setIsLoadingStructure] = useState(true);
   const [structureLoadError, setStructureLoadError] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
@@ -3674,8 +3689,14 @@ export default function CourseEditor({
   const copiedBlockIdResetTimerRef = useRef<number | null>(null);
   const copiedComponentIdResetTimerRef = useRef<number | null>(null);
   const previewFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const leftPanelContainerRef = useRef<HTMLDivElement | null>(null);
   const rightPanelContainerRef = useRef<HTMLElement | null>(null);
   const rightPanelScrollRef = useRef<HTMLDivElement | null>(null);
+  const leftPanelResizeStateRef = useRef<{
+    panelLeft: number;
+    previousCursor: string;
+    previousUserSelect: string;
+  } | null>(null);
   const rightPanelResizeStateRef = useRef<{
     panelRight: number;
     previousCursor: string;
@@ -3718,6 +3739,86 @@ export default function CourseEditor({
     const availableWidth = panel.getBoundingClientRect().right - canvas.getBoundingClientRect().left;
     return RIGHT_PANEL_MIN_WIDTH + Math.floor(availableWidth * RIGHT_PANEL_MAX_EXPANSION_RATIO);
   }, []);
+
+  const getLeftPanelMaxWidth = useCallback(() => {
+    const panel = leftPanelContainerRef.current;
+    const canvas = canvasRef.current;
+    if (!panel || !canvas) return LEFT_PANEL_DEFAULT_WIDTH;
+    const panelWidth = panel.getBoundingClientRect().width;
+    const canvasWidth = canvas.getBoundingClientRect().width;
+    const availableWidth = canvas.getBoundingClientRect().right - panel.getBoundingClientRect().left;
+    const proportionalMax = LEFT_PANEL_MIN_WIDTH + Math.floor(availableWidth * LEFT_PANEL_MAX_EXPANSION_RATIO);
+    const canvasBoundedMax = panelWidth + Math.max(0, canvasWidth - MIN_EDITOR_CANVAS_WIDTH);
+    return Math.max(panelWidth, Math.min(proportionalMax, canvasBoundedMax));
+  }, []);
+
+  const resizeLeftPanelTo = useCallback((width: number) => {
+    setLeftPanelWidth(Math.round(Math.min(getLeftPanelMaxWidth(), Math.max(LEFT_PANEL_MIN_WIDTH, width))));
+  }, [getLeftPanelMaxWidth]);
+
+  const clampLeftPanelWidth = useCallback(() => {
+    setLeftPanelWidth((width) => (
+      Math.round(Math.min(getLeftPanelMaxWidth(), Math.max(LEFT_PANEL_MIN_WIDTH, width)))
+    ));
+  }, [getLeftPanelMaxWidth]);
+
+  const finishLeftPanelResize = useCallback(() => {
+    const resizeState = leftPanelResizeStateRef.current;
+    if (!resizeState) return;
+    leftPanelResizeStateRef.current = null;
+    window.removeEventListener("pointerup", finishLeftPanelResize);
+    window.removeEventListener("pointercancel", finishLeftPanelResize);
+    window.removeEventListener("blur", finishLeftPanelResize);
+    document.body.style.cursor = resizeState.previousCursor;
+    document.body.style.userSelect = resizeState.previousUserSelect;
+    setIsResizingLeftPanel(false);
+  }, []);
+
+  const handleLeftPanelResizeMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const resizeState = leftPanelResizeStateRef.current;
+    if (!resizeState) return;
+    resizeLeftPanelTo(event.clientX - resizeState.panelLeft);
+  }, [resizeLeftPanelTo]);
+
+  const handleLeftPanelResizeStart = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const panelLeft = leftPanelContainerRef.current?.getBoundingClientRect().left;
+    if (panelLeft === undefined) return;
+
+    leftPanelResizeStateRef.current = {
+      panelLeft,
+      previousCursor: document.body.style.cursor,
+      previousUserSelect: document.body.style.userSelect,
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    setIsResizingLeftPanel(true);
+    window.addEventListener("pointerup", finishLeftPanelResize);
+    window.addEventListener("pointercancel", finishLeftPanelResize);
+    window.addEventListener("blur", finishLeftPanelResize);
+  }, [finishLeftPanelResize]);
+
+  useEffect(() => () => finishLeftPanelResize(), [finishLeftPanelResize]);
+
+  useEffect(() => {
+    setLeftPanelWidth(LEFT_PANEL_DEFAULT_WIDTH);
+  }, [courseId]);
+
+  useEffect(() => {
+    const clampWidth = () => {
+      if (!leftPanelContainerRef.current || !canvasRef.current) return;
+      clampLeftPanelWidth();
+    };
+    window.addEventListener("resize", clampWidth);
+    return () => window.removeEventListener("resize", clampWidth);
+  }, [clampLeftPanelWidth]);
+
+  useEffect(() => {
+    if (!leftPanelOpen) return;
+    const frameId = window.requestAnimationFrame(clampLeftPanelWidth);
+    return () => window.cancelAnimationFrame(frameId);
+  }, [clampLeftPanelWidth, leftPanelOpen]);
 
   const resizeRightPanelTo = useCallback((width: number) => {
     setRightPanelWidth(Math.round(Math.min(getRightPanelMaxWidth(), Math.max(RIGHT_PANEL_MIN_WIDTH, width))));
@@ -3804,14 +3905,15 @@ export default function CourseEditor({
     });
   }, []);
 
-  const hasUnsavedChanges = useMemo(() => Object.keys(dirtyNodeKeys).length > 0, [dirtyNodeKeys]);
+  const hasUnsavedChanges = useMemo(() => hasStructureDraft || Object.keys(dirtyNodeKeys).length > 0, [dirtyNodeKeys, hasStructureDraft]);
+  const outlineContentPages = hasStructureDraft && courseStructure ? projectEditorStructure(courseStructure, contentPages) : contentPages;
 
   const loadStructureFromDatabase = useCallback(async (selection?: {
     pageId?: string | null;
     articleId?: string | null;
     blockId?: string | null;
     componentId?: string | null;
-  }) => {
+  }, refreshedStructure?: Awaited<ReturnType<typeof getCourseStructure>>) => {
     const requestId = ++structureLoadRequestIdRef.current;
     const isCurrentRequest = () => isMountedRef.current && requestId === structureLoadRequestIdRef.current;
 
@@ -3844,7 +3946,7 @@ export default function CourseEditor({
 
     try {
       const [structure, courseAssets, contentAssets] = await Promise.all([
-        getCourseStructure(courseId, courseTitle),
+        refreshedStructure ?? getCourseStructure(courseId, courseTitle),
         getCourseAssetMappings(courseId),
         getCourseAssetIdMap(courseId),
       ]);
@@ -3859,6 +3961,9 @@ export default function CourseEditor({
       setContentAssetIdMap(contentAssets || {});
 
       setCourseStructure(structure);
+      savedCourseStructureRef.current = structuredClone(structure);
+      structureDraftRef.current = false;
+      setHasStructureDraft(false);
       const pages = mapStructureToPages(structure);
       const fallbackPage = pages[0] ?? null;
       const page = pages.find((item) => item.id === selection?.pageId) ?? fallbackPage;
@@ -4428,11 +4533,6 @@ export default function CourseEditor({
     // while actively selecting or hovering something, so a fully
     // deselected, un-hovered canvas renders as a pristine normal preview
     // with none of that extra space, per explicit user request.
-    // Keyed on the pointer merely BEING in the canvas, never on which level
-    // is hovered: these rules resize headers, so tying them to the hovered
-    // level made hover change the layout, which moved the element out from
-    // under a stationary cursor, which changed the hovered level — a
-    // mouseover/mouseout oscillation (measured: 23 flips in one slow sweep).
     doc.documentElement.classList.toggle(
       "adapt-authoring-editing-active",
       hasCanvasSelection || isPointerOverCanvas
@@ -4513,9 +4613,14 @@ export default function CourseEditor({
          matching the inset Article already uses. */
       .adapt-authoring-editing-active .page__header-inner {
         margin-top: 8px !important;
+        margin-bottom: 8px !important;
         margin-left: 8px !important;
         margin-right: 8px !important;
         padding: 0.5rem !important;
+      }
+
+      .adapt-authoring-editing-active .adapt-authoring-preview-first-surface {
+        margin-top: 8px !important;
       }
 
       /* Selecting a node calls scrollIntoView({block:"start"}), which parks
@@ -4547,19 +4652,6 @@ export default function CourseEditor({
       .adapt-authoring-preview-hover.menu,
       .adapt-authoring-preview-active.menu {
         padding: 0.5rem !important;
-      }
-
-      /* Vertical gutter for a Section/Content Group that renders NO header
-         of its own. Hover now resolves through headers only, so a level
-         that has one needs no gutter at all — its header box is already
-         held apart from its neighbours by the theme's own spacing, and the
-         gutter was only ever adding dead space between levels. A headerless
-         level still needs it: with nothing to point at, this margin is its
-         only hover surface, exactly as before. */
-      .adapt-authoring-editing-active .article:not(:has(> .article__inner > .article__header)),
-      .adapt-authoring-editing-active .block:not(:has(> .block__inner > .block__header)) {
-        margin-top: 10px !important;
-        margin-bottom: 10px !important;
       }
 
       /* Two half-width (left/right) components in the same Content Group
@@ -4619,8 +4711,10 @@ export default function CourseEditor({
          (before any hover has ever set data-preview-bridge-label) collapses
          a content-less block box to zero height in some engines — line-
          height alone isn't a reliable floor without real content present. */
+      .adapt-authoring-editing-active .page__header-inner::before,
       .adapt-authoring-editing-active .article__header-inner::before,
-      .adapt-authoring-editing-active .block__header-inner::before {
+      .adapt-authoring-editing-active .block__header-inner::before,
+      .adapt-authoring-editing-active .component__inner::before {
         content: attr(data-preview-bridge-label);
         display: block;
         min-height: 11px;
@@ -4671,6 +4765,20 @@ export default function CourseEditor({
 
       .adapt-authoring-preview-clickable {
         cursor: pointer !important;
+      }
+
+      .page__header[data-preview-injected="true"]:has(> .adapt-authoring-preview-headless-header:not(.adapt-authoring-preview-active)),
+      .article__header[data-preview-injected="true"]:has(> .adapt-authoring-preview-headless-header:not(.adapt-authoring-preview-active)),
+      .block__header[data-preview-injected="true"]:has(> .adapt-authoring-preview-headless-header:not(.adapt-authoring-preview-active)),
+      .adapt-authoring-preview-headless-header:not(.adapt-authoring-preview-active) {
+        display: none !important;
+      }
+
+      @media (max-width: 619px) {
+        [data-preview-hover-title-injected="true"],
+        [data-preview-hover-title-shown="true"] {
+          display: none !important;
+        }
       }
 
       .adapt-authoring-preview-inline-editable:not(.ck-editor__editable) {
@@ -5180,19 +5288,6 @@ export default function CourseEditor({
       });
     });
 
-    // When a level's title is hidden/empty, the real template renders NO
-    // header markup at all — falling back to the level's whole content
-    // container (.article__inner/.block__inner) as the hover/active target
-    // wraps every child underneath it too (e.g. a Content Group's hover box
-    // engulfing its Component). Quick Edit and syncPreviewInlineEditors'
-    // own selection path (ensureHeaderInnerHost) both avoid this by
-    // creating a small, real, permanent header placeholder to frame
-    // instead — mirrored here so HOVER gets the same small frame, not just
-    // Selection. Idempotent/safe to call from both hover and active
-    // resolution: checks for an existing header first, matches the exact
-    // classnames ensureHeaderInnerHost (syncPreviewInlineEditors) already
-    // uses, so whichever runs first is transparently reused by the other
-    // with no duplicate headers ever created.
     const ensureLevelHeaderHost = (
       level: "topic" | "section" | "group",
       root: Element | null
@@ -5222,6 +5317,16 @@ export default function CourseEditor({
       container.appendChild(inner);
       return inner;
     };
+
+    doc.querySelectorAll(".page__header-inner, .article__header-inner, .block__header-inner").forEach((host) => {
+      const hasVisibleContent = Array.from(host.children).some((child) => {
+        if (child.hasAttribute("data-preview-level-actions") || child.hasAttribute("data-preview-hover-title-injected")) return false;
+        const computed = doc.defaultView?.getComputedStyle(child);
+        if (computed?.display === "none" || computed?.visibility === "hidden") return false;
+        return !!child.textContent?.trim() || !!child.querySelector("img, video, audio, iframe, .ck-editor");
+      });
+      host.classList.toggle("adapt-authoring-preview-headless-header", !hasVisibleContent);
+    });
 
     const resolveHighlightTarget = (
       level: "menu" | "topic" | "section" | "group" | "component",
@@ -5367,6 +5472,23 @@ export default function CourseEditor({
         copyBtn.title = `Copy ${toBadgeLabel(level)}`;
       } else if (copyBtn) {
         copyBtn.remove();
+      }
+
+      let replaceBtn = actions.querySelector<HTMLButtonElement>("[data-preview-replace-component-btn]");
+      if (level === "component") {
+        if (!replaceBtn) {
+          replaceBtn = doc.createElement("button");
+          replaceBtn.type = "button";
+          replaceBtn.setAttribute("data-preview-replace-component-btn", "true");
+          replaceBtn.className = "adapt-authoring-level-action-btn";
+          replaceBtn.innerHTML = LEVEL_ACTION_REPLACE_ICON_SVG;
+          const deleteButton = actions.querySelector("[data-preview-delete-node-btn]");
+          actions.insertBefore(replaceBtn, deleteButton);
+        }
+        replaceBtn.title = "Replace component";
+        replaceBtn.setAttribute("aria-label", "Replace component");
+      } else if (replaceBtn) {
+        replaceBtn.remove();
       }
 
       let templateBtn = actions.querySelector<HTMLButtonElement>("[data-preview-save-template-btn]");
@@ -5591,7 +5713,7 @@ export default function CourseEditor({
       // An active level owns its descendants while selected. Showing a
       // second nested hover rectangle inside it creates the misaligned,
       // competing outline seen for Components inside a selected Group.
-      if (hoverNode && hoverNode !== activeNode && !activeNode?.contains(hoverNode)) {
+      if (hoverNode && !hoverNode.classList.contains("adapt-authoring-preview-headless-header") && hoverNode !== activeNode && !activeNode?.contains(hoverNode)) {
         hoverNode.classList.add("adapt-authoring-preview-hover");
         (hoverNode as Element).setAttribute("data-preview-bridge-label", toBadgeLabel(hoverLevel));
 
@@ -5667,6 +5789,36 @@ export default function CourseEditor({
 
     syncColorLabelIndicators(activeNode, hoverNode);
 
+    const visibleSurfaces = Array.from(
+      doc.querySelectorAll<HTMLElement>(".page__header-inner, .article__header-inner, .block__header-inner, .component__inner")
+    ).filter((node) => node.getBoundingClientRect().height > 0);
+    const firstSurface = visibleSurfaces[0];
+    const firstSurfaceTargets = new Set<HTMLElement>(firstSurface ? [firstSurface] : []);
+    if (firstSurface?.matches(".component__inner")) {
+      const component = firstSurface.closest(".component");
+      const container = component?.parentElement;
+      if (container?.classList.contains("component__container")) {
+        const components = Array.from(container.children).filter((child) =>
+          child.classList.contains("component")
+        ) as HTMLElement[];
+        const isSideBySidePair = components.length === 2 &&
+          components.some((node) => node.classList.contains("is-left")) &&
+          components.some((node) => node.classList.contains("is-right"));
+        if (isSideBySidePair) {
+          components.forEach((node) => {
+            const inner = node.querySelector<HTMLElement>(".component__inner");
+            if (inner) firstSurfaceTargets.add(inner);
+          });
+        }
+      }
+    }
+    doc.querySelectorAll(".adapt-authoring-preview-first-surface").forEach((node) => {
+      if (!firstSurfaceTargets.has(node as HTMLElement)) {
+        node.classList.remove("adapt-authoring-preview-first-surface");
+      }
+    });
+    firstSurfaceTargets.forEach((node) => node.classList.add("adapt-authoring-preview-first-surface"));
+
     // Topic/Section header insets (margin-left/right, CSS above) were
     // originally hardcoded to 8px on the assumption that Content Group's
     // own real inset (block__inner's theme padding minus the -0.5rem
@@ -5710,9 +5862,7 @@ export default function CourseEditor({
       // every level moves by the same amount, so their alignment is kept, and
       // a theme that already leaves room is left untouched.
       const ringRoom = PREVIEW_OUTLINE_RING_PX;
-      const levelBoxes = Array.from(
-        doc.querySelectorAll(".page__header-inner, .article__header-inner, .block__header-inner, .component__inner")
-      ).map((node) => node.getBoundingClientRect()).filter((rect) => rect.width > 0 && rect.height > 0);
+      const levelBoxes = visibleSurfaces.map((node) => node.getBoundingClientRect());
       if (levelBoxes.length) {
         const viewportWidth = doc.documentElement.clientWidth;
         const leftMost = Math.min(...levelBoxes.map((r) => r.left));
@@ -5860,6 +6010,7 @@ export default function CourseEditor({
       doc.querySelectorAll("[data-preview-injected='true']").forEach((node) => {
         const element = node as HTMLElement;
         if ((element.textContent || "").trim().length > 0) return;
+        if (element.matches(".adapt-authoring-preview-headless-header") || element.querySelector(".adapt-authoring-preview-headless-header")) return;
         if (element.matches("[data-preview-edit-enabled='true']") || element.querySelector("[data-preview-edit-enabled='true']")) return;
         const parent = element.parentElement;
         element.remove();
@@ -7920,6 +8071,7 @@ export default function CourseEditor({
 
     const pendingTarget = pendingLeftPanelScrollTargetRef.current;
     if (!pendingTarget) return;
+    if (!doc.documentElement.classList.contains("is-loading-hidden")) return;
 
     if (pendingTarget.level === "menu") {
       const menuNode = doc.querySelector(".menu[data-adapt-id]") ?? doc.querySelector(".menu");
@@ -7932,9 +8084,11 @@ export default function CourseEditor({
     if (!pendingTarget.id) return;
 
     if (pendingTarget.level === "topic") {
-      const pageNode = doc.querySelector(`.page[data-adapt-id="${pendingTarget.id}"]`) ?? doc.querySelector(".page");
+      const pageNode = doc.querySelector(`.page[data-adapt-id="${pendingTarget.id}"]`);
       if (!pageNode) return;
-      pageNode.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
+      const target = pageNode.querySelector(".page__header-inner.adapt-authoring-preview-active");
+      if (!target) return;
+      target.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
       if (clearTarget) pendingLeftPanelScrollTargetRef.current = null;
       return;
     }
@@ -7943,9 +8097,8 @@ export default function CourseEditor({
       const articleNode = doc.querySelector(`.article[data-adapt-id="${pendingTarget.id}"]`);
       if (!articleNode) return;
 
-      const target = articleNode.querySelector(".article__header-inner") ??
-                     articleNode.querySelector(".article__header") ??
-                     articleNode;
+      const target = articleNode.querySelector(".article__header-inner.adapt-authoring-preview-active");
+      if (!target) return;
 
       target.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
       if (clearTarget) pendingLeftPanelScrollTargetRef.current = null;
@@ -7956,9 +8109,8 @@ export default function CourseEditor({
       const blockNode = doc.querySelector(`.block[data-adapt-id="${pendingTarget.id}"]`);
       if (!blockNode) return;
 
-      const target = blockNode.querySelector(".block__header-inner") ??
-                     blockNode.querySelector(".block__header") ??
-                     blockNode;
+      const target = blockNode.querySelector(".block__header-inner.adapt-authoring-preview-active");
+      if (!target) return;
 
       target.scrollIntoView({ behavior: "smooth", block: "start", inline: "nearest" });
       if (clearTarget) pendingLeftPanelScrollTargetRef.current = null;
@@ -8211,9 +8363,6 @@ export default function CourseEditor({
       // header. Their remaining area is mostly empty padding wrapped around
       // a child level, so treating it as a hover target made the cursor
       // flip between two levels while crossing that blank space.
-      // A level with no header element at all (headless, before a prior
-      // selection has injected a synthetic one) keeps its old behaviour —
-      // that padding is then its only hover surface.
       if (level === "topic" || level === "section" || level === "group") {
         const rootSelector = level === "topic" ? ".page" : level === "section" ? ".article" : ".block";
         const headerSelector =
@@ -8223,7 +8372,10 @@ export default function CourseEditor({
               ? ".article__header, .article__header-inner"
               : ".block__header, .block__header-inner";
         const root = target?.closest(rootSelector);
-        if (root?.querySelector(headerSelector) && !target?.closest(headerSelector)) {
+        const header = root?.querySelector(headerSelector);
+        const headerInnerSelector = ".page__header-inner, .article__header-inner, .block__header-inner";
+        const headerInner = header?.matches(headerInnerSelector) ? header : header?.querySelector(headerInnerSelector);
+        if (!header || headerInner?.classList.contains("adapt-authoring-preview-headless-header") || !target?.closest(headerSelector)) {
           return noHover;
         }
       }
@@ -8234,17 +8386,6 @@ export default function CourseEditor({
       // the synthetic header has been created by a prior selection.
       if (level === "group" && target?.closest(".block__inner")) {
         if (target.closest(".component__container")) {
-          return noHover;
-        }
-      }
-
-      if (level === "group" && selectedComponentId && selectedBlockId === blockId) {
-        const block = target?.closest(".block");
-        const header = block?.querySelector(".block__header-inner");
-        const isHeadlessSelectedParent =
-          header?.getAttribute("data-preview-injected") === "true" ||
-          header?.closest(".block__header")?.getAttribute("data-preview-injected") === "true";
-        if (isHeadlessSelectedParent) {
           return noHover;
         }
       }
@@ -8463,6 +8604,22 @@ export default function CourseEditor({
         return;
       }
 
+      const replaceComponentBtn = target.closest("[data-preview-replace-component-btn]") as HTMLElement | null;
+      if (replaceComponentBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const actionsEl = replaceComponentBtn.closest("[data-preview-level-actions]") as HTMLElement | null;
+        if (actionsEl?.getAttribute("data-preview-actions-selected") !== "true") return;
+        const pageId = actionsEl.getAttribute("data-preview-action-page-id");
+        const articleId = actionsEl.getAttribute("data-preview-action-article-id");
+        const blockId = actionsEl.getAttribute("data-preview-action-block-id");
+        const componentId = actionsEl.getAttribute("data-preview-action-component-id");
+        if (pageId && articleId && blockId && componentId) {
+          handleAddComponentPanel(pageId, articleId, blockId, componentId);
+        }
+        return;
+      }
+
       // Let real course dialogs handle their own controls (especially the
       // framework notify close button) instead of treating those clicks as
       // canvas selection gestures.
@@ -8472,6 +8629,7 @@ export default function CourseEditor({
 
       const swapBtn = target.closest("[data-preview-swap-positions-btn]") as HTMLElement | null;
       if (swapBtn) {
+        if (guardStructuralWrite()) { event.preventDefault(); event.stopPropagation(); return; }
         event.preventDefault();
         event.stopPropagation();
         const pageId = swapBtn.getAttribute("data-preview-swap-page-id");
@@ -9478,10 +9636,13 @@ export default function CourseEditor({
         initializedSelectionFields = [];
         return;
       }
-        if (selectionKey === initializedSelectionKey && root === initializedSelectionRoot &&
+      if (selectionKey === initializedSelectionKey && root === initializedSelectionRoot &&
           root.querySelector(".adapt-authoring-preview-active") && initializedSelectionFields.length &&
           initializedSelectionFields.every((field) => root.contains(field) &&
-            field.matches(fieldSelector) && field.getAttribute("contenteditable") === "true")) return;
+            field.matches(fieldSelector) && field.getAttribute("contenteditable") === "true")) {
+        syncPreviewScrollFromLeftPanelRef.current();
+        return;
+      }
       syncPreviewInlineEditorsRef.current();
       applyPreviewSelectionStylesRef.current();
       initializedSelectionRoot = root;
@@ -10025,6 +10186,7 @@ export default function CourseEditor({
   }
 
   async function handleAddModule(parentModuleId?: string) {
+    if (guardStructuralWrite()) return;
     try {
       const parentId = parentModuleId || courseId;
       const childCount = parentModuleId
@@ -10052,6 +10214,7 @@ export default function CourseEditor({
   }
 
   async function handleDeleteModule(moduleId: string) {
+    if (guardStructuralWrite()) return;
     try {
       await deleteStructureNode("module", moduleId);
       await loadStructureFromDatabase();
@@ -10061,6 +10224,7 @@ export default function CourseEditor({
   }
 
   async function handleAddPage(parentModuleId?: string) {
+    if (guardStructuralWrite()) return;
     try {
       const parentId = parentModuleId || courseId;
       const siblingCount = parentModuleId
@@ -10088,6 +10252,7 @@ export default function CourseEditor({
   }
 
   async function handleAddArticle(pageId: string) {
+    if (guardStructuralWrite()) return;
     try {
       const page = contentPages.find((item) => item.id === pageId);
       const newArticleId = await seedDefaultSection(courseId, pageId, NEW_SECTION_TITLE, (page?.articles.length ?? 0) + 1);
@@ -10153,6 +10318,7 @@ export default function CourseEditor({
   }
 
   async function deleteArticle(pageId: string, articleId: string): Promise<boolean> {
+    if (guardStructuralWrite()) return false;
     try {
       await deleteStructureNode("section", articleId);
       await loadStructureFromDatabase({ pageId });
@@ -10868,6 +11034,7 @@ export default function CourseEditor({
   }
 
   async function deletePage(pageId: string): Promise<boolean> {
+    if (guardStructuralWrite()) return false;
     try {
       await deleteStructureNode("topic", pageId);
       await loadStructureFromDatabase();
@@ -10913,6 +11080,7 @@ export default function CourseEditor({
   }
 
   async function handleAddBlock(pageId: string, articleId: string) {
+    if (guardStructuralWrite()) return;
     try {
       const article = contentPages.find((item) => item.id === pageId)?.articles.find((item) => item.id === articleId);
       const newBlockId = await seedDefaultContentGroup(courseId, articleId, NEW_CONTENT_GROUP_TITLE, (article?.blocks.length ?? 0) + 1);
@@ -10925,6 +11093,11 @@ export default function CourseEditor({
   }
 
   function updateBlock(pageId: string, articleId: string, blockId: string, patch: Partial<BlockData>) {
+    if (structureDraftRef.current) {
+      const page = contentPagesRef.current.find(candidate => candidate.articles.some(article => article.blocks.some(block => block.id === blockId)));
+      const article = page?.articles.find(candidate => candidate.blocks.some(block => block.id === blockId));
+      if (page && article) { pageId = page.id; articleId = article.id; }
+    }
     setContentPages((previousPages) =>
       previousPages.map((p) =>
         p.id === pageId
@@ -10948,6 +11121,7 @@ export default function CourseEditor({
   }
 
   async function deleteBlock(pageId: string, articleId: string, blockId: string): Promise<boolean> {
+    if (guardStructuralWrite()) return false;
     try {
       await deleteStructureNode("contentGroup", blockId);
       await loadStructureFromDatabase({ pageId, articleId });
@@ -10965,6 +11139,7 @@ export default function CourseEditor({
     componentType: ComponentTypeOption,
     replaceComponentId?: string
   ) {
+    if (guardStructuralWrite()) return;
     const targetPage = contentPages.find((p) => p.id === pageId);
     const targetArticle = targetPage?.articles.find((a) => a.id === articleId);
     const targetBlock = targetArticle?.blocks.find((b) => b.id === blockId);
@@ -11023,6 +11198,115 @@ export default function CourseEditor({
   // matched here via queued background PUTs for each component, WITHOUT any
   // structure reload (loadStructureFromDatabase would re-fetch and re-mount
   // the whole iframe, causing the exact refresh/flash this is meant to avoid).
+  function handleOutlineMove(level: StructureLevel, id: string, parentId: string, beforeId: string | null) {
+    if (!courseStructure || isSavingSelection) return;
+    try {
+      const base = structureDraftRef.current ? courseStructure : structureWithCanvasOrder(courseStructure, contentPages);
+      const next = moveCourseStructure(base, courseId, level, id, parentId, beforeId);
+      const previousPositions = flattenStructure(base, courseId);
+      if (JSON.stringify(previousPositions) === JSON.stringify(flattenStructure(next, courseId))) return;
+      const positions = new Map(previousPositions.map(position => [position.id, position]));
+      const topicOf = (nodeId: string | null): string | null => {
+        while (nodeId && nodeId !== courseId) {
+          const position = positions.get(nodeId);
+          if (!position) return null;
+          if (position.level === "topic") return position.id;
+          nodeId = position.parentId;
+        }
+        return null;
+      };
+      if (level !== "module" && level !== "topic" && topicOf(id) === selectedPageId && topicOf(parentId) === selectedPageId) {
+        const canvasBase = structureWithCanvasOrder(savedCourseStructureRef.current ?? base, contentPages);
+        const canvasPositions = new Map(flattenStructure(canvasBase, courseId).map(position => [position.id, position]));
+        const canvasTopicOf = (nodeId: string): string | null => {
+          let position = canvasPositions.get(nodeId);
+          while (position && position.level !== "topic") position = canvasPositions.get(position.parentId);
+          return position?.id ?? null;
+        };
+        if (canvasTopicOf(id) === selectedPageId && canvasTopicOf(parentId) === selectedPageId) {
+          const canvasNext = moveCourseStructure(canvasBase, courseId, level, id, parentId, beforeId);
+          const pages = projectEditorStructure(canvasNext, contentPages);
+          const page = pages.find(candidate => candidate.id === selectedPageId);
+          const doc = previewFrameRef.current?.contentDocument;
+          if (!doc || !page) throw new Error("The preview is not ready for this move.");
+          const loaded = (doc.defaultView as Window & { require?: (name: string) => any })?.require?.("core/js/adapt");
+          const runtime = loaded?.default ?? loaded;
+          if (!runtime?.findById) throw new Error("The preview is not ready for this move.");
+          const checkChildren = (parentNodeId: string, childIds: string[], selector: string, containerSelector: string) => {
+            const root = doc.querySelector(`[data-adapt-id="${parentNodeId}"]`);
+            if (!runtime.findById(parentNodeId) || !root?.querySelector(containerSelector) ||
+                childIds.some(childId => !runtime.findById(childId) || !doc.querySelector(`${selector}[data-adapt-id="${childId}"]`))) {
+              throw new Error("The preview is not ready for this move.");
+            }
+          };
+          checkChildren(page.id, page.articles.map(article => article.id), ".article", ".article__container");
+          for (const article of page.articles) {
+            checkChildren(article.id, article.blocks.map(block => block.id), ".block", ".block__container");
+            for (const block of article.blocks) checkChildren(block.id, block.components.map(component => component.id), ".component", ".component__container");
+          }
+          const focus = doc.activeElement as HTMLElement | null;
+          const selection = doc.getSelection();
+          const range = selection?.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+          const syncChildren = (parentNodeId: string, childIds: string[], selector: string, containerSelector: string) => {
+            const parent = runtime.findById(parentNodeId);
+            const root = doc.querySelector(`[data-adapt-id="${parentNodeId}"]`);
+            const container = root?.querySelector(containerSelector);
+            const models = childIds.map(childId => runtime.findById(childId));
+            if (!parent || !container || models.some(model => !model)) throw new Error("The preview is not ready for this move.");
+            models.forEach((model, index) => {
+              model.set({ _parentId: parentNodeId, _sortOrder: index + 1 }, { silent: true });
+              model.setParent(parent);
+            });
+            parent.getChildren().reset(models, { silent: true, sort: false });
+            let following: Element | null = null;
+            for (let index = childIds.length - 1; index >= 0; index--) {
+              const node = doc.querySelector(`${selector}[data-adapt-id="${childIds[index]}"]`);
+              if (!node) throw new Error("The preview is not ready for this move.");
+              if (node.parentElement !== container || node.nextElementSibling !== following) container.insertBefore(node, following);
+              following = node;
+            }
+          };
+          syncChildren(page.id, page.articles.map(article => article.id), ".article", ".article__container");
+          for (const article of page.articles) {
+            syncChildren(article.id, article.blocks.map(block => block.id), ".block", ".block__container");
+            for (const block of article.blocks) {
+              syncChildren(block.id, block.components.map(component => component.id), ".component", ".component__container");
+              for (const component of block.components) {
+                const model = runtime.findById(component.id);
+                model.set("_layout", component.layout, { silent: true });
+                const node = doc.querySelector(`.component[data-adapt-id="${component.id}"]`);
+                node?.classList.remove("is-left", "is-right", "is-full");
+                node?.classList.add(`is-${component.layout}`);
+              }
+            }
+          }
+          setContentPages(pages);
+          const selectedArticle = page.articles.find(article => article.id === selectedArticleId || article.blocks.some(block => block.id === selectedBlockId || block.components.some(component => component.id === selectedComponentId)));
+          const selectedBlock = selectedArticle?.blocks.find(block => block.id === selectedBlockId || block.components.some(component => component.id === selectedComponentId));
+          setSelectedArticleId(selectedArticle?.id ?? null);
+          setSelectedBlockId(selectedBlock?.id ?? null);
+          if (focus?.isConnected) focus.focus({ preventScroll: true });
+          if (range && selection && range.startContainer.isConnected) { selection.removeAllRanges(); selection.addRange(range); }
+        }
+      }
+      if (!structureDraftRef.current) {
+        savedCourseStructureRef.current = structuredClone(base);
+        setSavedContentPages(projectEditorStructure(base, savedContentPages));
+      }
+      setCourseStructure(next);
+      structureDraftRef.current = true;
+      setHasStructureDraft(true);
+    } catch (error) {
+      setEditorToast({ type: "error", message: error instanceof Error ? error.message : "Could not move course content" });
+    }
+  }
+
+  function guardStructuralWrite(): boolean {
+    if (!structureDraftRef.current) return false;
+    setEditorToast({ type: "error", message: "Save or discard the structure changes before using this action." });
+    return true;
+  }
+
   function handleSwapComponentPositions(
     pageId: string,
     articleId: string,
@@ -11047,7 +11331,9 @@ export default function CourseEditor({
                                 if (c.id === leftComponentId) return { ...c, layout: "right" as const };
                                 if (c.id === rightComponentId) return { ...c, layout: "left" as const };
                                 return c;
-                              }),
+                              }).sort((first, second) =>
+                                Number(first.layout === "right") - Number(second.layout === "right")
+                              ),
                             }
                           : b
                       ),
@@ -11123,6 +11409,7 @@ export default function CourseEditor({
   // addToClipboard): Topic pastes immediately at the end of the page list
   // (no separate paste-zone step, per explicit user instruction).
   async function handleCopyTopicNode(pageId: string) {
+    if (guardStructuralWrite()) return;
     try {
       const sourceTitle = contentPagesRef.current.find((item) => item.id === pageId)?.title;
       const clipboardId = await copyStructureNodeToClipboard("topic", pageId, courseId);
@@ -11182,6 +11469,7 @@ export default function CourseEditor({
   }
 
   async function handlePasteFromClipboard(parentId: string, sortOrder: number) {
+    if (guardStructuralWrite()) return;
     const entry = clipboardEntryRef.current;
     if (!entry) return;
     setClipboardEntry(null);
@@ -11238,6 +11526,12 @@ export default function CourseEditor({
 
 
   function updateComponent(pageId: string, articleId: string, blockId: string, componentId: string, patch: Partial<ComponentData>) {
+    if (structureDraftRef.current) {
+      const page = contentPagesRef.current.find(candidate => candidate.articles.some(article => article.blocks.some(block => block.components.some(component => component.id === componentId))));
+      const article = page?.articles.find(candidate => candidate.blocks.some(block => block.components.some(component => component.id === componentId)));
+      const block = article?.blocks.find(candidate => candidate.components.some(component => component.id === componentId));
+      if (page && article && block) { pageId = page.id; articleId = article.id; blockId = block.id; }
+    }
     setContentPages((previousPages) =>
       previousPages.map((p) =>
         p.id === pageId
@@ -11311,6 +11605,12 @@ export default function CourseEditor({
     path: string,
     value: unknown
   ) {
+    if (structureDraftRef.current) {
+      const page = contentPagesRef.current.find(candidate => candidate.articles.some(article => article.blocks.some(block => block.components.some(component => component.id === componentId))));
+      const article = page?.articles.find(candidate => candidate.blocks.some(block => block.components.some(component => component.id === componentId)));
+      const block = article?.blocks.find(candidate => candidate.components.some(component => component.id === componentId));
+      if (page && article && block) { pageId = page.id; articleId = article.id; blockId = block.id; }
+    }
     setContentPages((previousPages) =>
       previousPages.map((p) =>
         p.id === pageId
@@ -11362,7 +11662,9 @@ export default function CourseEditor({
     // React state updates from commit() are asynchronous. Use the committed
     // editor values directly for this save instead of the stale render
     // snapshot captured when the Save handler was created.
-    const pages = cloneContentPages(contentPages);
+    const pages = hasStructureDraft && courseStructure
+      ? projectEditorStructure(courseStructure, cloneContentPages(contentPages))
+      : cloneContentPages(contentPages);
     committedCanvasBodyValues.forEach(({ html, ownerKey, fieldPath }) => {
       const [level, id] = ownerKey.split(":");
       if (!id) return;
@@ -11671,6 +11973,33 @@ export default function CourseEditor({
         setPendingExtensionDisableNames(new Set());
       }
 
+      if (hasStructureDraft && courseStructure && savedCourseStructureRef.current) {
+        const savedPositions = new Map(flattenStructure(savedCourseStructureRef.current, courseId).map(position => [position.id, position]));
+        for (const position of flattenStructure(courseStructure, courseId)) {
+          const previous = savedPositions.get(position.id);
+          if (!previous) continue;
+          if (position.parentId !== previous.parentId || position.order !== previous.order) {
+            await moveContentNode(position.level, position.id, position.parentId, position.order);
+          }
+          if (position.level === "component" && position.layout && position.layout !== previous.layout) {
+            await updateComponentLayout(position.id, position.layout);
+          }
+        }
+        savedCourseStructureRef.current = structuredClone(courseStructure);
+        structureDraftRef.current = false;
+        setHasStructureDraft(false);
+        const page = pages.find(candidate => candidate.id === selectedPageId);
+        const article = page?.articles.find(candidate => candidate.id === selectedArticleId);
+        const block = article?.blocks.find(candidate => candidate.id === selectedBlockId);
+        const component = block?.components.find(candidate => candidate.id === selectedComponentId);
+        setSelectedArticleId(article?.id ?? null);
+        setSelectedBlockId(block?.id ?? null);
+        setSelectedComponentId(component?.id ?? null);
+        setRightPanelType(component ? "component" : block ? "block" : article ? "article" : "page");
+        pendingLeftPanelScrollTargetRef.current = component ? { level: "component", id: component.id }
+          : block ? { level: "group", id: block.id }
+            : article ? { level: "section", id: article.id } : { level: "topic", id: page?.id ?? null };
+      }
       setContentPages(pages);
       setSavedContentPages(cloneContentPages(pages));
       setDirtyNodeKeys({});
@@ -11679,6 +12008,7 @@ export default function CourseEditor({
       return true;
     } catch (error) {
       console.error("Failed to save editor drafts", error);
+      if (structureDraftRef.current) setEditorToast({ type: "error", message: "Could not save structure changes. Your draft has been kept; please try again." });
       return false;
     } finally {
       setIsSavingSelection(false);
@@ -11686,6 +12016,9 @@ export default function CourseEditor({
   }
 
   function discardDraftChanges() {
+    if (structureDraftRef.current && savedCourseStructureRef.current) setCourseStructure(structuredClone(savedCourseStructureRef.current));
+    structureDraftRef.current = false;
+    setHasStructureDraft(false);
     setContentPages(cloneContentPages(savedContentPages));
     setDirtyNodeKeys({});
     topicBodyTargetRef.current = null;
@@ -11773,6 +12106,7 @@ export default function CourseEditor({
   }
 
   async function deleteComponent(pageId: string, articleId: string, blockId: string, componentId: string): Promise<boolean> {
+    if (guardStructuralWrite()) return false;
     try {
       const targetPage = contentPages.find((p) => p.id === pageId);
       const targetArticle = targetPage?.articles.find((a) => a.id === articleId);
@@ -11856,6 +12190,7 @@ export default function CourseEditor({
     moduleId?: string;
     componentId?: string;
   }) {
+    if (guardStructuralWrite()) return;
     setAddTemplateTarget(target);
   }
 
@@ -11867,6 +12202,7 @@ export default function CourseEditor({
     moduleId?: string;
     componentId?: string;
   }, template: DashboardTemplate) {
+    if (guardStructuralWrite()) return;
     try {
       const expectedType =
         target.level === "topic"
@@ -11887,9 +12223,13 @@ export default function CourseEditor({
       let componentIdsBeforeReplacement: Set<string> | null = null;
       let componentOrderBeforeReplacement: string[] | null = null;
       let replacementComponentId: string | null = null;
+      let existingTargetIds = new Set<string>();
 
       if (target.level === "topic" && target.moduleId) {
         parentId = target.moduleId;
+      }
+      if (target.level === "topic") {
+        existingTargetIds = new Set(contentPages.map((page) => page.id));
       }
 
       if (target.level === "section") {
@@ -11897,6 +12237,7 @@ export default function CourseEditor({
         if (!page) return;
         parentId = target.pageId;
         sortOrder = page.articles.length + 1;
+        existingTargetIds = new Set(page.articles.map((article) => article.id));
       }
 
       if (target.level === "group") {
@@ -11905,6 +12246,7 @@ export default function CourseEditor({
         if (!article) return;
         parentId = article.id;
         sortOrder = article.blocks.length + 1;
+        existingTargetIds = new Set(article.blocks.map((block) => block.id));
       }
 
       if (target.level === "component") {
@@ -11924,6 +12266,7 @@ export default function CourseEditor({
         layout = componentToReplace
           ? componentToReplace.layout ?? "full"
           : block.components.length === 0 ? "full" : "right";
+        existingTargetIds = new Set(block.components.map((component) => component.id));
 
         if (componentToReplace) {
           componentIdsBeforeReplacement = new Set(block.components.map((component) => component.id));
@@ -11942,41 +12285,57 @@ export default function CourseEditor({
         layout,
       });
 
-      if (target.level === "component" && componentIdsBeforeReplacement) {
-        const refreshedStructure = await getCourseStructure(courseId, courseTitle);
-        const refreshedPages = mapStructureToPages(refreshedStructure);
-        const refreshedBlock = refreshedPages
-          .find((item) => item.id === target.pageId)
-          ?.articles.find((item) => item.id === target.articleId)
-          ?.blocks.find((item) => item.id === target.blockId);
-        replacementComponentId =
-          refreshedBlock?.components.find((component) => !componentIdsBeforeReplacement?.has(component.id))?.id ?? null;
-        if (!replacementComponentId || !componentOrderBeforeReplacement) {
-          throw new Error("Could not identify the replacement component");
+      const refreshedStructure = await getCourseStructure(courseId, courseTitle);
+      const refreshedPages = mapStructureToPages(refreshedStructure);
+      let newSelection: {
+        pageId: string;
+        articleId?: string;
+        blockId?: string;
+        componentId?: string;
+      } | null = null;
+
+      if (target.level === "topic") {
+        const newPage = refreshedPages.find((page) => !existingTargetIds.has(page.id));
+        if (newPage) newSelection = { pageId: newPage.id };
+      } else if (target.level === "section") {
+        const newArticle = refreshedPages
+          .find((page) => page.id === target.pageId)
+          ?.articles.find((article) => !existingTargetIds.has(article.id));
+        if (newArticle) newSelection = { pageId: target.pageId, articleId: newArticle.id };
+      } else if (target.level === "group") {
+        const newBlock = refreshedPages
+          .find((page) => page.id === target.pageId)
+          ?.articles.find((article) => article.id === target.articleId)
+          ?.blocks.find((block) => !existingTargetIds.has(block.id));
+        if (newBlock) newSelection = { pageId: target.pageId, articleId: target.articleId, blockId: newBlock.id };
+      } else {
+        const newComponent = refreshedPages
+          .find((page) => page.id === target.pageId)
+          ?.articles.find((article) => article.id === target.articleId)
+          ?.blocks.find((block) => block.id === target.blockId)
+          ?.components.find((component) => !existingTargetIds.has(component.id));
+        if (newComponent) {
+          if (target.componentId && componentOrderBeforeReplacement) {
+            await reorderStructureNodes(
+              "component",
+              componentOrderBeforeReplacement.map((componentId) =>
+                componentId === target.componentId ? newComponent.id : componentId
+              )
+            );
+          }
+          newSelection = {
+            pageId: target.pageId,
+            articleId: target.articleId,
+            blockId: target.blockId,
+            componentId: newComponent.id,
+          };
         }
-        await reorderStructureNodes(
-          "component",
-          componentOrderBeforeReplacement.map((componentId) =>
-            componentId === target.componentId ? replacementComponentId! : componentId
-          )
-        );
       }
 
-      await loadStructureFromDatabase(
-        target.level === "component"
-          ? {
-              pageId: target.pageId,
-              articleId: target.articleId,
-              blockId: target.blockId,
-              componentId: target.componentId ? replacementComponentId : selectedComponentId,
-            }
-          : {
-              pageId: selectedPageId,
-              articleId: selectedArticleId,
-              blockId: selectedBlockId,
-              componentId: selectedComponentId,
-            }
-      );
+      if (!newSelection) {
+        throw new Error(`Could not identify the new ${expectedType.toLowerCase()}`);
+      }
+      await loadStructureFromDatabase(newSelection, target.componentId ? undefined : refreshedStructure);
       if (target.componentId) {
         setEditorToast({ type: "success", message: `Component replaced with "${template.name}"` });
       }
@@ -12194,6 +12553,18 @@ export default function CourseEditor({
       <div className="flex flex-1 overflow-hidden relative min-w-0">
         <PageEditorNavigation
           courseId={courseId}
+          onMove={handleOutlineMove}
+          leftPanelRef={leftPanelContainerRef}
+          leftPanelWidth={leftPanelWidth}
+          leftPanelMinWidth={LEFT_PANEL_MIN_WIDTH}
+          leftPanelActionsAlignToTitles={leftPanelWidth > LEFT_PANEL_DEFAULT_WIDTH}
+          leftPanelMaxWidth={getLeftPanelMaxWidth()}
+          isResizingLeftPanel={isResizingLeftPanel}
+          onResizeLeftPanelStart={handleLeftPanelResizeStart}
+          onResizeLeftPanelMove={handleLeftPanelResizeMove}
+          onResizeLeftPanelEnd={finishLeftPanelResize}
+          onResizeLeftPanelTo={resizeLeftPanelTo}
+          onResetLeftPanelWidth={() => setLeftPanelWidth(LEFT_PANEL_DEFAULT_WIDTH)}
           leftPanelOpen={leftPanelOpen}
           onClosePanels={() => {
             setLeftPanelOpen(false);
@@ -12204,7 +12575,7 @@ export default function CourseEditor({
           menuPageCreated={menuPageCreated}
           menuSelected={menuSelected}
           courseStructure={courseStructure}
-          contentPages={contentPages}
+          contentPages={outlineContentPages}
           selectedPageId={selectedPageId}
           selectedSubPageId={selectedSubPageId}
           selectedArticleId={selectedArticleId}
@@ -12245,7 +12616,7 @@ export default function CourseEditor({
           className="flex-1 min-w-0 bg-[#F2F2F2] overflow-y-auto overflow-x-hidden relative"
           onClick={handleCanvasClick}
         >
-          {isLoadingStructure ? (
+          {isLoadingStructure && !menuPageCreated ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-sm text-[#6b7280]">Loading course structure...</div>
             </div>
@@ -12552,16 +12923,6 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                               checked={!!page.showDisplayTitleInPreview}
                               onChange={(checked) => updatePageData(page.id, { showDisplayTitleInPreview: checked })}
                             />
-                            <div className="flex flex-col gap-1.5">
-                              <TopicFieldLabel>Body</TopicFieldLabel>
-                              {/* Keyed per topic: RichTextEditor only reads `value` when it mounts. */}
-                              <RichTextEditor
-                                key={`topic-body-${page.id}`}
-                                value={page.body}
-                                syncExternalValue
-                                onChange={(html) => updatePageData(page.id, { body: html })}
-                              />
-                            </div>
                             <button
                               type="button"
                               onClick={() => handleOpenSaveAsTemplate("topic", page.id)}
@@ -12774,6 +13135,16 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                           </TopicAccordion>
 
                           <TopicAccordion title="Menu Appearance" open={!!openTopicAccordions.menu} onToggle={(triggerEl) => toggleTopicAccordion("menu", triggerEl)}>
+                            <div className="flex flex-col gap-1.5">
+                              <TopicFieldLabel>Body</TopicFieldLabel>
+                              {/* Keyed per topic: RichTextEditor only reads `value` when it mounts. */}
+                              <RichTextEditor
+                                key={`topic-body-${page.id}`}
+                                value={page.body}
+                                syncExternalValue
+                                onChange={(html) => updatePageData(page.id, { body: html })}
+                              />
+                            </div>
                             <TopicCheckbox
                               label={getSchemaLabel(getMenuFieldSchema("contentobject", "_renderAsGroup"), "Enable as menu group?")}
                               hint={getSchemaHint(getMenuFieldSchema("contentobject", "_renderAsGroup"))}
