@@ -168,6 +168,10 @@ export default function StoryboardWorkspace({
 
   const commitTitle = async () => {
     setEditingTitle(false);
+    if (sb.viewerAccessLevel === 'review') {
+      setTitleDraft(resolvedCourseTitle); // reviewers can't rename the course — revert any stray edit
+      return;
+    }
     const next = titleDraft.trim();
     if (!courseId || !next || next === resolvedCourseTitle) {
       setTitleDraft(resolvedCourseTitle);
@@ -786,7 +790,7 @@ export default function StoryboardWorkspace({
                       e.currentTarget.blur();
                     }
                   }}
-                  disabled={savingTitle}
+                  disabled={savingTitle || sb.viewerAccessLevel === 'review'}
                   aria-label="Course title"
                   className="mt-1 w-full border-0 border-b border-transparent bg-transparent text-[2.6rem] font-bold leading-tight tracking-tight text-foreground outline-none focus:border-border disabled:opacity-60"
                 />
@@ -796,14 +800,16 @@ export default function StoryboardWorkspace({
                   key={sb.storyboardId ?? 'sb'}
                   ref={editorRef}
                   initialDocument={initialContent.current}
-                  // Best-effort in-canvas lockdown for a review-only invitee —
-                  // blocks direct typing into BlockNote-native text (headings/
-                  // paragraphs/lists). Card-level fields (componentBlock.tsx)
-                  // are separate React inputs outside BlockNote's editable
-                  // surface, so this alone doesn't guarantee they're inert too;
-                  // the backend (requestHandlers.js loadStoryboardAccess) is
-                  // the actual enforcement boundary regardless of what the
-                  // canvas allows a reviewer to type.
+                  // In-canvas lockdown for a review-only invitee — blocks
+                  // direct typing into BlockNote-native text (headings/
+                  // paragraphs/lists). Card-level fields (componentBlock.tsx,
+                  // assessmentBlock.tsx, placeholderBlock.tsx) are separate
+                  // React inputs outside BlockNote's editable surface, so each
+                  // of those reads `!editor.isEditable` itself and disables
+                  // its own native inputs/buttons accordingly. The backend
+                  // (requestHandlers.js loadStoryboardAccess) remains the
+                  // actual enforcement boundary regardless of what the canvas
+                  // allows — this is defense in depth, not the source of truth.
                   editable={sb.viewerAccessLevel !== 'review'}
                   onChange={handleChange}
                   onActiveBlock={(block) => {

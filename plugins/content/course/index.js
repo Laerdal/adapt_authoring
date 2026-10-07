@@ -195,8 +195,32 @@ function initialize () {
     });
     // Only return courses which have been shared
     rest.get('/shared/course', (req, res, next) => {
-      req.body.search = Object.assign({}, req.body.search, { $or: [{ _shareWithUsers: req.user._id }, { _isShared: true }] });
-      doQuery(req, res, next);
+      const orConditions = [{ _shareWithUsers: req.user._id }, { _isShared: true }];
+      const userId = req.user && req.user._id;
+      const tenantId = req.user && req.user.tenant && req.user.tenant._id;
+      const finish = () => {
+        req.body.search = Object.assign({}, req.body.search, { $or: orConditions });
+        doQuery(req, res, next);
+      };
+      if (!userId) return finish();
+      // A course whose Storyboard has been "Shared for Review" with this user
+      // (plugins/content/storyboard) should also be discoverable here, so an
+      // invited reviewer can find it under "Shared with Me". Resolved via a
+      // side query against the storyboard collection rather than writing
+      // anything onto the course record itself — course._shareWithUsers is
+      // also what evalCoursePermission (lib/helpers.js) treats as a full
+      // course co-author grant (any action, not read-only), so a review-only
+      // storyboard invitee must never end up listed there.
+      database.getDatabase((err, db) => {
+        if (err) return finish();
+        db.retrieve('storyboard', { _shareWithUsers: userId }, { jsonOnly: true }, (sbErr, storyboards) => {
+          if (!sbErr && Array.isArray(storyboards) && storyboards.length) {
+            const courseIds = storyboards.map((s) => s._courseId).filter(Boolean);
+            if (courseIds.length) orConditions.push({ _id: { $in: courseIds } });
+          }
+          finish();
+        });
+      }, tenantId);
     });
     /**
      * API Endpoint to duplicate a course
