@@ -169,14 +169,16 @@ async function getStoryboardAccessLevel(record, userId, tenantId) {
   if (!record) return null;
   const creatorId = record.createdBy && record.createdBy._id ? record.createdBy._id : record.createdBy;
   if (creatorId && String(creatorId) === String(userId)) return 'edit';
-  const shared = Array.isArray(record._shareWithUsers) ? record._shareWithUsers.map(String) : [];
-  if (shared.includes(String(userId))) return 'review';
-  // Neither the storyboard's own creator nor an invited reviewer — fall back
-  // to the COURSE-level relationship so a course owner, collaborator, or
-  // super admin (none of whom necessarily created the storyboard record
-  // itself) gets the same edit access they already have over the course.
+  // Resolve course-level access BEFORE falling back to the reviewer list. A
+  // user can be both a course owner/collaborator/admin AND listed in this
+  // storyboard's own reviewer array (e.g. added to Share for Review before —
+  // or regardless of — already having course access); checking the reviewer
+  // list first would downgrade their real edit rights to review-only,
+  // making the UI read-only and every mutation endpoint 404 for them.
   const courseLevel = await getCourseAccessLevel(record._courseId, userId, tenantId);
-  return courseLevel === 'edit' ? 'edit' : null;
+  if (courseLevel === 'edit') return 'edit';
+  const shared = Array.isArray(record._shareWithUsers) ? record._shareWithUsers.map(String) : [];
+  return shared.includes(String(userId)) ? 'review' : null;
 }
 
 // Fetches a storyboard by id and resolves the current user's access level in
