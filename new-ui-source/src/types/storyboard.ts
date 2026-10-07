@@ -35,6 +35,17 @@ export interface StoryboardHeading {
   level: number;
   text: string;
   adaptType: AdaptStructureType;
+  /**
+   * True for a synthetic row representing an individual content item
+   * (sbComponent/sbAssessment/sbPlaceholder block) rather than an authored
+   * heading. Content items have no H1-H4 markdown heading of their own, so
+   * without this the Structure panel could only ever navigate to the
+   * enclosing Content Group — leaving every item inside it (e.g. several
+   * MCQ/Image cards in a row) impossible to select individually.
+   */
+  isItem?: boolean;
+  /** Badge text for an item row (e.g. "MCQ", "Image") — unused for real headings. */
+  itemBadge?: string;
 }
 
 /** Review workflow status (spec AC8). */
@@ -72,8 +83,6 @@ export type StoryboardInsertKind =
   | 'textInput'
   | 'slider'
   | 'checklist'
-  // results / summary — configured on the storyboard, rendered as a component
-  | 'assessmentResult'
   // interactive placeholders (AC6)
   | 'hotgraphic'
   | 'hotgrid'
@@ -106,7 +115,6 @@ export const INSERT_META: Record<
   textInput: { label: 'Text Input', category: 'assessment', adaptComponent: 'adapt-contrib-textInput' },
   slider: { label: 'Slider', category: 'assessment', adaptComponent: 'adapt-contrib-slider' },
   checklist: { label: 'Checklist', category: 'assessment', adaptComponent: 'adapt-laerdal-checklist' },
-  assessmentResult: { label: 'Assessment Result', category: 'assessment', adaptComponent: 'adapt-contrib-assessmentResults' },
   hotgraphic: { label: 'Hot Graphic', category: 'interactive', adaptComponent: 'adapt-contrib-hotgraphic' },
   hotgrid: { label: 'Hot Grid', category: 'interactive', adaptComponent: 'adapt-laerdal-hotgrid' },
   actionplan: { label: 'Laerdal Action Plan', category: 'interactive', adaptComponent: 'adapt-laerdal-actionplan' },
@@ -264,6 +272,15 @@ export function validateAssessment(kind: AssessmentKind, data: AssessmentData, b
   const hasTitle = !!blockTitle.trim();
   if (!hasQuestion && !hasTitle) issues.push('Question text is required.');
 
+  // Whole-question feedback (`_feedback.correct`/`.incorrect`) — every kind
+  // reaches both of these states, so both are required regardless of kind.
+  // Previously unvalidated entirely, which is how an author could save a
+  // question with only, say, a missing options check flagged while feedback
+  // silently stayed blank.
+  const feedback = data.feedback;
+  if (!feedback?.correct?.trim()) issues.push('Add feedback for a correct answer.');
+  if (!feedback?.incorrect?.trim()) issues.push('Add feedback for an incorrect answer.');
+
   switch (kind) {
     case 'mcq':
     case 'gmcq': {
@@ -272,6 +289,9 @@ export function validateAssessment(kind: AssessmentKind, data: AssessmentData, b
       if (filled.length < 2) issues.push('Add at least two answer options.');
       if (!filled.some((o) => o.correct)) issues.push('Mark at least one option correct.');
       if (opts.some((o) => !o.text.trim())) issues.push('Every answer option needs text.');
+      if (kind === 'gmcq' && opts.some((o) => !(o.imageUrl || o.image))) {
+        issues.push('Every Graphic MCQ option needs an image.');
+      }
       break;
     }
     case 'checklist': {
@@ -535,17 +555,23 @@ export interface StoryboardEditorHandle {
    *  `opts.afterId`, when given and still present in the document, anchors the
    *  insertion right after that block instead of the editor's live text-cursor
    *  position (which goes stale once focus leaves the editor for a toolbar
-   *  menu — use the last known active/selected block id here). */
-  insert(kind: StoryboardInsertKind, opts?: { level?: number; afterId?: string }): void;
+   *  menu — use the last known active/selected block id here).
+   *  Returns `{ ok: false, warning }` instead of inserting when `kind` is a
+   *  content item and the target Content Group is already at the per-block
+   *  component limit (see MAX_COMPONENTS_PER_BLOCK in storyboardGeneration.ts)
+   *  — the caller should surface `warning` to the author. */
+  insert(kind: StoryboardInsertKind, opts?: { level?: number; afterId?: string }): { ok: boolean; warning?: string };
   /** Insert a pre-populated component card at the cursor (AI Assistance →
    *  Insert). `title` seeds the card title; `data` is merged into the card's
    *  default data (e.g. `{ description }` for a Text component). `afterId`
-   *  behaves as in `insert` above. Returns the new
-   *  block id so the caller can anchor follow-up actions (comments). */
+   *  behaves as in `insert` above. Returns `{ id }` (for anchoring follow-up
+   *  actions, e.g. comments) or `{ id: null, warning }` when the target
+   *  Content Group is already at the per-block component limit — shares the
+   *  same capacity check as `insert` above. */
   insertComponent(
     kind: StoryboardInsertKind,
     opts?: { title?: string; data?: Record<string, unknown>; afterId?: string }
-  ): string | null;
+  ): { id: string | null; warning?: string };
   /** Plain text of the block at the cursor (for AI actions, AC7). */
   getActiveText(): string;
   /** Replace the cursor block's content with `text` (Improve / Rewrite). */
@@ -575,4 +601,9 @@ export interface StoryboardEditorProps {
   onChange?: (doc: StoryboardDocument, headings: StoryboardHeading[]) => void;
   /** Reports the active (cursor) block so the Review panel can anchor comments. */
   onActiveBlock?: (block: ActiveBlockInfo | null) => void;
+  /** Reports a non-fatal authoring warning (e.g. a Content Group capacity
+   *  rejection triggered from inside the editor itself, like the H4
+   *  slash-menu item, rather than via `insert`/`insertComponent`'s own
+   *  return value) for the host to surface — e.g. as a toast. */
+  onWarning?: (message: string) => void;
 }

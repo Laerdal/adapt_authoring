@@ -30,7 +30,7 @@ import {
   type McqOption,
 } from '@/types/storyboard';
 
-const LABELS: Record<AssessmentKind, string> = {
+export const ASSESSMENT_LABELS: Record<AssessmentKind, string> = {
   mcq: 'MCQ',
   gmcq: 'Graphic MCQ',
   matching: 'Matching',
@@ -103,18 +103,30 @@ function HeaderBtn({ onClick, active, children, title }: { onClick: () => void; 
 
 // ── Feedback group (whole-question) ──────────────────────────────────────────
 
-function FeedbackGroup({ fb, set }: { fb: AssessmentFeedback; set: (f: AssessmentFeedback) => void }) {
-  const field = (key: keyof AssessmentFeedback, label: string) => (
+function FeedbackGroup({ fb, set, issues }: { fb: AssessmentFeedback; set: (f: AssessmentFeedback) => void; issues?: string[] }) {
+  // Only `correct`/`incorrect` are ever required (validateAssessment) — the
+  // other three are attempt-specific refinements, so they get no red marker.
+  const missingCorrect = !!issues?.some((i) => i.includes('feedback for a correct answer'));
+  const missingIncorrect = !!issues?.some((i) => i.includes('feedback for an incorrect answer'));
+  const field = (key: keyof AssessmentFeedback, label: string, required?: boolean) => (
     <label className="mt-1 block">
-      <span className={labelCls}>{label}</span>
-      <input value={fb[key]} onKeyDown={stop} onChange={(e) => set({ ...fb, [key]: e.target.value })} className={inputCls} />
+      <span className={labelCls}>
+        {label}
+        {required && <span className="ml-0.5 font-bold text-red-600">*</span>}
+      </span>
+      <input
+        value={fb[key]}
+        onKeyDown={stop}
+        onChange={(e) => set({ ...fb, [key]: e.target.value })}
+        className={required ? `${inputCls} border-red-500 focus:border-red-500` : inputCls}
+      />
     </label>
   );
   return (
     <div className="mt-2 rounded border border-border p-2">
       <div className={labelCls}>Feedback</div>
-      {field('correct', 'Correct')}
-      {field('incorrect', 'Incorrect')}
+      {field('correct', 'Correct', missingCorrect)}
+      {field('incorrect', 'Incorrect', missingIncorrect)}
       {field('incorrectNotFinal', 'Incorrect — not final')}
       {field('partlyCorrectFinal', 'Partly correct — final')}
       {field('partlyCorrectNotFinal', 'Partly correct — not final')}
@@ -485,6 +497,12 @@ export const assessmentBlock = createReactBlockSpec(
     // that field.
     meta: { selectable: false },
     render: ({ block, editor }) => {
+      // A review-only Share-for-Review invitee must not be able to edit a
+      // card's own native inputs either — editable={false} on the surrounding
+      // BlockNoteView only locks its own ProseMirror-native text, not these
+      // plain React inputs/buttons rendered inside a custom block (ADAPT-3760
+      // UAT fix) — see componentBlock.tsx's matching comment.
+      const readOnly = !editor.isEditable;
       const kind = (isAssessmentKind(block.props.kind as string) ? block.props.kind : 'mcq') as AssessmentKind;
       const [model, setModel] = useState<AssessmentData>(() => parseData(kind, block.props.data as string));
       //assessments open in Preview by default so the reader
@@ -512,7 +530,7 @@ export const assessmentBlock = createReactBlockSpec(
       // AI wiring: Replace overwrites the question, Insert appends to it.
       const openAi = () => {
         storyboardActions.openAi({
-          initialText: plainText(model.question || title || LABELS[kind]),
+          initialText: plainText(model.question || title || ASSESSMENT_LABELS[kind]),
           onReplace: (text) => update({ ...model, question: text }),
           onInsert: (text) => update({ ...model, question: model.question ? `${model.question}\n\n${text}` : text }),
         });
@@ -557,7 +575,7 @@ export const assessmentBlock = createReactBlockSpec(
           >
             <div className="mb-2 flex items-center gap-2">
               <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                {LABELS[kind]}
+                {ASSESSMENT_LABELS[kind]}
               </span>
               <span className="truncate text-base font-semibold text-foreground">
                 {headerText}
@@ -695,15 +713,21 @@ export const assessmentBlock = createReactBlockSpec(
           {/* Header */}
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {LABELS[kind]}
+              {ASSESSMENT_LABELS[kind]}
             </span>
-            <input value={title} placeholder={`${LABELS[kind]} title`} onKeyDown={stop} onChange={(e) => setTitle(e.target.value)} className="min-w-0 flex-1 border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground" />
-            <HeaderBtn onClick={() => update({ ...model, showTitle: !model.showTitle })} active={model.showTitle} title="Show the title to learners">
-              <Check className="h-3 w-3" /> Show title
-            </HeaderBtn>
-            <HeaderBtn onClick={openAi} title="Draft with AI">
-              <SamaritanIcon className="h-3 w-3" /> AI
-            </HeaderBtn>
+            {/* `<fieldset>` (display:contents so it doesn't disturb this flex
+                row) disables every native input/button inside it in one shot
+                when read-only — everything EXCEPT Comment, which stays usable:
+                reviewers can view + comment, just not edit. */}
+            <fieldset disabled={readOnly} className="contents">
+              <input value={title} placeholder={`${ASSESSMENT_LABELS[kind]} title`} onKeyDown={stop} onChange={(e) => setTitle(e.target.value)} className="min-w-0 flex-1 border-0 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60" />
+              <HeaderBtn onClick={() => update({ ...model, showTitle: !model.showTitle })} active={model.showTitle} title="Show the title to learners">
+                <Check className="h-3 w-3" /> Show title
+              </HeaderBtn>
+              <HeaderBtn onClick={openAi} title="Draft with AI">
+                <SamaritanIcon className="h-3 w-3" /> AI
+              </HeaderBtn>
+            </fieldset>
             <HeaderBtn
               onClick={() => {
                 // Comments only ever live at Page/Article level (never
@@ -711,51 +735,57 @@ export const assessmentBlock = createReactBlockSpec(
                 // than this question's own block id.
                 const anchor = resolveCommentAnchor(editor.document, block.id);
                 if (!anchor) return;
-                storyboardActions.openComment({ blockId: anchor.id, label: `${anchor.text || 'Untitled'} · ${LABELS[kind].toUpperCase()}` });
+                storyboardActions.openComment({ blockId: anchor.id, label: `${anchor.text || 'Untitled'} · ${ASSESSMENT_LABELS[kind].toUpperCase()}` });
               }}
               title="Comment on this question"
             >
               <MessageSquare className="h-3 w-3" /> Comment
             </HeaderBtn>
-            <HeaderBtn onClick={() => setConfirmDeleteOpen(true)} title="Delete content">
-              <Trash2 className="h-3 w-3" /> Delete
-            </HeaderBtn>
+            <fieldset disabled={readOnly} className="contents">
+              <HeaderBtn onClick={() => setConfirmDeleteOpen(true)} title="Delete content">
+                <Trash2 className="h-3 w-3" /> Delete
+              </HeaderBtn>
+            </fieldset>
             <HeaderBtn onClick={() => { if (!issues.length) setCollapsed(true); }} title={issues.length ? 'Resolve validation issues before closing' : 'Collapse'}>
               <Check className="h-3 w-3" /> Done
             </HeaderBtn>
           </div>
 
-          {/* Body */}
-          <div className="block">
-            <span className={labelCls}>Body</span>
-            <BasicRichTextEditor
-              html={model.question}
-              onChange={(html) => update({ ...model, question: html })}
-              placeholder="Type the question here"
-              minHeight={90}
-              ariaLabel="Question body"
-              resetKey={block.id}
-            />
-          </div>
-          
-
-          <Body kind={kind} data={model} update={update} />
-
-          <div className="mt-2">
+          <fieldset disabled={readOnly} className="contents">
+            {/* Body */}
             <div className="block">
-              <span className={labelCls}>Instruction text</span>
+              <span className={labelCls}>Body</span>
               <BasicRichTextEditor
-                html={model.instruction || ''}
-                onChange={(html) => update({ ...model, instruction: html })}
-                placeholder={FOOTER[kind]}
-                minHeight={70}
-                ariaLabel="Question instruction"
-                resetKey={`${block.id}-instruction`}
+                html={model.question}
+                onChange={(html) => update({ ...model, question: html })}
+                placeholder="Type the question here"
+                minHeight={90}
+                ariaLabel="Question body"
+                resetKey={block.id}
+                disabled={readOnly}
               />
             </div>
-          </div>
 
-          <FeedbackGroup fb={fb} set={(f) => update({ ...model, feedback: f })} />
+
+            <Body kind={kind} data={model} update={update} />
+
+            <div className="mt-2">
+              <div className="block">
+                <span className={labelCls}>Instruction text</span>
+                <BasicRichTextEditor
+                  html={model.instruction || ''}
+                  onChange={(html) => update({ ...model, instruction: html })}
+                  placeholder={FOOTER[kind]}
+                  minHeight={70}
+                  ariaLabel="Question instruction"
+                  resetKey={`${block.id}-instruction`}
+                  disabled={readOnly}
+                />
+              </div>
+            </div>
+
+            <FeedbackGroup fb={fb} set={(f) => update({ ...model, feedback: f })} issues={issues} />
+          </fieldset>
 
           {/* Footer + readiness */}
           <div className="mt-2">

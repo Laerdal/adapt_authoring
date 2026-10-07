@@ -9,10 +9,15 @@ export default function DocumentToolbar({
   onInsert,
   onInsertHeading,
   onEnrichAI,
+  readOnly = false,
 }: {
   onInsert: (kind: StoryboardInsertKind) => void;
   onInsertHeading: (level: number) => void;
   onEnrichAI: () => void;
+  /** True for a reviewer invited via Share for Review — Add Heading/Add
+   *  Content/Ask Samaritan all create or change document content, which the
+   *  server now rejects for review-only access (ADAPT-3760 follow-up). */
+  readOnly?: boolean;
 }) {
   return (
     <div
@@ -23,20 +28,26 @@ export default function DocumentToolbar({
         fontFamily: 'var(--font-family-primary)',
       }}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <HeadingMenu onSelect={onInsertHeading} />
-        <AddContentMenu onInsert={onInsert} />
+      {readOnly ? (
+        <p style={{ fontSize: 13, color: 'var(--life-color-text-subtle)' }}>
+          You're reviewing this course — select a heading's comment action to leave feedback.
+        </p>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <HeadingMenu onSelect={onInsertHeading} />
+          <AddContentMenu onInsert={onInsert} />
 
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onEnrichAI}
-            className="sb-toolbar-btn sb-toolbar-btn-samaritan"
-          >
-            <SamaritanIcon className="h-3.5 w-3.5" /> Ask Samaritan
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onEnrichAI}
+              className="sb-toolbar-btn sb-toolbar-btn-samaritan"
+            >
+              <SamaritanIcon className="h-3.5 w-3.5" /> Ask Samaritan
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

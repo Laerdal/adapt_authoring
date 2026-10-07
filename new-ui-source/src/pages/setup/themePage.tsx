@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { saveThemeForCourse, saveThemeVariables, getThemePresets, saveThemePreset, applyThemePreset, getThemePresetParentTheme, renameThemePreset, deleteThemePreset, getThemeTypeVariablesSchemaByLabel, type ThemePreset } from "../../api/adaptAuthoring";
 import ConfirmDialog from "../../components/common/ConfirmDialog";
 import InfoIcon, { InfoFieldLabel } from "../../components/common/InfoIcon";
@@ -52,6 +53,16 @@ const PREVIEW_TITLE_SIZE: Record<string, string | null> = {
 
 const PAGE_TITLE_SIZE_REM: Record<string, number> = {
   H1: 3.5, H2: 3, H3: 2.5, H4: 2, H5: 1.5, Paragraph: 1.125,
+};
+
+export const THEME_PREVIEW_INFO = {
+  title: "Info",
+  livePreviewLabel: "Live Preview",
+  livePreviewText:
+    "The live preview shows how heading and paragraph fonts, text colours (including font, heading, instruction, and link styles), and background colours for pages, articles, blocks, and components will appear. It also reflects navigation background settings and progress fill colours. Please note that preview colours may differ slightly from the final rendered output, as text colours are adjusted during course preview to ensure optimal visual consistency.",
+  accessibilityLabel: "Accessibility",
+  accessibilityText:
+    "Colour contrast is automatically checked across navigation elements, menus, notify pop‑ups, and drawers to ensure accessibility compliance. During course preview, text colours may be modified to maintain proper contrast ratios, which can result in slight variations from the initial preview.",
 };
 
 function calcDesktopSizes(baseRem: number) {
@@ -304,6 +315,35 @@ function ThemePreview({ cfg }: { cfg: CustomThemeValues }) {
             </div>
           </div>
         </div>
+
+        <div
+          className="mt-4 rounded-xl p-4 shadow-sm"
+          style={{
+            background: '#FFFBEB',
+            border: '1px solid #FEE685',
+            color: '#973C00',
+          }}
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <div
+              className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold"
+              style={{ background: '#FDE68A', color: '#973C00' }}
+            >
+              i
+            </div>
+            <span className="text-sm font-bold" style={{ color: '#973C00' }}>{THEME_PREVIEW_INFO.title}</span>
+          </div>
+
+          <div className="mb-4">
+            <div className="text-sm font-semibold mb-1.5" style={{ color: '#7A3000' }}>{THEME_PREVIEW_INFO.livePreviewLabel}</div>
+            <p className="text-xs leading-relaxed" style={{ color: '#973C00' }}>{THEME_PREVIEW_INFO.livePreviewText}</p>
+          </div>
+
+          <div>
+            <div className="text-sm font-semibold mb-1.5" style={{ color: '#7A3000' }}>{THEME_PREVIEW_INFO.accessibilityLabel}</div>
+            <p className="text-xs leading-relaxed" style={{ color: '#973C00' }}>{THEME_PREVIEW_INFO.accessibilityText}</p>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -548,6 +588,22 @@ function CustomThemeEditor({ onBack }: { onBack: () => void }) {
 /* Theme selection panel */
 function normalizeName(v?: string): string {
   return (v ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+export function getThemeSchemaDefaults(fields: Record<string, unknown>): Record<string, unknown> {
+  const defaults: Record<string, unknown> = {};
+  Object.entries(fields).forEach(([key, value]) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+    const field = value as Record<string, unknown>;
+    if (field.default !== undefined) {
+      defaults[key] = structuredClone(field.default);
+    } else if (field.properties && typeof field.properties === 'object' && !Array.isArray(field.properties)) {
+      defaults[key] = getThemeSchemaDefaults(field.properties as Record<string, unknown>);
+    } else if (field.type === 'array') {
+      defaults[key] = [];
+    }
+  });
+  return defaults;
 }
 
 function mapThemeNameToId(themeName?: string): string | null {
@@ -1104,9 +1160,9 @@ function LifeListField({
       <div>
         <InfoFieldLabel
           label={title}
+          hint={description}
           className="mb-1.5"
         />
-        <p className="text-xs text-[#6b7280] leading-relaxed">{description}</p>
       </div>
       <div className="space-y-3">
         {items.map((item, index) => {
@@ -1277,7 +1333,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   }
 
   async function handleSave() {
-    if (!courseId || !selected) return;
+    if (!courseId || !selected || selectedThemeSchemaFamily !== selected) return;
     const labelMap: Record<string, string> = { life: 'LIFE Theme', vanilla: 'Vanilla Theme', custom: 'Custom Theme' };
     const themeLabel = labelMap[selected];
     if (!themeLabel) return;
@@ -1305,10 +1361,16 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       }
       // Build themeVariables payload - keep schema nesting to preserve old/new UI parity.
       let vars: Record<string, unknown> = {};
-      if (selected === 'custom') vars = buildMergedCustomThemeVariables(dbThemeVariables);
-      else if (selected === 'vanilla') vars = buildMergedVanillaThemeVariables(dbThemeVariables);
+      const baseVariables = selected === initialSelectedThemeId
+        ? dbThemeVariables
+        : {
+            ...getThemeSchemaDefaults(selectedThemeSchema ?? {}),
+            ...(presets.find((preset) => preset._id === selectedPresetId)?.properties ?? {}),
+          };
+      if (selected === 'custom') vars = buildMergedCustomThemeVariables(baseVariables);
+      else if (selected === 'vanilla') vars = buildMergedVanillaThemeVariables(baseVariables);
       else if (selected === 'life') {
-        vars = buildMergedLifeThemeVariables(dbThemeVariables);
+        vars = buildMergedLifeThemeVariables(baseVariables);
       }
       // LIFE uses _components; Custom uses _componentConfig (handled in builder).
       if (selected === 'life') {
@@ -1413,10 +1475,13 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   const [activeCustomAccordion, setActiveCustomAccordion] = useState<string | null>('_global');
   const [customSettings, setCustomSettings] = useState<Record<string, string>>(CUSTOM_FIELD_DEFAULTS);
   const [selectedThemeSchema, setSelectedThemeSchema] = useState<Record<string, unknown> | undefined>(undefined);
+  const [selectedThemeSchemaFamily, setSelectedThemeSchemaFamily] = useState<string | null>(null);
+  const initializedThemeFamilyRef = useRef<string | null>(null);
   const isLifeTheme = selected === 'life';
 
   useEffect(() => {
     let cancelled = false;
+    setSelectedThemeSchemaFamily(null);
     if (!selected) {
       setSelectedThemeSchema(undefined);
       return () => {
@@ -1439,7 +1504,10 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
     void getThemeTypeVariablesSchemaByLabel(themeLabel)
       .then((schema) => {
-        if (!cancelled) setSelectedThemeSchema(schema ?? undefined);
+        if (!cancelled) {
+          setSelectedThemeSchema(schema ?? undefined);
+          if (schema) setSelectedThemeSchemaFamily(selected);
+        }
       })
       .catch((error) => {
         console.warn('Failed to load theme type schema', error);
@@ -1918,9 +1986,24 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
   // Load saved themeVariables into customSettings / vanillaColors / checkboxes.
   useEffect(() => {
-    hydrateThemeVariablesIntoEditors(initialThemeVariables ?? {});
+    if (!selected || selectedThemeSchemaFamily !== selected || !selectedThemeSchema) return;
+    const defaults = getThemeSchemaDefaults(selectedThemeSchema);
+    const variables = selected === initialSelectedThemeId ? initialThemeVariables ?? {} : {};
+    const hydrated = { ...defaults };
+    Object.entries(variables).forEach(([key, value]) => {
+      const defaultValue = defaults[key];
+      hydrated[key] = value && typeof value === 'object' && !Array.isArray(value) &&
+        defaultValue && typeof defaultValue === 'object' && !Array.isArray(defaultValue)
+        ? { ...defaultValue as Record<string, unknown>, ...value as Record<string, unknown> }
+        : value;
+    });
+    if (initializedThemeFamilyRef.current !== selected) {
+      initializedThemeFamilyRef.current = selected;
+      setSelectedPresetId(selected === initialSelectedThemeId ? initialPresetId ?? '' : '');
+    }
+    hydrateThemeVariablesIntoEditors(hydrated);
     setInitialHydrationComplete(true);
-  }, [hydrateThemeVariablesIntoEditors, initialThemeVariables]);
+  }, [hydrateThemeVariablesIntoEditors, initialThemeVariables, initialPresetId, initialSelectedThemeId, selected, selectedThemeSchema, selectedThemeSchemaFamily]);
 
   // When selecting a preset, apply that preset's own properties into editor state.
   useEffect(() => {
@@ -1968,8 +2051,11 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
   // Live Preview Component
   const LivePreview = () => {
-    const [darkMode, setDarkMode] = useState(false);
-    const [isExpanded, setIsExpanded] = useState(false);
+    const [previewDarkMode, setPreviewDarkMode] = useState(false);
+    const [isPreviewExpanded, setIsPreviewExpanded] = useState(false);
+    const triggerRef = useRef<HTMLButtonElement | null>(null);
+    const dialogRef = useRef<HTMLDivElement | null>(null);
+
     const primaryColor = getCustomSetting('_global', '_primaryBrandColor') || '#2e7fa1';
     const secondaryColor = getCustomSetting('_global', '_secondaryBrandColor') || '#25837e';
     const paragraphFont = getCustomSetting('_global', 'paragraph-font-family') || 'Lato';
@@ -2006,10 +2092,19 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       double: 24,
     };
 
-    const previewBg = darkMode ? '#1a1a1a' : pageBgColor;
-    const canvasBg = darkMode ? '#111827' : '#f0f4f8';
-    const textColor = darkMode ? '#e8e8e8' : fontColor;
-    const headingColor = darkMode ? '#ffffff' : headingColorTheme;
+    const previewBg = previewDarkMode ? 'var(--life-base-black)' : pageBgColor;
+    const canvasBg = previewDarkMode ? '#111827' : '#f0f4f8';
+    const textColor = previewDarkMode ? '#e8e8e8' : fontColor;
+    const headingColor = previewDarkMode ? '#ffffff' : headingColorTheme;
+    const instructionPreviewColor = previewDarkMode ? '#f3f4f6' : instructionColor;
+    const articlePreviewBg = previewDarkMode ? '#232323' : articleBgColor;
+    const blockPreviewBg = previewDarkMode ? '#2b2b2b' : blockBgColor;
+    const componentPreviewBg = previewDarkMode ? '#333333' : componentBgColor;
+    const itemPreviewBg = previewDarkMode ? '#3a3a3a' : componentBgColor;
+    const infoPanelBg = previewDarkMode ? '#1f2937' : '#FFFBEB';
+    const infoPanelBorder = previewDarkMode ? '#4b5563' : '#FEE685';
+    const infoPanelText = previewDarkMode ? '#f9fafb' : '#973C00';
+    const infoPanelHeading = previewDarkMode ? '#ffffff' : '#7A3000';
     const navIconColor = (pageHeaderTitleColor && pageHeaderTitleColor !== 'transparent') ? pageHeaderTitleColor : '#ffffff';
     const navTextColor = (pageHeaderBodyColor && pageHeaderBodyColor !== 'transparent') ? pageHeaderBodyColor : navIconColor;
     const titleSize = titleSizeRaw;
@@ -2017,14 +2112,47 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     const articleBottom = spacingScale[articleBottomPadding] ?? spacingScale.standard;
     const blockTop = spacingScale[blockTopPadding] ?? spacingScale.standard;
     const blockBottom = spacingScale[blockBottomPadding] ?? spacingScale.standard;
+    const darkModeLabel = previewDarkMode ? 'Light mode' : 'Dark mode';
+    const darkModeTitle = previewDarkMode ? 'Switch to light mode' : 'Switch to dark mode';
 
     useEffect(() => {
-      if (!isExpanded) return;
+      if (!isPreviewExpanded) return;
 
       const previousOverflow = document.body.style.overflow;
       const onKeyDown = (event: KeyboardEvent) => {
-        if (event.key === 'Escape') setIsExpanded(false);
+        if (event.key === 'Escape') {
+          setIsPreviewExpanded(false);
+          return;
+        }
+
+        const dialog = dialogRef.current;
+        if (!dialog || event.key !== 'Tab') return;
+
+        const focusable = dialog.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+
+        if (!focusable.length) {
+          event.preventDefault();
+          return;
+        }
+
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
       };
+
+      const dialog = dialogRef.current;
+      if (dialog) {
+        dialog.focus();
+      }
 
       document.body.style.overflow = 'hidden';
       window.addEventListener('keydown', onKeyDown);
@@ -2032,15 +2160,15 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       return () => {
         document.body.style.overflow = previousOverflow;
         window.removeEventListener('keydown', onKeyDown);
+        requestAnimationFrame(() => triggerRef.current?.focus());
       };
-    }, [isExpanded]);
+    }, [isPreviewExpanded]);
 
     const previewContent = (
       <div className="min-h-0 flex-1 overflow-y-auto p-0" style={{ fontSize: '13px' }}>
         <div style={{ maxWidth: '760px', margin: '0 auto' }}>
           <div className="overflow-hidden rounded-xl border border-[#e5e7eb]" style={{ backgroundColor: previewBg }}>
-            <div style={{ height: '4px', borderTop: `1px solid ${progressBorder}`, borderBottom: `1px solid ${progressBorder}`, background: `linear-gradient(to right, ${progressFill} 60%, ${progressBackground} 60%)` }} />
-            <div style={{ background: navBg, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', borderBottom: darkMode ? '1px solid #374151' : '1px solid #f3f4f6' }}>
+            <div style={{ background: navBg, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: '10px', borderBottom: previewDarkMode ? '1px solid #374151' : '1px solid #f3f4f6' }}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={navIconColor} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M19 12H5M12 19l-7-7 7-7" />
               </svg>
@@ -2057,6 +2185,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                 <line x1="21" y1="21" x2="16.65" y2="16.65" />
               </svg>
             </div>
+            <div style={{ height: '4px', borderTop: `1px solid ${progressBorder}`, borderBottom: `1px solid ${progressBorder}`, background: `linear-gradient(to right, ${progressFill} 60%, ${progressBackground} 60%)` }} />
             <div style={{ backgroundColor: previewBg, padding: '18px' }}>
               <div style={{ maxWidth: '560px', margin: '0 auto' }}>
                 <div style={{ padding: '6px 0 14px' }}>
@@ -2068,59 +2197,177 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                   </div>
                 </div>
 
-                <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.84rem', color: linkColor, textDecoration: 'underline', cursor: 'pointer', marginBottom: '12px' }}>
-                  This is a sample link
-                </div>
+                <div style={{ border: `1px solid ${previewDarkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: '10px', background: articlePreviewBg, padding: `${articleTop}px 12px ${articleBottom}px`, marginTop: '10px' }}>
+                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '1rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '10px' }}>
+                    New Article Title
+                  </div>
 
-                <div style={{ border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`, borderRadius: '10px', background: articleBgColor, padding: '12px' }}>
-                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.9rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '8px' }}>
-                    New Component Title
-                  </div>
-                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: instructionColor, fontStyle: 'italic', marginBottom: '10px' }}>
-                    Choose one option then select Submit.
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {[{ label: 'Correct', selected: true }, { label: 'Incorrect', selected: false }].map((opt) => (
-                      <div
-                        key={opt.label}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '10px',
-                          border: `1px solid ${darkMode ? '#4b5563' : '#e5e7eb'}`,
-                          borderRadius: '999px',
-                          padding: '8px 12px',
-                          background: opt.selected ? `${secondaryColor}1F` : articleBgColor,
-                        }}
-                      >
-                        <div style={{ width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0, border: `2px solid ${opt.selected ? secondaryColor : (darkMode ? '#6b7280' : '#cbd5e1')}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: componentBgColor }}>
-                          {opt.selected && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: secondaryColor }} />}
-                        </div>
-                        <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.8rem', fontWeight: 600, color: textColor }}>{opt.label}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-start' }}>
-                    <div style={{ display: 'inline-block', background: primaryColor, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
-                      Submit
+                  <div style={{ border: `1px solid ${previewDarkMode ? '#4b5563' : '#9fc9dd'}`, borderRadius: '10px', background: blockPreviewBg, padding: `${blockTop}px 12px ${blockBottom}px`, marginTop: '10px' }}>
+                    <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.92rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '10px' }}>
+                      New Block Title
                     </div>
-                  </div>
-                </div>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '14px' }}>
-                  <div style={{ display: 'inline-block', border: `1px solid ${primaryColor}`, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 600, color: primaryColor }}>
-                    Previous
-                  </div>
-                  <div style={{ display: 'inline-block', background: primaryColor, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
-                    Next
+                    <div style={{ border: `1px solid ${previewDarkMode ? '#6b7280' : '#d1d5db'}`, borderRadius: '10px', background: componentPreviewBg, padding: '12px', marginTop: '10px', boxShadow: previewDarkMode ? 'none' : '0 1px 2px rgba(0, 0, 0, 0.05)' }}>
+                      <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.9rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '8px' }}>
+                        New Component Title
+                      </div>
+                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: textColor, marginBottom: '6px' }}>
+                        Body text
+                      </div>
+                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.84rem', color: linkColor, textDecoration: 'underline', cursor: 'pointer', marginBottom: '10px' }}>
+                        This is a sample link
+                      </div>
+                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: instructionPreviewColor, fontStyle: 'italic', marginBottom: '10px' }}>
+                        Choose one option then select Submit.
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {[{ label: 'Correct', selected: true }, { label: 'Incorrect', selected: false }].map((opt) => (
+                          <div
+                            key={opt.label}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '10px',
+                              border: `1px solid ${previewDarkMode ? '#9ca3af' : '#e5e7eb'}`,
+                              borderRadius: '999px',
+                              padding: '8px 12px',
+                              background: opt.selected ? `${secondaryColor}1F` : itemPreviewBg,
+                            }}
+                          >
+                            <div style={{ width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0, border: `2px solid ${opt.selected ? secondaryColor : (previewDarkMode ? '#d1d5db' : '#cbd5e1')}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: componentPreviewBg }}>
+                              {opt.selected && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: secondaryColor }} />}
+                            </div>
+                            <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.8rem', fontWeight: 600, color: textColor }}>{opt.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'flex-start' }}>
+                        <div style={{ display: 'inline-block', background: primaryColor, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
+                          Submit
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '14px' }}>
+                        <div style={{ display: 'inline-block', border: `1px solid ${primaryColor}`, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 600, color: primaryColor }}>
+                          Previous
+                        </div>
+                        <div style={{ display: 'inline-block', background: primaryColor, borderRadius: '6px', padding: '7px 16px', fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', fontWeight: 700, color: '#fff' }}>
+                          Next
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
           </div>
+
+          <div
+            className="mt-4 mb-6 rounded-xl p-4 shadow-sm"
+            style={{
+              background: infoPanelBg,
+              border: `1px solid ${infoPanelBorder}`,
+              color: infoPanelText,
+            }}
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <div
+                className="flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold"
+                style={{ background: previewDarkMode ? '#374151' : '#FDE68A', color: infoPanelText }}
+              >
+                i
+              </div>
+              <span className="text-sm font-bold" style={{ color: infoPanelText }}>{THEME_PREVIEW_INFO.title}</span>
+            </div>
+
+            <div className="mb-4">
+              <div className="text-sm font-semibold mb-1.5" style={{ color: infoPanelHeading }}>{THEME_PREVIEW_INFO.livePreviewLabel}</div>
+              <p className="text-xs leading-relaxed" style={{ color: infoPanelText }}>{THEME_PREVIEW_INFO.livePreviewText}</p>
+            </div>
+
+            <div>
+              <div className="text-sm font-semibold mb-1.5" style={{ color: infoPanelHeading }}>{THEME_PREVIEW_INFO.accessibilityLabel}</div>
+              <p className="text-xs leading-relaxed" style={{ color: infoPanelText }}>{THEME_PREVIEW_INFO.accessibilityText}</p>
+            </div>
+          </div>
         </div>
       </div>
     );
+
+    const expandedPreview = isPreviewExpanded && typeof document !== 'undefined'
+      ? createPortal(
+        <div
+          className="fixed inset-0 overflow-y-auto px-4 pb-8"
+          style={{ zIndex: 9999, backgroundColor: 'rgba(248, 250, 252, 0.99)', paddingTop: '72px' }}
+          onClick={() => setIsPreviewExpanded(false)}
+        >
+          <div
+            ref={dialogRef}
+            className="mx-auto flex w-full max-w-6xl min-h-0 flex-col overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-2xl"
+            style={{ position: 'relative', zIndex: 10000 }}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Live Preview"
+            tabIndex={-1}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-[#e5e7eb] shrink-0 sticky top-0 z-10">
+              <div className="flex items-center gap-2">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill={primaryColor} stroke="none">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                </svg>
+                <span className="text-sm font-semibold text-[#111827]">Live Preview</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[#6b7280] mr-1">Press Esc to close</span>
+                <button
+                  onClick={() => setPreviewDarkMode(!previewDarkMode)}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#d1d5db] bg-white px-3 text-sm font-medium text-[#374151] shadow-sm hover:bg-[#f9fafb]"
+                  title={darkModeTitle}
+                  aria-label={darkModeTitle}
+                  type="button"
+                >
+                  {previewDarkMode ? (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="4" />
+                      <path d="M12 2v2" />
+                      <path d="M12 20v2" />
+                      <path d="m4.93 4.93 1.41 1.41" />
+                      <path d="m17.66 17.66 1.41 1.41" />
+                      <path d="M2 12h2" />
+                      <path d="M20 12h2" />
+                      <path d="m6.34 17.66-1.41 1.41" />
+                      <path d="m19.07 4.93-1.41 1.41" />
+                    </svg>
+                  ) : (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                    </svg>
+                  )}
+                  <span>{darkModeLabel}</span>
+                </button>
+                <button
+                  onClick={() => setIsPreviewExpanded(false)}
+                  className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#d1d5db] bg-white px-3 text-sm font-medium text-[#374151] shadow-sm hover:bg-[#f9fafb]"
+                  title="Minimize preview"
+                  aria-label="Minimize preview"
+                  type="button"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12" />
+                  </svg>
+                  <span>Minimize</span>
+                </button>
+              </div>
+            </div>
+            <div className="min-h-0 flex-1" style={{ backgroundColor: canvasBg }}>
+              {previewContent}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )
+      : null;
 
     return (
       <>
@@ -2134,18 +2381,34 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
             </div>
             <div className="flex gap-1.5">
               <button
-                onClick={() => setDarkMode(!darkMode)}
+                ref={triggerRef}
+                onClick={() => setPreviewDarkMode(!previewDarkMode)}
                 className="w-8 h-8 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
-                title="Toggle dark mode"
-                aria-label="Toggle dark mode"
+                title={darkModeTitle}
+                aria-label={darkModeTitle}
                 type="button"
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                </svg>
+                {previewDarkMode ? (
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="4" />
+                    <path d="M12 2v2" />
+                    <path d="M12 20v2" />
+                    <path d="m4.93 4.93 1.41 1.41" />
+                    <path d="m17.66 17.66 1.41 1.41" />
+                    <path d="M2 12h2" />
+                    <path d="M20 12h2" />
+                    <path d="m6.34 17.66-1.41 1.41" />
+                    <path d="m19.07 4.93-1.41 1.41" />
+                  </svg>
+                ) : (
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+                  </svg>
+                )}
               </button>
               <button
-                onClick={() => setIsExpanded(true)}
+                ref={triggerRef}
+                onClick={() => setIsPreviewExpanded(true)}
                 className="w-8 h-8 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
                 title="Expand preview"
                 aria-label="Expand preview"
@@ -2163,56 +2426,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           {previewContent}
         </div>
 
-        {isExpanded && (
-          <div className="fixed inset-x-0 top-14 bottom-0 z-50 overflow-y-auto bg-black/50 p-4" onClick={() => setIsExpanded(false)}>
-            <div
-              className="mx-auto flex min-h-full w-full max-w-6xl min-h-0 flex-col overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-2xl"
-              role="dialog"
-              aria-modal="true"
-              aria-label="Live Preview"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <div className="flex items-center justify-between px-4 py-3 bg-white border-b border-[#e5e7eb] shrink-0">
-                <div className="flex items-center gap-2">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill={primaryColor} stroke="none">
-                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-                  </svg>
-                  <span className="text-sm font-semibold text-[#111827]">Live Preview</span>
-                </div>
-                <div className="flex gap-1.5">
-                  <button
-                    onClick={() => setDarkMode(!darkMode)}
-                    className="w-9 h-9 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
-                    title="Toggle dark mode"
-                    aria-label="Toggle dark mode"
-                    type="button"
-                  >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={() => setIsExpanded(false)}
-                    className="w-9 h-9 flex items-center justify-center bg-transparent border border-[#e5e7eb] rounded-lg text-[#6b7280] hover:bg-[#f9fafb]"
-                    title="Collapse preview"
-                    aria-label="Collapse preview"
-                    type="button"
-                  >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#6b7280" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="9 3 3 3 3 9" />
-                      <polyline points="15 21 21 21 21 15" />
-                      <line x1="3" y1="3" x2="10" y2="10" />
-                      <line x1="14" y1="14" x2="21" y2="21" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-              <div className="min-h-0 flex-1" style={{ backgroundColor: canvasBg }}>
-                {previewContent}
-              </div>
-            </div>
-          </div>
-        )}
+        {expandedPreview}
       </>
     );
   };
@@ -2297,7 +2511,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <p className="text-sm text-[#6b7280] mt-0.5 mb-0">Choose and configure the visual theme for your course.</p>
         </div>
         <div className="ml-auto">
-          <SaveChangesButton dirty={hasChanges} saving={saving} disabled={!courseId || !selected} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+          <SaveChangesButton dirty={hasChanges} saving={saving} disabled={!courseId || !selected || selectedThemeSchemaFamily !== selected} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
         </div>
       </div>
       <div className="flex-1 overflow-y-auto min-h-0">
@@ -2307,7 +2521,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <h2 className="text-base font-semibold text-[var(--life-base-black)]">
             Select Theme <span className="text-red-500">*</span>
           </h2>
-          <p className="text-sm text-[var(--life-neutral-300)] mt-0.5"> Select the base theme for your course </p>
+          <p className="text-sm text-[var(--life-neutral-300)] mt-0.5"> Changing the theme options will replace any unsaved selections you've made in the form below; make sure there's nothing you want to keep! </p>
         </div>
       </div>
 
@@ -2433,10 +2647,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           <ThemeAccordion
             label={getSchemaText(getSchemaField(selectedThemeSchema, '_course'), 'title') ?? 'Configuration: Course'}
             hint={getSchemaText(getSchemaField(selectedThemeSchema, '_course'), 'help')}
-            isOpen={isLifeTheme || activeAccordion === "Configuration: Course"}
+            isOpen={activeAccordion === "Configuration: Course"}
             onToggle={() => {
-              if (isLifeTheme) return;
-              setActiveAccordion(activeAccordion === "Configuration: Course" ? null : "Configuration: Course");
+              setActiveAccordion((current) => current === "Configuration: Course" ? null : "Configuration: Course");
             }}
           >
             <div className="space-y-6">
@@ -2516,22 +2729,23 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           </ThemeAccordion>
         )}
 
-        {/* Configuration: Content Groups - LIFE and Custom */}
-        {selected !== "vanilla" && (
+        {/* Configuration: Content Groups - LIFE only */}
+        {isLifeTheme && (
           <ThemeAccordion
-            label={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks'), 'title') ?? 'Configuration: Content Groups'}
+            label="Configuration: Content Groups"
             hint={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks'), 'help')}
-            isOpen={isLifeTheme || activeAccordion === "Configuration: Content Groups"}
+            isOpen={activeAccordion === "Configuration: Content Groups"}
             onToggle={() => {
-              if (isLifeTheme) return;
-              setActiveAccordion(activeAccordion === "Configuration: Content Groups" ? null : "Configuration: Content Groups");
+              setActiveAccordion((current) => current === "Configuration: Content Groups" ? null : "Configuration: Content Groups");
             }}
           >
             <div className="space-y-5">
+              <p className="text-xs text-[#6b7280] leading-relaxed" >
+                Content Groups - Adjust the spacing above and below the content group: Double, Standard, Half, or Remove.
+              </p>
               <div>
                 <InfoFieldLabel
                   label={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks', '_paddingTop'), 'title') ?? 'Spacing top'}
-                  hint={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks', '_paddingTop'), 'help')}
                   className="mb-2"
                 />
                 <select
@@ -2540,7 +2754,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                   className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md bg-white text-[#111827] cursor-pointer outline-none focus:border-[var(--life-primary-500)]"
                   style={{ minWidth: "110px" }}
                 >
-                  <option value=""></option>
                   <option value="double">Double</option>
                   <option value="half">Half</option>
                   <option value="remove">Remove</option>
@@ -2550,7 +2763,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
               <div>
                 <InfoFieldLabel
                   label={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks', '_paddingBottom'), 'title') ?? 'Spacing bottom'}
-                  hint={getSchemaText(getSchemaField(selectedThemeSchema, '_blocks', '_paddingBottom'), 'help')}
                   className="mb-2"
                 />
                 <select
@@ -2559,7 +2771,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                   className="text-xs px-2.5 py-1.5 border border-[#d1d5db] rounded-md bg-white text-[#111827] cursor-pointer outline-none focus:border-[var(--life-primary-500)]"
                   style={{ minWidth: "110px" }}
                 >
-                  <option value=""></option>
                   <option value="double">Double</option>
                   <option value="half">Half</option>
                   <option value="remove">Remove</option>
@@ -2574,10 +2785,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         {selected !== "vanilla" && (
           <ThemeAccordion
             label={getSchemaText(selectedThemeComponentSchema, 'title') ?? 'Configuration: Components'}
-            isOpen={isLifeTheme || activeAccordion === "Configuration: Components"}
+            isOpen={activeAccordion === "Configuration: Components"}
             onToggle={() => {
-              if (isLifeTheme) return;
-              setActiveAccordion(activeAccordion === "Configuration: Components" ? null : "Configuration: Components");
+              setActiveAccordion((current) => current === "Configuration: Components" ? null : "Configuration: Components");
             }}
           >
             <div className="space-y-5">
@@ -2965,6 +3175,15 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           </div>
         </div>
       )}
+
+      <div className="mt-6 w-full">
+        <div className="flex items-start gap-2.5 rounded-lg bg-[#fff7ed] border border-[#fed7aa] px-4 py-3 mb-5">
+          <span className="text-base leading-none mt-0.5" aria-hidden="true">💡</span>
+          <p className="text-sm text-[#9a3412] leading-snug">
+            <span className="font-semibold">Tip:</span> Once you’ve set up your theme, choose the menu you want to use for your course.
+          </p>
+        </div>
+      </div>
       </div>
       </div>
 

@@ -48,7 +48,7 @@ export function SaveChangesButton({ dirty, saving, disabled = false, onClick, cl
       disabled={!dirty || saving || disabled}
       className={
         className ??
-        "inline-flex items-center gap-2 rounded-lg border border-[#d1d5db] bg-white px-4 py-2 text-sm font-semibold text-[#111827] transition-colors cursor-pointer hover:bg-[#f9fafb] disabled:cursor-not-allowed disabled:opacity-50"
+        "inline-flex h-9 items-center gap-1.5 rounded-[8px] border border-transparent bg-transparent px-3 py-2 text-[13px] font-bold text-[var(--life-base-black)] transition-colors cursor-pointer hover:bg-[var(--life-primary-050)] hover:text-[var(--life-primary-700)] active:bg-[var(--life-primary-100)] active:text-[var(--life-primary-800)] disabled:cursor-not-allowed disabled:border-transparent disabled:bg-transparent disabled:text-[#9ca3af] disabled:hover:bg-transparent disabled:hover:text-[#9ca3af]"
       }
       title="Save changes"
     >

@@ -98,7 +98,7 @@ export default function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
   }, [mobileOpen]);
 
   const NAV_ROUTES: Record<string, string> = {
-    "My Courses": "/my-courses",
+    "My Courses": "/dashboard",
     "Shared with Me": "/shared",
     "User Management": "/users",
     "Plugin Management": "/plugins",

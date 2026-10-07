@@ -69,8 +69,12 @@ function TocItem({
         >
           {collapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
         </button>
-        <span className="sb-heading-chip" style={{ fontSize: 10, padding: '1px 5px', minWidth: 20 }}>
-          H{node.level}
+        <span
+          className="sb-heading-chip"
+          style={{ fontSize: 10, padding: '1px 5px', minWidth: 20 }}
+          title={node.isItem ? node.itemBadge : undefined}
+        >
+          {node.isItem ? (node.itemBadge || 'Item') : `H${node.level}`}
         </span>
         <span
           className="min-w-0 flex-1 break-words py-0.5 leading-snug"

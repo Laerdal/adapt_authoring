@@ -37,7 +37,63 @@ var metadata = {
   idMap: {},
 };
 var courseId;
-function doQuery(req, res, andOptions, next) {
+function retrieveDashboardCourses(query, options, next) {
+  var sort = options.operators && options.operators.sort;
+  if (!sort || !sort.displayTitle) return new CourseContent().retrieve(query, options, next);
+  database.getDatabase(function(err, db) {
+    if (err) return next(err);
+    var Model = db.getModel('course');
+    var castQuery = Model.find(query);
+    try {
+      castQuery.cast(Model);
+    } catch (error) {
+      return next(error);
+    }
+    var displayName = { $trim: { input: { $ifNull: ['$displayTitle', ''] } } };
+    var title = { $trim: { input: { $ifNull: ['$title', ''] } } };
+    var sortKeys = { _dashboardName: Number(sort.displayTitle) < 0 ? -1 : 1 };
+    var sortFields = { _id: 1, title: 1, displayTitle: 1 };
+    Object.keys(sort).forEach(function(key) {
+      if (key !== 'displayTitle') {
+        sortKeys[key] = Number(sort[key]) < 0 ? -1 : 1;
+        sortFields[key] = 1;
+      }
+    });
+    if (!sortKeys._id) sortKeys._id = 1;
+    var pipeline = [
+      { $match: castQuery.getQuery() },
+      { $project: sortFields },
+      { $addFields: { _dashboardName: { $toLower: { $cond: [
+        { $ne: [displayName, ''] }, displayName,
+        { $cond: [{ $ne: [title, ''] }, title, 'Untitled Course'] }
+      ] } } } },
+      { $sort: sortKeys }
+    ];
+    var skip = parseInt(options.operators.skip, 10);
+    var limit = parseInt(options.operators.limit, 10);
+    if (skip > 0) pipeline.push({ $skip: skip });
+    if (limit > 0) pipeline.push({ $limit: limit });
+    pipeline.push({ $project: { _id: 1 } });
+    Model.aggregate(pipeline).exec(function(error, rows) {
+      if (error) return next(error);
+      if (!rows.length) return next(null, []);
+      var orderedIds = rows.map(function(row) { return row._id; });
+      var retrievalOptions = Object.assign({}, options, { operators: {} });
+      new CourseContent().retrieve({ _id: { $in: orderedIds } }, retrievalOptions, function(retrieveError, courses) {
+        if (retrieveError) return next(retrieveError);
+        var byId = {};
+        courses.forEach(function(course) { byId[String(course._id)] = course; });
+        next(null, orderedIds.map(function(id) { return byId[String(id)]; }).filter(Boolean));
+      });
+    });
+  });
+}
+
+// `onResults`, when given, receives `(err, results)` instead of doQuery
+// writing the response itself — lets a caller (e.g. /shared/course) merge in
+// results from elsewhere before responding exactly once. Existing callers
+// that don't pass it keep the original behaviour unchanged.
+function doQuery(req, res, andOptions, next, onResults) {
   if(!next) {
     next = andOptions;
     andOptions = [];
@@ -78,10 +134,14 @@ function doQuery(req, res, andOptions, next) {
       console.error('This suggests a database connection or query performance issue');
     }, 5000); // 5 second timeout
     
-    new CourseContent().retrieve(query, options, function (err, results) {
-      clearTimeout(queryTimeout); // Clear the timeout when callback is reached      
-            
-      if (err) {        
+    retrieveDashboardCourses(query, options, function (err, results) {
+      clearTimeout(queryTimeout); // Clear the timeout when callback is reached
+
+      if (typeof onResults === 'function') {
+        return onResults(err, results, query);
+      }
+
+      if (err) {
         // Try to extract meaningful error info
         let errorMessage = err.message || err.toString() || 'Unknown database error';
         let errorDetails = {
@@ -141,10 +201,116 @@ function initialize () {
         });
       }
     });
+    // Fetches courses discoverable ONLY via a storyboard "Shared for Review"
+    // invite, bypassing ContentPlugin's normal co-author permission gate
+    // entirely (raw db.retrieve, not CourseContent.retrieve). That gate
+    // (lib/contentmanager.js's ContentPlugin.prototype.retrieve, ~line 224)
+    // runs helpers.hasCoursePermission for EVERY matched record and fails the
+    // WHOLE request if even one is denied — so simply adding these course ids
+    // to the normal $or query doesn't work: a review-only invitee is
+    // deliberately absent from course._shareWithUsers (see shareStoryboard's
+    // own comment on why), so hasCoursePermission denies them and the entire
+    // "Shared with Me" listing failed for that user, not just this course.
+    // Still tenant-scoped (defence in depth, matching every other raw query
+    // in this codebase) even though these ids already came from a
+    // tenant-scoped storyboard query.
+    function fetchStoryboardSharedCourses(db, courseIds, tenantId) {
+      return new Promise((resolve) => {
+        if (!courseIds.length) return resolve([]);
+        const query = { _id: { $in: courseIds } };
+        if (tenantId) query._tenantId = tenantId;
+        db.retrieve(
+          'course',
+          query,
+          {
+            jsonOnly: true,
+            fields: DASHBOARD_COURSE_FIELDS.join(' '),
+            populate: { createdBy: 'email firstName lastName', tags: '_id title' },
+          },
+          (err, courses) => resolve(!err && Array.isArray(courses) ? courses : []),
+        );
+      });
+    }
+
     // Only return courses which have been shared
     rest.get('/shared/course', (req, res, next) => {
-      req.body.search = Object.assign({}, req.body.search, { $or: [{ _shareWithUsers: req.user._id }, { _isShared: true }] });
-      doQuery(req, res, next);
+      const orConditions = [{ _shareWithUsers: req.user._id }, { _isShared: true }];
+      const userId = req.user && req.user._id;
+      // req.user is passport's deserialized session user — a raw 'user' DB
+      // record, which carries the tenant as a flat `_tenantId` field
+      // (lib/dml/schema/system/tenantObject.schema), never a nested `.tenant`
+      // object (that shape only exists on the SERIALIZED session payload /
+      // usermanager.getCurrentUser(), a different object entirely — see
+      // lib/usermanager.js's serializeUser vs deserializeUser). Reading
+      // `.tenant._id` here always resolved to undefined, defeating the
+      // explicit tenant passed to getDatabase below and silently skipping
+      // the storyboard-discovery side query whenever the process.domain
+      // fallback it then depended on wasn't available either.
+      let tenantId = req.user && req.user._tenantId;
+      if (!tenantId) {
+        try {
+          const sessionUser = usermanager.getCurrentUser();
+          tenantId = sessionUser && sessionUser.tenant && sessionUser.tenant._id;
+        } catch (e) {
+          tenantId = undefined;
+        }
+      }
+
+      // Merge the normal (permission-gated) co-author results with the
+      // separately-fetched (permission-bypassed, tenant-scoped) storyboard-
+      // shared ones, de-duplicated by _id, and respond exactly once.
+      const respondMerged = (err, coAuthorResults, storyboardSharedCourses) => {
+        if (err) {
+          const errorMessage = err.message || err.toString() || 'Unknown database error';
+          return res.status(500).json({
+            error: 'Database query failed',
+            details: errorMessage,
+            errorInfo: {
+              type: typeof err,
+              constructor: err.constructor.name,
+              message: err.message,
+              stack: err.stack,
+              allProperties: Object.getOwnPropertyNames(err),
+            },
+          });
+        }
+        const byId = new Map();
+        (coAuthorResults || []).forEach((c) => byId.set(String(c._id), c));
+        (storyboardSharedCourses || []).forEach((c) => {
+          if (!byId.has(String(c._id))) byId.set(String(c._id), c);
+        });
+        return res.status(200).json(Array.from(byId.values()));
+      };
+
+      const runCoAuthorQuery = (onDone) => {
+        req.body.search = Object.assign({}, req.body.search, { $or: orConditions });
+        doQuery(req, res, [], next, onDone);
+      };
+
+      if (!userId) {
+        return runCoAuthorQuery((err, results) => respondMerged(err, results, []));
+      }
+
+      // A course whose Storyboard has been "Shared for Review" with this user
+      // (plugins/content/storyboard) should also be discoverable here, so an
+      // invited reviewer can find it under "Shared with Me" — without ever
+      // writing anything onto the course record itself (course._shareWithUsers
+      // is also what evalCoursePermission, lib/helpers.js, treats as a full
+      // course co-author grant, not read-only, so a review-only storyboard
+      // invitee must never end up listed there).
+      database.getDatabase((err, db) => {
+        if (err) return runCoAuthorQuery((qErr, results) => respondMerged(qErr, results, []));
+        db.retrieve('storyboard', { _shareWithUsers: userId }, { jsonOnly: true }, (sbErr, storyboards) => {
+          const courseIds =
+            !sbErr && Array.isArray(storyboards) ? storyboards.map((s) => s._courseId).filter(Boolean) : [];
+          runCoAuthorQuery((qErr, coAuthorResults) => {
+            if (qErr || !courseIds.length) return respondMerged(qErr, coAuthorResults, []);
+            fetchStoryboardSharedCourses(db, courseIds, tenantId).then((storyboardSharedCourses) => {
+              respondMerged(null, coAuthorResults, storyboardSharedCourses);
+            });
+          });
+        });
+      }, tenantId);
     });
     /**
      * API Endpoint to duplicate a course
@@ -180,13 +346,23 @@ function initialize () {
 
 
   app.contentmanager.addContentHook('update', 'course', { when: 'pre' }, function (data, next) {
-    if (data[1].hasOwnProperty('themeSettings') || data[1].hasOwnProperty('customStyle')) {
-      var tenantId = usermanager.getCurrentUser().tenant._id;
-
-      app.emit('rebuildCourse', tenantId, data[0]._id);
+    var delta = data[1];
+    if (!['themeSettings', 'customStyle', 'themeVariables'].some(function(key) { return delta.hasOwnProperty(key); })) {
+      return next(null, data);
     }
-
-    next(null, data);
+    var tenantId = usermanager.getCurrentUser().tenant._id;
+    app.contentmanager.retrieve('course', data[0], function(err, courses) {
+      if (err) return next(err);
+      var stored = courses && courses[0];
+      if (!stored) return next(null, data);
+      var updated = _.extend({}, stored, delta);
+      var fingerprint = require('../../../lib/outputmanager').OutputPlugin.prototype.computeCompiledStyleFingerprint;
+      if (!_.isEqual(stored.themeSettings || {}, updated.themeSettings || {}) ||
+          fingerprint({ course: [stored] }) !== fingerprint({ course: [updated] })) {
+        app.emit('rebuildCourse', tenantId, data[0]._id);
+      }
+      next(null, data);
+    });
   });
 
   ['component'].forEach(function (contentType) {

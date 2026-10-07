@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import InfoIcon, { InfoFieldLabel, shouldRenderFieldInfoIcon } from "../../components/common/InfoIcon";
 import AssetPickerModal from "../../components/common/AssetPickerModal";
 import RichTextEditor from "../../components/common/RichTextEditor";
+import { tagAssetForAiTutor } from "../../api/adaptAuthoring";
 import { SaveChangesButton } from "./SaveChangesButton";
 import { SaveStatusToast } from "./SaveStatusToast";
 import {
@@ -105,7 +106,11 @@ function newResource(): LearningResource {
     sourceType: "asset",
     assetValue: "",
     urlValue: "",
-    displayOnEveryPage: false,
+    // Matches the `_isGlobal` schema default (true). The Adapt framework's
+    // resources extension filters out any item with `_isGlobal === false`
+    // when the drawer is opened from a page (i.e. always, in practice), so
+    // defaulting this to false silently hid every newly added resource.
+    displayOnEveryPage: true,
   };
 }
 
@@ -221,14 +226,26 @@ const LR_INPUT = "w-full px-3 py-2 text-sm rounded-lg border border-[#e5e7eb] bg
 const LR_TEXTAREA = `${LR_INPUT} resize-none`;
 
 /* Demo video placeholder shown at top of each accordion section */
-function DemoVideoPlaceholder({ label }: { label?: string }) {
+function DemoVideoPlaceholder({ label, src }: { label?: string; src?: string }) {
   return (
     <div className="rounded-lg overflow-hidden border border-[#e5e7eb]">
-      <div className="relative bg-[#1b3a4b] flex flex-col items-center justify-center gap-2.5" style={{ aspectRatio: '16/9' }}>
-        <div className="w-12 h-12 rounded-full bg-white/15 border-2 border-white/35 flex items-center justify-center backdrop-blur-sm">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="rgba(255,255,255,0.8)"><polygon points="5,3 19,12 5,21"/></svg>
-        </div>
-        <span className="text-xs text-white/50 font-medium">{label ?? 'Demo video coming soon'}</span>
+      <div className="relative bg-[#1b3a4b] flex flex-col items-center justify-center gap-2.5 overflow-hidden" style={{ aspectRatio: '16/9' }}>
+        {src ? (
+          <video
+            src={src}
+            muted
+            playsInline
+            controls
+            className="block w-full h-full object-cover"
+          />
+        ) : (
+          <>
+            <div className="w-12 h-12 rounded-full bg-white/15 border-2 border-white/35 flex items-center justify-center backdrop-blur-sm">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="rgba(255,255,255,0.8)"><polygon points="5,3 19,12 5,21"/></svg>
+            </div>
+            <span className="text-xs text-white/50 font-medium">{label ?? 'Demo video coming soon'}</span>
+          </>
+        )}
       </div>
     </div>
   );
@@ -244,6 +261,7 @@ function AddResourceDialog({
   onAdd: (r: LearningResource) => void;
   onCancel: () => void;
 }) {
+  const isEditing = !!initial;
   const [res, setRes] = useState<LearningResource>(initial ?? newResource());
   const [assetPickerOpen, setAssetPickerOpen] = useState(false);
   const [errors, setErrors] = useState<{ title?: string; format?: string; source?: string }>({});
@@ -276,7 +294,7 @@ function AddResourceDialog({
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col max-h-[90vh] overflow-hidden">
         {/* header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-[#f3f4f6] shrink-0">
-          <h3 className="text-base font-bold text-[#111827]">Add Resource</h3>
+          <h3 className="text-base font-bold text-[#111827]">{isEditing ? "Edit Resource" : "Add Resource"}</h3>
           <button type="button" onClick={onCancel} className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#f3f4f6] transition-colors">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
@@ -315,7 +333,7 @@ function AddResourceDialog({
             checked={res.forceDownload}
             onChange={(v) => set("forceDownload", v)}
             label="Force download"
-            help={<LrHelp>Forces the resource to be downloaded rather than opened in the browser. Only supported in browsers that support the 'download' attribute and for resources that are part of the course content/hosted on the same URL.</LrHelp>}
+            hint="Forces the resource to be downloaded rather than opened in the browser. Only supported in browsers that support the 'download' attribute and for resources that are part of the course content/hosted on the same URL."
           />
 
           {/* Title */}
@@ -334,7 +352,7 @@ function AddResourceDialog({
           </LrField>
 
           {/* File Name */}
-          <LrField label="File Name" help={<LrHelp>Used to set the name of the downloaded file to something different to the source filename. Only supported in browsers that support the 'download' attribute and for resources that are part of the course content/hosted on the same URL. Forces the file to be downloaded regardless of what 'Force download' is set to.</LrHelp>}>
+          <LrField label="File Name" hint="Used to set the name of the downloaded file to something different to the source filename. Only supported in browsers that support the 'download' attribute and for resources that are part of the course content/hosted on the same URL. Forces the file to be downloaded regardless of what 'Force download' is set to.">
             <input
               type="text"
               value={res.fileName}
@@ -427,7 +445,7 @@ function AddResourceDialog({
             onClick={handleAddClick}
             className="px-4 py-2 text-sm font-semibold text-white bg-[#2d6fa8] hover:bg-[#245c8f] rounded-lg transition-colors"
           >
-            Add
+            {isEditing ? "Save" : "Add"}
           </button>
         </div>
       </div>
@@ -438,6 +456,7 @@ function AddResourceDialog({
         assetType={learningResourcePickerType(res.format)}
         onSelect={(asset) => {
           set("assetValue", asset.assetLink);
+          set("assetId", asset.id);
           setErrors((prev) => ({ ...prev, source: undefined }));
           setAssetPickerOpen(false);
         }}
@@ -710,6 +729,7 @@ export function LearnerExperiencePanel({
   const [lrLoading, setLrLoading] = useState(false);
   const [lrSaving, setLrSaving] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [editingResource, setEditingResource] = useState<LearningResource | null>(null);
   const [openAccordion, setOpenAccordion] = useState<LearnerExperienceAccordion | "">("");
   const toggleAccordion = (accordion: LearnerExperienceAccordion) => {
     setOpenAccordion((current) => (current === accordion ? "" : accordion));
@@ -729,6 +749,14 @@ export function LearnerExperiencePanel({
   function handleAddResource(r: LearningResource) {
     setLrState((prev) => ({ ...prev, resources: [...prev.resources, r] }));
     setShowAddDialog(false);
+  }
+
+  function handleUpdateResource(r: LearningResource) {
+    setLrState((prev) => ({
+      ...prev,
+      resources: prev.resources.map((existing) => (existing.id === r.id ? r : existing)),
+    }));
+    setEditingResource(null);
   }
 
   function handleRemoveResource(id: string) {
@@ -1132,7 +1160,10 @@ export function LearnerExperiencePanel({
           }
         >
           {/* Enable toggle */}
-          <DemoVideoPlaceholder label="See how Learning Resources works" />
+          <DemoVideoPlaceholder
+            label="See how Learning Resources works"
+            src="https://cdn-esim.contentservice.net/DEV/Resource_Help_9dc10de290-muxs5jn5.mp4"
+          />
           {lrLoading && (
             <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-sm text-[#6b7280]">
               Loading Learning Resources settings...
@@ -1143,7 +1174,6 @@ export function LearnerExperiencePanel({
               checked={lrState.enabled}
               onChange={(v) => setLr("enabled", v)}
               label={getSchemaLabel(getSchemaNode(resourcesFieldsSchema, "_isEnabled"), "Enable Learning Resources")}
-              hint={getSchemaHint(getSchemaNode(resourcesFieldsSchema, "_isEnabled"))}
               align="right"
             />
           </div>
@@ -1259,10 +1289,25 @@ export function LearnerExperiencePanel({
                   {lrState.resources.map((r) => (
                     <div key={r.id} className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-[#e5e7eb] bg-[#f9fafb]">
                       <ResourceFormatIcon format={r.format} />
-                      <div className="flex-1 min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => setEditingResource(r)}
+                        className="flex-1 min-w-0 text-left"
+                        title="Edit resource"
+                      >
                         <p className="text-sm font-medium text-[#111827] truncate">{r.title || <span className="text-[#9ca3af] font-normal">Untitled resource</span>}</p>
                         <p className="text-xs text-[#6b7280]">{getResourceFormatLabel(r.format)}{r.displayOnEveryPage ? " · Every page" : ""}</p>
-                      </div>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setEditingResource(r)}
+                        className="p-1 rounded text-[#9ca3af] hover:text-[#2d6fa8] hover:bg-[#eaf3fb] transition-colors shrink-0"
+                        title="Edit resource"
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                        </svg>
+                      </button>
                       <button
                         type="button"
                         onClick={() => handleRemoveResource(r.id)}
@@ -1305,7 +1350,10 @@ export function LearnerExperiencePanel({
             </svg>
           }
         >
-          <DemoVideoPlaceholder label="See how Learner Notes works" />
+          <DemoVideoPlaceholder
+            label="See how Learner Notes works"
+            src="https://cdn-esim.contentservice.net/DEV/course_notes_e4decc897c-muxs5x00.mp4"
+          />
           {lnLoading && (
             <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-sm text-[#6b7280]">
               Loading Learner Notes settings...
@@ -1316,7 +1364,6 @@ export function LearnerExperiencePanel({
               checked={lnState.enabled}
               onChange={(v) => setLn("enabled", v)}
               label={getSchemaLabel(getSchemaNode(notesFieldsSchema, "_isEnabled"), "Enable Notes")}
-              hint={getSchemaHint(getSchemaNode(notesFieldsSchema, "_isEnabled"))}
               align="right"
             />
           </div>
@@ -1504,7 +1551,10 @@ export function LearnerExperiencePanel({
             </svg>
           }
         >
-          <DemoVideoPlaceholder label="See how Learner Search works" />
+          <DemoVideoPlaceholder
+            label="See how Learner Search works"
+            src="https://cdn-esim.contentservice.net/DEV/Search_video_11c7429678-muxs6p06.mp4"
+          />
           {lsLoading && (
             <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-sm text-[#6b7280]">
               Loading Learner Search settings...
@@ -1587,7 +1637,10 @@ export function LearnerExperiencePanel({
           }
         >
           {/* Enable toggle */}
-          <DemoVideoPlaceholder label="See how Ask AI Tutor works" />
+          <DemoVideoPlaceholder
+            label="See how Ask AI Tutor works"
+            src="https://cdn-esim.contentservice.net/LA/AI_Tutor_3c4e313383-muy1qy02.mp4"
+          />
           {atLoading && (
             <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-sm text-[#6b7280]">
               Loading Ask AI Tutor settings...
@@ -1598,7 +1651,6 @@ export function LearnerExperiencePanel({
               checked={atState.enabled}
               onChange={(v) => setAt("enabled", v)}
               label={getSchemaLabel(getSchemaNode(aiTutorFieldsSchema, "_isEnabled"), "Enable AI Tutor")}
-              hint={getSchemaHint(getSchemaNode(aiTutorFieldsSchema, "_isEnabled"))}
               align="right"
             />
           </div>
@@ -1696,13 +1748,15 @@ export function LearnerExperiencePanel({
           }
         >
           {/* Enable toggle */}
-          <DemoVideoPlaceholder label="See how Laerdal Course Feedback works" />
+          <DemoVideoPlaceholder
+            label="See how Laerdal Course Feedback works"
+            src="https://cdn-esim.contentservice.net/DEV/course_Feedback_4_e8eaa74e92-muxs7da9.mp4"
+          />
           <div className={`pt-3${cfState.enabled ? " pb-4 border-b border-[#e5e7eb]" : ""}`}>
             <LrToggle
               checked={cfState.enabled}
               onChange={(v) => setCf("enabled", v)}
               label={getSchemaLabel(getSchemaNode(feedbackFieldsSchema, "_isEnabled"), "Enable Laerdal Course Feedback")}
-              hint={getSchemaHint(getSchemaNode(feedbackFieldsSchema, "_isEnabled"))}
               align="right"
             />
           </div>
@@ -1910,6 +1964,14 @@ export function LearnerExperiencePanel({
         />
       )}
 
+      {editingResource && (
+        <AddResourceDialog
+          initial={editingResource}
+          onAdd={handleUpdateResource}
+          onCancel={() => setEditingResource(null)}
+        />
+      )}
+
       <div className="h-8" />
       </div>
 
@@ -1918,6 +1980,7 @@ export function LearnerExperiencePanel({
       {assetPickerOpen && (
         <AssetPickerModal
           assetType="other"
+          aiTutorCourseId={courseId}
           onSelect={(asset) => {
             const name = asset.assetLink.split("/").pop() ?? asset.assetLink;
             setAtState((prev) => ({
@@ -1925,6 +1988,7 @@ export function LearnerExperiencePanel({
               documents: [...prev.documents, { id: asset.id, name, document: asset.assetLink }],
             }));
             setAssetPickerOpen(false);
+            void tagAssetForAiTutor(asset.id, courseId);
           }}
           onClose={() => setAssetPickerOpen(false)}
         />

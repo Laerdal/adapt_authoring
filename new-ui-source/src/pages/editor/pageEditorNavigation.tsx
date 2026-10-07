@@ -1,6 +1,7 @@
+import type { PointerEvent as ReactPointerEvent, RefObject } from "react";
 import { CourseOutlinePanel } from "../../components/editor/index";
 import type { ContentPageData } from "./pageEditorWorkspace";
-import type { CourseStructure } from "../../types/structure";
+import type { CourseStructure, StructureLevel } from "../../types/structure";
 
 const ICON_BASE = "/new/assets/icons";
 
@@ -26,6 +27,18 @@ function MaskIcon({ file, className }: { file: string; className?: string }) {
 
 interface PageEditorNavigationProps {
   courseId: string;
+  onMove?: (level: StructureLevel, id: string, parentId: string, beforeId: string | null) => void;
+  leftPanelRef: RefObject<HTMLDivElement | null>;
+  leftPanelWidth: number;
+  leftPanelMinWidth: number;
+  leftPanelActionsAlignToTitles: boolean;
+  leftPanelMaxWidth: number;
+  isResizingLeftPanel: boolean;
+  onResizeLeftPanelStart: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onResizeLeftPanelMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  onResizeLeftPanelEnd: () => void;
+  onResizeLeftPanelTo: (width: number) => void;
+  onResetLeftPanelWidth: () => void;
   leftPanelOpen: boolean;
   onClosePanels: () => void;
   onOpenPanels: () => void;
@@ -54,7 +67,7 @@ interface PageEditorNavigationProps {
   onAddSubPage: (pageId: string) => void;
   onAddBlock: (pageId: string, articleId: string) => void;
   onDeleteBlock: (pageId: string, articleId: string, blockId: string) => void;
-  onAddComponent: (pageId: string, articleId: string, blockId: string) => void;
+  onAddComponent: (pageId: string, articleId: string, blockId: string, componentId?: string) => void;
   onDeleteComponent: (pageId: string, articleId: string, blockId: string, componentId: string) => void;
   onUseTemplate?: (target: {
     level: "topic" | "section" | "group" | "component";
@@ -62,11 +75,24 @@ interface PageEditorNavigationProps {
     articleId?: string;
     blockId?: string;
     moduleId?: string;
+    componentId?: string;
   }) => void;
 }
 
 export default function PageEditorNavigation({
   courseId,
+  onMove,
+  leftPanelRef,
+  leftPanelWidth,
+  leftPanelMinWidth,
+  leftPanelActionsAlignToTitles,
+  leftPanelMaxWidth,
+  isResizingLeftPanel,
+  onResizeLeftPanelStart,
+  onResizeLeftPanelMove,
+  onResizeLeftPanelEnd,
+  onResizeLeftPanelTo,
+  onResetLeftPanelWidth,
   leftPanelOpen,
   onClosePanels,
   onOpenPanels,
@@ -110,8 +136,12 @@ export default function PageEditorNavigation({
       )}
 
       {leftPanelOpen && (
-        <div className="flex md:relative fixed inset-y-0 left-0 z-40 md:z-auto h-full md:h-auto shrink-0">
+        <div ref={leftPanelRef} className="flex md:relative fixed inset-y-0 left-0 z-40 md:z-auto h-full md:h-auto shrink-0">
           <CourseOutlinePanel
+            courseId={courseId}
+            onMove={onMove}
+            panelWidth={leftPanelWidth}
+            panelActionsAlignToTitles={leftPanelActionsAlignToTitles}
             onClose={onClosePanels}
             menuPageCreated={menuPageCreated}
             menuSelected={menuSelected}
@@ -142,6 +172,42 @@ export default function PageEditorNavigation({
             onDeleteComponent={onDeleteComponent}
             onUseTemplate={onUseTemplate}
           />
+          {isResizingLeftPanel && (
+            <div
+              className="fixed inset-0 z-[100] cursor-col-resize touch-none"
+              onPointerMove={onResizeLeftPanelMove}
+              onPointerUp={onResizeLeftPanelEnd}
+              onPointerCancel={onResizeLeftPanelEnd}
+              aria-hidden="true"
+            />
+          )}
+          <div
+            role="separator"
+            aria-label="Resize structure panel"
+            aria-orientation="vertical"
+            aria-valuemin={leftPanelMinWidth}
+            aria-valuemax={leftPanelMaxWidth}
+            aria-valuenow={leftPanelWidth}
+            tabIndex={0}
+            title="Drag to resize structure panel"
+            onPointerDown={onResizeLeftPanelStart}
+            onDoubleClick={onResetLeftPanelWidth}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowLeft") {
+                event.preventDefault();
+                onResizeLeftPanelTo(leftPanelWidth + 20);
+              } else if (event.key === "ArrowRight") {
+                event.preventDefault();
+                onResizeLeftPanelTo(leftPanelWidth - 20);
+              } else if (event.key === "Home") {
+                event.preventDefault();
+                onResetLeftPanelWidth();
+              }
+            }}
+            className={`group hidden md:flex absolute inset-y-0 -right-1 z-30 w-2 cursor-col-resize touch-none items-center justify-center outline-none ${isResizingLeftPanel ? "bg-[#2e7fa1]/10" : ""}`}
+          >
+            <span className={`h-12 w-1 rounded-full transition-colors ${isResizingLeftPanel ? "bg-[#2e7fa1]" : "bg-[#94a3b8] group-hover:bg-[#2e7fa1] group-focus-visible:bg-[#2e7fa1]"}`} />
+          </div>
         </div>
       )}
 

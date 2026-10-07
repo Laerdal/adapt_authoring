@@ -28,7 +28,7 @@ export function SaveStatusToast({ toast, onDismiss, autoHideMs = 3000 }: SaveSta
   if (!toast) return null;
 
   return createPortal(
-    <div className="fixed top-6 right-6 z-50 pointer-events-none">
+    <div className="fixed top-6 right-6 z-[200] pointer-events-none">
       <div
         role="status"
         aria-live="polite"

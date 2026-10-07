@@ -72,6 +72,18 @@ const HEADING_LEVEL = {
   4: HeadingLevel.HEADING_4,
 };
 
+// Shown ONLY when a heading has no text at all (not even an un-renamed
+// default title) — used so the heading paragraph is never written with
+// blank text, which docxNormalizer.js's import would then fail to recognize
+// as a heading at all (it requires non-empty trimmed text), dropping the
+// whole structural boundary on reimport.
+const HEADING_LEVEL_FALLBACK = {
+  1: 'Untitled Topic',
+  2: 'Untitled Section',
+  3: 'Untitled Content Group',
+  4: 'Untitled Component',
+};
+
 // docx spacing units are twentieths of a point. 240 = 12pt = one line at 12pt.
 // Mirrors Word's default heading spacing so the export doesn't look
 // wall-to-wall (ADAPT-3785 §1: "spacing before/after headings").
@@ -135,6 +147,119 @@ function stripHtml(text) {
     .replace(/&#39;/g, "'")
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+// Converts a rich-text HTML field (description/instruction/question — the
+// BasicRichTextEditor fields, which store contentEditable-produced HTML like
+// "<p>Watch the video</p><div><br></div><div><br></div>") into plain text
+// with one newline per original block, instead of flattening to one line.
+// Unlike stripHtml (deliberately single-line, for feedback rows), this is for
+// fields that are genuinely multi-paragraph — pushTextParagraphs (DOCX) and
+// pdfkit's own multi-line text() (PDF) both split/wrap on '\n', so block
+// boundaries need to become real newlines, not get discarded. Without this,
+// the raw HTML (tags included) was rendered as literal visible text in the
+// exported document, since plain text-splitting on '\n' never sees a tag.
+function htmlToParagraphText(html) {
+  if (html == null) return '';
+  return String(html)
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\s*\/(p|div|li|h[1-6])\s*>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+/g, ' ').trim())
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n') // collapse runs of blank lines to at most one
+    .trim();
+}
+
+const RICH_TEXT_MARK_TAGS = {
+  strong: 'bold', b: 'bold', em: 'italic', i: 'italic', u: 'underline',
+  s: 'strike', strike: 'strike', sub: 'subscript', sup: 'superscript',
+};
+const RICH_TEXT_BLOCK_TAGS = new Set(['p', 'div', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'blockquote']);
+
+// Parses a rich-text HTML field (description/instruction/question — the
+// BasicRichTextEditor fields) into paragraphs of BlockNote-shaped inline runs
+// (`{ text, styles: { bold, italic, underline, strike, subscript,
+// superscript } }` — the SAME shape `inlineToRuns`/`inlineToText` above
+// already consume) instead of flattening to plain text. Author-applied
+// bold/italic/underline/strike/subscript/superscript previously never made
+// it into the exported document at all (htmlToParagraphText strips every
+// tag, keeping only the text) — this is what actually renders them as real
+// Word/PDF formatting instead of losing it on every export.
+function parseRichTextHtml(html) {
+  const source = String(html || '').trim();
+  if (!source) return [];
+
+  const { Parser } = require('htmlparser2');
+  const { DomHandler } = require('domhandler');
+  const domutils = require('domutils');
+
+  let dom = [];
+  const handler = new DomHandler((err, result) => { if (!err) dom = result; });
+  const parser = new Parser(handler, { decodeEntities: true });
+  parser.write(source);
+  parser.end();
+
+  const paragraphs = [];
+  let current = null;
+  const flush = () => {
+    if (current && current.some((r) => r.text.trim())) paragraphs.push(current);
+    current = null;
+  };
+  const ensure = () => {
+    if (!current) current = [];
+    return current;
+  };
+  // `<li>` is a recognized block tag (its own paragraph), but without this a
+  // list rendered no differently from a run of plain paragraphs — the bullet/
+  // number marker was dropped entirely, not just the <ul>/<ol> wrapper, so
+  // the export still didn't read as a list even once the raw tags were gone.
+  // `listCtx` threads the enclosing <ul>/<ol> (and an order counter for <ol>)
+  // down through the recursion so each <li> can prefix itself.
+  const walk = (node, styles, listCtx) => {
+    if (!node) return;
+    if (node.type === 'text') {
+      if (node.data) ensure().push({ text: node.data, styles });
+      return;
+    }
+    if (node.type !== 'tag') return;
+    const tag = node.name;
+    if (tag === 'br') {
+      ensure().push({ text: '\n', styles });
+      return;
+    }
+    if (tag === 'ul' || tag === 'ol') {
+      const childListCtx = { type: tag, counter: 0 };
+      for (const child of domutils.getChildren(node) || []) walk(child, styles, childListCtx);
+      return;
+    }
+    const nextStyles = RICH_TEXT_MARK_TAGS[tag] ? { ...styles, [RICH_TEXT_MARK_TAGS[tag]]: true } : styles;
+    const isBlock = RICH_TEXT_BLOCK_TAGS.has(tag);
+    if (isBlock) flush();
+    if (tag === 'li' && listCtx) {
+      listCtx.counter += 1;
+      ensure().push({ text: listCtx.type === 'ol' ? `${listCtx.counter}. ` : '• ', styles: {} });
+    }
+    for (const child of domutils.getChildren(node) || []) walk(child, nextStyles, listCtx);
+    if (isBlock) flush();
+  };
+  for (const node of dom) walk(node, {}, null);
+  flush();
+
+  if (paragraphs.length) return paragraphs;
+
+  // No recognizable block/inline markup at all (e.g. the field somehow holds
+  // plain text already) — fall back to the plain-text split so nothing is
+  // lost, just unstyled.
+  const plain = htmlToParagraphText(source);
+  return plain ? plain.split('\n').filter((l) => l.trim()).map((line) => [{ text: line, styles: {} }]) : [];
 }
 
 // BlockNote inline content can be a plain string OR an array of styled runs
@@ -265,13 +390,31 @@ function pushTextParagraphs(children, text, opts) {
   }
 }
 
+// Renders a rich-text HTML field (description/instruction/question) as one
+// real, formatted Word paragraph per source block — bold/italic/underline/
+// strike/subscript/superscript survive as actual docx run styling instead of
+// being flattened to plain text.
+function pushRichTextParagraphs(children, html) {
+  const paragraphs = parseRichTextHtml(html);
+  for (const runs of paragraphs) {
+    children.push(new Paragraph({ spacing: { before: 60, after: 60 }, children: inlineToRuns(runs) }));
+  }
+}
+
 // Push an image ref (already resolved via assetResolver) as an ImageRun. Falls
 // back to a bracketed text reference if resolution failed (external URL, etc.).
 async function pushImageRef(children, ref, label, ctx) {
   try {
     let resolved = await assetResolver.resolveAnyImage(ref, ctx);
     if (resolved) {
-      resolved = await assetResolver.normalizeImageForEmbedding(resolved) || resolved;
+      // See assetResolver.js's normalizeImageForEmbedding comment: for an
+      // SVG this returns a `{ type: 'svg', fallback }` shape (never null) —
+      // Word 2016+ renders the SVG natively via docx's asvg:svgBlip
+      // extension, so the embed doesn't depend on sharp/librsvg succeeding.
+      resolved = await assetResolver.normalizeImageForEmbedding(resolved);
+    }
+    if (resolved) {
+      const isSvg = String(resolved.type || '').toLowerCase() === 'svg';
       children.push(
         new Paragraph({
           spacing: { before: 120, after: 120 },
@@ -280,6 +423,7 @@ async function pushImageRef(children, ref, label, ctx) {
               data: resolved.buffer,
               type: resolved.type,
               transformation: { width: resolved.width, height: resolved.height },
+              ...(isSvg ? { fallback: { type: resolved.fallback.type, data: resolved.fallback.buffer } } : {}),
               altText: resolved.alt
                 ? { title: resolved.alt, description: resolved.alt, name: resolved.alt }
                 : undefined,
@@ -298,7 +442,12 @@ async function pushImageRef(children, ref, label, ctx) {
       return true;
     }
   } catch (e) {
-    /* fall through to text reference */
+    // Logged (not silently swallowed) so a genuine embedding failure — e.g.
+    // docx's ImageRun rejecting an SVG that slipped through un-rasterized —
+    // is distinguishable in server logs from "this ref just isn't a DAM
+    // asset", which is the far more common, expected reason this falls
+    // through to the text-reference placeholder below.
+    console.error('[storyboard] image embed failed, falling back to a text reference:', e && e.message);
   }
   // Reference-only fallback (external URL / permission denied / deleted).
   const link = (ref && (ref.link || ref.url)) || '';
@@ -338,8 +487,8 @@ async function sbComponentToDocxParagraphs(children, props, ctx) {
   const title = isPlaceholderTitle(rawTitle) ? '' : rawTitle;
   const label = COMPONENT_KIND_LABEL[kind] || kind;
 
-  const description = data.description ? String(data.description).trim() : '';
-  const instruction = data.instruction ? String(data.instruction).trim() : '';
+  const description = data.description ? htmlToParagraphText(data.description) : '';
+  const instruction = data.instruction ? htmlToParagraphText(data.instruction) : '';
   const image = data.image || null;
   const media = data.media || null;
   const hasImageAsset = !!(image && (image.link || image.assetId));
@@ -352,20 +501,15 @@ async function sbComponentToDocxParagraphs(children, props, ctx) {
   const hasFormFields =
     kind === 'laerdalForm' && Array.isArray(data.fields) && data.fields.some((f) => f && f.label);
 
-  // A brand-new component with no title AND no data is scaffolding only —
-  // skip it entirely so the docx doesn't fill with empty "Text —" headers.
-  if (
-    !title &&
-    !description &&
-    !instruction &&
-    !hasGroupItems &&
-    !hasFormFields &&
-    !hasImageAsset &&
-    !hasMediaAsset &&
-    !hasMediaPoster
-  ) {
-    return;
-  }
+  // NOTE: a brand-new/unauthored component (no title/description/etc.) is
+  // NOT skipped here — it still gets a card marker + its bare "{label}"
+  // header line below. "Update content only" (storyboardContentUpdate.ts)
+  // matches reimported content back to the live course by POSITION, so
+  // omitting a component from the export entirely would shift every later
+  // sibling's match in the reimported document and corrupt the course — this
+  // was the confirmed root cause of a reported "reimport breaks the whole
+  // course structure" bug. The header-only render below already degrades
+  // gracefully to just the kind label when there's nothing else to show.
 
   pushCardBeginMarker(children, 'sbComponent', props);
 
@@ -381,7 +525,7 @@ async function sbComponentToDocxParagraphs(children, props, ctx) {
     }),
   );
 
-  if (description) pushTextParagraphs(children, description);
+  if (description) pushRichTextParagraphs(children, data.description);
 
   // Image component: embed the picked asset (or fall back to a text ref).
   if (kind === 'image' && hasImageAsset) {
@@ -441,7 +585,12 @@ async function sbComponentToDocxParagraphs(children, props, ctx) {
           }),
         );
       }
-      if (b) pushTextParagraphs(children, b);
+      // `item.body` is rich-text HTML from the grouped-content card's editor
+      // (same shape as description/instruction) — pushTextParagraphs only
+      // splits on literal newline characters, which raw HTML never contains,
+      // so the whole "<p>...</p>" string was landing in the document as one
+      // literal, unparsed line of tags instead of formatted paragraphs.
+      if (b) pushRichTextParagraphs(children, b);
       if (item.image) {
         // eslint-disable-next-line no-await-in-loop
         await pushImageRef(
@@ -468,7 +617,25 @@ async function sbComponentToDocxParagraphs(children, props, ctx) {
     }
   }
 
-  if (instruction) pushTextParagraphs(children, instruction, { italic: true });
+  if (instruction) {
+    // A bold "Instruction:" label (same convention as "Transcript:" above)
+    // visually distinguishes the section WITHOUT touching the content's own
+    // formatting — forcing every run italic (an earlier version of this
+    // code) is fundamentally lossy in OOXML: a run can't represent "italic
+    // for two different reasons," so an author's OWN <em> text became
+    // indistinguishable from the baseline convention and both or neither
+    // survived reimport. The label doubles as an unambiguous reimport marker
+    // (see reconcileCardProps in toBlockNote.js) — simpler than the italic
+    // heuristic it replaces, which also had to special-case an image's alt
+    // caption to avoid misreading it as instruction text.
+    children.push(
+      new Paragraph({
+        spacing: { before: 120, after: 40 },
+        children: [new TextRun({ text: 'Instruction:', bold: true })],
+      }),
+    );
+    pushRichTextParagraphs(children, data.instruction);
+  }
 
   pushCardEndMarker(children);
 }
@@ -496,25 +663,17 @@ async function sbAssessmentToDocxParagraphs(children, props, ctx) {
   const data = safeParse(props.data, {});
   const rawTitle = (props.title || '').trim();
   const title = isPlaceholderTitle(rawTitle) ? '' : rawTitle;
-  const question = data.question ? String(data.question).trim() : '';
+  const question = data.question ? htmlToParagraphText(data.question) : '';
   const options = Array.isArray(data.options) ? data.options.filter((o) => o && o.text) : [];
   const items = Array.isArray(data.items) ? data.items.filter(Boolean) : [];
   const pairs = Array.isArray(data.pairs) ? data.pairs.filter((p) => p && (p.prompt || (Array.isArray(p.options) && p.options.length))) : [];
   const answers = Array.isArray(data.answers) ? data.answers.filter(Boolean) : [];
   const fb = data.feedback || {};
 
-  // Skip an assessment card that carries no authored content at all.
-  if (
-    !title &&
-    !question &&
-    !options.length &&
-    !items.length &&
-    !pairs.length &&
-    !answers.length &&
-    !(data.slider && data.slider.correct != null)
-  ) {
-    return;
-  }
+  // NOTE: an unauthored assessment card is NOT skipped — see the matching
+  // comment in sbComponentToDocxParagraphs above (same position-matching
+  // reimport-corruption reason). The header-only render below already
+  // degrades gracefully to just the kind label when there's nothing else.
 
   pushCardBeginMarker(children, 'sbAssessment', props);
 
@@ -523,7 +682,12 @@ async function sbAssessmentToDocxParagraphs(children, props, ctx) {
   //     empty the question Body stands in as the header.
   //   • The question Body is emitted as its own paragraph only when it isn't
   //     already the header text — so the same sentence never renders twice.
-  const headerText = title || question;
+  // The header is always a single line — collapse any paragraph breaks
+  // htmlToParagraphText preserved in `question` (a plain '\n' inside one
+  // docx TextRun isn't a real line break; it'd just render as stray
+  // whitespace). The full multi-paragraph question still appears correctly
+  // below via pushTextParagraphs when `showQuestionParagraph` is true.
+  const headerText = title || question.replace(/\n+/g, ' ').trim();
   const showQuestionParagraph = !!question && question !== headerText;
 
   // Type badge + title (mirrors the collapsed Preview header).
@@ -539,7 +703,7 @@ async function sbAssessmentToDocxParagraphs(children, props, ctx) {
   );
 
   // Question body — only when it isn't already the header.
-  if (showQuestionParagraph) pushTextParagraphs(children, question);
+  if (showQuestionParagraph) pushRichTextParagraphs(children, data.question);
 
   // Per-kind body.
   if (kind === 'mcq' || kind === 'gmcq' || kind === 'checklist') {
@@ -717,14 +881,23 @@ async function blocksToDocx(blocks, title, ctx, meta) {
     if (!b || !b.type) continue;
     if (b.type !== 'numberedListItem') numberedIndex = 0;
     if (b.type === 'heading') {
-      const text = inlineToText(b.content);
-      // Skip empty headings and headings whose only text is a schema default —
-      // legacy storyboard records baked those in as heading content before the
-      // projector filtered them out.
-      if (isPlaceholderTitle(text)) continue;
+      const text = inlineToText(b.content).trim();
       const level = HEADING_LEVEL[props.level] || HeadingLevel.HEADING_4;
       const spacing = HEADING_SPACING[props.level] || HEADING_SPACING[4];
-      children.push(new Paragraph({ heading: level, spacing, children: inlineToRuns(b.content) }));
+      // Always write the heading paragraph — even an un-renamed default
+      // title ("New Topic Title" etc.) or a genuinely empty one is still a
+      // REAL structural boundary (Topic/Section/Content Group) that "Update
+      // content only" matches back to the live course by POSITION
+      // (storyboardContentUpdate.ts); silently dropping it here shifted
+      // every later sibling's match and corrupted the reimported course
+      // (confirmed root cause of a reported "reimport breaks the whole
+      // course structure" bug). A level-appropriate fallback is used only
+      // for the genuinely-blank case, since docxNormalizer.js's import
+      // requires non-empty text to recognize a paragraph as a heading at all.
+      const runs = text
+        ? inlineToRuns(b.content)
+        : [new TextRun({ text: HEADING_LEVEL_FALLBACK[props.level] || 'Untitled', italics: true })];
+      children.push(new Paragraph({ heading: level, spacing, children: runs }));
     } else if (b.type === 'sbComponent') {
       // eslint-disable-next-line no-await-in-loop
       await sbComponentToDocxParagraphs(children, props, ctx);
@@ -801,8 +974,142 @@ async function resolveForPdf(ref, ctx) {
   }
 }
 
+// Above this, an internal asset is linked-to only (no attachment) — large
+// video files would otherwise bloat the PDF substantially. 15MB comfortably
+// covers typical compressed audio and short video clips.
+const PDF_EMBED_MAX_BYTES = 15 * 1024 * 1024;
+
+// An internal `course/assets/<filename>` reference is never itself reachable
+// from the exported file — unlike an author-pasted external URL, there's
+// nothing for a PDF reader to open. Resolve it to the real asset record and
+// make it reachable two ways: a clickable link to the (unauthenticated)
+// asset-serve endpoint — same mechanism already used for external URLs — and,
+// for anything under the size cap, an embedded file attachment so the asset
+// is also openable with no network access at all. Returns true if anything
+// was drawn, so the caller can fall back to the bare-text behaviour.
+// Draws the "Attached below for offline access" note + the actual embedded
+// file annotation. Shared by the internal-asset and external-URL paths below
+// — once bytes are in hand, embedding them is identical either way.
+function pdfAttachFile(doc, buffer, filename) {
+  if (!buffer || !buffer.length) return;
+  doc.font(PDF_FONT_ITALIC).fontSize(9).fillColor('#555')
+    .text('Attached below for offline access:', { indent: 12 });
+  const x = doc.x;
+  const y = doc.y;
+  doc.fileAnnotation(x, y, 12, 12, { src: buffer, name: filename || 'asset' });
+  doc.y = y + 16;
+  pdfResetText(doc);
+}
+
+async function pdfLinkInternalAsset(doc, ref, ctx) {
+  let assetRec;
+  try {
+    assetRec = await assetResolver.resolveAnyAssetRecord(ref, ctx);
+  } catch (e) {
+    assetRec = null;
+  }
+  if (!assetRec || !assetRec._id) return false;
+
+  let baseUrl = '';
+  try {
+    baseUrl = require('../../../../').getServerURL() || '';
+  } catch (e) {
+    /* no app context (e.g. a standalone script) — link falls back to a
+       relative path below, which a reader can't follow, but the attachment
+       (if small enough) still makes the file accessible. */
+  }
+  const relPath = `/api/asset/serve/${assetRec._id}`;
+  const url = baseUrl ? `${baseUrl}${relPath}` : relPath;
+
+  pdfResetText(doc);
+  doc.font(PDF_FONT_REGULAR).fillColor('#0645AD').text(url, { link: url, underline: true, indent: 12 });
+  pdfResetText(doc);
+
+  const size = Number(assetRec.size) || 0;
+  if (size > 0 && size <= PDF_EMBED_MAX_BYTES) {
+    try {
+      const buffer = await assetResolver.readResolvedAssetBuffer(assetRec, ctx);
+      pdfAttachFile(doc, buffer, assetRec.filename);
+    } catch (e) {
+      /* embedding is best-effort — the link above already makes the asset
+         reachable even if this fails */
+    }
+  }
+  return true;
+}
+
+// External video/audio: the clickable link (drawn by the caller) already
+// works today — this ADDS an embedded-attachment copy for offline access,
+// the same mechanism as internal assets, once the bytes are actually fetched.
+// Best-effort only: any failure (network, size cap, SSRF-blocked, etc.)
+// leaves the existing link-only behavior as the complete, correct fallback.
+async function pdfAttachExternalAsset(doc, link) {
+  try {
+    const result = await assetResolver.fetchExternalBytes(link, PDF_EMBED_MAX_BYTES);
+    if (!result || !result.buffer.length) return;
+    const filename = (() => {
+      try {
+        return decodeURIComponent(new URL(link).pathname.split('/').pop() || 'asset');
+      } catch (e) {
+        return 'asset';
+      }
+    })();
+    pdfAttachFile(doc, result.buffer, filename);
+  } catch (e) {
+    /* best effort — the link already drawn by the caller remains correct */
+  }
+}
+
+// ASCII-only on purpose: pdfkit's standard-14 fonts (Helvetica/etc.) encode
+// text via a single-byte WinAnsi map, which has no entry for U+25CF/U+25CB.
+// Those codepoints get pushed as raw 2-byte hex into a stream the reader
+// decodes one byte at a time, producing mojibake ("%Ï"/"%Ë" — reproduced and
+// confirmed). This only renders correctly when a Unicode TTF is registered
+// (registerPdfFonts, below) — which depends on an asset from an unrelated,
+// optionally-installed plugin and silently falls back to Helvetica when
+// absent. Use a marker every standard font can render instead of chasing
+// that dependency.
 function pdfMcqBullet(correct) {
-  return correct ? '● ' : '○ ';
+  return correct ? '[X] ' : '[ ] ';
+}
+
+// pdfkit's own `doc.image()` only ever understands raster JPEG/PNG — it has
+// no SVG support at all. `svg-to-pdfkit` draws an SVG's paths directly onto
+// the document using pdfkit's own vector primitives (pure JS, no native
+// dependency), so an SVG renders as a real vector — not a sharp/librsvg
+// rasterization — matching the Word export's native-SVG embed and no longer
+// depending on sharp succeeding at all. Falls back to the rasterized
+// `resolved.fallback` image (present whenever normalizeImageForEmbedding
+// processed an SVG) only if svg-to-pdfkit itself can't parse this particular
+// SVG (e.g. a feature it doesn't support) — same safety net as Word's.
+function pdfDrawImageAt(doc, resolved, x, y, w, h) {
+  if (String(resolved.type || '').toLowerCase() === 'svg') {
+    try {
+      const SVGtoPDF = require('svg-to-pdfkit');
+      SVGtoPDF(doc, resolved.buffer.toString('utf8'), x, y, {
+        width: w,
+        height: h,
+        preserveAspectRatio: 'xMidYMid meet',
+        assumePt: true,
+      });
+      return true;
+    } catch (e) {
+      const fallbackBuffer = resolved.fallback && resolved.fallback.buffer;
+      if (!fallbackBuffer) return false;
+      try {
+        doc.image(fallbackBuffer, x, y, { width: w, height: h });
+        return true;
+      } catch (e2) {
+        return false;
+      }
+    }
+  }
+  try {
+    doc.image(resolved.buffer, x, y, { width: w, height: h });
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 // Draw an image into the PDF, capped to the page's content width, aspect-
@@ -846,17 +1153,14 @@ function pdfDrawImage(doc, resolved, opts) {
       const w2 = w * scale;
       const h2 = h * scale;
       doc.addPage();
-      try { doc.image(resolved.buffer, marginL, doc.y, { width: w2, height: h2 }); }
-      catch (e) { return false; }
+      if (!pdfDrawImageAt(doc, resolved, marginL, doc.y, w2, h2)) return false;
       doc.y += h2 + 8;
       doc.x = marginL;
       return true;
     }
     doc.addPage();
   }
-  try {
-    doc.image(resolved.buffer, marginL, doc.y, { width: w, height: h });
-  } catch (e) {
+  if (!pdfDrawImageAt(doc, resolved, marginL, doc.y, w, h)) {
     return false;
   }
   // Advance the text cursor PAST the image with a comfortable gap so the next
@@ -892,22 +1196,130 @@ function pdfEnsureRoom(doc, minSpace) {
 const PDF_FONT_REGULAR = 'StoryboardPdfRegular';
 const PDF_FONT_BOLD = 'StoryboardPdfBold';
 const PDF_FONT_ITALIC = 'StoryboardPdfItalic';
+const PDF_FONT_BOLD_ITALIC = 'StoryboardPdfBoldItalic';
 
-function registerPdfFonts(doc) {
+// The Unicode TTF belongs to the separately-installed/versioned
+// `adapt-output-preflight` plugin, not this one — it only lands on disk via
+// that plugin's own postinstall copy, so it's absent whenever that plugin is
+// disabled/not installed on a given environment, or the install layout
+// differs from the one path assumed here. Check a couple of plausible
+// layouts before giving up, and log clearly when none match: the
+// ASCII-safe-marker fix (pdfMcqBullet et al.) means a missing font no longer
+// corrupts the indicator glyphs, but anything that still draws genuine
+// Unicode text would silently degrade without this warning.
+function findUnicodeFontPath() {
   const fs = require('fs');
   const path = require('path');
-  const fontPath = path.resolve(__dirname, '../../../output/preflight/assets/arial-unicode-ms.ttf');
-  if (fs.existsSync(fontPath)) {
+  const configuration = require('../../../../lib/configuration');
+  const relFilename = 'arial-unicode-ms.ttf';
+  const candidates = [
+    // Current layout: plugins/output/preflight/assets/<file>, reached from
+    // plugins/content/storyboard/utils/.
+    path.resolve(__dirname, '../../../output/preflight/assets', relFilename),
+    // Same target, resolved from the configured server root rather than a
+    // fixed `__dirname` depth — survives this file moving within the plugin.
+    path.join(configuration.serverRoot || process.cwd(), 'plugins/output/preflight/assets', relFilename),
+  ];
+  return candidates.find((p) => fs.existsSync(p)) || null;
+}
+
+function registerPdfFonts(doc) {
+  const fontPath = findUnicodeFontPath();
+  if (fontPath) {
+    // Only one weight/style of this TTF ships with adapt-output-preflight —
+    // there's no bold/italic/bold-italic face to register. Registering all
+    // four style names against that same single file used to make pdfkit
+    // render bold/italic/bold-italic runs visually identical to regular
+    // (a TTF has no variant data pdfkit can synthesize from an alias).
+    // Use it for regular text, where non-ASCII glyph coverage matters most,
+    // and fall back to pdfkit's built-in Helvetica variants — genuinely
+    // distinct bold/italic/bold-italic outlines, at the cost of WinAnsi-only
+    // coverage — for the styled runs so bold/italic are visibly different.
     doc.registerFont(PDF_FONT_REGULAR, fontPath);
-    doc.registerFont(PDF_FONT_BOLD, fontPath);
-    doc.registerFont(PDF_FONT_ITALIC, fontPath);
+    doc.registerFont(PDF_FONT_BOLD, 'Helvetica-Bold');
+    doc.registerFont(PDF_FONT_ITALIC, 'Helvetica-Oblique');
+    doc.registerFont(PDF_FONT_BOLD_ITALIC, 'Helvetica-BoldOblique');
   } else {
     // Font file missing, register names with PDFKit built-in fonts as fallback
+    try {
+      require('../../../../lib/logger').log(
+        'warn',
+        'Storyboard PDF export: Unicode font (arial-unicode-ms.ttf, from the adapt-output-preflight plugin) not found — falling back to Helvetica. Non-ASCII characters outside its WinAnsi encoding will not render correctly.'
+      );
+    } catch (e) {
+      /* logging must never block export */
+    }
     doc.registerFont(PDF_FONT_REGULAR, 'Helvetica');
     doc.registerFont(PDF_FONT_BOLD, 'Helvetica-Bold');
     doc.registerFont(PDF_FONT_ITALIC, 'Helvetica-Oblique');
+    doc.registerFont(PDF_FONT_BOLD_ITALIC, 'Helvetica-BoldOblique');
   }
   return true;
+}
+
+// Renders one styled run (as produced by parseRichTextHtml) using pdfkit's
+// `continued: true` chaining, so multiple differently-styled runs land on
+// the same line/paragraph instead of each starting a new one. Picks the
+// bold/italic font variant per run (falls back to the Unicode font registered
+// under all four names when the dedicated Unicode TTF isn't available — see
+// registerPdfFonts); underline/strike use pdfkit's own text() options rather
+// than a font switch. Subscript/superscript are approximated with a smaller
+// font size (pdfkit has no native baseline-shift API for this).
+function pdfRunFont(styles) {
+  if (styles.bold && styles.italic) return PDF_FONT_BOLD_ITALIC;
+  if (styles.bold) return PDF_FONT_BOLD;
+  if (styles.italic) return PDF_FONT_ITALIC;
+  return PDF_FONT_REGULAR;
+}
+
+function pdfWriteStyledRuns(doc, runs, baseFontSize, fillColor) {
+  const all = (runs || []).filter((r) => r && r.text);
+  if (!all.length) return;
+  if (fillColor) doc.fillColor(fillColor);
+  // A manual `<br>` is represented as its own run with `text: '\n'` (see
+  // parseRichTextHtml). Simply excluding it from the continued-text chain
+  // (as before) discarded the break entirely — "A<br>B" rendered as "AB" on
+  // one line. Split into per-line groups on these markers instead, ending
+  // the continued chain at each break so the next group starts on a new
+  // line, same as a `continued: false` call naturally does in pdfkit.
+  const lines = [[]];
+  for (const run of all) {
+    if (run.text === '\n') {
+      lines.push([]);
+      continue;
+    }
+    lines[lines.length - 1].push(run);
+  }
+  lines.forEach((lineRuns, lineIndex) => {
+    if (!lineRuns.length) {
+      if (lineIndex < lines.length - 1) doc.text('', { continued: false });
+      return;
+    }
+    lineRuns.forEach((run, i) => {
+      const styles = run.styles || {};
+      const size = styles.subscript || styles.superscript ? Math.max(6, baseFontSize * 0.7) : baseFontSize;
+      doc.font(pdfRunFont(styles)).fontSize(size).text(run.text, {
+        continued: i < lineRuns.length - 1,
+        underline: !!styles.underline,
+        strike: !!styles.strike,
+      });
+    });
+  });
+}
+
+// Writes a rich-text HTML field (description/instruction/question) as one
+// pdfkit paragraph per source block, preserving bold/italic/underline/
+// strike/subscript/superscript instead of the single flat-styled line the
+// PDF path used before. Does NOT reset text state itself (fillColor/doc.x)
+// before or after — callers already manage pdfResetText around their own
+// calls, and this needs to apply `opts.fillColor` (e.g. the instruction's
+// muted gray) without it being clobbered back to default.
+function pdfWriteRichText(doc, html, opts) {
+  const paragraphs = parseRichTextHtml(html);
+  const fontSize = (opts && opts.fontSize) || 11;
+  for (const runs of paragraphs) {
+    pdfWriteStyledRuns(doc, runs, fontSize, opts && opts.fillColor);
+  }
 }
 
 async function pdfWriteComponent(doc, props, ctx) {
@@ -915,8 +1327,8 @@ async function pdfWriteComponent(doc, props, ctx) {
   const data = safeParse(props.data, {});
   const rawTitle = (props.title || '').trim();
   const title = isPlaceholderTitle(rawTitle) ? '' : rawTitle;
-  const description = data.description ? String(data.description).trim() : '';
-  const instruction = data.instruction ? String(data.instruction).trim() : '';
+  const description = data.description ? htmlToParagraphText(data.description) : '';
+  const instruction = data.instruction ? htmlToParagraphText(data.instruction) : '';
   const image = data.image || null;
   const media = data.media || null;
   const label = COMPONENT_KIND_LABEL[kind] || kind;
@@ -927,7 +1339,8 @@ async function pdfWriteComponent(doc, props, ctx) {
     kind === 'groupedContent' &&
     Array.isArray(data.items) &&
     data.items.some((it) => it && (it.title || it.body || it.image));
-  if (!title && !description && !instruction && !hasImage && !hasMedia && !hasPoster && !hasGroupItems) return;
+  // NOTE: not skipped when empty — see the matching comment in
+  // sbComponentToDocxParagraphs (position-matching reimport-corruption fix).
 
   // Reserve at least ~1 inch of vertical room for the block's header + first
   // line of content, otherwise start on a fresh page so the header doesn't
@@ -935,10 +1348,11 @@ async function pdfWriteComponent(doc, props, ctx) {
   pdfEnsureRoom(doc, 72);
   doc.moveDown(0.6);
   pdfResetText(doc);
-  doc.font(PDF_FONT_BOLD).fontSize(11).text(`${label}${title ? ' — ' : ''}${title}`);
+  doc.font(PDF_FONT_BOLD).fontSize(11).text(`${label}${title ? ' - ' : ''}${title}`);
   if (description) {
     pdfResetText(doc);
-    doc.font(PDF_FONT_REGULAR).fontSize(11).text(description, { paragraphGap: 4 });
+    pdfWriteRichText(doc, data.description, { fontSize: 11 });
+    pdfResetText(doc);
   }
 
   if (kind === 'image' && hasImage) {
@@ -949,7 +1363,7 @@ async function pdfWriteComponent(doc, props, ctx) {
         if (resolved.alt) doc.font(PDF_FONT_ITALIC).fontSize(9).fillColor('#555').text(resolved.alt);
         pdfResetText(doc);
       } else {
-        doc.font(PDF_FONT_ITALIC).fontSize(10).text(`[Image — ${(image && image.link) || ''}]`);
+        doc.font(PDF_FONT_ITALIC).fontSize(10).text(`[Image - ${(image && image.link) || ''}]`);
       }
     } else if (image && image.link) {
       doc.font(PDF_FONT_REGULAR).fontSize(10).fillColor('#0645AD').text(image.link, { link: image.link, underline: true });
@@ -969,8 +1383,10 @@ async function pdfWriteComponent(doc, props, ctx) {
         if (/^https?:\/\//i.test(link)) {
           doc.font(PDF_FONT_REGULAR).fillColor('#0645AD').text(link, { link, underline: true, indent: 12 });
           pdfResetText(doc);
+          await pdfAttachExternalAsset(doc, link);
         } else {
-          doc.font(PDF_FONT_REGULAR).text(link, { indent: 12 });
+          const linked = await pdfLinkInternalAsset(doc, media.asset, ctx);
+          if (!linked) doc.font(PDF_FONT_REGULAR).text(link, { indent: 12 });
         }
       }
     }
@@ -988,7 +1404,14 @@ async function pdfWriteComponent(doc, props, ctx) {
       if (!t && !b && !item.image) continue;
       doc.moveDown(0.2);
       if (t) doc.font(PDF_FONT_BOLD).fontSize(10).text(t);
-      if (b) doc.font(PDF_FONT_REGULAR).fontSize(10).text(b);
+      // See the matching DOCX-side comment: `item.body` is rich-text HTML,
+      // not plain text — printing it verbatim via doc.text() rendered the
+      // literal "<p>...</p>" tags instead of formatted paragraphs.
+      if (b) {
+        pdfResetText(doc);
+        pdfWriteRichText(doc, b, { fontSize: 10 });
+        pdfResetText(doc);
+      }
       if (item.image) {
         // eslint-disable-next-line no-await-in-loop
         const resolved = await resolveForPdf({ link: item.image, assetId: item.imageAssetId }, ctx);
@@ -999,7 +1422,11 @@ async function pdfWriteComponent(doc, props, ctx) {
   if (instruction) {
     doc.moveDown(0.3);
     pdfResetText(doc);
-    doc.font(PDF_FONT_ITALIC).fontSize(10).fillColor('#555').text(instruction);
+    // See the matching DOCX-side comment: a bold label (not forced italic
+    // content styling) distinguishes the section without destroying the
+    // author's own formatting, and doubles as the reimport marker.
+    doc.font(PDF_FONT_BOLD).fontSize(10).text('Instruction:');
+    pdfWriteRichText(doc, data.instruction, { fontSize: 10, fillColor: '#555' });
     pdfResetText(doc);
   }
   doc.moveDown(0.8);
@@ -1010,23 +1437,14 @@ async function pdfWriteAssessment(doc, props, ctx) {
   const data = safeParse(props.data, {});
   const rawTitle = (props.title || '').trim();
   const title = isPlaceholderTitle(rawTitle) ? '' : rawTitle;
-  const question = data.question ? String(data.question).trim() : '';
+  const question = data.question ? htmlToParagraphText(data.question) : '';
   const options = Array.isArray(data.options) ? data.options.filter((o) => o && o.text) : [];
   const items = Array.isArray(data.items) ? data.items.filter(Boolean) : [];
   const pairs = Array.isArray(data.pairs) ? data.pairs.filter((p) => p && (p.prompt || p.answer)) : [];
   const answers = Array.isArray(data.answers) ? data.answers.filter(Boolean) : [];
   const fb = data.feedback || {};
-  if (
-    !title &&
-    !question &&
-    !options.length &&
-    !items.length &&
-    !pairs.length &&
-    !answers.length &&
-    !(data.slider && data.slider.correct != null)
-  ) {
-    return;
-  }
+  // NOTE: not skipped when empty — see the matching comment in
+  // sbComponentToDocxParagraphs (position-matching reimport-corruption fix).
   // Reserve ~1.2 in of vertical room so a question header + first option
   // isn't orphaned at the page bottom.
   pdfEnsureRoom(doc, 90);
@@ -1035,13 +1453,15 @@ async function pdfWriteAssessment(doc, props, ctx) {
   const kindLabel = ASSESSMENT_KIND_LABEL[kind] || 'Question';
   // See docx-side comment: Title is the primary header, Body renders as its
   // own paragraph only when it isn't already the header (no duplication).
-  const headerText = title || question;
+  // Collapse paragraph breaks for the single-line header (consistent with
+  // the docx path, even though pdfkit's text() would wrap them fine too).
+  const headerText = title || question.replace(/\n+/g, ' ').trim();
   const showQuestionParagraph = !!question && question !== headerText;
-  doc.font(PDF_FONT_BOLD).fontSize(11).text(`${kindLabel}${headerText ? ' — ' : ''}${headerText}`);
+  doc.font(PDF_FONT_BOLD).fontSize(11).text(`${kindLabel}${headerText ? ' - ' : ''}${headerText}`);
   if (showQuestionParagraph) {
-    doc.font(PDF_FONT_REGULAR).fontSize(11);
     pdfResetText(doc);
-    doc.text(question, { paragraphGap: 3 });
+    pdfWriteRichText(doc, data.question, { fontSize: 11 });
+    pdfResetText(doc);
   }
 
   if (kind === 'mcq' || kind === 'gmcq' || kind === 'checklist') {
@@ -1067,16 +1487,16 @@ async function pdfWriteAssessment(doc, props, ctx) {
       // Get the correct option from options array (if available)
       const correctOption = Array.isArray(p.options) ? p.options.find((opt) => opt && opt.correct) : null;
       const answerText = correctOption ? String(correctOption.text || '') : '';
-      doc.font(PDF_FONT_REGULAR).fontSize(11).text(`• ${p.prompt || ''}  →  ${answerText}`, { indent: 12 });
+      doc.font(PDF_FONT_REGULAR).fontSize(11).text(`- ${p.prompt || ''}  ->  ${answerText}`, { indent: 12 });
     }
   } else if (kind === 'reorder') {
     items.forEach((it, i) => doc.font(PDF_FONT_REGULAR).fontSize(11).text(`${i + 1}. ${it}`, { indent: 12 }));
   } else if (kind === 'textInput') {
-    for (const ans of answers) doc.font(PDF_FONT_REGULAR).fontSize(11).text(`• Accepted answer: ${ans}`, { indent: 12 });
+    for (const ans of answers) doc.font(PDF_FONT_REGULAR).fontSize(11).text(`- Accepted answer: ${ans}`, { indent: 12 });
   } else if (kind === 'slider' && data.slider) {
     const s = data.slider;
     doc.font(PDF_FONT_REGULAR).fontSize(11).text(
-      `Range: ${s.min ?? 0}–${s.max ?? 10} step ${s.step ?? 1}, correct answer ${s.correct ?? ''}`,
+      `Range: ${s.min ?? 0}-${s.max ?? 10} step ${s.step ?? 1}, correct answer ${s.correct ?? ''}`,
       { indent: 12 },
     );
   }
@@ -1084,9 +1504,9 @@ async function pdfWriteAssessment(doc, props, ctx) {
   const FEEDBACK_LABELS = [
     ['correct', 'Correct'],
     ['incorrect', 'Incorrect'],
-    ['incorrectNotFinal', 'Incorrect — not final'],
-    ['partlyCorrectFinal', 'Partly correct — final'],
-    ['partlyCorrectNotFinal', 'Partly correct — not final'],
+    ['incorrectNotFinal', 'Incorrect - not final'],
+    ['partlyCorrectFinal', 'Partly correct - final'],
+    ['partlyCorrectNotFinal', 'Partly correct - not final'],
   ];
   const fbLines = FEEDBACK_LABELS
     .map(([k, lbl]) => [k, lbl, stripHtml(fb[k])])
@@ -1190,8 +1610,10 @@ async function blocksToPdf(blocks, title, ctx) {
     // or feedback row doesn't bleed into the next block's heading/body.
     pdfResetText(doc);
     if (b.type === 'heading') {
-      const text = inlineToText(b.content);
-      if (isPlaceholderTitle(text)) continue;
+      // Always write the heading — see the matching comment on the DOCX
+      // path above (position-matching reimport-corruption fix). A
+      // level-appropriate fallback is used only when genuinely blank.
+      const text = inlineToText(b.content).trim() || HEADING_LEVEL_FALLBACK[props.level] || 'Untitled';
       const size = PDF_HEADING_SIZE[props.level] || 12;
       // Keep headings with their following block by breaking to a new page
       // when there's no room for at least ~2 lines below the heading.
@@ -1216,7 +1638,7 @@ async function blocksToPdf(blocks, title, ctx) {
     } else if (b.type === 'bulletListItem' || b.type === 'numberedListItem') {
       const text = inlineToText(b.content);
       if (text) {
-        const prefix = b.type === 'numberedListItem' ? `${++numberedIndex}. ` : '• ';
+        const prefix = b.type === 'numberedListItem' ? `${++numberedIndex}. ` : '- ';
         doc.font(PDF_FONT_REGULAR).fontSize(11).text(`${prefix}${text}`, { indent: 12 });
       }
     } else {

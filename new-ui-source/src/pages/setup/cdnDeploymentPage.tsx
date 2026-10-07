@@ -124,7 +124,7 @@ function TextField({
 }: { label: string; hint?: string; value: string; onChange: (v: string) => void; placeholder?: string; error?: string; maxLength?: number; sanitize?: (v: string) => string }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <InfoFieldLabel label={label} hint={hint} className="text-[var(--life-base-black)]" />
+      <InfoFieldLabel label={label} hint={hint} description={hint} className="text-[var(--life-base-black)]" />
       <input
         type="text"
         value={value}
@@ -136,9 +136,10 @@ function TextField({
       />
       {error ? (
         <p className="text-[11px] text-[var(--life-error-500)] leading-snug">{error}</p>
-      ) : hint ? (
-        <p className="text-[11px] text-[#9ca3af] leading-snug">{hint}</p>
+       
       ) : null}
+      {hint && <p className="text-[11px] text-[var(--life-neutral-300)] leading-snug">{hint}</p>}
+
     </div>
   );
 }
@@ -148,7 +149,7 @@ function SelectField({
 }: { label: string; hint?: string; value: string; onChange: (v: string) => void; options: readonly string[] }) {
   return (
     <div className="flex flex-col gap-1.5">
-      <InfoFieldLabel label={label} hint={hint} className="text-[var(--life-base-black)]" />
+      <InfoFieldLabel label={label} hint={hint} description={hint} className="text-[var(--life-base-black)]" />
       <div className="relative">
         <select
           value={value}
@@ -161,7 +162,8 @@ function SelectField({
           <polyline points="6 9 12 15 18 9" />
         </svg>
       </div>
-      {hint && <p className="text-[11px] text-[#9ca3af] leading-snug">{hint}</p>}
+      {hint && <p className="text-[11px] text-[var(--life-neutral-300)] leading-snug">{hint}</p>}
+    
     </div>
   );
 }
@@ -617,13 +619,13 @@ export function CdnDeploymentPage({
       <div className="shrink-0 px-6 py-5 bg-white border-b border-[#e5e7eb] flex items-start gap-4">
         <div>
           <h2 className="text-xl font-bold text-[var(--life-base-black)]">CDN Deployment</h2>
-          <SaveChangesButton dirty={dirty} saving={saving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+          <p className="text-sm text-[#6b7280] mt-0.5">Configure where your course is deployed, trigger deployment to publish new versions to the CDN, and restore previous versions when needed.</p>
           {cdnCliVersion && (
             <p className="text-xs text-[#9ca3af] mt-2">NPM <span className="font-mono">cdndeploy</span> version: {cdnCliVersion}</p>
           )}
         </div>
         <div className="ml-auto pt-1">
-          <SaveChangesButton dirty={dirty} saving={saving} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
+          <SaveChangesButton dirty={dirty} saving={saving} disabled={!courseId} onClick={() => void handleSave()} portalTargetId="setup-save-button-slot" />
         </div>
       </div>
 
@@ -645,7 +647,7 @@ export function CdnDeploymentPage({
                   </svg>
                 }
               >
-                <ToggleSwitch checked={cfg.isEnabled} onChange={(v) => set({ isEnabled: v })} label={getSchemaLabel(getSchemaNode(cdnSchema, "_isEnabled"), "Enable CDN settings")} hint={getSchemaHint(getSchemaNode(cdnSchema, "_isEnabled"))} />
+                <ToggleSwitch checked={cfg.isEnabled} onChange={(v) => set({ isEnabled: v })} label={getSchemaLabel(getSchemaNode(cdnSchema, "_isEnabled"), "Enable CDN settings")} />
 
                 {cfg.isEnabled && (
                   <div className="flex flex-col gap-3 mt-1">
@@ -687,14 +689,7 @@ export function CdnDeploymentPage({
                       onChange={(v) => set({ buildTriggerComment: v })}
                     />
 
-                    {identityMatchesDefault ? (
-                      <p className="text-xs text-[var(--life-warning-500)] bg-[var(--life-warning-050)] border border-[var(--life-warning-100)] rounded-lg px-3 py-2">
-                        Project and/or Course Id is still set to a default placeholder value ("default-project" /
-                        "default-course"). Update both to values specific to this course before you can trigger a CDN
-                        build — deploying with a shared default would overwrite another course's deployment at the
-                        same path.
-                      </p>
-                    ) : dirty ? (
+                    {!identityMatchesDefault && dirty ? (
                       // Only shown while the edits are unsaved (`dirty`) — this is a heads-up about the
                       // *pending* change, so it should go away once the user saves (at which point
                       // `savedSnapshot` catches up to `cfg` and these are simply the current settings,
@@ -711,13 +706,20 @@ export function CdnDeploymentPage({
 
               {/* Course Deployment */}
               <Section
-                title="Course Deployment"
+                title="Course Deployment"  
                 icon={
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline points="22 4 12 14.01 9 11.01" />
                   </svg>
                 }
               >
+                {identityMatchesDefault && (
+                  <p className="text-[11px] text-[#9ca3af] leading-snug">
+                    Before deploying, replace the default Project ID and Course ID with values specific to this
+                    course. Trigger CDN Build will remain disabled until both fields are updated.
+                  </p>
+                )}
+              
                 <label className="relative flex items-start gap-3 cursor-pointer group">
                   <input
                     type="checkbox"
@@ -727,14 +729,16 @@ export function CdnDeploymentPage({
                     className="sr-only peer"
                   />
                   <CheckboxIndicator checked={includeExport} className="mt-0.5 w-4 h-4 rounded shrink-0 border-2 flex items-center justify-center transition-colors peer-checked:bg-[var(--life-primary-500)] peer-checked:border-[var(--life-primary-500)] border-[#d1d5db] bg-white group-hover:border-[#93c5fd]" />
-                  <span className="text-sm text-[#374151]">
-                    Include the <strong>source code*</strong> as part of the CDN deployment.
-                    <span className="block mt-1 text-xs text-[#9ca3af]">
-                      *Same bundle as when you "Export" a course from the Authoring Tool. Useful for debugging courses after they have been deployed.
-                      <span className="block mt-0.5"><strong>Note:</strong> This extra build step will slow down CDN deployment.</span>
-                    </span>
+                  <span className="text-sm text-[#374151] flex items-center gap-1.5">
+                    Include the <strong>source code</strong> as part of the CDN deployment.
+                    <InfoIcon
+                      label="Include the source code as part of the CDN deployment"
+                      hint={'Same bundle as when you "Export" a course from the Authoring Tool. Useful for debugging courses after they have been deployed. Note: this extra build step will slow down CDN deployment.'}
+                    />
                   </span>
                 </label>
+
+
 
                 <div className="flex items-center justify-between gap-2 mt-1">
                   <button
@@ -902,7 +906,7 @@ export function CdnDeploymentPage({
               <div className="flex items-start gap-2.5 rounded-lg bg-[#fff7ed] border border-[#fed7aa] px-4 py-3">
                 <span className="text-base leading-none mt-0.5" aria-hidden="true">💡</span>
                 <p className="text-sm text-[#9a3412] leading-snug">
-                  <span className="font-semibold">Tip:</span> Edit the config above and click Trigger CDN Build to publish a new version. Use Restore on a previous version to promote it back to active.
+                  <span className="font-semibold">Tip:</span> Set an expiry date when sharing a CDN link to help limit how long the course remains accessible and reduce unintended sharing or wider circulation.
                 </p>
               </div>
             </>

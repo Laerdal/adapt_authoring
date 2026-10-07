@@ -108,10 +108,9 @@ const DEFAULT_CONFIG: MenuPageConfig = {
   bgPosition: "",
 };
 
-const BG_REPEAT_OPTIONS: BgRepeat[] = ["", "no-repeat", "repeat", "repeat-x", "repeat-y"];
-const BG_SIZE_OPTIONS: BgSize[] = ["", "auto", "cover", "contain"];
+const BG_REPEAT_OPTIONS: BgRepeat[] = ["no-repeat", "repeat", "repeat-x", "repeat-y"];
+const BG_SIZE_OPTIONS: BgSize[] = ["auto", "cover", "contain"];
 const BG_POSITION_OPTIONS: BgPosition[] = [
-  "",
   "left top",
   "left center",
   "left bottom",
@@ -239,14 +238,13 @@ type AssetTarget =
   | { scope: "headerImage"; bp: BreakpointKey }
   | { scope: "backgroundImage"; bp: BreakpointKey };
 
-function mergeConfigFromCourseMenuSettings(base: MenuPageConfig, settings: CourseMenuSettings): MenuPageConfig {
+export function mergeConfigFromCourseMenuSettings(base: MenuPageConfig, settings: CourseMenuSettings): MenuPageConfig {
   const box = getMenuSettingsEntryForStyle(settings, base.menuStyle);
   const header = box?._menuHeader;
   const textAlign = header?._textAlignment;
   const headerStyles = header?._backgroundStyles;
   const bgStyles = box?._backgroundStyles;
   const minHeights = header?._minimumHeights;
-  const readSubtitleAlign = base.menuStyle === "box";
   const hasSubmenuControls = base.menuStyle === "life" || base.menuStyle === "overview";
   const hasDisplayAboveHeaderSetting = hasSubmenuControls && typeof header?._displayAboveHeader === "boolean";
 
@@ -260,7 +258,7 @@ function mergeConfigFromCourseMenuSettings(base: MenuPageConfig, settings: Cours
     logoAltText: box?._graphic?.alt || "",
     logoSrc: box?._graphic?._src || "",
     titleAlign: coerceAlign(textAlign?._title, base.titleAlign),
-    subtitleAlign: readSubtitleAlign ? coerceAlign(textAlign?._subtitle, base.subtitleAlign) : base.subtitleAlign,
+    subtitleAlign: coerceAlign(textAlign?._subtitle, base.subtitleAlign),
     instructionAlign: coerceAlign(textAlign?._instruction, base.instructionAlign),
     bodyAlign: coerceAlign(textAlign?._body, base.bodyAlign),
     headerImageSrc: {
@@ -290,22 +288,18 @@ function mergeConfigFromCourseMenuSettings(base: MenuPageConfig, settings: Cours
   };
 }
 
-function buildCourseMenuSettingsPayload(config: MenuPageConfig, currentSettings: CourseMenuSettings): CourseMenuSettings {
+export function buildCourseMenuSettingsPayload(config: MenuPageConfig, currentSettings: CourseMenuSettings): CourseMenuSettings {
   const textAlignment: {
     _title: Align;
     _body: Align;
     _instruction: Align;
-    _subtitle?: Align;
+    _subtitle: Align;
   } = {
     _title: config.titleAlign,
     _body: config.bodyAlign,
     _instruction: config.instructionAlign,
+    _subtitle: config.subtitleAlign,
   };
-
-  // Subtitle alignment is currently persisted for Box menu only.
-  if (config.menuStyle === "box") {
-    textAlignment._subtitle = config.subtitleAlign;
-  }
 
   const nextEntry: NonNullable<CourseMenuSettings["_boxMenu"]> = {
       _graphic: {
@@ -1302,7 +1296,7 @@ export function MenuPage({
         </div>
         <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="flex flex-row items-start min-h-full w-full">
-        <div className="flex-1 min-w-0 bg-[#f7f9fb] border-r border-[var(--life-neutral-200)] px-4 sm:px-6 lg:px-8 pt-6 lg:pt-8 pb-12 lg:pb-16">
+        <div className="flex flex-col flex-1 min-w-0 bg-[#f7f9fb] border-r border-[var(--life-neutral-200)] px-4 sm:px-6 lg:px-8 pt-6 lg:pt-8 pb-12 lg:pb-16">
           <div className="mb-7">
             <div className="px-3.5 py-2.5 rounded-lg bg-[var(--life-accent1-050)] border border-[var(--life-accent1-300)] flex items-start gap-2">
               <span className="text-[var(--life-accent1-600)] shrink-0 mt-[1px]">
@@ -1346,7 +1340,7 @@ export function MenuPage({
               </div>
             </MenuAccordion>
 
-            <MenuAccordion title={getSchemaLabel(menuTextAlignmentSchema, "Menu text alignment")} hint={getSchemaHint(menuTextAlignmentSchema)} subtitle="Applies to menu title, body copy, and instruction text." open={openAcc === "alignment"} onToggle={() => setOpenAcc((p) => (p === "alignment" ? "" : "alignment"))}>
+            <MenuAccordion title={getSchemaLabel(menuTextAlignmentSchema, "Menu text alignment")} hint={getSchemaHint(menuTextAlignmentSchema)} subtitle="Applies to menu title, body, copy and instruction text. The alignment automatically inverses for right-to-left languages. The default inherits the natural page direction." open={openAcc === "alignment"} onToggle={() => setOpenAcc((p) => (p === "alignment" ? "" : "alignment"))}>
               <div>
                 <InfoFieldLabel label={getSchemaLabel(getSchemaNode(menuTextAlignmentSchema, "_title"), "Title alignment")} hint={getSchemaHint(getSchemaNode(menuTextAlignmentSchema, "_title"))} className="text-[var(--life-base-black)] mb-2" />
                 <AlignButtons value={config.titleAlign} onChange={(v) => set("titleAlign", v)} />
@@ -1386,7 +1380,7 @@ export function MenuPage({
               <AssetPickerCard label="_medium" value={config.headerImageSrc.medium} resolveUrl={resolveAssetPreviewUrl} onPickAsset={() => setAssetPickerTarget({ scope: "headerImage", bp: "medium" })} onPickExternal={() => setExternalAssetTarget({ scope: "headerImage", bp: "medium" })} onClear={() => applyAssetValue({ scope: "headerImage", bp: "medium" }, "")} />
               <AssetPickerCard label="_small" value={config.headerImageSrc.small} resolveUrl={resolveAssetPreviewUrl} onPickAsset={() => setAssetPickerTarget({ scope: "headerImage", bp: "small" })} onPickExternal={() => setExternalAssetTarget({ scope: "headerImage", bp: "small" })} onClear={() => applyAssetValue({ scope: "headerImage", bp: "small" }, "")} />
               <div className="flex flex-col gap-3">
-                <div className="text-[13px] font-bold text-[var(--life-base-black)] inline-flex items-center gap-1.5">{getSchemaLabel(menuHeaderMinSchema, "Menu header minimum height")}{getSchemaHint(menuHeaderMinSchema) ? <InfoIcon label="Menu header minimum height" hint={getSchemaHint(menuHeaderMinSchema)} /> : null}</div>
+                <div className="text-[13px] font-bold text-[var(--life-base-black)] inline-flex items-center gap-1.5">{getSchemaLabel(menuHeaderMinSchema, "Menu header minimum height")}<InfoIcon label="Menu header minimum height" hint="Set a minimum height when the menu header needs additional space, such as to prevent a background image from being cropped." /></div>
                 {(["xlarge", "large", "medium", "small"] as BreakpointKey[]).map((bp) => (
                   <div key={bp} className="flex flex-col gap-1.5">
                     <div className="flex items-center justify-between">
@@ -1416,7 +1410,7 @@ export function MenuPage({
               </div>
             </MenuAccordion>
 
-            <MenuAccordion title={getSchemaLabel(menuBackgroundSchema, "Menu background image")} hint={getSchemaHint(menuBackgroundSchema)} subtitle="Optional background behind the menu." open={openAcc === "background"} onToggle={() => setOpenAcc((p) => (p === "background" ? "" : "background"))}>
+            <MenuAccordion title={getSchemaLabel(menuBackgroundSchema, "Menu background image")} hint={getSchemaHint(menuBackgroundSchema)} subtitle="Optional background behind the menu for HD laptop/desktop computers, tablet devices and handheld devices" open={openAcc === "background"} onToggle={() => setOpenAcc((p) => (p === "background" ? "" : "background"))}>
               <AssetPickerCard label="_xlarge" value={config.bgImageSrc.xlarge} resolveUrl={resolveAssetPreviewUrl} onPickAsset={() => setAssetPickerTarget({ scope: "backgroundImage", bp: "xlarge" })} onPickExternal={() => setExternalAssetTarget({ scope: "backgroundImage", bp: "xlarge" })} onClear={() => applyAssetValue({ scope: "backgroundImage", bp: "xlarge" }, "")} />
               <AssetPickerCard label="_large" value={config.bgImageSrc.large} resolveUrl={resolveAssetPreviewUrl} onPickAsset={() => setAssetPickerTarget({ scope: "backgroundImage", bp: "large" })} onPickExternal={() => setExternalAssetTarget({ scope: "backgroundImage", bp: "large" })} onClear={() => applyAssetValue({ scope: "backgroundImage", bp: "large" }, "")} />
               <AssetPickerCard label="_medium" value={config.bgImageSrc.medium} resolveUrl={resolveAssetPreviewUrl} onPickAsset={() => setAssetPickerTarget({ scope: "backgroundImage", bp: "medium" })} onPickExternal={() => setExternalAssetTarget({ scope: "backgroundImage", bp: "medium" })} onClear={() => applyAssetValue({ scope: "backgroundImage", bp: "medium" }, "")} />
@@ -1449,6 +1443,15 @@ export function MenuPage({
                 />
               </div>
             </MenuAccordion>
+          </div>
+
+          <div className="mt-auto pt-6 w-full">
+            <div className="flex items-start gap-2.5 rounded-lg bg-[#fff7ed] border border-[#fed7aa] px-4 py-3">
+              <span className="text-base leading-none mt-0.5" aria-hidden="true">💡</span>
+              <p className="text-sm text-[#9a3412] leading-snug">
+                <span className="font-semibold">Tip:</span> Once you’ve set up your menu, head to Navigation settings to define how learners move through the course.
+              </p>
+            </div>
           </div>
         </div>
 

@@ -10,11 +10,6 @@ export interface RequestOptions extends RequestInit {
   headers?: Record<string, string>;
 }
 
-// Guards against showing the alert/redirecting more than once when several
-// in-flight requests all 401 around the same time (e.g. a page that fires a
-// handful of parallel calls right as the session dies).
-let sessionExpiredHandled = false;
-
 class ApiClient {
   private baseUrl: string;
 
@@ -43,11 +38,11 @@ class ApiClient {
         // the classic UI itself would (external SSO if configured, otherwise
         // /classic's own login form). Tell them why they're being moved
         // instead of a silent bounce, which used to leave people wondering
-        // what just happened.
-        if (response.status === 401 && !sessionExpiredHandled) {
-          sessionExpiredHandled = true;
-          alert("Your session has expired. Please log in again.");
-          redirectToLogin();
+        // what just happened. redirectToLogin()'s own guard collapses this
+        // with any other concurrent caller (e.g. AuthContext's initial check)
+        // into a single redirect, so this is safe to call unconditionally.
+        if (response.status === 401) {
+          redirectToLogin("Your session has expired. Please log in again.");
         }
         const error = await response.json().catch(() => ({ message: response.statusText }));
         // Some services (e.g. plugins/services/ai-tutor) respond with a

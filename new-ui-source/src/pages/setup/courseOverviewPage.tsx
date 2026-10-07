@@ -89,12 +89,13 @@ export function CourseOverviewPage({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [loading, setLoading] = useState(!!courseId);
+  const initialBodyValue = initialDescription || "";
 
   // Committed values (server state)
   const [savedTitle, setSavedTitle] = useState(initialTitle);
   const [savedSubtitle, setSavedSubtitle] = useState("");
-  const [savedBody, setSavedBody] = useState("");
-  const [savedDesc, setSavedDesc] = useState(initialDescription);
+  const [savedBody, setSavedBody] = useState(initialBodyValue);
+  const [savedDesc, setSavedDesc] = useState("");
   const [savedInstruction, setSavedInstruction] = useState("");
   const [savedTags, setSavedTags] = useState<string[]>([]);
   const [savedHeroAssetId, setSavedHeroAssetId] = useState<string | null>(null);
@@ -105,8 +106,8 @@ export function CourseOverviewPage({
   // Live form values
   const [formTitle, setFormTitle] = useState(initialTitle);
   const [formSubtitle, setFormSubtitle] = useState("");
-  const [formBody, setFormBody] = useState(""); 
-  const [formDesc, setFormDesc] = useState(initialDescription);
+  const [formBody, setFormBody] = useState(initialBodyValue);
+  const [formDesc, setFormDesc] = useState("");
   const [formInstruction, setFormInstruction] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
@@ -541,9 +542,9 @@ export function CourseOverviewPage({
 
   const labelStyle: React.CSSProperties = {
     fontFamily: '"Lato", sans-serif',
-    fontSize: 13,
-    fontWeight: 700,
-    color: "var(--life-base-black)",   // #1A1A1A
+    fontSize: 12,
+    fontWeight: 600,
+    color: "#374151",
     display: "block",
     marginBottom: 6,
   };
@@ -580,16 +581,21 @@ export function CourseOverviewPage({
   function renderFieldLabel(
     label: string,
     schemaPath: string[],
-    options?: { required?: boolean; schemaRoot?: SetupSchemaNode | null; hint?: string; labelOverride?: string }
+    options?: { required?: boolean; schemaRoot?: SetupSchemaNode | null; hint?: string; labelOverride?: string; showInfoIcon?: boolean }
   ) {
     const schemaRoot = options?.schemaRoot ?? courseSchema;
     const schemaNode = getSchemaNode(schemaRoot, ...schemaPath);
     const displayLabel = options?.labelOverride ?? getSchemaLabel(schemaNode, label);
     const hint = options?.hint ?? getSchemaHint(schemaNode);
+    const showInfoIcon = options?.showInfoIcon ?? true;
 
     return (
       <div style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 4, flexWrap: "nowrap" }}>
-        <InfoFieldLabel label={displayLabel} hint={hint} className="text-[#374151] !mb-0" />
+        {showInfoIcon ? (
+          <InfoFieldLabel label={displayLabel} hint={hint} className="text-[#374151] !mb-0" />
+        ) : (
+          <span style={{ ...labelStyle, marginBottom: 0, lineHeight: 1.2 }}>{displayLabel}</span>
+        )}
         {options?.required ? <span style={{ color: "var(--life-critical-500)", fontWeight: 400, lineHeight: 1 }}>*</span> : null}
       </div>
     );
@@ -651,7 +657,7 @@ export function CourseOverviewPage({
 
         {/* Sub-Title */}
         <div>
-          {renderFieldLabel("Subtitle", ["subtitle"])}
+          {renderFieldLabel("Subtitle", ["subtitle"], { showInfoIcon: false })}
           <input
             value={formSubtitle}
             onChange={(e) => { setFormSubtitle(e.target.value); markDirty(); }}
@@ -666,32 +672,37 @@ export function CourseOverviewPage({
 
         {/* Description */}
         <div>
-          {renderFieldLabel("Description", ["description"])}
-          <textarea
-            rows={4}
-            value={formDesc}
-            onChange={(e) => { setFormDesc(e.target.value); markDirty();}}
-            placeholder="Describe what this course is about and what learners will gain"
-            disabled={loading}
-            style={textareaBase}
-            onFocus={focusIn}
-            onBlur={focusOut}
-          />
-        </div>
-
-          {/* Body */}
-        <div>
-          {renderFieldLabel("Course Metadata", ["body"], {
-            labelOverride: "Course Metadata",
-            hint: "This information is not currently displayed within the course",
-          })}
+          {renderFieldLabel("Description", ["body"])}
           <BasicRichTextEditor
             key={bodyEditorKey}
             html={formBody}
             onChange={(next) => { setFormBody(next); markDirty(); }}
             disabled={loading}
+            placeholder="Describe what this course is about and what learners will gain"
+            ariaLabel="description"
+          />
+        </div>
+
+          {/* Body */}
+        <div>
+          {renderFieldLabel("Course Metadata", ["description"], {
+            labelOverride: "Course Metadata",
+            hint: "This information is not currently displayed within the course",
+          })}
+          {/* Plain text, not rich text: `description` is a plain Text schema
+              field and CourseCard renders it as literal text — a rich editor
+              here would save HTML tags that show up unrendered on course
+              cards. The rich editor is only correct for `body` (Description,
+              above), which is an actual HTML field. */}
+          <textarea
+            rows={4}
+            value={formDesc}
+            onChange={(e) => { setFormDesc(e.target.value); markDirty(); }}
             placeholder="Provide description to be added to the course manifest metadata"
-            ariaLabel="Course Metadata"
+            disabled={loading}
+            style={textareaBase}
+            onFocus={focusIn}
+            onBlur={focusOut}
           />
         </div>
 
@@ -798,7 +809,7 @@ export function CourseOverviewPage({
 
         {/* Tags */}
         <div>
-          {renderFieldLabel("Tags", ["tags"])}
+          {renderFieldLabel("Tags", ["tags"], { showInfoIcon: false })}
           <div style={{ display: "flex", gap: 8, marginBottom: tags.length > 0 ? 10 : 0 }}>
             <input
               value={tagInput}

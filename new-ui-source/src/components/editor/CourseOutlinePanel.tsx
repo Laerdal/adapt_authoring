@@ -1,14 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { CSSProperties, HTMLAttributes, ReactNode } from "react";
+import { GripVertical } from "lucide-react";
+import { computeDrop, type Dragged, type RowRef } from "../course/CourseStructureTree";
+import { flattenStructure, moveCourseStructure } from "../../hooks/useCourseStructure";
 import { StructureIcon, STRUCTURE_ICON_COLOR_CLASS } from "@/components/course/StructureIcons";
 import { ConfirmDialog } from "@/components/common";
 import type { ContentPageData } from "@/pages/editor/pageEditorWorkspace";
-import type { CourseStructure, SModule } from "@/types/structure";
+import type { CourseStructure, SModule, StructureLevel } from "@/types/structure";
 import { mergedChildren } from "@/types/structure";
 
 const ICON_BASE = "/new/assets/icons";
+const INLINE_ADD_BUTTON_CLASS = "h-8 shrink-0 inline-flex items-center justify-center gap-1.5 px-2 rounded-[6px] text-[#2E7FA1] text-xs font-medium hover:bg-[#f0f8ff] transition-colors";
 
 function MaskIcon({ file, className }: { file: string; className?: string }) {
   const iconPath = `${ICON_BASE}/${file}`;
@@ -31,6 +35,10 @@ function MaskIcon({ file, className }: { file: string; className?: string }) {
 }
 
 interface CourseOutlinePanelProps {
+  courseId: string;
+  panelWidth: number;
+  panelActionsAlignToTitles: boolean;
+  onMove?: (level: StructureLevel, id: string, parentId: string, beforeId: string | null) => void;
   onClose: () => void;
   menuPageCreated: boolean;
   menuSelected: boolean;
@@ -57,7 +65,7 @@ interface CourseOutlinePanelProps {
   onAddSubPage: (pageId: string) => void;
   onAddBlock: (pageId: string, articleId: string) => void;
   onDeleteBlock: (pageId: string, articleId: string, blockId: string) => void;
-  onAddComponent: (pageId: string, articleId: string, blockId: string) => void;
+  onAddComponent: (pageId: string, articleId: string, blockId: string, componentId?: string) => void;
   onDeleteComponent: (pageId: string, articleId: string, blockId: string, componentId: string) => void;
   onUseTemplate?: (target: {
     level: "topic" | "section" | "group" | "component";
@@ -65,6 +73,7 @@ interface CourseOutlinePanelProps {
     articleId?: string;
     blockId?: string;
     moduleId?: string;
+    componentId?: string;
   }) => void;
 }
 
@@ -74,6 +83,7 @@ type AddMenuTarget = {
   moduleId?: string;
   articleId?: string;
   blockId?: string;
+  componentId?: string;
 };
 
 type DeleteTarget = {
@@ -87,10 +97,17 @@ type DeleteTarget = {
 };
 
 function getTargetKey(target: AddMenuTarget) {
-  return `${target.level}:${target.moduleId ?? ""}:${target.pageId ?? ""}:${target.articleId ?? ""}:${target.blockId ?? ""}`;
+  return `${target.level}:${target.moduleId ?? ""}:${target.pageId ?? ""}:${target.articleId ?? ""}:${target.blockId ?? ""}:${target.componentId ?? ""}`;
 }
 
+function titleCase(value: string) {
+  return value.replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+type OutlineDragBindings = HTMLAttributes<HTMLDivElement> & { "data-outline-id": string; "data-outline-drop"?: string };
+
 function TreeRow({
+  dragBindings,
   label,
   paddingLeft,
   selected,
@@ -103,13 +120,12 @@ function TreeRow({
   onAdd,
   showDelete = false,
   onDelete,
-  menuOpen = false,
-  onAddStartFresh,
   onAddTemplate,
   addLabel = "section",
   toggleLabel = "section",
   labelClassName,
 }: {
+  dragBindings?: OutlineDragBindings;
   label: string;
   paddingLeft: number;
   selected: boolean;
@@ -122,8 +138,6 @@ function TreeRow({
   onAdd?: () => void;
   showDelete?: boolean;
   onDelete?: () => void;
-  menuOpen?: boolean;
-  onAddStartFresh?: () => void;
   onAddTemplate?: () => void;
   addLabel?: string;
   toggleLabel?: string;
@@ -131,14 +145,20 @@ function TreeRow({
 }) {
   return (
     <div
+      {...dragBindings}
       data-outline-selected={selected ? "true" : undefined}
-      className={`w-full min-h-9 flex items-center gap-[6px] text-left border-l-[3px] transition-colors group relative ${
+      className={`w-full min-h-9 flex items-center gap-[6px] text-left border-l-[3px] transition-colors group relative [&[data-outline-drop=before]]:shadow-[inset_0_2px_0_#2d6fa8] [&[data-outline-drop=into]]:ring-2 [&[data-outline-drop=into]]:ring-[#2d6fa8] ${
         selected
           ? "bg-[var(--life-primary-100)] border-[var(--life-primary-500)]"
           : "border-transparent hover:bg-[var(--life-neutral-100)]"
       }`}
       style={{ paddingLeft, paddingRight: 6, paddingTop: 6, paddingBottom: 6 }}
     >
+      {dragBindings && (
+        <button type="button" data-outline-grip title={`Drag ${label}`} aria-label={`Drag ${label}`} className="shrink-0 cursor-grab active:cursor-grabbing text-[#9ca3af] opacity-0 group-hover:opacity-100 focus:opacity-100" onClick={event => event.stopPropagation()}>
+          <GripVertical size={12} />
+        </button>
+      )}
       <div
         role="button"
         tabIndex={0}
@@ -202,10 +222,25 @@ function TreeRow({
               onAdd?.();
             }}
             className="w-6 h-6 rounded-[4px] flex items-center justify-center text-[#2E7FA1] hover:bg-[#e8f3f8] active:bg-[#d4e9f2]"
-            aria-label={`Add ${addLabel}`}
-            title={`Add ${addLabel}`}
+            aria-label={`Add ${titleCase(addLabel)}`}
+            title={`Add ${titleCase(addLabel)}`}
           >
             <MaskIcon file="add-icon.svg" className="block w-[12px] h-[12px] shrink-0 bg-current" />
+          </button>
+        )}
+
+        {showAdd && onAddTemplate && (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onAddTemplate();
+            }}
+            className="w-6 h-6 rounded-[4px] flex items-center justify-center text-[var(--life-accent1-500)] hover:bg-[var(--life-accent1-050)] active:bg-[var(--life-accent1-100)]"
+            aria-label={`Use ${titleCase(addLabel)} Template`}
+            title={`Use ${titleCase(addLabel)} Template`}
+          >
+            <MaskIcon file="use-template-icon.svg" className="block w-[12px] h-[12px] shrink-0 bg-current" />
           </button>
         )}
 
@@ -224,43 +259,6 @@ function TreeRow({
         )}
       </div>
 
-      {menuOpen && (
-        <div className="absolute left-8 top-[36px] z-30 min-w-[210px] rounded-[var(--radius-md)] border border-[var(--life-neutral-100)] bg-[var(--life-base-white)] p-[6px] shadow-[0_4px_20px_rgba(0,0,0,0.12)] flex flex-col gap-[2px]">
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onAddStartFresh?.();
-            }}
-            className="w-full flex items-center gap-[10px] rounded-[var(--radius-sm)] px-[10px] py-[8px] text-left hover:bg-[var(--life-primary-020)] transition-colors"
-          >
-            <span className="w-[30px] h-[30px] rounded-[var(--radius-sm)] bg-[var(--life-primary-050)] flex items-center justify-center text-[var(--life-primary-600)] shrink-0">
-              <MaskIcon file="add-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-            </span>
-            <span className="text-left">
-              <span className="block text-[12px] leading-[1.2] font-semibold text-[var(--life-base-black)]">Start fresh</span>
-              <span className="block text-[11px] leading-[1.2] text-[var(--life-neutral-500)]">Blank {addLabel}</span>
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onAddTemplate?.();
-            }}
-            className="w-full flex items-center gap-[10px] rounded-[var(--radius-sm)] px-[10px] py-[8px] text-left hover:bg-[var(--life-primary-020)] transition-colors"
-          >
-            <span className="w-[30px] h-[30px] rounded-[var(--radius-sm)] bg-[var(--life-accent1-050)] flex items-center justify-center text-[var(--life-accent1-600)] shrink-0">
-              <MaskIcon file="use-template-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-            </span>
-            <span className="text-left">
-              <span className="block text-[12px] leading-[1.2] font-semibold text-[var(--life-base-black)]">Use template</span>
-              <span className="block text-[11px] leading-[1.2] text-[var(--life-neutral-500)]">Pick a pre-built structure</span>
-            </span>
-          </button>
-        </div>
-      )}
     </div>
   );
 }
@@ -269,21 +267,55 @@ function InlineAddRow({
   label,
   paddingLeft,
   onClick,
-  menuOpen = false,
   onAddStartFresh,
   onAddTemplate,
   addLabel = "item",
+  panelExpanded = false,
+  titleIndent = 0,
+  componentActions = false,
 }: {
   label: string;
   paddingLeft: number;
-  onClick: () => void;
-  menuOpen?: boolean;
+  onClick?: () => void;
   onAddStartFresh?: () => void;
   onAddTemplate?: () => void;
   addLabel?: string;
+  panelExpanded?: boolean;
+  titleIndent?: number;
+  componentActions?: boolean;
 }) {
-  return (
-    <div className="relative">
+  if (componentActions) {
+    return (
+      <div
+        className="w-full h-9 flex items-center justify-start gap-1"
+        style={{ paddingLeft: paddingLeft + titleIndent, paddingRight: 6 }}
+      >
+        <span className="mr-1 text-[13px] font-medium text-[#2E7FA1]">{label}</span>
+        <button
+          type="button"
+          onClick={onAddStartFresh}
+          className="w-6 h-6 shrink-0 rounded-[4px] flex items-center justify-center text-[#2E7FA1] hover:bg-[#e8f3f8] active:bg-[#d4e9f2]"
+          aria-label="Add Component"
+          title="Add Component"
+        >
+          <StructureIcon level="component" size={14} className={STRUCTURE_ICON_COLOR_CLASS.component} />
+        </button>
+        <button
+          type="button"
+          onClick={onAddTemplate}
+          disabled={!onAddTemplate}
+          className="w-6 h-6 shrink-0 rounded-[4px] flex items-center justify-center text-[var(--life-accent1-500)] hover:bg-[var(--life-accent1-050)] active:bg-[var(--life-accent1-100)] disabled:opacity-40"
+          aria-label="Use Component Template"
+          title="Use Component Template"
+        >
+          <MaskIcon file="use-template-icon.svg" className="block w-[12px] h-[12px] shrink-0 bg-current" />
+        </button>
+      </div>
+    );
+  }
+
+  if (!onAddStartFresh) {
+    return (
       <button
         type="button"
         onClick={onClick}
@@ -296,49 +328,48 @@ function InlineAddRow({
         </span>
         <span className="text-[13px] font-medium">{label}</span>
       </button>
+    );
+  }
 
-      {menuOpen && (
-        <div className="absolute left-8 top-[36px] z-30 min-w-[210px] rounded-[var(--radius-md)] border border-[var(--life-neutral-100)] bg-[var(--life-base-white)] p-[6px] shadow-[0_4px_20px_rgba(0,0,0,0.12)] flex flex-col gap-[2px]">
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onAddStartFresh?.();
-            }}
-            className="w-full flex items-center gap-[10px] rounded-[var(--radius-sm)] px-[10px] py-[8px] text-left hover:bg-[var(--life-primary-020)] transition-colors"
-          >
-            <span className="w-[30px] h-[30px] rounded-[var(--radius-sm)] bg-[var(--life-primary-050)] flex items-center justify-center text-[var(--life-primary-600)] shrink-0">
-              <MaskIcon file="add-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-            </span>
-            <span className="text-left">
-              <span className="block text-[12px] leading-[1.2] font-semibold text-[var(--life-base-black)]">Start fresh</span>
-              <span className="block text-[11px] leading-[1.2] text-[var(--life-neutral-500)]">Blank {addLabel}</span>
-            </span>
-          </button>
+  return (
+    <div
+      className={`w-full h-9 flex items-center gap-1 ${panelExpanded ? "justify-start" : "justify-center"}`}
+      style={{ paddingLeft: paddingLeft + (panelExpanded ? titleIndent : 0), paddingRight: 6 }}
+    >
+      <button
+        type="button"
+        onClick={onAddStartFresh}
+        className={`${INLINE_ADD_BUTTON_CLASS} ${onAddTemplate ? "" : "w-full"}`}
+        aria-label={`Add ${titleCase(addLabel)}`}
+        title={`Add ${titleCase(addLabel)}`}
+      >
+        <span className="w-[14px] shrink-0 flex items-center justify-center">
+          <MaskIcon file="add-icon.svg" className="block w-[12px] h-[12px] shrink-0 bg-current" />
+        </span>
+        <span className="truncate">{label}</span>
+      </button>
 
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation();
-              onAddTemplate?.();
-            }}
-            className="w-full flex items-center gap-[10px] rounded-[var(--radius-sm)] px-[10px] py-[8px] text-left hover:bg-[var(--life-primary-020)] transition-colors"
-          >
-            <span className="w-[30px] h-[30px] rounded-[var(--radius-sm)] bg-[var(--life-accent1-050)] flex items-center justify-center text-[var(--life-accent1-600)] shrink-0">
-              <MaskIcon file="use-template-icon.svg" className="block w-[14px] h-[14px] shrink-0 bg-current" />
-            </span>
-            <span className="text-left">
-              <span className="block text-[12px] leading-[1.2] font-semibold text-[var(--life-base-black)]">Use template</span>
-              <span className="block text-[11px] leading-[1.2] text-[var(--life-neutral-500)]">Pick a pre-built structure</span>
-            </span>
-          </button>
-        </div>
+      {onAddTemplate && (
+        <button
+          type="button"
+          onClick={onAddTemplate}
+          className={INLINE_ADD_BUTTON_CLASS}
+          aria-label={`Use ${titleCase(addLabel)} Template`}
+          title={`Use ${titleCase(addLabel)} Template`}
+        >
+          <MaskIcon file="use-template-icon.svg" className="block w-[12px] h-[12px] shrink-0 bg-current" />
+          <span>Template</span>
+        </button>
       )}
     </div>
   );
 }
 
 export default function CourseOutlinePanel({
+  courseId,
+  panelWidth,
+  panelActionsAlignToTitles,
+  onMove,
   onClose,
   courseStructure,
   contentPages,
@@ -371,8 +402,74 @@ export default function CourseOutlinePanel({
   const [expandedTopics, setExpandedTopics] = useState<Record<string, boolean>>({});
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
-  const [activeAddMenu, setActiveAddMenu] = useState<AddMenuTarget | null>(null);
+  const [, setActiveAddMenu] = useState<AddMenuTarget | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const draggedRef = useRef<Dragged | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ id: string; mode: "before" | "after" | "into" } | null>(null);
+  const positions = courseStructure ? flattenStructure(courseStructure, courseId) : [];
+
+  function getDropPlan(draggedRow: Dragged, targetRow: RowRef, position: "before" | "after") {
+    if (!courseStructure) return null;
+    const siblings = positions.filter((item) => item.parentId === targetRow.parentId);
+    const targetIndex = siblings.findIndex((item) => item.id === targetRow.id);
+    const row = {
+      ...targetRow,
+      nextSiblingId: targetIndex >= 0 ? siblings[targetIndex + 1]?.id ?? null : null,
+    };
+    const plan = computeDrop(draggedRow, row, position);
+    if (!plan) return null;
+
+    try {
+      const moved = moveCourseStructure(courseStructure, courseId, draggedRow.level, draggedRow.id, plan.newParentId, plan.beforeId);
+      if (JSON.stringify(flattenStructure(moved, courseId)) === JSON.stringify(positions)) return null;
+      return plan;
+    } catch {
+      return null;
+    }
+  }
+
+  function dragBindings(row: RowRef): OutlineDragBindings | undefined {
+    if (!onMove) return undefined;
+    const clear = () => { draggedRef.current = null; setDropTarget(null); };
+    return {
+      "data-outline-id": row.id,
+      "data-outline-drop": dropTarget?.id === row.id ? dropTarget.mode : undefined,
+      draggable: true,
+      onDragStart: event => {
+        const target = event.target as HTMLElement;
+        if (target.closest('button') && !target.closest('[data-outline-grip]')) { event.preventDefault(); return; }
+        event.stopPropagation();
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('text/plain', row.id);
+        setActiveAddMenu(null);
+        draggedRef.current = { id: row.id, level: row.level };
+      },
+      onDragOver: event => {
+        const dragged = draggedRef.current;
+        if (!dragged) return;
+        const rect = event.currentTarget.getBoundingClientRect();
+        const position = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+        const plan = getDropPlan(dragged, row, position);
+        if (!plan) { setDropTarget(null); return; }
+        event.preventDefault();
+        event.stopPropagation();
+        event.dataTransfer.dropEffect = 'move';
+        setDropTarget((previous) => previous?.id === row.id && previous.mode === plan.mode ? previous : { id: row.id, mode: plan.mode });
+      },
+      onDrop: event => {
+        const dragged = draggedRef.current;
+        if (!dragged) return;
+        const rect = event.currentTarget.getBoundingClientRect();
+        const position = event.clientY < rect.top + rect.height / 2 ? "before" : "after";
+        const plan = getDropPlan(dragged, row, position);
+        event.preventDefault();
+        event.stopPropagation();
+        if (plan) onMove(dragged.level, dragged.id, plan.newParentId, plan.beforeId);
+        clear();
+      },
+      onDragEnd: clear,
+    };
+  }
 
   useEffect(() => {
     function handleOutsideClick(event: MouseEvent) {
@@ -412,11 +509,6 @@ export default function CourseOutlinePanel({
     contentPages,
     courseStructure,
   ]);
-
-  const activeAddKey = useMemo(() => {
-    if (!activeAddMenu) return null;
-    return getTargetKey(activeAddMenu);
-  }, [activeAddMenu]);
 
   function isExpanded(state: Record<string, boolean>, id: string) {
     return state[id] ?? true;
@@ -462,7 +554,7 @@ export default function CourseOutlinePanel({
     if (level === "module") return "Module";
     if (level === "topic") return "Topic";
     if (level === "section") return "Section";
-    if (level === "group") return "Group";
+    if (level === "group") return "Content Group";
     return "Component";
   }
 
@@ -497,6 +589,7 @@ export default function CourseOutlinePanel({
       <div key={page.id} className="mb-2">
         <TreeRow
           label={page.title}
+          dragBindings={dragBindings({ id: page.id, level: 'topic', parentId: moduleId || courseId, parentLevel: moduleId ? 'module' : 'course' })}
           paddingLeft={topicPadding}
           selected={pageSelected}
           labelClassName="text-[13px] font-bold"
@@ -509,10 +602,7 @@ export default function CourseOutlinePanel({
           expanded={isExpanded(expandedTopics, page.id)}
           onToggleExpand={() => setExpandedTopics((previous) => ({ ...previous, [page.id]: !isExpanded(previous, page.id) }))}
           showAdd={true}
-          onAdd={() => {
-            const target: AddMenuTarget = { level: "topic", pageId: page.id, moduleId };
-            setActiveAddMenu((previous) => (previous && getTargetKey(previous) === getTargetKey(target) ? null : target));
-          }}
+          onAdd={() => runAddAction({ level: "topic", pageId: page.id, moduleId })}
           showDelete={true}
           onDelete={() => {
             setActiveAddMenu(null);
@@ -522,17 +612,10 @@ export default function CourseOutlinePanel({
               pageId: page.id,
             });
           }}
-          menuOpen={activeAddKey === getTargetKey({ level: "topic", pageId: page.id, moduleId })}
-          onAddStartFresh={() => runAddAction({ level: "topic", pageId: page.id, moduleId })}
-          onAddTemplate={() => {
-            const target: AddMenuTarget = { level: "topic", pageId: page.id, moduleId };
-            if (onUseTemplate) {
-              onUseTemplate({ level: "topic", pageId: page.id, moduleId });
-              setActiveAddMenu(null);
-              return;
-            }
-            runAddAction(target);
-          }}
+          onAddTemplate={onUseTemplate ? () => {
+            onUseTemplate({ level: "topic", pageId: page.id, moduleId });
+            setActiveAddMenu(null);
+          } : undefined}
           addLabel="topic"
           toggleLabel="topic"
         />
@@ -543,6 +626,7 @@ export default function CourseOutlinePanel({
             <div key={article.id}>
               <TreeRow
                 label={article.title}
+                dragBindings={dragBindings({ id: article.id, level: 'section', parentId: page.id, parentLevel: 'topic' })}
                 paddingLeft={sectionPadding}
                 selected={articleSelected}
                 labelClassName="text-[13px] font-medium"
@@ -555,10 +639,7 @@ export default function CourseOutlinePanel({
                 expanded={isExpanded(expandedSections, article.id)}
                 onToggleExpand={() => setExpandedSections((previous) => ({ ...previous, [article.id]: !isExpanded(previous, article.id) }))}
                 showAdd={true}
-                onAdd={() => {
-                  const target: AddMenuTarget = { level: "section", pageId: page.id, articleId: article.id };
-                  setActiveAddMenu((previous) => (previous && getTargetKey(previous) === getTargetKey(target) ? null : target));
-                }}
+                onAdd={() => runAddAction({ level: "section", pageId: page.id, articleId: article.id })}
                 showDelete={true}
                 onDelete={() => {
                   setActiveAddMenu(null);
@@ -569,17 +650,10 @@ export default function CourseOutlinePanel({
                     articleId: article.id,
                   });
                 }}
-                menuOpen={activeAddKey === getTargetKey({ level: "section", pageId: page.id, articleId: article.id })}
-                onAddStartFresh={() => runAddAction({ level: "section", pageId: page.id, articleId: article.id })}
-                onAddTemplate={() => {
-                  const target: AddMenuTarget = { level: "section", pageId: page.id, articleId: article.id };
-                  if (onUseTemplate && target.pageId) {
-                    onUseTemplate({ level: "section", pageId: target.pageId, articleId: target.articleId });
-                    setActiveAddMenu(null);
-                    return;
-                  }
-                  runAddAction(target);
-                }}
+                onAddTemplate={onUseTemplate ? () => {
+                  onUseTemplate({ level: "section", pageId: page.id, articleId: article.id });
+                  setActiveAddMenu(null);
+                } : undefined}
                 addLabel="section"
                 toggleLabel="section"
               />
@@ -588,21 +662,13 @@ export default function CourseOutlinePanel({
                 <InlineAddRow
                   label="Add Group"
                   paddingLeft={groupPadding}
-                  onClick={() => {
-                    const target: AddMenuTarget = { level: "group", pageId: page.id, articleId: article.id };
-                    setActiveAddMenu((previous) => (previous && getTargetKey(previous) === getTargetKey(target) ? null : target));
-                  }}
-                  menuOpen={activeAddKey === getTargetKey({ level: "group", pageId: page.id, articleId: article.id })}
+                  panelExpanded={panelActionsAlignToTitles}
+                  titleIndent={65}
                   onAddStartFresh={() => runAddAction({ level: "group", pageId: page.id, articleId: article.id })}
-                  onAddTemplate={() => {
-                    const target: AddMenuTarget = { level: "group", pageId: page.id, articleId: article.id };
-                    if (onUseTemplate && target.pageId) {
-                      onUseTemplate({ level: "group", pageId: target.pageId, articleId: target.articleId });
-                      setActiveAddMenu(null);
-                      return;
-                    }
-                    runAddAction(target);
-                  }}
+                  onAddTemplate={onUseTemplate ? () => {
+                    onUseTemplate({ level: "group", pageId: page.id, articleId: article.id });
+                    setActiveAddMenu(null);
+                  } : undefined}
                   addLabel="group"
                 />
               )}
@@ -614,6 +680,7 @@ export default function CourseOutlinePanel({
                   <div key={block.id}>
                     <TreeRow
                       label={block.title}
+                      dragBindings={dragBindings({ id: block.id, level: 'contentGroup', parentId: article.id, parentLevel: 'section' })}
                       paddingLeft={groupPadding}
                       selected={blockSelected}
                       labelClassName="text-[13px] font-normal"
@@ -626,10 +693,7 @@ export default function CourseOutlinePanel({
                       expanded={isExpanded(expandedGroups, block.id)}
                       onToggleExpand={() => setExpandedGroups((previous) => ({ ...previous, [block.id]: !isExpanded(previous, block.id) }))}
                       showAdd={true}
-                      onAdd={() => {
-                        const target: AddMenuTarget = { level: "group", pageId: page.id, articleId: article.id, blockId: block.id };
-                        setActiveAddMenu((previous) => (previous && getTargetKey(previous) === getTargetKey(target) ? null : target));
-                      }}
+                      onAdd={() => runAddAction({ level: "group", pageId: page.id, articleId: article.id, blockId: block.id })}
                       showDelete={true}
                       onDelete={() => {
                         setActiveAddMenu(null);
@@ -641,17 +705,10 @@ export default function CourseOutlinePanel({
                           blockId: block.id,
                         });
                       }}
-                      menuOpen={activeAddKey === getTargetKey({ level: "group", pageId: page.id, articleId: article.id, blockId: block.id })}
-                      onAddStartFresh={() => runAddAction({ level: "group", pageId: page.id, articleId: article.id, blockId: block.id })}
-                      onAddTemplate={() => {
-                        const target: AddMenuTarget = { level: "group", pageId: page.id, articleId: article.id, blockId: block.id };
-                        if (onUseTemplate && target.pageId) {
-                          onUseTemplate({ level: "group", pageId: target.pageId, articleId: target.articleId, blockId: target.blockId });
-                          setActiveAddMenu(null);
-                          return;
-                        }
-                        runAddAction(target);
-                      }}
+                      onAddTemplate={onUseTemplate ? () => {
+                        onUseTemplate({ level: "group", pageId: page.id, articleId: article.id, blockId: block.id });
+                        setActiveAddMenu(null);
+                      } : undefined}
                       addLabel="content group"
                       toggleLabel="content group"
                     />
@@ -659,6 +716,7 @@ export default function CourseOutlinePanel({
                     {isExpanded(expandedGroups, block.id) && block.components.map((component) => (
                       <TreeRow
                         key={component.id}
+                        dragBindings={dragBindings({ id: component.id, level: 'component', parentId: block.id, parentLevel: 'contentGroup' })}
                         label={component.settings.title || component.type}
                         paddingLeft={componentPadding}
                         selected={selectedComponentId === component.id}
@@ -684,23 +742,16 @@ export default function CourseOutlinePanel({
 
                     {isExpanded(expandedGroups, block.id) && canAddComponent && (
                       <InlineAddRow
-                        label="Add Component"
+                        label="Add"
                         paddingLeft={componentPadding}
-                        onClick={() => {
-                          const target: AddMenuTarget = { level: "component", pageId: page.id, articleId: article.id, blockId: block.id };
-                          setActiveAddMenu((previous) => (previous && getTargetKey(previous) === getTargetKey(target) ? null : target));
-                        }}
-                        menuOpen={activeAddKey === getTargetKey({ level: "component", pageId: page.id, articleId: article.id, blockId: block.id })}
+                        panelExpanded
+                        titleIndent={45}
+                        componentActions
                         onAddStartFresh={() => runAddAction({ level: "component", pageId: page.id, articleId: article.id, blockId: block.id })}
-                        onAddTemplate={() => {
-                          const target: AddMenuTarget = { level: "component", pageId: page.id, articleId: article.id, blockId: block.id };
-                          if (onUseTemplate && target.pageId) {
-                            onUseTemplate({ level: "component", pageId: target.pageId, articleId: target.articleId, blockId: target.blockId });
-                            setActiveAddMenu(null);
-                            return;
-                          }
-                          runAddAction(target);
-                        }}
+                        onAddTemplate={onUseTemplate ? () => {
+                          onUseTemplate({ level: "component", pageId: page.id, articleId: article.id, blockId: block.id });
+                          setActiveAddMenu(null);
+                        } : undefined}
                         addLabel="component"
                       />
                     )}
@@ -712,7 +763,14 @@ export default function CourseOutlinePanel({
                 <InlineAddRow
                   label="Add Section"
                   paddingLeft={sectionPadding}
-                  onClick={() => onAddArticle(page.id)}
+                  panelExpanded={panelActionsAlignToTitles}
+                  titleIndent={65}
+                  onAddStartFresh={() => onAddArticle(page.id)}
+                  onAddTemplate={onUseTemplate ? () => {
+                    onUseTemplate({ level: "section", pageId: page.id });
+                    setActiveAddMenu(null);
+                  } : undefined}
+                  addLabel="section"
                 />
               )}
 
@@ -745,6 +803,7 @@ export default function CourseOutlinePanel({
       <div key={mod.id} className="mb-2">
         <TreeRow
           label={mod.title}
+          dragBindings={dragBindings({ id: mod.id, level: 'module', parentId: positions.find(position => position.id === mod.id)?.parentId || courseId, parentLevel: positions.find(position => position.id === mod.id)?.parentId === courseId ? 'course' : 'module' })}
           paddingLeft={modulePadding}
           selected={false}
           labelClassName="text-[13px] font-bold text-[#1d4c60]"
@@ -799,7 +858,11 @@ export default function CourseOutlinePanel({
   }
 
   return (
-    <div ref={panelRef} className="w-[280px] h-full bg-white border-r border-[#d8dee6] flex flex-col shrink-0 overflow-x-hidden">
+    <div
+      ref={panelRef}
+      style={{ "--outline-panel-width": `${panelWidth}px` } as CSSProperties}
+      className="w-[280px] md:w-[var(--outline-panel-width)] h-full bg-white border-r border-[#d8dee6] flex flex-col shrink-0 overflow-x-hidden"
+    >
       <div className="px-[14px] py-3 border-b border-[#d8dee6] flex items-center justify-between shrink-0">
         <span className="text-sm tracking-[0.08em] font-semibold text-[#3b4753] uppercase">Structure</span>
         <div className="flex items-center gap-[6px]">

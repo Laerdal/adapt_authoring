@@ -140,12 +140,15 @@ export default function StoryboardWorkspace({
   courseTitle = '',
   initialDocument,
   onBack,
+  showBackButton = true,
   onTitleChange,
 }: {
   courseId?: string;
   courseTitle?: string;
   initialDocument?: StoryboardDocument;
   onBack?: () => void;
+  /** Forwarded to StoryboardTopBar's own `showBack` — see its doc comment. */
+  showBackButton?: boolean;
   /** Called with the new title after a successful edit here, so callers whose
    *  own state feeds `courseTitle` (StoryboardPage, SetupPage's embedded
    *  panel) stay in sync without needing a full refetch. */
@@ -165,6 +168,10 @@ export default function StoryboardWorkspace({
 
   const commitTitle = async () => {
     setEditingTitle(false);
+    if (sb.viewerAccessLevel === 'review') {
+      setTitleDraft(resolvedCourseTitle); // reviewers can't rename the course — revert any stray edit
+      return;
+    }
     const next = titleDraft.trim();
     if (!courseId || !next || next === resolvedCourseTitle) {
       setTitleDraft(resolvedCourseTitle);
@@ -217,6 +224,13 @@ export default function StoryboardWorkspace({
   const [genPlan, setGenPlan] = useState<GenerationPlan | null>(null);
   const [genRunning, setGenRunning] = useState(false);
   const [genResult, setGenResult] = useState<GenerationResult | null>(null);
+  // Guards the WHOLE handleSave operation, not just the final sb.save() PUT —
+  // a double-click (or clicking again because nothing visibly happened yet)
+  // during the additive generateStoryboardCourse step below used to let two
+  // concurrent runs each independently decide the same not-yet-created block
+  // was "new" and create its own duplicate copy (ADAPT-3760 Save-duplication
+  // fix). Mirrors confirmGenerate's own genRunning guard.
+  const [saveRunning, setSaveRunning] = useState(false);
 
   // Resolve a block id to a human label for the Review panel (AC9).
   const labelFor = (blockId: string): string => {
@@ -235,9 +249,9 @@ export default function StoryboardWorkspace({
   // block id → generated content id, for idempotent regeneration (AC11).
   const generatedMap = useRef<Record<string, string>>({});
 
-  const flash = (msg: string) => {
+  const flash = (msg: string, ms: number = 2600) => {
     setToast(msg);
-    window.setTimeout(() => setToast(undefined), 2600);
+    window.setTimeout(() => setToast(undefined), ms);
   };
 
   // Once the storyboard has loaded, decide the editor's initial content. The
@@ -313,7 +327,10 @@ export default function StoryboardWorkspace({
   // moves focus out of the editor, and BlockNote can then no longer resolve
   // "where the cursor is" reliably, which previously caused new content to
   // land in the wrong place instead of right after the last active component.
-  const insert = (kind: StoryboardInsertKind) => editorRef.current?.insert(kind, { afterId: activeBlock?.id });
+  const insert = (kind: StoryboardInsertKind) => {
+    const result = editorRef.current?.insert(kind, { afterId: activeBlock?.id });
+    if (result && !result.ok && result.warning) flash(result.warning);
+  };
   const insertHeading = (level: number) => editorRef.current?.insert('heading', { level, afterId: activeBlock?.id });
 
   // Pull the latest backend course structure into the storyboard silently
@@ -359,10 +376,11 @@ export default function StoryboardWorkspace({
     setAiConfig({
       initialText: activeBlock?.text || editorRef.current?.getActiveText() || '',
       onInsert: (text) => {
-        editorRef.current?.insertComponent('text', {
+        const result = editorRef.current?.insertComponent('text', {
           data: { description: text, showTitle: false },
           afterId: activeBlock?.id,
         });
+        if (result && !result.id && result.warning) flash(result.warning);
         setHeadings(editorRef.current?.getHeadings() ?? []);
         setSummary(editorRef.current?.getSummary() ?? EMPTY_SUMMARY);
       },
@@ -371,12 +389,18 @@ export default function StoryboardWorkspace({
   };
 
   const handleSave = async () => {
+    if (saveRunning) return; // a Save is already in flight — see saveRunning's declaration
     const doc = editorRef.current?.getDocument() as unknown[] | undefined;
     const validationIssues = collectStoryboardValidationIssues(doc ?? []);
     if (validationIssues.length) {
-      flash(`Save blocked — ${validationIssues.slice(0, 3).join(' ')}`);
+      // Show every issue, not just the first few — a consolidated summary is
+      // the whole point of validating on Save; silently dropping the rest
+      // left authors fixing one problem at a time instead of seeing the full
+      // list up front.
+      flash(`Save blocked — fix ${validationIssues.length} issue(s):\n${validationIssues.join('\n')}`, 8000);
       return;
     }
+    setSaveRunning(true);
     try {
       let msg = 'Storyboard saved.';
       if (courseId && doc) {
@@ -414,6 +438,8 @@ export default function StoryboardWorkspace({
       flash(msg);
     } catch (e) {
       flash(`Save failed — ${e instanceof Error ? e.message : 'unknown error'}`);
+    } finally {
+      setSaveRunning(false);
     }
   };
 
@@ -578,12 +604,18 @@ export default function StoryboardWorkspace({
       // every export, regardless of the `dirty` flag: content projected from
       // the course on load is marked "saved" for the UI (no false "unsaved
       // changes" pill) without ever having been PUT to the backend record.
-      // Pull straight from the live editor and scrub any placeholder-title
-      // headings so the persisted document (and therefore the export) matches
-      // exactly what Preview shows, not the legacy scaffolding.
-      const liveDoc = stripPlaceholderHeadings(
-        (editorRef.current?.getDocument() as unknown[] | undefined) ?? [],
-      );
+      // Pull straight from the live editor as-is — do NOT run
+      // stripPlaceholderHeadings here. That helper removes the whole heading
+      // BLOCK (not just its text), which is a real structural boundary
+      // (Topic/Section/Content Group); Preview/TOC only blanks the text for a
+      // still-default title and keeps the row (see TableOfContents.tsx), and
+      // documentConvert.js's blocksToPdf/blocksToDocx already render a
+      // level-appropriate fallback for a blank/default heading rather than
+      // dropping it. Stripping it here instead deleted real structure from
+      // the saved document before export ever ran (ADAPT-3760 bug: default
+      // Topic/Section/Content Group headings missing from exported PDF/Word,
+      // only their content items surviving).
+      const liveDoc = (editorRef.current?.getDocument() as unknown[] | undefined) ?? [];
       await sb.save(liveDoc);
       const titleForExport = resolvedCourseTitle;
       const { filename, mime, dataBase64 } = isPdf
@@ -679,13 +711,15 @@ export default function StoryboardWorkspace({
       <StoryboardTopBar
         status={sb.status}
         onBack={() => onBack?.()}
+        showBack={showBackButton}
         onImport={handleImport}
         onExport={handleExport}
         onGenerate={generate}
         onSave={handleSave}
         onShareForReview={() => setShareOpen(true)}
         dirty={sb.dirty}
-        saving={sb.saving}
+        saving={sb.saving || saveRunning}
+        readOnly={sb.viewerAccessLevel === 'review'}
       />
 
       {sb.error && (
@@ -724,6 +758,7 @@ export default function StoryboardWorkspace({
             onInsert={insert}
             onInsertHeading={insertHeading}
             onEnrichAI={openEnrichAi}
+            readOnly={sb.viewerAccessLevel === 'review'}
           />
           <div className="flex-1 overflow-y-auto">
             {/* Authoring canvas ~60% of the viewport (Lovable proportions),
@@ -755,7 +790,7 @@ export default function StoryboardWorkspace({
                       e.currentTarget.blur();
                     }
                   }}
-                  disabled={savingTitle}
+                  disabled={savingTitle || sb.viewerAccessLevel === 'review'}
                   aria-label="Course title"
                   className="mt-1 w-full border-0 border-b border-transparent bg-transparent text-[2.6rem] font-bold leading-tight tracking-tight text-foreground outline-none focus:border-border disabled:opacity-60"
                 />
@@ -765,11 +800,23 @@ export default function StoryboardWorkspace({
                   key={sb.storyboardId ?? 'sb'}
                   ref={editorRef}
                   initialDocument={initialContent.current}
+                  // In-canvas lockdown for a review-only invitee — blocks
+                  // direct typing into BlockNote-native text (headings/
+                  // paragraphs/lists). Card-level fields (componentBlock.tsx,
+                  // assessmentBlock.tsx, placeholderBlock.tsx) are separate
+                  // React inputs outside BlockNote's editable surface, so each
+                  // of those reads `!editor.isEditable` itself and disables
+                  // its own native inputs/buttons accordingly. The backend
+                  // (requestHandlers.js loadStoryboardAccess) remains the
+                  // actual enforcement boundary regardless of what the canvas
+                  // allows — this is defense in depth, not the source of truth.
+                  editable={sb.viewerAccessLevel !== 'review'}
                   onChange={handleChange}
                   onActiveBlock={(block) => {
                     setActiveBlock(block);
                     setCommentAnchor(editorRef.current?.getCommentAnchor() ?? null);
                   }}
+                  onWarning={flash}
                 />
               ) : (
                 <div className="flex items-center gap-2 py-16 text-sm text-muted-foreground">
@@ -880,7 +927,10 @@ export default function StoryboardWorkspace({
       )}
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-foreground px-4 py-2 text-sm text-background shadow-lg">
+        <div
+          className="fixed bottom-6 left-1/2 z-50 max-w-lg -translate-x-1/2 whitespace-pre-line rounded-lg bg-foreground px-4 py-2 text-left text-sm text-background shadow-lg"
+          onClick={() => setToast(undefined)}
+        >
           {toast}
         </div>
       )}

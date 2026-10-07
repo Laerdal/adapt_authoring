@@ -1,3 +1,5 @@
+import { Music2 } from "lucide-react";
+
 type AssetSelectionFieldProps = {
   label: string;
   value: string;
@@ -84,9 +86,12 @@ export default function AssetSelectionField({
         <div className="border border-[var(--life-neutral-200)] rounded-md overflow-hidden bg-[var(--life-neutral-020)]">
           <div className={compact ? "h-20 w-full flex items-center justify-center overflow-hidden bg-[var(--life-neutral-020)]" : "h-56 w-full flex items-center justify-center overflow-hidden bg-[var(--life-neutral-020)]"}>
             {previewKind === "video" ? (
-              <video src={previewUrl} controls preload="metadata" className="w-full h-full object-contain bg-black" />
+              <video key={previewUrl} src={previewUrl} muted playsInline preload="metadata" disablePictureInPicture disableRemotePlayback className="pointer-events-none w-full h-full object-contain bg-black" />
             ) : previewKind === "audio" ? (
-              <audio src={previewUrl} controls className="w-[92%]" />
+              <div className="flex max-w-full flex-col items-center gap-2 px-3 text-[var(--life-neutral-500)]">
+                <Music2 size={32} aria-hidden="true" />
+                <span className="max-w-full truncate text-[11px]">{value.split("/").pop()?.split(/[?#]/)[0] || label}</span>
+              </div>
             ) : previewKind === "other" ? (
               <span className="px-2 text-center text-[11px] text-[var(--life-neutral-500)]">Preview is not available for this file type.</span>
             ) : (
