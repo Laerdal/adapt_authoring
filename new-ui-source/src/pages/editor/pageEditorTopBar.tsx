@@ -141,16 +141,6 @@ export default function PageEditorTopBar({
     <div className="ml-auto flex items-center gap-3">
       <button
         type="button"
-        onClick={() => setIsGuideOpen(true)}
-        aria-haspopup="dialog"
-        aria-expanded={isGuideOpen}
-        className="inline-flex items-center gap-1.5 rounded-[8px] px-2.5 py-2 text-[13px] font-medium text-[#40515e] transition-colors hover:bg-[#f1f5f8] hover:text-[#1d3547] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2d6fa8]"
-      >
-        <Lightbulb size={16} strokeWidth={1.8} aria-hidden="true" />
-        <span>How-To Guide</span>
-      </button>
-      <button
-        type="button"
         onClick={onSave}
         disabled={isSaveDisabled || isSaving}
         className="inline-flex items-center gap-1.5 px-3 py-2 text-[13px] font-bold bg-transparent text-[var(--life-base-black)] rounded-[8px] hover:bg-[var(--life-primary-050)] hover:text-[var(--life-primary-700)] active:bg-[var(--life-primary-100)] active:text-[var(--life-primary-800)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
@@ -160,6 +150,16 @@ export default function PageEditorTopBar({
       </button>
 
       <PublishMenuButton onSelectPreflight={onSelectPreflight} onSelectPublish={onSelectPublish} />
+      <button
+        type="button"
+        onClick={() => setIsGuideOpen(true)}
+        aria-haspopup="dialog"
+        aria-expanded={isGuideOpen}
+        className="inline-flex items-center gap-1.5 rounded-[8px] px-2.5 py-2 text-[13px] font-medium text-[#40515e] transition-colors hover:bg-[#f1f5f8] hover:text-[#1d3547] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2d6fa8]"
+      >
+        <Lightbulb size={16} strokeWidth={1.8} aria-hidden="true" />
+        <span>How-To Guide</span>
+      </button>
     </div>
   );
 

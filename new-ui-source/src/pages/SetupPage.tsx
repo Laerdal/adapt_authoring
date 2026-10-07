@@ -7,10 +7,11 @@ import CourseStructureTree from "../components/course/CourseStructureTree";
 import AddComponentDrawer from "../components/course/AddComponentDrawer";
 import { StoryboardWorkspace } from "../components/storyboard";
 import CommonCourseTopBarRow from "../components/course/CommonCourseTopBarRow";
+import { Lightbulb } from "lucide-react";
 import { getCourseBootstrapData, publishCoursePackage } from "../api/adaptAuthoring";
 import { useCourseStructure } from "../hooks/useCourseStructure";
 import { STRUCTURE_LABELS } from "../types/structure";
-import { BasicRichTextEditor } from "../components/common";
+import { BasicRichTextEditor, GuideDialog, type GuidePanel, type GuideSection } from "../components/common";
 import { CourseOverviewPage } from "./setup/courseOverviewPage";
 import { SaveChangesButton } from "./setup/SaveChangesButton";
 import { SaveStatusToast } from "./setup/SaveStatusToast";
@@ -40,6 +41,196 @@ import { usePageLoader } from "../hooks";
 import type { AssetPickerRequest, AssetPickerResult } from "../types/assetPicker";
 
 const ICON_BASE = "/new/assets/icons";
+
+const COURSE_SETUP_GUIDE_PANELS: GuidePanel[] = [
+  {
+    title: "Left panel: Settings navigation",
+    description: "Browse meaningful settings groups for course setup, design, learning flow, insights, advanced configuration, and publishing actions.",
+  },
+  {
+    title: "Middle panel: Configuration workspace",
+    description: "Edit the selected area's fields, expandable sections, toggles, selection cards, or guided workflows.",
+  },
+  {
+    title: "Preview and supporting guidance",
+    description: "Where available, use live previews to check the learner experience. Tips within each area provide context for advanced options.",
+  },
+];
+
+const COURSE_SETUP_GUIDE_SECTIONS: GuideSection[] = [
+  {
+    title: "A useful working flow",
+    description: "Start with course fundamentals, define the learner experience, then configure advanced and publishing settings.",
+    items: [
+      "Complete Course Overview: title, description, metadata, language, and preview image.",
+      "Use Course Structure to organize the initial hierarchy.",
+      "Configure Theme and Menu for visual identity and navigation.",
+      "Set up Navigation, Completion & Progress, and Learner Experience.",
+      "Configure Tracking & Analytics for the delivery environment.",
+      "Review Accessibility and use Technical Settings for advanced configuration.",
+      "Configure CDN Deployment or Translation when ready for distribution or localization.",
+      "Preview and validate the learner experience before publishing.",
+    ],
+  },
+  {
+    title: "Course Overview",
+    description: "Define the course identity and essential information.",
+    items: [
+      "Add the course title, subtitle, and description.",
+      "Provide course metadata and learner instructions.",
+      "Add a preview image and relevant tags.",
+      "Select the default course language.",
+    ],
+  },
+  {
+    title: "Course Structure",
+    description: "Build and organize the learning journey.",
+    items: [
+      "Create and organize Modules, Topics, Sections, Content Groups, and Components.",
+      "Reorder items to improve sequence and learning flow.",
+      "Open Storyboard when the initial structure is ready for content planning and review.",
+      "Select a Topic to continue detailed authoring in Page Editor.",
+    ],
+  },
+  {
+    title: "Theme",
+    description: "Configure the overall visual appearance of the course.",
+    items: [
+      "Choose an available theme.",
+      "Configure colors, fonts, and text styles.",
+      "Adjust course-level and component-level presentation.",
+      "Save frequently used configurations as presets.",
+      "Use the live preview to review changes as you work.",
+    ],
+  },
+  {
+    title: "Menu",
+    description: "Define how learners access and navigate the course.",
+    items: [
+      "Select an appropriate menu style.",
+      "Add a menu logo, header image, or background image where required.",
+      "Configure text alignment and menu behavior.",
+      "Decide whether learners should see submenu pages.",
+      "Provide clear messaging for locked or unavailable content.",
+      "Review the result in the live menu preview.",
+    ],
+  },
+  {
+    title: "Navigation",
+    description: "Define how learners enter and move through the course.",
+    items: [
+      "Choose the page learners see when opening the course.",
+      "Configure start items and routing behavior.",
+      "Control access to the course menu and configure menu locking for guided sequences.",
+      "Set up top-bar logos, primary navigation labels, and footer navigation.",
+    ],
+  },
+  {
+    title: "Completion & Progress",
+    description: "Define how learner progress is tracked and displayed.",
+    items: [
+      "Configure course completion criteria and feedback.",
+      "Set resume and bookmarking behavior.",
+      "Choose how progress is shown.",
+      "Provide an estimated course duration.",
+      "Review settings that can be overridden at Topic level.",
+    ],
+  },
+  {
+    title: "Learner Experience",
+    description: "Manage additional tools available to learners. Enable only features that support the course objective and learner journey.",
+    items: [
+      "Learning Resources",
+      "Learner Notes",
+      "Learner Search",
+      "Ask AI Tutor",
+      "Laerdal Course Feedback",
+    ],
+  },
+  {
+    title: "Tracking & Analytics",
+    description: "Configure reporting and usage insights.",
+    items: [
+      "Choose the tracking standard used to report learner progress to the LMS.",
+      "Configure the required analytics integration.",
+      "Enable tracking and analytics according to delivery requirements.",
+      "Validate the configured options in the intended destination before release.",
+    ],
+  },
+  {
+    title: "Accessibility",
+    description: "Configure course-wide accessibility behavior.",
+    items: [
+      "Enable available accessibility features.",
+      "Review ARIA heading levels and labels.",
+      "Configure accessibility options for Components, Extensions, Drawer, Navigation, and Menu.",
+      "Validate keyboard navigation, focus order, heading structure, and labels in the completed course.",
+    ],
+  },
+  {
+    title: "Technical Settings",
+    description: "These options are intended for developers and advanced users. Use custom styling with caution; framework or component updates can affect selectors and underlying structures.",
+    items: [
+      "Configure responsive screen-size breakpoints.",
+      "Review assistive and embedded experience options.",
+      "Configure runtime behavior where required.",
+      "Add custom CSS or LESS for course-specific styling.",
+      "Export a copy of configured custom styling for reference or backup.",
+    ],
+  },
+  {
+    title: "CDN Deployment",
+    description: "Publish and manage deployed course versions.",
+    items: [
+      "Enable the CDN configuration.",
+      "Enter course-specific project and course identifiers.",
+      "Choose whether to include source code.",
+      "Trigger a CDN build to publish a new version.",
+      "Review previous deployment links where available.",
+      "Set an appropriate expiry date before sharing a course link.",
+    ],
+  },
+  {
+    title: "Translation",
+    description: "Prepare course content for additional languages.",
+    items: [
+      "Select the source language and load the available course strings.",
+      "Preview the strings and review counts for strings and characters.",
+      "Include Global Strings, Course Strings, or both.",
+      "Select a translation method.",
+      "Review and confirm translated content.",
+      "Check for missing translations and validate them in the learner experience.",
+    ],
+  },
+  {
+    title: "Recommendations",
+    items: [
+      "Use Course Settings for overall defaults and expected course behavior; not every detailed decision is needed at this stage.",
+      "Some course-level settings can be overridden at Topic or content level in Page Editor.",
+      "Configure content-, layout-, or learning-context-specific settings directly in Page Editor.",
+      "Set defaults here when behavior should apply consistently across the course.",
+      "Use Page Editor when a decision depends on a specific Topic, Section, Content Group, Component, or interaction.",
+      "Avoid changing a course-wide default to solve an issue limited to one area.",
+      "Preview affected content after applying an override.",
+      "Keep completion, navigation, progress, and tracking decisions aligned across levels.",
+    ],
+  },
+  {
+    title: "Best practices",
+    items: [
+      "Complete essential course-level settings before detailed authoring.",
+      "Use clear, learner-focused course titles and descriptions.",
+      "Keep structure, menu, and navigation consistent.",
+      "Use Theme and Menu previews to validate visual and navigation decisions.",
+      "Test the experience for new and returning learners.",
+      "Review Topic-level overrides to avoid inconsistent behavior.",
+      "Treat Accessibility as part of course design, not just a final publishing check.",
+      "Reserve Technical Settings for needs that standard configuration cannot address.",
+      "Verify links, resources, tracking, completion behavior, and translations in the delivery environment.",
+      "Preview the complete course on representative screen sizes before publishing.",
+    ],
+  },
+];
 
 function SidebarMaskIcon({ file, className }: { file: string; className?: string }) {
   const iconPath = `${ICON_BASE}/${file}`;
@@ -2554,6 +2745,7 @@ function CourseCreationCenterContent() {
           ? "export-pdf"
           : "overview",
   );
+          const [isCourseGuideOpen, setIsCourseGuideOpen] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -2899,6 +3091,15 @@ function CourseCreationCenterContent() {
         previewMode="button"
       />
 
+      <GuideDialog
+        open={isCourseGuideOpen}
+        title="Course Settings How-To Guide"
+        description="A practical overview of Course Settings panels, common setup tasks, and how global defaults relate to detailed authoring."
+        panels={COURSE_SETUP_GUIDE_PANELS}
+        sections={COURSE_SETUP_GUIDE_SECTIONS}
+        onClose={() => setIsCourseGuideOpen(false)}
+      />
+
       {/* -- Second Row Header -- */}
       {/* Hidden on Storyboard: it isn't part of the Course Configuration nav
           (activeItem resolves to nothing there) and StoryboardTopBar already
@@ -2926,6 +3127,16 @@ function CourseCreationCenterContent() {
               onSelectPreflight={() => handleNavigation("publish")}
               onSelectPublish={() => requestGuardedAction(openPublishDialog)}
             />
+            <button
+              type="button"
+              onClick={() => setIsCourseGuideOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-[8px] px-2.5 py-2 text-[13px] font-medium text-[#40515e] transition-colors hover:bg-[#f1f5f8] hover:text-[#1d3547] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#2d6fa8]"
+              aria-haspopup="dialog"
+              aria-expanded={isCourseGuideOpen}
+            >
+              <Lightbulb size={16} strokeWidth={1.8} aria-hidden="true" />
+              <span>How-To Guide</span>
+            </button>
           </div>
         </div>
       )}

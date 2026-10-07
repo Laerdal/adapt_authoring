@@ -108,10 +108,9 @@ const DEFAULT_CONFIG: MenuPageConfig = {
   bgPosition: "",
 };
 
-const BG_REPEAT_OPTIONS: BgRepeat[] = ["","no-repeat", "repeat", "repeat-x", "repeat-y"];
-const BG_SIZE_OPTIONS: BgSize[] = ["","auto", "cover", "contain"];
+const BG_REPEAT_OPTIONS: BgRepeat[] = ["no-repeat", "repeat", "repeat-x", "repeat-y"];
+const BG_SIZE_OPTIONS: BgSize[] = ["auto", "cover", "contain"];
 const BG_POSITION_OPTIONS: BgPosition[] = [
-  "",
   "left top",
   "left center",
   "left bottom",
