@@ -1637,7 +1637,10 @@ export function LearnerExperiencePanel({
           }
         >
           {/* Enable toggle */}
-          <DemoVideoPlaceholder label="See how Ask AI Tutor works" />
+          <DemoVideoPlaceholder
+            label="See how Ask AI Tutor works"
+            src="https://cdn-esim.contentservice.net/LA/AI_Tutor_3c4e313383-muy1qy02.mp4"
+          />
           {atLoading && (
             <div className="rounded-lg border border-[#e5e7eb] bg-[#f9fafb] px-3 py-2 text-sm text-[#6b7280]">
               Loading Ask AI Tutor settings...
