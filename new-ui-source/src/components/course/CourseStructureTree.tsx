@@ -35,26 +35,32 @@ export interface CourseStructureTreeProps {
   onOpenTopic: (topicId: string) => void;
 }
 
-interface Dragged { level: StructureLevel; id: string; }
-interface RowRef { level: StructureLevel; id: string; parentId: string; parentLevel: ContainerLevel; }
-type DropPlan = { newParentId: string; beforeId: string | null; mode: 'before' | 'into' };
+export interface Dragged { level: StructureLevel; id: string; }
+export interface RowRef { level: StructureLevel; id: string; parentId: string; parentLevel: ContainerLevel; nextSiblingId?: string | null; }
+type DropPlan = { newParentId: string; beforeId: string | null; mode: 'before' | 'after' | 'into' };
 
 // Resolve a drop of `dragged` onto `row`:
 //  • same level          → reorder / move as a sibling before that row
 //  • different level, row is a valid container for it → move INTO the row
 //  • different level, but a sibling is valid          → move as a sibling
-function computeDrop(dragged: Dragged, row: RowRef): DropPlan | null {
+export function computeDrop(dragged: Dragged, row: RowRef, position: 'before' | 'after' = 'before'): DropPlan | null {
   if (dragged.id === row.id) return null;
+  if (position === 'after' && row.nextSiblingId === dragged.id) return null;
+  const siblingPlan = (): DropPlan => ({
+    newParentId: row.parentId,
+    beforeId: position === 'after' ? row.nextSiblingId ?? null : row.id,
+    mode: position,
+  });
   if (dragged.level === row.level) {
     return acceptsChild(row.parentLevel, dragged.level)
-      ? { newParentId: row.parentId, beforeId: row.id, mode: 'before' }
+      ? siblingPlan()
       : null;
   }
   if (acceptsChild(row.level, dragged.level)) {
     return { newParentId: row.id, beforeId: null, mode: 'into' };
   }
   if (acceptsChild(row.parentLevel, dragged.level)) {
-    return { newParentId: row.parentId, beforeId: row.id, mode: 'before' };
+    return siblingPlan();
   }
   return null;
 }
@@ -114,7 +120,7 @@ export default function CourseStructureTree(props: CourseStructureTreeProps) {
   const [inlineOriginalValue, setInlineOriginalValue] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [drag, setDrag] = useState<Dragged | null>(null);
-  const [dropTarget, setDropTarget] = useState<{ rowId: string; mode: 'before' | 'into' } | null>(null);
+  const [dropTarget, setDropTarget] = useState<{ rowId: string; mode: 'before' | 'after' | 'into' } | null>(null);
 
   const isOpen = (id: string) => collapsed[id] !== true;
   const toggle = (id: string) => setCollapsed((p) => ({ ...p, [id]: p[id] ? false : true }));

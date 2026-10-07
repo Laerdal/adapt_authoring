@@ -144,7 +144,7 @@ function computeFingerprint(tenantId, courseId, cb) {
           aiTutorDocs: sortedAiTutorDocRefs(cfg),
           compiledStyle: plugin.computeCompiledStyleFingerprint(raw)
         });
-        cb(null, crypto.createHash('sha1').update(key).digest('hex').slice(0, 16));
+        cb(null, crypto.createHash('sha1').update(key).digest('hex').slice(0, 16), raw);
       });
     });
   });
@@ -320,7 +320,7 @@ function invalidateLiveCache(data, cb) {
   });
 });
 
-function getSanitizedCourse(tenantId, courseId, cb) {
+function getSanitizedCourse(tenantId, courseId, cb, assembledCourse) {
   const key = tenantId + ':' + courseId;
   const hit = liveCache.get(key);
   if (hit && (Date.now() - hit.at) < LIVE_TTL_MS) return cb(null, hit.data);
@@ -334,12 +334,16 @@ function getSanitizedCourse(tenantId, courseId, cb) {
   };
   origin().outputmanager.getOutputPlugin('adapt', function (err, plugin) {
     if (err) return settle(err);
-    plugin.getCourseJSON(tenantId, courseId, function (err, raw) {
-      if (err) return settle(err);
+    const sanitize = function (raw) {
       plugin.sanitizeCourseJSON(Constants.Modes.Preview, raw, function (err, sanitized) {
         if (err) return settle(err);
         settle(null, sanitized);
       });
+    };
+    if (assembledCourse) return sanitize(assembledCourse);
+    plugin.getCourseJSON(tenantId, courseId, function (err, raw) {
+      if (err) return settle(err);
+      sanitize(raw);
     });
   });
 }
@@ -397,23 +401,30 @@ server.post('/studio/ensure/:tenant/:course', (req, res, next) => {
   helpers.hasCoursePermission('*', user._id, tenantId, { _id: courseId }, (error, hasPermission) => {
     if (error || !hasPermission) return next(new StudioPermissionError());
 
-    computeFingerprint(tenantId, courseId, (err, fp) => {
+    liveCache.delete(tenantId + ':' + courseId);
+    computeFingerprint(tenantId, courseId, (err, fp, assembledCourse) => {
       if (err) return next(err);
       const buildRoot = courseBuildRoot(tenantId, courseId);
       const indexPath = path.join(buildRoot, Constants.Filenames.Main);
+      const sendCachedShell = () => {
+        getSanitizedCourse(tenantId, courseId, (dataError) => {
+          if (dataError) return next(dataError);
+          res.json({ success: true, built: false, cached: true, fingerprint: fp });
+        }, assembledCourse);
+      };
 
       fsx.readFile(path.join(buildRoot, FP_MARKER), 'utf8', (_e, marker) => {
         const rebuildRequired = force || fsx.existsSync(path.join(buildRoot, Constants.Filenames.Rebuild));
         // 1) Already materialised for this fingerprint.
         if (!rebuildRequired && marker === fp && fsx.existsSync(indexPath)) {
-          return res.json({ success: true, built: false, cached: true, fingerprint: fp });
+          return sendCachedShell();
         }
         // 2) Shell cached AND this course already has a build folder (its assets) → restore, no grunt.
         if (!rebuildRequired && fsx.existsSync(path.join(shellCacheDir(fp), Constants.Filenames.Main)) && fsx.existsSync(buildRoot)) {
           return restoreShell(fp, buildRoot, (rErr) => {
             if (rErr) return next(rErr);
             logger.log('info', `Studio: restored cached shell ${fp} for course ${courseId} (no build)`);
-            res.json({ success: true, built: false, cached: true, fingerprint: fp });
+            sendCachedShell();
           });
         }
         // 3) Miss → build once with the shared grunt compiler (NOT the preview route).

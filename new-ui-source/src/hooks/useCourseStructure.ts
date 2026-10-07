@@ -191,7 +191,7 @@ interface NodeDesc {
   layout?: "full" | "left" | "right";
 }
 // Depth-first, parents before children — safe order for creates.
-function flatten(s: CourseStructure, courseId: string): NodeDesc[] {
+export function flattenStructure(s: CourseStructure, courseId: string): NodeDesc[] {
   const out: NodeDesc[] = [];
   const walkContainer = (containerId: string, modules: SModule[], topics: STopic[]) => {
     mergedChildren(modules, topics).forEach((child, i) => {
@@ -216,6 +216,61 @@ function flatten(s: CourseStructure, courseId: string): NodeDesc[] {
   };
   walkContainer(courseId, s.modules, s.topics);
   return out;
+}
+
+export function moveCourseStructure(
+  structure: CourseStructure,
+  courseId: string,
+  level: StructureLevel,
+  id: string,
+  newParentId: string,
+  beforeId: string | null
+): CourseStructure {
+  const newParentLevel = containerLevelOf(structure, newParentId, courseId);
+  if (!newParentLevel || !acceptsChild(newParentLevel, level)) throw new Error("That item can't be placed there.");
+  if (level === "module") {
+    const banned = new Set<string>();
+    const collect = (module: SModule) => { banned.add(module.id); module.modules.forEach(collect); };
+    const dragged = findModule(structure, id);
+    if (dragged) collect(dragged);
+    if (banned.has(newParentId)) throw new Error("A module can't be moved inside itself.");
+  }
+  if (level === "component") {
+    const target = findContentGroup(structure, newParentId);
+    const source = findGroupOfComponent(structure, id);
+    if (target && source && target.id !== source.id && target.components.length >= 2) {
+      throw new Error("A content group can contain at most two components.");
+    }
+  }
+  if (level === "topic") {
+    const sourceModule = moduleContainingTopic(structure, id);
+    if (sourceModule && sourceModule.id !== newParentId && sourceModule.topics.length <= 1) {
+      throw new Error("Each module must contain at least one topic.");
+    }
+    if (!sourceModule && newParentId !== courseId && structure.topics.length <= 1) {
+      throw new Error("At least one topic is required at the course level.");
+    }
+  }
+  const next = structuredClone(structure);
+  const detached = detachNode(next, level, id, courseId);
+  if (!detached) return next;
+  const { node } = detached;
+  if (level === "module" || level === "topic") {
+    const target = container(next, newParentId, courseId);
+    const ids = mergedChildren(target.modules, target.topics).map((child) => child.node.id);
+    if (beforeId && ids.includes(beforeId)) ids.splice(ids.indexOf(beforeId), 0, node.id);
+    else ids.push(node.id);
+    (level === "module" ? target.modules : target.topics).push(node);
+    const byId = new Map<string, SModule | STopic>([...target.modules, ...target.topics].map((child) => [child.id, child]));
+    ids.forEach((childId, index) => { const child = byId.get(childId); if (child) child.sortOrder = index + 1; });
+  } else {
+    const children = getChildArray(next, level, newParentId);
+    if (!children) return next;
+    const index = beforeId ? children.findIndex((child) => child.id === beforeId) : -1;
+    if (index >= 0) children.splice(index, 0, node);
+    else children.push(node);
+  }
+  return next;
 }
 
 export function useCourseStructure(courseId: string, courseTitle = "Course") {
@@ -304,42 +359,12 @@ export function useCourseStructure(courseId: string, courseTitle = "Course") {
 
   // Drag-and-drop move — reparent/reorder within the draft (no backend).
   const moveNode = useCallback((level: StructureLevel, id: string, newParentId: string, beforeId: string | null) => {
-    const newParentLevel = containerLevelOf(draft, newParentId, courseId);
-    if (!newParentLevel || !acceptsChild(newParentLevel, level)) { setError(new Error("That item can't be placed there.")); return; }
-    if (level === "module") {
-      const banned = new Set<string>();
-      const collect = (m: SModule) => { banned.add(m.id); m.modules.forEach(collect); };
-      const dragged = findModule(draft, id); if (dragged) collect(dragged);
-      if (banned.has(newParentId)) { setError(new Error("A module can't be moved inside itself.")); return; }
+    try {
+      const moved = moveCourseStructure(draft, courseId, level, id, newParentId, beforeId);
+      edit((next) => Object.assign(next, moved));
+    } catch (error) {
+      setError(error instanceof Error ? error : new Error("Failed to move course content"));
     }
-    if (level === "component") {
-      const target = findContentGroup(draft, newParentId);
-      const source = findGroupOfComponent(draft, id);
-      if (target && source && target.id !== source.id && target.components.length >= 2) { setError(new Error("A content group can contain at most two components.")); return; }
-    }
-    if (level === "topic") {
-      const srcModule = moduleContainingTopic(draft, id);
-      if (srcModule && srcModule.id !== newParentId && srcModule.topics.length <= 1) { setError(new Error("Each module must contain at least one topic.")); return; }
-      if (!srcModule && newParentId !== courseId && draft.topics.length <= 1) { setError(new Error("At least one topic is required at the course level.")); return; }
-    }
-
-    edit((next) => {
-      const detached = detachNode(next, level, id, courseId);
-      if (!detached) return;
-      const { node } = detached;
-      if (level === "module" || level === "topic") {
-        const c = container(next, newParentId, courseId);
-        let ids = mergedChildren(c.modules, c.topics).map((x) => x.node.id).filter((x) => x !== node.id);
-        if (beforeId && ids.includes(beforeId)) ids.splice(ids.indexOf(beforeId), 0, node.id); else ids.push(node.id);
-        (level === "module" ? c.modules : c.topics).push(node as SModule & STopic);
-        const byId = new Map<string, SModule | STopic>([...c.modules, ...c.topics].map((n) => [n.id, n]));
-        ids.forEach((cid, i) => { const n = byId.get(cid); if (n) n.sortOrder = i + 1; });
-      } else {
-        const arr = getChildArray(next, level, newParentId);
-        if (!arr) return;
-        if (beforeId) { const i = arr.findIndex((x) => x.id === beforeId); if (i >= 0) arr.splice(i, 0, node); else arr.push(node); } else arr.push(node);
-      }
-    });
   }, [edit, draft, courseId]);
 
   const discard = useCallback(() => { void reload(); }, [reload]);
@@ -354,8 +379,8 @@ export function useCourseStructure(courseId: string, courseTitle = "Course") {
       if (!componentsRef.current) componentsRef.current = await getAvailableComponents();
       const compByKey = new Map(componentsRef.current.map((c) => [c.component, c]));
 
-      const draftDescs = flatten(draft, courseId);
-      const savedDescs = flatten(saved, courseId);
+      const draftDescs = flattenStructure(draft, courseId);
+      const savedDescs = flattenStructure(saved, courseId);
       const savedById = new Map(savedDescs.map((d) => [d.id, d]));
       const draftIds = new Set(draftDescs.map((d) => d.id));
 
