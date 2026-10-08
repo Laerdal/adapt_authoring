@@ -25,6 +25,23 @@ env:
   STUDIO_E2E_BRANCH: main
 
 jobs:
+  check-studio-e2e-secret:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      has_token: ${{ steps.check.outputs.has_token }}
+    steps:
+      # secrets context can't be used directly in a job-level `if:`, so resolve it here first
+      - id: check
+        env:
+          STUDIO_E2E_TOKEN: ${{ secrets.STUDIO_E2E_TOKEN }}
+        run: |
+          if [ -n "${STUDIO_E2E_TOKEN:-}" ]; then
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+          fi
+
   backend-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 120
@@ -76,9 +93,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     needs:
+      - check-studio-e2e-secret
       - backend-tests
       - new-ui-tests
-    if: ${{ secrets.STUDIO_E2E_TOKEN != '' }}
+    if: ${{ needs.check-studio-e2e-secret.outputs.has_token == 'true' }}
     outputs:
       dispatch_time: ${{ steps.trigger_e2e.outputs.dispatch_time }}
 
@@ -115,8 +133,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     needs:
+      - check-studio-e2e-secret
       - trigger-studio-e2e
-    if: ${{ secrets.STUDIO_E2E_TOKEN != '' }}
+    if: ${{ needs.check-studio-e2e-secret.outputs.has_token == 'true' }}
 
     steps:
       - name: Wait for Studio E2E completion
