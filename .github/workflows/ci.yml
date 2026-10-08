@@ -3,9 +3,11 @@ name: CI
 on:
   pull_request:
     branches:
+      - develop
       - adapt-studio-cicd-setup
   push:
     branches:
+      - develop
       - adapt-studio-cicd-setup
   workflow_dispatch:
   schedule:
@@ -104,7 +106,7 @@ jobs:
       - check-studio-e2e-secret
       - backend-tests
       - new-ui-tests
-    if: ${{ needs.check-studio-e2e-secret.outputs.has_token == 'true' }}
+    if: ${{ github.event_name != 'pull_request' && needs.check-studio-e2e-secret.outputs.has_token == 'true' }}
     outputs:
       dispatch_time: ${{ steps.trigger_e2e.outputs.dispatch_time }}
 
@@ -143,7 +145,7 @@ jobs:
     needs:
       - check-studio-e2e-secret
       - trigger-studio-e2e
-    if: ${{ needs.check-studio-e2e-secret.outputs.has_token == 'true' }}
+    if: ${{ github.event_name != 'pull_request' && needs.check-studio-e2e-secret.outputs.has_token == 'true' }}
 
     steps:
       - name: Wait for Studio E2E completion
