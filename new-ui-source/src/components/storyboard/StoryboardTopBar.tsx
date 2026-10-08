@@ -22,9 +22,118 @@ import {
   ChevronDown,
   Save,
   Loader2,
+  Lightbulb,
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { REVIEW_STATUS_LABEL, type ReviewStatus } from '@/types/storyboard';
+import GuideDialog, { type GuidePanel, type GuideSection } from '@/components/common/GuideDialog';
+
+const STORYBOARD_GUIDE_PANELS: GuidePanel[] = [
+  {
+    title: 'Left panel: Contents',
+    description: 'Browse the Storyboard outline, expand or collapse content, and select the Topic, Section, Content Group, or content item you want to review.',
+  },
+  {
+    title: 'Middle panel: Storyboard',
+    description: 'Build and review the course narrative in a document-style view. Add headings and content, edit existing items, and assess the learning flow before detailed authoring.',
+  },
+  {
+    title: 'Right panel: Review Center',
+    description: 'View the Storyboard summary and status, monitor comments, and manage review feedback. Select a content block to comment in context, or switch between open and resolved feedback.',
+  },
+];
+
+const STORYBOARD_GUIDE_SECTIONS: GuideSection[] = [
+  {
+    title: 'A useful working flow',
+    description: 'Build the narrative, review the overall flow, and then move into detailed authoring.',
+    items: [
+      'Select a Topic in Contents or add a new heading.',
+      'Add and organize content to develop the learning flow.',
+      'Edit content in the middle panel and review the Storyboard as a complete narrative.',
+      'Use Ask Samaritan to generate or refine content where support is needed.',
+      'Select a content block and use the Review Center to add contextual feedback.',
+      'Share the Storyboard with another creator on this Adapt Studio instance when collaboration or review is needed.',
+      'Address comments and update their status as review progresses.',
+      'Continue to Page Editor when the content direction and review are complete.',
+    ],
+  },
+  {
+    title: 'Review Center: Storyboard summary',
+    description: 'Use the summary to understand the Storyboard size and see whether feedback still needs attention.',
+    items: [
+      'Number of Topics, Sections, content items, and assets.',
+      'Number of open and resolved comments.',
+      'Current Storyboard status.',
+    ],
+  },
+  {
+    title: 'Review Center: Comments and review',
+    items: [
+      'Select a content block before adding a comment so feedback stays attached to the right context.',
+      'Use Open to review comments that still need attention.',
+      'Use Resolved to view feedback that has been addressed.',
+      'Resolve comments when the requested change or decision is complete.',
+      'Review outstanding comments before changing Storyboard status or moving to detailed authoring.',
+    ],
+  },
+  {
+    title: 'Collaborating on a Storyboard',
+    items: [
+      'Share with specific collaborators on the same Adapt Studio instance.',
+      'Keep discussions connected to the relevant content with comments.',
+      'Address feedback in the Storyboard rather than a separate document.',
+      'Resolve completed discussions so outstanding feedback is easy to find.',
+      'Check status and open comments before moving to Page Editor.',
+    ],
+  },
+  {
+    title: 'Working with AI assistance',
+    items: [
+      'Use Ask Samaritan to generate an initial content direction or first draft.',
+      'Refine headings, instructional text, summaries, or learning activities.',
+      'Explore alternate ways to organize or present complex information.',
+      'Treat AI suggestions as a starting point, not approved content.',
+      'Review suggestions for accuracy, relevance, tone, and learning value.',
+      'Confirm generated content aligns with approved sources and intended outcomes.',
+    ],
+  },
+  {
+    title: 'Recommendations',
+    items: [
+      'Give each Topic a clear learning purpose.',
+      'Sequence content so it is easy for learners to follow.',
+      'Keep headings short and descriptive for easy navigation in Contents.',
+      'Agree on content direction in Storyboard before detailed visual configuration.',
+      'Use comments for review discussions instead of unresolved notes in learning content.',
+      'Review the complete Storyboard, not only individual items.',
+      'Address important feedback before moving into Page Editor.',
+    ],
+  },
+  {
+    title: 'Best practices',
+    items: [
+      'Start with the intended learning outcome.',
+      'Keep each part focused on a distinct idea or stage in the learning journey.',
+      'Balance information with activities, reflection, and checks for understanding.',
+      'Select the exact content block before commenting.',
+      'Check the summary regularly to monitor content and review progress.',
+      'Resolve completed comments to keep Review Center manageable.',
+      'Save substantial changes regularly.',
+      'Complete structural and content review before detailed authoring.',
+    ],
+  },
+  {
+    title: 'Moving from Storyboard to Page Editor',
+    items: [
+      'Confirm the Topic sequence and overall learning flow.',
+      'Review the Storyboard summary and current status.',
+      'Address or resolve outstanding comments and confirm collaborator review is complete.',
+      'Continue to Page Editor to configure layouts, presentation, interactions, and behavior.',
+      'Use Preview to validate the completed learner experience.',
+    ],
+  },
+];
 
 // Status is fully automatic — driven by comment state (see
 // recomputeStatus in requestHandlers.js): no comments -> Draft, any
@@ -151,6 +260,7 @@ export default function StoryboardTopBar({
   dirty: boolean;
   saving: boolean;
 }) {
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
   const meta = STATUS_META[status];
 
   return (
@@ -230,6 +340,15 @@ export default function StoryboardTopBar({
           Generate Course <ArrowRight className="h-3.5 w-3.5" />
         </button>
       </div>
+
+      <GuideDialog
+        open={isGuideOpen}
+        title="Storyboard How-To Guide"
+        description="A practical overview of the Storyboard panels, review workflow, collaboration, and moving into detailed authoring."
+        panels={STORYBOARD_GUIDE_PANELS}
+        sections={STORYBOARD_GUIDE_SECTIONS}
+        onClose={() => setIsGuideOpen(false)}
+      />
     </header>
   );
 }

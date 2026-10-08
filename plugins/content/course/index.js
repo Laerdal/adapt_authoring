@@ -131,9 +131,9 @@ function doQuery(req, res, andOptions, next) {
     }, 5000); // 5 second timeout
     
     retrieveDashboardCourses(query, options, function (err, results) {
-      clearTimeout(queryTimeout); // Clear the timeout when callback is reached      
-            
-      if (err) {        
+      clearTimeout(queryTimeout); // Clear the timeout when callback is reached
+
+      if (err) {
         // Try to extract meaningful error info
         let errorMessage = err.message || err.toString() || 'Unknown database error';
         let errorDetails = {

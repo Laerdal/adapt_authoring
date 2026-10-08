@@ -90,7 +90,7 @@ async function createStoryboard(req, res) {
 async function getStoryboardByCourse(req, res) {
   try {
     const results = await db.retrieve('storyboard', { _courseId: req.params.courseId });
-    const rec = Array.isArray(results) && results.length ? results[0] : null;
+    const rec = Array.isArray(results) && results.length ? toPlain(results[0]) : null;
     return res.status(200).json(rec ? serializeStoryboard(rec) : null);
   } catch (error) {
     return fail(res, error, 'Failed to retrieve storyboard by course');
@@ -327,9 +327,6 @@ async function updateComment(req, res) {
 
     await db.update('storyboardcomment', { _id: req.params.commentId }, delta);
     const results = await db.retrieve('storyboardcomment', { _id: req.params.commentId });
-    if (!Array.isArray(results) || !results.length) {
-      return res.status(404).json({ error: 'Comment not found' });
-    }
     const updated = toPlain(results[0]);
     if (updated._storyboardId) await recomputeStatus(updated._storyboardId, { userId, tenantId });
     return res.status(200).json(updated);
@@ -426,6 +423,7 @@ async function handleAi(req, res) {
 
 async function exportWord(req, res) {
   try {
+    const { userId, tenantId } = userCtx(req);
     const results = await db.retrieve('storyboard', { _id: req.params.id });
     if (!Array.isArray(results) || !results.length) {
       return res.status(404).json({ error: 'Storyboard not found' });
@@ -438,7 +436,6 @@ async function exportWord(req, res) {
     // Explicit user/tenant context so the asset resolver doesn't depend on
     // process.domain.session surviving through async awaits (ADAPT-3785 image
     // embedding fix).
-    const { userId, tenantId } = userCtx(req);
     const ctx = { user: req.user, userId, tenantId };
     // Stamp the course + storyboard id into the exported file so a later
     // import can map it back to this course (ADAPT-3760 import enhancements
@@ -458,6 +455,7 @@ async function exportWord(req, res) {
 
 async function exportPdf(req, res) {
   try {
+    const { userId, tenantId } = userCtx(req);
     const results = await db.retrieve('storyboard', { _id: req.params.id });
     if (!Array.isArray(results) || !results.length) {
       return res.status(404).json({ error: 'Storyboard not found' });
@@ -465,7 +463,6 @@ async function exportPdf(req, res) {
     const rec = toPlain(results[0]);
     const docTitle = (req.query && req.query.title) || rec.title || 'Storyboard';
     const blocks = safeParse(rec.documentJson, []);
-    const { userId, tenantId } = userCtx(req);
     const ctx = { user: req.user, userId, tenantId };
     const buffer = await convert.blocksToPdf(blocks, docTitle, ctx);
     // Filename is keyed on Course ID, not the course title (ADAPT-3760).

@@ -3769,15 +3769,29 @@ export async function getAvailableComponents(): Promise<ComponentTypeOption[]> {
 // question components (e.g. mcq) get a valid _buttons sub-tree at runtime.
 // Ported from adapt-preview-edit/js/contentEditView.js (fetchMergedComponentSchema).
 let mergedSchemaCache: Record<string, { properties?: Record<string, unknown> }> | null = null;
+let mergedSchemaRequest: Promise<typeof mergedSchemaCache> | null = null;
+
+async function loadMergedSchema(): Promise<typeof mergedSchemaCache> {
+  if (mergedSchemaCache) return mergedSchemaCache;
+  if (!mergedSchemaRequest) {
+    mergedSchemaRequest = apiClient.get<NonNullable<typeof mergedSchemaCache>>("/api/content/schema")
+      .then((schema) => {
+        mergedSchemaCache = schema;
+        return schema;
+      })
+      .finally(() => {
+        mergedSchemaRequest = null;
+      });
+  }
+  return mergedSchemaRequest;
+}
 
 async function fetchMergedComponentSchema(
   componentKey: string
 ): Promise<{ properties?: Record<string, unknown> } | null> {
   if (!componentKey) return null;
   try {
-    if (!mergedSchemaCache) {
-      mergedSchemaCache = await apiClient.get("/api/content/schema");
-    }
+    await loadMergedSchema();
     return mergedSchemaCache?.[componentKey] ?? null;
   } catch {
     return null;
@@ -3789,9 +3803,7 @@ export async function getMergedContentSchema(schemaKey: string): Promise<Record<
   if (!key) return null;
 
   try {
-    if (!mergedSchemaCache) {
-      mergedSchemaCache = await apiClient.get("/api/content/schema");
-    }
+    await loadMergedSchema();
     const entry = mergedSchemaCache?.[key];
     return entry && typeof entry === "object" ? (entry as Record<string, unknown>) : null;
   } catch {
@@ -4006,9 +4018,7 @@ export async function getExtensionSchemasByLevel(): Promise<
   Record<ExtensionSchemaLevel, Record<string, ExtensionFieldSchema>>
 > {
   if (!extensionSchemasByLevelCache) {
-    if (!mergedSchemaCache) {
-      mergedSchemaCache = await apiClient.get("/api/content/schema");
-    }
+    await loadMergedSchema();
     const result = {} as Record<ExtensionSchemaLevel, Record<string, ExtensionFieldSchema>>;
     for (const level of EXTENSION_SCHEMA_LEVELS) {
       const levelSchema = (mergedSchemaCache as Record<string, unknown> | null)?.[level] as
@@ -4043,9 +4053,7 @@ let menuSettingsSchemaByLevelCache: Record<ExtensionSchemaLevel, Record<string, 
 async function getPluginSettingsSchemaByLevel(
   settingsProperty: "themeSettings" | "menuSettings"
 ): Promise<Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>>> {
-  if (!mergedSchemaCache) {
-    mergedSchemaCache = await apiClient.get("/api/content/schema");
-  }
+  await loadMergedSchema();
   const result = {} as Record<ExtensionSchemaLevel, Record<string, PluginSettingsFieldSchema>>;
   for (const level of EXTENSION_SCHEMA_LEVELS) {
     const levelSchema = (mergedSchemaCache as Record<string, unknown> | null)?.[level] as
@@ -4131,9 +4139,7 @@ export async function getComponentExtensionSchema(
   if (!key) return {};
 
   if (!componentExtensionSchemaIndex) {
-    if (!mergedSchemaCache) {
-      mergedSchemaCache = await apiClient.get("/api/content/schema");
-    }
+    await loadMergedSchema();
     componentExtensionSchemaIndex = {};
     Object.entries(mergedSchemaCache ?? {}).forEach(([schemaKey, schema]) => {
       const extensionsProperties = (
@@ -4215,9 +4221,7 @@ function deepMergeGlobals(base: GlobalsObject, override: GlobalsObject): Globals
 
 export async function getGlobalsDefaults(): Promise<GlobalsObject> {
   try {
-    if (!mergedSchemaCache) {
-      mergedSchemaCache = await apiClient.get("/api/content/schema");
-    }
+    await loadMergedSchema();
     // The filtered course schema exposes `_globals` directly; guard the alternate
     // `.properties._globals` shape too, in case the server response changes.
     const courseSchema = (mergedSchemaCache as Record<string, unknown> | null)?.course as
@@ -4252,9 +4256,7 @@ export async function getCourseGlobalsMerged(courseId: string): Promise<GlobalsO
 // missing branches (existing values ALWAYS win) and PATCHes the doc back so
 // preview + publish + Adapt runtime never see an undefined critical field.
 async function computeCourseSchemaDefaults(): Promise<Record<string, unknown>> {
-  if (!mergedSchemaCache) {
-    mergedSchemaCache = await apiClient.get("/api/content/schema");
-  }
+  await loadMergedSchema();
   const courseSchema = (mergedSchemaCache as Record<string, unknown> | null)?.course as
     | Record<string, unknown>
     | undefined;

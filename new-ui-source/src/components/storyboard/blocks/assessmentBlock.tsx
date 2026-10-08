@@ -749,7 +749,7 @@ export const assessmentBlock = createReactBlockSpec(
               resetKey={block.id}
             />
           </div>
-          
+
 
           <Body kind={kind} data={model} update={update} />
 

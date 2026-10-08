@@ -591,15 +591,44 @@ async function fetchExternalImage(link, alt) {
 
 // A freshly-imported image (picked in the Storyboard editor but not yet
 // Saved/Generated into the course, so it has no DAM asset record yet) is a
-// self-contained `data:image/<type>;base64,<data>` URI — decode it directly.
-// Without this, the DAM lookup below always misses for such an image and the
-// caller (docx/PDF export) fell back to printing the raw base64 string as
-// visible text in the exported document.
-const DATA_URI_PATTERN = /^data:image\/([a-zA-Z0-9.+-]+);base64,(.+)$/;
+// self-contained `data:image/<type>[;charset][;base64],<data>` URI — decode
+// it directly. Without this, the DAM lookup below always misses for such an
+// image and the caller (docx/PDF export) fell back to printing the raw data
+// URI as visible text in the exported document.
+//
+// Two encodings exist in practice and both must be handled: binary formats
+// (PNG/JPG) are always base64-encoded (`;base64,<base64-data>`), but SVG is
+// plain-text XML, and several browser/editor code paths that construct an
+// SVG data URI percent-encode it instead of base64-encoding it
+// (`;charset=utf-8,<percent-encoded-svg>`, or no `;base64` segment at all) —
+// confirmed as the cause of a real "SVG exports as a path, PNG/JPG embed
+// fine" report: the base64-only regex below never matched that second form,
+// so resolveDataUri always returned null for it and every caller fell back
+// to the text-only placeholder, regardless of anything downstream (sharp/
+// normalizeImageForEmbedding never even ran).
+const DATA_URI_PATTERN = /^data:image\/([a-zA-Z0-9.+-]+)(;[^,]*)?,(.+)$/s;
 function resolveDataUri(link, alt) {
   const m = link.match(DATA_URI_PATTERN);
   if (!m) return null;
-  const buffer = Buffer.from(m[2], 'base64');
+  const params = m[2] || '';
+  const payload = m[3];
+  const isBase64 = /;base64/i.test(params);
+  let buffer;
+  if (isBase64) {
+    buffer = Buffer.from(payload, 'base64');
+  } else {
+    // Percent-encoded (the non-base64 data URI form) — decode the escape
+    // sequences back to the original text/bytes. Falls back to the raw
+    // payload as UTF-8 if it isn't validly percent-encoded, rather than
+    // dropping the image entirely.
+    let decoded = payload;
+    try {
+      decoded = decodeURIComponent(payload);
+    } catch (e) {
+      /* not percent-encoded (or malformed) — use the payload as-is */
+    }
+    buffer = Buffer.from(decoded, 'utf8');
+  }
   if (!buffer.length) return null;
   const { width, height } = sizeFromBuffer(buffer);
   const type = normalizeDocxImageType(m[1]);
@@ -700,31 +729,78 @@ function sanitizeSvgMarkup(svgText) {
   return String(svgText).replace(/&(?!(?:amp|lt|gt|apos|quot|#\d+|#x[0-9a-fA-F]+);)/g, '&amp;');
 }
 
+// Tiny 1×1 transparent PNG, inlined as a constant — a pure-JS fallback with
+// zero dependency on sharp/libvips/librsvg being installed or working. Used
+// only as docx's mandatory `fallback` image for apps/old-Word versions that
+// can't render the native SVG blip (see below); never shown by any Word
+// 2016+ install, which renders the real vector SVG instead.
+const PLACEHOLDER_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+  'base64',
+);
+
+// Best-effort sharp rasterization, tried against the raw buffer then a
+// sanitized copy. Returns null (never throws) on any failure — sharp's
+// prebuilt binary lacking full librsvg support is a common real-world
+// deployment issue (e.g. some Linux/Alpine/Docker base images), and that
+// must not block the image from being embedded at all (see
+// normalizeImageForEmbedding below).
+async function rasterizeSvgToPng(buffer) {
+  try {
+    const sharp = require('sharp');
+    return await sharp(buffer).png().toBuffer();
+  } catch (e) {
+    try {
+      const sharp = require('sharp');
+      const repaired = sanitizeSvgMarkup(buffer.toString('utf8'));
+      return await sharp(Buffer.from(repaired, 'utf8')).png().toBuffer();
+    } catch (e2) {
+      console.error(
+        '[storyboard] SVG-to-PNG rasterization via sharp failed (sharp/librsvg missing or broken in this environment, or a malformed SVG):',
+        (e2 && e2.message) || (e && e.message) || 'unknown error',
+      );
+      return null;
+    }
+  }
+}
+
+// Both export formats can now render SVG as a real vector, neither of which
+// needs sharp/librsvg to succeed:
+//   • Word: docx's own `asvg:svgBlip` extension (Word 2016+) — a raster is
+//     only required as docx's mandatory `fallback`, shown solely by
+//     apps/old-Word versions that can't render the SVG blip natively.
+//   • PDF: `svg-to-pdfkit` draws the SVG's paths directly onto the pdfkit
+//     document with pdfkit's own vector primitives — pure JS, no native
+//     dependency at all (pdfkit's own `doc.image()` only ever supported
+//     raster JPEG/PNG, never SVG).
+// Previously this function always flattened via sharp first and returned
+// null (→ caller's text-only placeholder) the instant sharp failed —
+// meaning the ENTIRE embed depended on sharp working, for both formats, even
+// though neither actually needs a raster for the primary render. That made
+// every SVG export silently fail whenever sharp/librsvg wasn't fully
+// functional in the deployed environment (confirmed: a real "SVG never
+// embeds, PNG/JPG work fine" production report, affecting both Word and
+// PDF). Now the real vector SVG is always handed to the caller; sharp is
+// only used to make the compatibility fallback look right when it's shown at
+// all (docx's `fallback`, or pdfkit falling back to a raster if
+// svg-to-pdfkit itself can't parse a particular SVG), falling back to an
+// inert placeholder image when sharp can't produce one.
 async function normalizeImageForEmbedding(resolved) {
   if (!resolved || !resolved.buffer) return resolved;
   const type = String(resolved.type || '').toLowerCase();
   if (type !== 'svg' && type !== 'svg+xml') return resolved;
-  const sharp = require('sharp');
   const width = Math.max(1, Number(resolved.width) || FALLBACK_WIDTH);
   const height = Math.max(1, Number(resolved.height) || FALLBACK_HEIGHT);
-  try {
-    const png = await sharp(resolved.buffer).png().toBuffer();
-    return { ...resolved, buffer: png, type: 'png', width, height };
-  } catch (e) {
-    // Retry against a sanitized copy before giving up — covers the common
-    // real-world defect above without silently dropping the image.
-    try {
-      const repaired = sanitizeSvgMarkup(resolved.buffer.toString('utf8'));
-      const png = await sharp(Buffer.from(repaired, 'utf8')).png().toBuffer();
-      return { ...resolved, buffer: png, type: 'png', width, height };
-    } catch (e2) {
-      // Unrecoverable — return null so callers fall back to their text
-      // placeholder. A `type: 'svg'` object isn't actually usable here:
-      // docx's ImageRun requires a raster `fallback` we can't supply, and
-      // pdfkit cannot draw SVG at all.
-      return null;
-    }
-  }
+  const sanitized = Buffer.from(sanitizeSvgMarkup(resolved.buffer.toString('utf8')), 'utf8');
+  const pngBuffer = await rasterizeSvgToPng(resolved.buffer);
+  return {
+    ...resolved,
+    type: 'svg',
+    buffer: sanitized,
+    width,
+    height,
+    fallback: { type: 'png', buffer: pngBuffer || PLACEHOLDER_PNG },
+  };
 }
 
 async function resolveAnyImage(input, ctx) {
