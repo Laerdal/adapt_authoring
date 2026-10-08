@@ -1,0 +1,199 @@
+name: CD dev (build, E2E gate, deploy)
+
+# Dev only (use1). Same flow as adapt-framework-plugins build.yml: build -> E2E gate -> helm deploy -> notify.
+# Manual trigger while being verified on the test branch; switch to `push: branches: [develop]` once a dispatch run succeeds.
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+  packages: read
+
+concurrency:
+  group: adapt-studio-cd-dev
+  cancel-in-progress: false
+
+env:
+  ENV_FILE_NAME: dev-use1.env
+  LOCAL_ENV_PATH: ./.github/gha_local_env_vars
+  APP_TAG: build_studio
+  DEVELOPMENT_BRANCH: develop
+  STUDIO_E2E_REPO: Laerdal-Medical/adapt-studio-e2e-test
+  STUDIO_E2E_WORKFLOW: playwright.yml
+  STUDIO_E2E_BRANCH: main
+
+jobs:
+  # Fails closed: nothing builds or deploys until every prerequisite below exists.
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      HAS_E2E_TOKEN: ${{ secrets.STUDIO_E2E_TOKEN != '' }}
+      HAS_APP_ID: ${{ secrets.GHA_READ_APP_ID != '' }}
+      HAS_APP_KEY: ${{ secrets.GHA_READ_PRIVATE_KEY != '' }}
+      ECR_REPOSITORY: ${{ vars.STUDIO_ECR_REPOSITORY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check deployment prerequisites
+        run: |
+          missing=0
+          need() { echo "::error::Missing $1"; missing=1; }
+
+          [ -f Dockerfile ] || need "Dockerfile at repository root"
+          [ -f charts/adapt-studio/values.yaml ] || need "Helm values at charts/adapt-studio/values.yaml"
+          [ -f "${LOCAL_ENV_PATH}/${ENV_FILE_NAME}" ] || need "${LOCAL_ENV_PATH}/${ENV_FILE_NAME}"
+          [ -n "${ECR_REPOSITORY:-}" ] || need "repository variable STUDIO_ECR_REPOSITORY"
+          [ "$HAS_E2E_TOKEN" = "true" ] || need "secret STUDIO_E2E_TOKEN (E2E gate cannot run without it)"
+          [ "$HAS_APP_ID" = "true" ] || need "secret GHA_READ_APP_ID"
+          [ "$HAS_APP_KEY" = "true" ] || need "secret GHA_READ_PRIVATE_KEY"
+
+          exit "$missing"
+
+  build:
+    name: build studio image
+    needs: [preflight]
+    runs-on: ${{ vars.STUDIO_BUILD_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 60
+    outputs:
+      APP_VERSION: ${{ steps.get_version.outputs.APP_VERSION }}
+    steps:
+      - name: Generate a token
+        id: generate-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.GHA_READ_APP_ID }}
+          private-key: ${{ secrets.GHA_READ_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: fetch env vars
+        uses: Laerdal-Medical/lcph-devops-github-action-templates/actions/fetch-env-vars@main
+        with:
+          env_file_name: ${{ env.ENV_FILE_NAME }}
+          is_global_env_vars: "true"
+          is_local_env_vars: "true"
+          local_env_file_name: ${{ env.ENV_FILE_NAME }}
+          path_to_local_env_vars: ${{ env.LOCAL_ENV_PATH }}
+          GH_APP_PAT_TOKEN: ${{ steps.generate-token.outputs.token }}
+          job_name: ${{ github.job }}
+
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Read package.json and get version
+        id: get_version
+        shell: bash
+        run: |
+          APP_VERSION=$(jq -r '.version' package.json)
+          echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_ENV"
+          echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Docker build and push
+        uses: Laerdal-Medical/lcph-devops-github-action-templates/actions/docker-build@main
+        with:
+          AWS_REGION: ${{ env.REGION }}
+          ROLE_TO_ASSUME: ${{ env.AWS_MGMT_CICD_ASSUME_ROLE }}
+          ECR_REPOSITORY: ${{ vars.STUDIO_ECR_REPOSITORY }}
+          APP_VERSION: ${{ env.APP_VERSION }}
+          DOCKER_FILE_PATH: ./
+          DEVELOPMENT_BRANCH: ${{ env.DEVELOPMENT_BRANCH }}
+          OVERRIDE_BUILD_ARGUMENTS: "true"
+          DOCKER_BUILD_ARGUMENTS: "-t $REGISTRY:${{ env.APP_TAG }}-latest -t $REGISTRY:${{ env.APP_TAG }}-$IMAGETAG -t $REGISTRY:$BRANCH-${{ env.APP_TAG }}-$COMMITID"
+
+  e2e-gate:
+    name: E2E tests (pre-deploy gate)
+    needs: [build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      STUDIO_E2E_TOKEN: ${{ secrets.STUDIO_E2E_TOKEN }}
+    steps:
+      - name: Trigger Studio E2E and wait for result
+        run: |
+          set -euo pipefail
+
+          api="https://api.github.com/repos/${STUDIO_E2E_REPO}/actions/workflows/${STUDIO_E2E_WORKFLOW}"
+          hdr=(-H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${STUDIO_E2E_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28")
+
+          started=$(date -u +%s)
+          curl -fsS -X POST "${hdr[@]}" "${api}/dispatches" -d "{\"ref\":\"${STUDIO_E2E_BRANCH}\"}"
+
+          for attempt in $(seq 1 270); do
+            sleep 20
+            run=$(curl -fsS "${hdr[@]}" "${api}/runs?branch=${STUDIO_E2E_BRANCH}&event=workflow_dispatch&per_page=20" \
+              | jq -r --argjson t "$started" '[.workflow_runs[] | select((.created_at | fromdateiso8601) >= $t)] | sort_by(.created_at) | last // empty | "\(.status) \(.conclusion // "none") \(.html_url)"')
+
+            [ -z "$run" ] && continue
+            read -r status conclusion url <<< "$run"
+
+            if [ "$status" = "completed" ]; then
+              echo "Studio E2E run: $url ($conclusion)"
+              [ "$conclusion" = "success" ] && exit 0
+              exit 1
+            fi
+          done
+
+          echo "Timed out waiting for the Studio E2E run."
+          exit 1
+
+  deploy-dev:
+    name: deploy studio to dev
+    needs: [build, e2e-gate]
+    uses: Laerdal-Medical/lcph-devops-github-action-templates/.github/workflows/helm-install.yml@main
+    with:
+      env_file_name: dev-use1.env
+      is_global_env_vars: "true"
+      is_local_env_vars: "true"
+      local_env_file_name: dev-use1.env
+      path_to_local_env_vars: ./.github/gha_local_env_vars
+      APP_VERSION: "${{ needs.build.outputs.APP_VERSION }}"
+      DEVELOPMENT_BRANCH: develop
+      HELM_CHART_PATH: "./charts/adapt-studio/"
+      HELM_DEPLOY_ARGUMENTS: "adapt-studio --values ./$HELM_VALUES_FILE --set imageTag=build_studio-$IMAGETAG --set eksCluster=$DEPLOY_TO_EKS_CLUSTER --set datadogLabels.version=$IMAGETAG --set sslPolicy=$EKS_ELB_SSL_POLICY --namespace adapt --create-namespace"
+      HELM_CHART_REPOSITORY_TYPE: "s3"
+      HELM_CHART_NAME: web-app
+      HELM_CHART_VERSION: "1.5.0"
+      HELM_CHART_REPO_S3_BUCKET: "an2-global-helm-chart-repo"
+    secrets: inherit
+
+  notify-teams:
+    needs: [preflight, build, e2e-gate, deploy-dev]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+      DEPLOY_RESULT: ${{ needs.deploy-dev.result }}
+      FAILED_STAGE: ${{ contains(needs.*.result, 'failure') && 'failure' || 'none' }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Send Teams notification
+        run: |
+          [ -z "${TEAMS_WEBHOOK_URL:-}" ] && echo "TEAMS_WEBHOOK_URL not set, skipping" && exit 0
+
+          if [ "$DEPLOY_RESULT" = "success" ]; then
+            text="Adapt Studio deployed to dev: E2E gate passed."
+          elif [ "$FAILED_STAGE" = "failure" ]; then
+            text="Adapt Studio dev pipeline FAILED (nothing was deployed unless the deploy step ran)."
+          else
+            text="Adapt Studio dev pipeline did not deploy (result: ${DEPLOY_RESULT})."
+          fi
+
+          jq -n --arg text "$text" --arg url "$RUN_URL" '{
+            type: "message",
+            attachments: [{
+              contentType: "application/vnd.microsoft.card.adaptive",
+              content: {
+                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                type: "AdaptiveCard", version: "1.4",
+                body: [
+                  {type: "TextBlock", size: "Large", weight: "Bolder", text: "Adapt Studio CD (dev)"},
+                  {type: "TextBlock", wrap: true, text: $text},
+                  {type: "TextBlock", wrap: true, text: ("[View run](" + $url + ")")}
+                ]
+              }
+            }]
+          }' | curl -fsS -X POST "$TEAMS_WEBHOOK_URL" -H "Content-Type: application/json" -d @-
