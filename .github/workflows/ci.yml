@@ -15,7 +15,7 @@ on:
 
 concurrency:
   group: adapt-authoring-ci-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -209,3 +209,122 @@ jobs:
 
           echo "Timed out waiting for Studio E2E workflow to finish."
           exit 1
+
+  # Merge to the deploy branch is separate from deploying: this job only runs once tests and the E2E gate pass.
+  # A skipped gate (e.g. no STUDIO_E2E_TOKEN) skips this job, so it can never deploy ungated.
+  deploy-dev:
+    name: deploy to dev (EC2)
+    needs:
+      - backend-tests
+      - new-ui-tests
+      - wait-for-studio-e2e
+    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', vars.STUDIO_DEPLOY_BRANCH || 'develop') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: adapt-studio-deploy-dev
+      cancel-in-progress: false
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      AWS_ROLE_ARN: ${{ vars.STUDIO_DEV_AWS_ROLE_ARN }}
+      AWS_REGION: ${{ vars.STUDIO_DEV_AWS_REGION || 'us-east-1' }}
+      EC2_NAME: ${{ vars.STUDIO_DEV_EC2_NAME }}
+      DEPLOY_COMMAND: ${{ vars.STUDIO_DEV_DEPLOY_COMMAND }}
+      HEALTH_URL: ${{ vars.STUDIO_DEV_HEALTH_URL }}
+
+    steps:
+      - name: Check deploy settings
+        run: |
+          missing=0
+          need() { echo "::error::Missing repository variable $1"; missing=1; }
+          [ -n "${AWS_ROLE_ARN:-}" ] || need STUDIO_DEV_AWS_ROLE_ARN
+          [ -n "${EC2_NAME:-}" ] || need STUDIO_DEV_EC2_NAME
+          [ -n "${DEPLOY_COMMAND:-}" ] || need STUDIO_DEV_DEPLOY_COMMAND
+          exit "$missing"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Run deploy command on the dev instance (SSM)
+        run: |
+          set -euo pipefail
+
+          params=$(jq -n --arg c "export DEPLOY_SHA=${GITHUB_SHA}; ${DEPLOY_COMMAND}" '{commands: [$c]}')
+          cmd_id=$(aws ssm send-command \
+            --document-name AWS-RunShellScript \
+            --targets "Key=tag:Name,Values=${EC2_NAME}" \
+            --parameters "$params" \
+            --comment "Adapt Studio deploy ${GITHUB_SHA}" \
+            --timeout-seconds 1200 \
+            --query Command.CommandId --output text)
+          echo "SSM command: ${cmd_id}"
+
+          for _ in $(seq 1 80); do
+            sleep 15
+            statuses=$(aws ssm list-command-invocations --command-id "$cmd_id" --query 'CommandInvocations[].Status' --output text)
+            [ -z "$statuses" ] && continue
+            grep -qE 'Pending|InProgress|Delayed' <<< "$statuses" && continue
+
+            aws ssm list-command-invocations --command-id "$cmd_id" --details \
+              --query 'CommandInvocations[].CommandPlugins[].Output' --output text | tail -n 40
+
+            for s in $statuses; do
+              [ "$s" = "Success" ] || { echo "Deploy failed: $statuses"; exit 1; }
+            done
+            echo "Deploy command succeeded."
+            exit 0
+          done
+
+          echo "No instance with Name tag '${EC2_NAME}' finished the deploy command in time."
+          exit 1
+
+      - name: Health check
+        if: ${{ env.HEALTH_URL != '' }}
+        run: curl -fsS --retry 10 --retry-delay 15 --retry-all-errors --max-time 30 "$HEALTH_URL" > /dev/null
+
+  notify-teams:
+    needs:
+      - backend-tests
+      - new-ui-tests
+      - wait-for-studio-e2e
+      - deploy-dev
+    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', vars.STUDIO_DEPLOY_BRANCH || 'develop') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+      TESTS_RESULT: ${{ needs.backend-tests.result == 'success' && needs.new-ui-tests.result == 'success' && 'success' || 'failure' }}
+      E2E_RESULT: ${{ needs.wait-for-studio-e2e.result }}
+      DEPLOY_RESULT: ${{ needs.deploy-dev.result }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Send Teams notification
+        run: |
+          [ -z "${TEAMS_WEBHOOK_URL:-}" ] && echo "TEAMS_WEBHOOK_URL not set, skipping" && exit 0
+
+          if [ "$DEPLOY_RESULT" = "success" ]; then
+            text="Adapt Studio deployed to dev. Tests and the E2E gate passed."
+          else
+            text="Adapt Studio was NOT deployed to dev. Tests: ${TESTS_RESULT}, E2E gate: ${E2E_RESULT}, deploy: ${DEPLOY_RESULT}."
+          fi
+
+          jq -n --arg text "$text" --arg url "$RUN_URL" '{
+            type: "message",
+            attachments: [{
+              contentType: "application/vnd.microsoft.card.adaptive",
+              content: {
+                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                type: "AdaptiveCard", version: "1.4",
+                body: [
+                  {type: "TextBlock", size: "Large", weight: "Bolder", text: "Adapt Studio pipeline (dev)"},
+                  {type: "TextBlock", wrap: true, text: $text},
+                  {type: "TextBlock", wrap: true, text: ("[View run](" + $url + ")")}
+                ]
+              }
+            }]
+          }' | curl -fsS -X POST "$TEAMS_WEBHOOK_URL" -H "Content-Type: application/json" -d @-
