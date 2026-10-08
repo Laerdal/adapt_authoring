@@ -463,7 +463,7 @@ export default function UserManagementPage() {
                           >
                             <img
                               src={user.isDeleted ? "/assets/icons/UserRow.svg" : "/assets/icons/DisableUserIcon.svg"}
-                              alt={user.isDeleted ? "Restore user" : "Disable user"}
+                              alt=""
                               className="w-4 h-4 shrink-0"
                             />
                             {getUserActionLabel(!!user.isDeleted)}
