@@ -4,11 +4,11 @@ on:
   pull_request:
     branches:
       - develop
-      - adapt-studio-cicd-setup
+      - develop-cicd-trial
   push:
     branches:
       - develop
-      - adapt-studio-cicd-setup
+      - develop-cicd-trial
   workflow_dispatch:
   schedule:
     - cron: '0 2 * * *'
