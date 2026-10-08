@@ -78,7 +78,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: '22'
           # no package-lock.json in new-ui-source - omit cache so it doesn't fall back to caching against the root lockfile
 
       - name: Update npm
