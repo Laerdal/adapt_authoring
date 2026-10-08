@@ -65,7 +65,8 @@ jobs:
 
       - name: Install new UI dependencies
         working-directory: new-ui-source
-        run: npm ci
+        # no package-lock.json committed here (platform-specific native binary, see new-ui-source/.gitignore), so npm ci would fail
+        run: npm install
 
       - name: Run new UI tests
         working-directory: new-ui-source
