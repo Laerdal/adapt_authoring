@@ -81,6 +81,10 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           # no package-lock.json in new-ui-source - omit cache so it doesn't fall back to caching against the root lockfile
 
+      - name: Update npm
+        # Node 18 ships npm 10.8.2, which has a known optional-dependency native-binding bug (npm/cli#4828). Newer npm fixes it.
+        run: npm install -g npm@latest
+
       - name: Install new UI dependencies
         working-directory: new-ui-source
         # no package-lock.json committed here (platform-specific native binary, see new-ui-source/.gitignore), so npm ci would fail.
