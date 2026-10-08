@@ -236,6 +236,7 @@ function DemoVideoPlaceholder({ label, src }: { label?: string; src?: string }) 
             muted
             playsInline
             controls
+            aria-label={label ?? "Demo video"}
             className="block w-full h-full object-cover"
           />
         ) : (
