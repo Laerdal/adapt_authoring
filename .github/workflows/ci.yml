@@ -59,7 +59,8 @@ jobs:
           cache: npm
 
       - name: Install root dependencies
-        run: npm ci --ignore-scripts
+        # root package-lock.json is out of sync with package.json (version mismatches) - npm ci rejects that, npm install tolerates it
+        run: npm install --ignore-scripts
 
       - name: Run backend CI tests
         run: ./node_modules/.bin/mocha ./test/storyboard.commentStatus.js ./test/storyboard.import.smoke.js
@@ -78,12 +79,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+          # no package-lock.json in new-ui-source - omit cache so it doesn't fall back to caching against the root lockfile
 
       - name: Install new UI dependencies
         working-directory: new-ui-source
-        # no package-lock.json committed here (platform-specific native binary, see new-ui-source/.gitignore), so npm ci would fail
-        run: npm install
+        # no package-lock.json committed here (platform-specific native binary, see new-ui-source/.gitignore), so npm ci would fail.
+        # Also force a clean install dir to avoid npm's known optional-dependency native-binding bug (npm/cli#4828).
+        run: |
+          rm -rf node_modules package-lock.json
+          npm install
 
       - name: Run new UI tests
         working-directory: new-ui-source
