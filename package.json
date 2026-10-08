@@ -156,6 +156,9 @@
     "@babel/plugin-transform-modules-systemjs": "^7.29.4",
     "URIjs": "npm:urijs@^1.19.11",
     "uuid": "^11.1.1",
+    "request": {
+      "uuid": "3.4.0"
+    },
     "mocha": {
       "debug": "^3.2.7",
       "diff": "^3.5.1"
