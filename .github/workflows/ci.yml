@@ -287,6 +287,7 @@ jobs:
     needs:
       - backend-tests
       - new-ui-tests
+      - trigger-studio-e2e
       - wait-for-studio-e2e
       - deploy-dev
     if: ${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', vars.STUDIO_DEPLOY_BRANCH || 'develop') }}
@@ -295,34 +296,78 @@ jobs:
     env:
       TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
       TESTS_RESULT: ${{ needs.backend-tests.result == 'success' && needs.new-ui-tests.result == 'success' && 'success' || 'failure' }}
+      E2E_TRIGGER_RESULT: ${{ needs.trigger-studio-e2e.result }}
       E2E_RESULT: ${{ needs.wait-for-studio-e2e.result }}
       DEPLOY_RESULT: ${{ needs.deploy-dev.result }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      BRANCH: ${{ github.ref_name }}
+      COMMIT: ${{ github.sha }}
+      COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+      ACTOR: ${{ github.actor }}
     steps:
       - name: Send Teams notification
         run: |
-          [ -z "${TEAMS_WEBHOOK_URL:-}" ] && echo "TEAMS_WEBHOOK_URL not set, skipping" && exit 0
-
-          if [ "$DEPLOY_RESULT" = "success" ]; then
-            text="Adapt Studio deployed to dev. Tests and the E2E gate passed."
-          elif [ "$DEPLOY_RESULT" = "skipped" ]; then
-            text="Adapt Studio CI finished. Tests: ${TESTS_RESULT}, E2E gate: ${E2E_RESULT}. No deploy was run."
-          else
-            text="Adapt Studio was NOT deployed to dev. Tests: ${TESTS_RESULT}, E2E gate: ${E2E_RESULT}, deploy: ${DEPLOY_RESULT}."
+          if [ -z "${TEAMS_WEBHOOK_URL:-}" ]; then
+            echo "::notice::TEAMS_WEBHOOK_URL is not set, so no Teams message was sent"
+            exit 0
           fi
 
-          jq -n --arg text "$text" --arg url "$RUN_URL" '{
-            type: "message",
-            attachments: [{
-              contentType: "application/vnd.microsoft.card.adaptive",
-              content: {
-                "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
-                type: "AdaptiveCard", version: "1.4",
-                body: [
-                  {type: "TextBlock", size: "Large", weight: "Bolder", text: "Adapt Studio pipeline (dev)"},
-                  {type: "TextBlock", wrap: true, text: $text},
-                  {type: "TextBlock", wrap: true, text: ("[View run](" + $url + ")")}
-                ]
-              }
-            }]
-          }' | curl -fsS -X POST "$TEAMS_WEBHOOK_URL" -H "Content-Type: application/json" -d @-
+          label() {
+            case "$1" in
+              success) echo "✅ Passed" ;;
+              failure) echo "❌ Failed" ;;
+              cancelled) echo "🚫 Cancelled" ;;
+              *) echo "⚪ Skipped" ;;
+            esac
+          }
+
+          # A failed trigger skips the wait job, so report it here instead of showing the gate as skipped
+          e2e="$(label "$E2E_RESULT")"
+          if [ "$E2E_TRIGGER_RESULT" = "failure" ]; then
+            e2e="❌ Could not start"
+            E2E_RESULT=failure
+          fi
+
+          deploy="$(label "$DEPLOY_RESULT")"
+          [ "$DEPLOY_RESULT" = "success" ] && deploy="✅ Deployed"
+          [ "$DEPLOY_RESULT" = "skipped" ] && deploy="⚪ Not run"
+
+          # Title colour: red if anything failed, green if tests and the E2E gate passed, amber otherwise (e.g. gate skipped)
+          color="Warning"
+          if [ "$TESTS_RESULT" = "failure" ] || [ "$E2E_RESULT" = "failure" ] || [ "$E2E_RESULT" = "cancelled" ] || [ "$DEPLOY_RESULT" = "failure" ]; then
+            color="Attention"
+          elif [ "$TESTS_RESULT" = "success" ] && [ "$E2E_RESULT" = "success" ]; then
+            color="Good"
+          fi
+
+          subject=$(printf '%s' "${COMMIT_MESSAGE:-}" | head -n 1)
+          commit="${COMMIT:0:7}${subject:+ - ${subject:0:80}}"
+
+          jq -n \
+            --arg color "$color" --arg url "$RUN_URL" --arg branch "$BRANCH" --arg commit "$commit" --arg actor "$ACTOR" \
+            --arg tests "$(label "$TESTS_RESULT")" --arg e2e "$e2e" --arg deploy "$deploy" '{
+              type: "message",
+              attachments: [{
+                contentType: "application/vnd.microsoft.card.adaptive",
+                content: {
+                  "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                  type: "AdaptiveCard", version: "1.4",
+                  body: [
+                    {type: "TextBlock", size: "Large", weight: "Bolder", color: $color, text: "🚀 Adapt Studio CI/CD Results"},
+                    {type: "TextBlock", wrap: true, size: "Medium", weight: "Bolder", color: "Dark", text: ("[🔍 View GitHub Actions Run](" + $url + ")")},
+                    {type: "FactSet", facts: [
+                      {title: "Branch:", value: $branch},
+                      {title: "Commit:", value: $commit},
+                      {title: "Triggered by:", value: $actor},
+                      {title: "Unit tests:", value: $tests},
+                      {title: "E2E gate:", value: $e2e},
+                      {title: "Deploy to dev:", value: $deploy}
+                    ]}
+                  ]
+                }
+              }]
+            }' > card.json
+
+          # A broken webhook must not turn a green pipeline red
+          curl -sS -f -X POST "$TEAMS_WEBHOOK_URL" -H "Content-Type: application/json" -d @card.json \
+            || echo "::warning::The Teams webhook rejected the message. Check that the TEAMS_WEBHOOK_URL secret is still valid."
