@@ -152,9 +152,17 @@ jobs:
       - check-studio-e2e-secret
       - trigger-studio-e2e
     if: ${{ github.event_name != 'pull_request' && needs.check-studio-e2e-secret.outputs.has_token == 'true' }}
+    outputs:
+      e2e_run_url: ${{ steps.wait.outputs.e2e_run_url }}
+      e2e_passed: ${{ steps.report.outputs.e2e_passed }}
+      e2e_failed: ${{ steps.report.outputs.e2e_failed }}
+      e2e_skipped: ${{ steps.report.outputs.e2e_skipped }}
+      e2e_broken: ${{ steps.report.outputs.e2e_broken }}
+      e2e_total: ${{ steps.report.outputs.e2e_total }}
 
     steps:
       - name: Wait for Studio E2E completion
+        id: wait
         env:
           STUDIO_E2E_TOKEN: ${{ secrets.STUDIO_E2E_TOKEN }}
           DISPATCH_TIME: ${{ needs.trigger-studio-e2e.outputs.dispatch_time }}
@@ -200,9 +208,20 @@ jobs:
               | .conclusion // empty
             ')
 
+            if [ -n "$run_id" ]; then
+              run_url=$(printf '%s' "$response" | jq -r --argjson id "$run_id" '.workflow_runs[] | select(.id == $id) | .html_url')
+              if [ "${announced_id:-}" != "$run_id" ]; then
+                echo "Studio E2E run: ${run_url}"
+                announced_id="$run_id"
+              fi
+            fi
+
             if [ -n "$run_id" ] && [ "$status" = "completed" ]; then
+              echo "e2e_run_id=${run_id}" >> "$GITHUB_OUTPUT"
+              echo "e2e_run_url=${run_url}" >> "$GITHUB_OUTPUT"
+
               if [ "$conclusion" != "success" ]; then
-                echo "Studio E2E workflow failed with conclusion: $conclusion"
+                echo "::error::Studio E2E workflow failed with conclusion: ${conclusion}. Details: ${run_url}"
                 exit 1
               fi
 
@@ -215,6 +234,55 @@ jobs:
 
           echo "Timed out waiting for Studio E2E workflow to finish."
           exit 1
+
+      # Best effort: copies the E2E counts and the failing test output into this run, so nobody has to open the other repository to see what failed.
+      - name: Report Studio E2E results
+        id: report
+        if: ${{ always() && steps.wait.outputs.e2e_run_id != '' }}
+        continue-on-error: true
+        env:
+          STUDIO_E2E_TOKEN: ${{ secrets.STUDIO_E2E_TOKEN }}
+          E2E_RUN_ID: ${{ steps.wait.outputs.e2e_run_id }}
+          E2E_RUN_URL: ${{ steps.wait.outputs.e2e_run_url }}
+        run: |
+          api="https://api.github.com/repos/${STUDIO_E2E_REPO}"
+          auth=(-H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${STUDIO_E2E_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28")
+
+          {
+            echo "### Studio E2E run"
+            echo "[Open the Studio E2E run](${E2E_RUN_URL}). The Allure report is attached to it as an artifact."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Same numbers the E2E repo's own report uses (Allure summary)
+          art_id=$(curl -fsS "${auth[@]}" "${api}/actions/runs/${E2E_RUN_ID}/artifacts?per_page=100" \
+            | jq -r '[.artifacts[] | select(.name == "allure-report" and (.expired | not))] | first | .id // empty') || art_id=""
+          if [ -n "$art_id" ] && curl -fsSL "${auth[@]}" -o allure.zip "${api}/actions/artifacts/${art_id}/zip" && unzip -p allure.zip widgets/summary.json > summary.json; then
+            for k in passed failed skipped broken total; do
+              echo "e2e_${k}=$(jq -r ".statistic.${k}" summary.json)" >> "$GITHUB_OUTPUT"
+            done
+            jq -r '"| Passed | Failed | Skipped | Broken | Total |\n|---|---|---|---|---|\n| \(.statistic.passed) | \(.statistic.failed) | \(.statistic.skipped) | \(.statistic.broken) | \(.statistic.total) |"' summary.json >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "::notice::No Allure summary found on the Studio E2E run, so the counts are not shown"
+          fi
+
+          # Output of the Playwright step of every failed job, so the failing tests are visible here
+          curl -fsS "${auth[@]}" "${api}/actions/runs/${E2E_RUN_ID}/jobs?per_page=100" > jobs.json || exit 0
+          for job_id in $(jq -r '.jobs[] | select(.conclusion == "failure") | .id' jobs.json); do
+            curl -fsSL "${auth[@]}" -o job.log "${api}/actions/jobs/${job_id}/logs" || continue
+            awk '/##\[group\]Run npx playwright test/ {hdr=1; next} hdr && /##\[endgroup\]/ {hdr=0; on=1; next} on && /##\[group\]/ {exit} on' job.log \
+              | sed -E 's/^[0-9T:.-]+Z //' | tail -n 150 > failed-tests.txt
+            echo "::group::Failing test output from the Studio E2E run"
+            cat failed-tests.txt
+            echo "::endgroup::"
+            {
+              echo "<details><summary>Failing test output</summary>"
+              echo
+              echo '```'
+              cat failed-tests.txt
+              echo '```'
+              echo "</details>"
+            } >> "$GITHUB_STEP_SUMMARY"
+          done
 
   # Merge to the deploy branch is separate from deploying: this job only runs once tests and the E2E gate pass.
   # A skipped gate (e.g. no STUDIO_E2E_TOKEN) skips this job, so it can never deploy ungated.
@@ -304,6 +372,12 @@ jobs:
       COMMIT: ${{ github.sha }}
       COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
       ACTOR: ${{ github.actor }}
+      E2E_RUN_URL: ${{ needs.wait-for-studio-e2e.outputs.e2e_run_url }}
+      E2E_PASSED: ${{ needs.wait-for-studio-e2e.outputs.e2e_passed }}
+      E2E_FAILED: ${{ needs.wait-for-studio-e2e.outputs.e2e_failed }}
+      E2E_SKIPPED: ${{ needs.wait-for-studio-e2e.outputs.e2e_skipped }}
+      E2E_BROKEN: ${{ needs.wait-for-studio-e2e.outputs.e2e_broken }}
+      E2E_TOTAL: ${{ needs.wait-for-studio-e2e.outputs.e2e_total }}
     steps:
       - name: Send Teams notification
         run: |
@@ -345,25 +419,40 @@ jobs:
 
           jq -n \
             --arg color "$color" --arg url "$RUN_URL" --arg branch "$BRANCH" --arg commit "$commit" --arg actor "$ACTOR" \
-            --arg tests "$(label "$TESTS_RESULT")" --arg e2e "$e2e" --arg deploy "$deploy" '{
+            --arg tests "$(label "$TESTS_RESULT")" --arg e2e "$e2e" --arg deploy "$deploy" \
+            --arg e2e_url "${E2E_RUN_URL:-}" --arg passed "${E2E_PASSED:-}" --arg failed "${E2E_FAILED:-}" \
+            --arg skipped "${E2E_SKIPPED:-}" --arg broken "${E2E_BROKEN:-}" --arg total "${E2E_TOTAL:-}" '{
               type: "message",
               attachments: [{
                 contentType: "application/vnd.microsoft.card.adaptive",
                 content: {
                   "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
                   type: "AdaptiveCard", version: "1.4",
-                  body: [
-                    {type: "TextBlock", size: "Large", weight: "Bolder", color: $color, text: "🚀 Adapt Studio CI/CD Results"},
-                    {type: "TextBlock", wrap: true, size: "Medium", weight: "Bolder", color: "Dark", text: ("[🔍 View GitHub Actions Run](" + $url + ")")},
-                    {type: "FactSet", facts: [
-                      {title: "Branch:", value: $branch},
-                      {title: "Commit:", value: $commit},
-                      {title: "Triggered by:", value: $actor},
-                      {title: "Unit tests:", value: $tests},
-                      {title: "E2E gate:", value: $e2e},
-                      {title: "Deploy to dev:", value: $deploy}
-                    ]}
-                  ]
+                  body: (
+                    [
+                      {type: "TextBlock", size: "Large", weight: "Bolder", color: $color, text: "🚀 Adapt Studio CI/CD Results"},
+                      {type: "TextBlock", wrap: true, size: "Medium", weight: "Bolder", color: "Dark", text: ("[🔍 View GitHub Actions Run](" + $url + ")")}
+                    ]
+                    + (if $e2e_url != "" then [{type: "TextBlock", wrap: true, text: ("[🎭 View Studio E2E run and Allure report](" + $e2e_url + ")")}] else [] end)
+                    + [{type: "FactSet", facts: [
+                        {title: "Branch:", value: $branch},
+                        {title: "Commit:", value: $commit},
+                        {title: "Triggered by:", value: $actor},
+                        {title: "Unit tests:", value: $tests},
+                        {title: "E2E gate:", value: $e2e},
+                        {title: "Deploy to dev:", value: $deploy}
+                      ]}]
+                    + (if $total != "" then [
+                        {type: "TextBlock", weight: "Bolder", spacing: "Medium", text: "Studio E2E results"},
+                        {type: "FactSet", facts: [
+                          {title: "✅ Passed:", value: $passed},
+                          {title: "❌ Failed:", value: $failed},
+                          {title: "⚠ Skipped:", value: $skipped},
+                          {title: "💥 Broken:", value: $broken},
+                          {title: "📊 Total:", value: $total}
+                        ]}
+                      ] else [] end)
+                  )
                 }
               }]
             }' > card.json
