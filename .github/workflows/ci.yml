@@ -212,76 +212,66 @@ jobs:
 
   # Merge to the deploy branch is separate from deploying: this job only runs once tests and the E2E gate pass.
   # A skipped gate (e.g. no STUDIO_E2E_TOKEN) skips this job, so it can never deploy ungated.
+  # It is also skipped until the repository variable STUDIO_DEV_SSH_HOST exists, so merging this workflow is safe before the server is set up.
   deploy-dev:
-    name: deploy to dev (EC2)
+    name: deploy to dev (SSH)
     needs:
       - backend-tests
       - new-ui-tests
       - wait-for-studio-e2e
-    if: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', vars.STUDIO_DEPLOY_BRANCH || 'develop') }}
-    runs-on: ubuntu-latest
+    if: ${{ vars.STUDIO_DEV_SSH_HOST != '' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', vars.STUDIO_DEPLOY_BRANCH || 'develop') }}
+    # GitHub-hosted runners usually can't reach a dev server's SSH port: set STUDIO_DEPLOY_RUNNER to a self-hosted runner label inside the network.
+    runs-on: ${{ vars.STUDIO_DEPLOY_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     concurrency:
       group: adapt-studio-deploy-dev
       cancel-in-progress: false
     permissions:
-      id-token: write
       contents: read
     env:
-      AWS_ROLE_ARN: ${{ vars.STUDIO_DEV_AWS_ROLE_ARN }}
-      AWS_REGION: ${{ vars.STUDIO_DEV_AWS_REGION || 'us-east-1' }}
-      EC2_NAME: ${{ vars.STUDIO_DEV_EC2_NAME }}
+      SSH_HOST: ${{ vars.STUDIO_DEV_SSH_HOST }}
+      SSH_USER: ${{ vars.STUDIO_DEV_SSH_USER }}
+      SSH_PORT: ${{ vars.STUDIO_DEV_SSH_PORT || '22' }}
+      SSH_KNOWN_HOSTS: ${{ vars.STUDIO_DEV_SSH_KNOWN_HOSTS }}
       DEPLOY_COMMAND: ${{ vars.STUDIO_DEV_DEPLOY_COMMAND }}
       HEALTH_URL: ${{ vars.STUDIO_DEV_HEALTH_URL }}
 
     steps:
       - name: Check deploy settings
+        env:
+          SSH_KEY: ${{ secrets.STUDIO_DEV_SSH_KEY }}
         run: |
           missing=0
-          need() { echo "::error::Missing repository variable $1"; missing=1; }
-          [ -n "${AWS_ROLE_ARN:-}" ] || need STUDIO_DEV_AWS_ROLE_ARN
-          [ -n "${EC2_NAME:-}" ] || need STUDIO_DEV_EC2_NAME
-          [ -n "${DEPLOY_COMMAND:-}" ] || need STUDIO_DEV_DEPLOY_COMMAND
+          need() { echo "::error::Missing $1"; missing=1; }
+          [ -n "${SSH_USER:-}" ] || need "repository variable STUDIO_DEV_SSH_USER"
+          [ -n "${SSH_KNOWN_HOSTS:-}" ] || need "repository variable STUDIO_DEV_SSH_KNOWN_HOSTS"
+          [ -n "${DEPLOY_COMMAND:-}" ] || need "repository variable STUDIO_DEV_DEPLOY_COMMAND"
+          [ -n "${SSH_KEY:-}" ] || need "repository secret STUDIO_DEV_SSH_KEY"
           exit "$missing"
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ env.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Run deploy command on the dev instance (SSM)
+      - name: Run deploy command on the dev server (SSH)
+        env:
+          SSH_KEY: ${{ secrets.STUDIO_DEV_SSH_KEY }}
         run: |
           set -euo pipefail
 
-          params=$(jq -n --arg c "export DEPLOY_SHA=${GITHUB_SHA}; ${DEPLOY_COMMAND}" '{commands: [$c]}')
-          cmd_id=$(aws ssm send-command \
-            --document-name AWS-RunShellScript \
-            --targets "Key=tag:Name,Values=${EC2_NAME}" \
-            --parameters "$params" \
-            --comment "Adapt Studio deploy ${GITHUB_SHA}" \
-            --timeout-seconds 1200 \
-            --query Command.CommandId --output text)
-          echo "SSM command: ${cmd_id}"
+          key="${RUNNER_TEMP}/deploy_key"
+          known_hosts="${RUNNER_TEMP}/known_hosts"
+          trap 'rm -f "$key" "$known_hosts"' EXIT
+          (umask 077; printf '%s\n' "$SSH_KEY" | tr -d '\r' > "$key")
+          printf '%s\n' "$SSH_KNOWN_HOSTS" | tr -d '\r' > "$known_hosts"
 
-          for _ in $(seq 1 80); do
-            sleep 15
-            statuses=$(aws ssm list-command-invocations --command-id "$cmd_id" --query 'CommandInvocations[].Status' --output text)
-            [ -z "$statuses" ] && continue
-            grep -qE 'Pending|InProgress|Delayed' <<< "$statuses" && continue
+          # set -e makes a failing step fail the deploy; the script travels base64-encoded so any login shell and any quoting works on the server
+          cmd=$(printf '%s' "$DEPLOY_COMMAND" | tr -d '\r')
+          script=$(printf 'set -e\nexport DEPLOY_SHA=%s\n%s\n' "$GITHUB_SHA" "$cmd")
+          payload=$(printf '%s' "$script" | base64 -w0)
 
-            aws ssm list-command-invocations --command-id "$cmd_id" --details \
-              --query 'CommandInvocations[].CommandPlugins[].Output' --output text | tail -n 40
-
-            for s in $statuses; do
-              [ "$s" = "Success" ] || { echo "Deploy failed: $statuses"; exit 1; }
-            done
-            echo "Deploy command succeeded."
-            exit 0
-          done
-
-          echo "No instance with Name tag '${EC2_NAME}' finished the deploy command in time."
-          exit 1
+          # bash -l loads the deploy user's profile (PATH for node, pm2)
+          ssh -i "$key" -p "$SSH_PORT" \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=30 \
+            -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$known_hosts" \
+            "${SSH_USER}@${SSH_HOST}" "bash -lc \"\$(printf %s '${payload}' | base64 -d)\""
 
       - name: Health check
         if: ${{ env.HEALTH_URL != '' }}
@@ -309,6 +299,8 @@ jobs:
 
           if [ "$DEPLOY_RESULT" = "success" ]; then
             text="Adapt Studio deployed to dev. Tests and the E2E gate passed."
+          elif [ "$DEPLOY_RESULT" = "skipped" ]; then
+            text="Adapt Studio CI finished. Tests: ${TESTS_RESULT}, E2E gate: ${E2E_RESULT}. No deploy was run."
           else
             text="Adapt Studio was NOT deployed to dev. Tests: ${TESTS_RESULT}, E2E gate: ${E2E_RESULT}, deploy: ${DEPLOY_RESULT}."
           fi
