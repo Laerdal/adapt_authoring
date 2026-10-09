@@ -272,15 +272,6 @@ export function validateAssessment(kind: AssessmentKind, data: AssessmentData, b
   const hasTitle = !!blockTitle.trim();
   if (!hasQuestion && !hasTitle) issues.push('Question text is required.');
 
-  // Whole-question feedback (`_feedback.correct`/`.incorrect`) — every kind
-  // reaches both of these states, so both are required regardless of kind.
-  // Previously unvalidated entirely, which is how an author could save a
-  // question with only, say, a missing options check flagged while feedback
-  // silently stayed blank.
-  const feedback = data.feedback;
-  if (!feedback?.correct?.trim()) issues.push('Add feedback for a correct answer.');
-  if (!feedback?.incorrect?.trim()) issues.push('Add feedback for an incorrect answer.');
-
   switch (kind) {
     case 'mcq':
     case 'gmcq': {

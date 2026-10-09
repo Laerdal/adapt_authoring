@@ -30,6 +30,7 @@ import { useStoryboardReview } from '@/hooks/useStoryboardReview';
 import {
   getCourseStoryboardBlocks,
   saveStoryboardToCourse,
+  addCourseCollaborators,
   exportStoryboardWord,
   exportStoryboardPdf,
   importStoryboardDocument,
@@ -280,14 +281,6 @@ export default function StoryboardWorkspace({
               ? (initialDocument as unknown[])
               : STARTER_DOCUMENT;
       }
-      // Only strip placeholder heading text from a LEGACY fallback snapshot
-      // (a persisted DB record from before the projector always emitted real
-      // structure headings, or one captured from a course later edited to
-      // remove real titles) — never from the live course projection itself,
-      // which now intentionally shows structure headings (Topic/Section/
-      // Content Group), including still-default ones, so the Storyboard
-      // document/TOC mirrors Editor Mode's Structure panel instead of looking
-      // empty for a freshly created structure.
       if (!fromCourse) doc = stripPlaceholderHeadings(doc);
       if (!doc.length) doc = STARTER_DOCUMENT;
       initialContent.current = doc;
@@ -600,17 +593,6 @@ export default function StoryboardWorkspace({
       // every export, regardless of the `dirty` flag: content projected from
       // the course on load is marked "saved" for the UI (no false "unsaved
       // changes" pill) without ever having been PUT to the backend record.
-      // Pull straight from the live editor as-is — do NOT run
-      // stripPlaceholderHeadings here. That helper removes the whole heading
-      // BLOCK (not just its text), which is a real structural boundary
-      // (Topic/Section/Content Group); Preview/TOC only blanks the text for a
-      // still-default title and keeps the row (see TableOfContents.tsx), and
-      // documentConvert.js's blocksToPdf/blocksToDocx already render a
-      // level-appropriate fallback for a blank/default heading rather than
-      // dropping it. Stripping it here instead deleted real structure from
-      // the saved document before export ever ran (ADAPT-3760 bug: default
-      // Topic/Section/Content Group headings missing from exported PDF/Word,
-      // only their content items surviving).
       const liveDoc = (editorRef.current?.getDocument() as unknown[] | undefined) ?? [];
       await sb.save(liveDoc);
       const titleForExport = resolvedCourseTitle;
@@ -867,6 +849,7 @@ export default function StoryboardWorkspace({
         <ShareForReviewDialog
           sharedWith={sb.shareWithUsers}
           onShare={async (userIds) => {
+            if (courseId) await addCourseCollaborators(courseId, userIds);
             await sb.share(userIds);
             flash(`Shared with ${userIds.length} reviewer(s).`);
           }}

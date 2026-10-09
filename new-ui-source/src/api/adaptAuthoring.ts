@@ -508,6 +508,23 @@ export async function updateCourse(
   return coursePromise;
 }
 
+/** Grant selected users course access without removing existing collaborators. */
+export async function addCourseCollaborators(courseId: string, userIds: string[]): Promise<void> {
+  const requested = [...new Set(userIds.filter((id) => typeof id === "string" && id.length > 0))];
+  if (!requested.length) return;
+
+  const course = await apiClient.get<Pick<EngineCourseDetails, "_isShared" | "_shareWithUsers">>(
+    `/api/content/course/${courseId}`
+  );
+  if (course._isShared) return;
+
+  const current = Array.isArray(course._shareWithUsers) ? course._shareWithUsers : [];
+  const combined = [...new Set([...current, ...requested])];
+  if (combined.length === current.length && combined.every((id) => current.includes(id))) return;
+
+  await updateCourse(courseId, { shareWithUserIds: combined });
+}
+
 export function duplicateCourse(backendId: string): Promise<unknown> {
   return apiClient.get(`/api/duplicatecourse/${backendId}`);
 }
@@ -3250,34 +3267,18 @@ export async function getCourseStoryboardBlocks(courseId: string): Promise<unkno
     });
   };
   const emitTopic = (page: EngineContentNode) => {
-    // Structure headings always appear, exactly like Editor Mode's Structure
-    // panel — including a still-unrenamed default node's placeholder title
-    // ("New Topic Title" etc). Editor Mode never hides these (getCourseStructure
-    // above uses the raw title unconditionally), and hiding them here made the
-    // Storyboard document (and its Contents/TOC) look empty for any freshly
-    // created Topic/Section/Content Group, even though the structure exists.
-    // Word/PDF export has its OWN independent placeholder filter
-    // (documentConvert.js::DEFAULT_PLACEHOLDER_TITLES) so suppressing them
-    // here too was redundant for that concern.
-    const rawLabel = (n: EngineContentNode): string => (n.displayTitle || n.title || "").trim() || "Untitled";
-    const topicTitle = rawLabel(page);
+    const topicTitle = label(page);
     out.push({ id: page._id, type: "heading", props: { level: 1 }, content: topicTitle });
     for (const article of childrenOf(articles, page._id)) {
-      const articleTitle = rawLabel(article);
+      const articleTitle = label(article);
       out.push({ id: article._id, type: "heading", props: { level: 2 }, content: articleTitle });
-      // The generation engine caps each Adapt block at 2 components — extra
-      // components are placed in continuation blocks that carry the SAME H3
-      // title. When we round-trip the course, those continuation blocks would
-      // appear as duplicate H3 headings in the Storyboard (and duplicate again
-      // on the next Save/Generate). Merge adjacent same-title H3 blocks so the
-      // Storyboard shows one H3 with all its components in their original order.
-      let prevTitle: string | null = null;
+      // Each Adapt block is a real Content Group with its own identity. Keep
+      // every heading, even when sibling groups share a title: generation
+      // uses these ids to update the existing structure instead of creating
+      // replacement groups for items whose ids were collapsed here.
       for (const blk of childrenOf(blocks, article._id)) {
-        const title = rawLabel(blk);
-        if (title !== prevTitle) {
-          out.push({ id: blk._id, type: "heading", props: { level: 3 }, content: title });
-          prevTitle = title;
-        }
+        const title = label(blk);
+        out.push({ id: blk._id, type: "heading", props: { level: 3 }, content: title });
         for (const comp of childrenOf(components, blk._id)) emitComponent(comp);
       }
     }
