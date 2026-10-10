@@ -27,10 +27,28 @@ env:
   STUDIO_E2E_BRANCH: main
 
 jobs:
-  build:
-    name: build
+  check-studio-e2e-secret:
+    name: check E2E token
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 5
+    outputs:
+      has_token: ${{ steps.check.outputs.has_token }}
+    steps:
+      # secrets context can't be used directly in a job-level `if:`, so resolve it here first
+      - id: check
+        env:
+          STUDIO_E2E_TOKEN: ${{ secrets.STUDIO_E2E_TOKEN }}
+        run: |
+          if [ -n "${STUDIO_E2E_TOKEN:-}" ]; then
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  backend-tests:
+    name: build (backend)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
 
     steps:
       - name: Checkout repository
@@ -38,34 +56,41 @@ jobs:
         with:
           ref: ${{ github.event_name == 'schedule' && 'develop' || github.ref }}
 
-      - name: Backend - setup Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Backend - install dependencies
+      - name: Install root dependencies
         # root package-lock.json is out of sync with package.json (version mismatches) - npm ci rejects that, npm install tolerates it
         run: npm install --ignore-scripts
 
-      - name: Backend - run tests
+      - name: Run backend CI tests
         run: ./node_modules/.bin/mocha ./test/storyboard.commentStatus.js ./test/storyboard.import.smoke.js
 
-      # The new UI steps still run when the backend failed, so one run shows both results
-      - name: New UI - setup Node.js
-        if: ${{ !cancelled() }}
+  new-ui-tests:
+    name: build (new UI)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'schedule' && 'develop' || github.ref }}
+
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           # no package-lock.json in new-ui-source - omit cache so it doesn't fall back to caching against the root lockfile
 
-      - name: New UI - update npm
-        if: ${{ !cancelled() }}
+      - name: Update npm
         # Node 18 ships npm 10.8.2, which has a known optional-dependency native-binding bug (npm/cli#4828).
         run: npm install -g npm@10.9.4
 
-      - name: New UI - install dependencies
-        if: ${{ !cancelled() }}
+      - name: Install new UI dependencies
         working-directory: new-ui-source
         # no package-lock.json committed here (platform-specific native binary, see new-ui-source/.gitignore), so npm ci would fail.
         # Also force a clean install dir to avoid npm's known optional-dependency native-binding bug (npm/cli#4828).
@@ -73,16 +98,18 @@ jobs:
           rm -rf node_modules package-lock.json
           npm install
 
-      - name: New UI - run tests
-        if: ${{ !cancelled() }}
+      - name: Run new UI tests
         working-directory: new-ui-source
         run: npm test
 
   e2e-studio:
     name: E2E tests (pre-deploy gate)
-    needs: build
-    # A pull request only runs the build job
-    if: ${{ github.event_name != 'pull_request' }}
+    needs:
+      - check-studio-e2e-secret
+      - backend-tests
+      - new-ui-tests
+    # A pull request only runs the build jobs; without the token the gate is skipped, so nothing deploys
+    if: ${{ github.event_name != 'pull_request' && needs.check-studio-e2e-secret.outputs.has_token == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
     outputs:
@@ -94,22 +121,8 @@ jobs:
       e2e_total: ${{ steps.results.outputs.e2e_total }}
 
     steps:
-      # secrets context can't be used directly in an `if:`, so resolve it here first
-      - name: Check E2E token
-        id: token
-        env:
-          STUDIO_E2E_TOKEN: ${{ secrets.STUDIO_E2E_TOKEN }}
-        run: |
-          if [ -n "${STUDIO_E2E_TOKEN:-}" ]; then
-            echo "has_token=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_token=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::STUDIO_E2E_TOKEN is not set, so the Studio E2E tests did not run and nothing will be deployed"
-          fi
-
       - name: Start Studio E2E tests
         id: trigger
-        if: ${{ steps.token.outputs.has_token == 'true' }}
         env:
           STUDIO_E2E_TOKEN: ${{ secrets.STUDIO_E2E_TOKEN }}
         run: |
@@ -134,7 +147,6 @@ jobs:
 
       - name: Wait for Studio E2E tests
         id: wait
-        if: ${{ steps.token.outputs.has_token == 'true' }}
         env:
           STUDIO_E2E_TOKEN: ${{ secrets.STUDIO_E2E_TOKEN }}
           DISPATCH_TIME: ${{ steps.trigger.outputs.dispatch_time }}
@@ -250,7 +262,8 @@ jobs:
   deploy-dev:
     name: deploy to dev (SSH)
     needs:
-      - build
+      - backend-tests
+      - new-ui-tests
       - e2e-studio
     if: ${{ needs.e2e-studio.outputs.passed == 'true' && vars.STUDIO_DEV_SSH_HOST != '' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', vars.STUDIO_DEPLOY_BRANCH || 'develop') }}
     # GitHub-hosted runners usually can't reach a dev server's SSH port: set STUDIO_DEPLOY_RUNNER to a self-hosted runner label inside the network.
@@ -313,7 +326,9 @@ jobs:
   notify-teams:
     name: notify Teams
     needs:
-      - build
+      - check-studio-e2e-secret
+      - backend-tests
+      - new-ui-tests
       - e2e-studio
       - deploy-dev
     if: ${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', vars.STUDIO_DEPLOY_BRANCH || 'develop') }}
@@ -325,7 +340,8 @@ jobs:
     env:
       TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
       GITHUB_TOKEN: ${{ github.token }}
-      BUILD_RESULT: ${{ needs.build.result }}
+      BUILD_RESULT: ${{ needs.backend-tests.result == 'success' && needs.new-ui-tests.result == 'success' && 'success' || 'failure' }}
+      HAS_TOKEN: ${{ needs.check-studio-e2e-secret.outputs.has_token }}
       E2E_RESULT: ${{ needs.e2e-studio.result }}
       E2E_PASSED_FLAG: ${{ needs.e2e-studio.outputs.passed }}
       DEPLOY_RESULT: ${{ needs.deploy-dev.result }}
@@ -358,7 +374,7 @@ jobs:
           build="$(label "$BUILD_RESULT")"
 
           e2e="$(label "$E2E_RESULT")"
-          if [ "$E2E_RESULT" = "success" ] && [ "$E2E_PASSED_FLAG" != "true" ]; then
+          if [ "$E2E_RESULT" = "skipped" ] && [ "$HAS_TOKEN" = "false" ]; then
             e2e="⚪ Skipped (no E2E token)"
           fi
 
