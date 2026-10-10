@@ -10,8 +10,6 @@ on:
       - develop
       - develop-cicd-trial
   workflow_dispatch:
-  schedule:
-    - cron: '0 2 * * *'
 
 concurrency:
   group: adapt-authoring-ci-${{ github.event_name }}-${{ github.ref }}
@@ -53,8 +51,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'schedule' && 'develop' || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -77,8 +73,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'schedule' && 'develop' || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
