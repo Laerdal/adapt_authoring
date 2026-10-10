@@ -1,4 +1,4 @@
-name: CI
+name: build deploy and test
 
 on:
   pull_request:
@@ -27,28 +27,10 @@ env:
   STUDIO_E2E_BRANCH: main
 
 jobs:
-  check-studio-e2e-secret:
-    name: check E2E token
+  build:
+    name: build
     runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      has_token: ${{ steps.check.outputs.has_token }}
-    steps:
-      # secrets context can't be used directly in a job-level `if:`, so resolve it here first
-      - id: check
-        env:
-          STUDIO_E2E_TOKEN: ${{ secrets.STUDIO_E2E_TOKEN }}
-        run: |
-          if [ -n "${STUDIO_E2E_TOKEN:-}" ]; then
-            echo "has_token=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "has_token=false" >> "$GITHUB_OUTPUT"
-          fi
-
-  backend-tests:
-    name: build and test (backend)
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 60
 
     steps:
       - name: Checkout repository
@@ -56,41 +38,34 @@ jobs:
         with:
           ref: ${{ github.event_name == 'schedule' && 'develop' || github.ref }}
 
-      - name: Setup Node.js
+      - name: Backend - setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
-      - name: Install root dependencies
+      - name: Backend - install dependencies
         # root package-lock.json is out of sync with package.json (version mismatches) - npm ci rejects that, npm install tolerates it
         run: npm install --ignore-scripts
 
-      - name: Run backend CI tests
+      - name: Backend - run tests
         run: ./node_modules/.bin/mocha ./test/storyboard.commentStatus.js ./test/storyboard.import.smoke.js
 
-  new-ui-tests:
-    name: build and test (new UI)
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'schedule' && 'develop' || github.ref }}
-
-      - name: Setup Node.js
+      # The new UI steps still run when the backend failed, so one run shows both results
+      - name: New UI - setup Node.js
+        if: ${{ !cancelled() }}
         uses: actions/setup-node@v4
         with:
           node-version: '22'
           # no package-lock.json in new-ui-source - omit cache so it doesn't fall back to caching against the root lockfile
 
-      - name: Update npm
+      - name: New UI - update npm
+        if: ${{ !cancelled() }}
         # Node 18 ships npm 10.8.2, which has a known optional-dependency native-binding bug (npm/cli#4828).
         run: npm install -g npm@10.9.4
 
-      - name: Install new UI dependencies
+      - name: New UI - install dependencies
+        if: ${{ !cancelled() }}
         working-directory: new-ui-source
         # no package-lock.json committed here (platform-specific native binary, see new-ui-source/.gitignore), so npm ci would fail.
         # Also force a clean install dir to avoid npm's known optional-dependency native-binding bug (npm/cli#4828).
@@ -98,39 +73,47 @@ jobs:
           rm -rf node_modules package-lock.json
           npm install
 
-      - name: Run new UI tests
+      - name: New UI - run tests
+        if: ${{ !cancelled() }}
         working-directory: new-ui-source
         run: npm test
 
-  trigger-studio-e2e:
-    name: E2E gate (start Studio E2E tests)
+  e2e-studio:
+    name: E2E tests (pre-deploy gate)
+    needs: build
+    # A pull request only runs the build job
+    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    needs:
-      - check-studio-e2e-secret
-      - backend-tests
-      - new-ui-tests
-    if: ${{ github.event_name != 'pull_request' && needs.check-studio-e2e-secret.outputs.has_token == 'true' }}
     outputs:
-      dispatch_time: ${{ steps.trigger_e2e.outputs.dispatch_time }}
+      passed: ${{ steps.results.outputs.passed }}
+      e2e_passed: ${{ steps.results.outputs.e2e_passed }}
+      e2e_failed: ${{ steps.results.outputs.e2e_failed }}
+      e2e_skipped: ${{ steps.results.outputs.e2e_skipped }}
+      e2e_broken: ${{ steps.results.outputs.e2e_broken }}
+      e2e_total: ${{ steps.results.outputs.e2e_total }}
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'schedule' && 'develop' || github.ref }}
+      # secrets context can't be used directly in an `if:`, so resolve it here first
+      - name: Check E2E token
+        id: token
+        env:
+          STUDIO_E2E_TOKEN: ${{ secrets.STUDIO_E2E_TOKEN }}
+        run: |
+          if [ -n "${STUDIO_E2E_TOKEN:-}" ]; then
+            echo "has_token=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_token=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::STUDIO_E2E_TOKEN is not set, so the Studio E2E tests did not run and nothing will be deployed"
+          fi
 
-      - name: Trigger Studio E2E workflow
-        id: trigger_e2e
+      - name: Start Studio E2E tests
+        id: trigger
+        if: ${{ steps.token.outputs.has_token == 'true' }}
         env:
           STUDIO_E2E_TOKEN: ${{ secrets.STUDIO_E2E_TOKEN }}
         run: |
           set -euo pipefail
-
-          if [ -z "${STUDIO_E2E_TOKEN:-}" ]; then
-            echo "Missing required secret: STUDIO_E2E_TOKEN"
-            exit 1
-          fi
 
           dispatch_time=$(date -u +%s)
 
@@ -149,35 +132,14 @@ jobs:
 
           echo "dispatch_time=${dispatch_time}" >> "$GITHUB_OUTPUT"
 
-  wait-for-studio-e2e:
-    name: E2E gate (wait for Studio E2E tests)
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    needs:
-      - check-studio-e2e-secret
-      - trigger-studio-e2e
-    if: ${{ github.event_name != 'pull_request' && needs.check-studio-e2e-secret.outputs.has_token == 'true' }}
-    outputs:
-      e2e_run_url: ${{ steps.wait.outputs.e2e_run_url }}
-      e2e_passed: ${{ steps.report.outputs.e2e_passed }}
-      e2e_failed: ${{ steps.report.outputs.e2e_failed }}
-      e2e_skipped: ${{ steps.report.outputs.e2e_skipped }}
-      e2e_broken: ${{ steps.report.outputs.e2e_broken }}
-      e2e_total: ${{ steps.report.outputs.e2e_total }}
-
-    steps:
-      - name: Wait for Studio E2E completion
+      - name: Wait for Studio E2E tests
         id: wait
+        if: ${{ steps.token.outputs.has_token == 'true' }}
         env:
           STUDIO_E2E_TOKEN: ${{ secrets.STUDIO_E2E_TOKEN }}
-          DISPATCH_TIME: ${{ needs.trigger-studio-e2e.outputs.dispatch_time }}
+          DISPATCH_TIME: ${{ steps.trigger.outputs.dispatch_time }}
         run: |
           set -euo pipefail
-
-          if [ -z "${STUDIO_E2E_TOKEN:-}" ]; then
-            echo "Missing required secret: STUDIO_E2E_TOKEN"
-            exit 1
-          fi
 
           for attempt in $(seq 1 90); do
             response=$(curl -fsS \
@@ -186,133 +148,111 @@ jobs:
               -H "X-GitHub-Api-Version: 2022-11-28" \
               "https://api.github.com/repos/${STUDIO_E2E_REPO}/actions/workflows/${STUDIO_E2E_WORKFLOW}/runs?branch=${STUDIO_E2E_BRANCH}&event=workflow_dispatch&per_page=20")
 
-            run_id=$(printf '%s' "$response" | jq -r --argjson cutoff "$DISPATCH_TIME" '
-              [.workflow_runs[]
-                | select((.created_at | fromdateiso8601) >= $cutoff)
-              ]
-              | sort_by(.created_at)
-              | last
-              | .id // empty
-            ')
+            # the newest run created after the dispatch
+            run=$(jq -c --argjson cutoff "$DISPATCH_TIME" '
+              [.workflow_runs[] | select((.created_at | fromdateiso8601) >= $cutoff)]
+              | sort_by(.created_at) | last // empty
+            ' <<< "$response")
 
-            status=$(printf '%s' "$response" | jq -r --argjson cutoff "$DISPATCH_TIME" '
-              [.workflow_runs[]
-                | select((.created_at | fromdateiso8601) >= $cutoff)
-              ]
-              | sort_by(.created_at)
-              | last
-              | .status // empty
-            ')
-
-            conclusion=$(printf '%s' "$response" | jq -r --argjson cutoff "$DISPATCH_TIME" '
-              [.workflow_runs[]
-                | select((.created_at | fromdateiso8601) >= $cutoff)
-              ]
-              | sort_by(.created_at)
-              | last
-              | .conclusion // empty
-            ')
-
-            if [ -n "$run_id" ]; then
-              run_url=$(printf '%s' "$response" | jq -r --argjson id "$run_id" '.workflow_runs[] | select(.id == $id) | .html_url')
+            if [ -n "$run" ]; then
+              run_id=$(jq -r '.id' <<< "$run")
+              run_url=$(jq -r '.html_url' <<< "$run")
               if [ "${announced_id:-}" != "$run_id" ]; then
                 echo "Studio E2E run: ${run_url}"
                 announced_id="$run_id"
               fi
-            fi
 
-            if [ -n "$run_id" ] && [ "$status" = "completed" ]; then
-              echo "e2e_run_id=${run_id}" >> "$GITHUB_OUTPUT"
-              echo "e2e_run_url=${run_url}" >> "$GITHUB_OUTPUT"
-
-              if [ "$conclusion" != "success" ]; then
-                echo "::error::Studio E2E workflow failed with conclusion: ${conclusion}. Details: ${run_url}"
-                exit 1
+              if [ "$(jq -r '.status' <<< "$run")" = "completed" ]; then
+                conclusion=$(jq -r '.conclusion // ""' <<< "$run")
+                {
+                  echo "e2e_run_id=${run_id}"
+                  echo "e2e_run_url=${run_url}"
+                  echo "e2e_conclusion=${conclusion}"
+                } >> "$GITHUB_OUTPUT"
+                echo "Studio E2E run finished with conclusion: ${conclusion}"
+                exit 0
               fi
-
-              echo "Studio E2E workflow completed successfully."
-              exit 0
             fi
 
             sleep 20
           done
 
-          echo "Timed out waiting for Studio E2E workflow to finish."
+          echo "::error::Timed out waiting for the Studio E2E run to finish"
           exit 1
 
-      # Best effort: copies the E2E counts and every test result into this run, so people without access to the Studio E2E repository can read them here.
-      - name: Studio E2E test results (copied from the E2E run)
-        id: report
+      # Developers cannot open the Studio E2E repository, so its Playwright output is copied here, one line per test like the E2E job of the framework-plugins pipeline.
+      - name: Run Playwright tests for studioTests (copied from the E2E run)
+        id: results
         if: ${{ always() && steps.wait.outputs.e2e_run_id != '' }}
-        continue-on-error: true
         env:
           STUDIO_E2E_TOKEN: ${{ secrets.STUDIO_E2E_TOKEN }}
           E2E_RUN_ID: ${{ steps.wait.outputs.e2e_run_id }}
           E2E_RUN_URL: ${{ steps.wait.outputs.e2e_run_url }}
+          E2E_CONCLUSION: ${{ steps.wait.outputs.e2e_conclusion }}
         run: |
+          echo "The Studio E2E tests ran in the Studio E2E repository (${E2E_RUN_URL}). This is their output."
+          set +e
           api="https://api.github.com/repos/${STUDIO_E2E_REPO}"
           auth=(-H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${STUDIO_E2E_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28")
 
-          {
-            echo "### Studio E2E tests"
-            echo "Copied from the Studio E2E run so the results can be read here. The run itself and its Allure report are in the Studio E2E repository (access needed): ${E2E_RUN_URL}"
-          } >> "$GITHUB_STEP_SUMMARY"
+          # The Playwright step of the E2E run. Lines that look like workflow commands are indented so they stay plain text.
+          curl -fsS "${auth[@]}" "${api}/actions/runs/${E2E_RUN_ID}/jobs?per_page=100" > jobs.json
+          : > tests.txt
+          for job_id in $(jq -r '.jobs[] | select(any(.steps[]?; (.name // "") | startswith("Run Playwright tests"))) | .id' jobs.json 2>/dev/null); do
+            curl -fsSL "${auth[@]}" -o job.log "${api}/actions/jobs/${job_id}/logs" || continue
+            awk '/##\[group\]Run npx playwright test/ {hdr=1; next} hdr && /##\[endgroup\]/ {hdr=0; on=1; next} on && /##\[group\]/ {exit} on' job.log \
+              | sed -E 's/^[0-9T:.-]+Z //; s/\x1b\[[0-9;]*m//g; s/\r$//; s/^(##\[|::)/ \1/' | tail -n 5000 >> tests.txt
+          done
+          if [ -s tests.txt ]; then
+            cat tests.txt
+          else
+            echo "::warning::The Playwright output of the E2E run could not be read"
+          fi
 
-          # Same numbers the E2E repo's own report uses (Allure summary)
+          # Counts from the Allure summary, the same numbers the E2E repo's own report uses
+          : > counts.md
           art_id=$(curl -fsS "${auth[@]}" "${api}/actions/runs/${E2E_RUN_ID}/artifacts?per_page=100" \
-            | jq -r '[.artifacts[] | select(.name == "allure-report" and (.expired | not))] | first | .id // empty') || art_id=""
+            | jq -r '[.artifacts[] | select(.name == "allure-report" and (.expired | not))] | first | .id // empty')
           if [ -n "$art_id" ] && curl -fsSL "${auth[@]}" -o allure.zip "${api}/actions/artifacts/${art_id}/zip" && unzip -p allure.zip widgets/summary.json > summary.json; then
             for k in passed failed skipped broken total; do
               echo "e2e_${k}=$(jq -r ".statistic.${k}" summary.json)" >> "$GITHUB_OUTPUT"
             done
-            jq -r '"| Passed | Failed | Skipped | Broken | Total |\n|---|---|---|---|---|\n| \(.statistic.passed) | \(.statistic.failed) | \(.statistic.skipped) | \(.statistic.broken) | \(.statistic.total) |"' summary.json >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "::notice::No Allure summary found on the Studio E2E run, so the counts are not shown"
+            jq -r '"| Passed | Failed | Skipped | Broken | Total |\n|---|---|---|---|---|\n| \(.statistic.passed) | \(.statistic.failed) | \(.statistic.skipped) | \(.statistic.broken) | \(.statistic.total) |"' summary.json > counts.md
           fi
 
-          # Test output of the Playwright step, for passed and failed runs alike, so every test result is readable here
-          curl -fsS "${auth[@]}" "${api}/actions/runs/${E2E_RUN_ID}/jobs?per_page=100" > jobs.json || exit 0
-          for job_id in $(jq -r '.jobs[] | select(any(.steps[]?; (.name // "") | startswith("Run Playwright tests"))) | .id' jobs.json); do
-            conclusion=$(jq -r --argjson id "$job_id" '.jobs[] | select(.id == $id) | .conclusion' jobs.json)
-            curl -fsSL "${auth[@]}" -o job.log "${api}/actions/jobs/${job_id}/logs" || continue
-            awk '/##\[group\]Run npx playwright test/ {hdr=1; next} hdr && /##\[endgroup\]/ {hdr=0; on=1; next} on && /##\[group\]/ {exit} on' job.log \
-              | sed -E 's/^[0-9T:.-]+Z //; s/\x1b\[[0-9;]*m//g' | tail -n 2500 > tests.txt
-
-            echo "::group::Studio E2E test output (copied from the E2E run)"
-            cat tests.txt
-            echo "::endgroup::"
-
-            # Playwright prints the failure details from "1)" on, so show them on their own above the full list
-            awk '/^[[:space:]]+1\) \[/ {f=1} f' tests.txt | head -n 400 > failures.txt
-            {
-              if [ -s failures.txt ]; then
-                echo "<details open><summary>Failing tests</summary>"
-                echo
-                echo '```'
-                cat failures.txt
-                echo '```'
-                echo "</details>"
-              fi
-              [ "$conclusion" = "failure" ] && open=" open" || open=""
-              echo "<details${open}><summary>All Studio E2E test output</summary>"
+          # Playwright prints the failure details from "1)" on, so show them on their own in the run summary
+          awk '/^[[:space:]]+1\) \[/ {f=1} f' tests.txt | head -n 300 > failures.txt
+          {
+            echo "### Studio E2E tests"
+            cat counts.md
+            if [ -s failures.txt ]; then
+              echo "<details open><summary>Failing tests</summary>"
               echo
               echo '```'
-              cat tests.txt
+              cat failures.txt
               echo '```'
               echo "</details>"
-            } >> "$GITHUB_STEP_SUMMARY"
-          done
+            fi
+            echo
+            echo "Every test is listed in the job log, step \"Run Playwright tests for studioTests (copied from the E2E run)\". The run itself is in the Studio E2E repository (access needed): ${E2E_RUN_URL}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-  # Merge to the deploy branch is separate from deploying: this job only runs once tests and the E2E gate pass.
+          if [ "$E2E_CONCLUSION" = "success" ]; then
+            echo "passed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::The Studio E2E tests did not pass (conclusion: ${E2E_CONCLUSION}). The failing tests are listed above."
+            exit 1
+          fi
+
+  # Merge to the deploy branch is separate from deploying: this job only runs once the build and the E2E gate pass.
   # A skipped gate (e.g. no STUDIO_E2E_TOKEN) skips this job, so it can never deploy ungated.
   # It is also skipped until the repository variable STUDIO_DEV_SSH_HOST exists, so merging this workflow is safe before the server is set up.
   deploy-dev:
     name: deploy to dev (SSH)
     needs:
-      - backend-tests
-      - new-ui-tests
-      - wait-for-studio-e2e
-    if: ${{ vars.STUDIO_DEV_SSH_HOST != '' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', vars.STUDIO_DEPLOY_BRANCH || 'develop') }}
+      - build
+      - e2e-studio
+    if: ${{ needs.e2e-studio.outputs.passed == 'true' && vars.STUDIO_DEV_SSH_HOST != '' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', vars.STUDIO_DEPLOY_BRANCH || 'develop') }}
     # GitHub-hosted runners usually can't reach a dev server's SSH port: set STUDIO_DEPLOY_RUNNER to a self-hosted runner label inside the network.
     runs-on: ${{ vars.STUDIO_DEPLOY_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
@@ -373,30 +313,31 @@ jobs:
   notify-teams:
     name: notify Teams
     needs:
-      - backend-tests
-      - new-ui-tests
-      - trigger-studio-e2e
-      - wait-for-studio-e2e
+      - build
+      - e2e-studio
       - deploy-dev
     if: ${{ always() && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == format('refs/heads/{0}', vars.STUDIO_DEPLOY_BRANCH || 'develop') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
     env:
       TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
-      TESTS_RESULT: ${{ needs.backend-tests.result == 'success' && needs.new-ui-tests.result == 'success' && 'success' || 'failure' }}
-      E2E_TRIGGER_RESULT: ${{ needs.trigger-studio-e2e.result }}
-      E2E_RESULT: ${{ needs.wait-for-studio-e2e.result }}
+      GITHUB_TOKEN: ${{ github.token }}
+      BUILD_RESULT: ${{ needs.build.result }}
+      E2E_RESULT: ${{ needs.e2e-studio.result }}
+      E2E_PASSED_FLAG: ${{ needs.e2e-studio.outputs.passed }}
       DEPLOY_RESULT: ${{ needs.deploy-dev.result }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
       BRANCH: ${{ github.ref_name }}
       COMMIT: ${{ github.sha }}
       COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
-      ACTOR: ${{ github.actor }}
-      E2E_PASSED: ${{ needs.wait-for-studio-e2e.outputs.e2e_passed }}
-      E2E_FAILED: ${{ needs.wait-for-studio-e2e.outputs.e2e_failed }}
-      E2E_SKIPPED: ${{ needs.wait-for-studio-e2e.outputs.e2e_skipped }}
-      E2E_BROKEN: ${{ needs.wait-for-studio-e2e.outputs.e2e_broken }}
-      E2E_TOTAL: ${{ needs.wait-for-studio-e2e.outputs.e2e_total }}
+      E2E_PASSED: ${{ needs.e2e-studio.outputs.e2e_passed }}
+      E2E_FAILED: ${{ needs.e2e-studio.outputs.e2e_failed }}
+      E2E_SKIPPED: ${{ needs.e2e-studio.outputs.e2e_skipped }}
+      E2E_BROKEN: ${{ needs.e2e-studio.outputs.e2e_broken }}
+      E2E_TOTAL: ${{ needs.e2e-studio.outputs.e2e_total }}
     steps:
       - name: Send Teams notification
         run: |
@@ -414,31 +355,39 @@ jobs:
             esac
           }
 
-          # A failed trigger skips the wait job, so report it here instead of showing the gate as skipped
+          build="$(label "$BUILD_RESULT")"
+
           e2e="$(label "$E2E_RESULT")"
-          if [ "$E2E_TRIGGER_RESULT" = "failure" ]; then
-            e2e="❌ Could not start"
-            E2E_RESULT=failure
+          if [ "$E2E_RESULT" = "success" ] && [ "$E2E_PASSED_FLAG" != "true" ]; then
+            e2e="⚪ Skipped (no E2E token)"
           fi
 
           deploy="$(label "$DEPLOY_RESULT")"
           [ "$DEPLOY_RESULT" = "success" ] && deploy="✅ Deployed"
           [ "$DEPLOY_RESULT" = "skipped" ] && deploy="⚪ Not run"
 
-          # Title colour: red if anything failed, green if tests and the E2E gate passed, amber otherwise (e.g. gate skipped)
+          # Title colour: red if anything failed, green if the build and the E2E tests passed, amber otherwise (e.g. no E2E token)
           color="Warning"
-          if [ "$TESTS_RESULT" = "failure" ] || [ "$E2E_RESULT" = "failure" ] || [ "$E2E_RESULT" = "cancelled" ] || [ "$DEPLOY_RESULT" = "failure" ]; then
+          if [ "$BUILD_RESULT" = "failure" ] || [ "$E2E_RESULT" = "failure" ] || [ "$E2E_RESULT" = "cancelled" ] || [ "$DEPLOY_RESULT" = "failure" ]; then
             color="Attention"
-          elif [ "$TESTS_RESULT" = "success" ] && [ "$E2E_RESULT" = "success" ]; then
+          elif [ "$BUILD_RESULT" = "success" ] && [ "$E2E_PASSED_FLAG" = "true" ]; then
             color="Good"
           fi
 
           subject=$(printf '%s' "${COMMIT_MESSAGE:-}" | head -n 1)
           commit="${COMMIT:0:7}${subject:+ - ${subject:0:80}}"
 
+          # The link opens the test output of the E2E job (its "Run Playwright tests" step); without an E2E job it opens the run page
+          link="$RUN_URL"
+          anchor=$(curl -fsS -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100" \
+            | jq -r '[.jobs[] | select(.name == "E2E tests (pre-deploy gate)" and .conclusion != "skipped")] | first | select(. != null)
+                     | "\(.id)#step:\([.steps[] | select(.name | startswith("Run Playwright tests"))] | (first // {number: 1}) | .number):1"' 2>/dev/null) || anchor=""
+          [ -n "$anchor" ] && link="${RUN_URL}/job/${anchor}"
+
           jq -n \
-            --arg color "$color" --arg url "$RUN_URL" --arg branch "$BRANCH" --arg commit "$commit" --arg actor "$ACTOR" \
-            --arg tests "$(label "$TESTS_RESULT")" --arg e2e "$e2e" --arg deploy "$deploy" \
+            --arg color "$color" --arg url "$link" --arg branch "$BRANCH" --arg commit "$commit" \
+            --arg build "$build" --arg e2e "$e2e" --arg deploy "$deploy" \
             --arg passed "${E2E_PASSED:-}" --arg failed "${E2E_FAILED:-}" \
             --arg skipped "${E2E_SKIPPED:-}" --arg broken "${E2E_BROKEN:-}" --arg total "${E2E_TOTAL:-}" '{
               type: "message",
@@ -450,16 +399,15 @@ jobs:
                   body: (
                     [
                       {type: "TextBlock", size: "Large", weight: "Bolder", color: $color, text: "🚀 Adapt Studio CI/CD Results"},
-                      {type: "TextBlock", wrap: true, size: "Medium", weight: "Bolder", color: "Dark", text: ("[🔍 View GitHub Actions Run](" + $url + ")")}
-                    ]
-                    + [{type: "FactSet", facts: [
+                      {type: "TextBlock", wrap: true, size: "Medium", weight: "Bolder", color: "Dark", text: ("[🔍 View E2E test results (GitHub Actions)](" + $url + ")")},
+                      {type: "FactSet", facts: [
                         {title: "Branch:", value: $branch},
                         {title: "Commit:", value: $commit},
-                        {title: "Triggered by:", value: $actor},
-                        {title: "Unit tests:", value: $tests},
-                        {title: "E2E gate:", value: $e2e},
+                        {title: "Build:", value: $build},
+                        {title: "E2E tests:", value: $e2e},
                         {title: "Deploy to dev:", value: $deploy}
-                      ]}]
+                      ]}
+                    ]
                     + (if $total != "" then [
                         {type: "TextBlock", weight: "Bolder", spacing: "Medium", text: "Studio E2E results"},
                         {type: "FactSet", facts: [
