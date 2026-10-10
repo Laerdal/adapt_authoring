@@ -28,6 +28,7 @@ env:
 
 jobs:
   check-studio-e2e-secret:
+    name: check E2E token
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -45,6 +46,7 @@ jobs:
           fi
 
   backend-tests:
+    name: build and test (backend)
     runs-on: ubuntu-latest
     timeout-minutes: 120
 
@@ -68,6 +70,7 @@ jobs:
         run: ./node_modules/.bin/mocha ./test/storyboard.commentStatus.js ./test/storyboard.import.smoke.js
 
   new-ui-tests:
+    name: build and test (new UI)
     runs-on: ubuntu-latest
     timeout-minutes: 120
 
@@ -100,6 +103,7 @@ jobs:
         run: npm test
 
   trigger-studio-e2e:
+    name: E2E gate (start Studio E2E tests)
     runs-on: ubuntu-latest
     timeout-minutes: 120
     needs:
@@ -146,6 +150,7 @@ jobs:
           echo "dispatch_time=${dispatch_time}" >> "$GITHUB_OUTPUT"
 
   wait-for-studio-e2e:
+    name: E2E gate (wait for Studio E2E tests)
     runs-on: ubuntu-latest
     timeout-minutes: 120
     needs:
@@ -235,8 +240,8 @@ jobs:
           echo "Timed out waiting for Studio E2E workflow to finish."
           exit 1
 
-      # Best effort: copies the E2E counts and the failing test output into this run, so nobody has to open the other repository to see what failed.
-      - name: Report Studio E2E results
+      # Best effort: copies the E2E counts and every test result into this run, so people without access to the Studio E2E repository can read them here.
+      - name: Studio E2E test results (copied from the E2E run)
         id: report
         if: ${{ always() && steps.wait.outputs.e2e_run_id != '' }}
         continue-on-error: true
@@ -249,8 +254,8 @@ jobs:
           auth=(-H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${STUDIO_E2E_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28")
 
           {
-            echo "### Studio E2E run"
-            echo "[Open the Studio E2E run](${E2E_RUN_URL}). The Allure report is attached to it as an artifact."
+            echo "### Studio E2E tests"
+            echo "Copied from the Studio E2E run so the results can be read here. The run itself and its Allure report are in the Studio E2E repository (access needed): ${E2E_RUN_URL}"
           } >> "$GITHUB_STEP_SUMMARY"
 
           # Same numbers the E2E repo's own report uses (Allure summary)
@@ -265,20 +270,34 @@ jobs:
             echo "::notice::No Allure summary found on the Studio E2E run, so the counts are not shown"
           fi
 
-          # Output of the Playwright step of every failed job, so the failing tests are visible here
+          # Test output of the Playwright step, for passed and failed runs alike, so every test result is readable here
           curl -fsS "${auth[@]}" "${api}/actions/runs/${E2E_RUN_ID}/jobs?per_page=100" > jobs.json || exit 0
-          for job_id in $(jq -r '.jobs[] | select(.conclusion == "failure") | .id' jobs.json); do
+          for job_id in $(jq -r '.jobs[] | select(any(.steps[]?; (.name // "") | startswith("Run Playwright tests"))) | .id' jobs.json); do
+            conclusion=$(jq -r --argjson id "$job_id" '.jobs[] | select(.id == $id) | .conclusion' jobs.json)
             curl -fsSL "${auth[@]}" -o job.log "${api}/actions/jobs/${job_id}/logs" || continue
             awk '/##\[group\]Run npx playwright test/ {hdr=1; next} hdr && /##\[endgroup\]/ {hdr=0; on=1; next} on && /##\[group\]/ {exit} on' job.log \
-              | sed -E 's/^[0-9T:.-]+Z //' | tail -n 150 > failed-tests.txt
-            echo "::group::Failing test output from the Studio E2E run"
-            cat failed-tests.txt
+              | sed -E 's/^[0-9T:.-]+Z //; s/\x1b\[[0-9;]*m//g' | tail -n 2500 > tests.txt
+
+            echo "::group::Studio E2E test output (copied from the E2E run)"
+            cat tests.txt
             echo "::endgroup::"
+
+            # Playwright prints the failure details from "1)" on, so show them on their own above the full list
+            awk '/^[[:space:]]+1\) \[/ {f=1} f' tests.txt | head -n 400 > failures.txt
             {
-              echo "<details><summary>Failing test output</summary>"
+              if [ -s failures.txt ]; then
+                echo "<details open><summary>Failing tests</summary>"
+                echo
+                echo '```'
+                cat failures.txt
+                echo '```'
+                echo "</details>"
+              fi
+              [ "$conclusion" = "failure" ] && open=" open" || open=""
+              echo "<details${open}><summary>All Studio E2E test output</summary>"
               echo
               echo '```'
-              cat failed-tests.txt
+              cat tests.txt
               echo '```'
               echo "</details>"
             } >> "$GITHUB_STEP_SUMMARY"
@@ -352,6 +371,7 @@ jobs:
         run: curl -fsS --retry 10 --retry-delay 15 --retry-all-errors --max-time 30 "$HEALTH_URL" > /dev/null
 
   notify-teams:
+    name: notify Teams
     needs:
       - backend-tests
       - new-ui-tests
@@ -372,7 +392,6 @@ jobs:
       COMMIT: ${{ github.sha }}
       COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
       ACTOR: ${{ github.actor }}
-      E2E_RUN_URL: ${{ needs.wait-for-studio-e2e.outputs.e2e_run_url }}
       E2E_PASSED: ${{ needs.wait-for-studio-e2e.outputs.e2e_passed }}
       E2E_FAILED: ${{ needs.wait-for-studio-e2e.outputs.e2e_failed }}
       E2E_SKIPPED: ${{ needs.wait-for-studio-e2e.outputs.e2e_skipped }}
@@ -420,7 +439,7 @@ jobs:
           jq -n \
             --arg color "$color" --arg url "$RUN_URL" --arg branch "$BRANCH" --arg commit "$commit" --arg actor "$ACTOR" \
             --arg tests "$(label "$TESTS_RESULT")" --arg e2e "$e2e" --arg deploy "$deploy" \
-            --arg e2e_url "${E2E_RUN_URL:-}" --arg passed "${E2E_PASSED:-}" --arg failed "${E2E_FAILED:-}" \
+            --arg passed "${E2E_PASSED:-}" --arg failed "${E2E_FAILED:-}" \
             --arg skipped "${E2E_SKIPPED:-}" --arg broken "${E2E_BROKEN:-}" --arg total "${E2E_TOTAL:-}" '{
               type: "message",
               attachments: [{
@@ -433,7 +452,6 @@ jobs:
                       {type: "TextBlock", size: "Large", weight: "Bolder", color: $color, text: "🚀 Adapt Studio CI/CD Results"},
                       {type: "TextBlock", wrap: true, size: "Medium", weight: "Bolder", color: "Dark", text: ("[🔍 View GitHub Actions Run](" + $url + ")")}
                     ]
-                    + (if $e2e_url != "" then [{type: "TextBlock", wrap: true, text: ("[🎭 View Studio E2E run and Allure report](" + $e2e_url + ")")}] else [] end)
                     + [{type: "FactSet", facts: [
                         {title: "Branch:", value: $branch},
                         {title: "Commit:", value: $commit},
