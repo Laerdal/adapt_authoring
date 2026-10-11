@@ -201,16 +201,19 @@ jobs:
           api="https://api.github.com/repos/${STUDIO_E2E_REPO}"
           auth=(-H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${STUDIO_E2E_TOKEN}" -H "X-GitHub-Api-Version: 2022-11-28")
 
-          # The Playwright step of the E2E run. Lines that look like workflow commands are indented so they stay plain text.
+          # The copied output goes between stop-commands markers so its ##[error] and ::error lines stay plain text instead of becoming annotations.
           curl -fsS "${auth[@]}" "${api}/actions/runs/${E2E_RUN_ID}/jobs?per_page=100" > jobs.json
           : > tests.txt
           for job_id in $(jq -r '.jobs[] | select(any(.steps[]?; (.name // "") | startswith("Run Playwright tests"))) | .id' jobs.json 2>/dev/null); do
             curl -fsSL "${auth[@]}" -o job.log "${api}/actions/jobs/${job_id}/logs" || continue
             awk '/##\[group\]Run npx playwright test/ {hdr=1; next} hdr && /##\[endgroup\]/ {hdr=0; on=1; next} on && /##\[group\]/ {exit} on' job.log \
-              | sed -E 's/^[0-9T:.-]+Z //; s/\x1b\[[0-9;]*m//g; s/\r$//; s/^(##\[|::)/ \1/' | tail -n 5000 >> tests.txt
+              | sed -E 's/^[0-9T:.-]+Z //; s/\x1b\[[0-9;]*m//g; s/\r$//' | tail -n 5000 >> tests.txt
           done
           if [ -s tests.txt ]; then
+            stop_token=$(uuidgen)
+            echo "::stop-commands::${stop_token}"
             cat tests.txt
+            echo "::${stop_token}::"
           else
             echo "::warning::The Playwright output of the E2E run could not be read"
           fi
