@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent, ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { Replace } from "lucide-react";
 import colorLabelIconSvgRaw from "../../../public/assets/icons/color-label-icon.svg?raw";
 import templateIconSvgRaw from "../../../public/assets/icons/template-icon.svg?raw";
 import AddComponentDrawer from "../../components/course/AddComponentDrawer";
@@ -34,7 +35,7 @@ import { UnsavedChangesModal } from "../setup/unsavedChangesModal";
 import PublishCourseDialog, { type PublishCoursePhase } from "../../components/publish/PublishCourseDialog";
 import PageEditorTopBar from "./pageEditorTopBar";
 import PageEditorNavigation from "./pageEditorNavigation";
-import { projectEditorStructure, structureWithCanvasOrder } from "./editorStructureMoves";
+import { getEditorDeletionError, projectEditorStructure, structureWithCanvasOrder, type EditorDeletionError } from "./editorStructureMoves";
 import { flattenStructure, moveCourseStructure } from "../../hooks/useCourseStructure";
 import type { StructureLevel } from "../../types/structure";
 import { useNavigate } from "react-router-dom";
@@ -3453,6 +3454,7 @@ export default function CourseEditor({
   const [isLoadingStructure, setIsLoadingStructure] = useState(true);
   const [structureLoadError, setStructureLoadError] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [isPreviewBuilding, setIsPreviewBuilding] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [dismissedStructureLoadError, setDismissedStructureLoadError] = useState<string | null>(null);
   const [dismissedPreviewError, setDismissedPreviewError] = useState<string | null>(null);
@@ -3523,6 +3525,7 @@ export default function CourseEditor({
   const [isSavingSelection, setIsSavingSelection] = useState(false);
   const [showUnsavedChangesModal, setShowUnsavedChangesModal] = useState(false);
   const [editorToast, setEditorToast] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
+  const [deletionError, setDeletionError] = useState<EditorDeletionError | null>(null);
   const [isPointerOverCanvas, setIsPointerOverCanvas] = useState(false);
   const isPointerOverCanvasRef = useRef(false);
   const pointerLeaveTimerRef = useRef<number | null>(null);
@@ -4431,6 +4434,7 @@ export default function CourseEditor({
   useEffect(() => {
     if (!menuPageCreated || isLoadingStructure || !courseId || courseId === "new-course" || !user?._tenantId) {
       setIsPreviewLoading(false);
+      setIsPreviewBuilding(false);
       setPreviewError(null);
       return;
     }
@@ -4464,6 +4468,7 @@ export default function CourseEditor({
 
     const buildPreview = async () => {
       setIsPreviewLoading(true);
+      setIsPreviewBuilding(false);
       setPreviewError(null);
       setDismissedPreviewError(null);
 
@@ -4479,6 +4484,7 @@ export default function CourseEditor({
         }
 
         if (result.payload?.pollUrl) {
+          setIsPreviewBuilding(true);
           await pollPreview(result.payload.pollUrl);
         }
 
@@ -4492,6 +4498,7 @@ export default function CourseEditor({
       } finally {
         if (isCurrentRequest()) {
           setIsPreviewLoading(false);
+          setIsPreviewBuilding(false);
         }
       }
     };
@@ -8726,6 +8733,8 @@ export default function CourseEditor({
         const blockId = actionsEl?.getAttribute("data-preview-action-block-id") ?? null;
         const componentId = actionsEl?.getAttribute("data-preview-action-component-id") ?? null;
         if (!level || !pageId) return;
+        const id = level === "topic" ? pageId : level === "section" ? articleId : level === "group" ? blockId : componentId;
+        if (!id || guardLastChildDeletion(level === "group" ? "contentGroup" : level, id)) return;
         setCanvasDeleteTarget({
           level,
           pageId,
@@ -10215,11 +10224,13 @@ export default function CourseEditor({
 
   async function handleDeleteModule(moduleId: string) {
     if (guardStructuralWrite()) return;
+    if (guardLastChildDeletion("module", moduleId)) return;
     try {
       await deleteStructureNode("module", moduleId);
       await loadStructureFromDatabase();
     } catch (error) {
       console.error("Failed to delete module", error);
+      setDeletionError({ message: error instanceof Error ? error.message : "Could not delete Module." });
     }
   }
 
@@ -10319,12 +10330,14 @@ export default function CourseEditor({
 
   async function deleteArticle(pageId: string, articleId: string): Promise<boolean> {
     if (guardStructuralWrite()) return false;
+    if (guardLastChildDeletion("section", articleId)) return false;
     try {
       await deleteStructureNode("section", articleId);
       await loadStructureFromDatabase({ pageId });
       return true;
     } catch (error) {
       console.error("Failed to delete section", error);
+      setDeletionError({ message: error instanceof Error ? error.message : "Could not delete Section." });
       return false;
     }
   }
@@ -11035,12 +11048,14 @@ export default function CourseEditor({
 
   async function deletePage(pageId: string): Promise<boolean> {
     if (guardStructuralWrite()) return false;
+    if (guardLastChildDeletion("topic", pageId)) return false;
     try {
       await deleteStructureNode("topic", pageId);
       await loadStructureFromDatabase();
       return true;
     } catch (error) {
       console.error("Failed to delete topic", error);
+      setDeletionError({ message: error instanceof Error ? error.message : "Could not delete Topic." });
       return false;
     }
   }
@@ -11122,12 +11137,14 @@ export default function CourseEditor({
 
   async function deleteBlock(pageId: string, articleId: string, blockId: string): Promise<boolean> {
     if (guardStructuralWrite()) return false;
+    if (guardLastChildDeletion("contentGroup", blockId)) return false;
     try {
       await deleteStructureNode("contentGroup", blockId);
       await loadStructureFromDatabase({ pageId, articleId });
       return true;
     } catch (error) {
       console.error("Failed to delete content group", error);
+      setDeletionError({ message: error instanceof Error ? error.message : "Could not delete Content Group." });
       return false;
     }
   }
@@ -11398,11 +11415,17 @@ export default function CourseEditor({
     } else {
       return;
     }
-    if (!deleted) {
-      setEditorToast({ type: "error", message: `Could not delete "${target.name}"` });
-      return;
-    }
+    if (!deleted) return;
     setEditorToast({ type: "success", message: `"${target.name}" deleted` });
+  }
+
+  function guardLastChildDeletion(level: StructureLevel, id: string): boolean {
+    const deletionError = courseStructure
+      ? getEditorDeletionError(courseStructure, courseId, level, id)
+      : { message: "The course structure is not ready. Please try again once it has loaded." };
+    if (!deletionError) return false;
+    setDeletionError(deletionError);
+    return true;
   }
 
   // Old-tool parity (editorOriginView.js onCopy -> editorView.js
@@ -12107,6 +12130,7 @@ export default function CourseEditor({
 
   async function deleteComponent(pageId: string, articleId: string, blockId: string, componentId: string): Promise<boolean> {
     if (guardStructuralWrite()) return false;
+    if (guardLastChildDeletion("component", componentId)) return false;
     try {
       const targetPage = contentPages.find((p) => p.id === pageId);
       const targetArticle = targetPage?.articles.find((a) => a.id === articleId);
@@ -12123,6 +12147,7 @@ export default function CourseEditor({
       return true;
     } catch (error) {
       console.error("Failed to delete component", error);
+      setDeletionError({ message: error instanceof Error ? error.message : "Could not delete Component." });
       return false;
     }
   }
@@ -12554,6 +12579,7 @@ export default function CourseEditor({
         <PageEditorNavigation
           courseId={courseId}
           onMove={handleOutlineMove}
+          onCheckDelete={(level, id) => !guardLastChildDeletion(level, id)}
           leftPanelRef={leftPanelContainerRef}
           leftPanelWidth={leftPanelWidth}
           leftPanelMinWidth={LEFT_PANEL_MIN_WIDTH}
@@ -12667,8 +12693,8 @@ export default function CourseEditor({
                 {isPreviewLoading && (
                   <div className="absolute inset-0 flex items-center justify-center bg-white/85 backdrop-blur-[2px]">
                     <div className="rounded-xl border border-[#d8dee6] bg-white px-5 py-4 text-center shadow-sm">
-                      <p className="text-sm font-semibold text-[#1f2937]">Building course preview...</p>
-                      <p className="mt-1 text-xs text-[#6b7280]">The real preview will update when generation completes.</p>
+                      <p className="text-sm font-semibold text-[#1f2937]">{isPreviewBuilding ? "Building course preview..." : "Refreshing course preview..."}</p>
+                      <p className="mt-1 text-xs text-[#6b7280]">{isPreviewBuilding ? "The real preview will update when generation completes." : "The preview will update with the latest course content."}</p>
                     </div>
                   </div>
                 )}
@@ -14031,6 +14057,29 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
           title="Error"
           message={structureLoadError || ""}
           onClose={() => setDismissedStructureLoadError(structureLoadError)}
+        />
+
+        <ErrorDialog
+          open={!!deletionError}
+          title="Error"
+          message={deletionError ? (
+            <>
+              {deletionError.message}
+              {deletionError.followUp && (
+                <>
+                  <br />
+                  {typeof deletionError.followUp === "string" ? deletionError.followUp : (
+                    <>
+                      {deletionError.followUp.beforeReplaceIcon}
+                      <Replace size={15} strokeWidth={2} aria-hidden="true" className="inline-block align-[-3px] text-current" />
+                      {deletionError.followUp.afterReplaceIcon}
+                    </>
+                  )}
+                </>
+              )}
+            </>
+          ) : ""}
+          onClose={() => setDeletionError(null)}
         />
 
         <ErrorDialog
