@@ -14,6 +14,7 @@ const origin = require('../../../');
 const path = require("path");
 const { promisify } = require('util');
 const { getDB, closeDB } = require('./dbIndex');
+const updateCourseStartIds = require('../../../lib/courseStartIds');
 
 function ImportSource(req, done) {
   var dbInstance;
@@ -371,6 +372,9 @@ function ImportSource(req, done) {
           }, cb2);
         }, cb);
       },
+      async function remapCourseStartIds() {
+        await updateCourseStartIds(dbInstance, courseId, metadata.idMap);
+      },
       async function populateGlobals() {
         const dbRetrieve = promisify(dbInstance.retrieve.bind(dbInstance));
         const dbUpdate = promisify(dbInstance.update.bind(dbInstance));
@@ -423,9 +427,6 @@ function ImportSource(req, done) {
           // update the configObject with the new footer custom id
           const configObject = await db.collection('contentobjects').find({ _courseId: courseId }).toArray();
           if (!configObject) throw new Error('ConfigObject not found');
-
-          // Update course start IDs
-          await updateCourseStartId(db, course);
 
           // Update components with new view IDs
           await updateComponentCollection(db, components);
@@ -702,22 +703,6 @@ function ImportSource(req, done) {
     ], done);
   }
 
-  // Function to update the course's start IDs in the database
-  async function updateCourseStartId(db, course) {
-    const updatedCourse = updateStartIds(course);
-
-    try {
-      // Update the course's _start._startIds in the database
-      await db.collection('courses').updateOne(
-        { _id: course._id },
-        { $set: { '_start._startIds': updatedCourse._start._startIds } }
-      );
-      console.log('Course _start._startIds updated successfully');
-    } catch (err) {
-      throw new Error('Error updating the course start IDs: ' + err.message);
-    }
-  }
-
   // Function to update the component records with new properties
   async function updateComponentCollection(db, components) {
     // Update _viewId in the _additionalMaterial._items array
@@ -889,24 +874,6 @@ function ImportSource(req, done) {
         }
       })
     );
-  }
-
-  // Function to update the start IDs in the course object
-  function updateStartIds(course) {
-    const idMap = metadata.idMap;
-
-    if (!idMap || typeof idMap !== 'object') {
-      throw new Error('Invalid idMap. Ensure idMap is properly populated.');
-    }
-    if (!course._start || !Array.isArray(course._start._startIds)) {
-      throw new Error('Invalid course data. Ensure _start and _startIds are correctly defined.');
-    }
-    course._start._startIds = course._start._startIds.map(start => ({
-      ...start,
-      _id: idMap[start._id] || start._id, // Replace the old _id with the new one from idMap, if available
-    }));
-
-    return course;
   }
 
   function transformContent(type, originalData) {
