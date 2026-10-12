@@ -5406,10 +5406,18 @@ export async function getAssets(options: AssetQueryOptions = {}): Promise<AssetP
     params.append("search[filename]", text);
   }
   if (format && format !== "All") {
-    if (format === "other") {
+    if (format === "other" && aiTutorCourseId) {
+      // Match the classic AI Tutor picker only: the scaffold field is Asset:other and
+      // the old UI sends search.assetType={$in:['other']} together with aiTutorCourseId.
+      // Keep that behavior scoped to AI Tutor so normal "other files" flows continue to
+      // use the broader mime-based document bucket they already relied on.
+      params.append("search[assetType][$in][]", "other");
+    }
+    else if (format === "other") {
       params.append("search[mimeType][$not][$regex]", "image|audio|video");
       params.append("search[mimeType][$not][$options]", "i");
-    } else {
+    }
+    else {
       params.append("search[mimeType][$regex]", format);
       params.append("search[mimeType][$options]", "i");
     }
