@@ -1112,9 +1112,9 @@ const DEFAULT_ON_SCREEN_CONFIG: OnScreenConfig = {
 };
 
 const ON_SCREEN_ROW_DEFS: Array<{ key: OnScreenLevelKey; label: string }> = [
-  { key: 'page', label: 'Topic' },
-  { key: 'section', label: 'Section' },
-  { key: 'contentGroup', label: 'Content Group' },
+  { key: 'page', label: 'Topic (Page)' },
+  { key: 'section', label: 'Section (Article)' },
+  { key: 'contentGroup', label: 'Content Group (Block)' },
   { key: 'content', label: 'Component' },
 ];
 
