@@ -28,6 +28,7 @@ function MaskIcon({ file, className }: { file: string; className?: string }) {
 interface PageEditorNavigationProps {
   courseId: string;
   onMove?: (level: StructureLevel, id: string, parentId: string, beforeId: string | null) => void;
+  onCheckDelete?: (level: StructureLevel, id: string) => boolean;
   leftPanelRef: RefObject<HTMLDivElement | null>;
   leftPanelWidth: number;
   leftPanelMinWidth: number;
@@ -82,6 +83,7 @@ interface PageEditorNavigationProps {
 export default function PageEditorNavigation({
   courseId,
   onMove,
+  onCheckDelete,
   leftPanelRef,
   leftPanelWidth,
   leftPanelMinWidth,
@@ -140,6 +142,7 @@ export default function PageEditorNavigation({
           <CourseOutlinePanel
             courseId={courseId}
             onMove={onMove}
+            onCheckDelete={onCheckDelete}
             panelWidth={leftPanelWidth}
             panelActionsAlignToTitles={leftPanelActionsAlignToTitles}
             onClose={onClosePanels}
