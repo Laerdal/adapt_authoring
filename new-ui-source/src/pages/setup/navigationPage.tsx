@@ -743,7 +743,7 @@ export function NavigationPage({
                 {...acc("navFooter")}
                 title={getSchemaLabel(navigationFooterSchema, "Navigation Footer")}
                 hint={getSchemaHint(navigationFooterSchema)}
-                subtitle="Configure the footer navigation buttons shown on each page."
+                subtitle="Configure the footer navigation buttons shown on each topic; these can be overridden on a specific topic/page, if required."
               >
                 <ToggleSwitch checked={s.navFooter.enabled} onChange={(v) => setNavFooter({ enabled: v })} label={getSchemaLabel(getSchemaNode(navigationFooterSchema, "_isEnabled"), "Enable Navigation Footer")} hint={getSchemaHint(getSchemaNode(navigationFooterSchema, "_isEnabled"))} />
 
