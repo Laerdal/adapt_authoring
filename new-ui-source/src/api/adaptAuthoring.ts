@@ -397,7 +397,9 @@ export async function fetchDashboardCourses(
     }
   }
   const term = query.search?.trim();
-  if (term) params.set("search[title]", escapeRegExp(term)); // title search
+  if (term) {
+    params.set("search[displayTitle]", escapeRegExp(term)); // displayTitle search
+  }
   for (const tagId of query.tags ?? []) {
     params.append("search[tags][$all][]", tagId);
   }
