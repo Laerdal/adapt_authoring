@@ -675,6 +675,11 @@ export function parseDocToTree(doc: unknown[], resolveExisting: (id: string) => 
 export const MAX_COMPONENTS_PER_BLOCK = 1;
 
 export function enforceMaxComponentsPerBlock(topics: GenTopic[], existingBlocks: ContentNode[] = []): void {
+  const explicitlyEmittedGroupIds = new Set(
+    topics.flatMap((topic) => topic.sections.flatMap((section) =>
+      section.groups.map((group) => group.existingId).filter((id): id is string => !!id)
+    ))
+  );
   for (const t of topics) {
     for (const s of t.sections) {
       const out: GenGroup[] = [];
@@ -692,7 +697,11 @@ export function enforceMaxComponentsPerBlock(topics: GenTopic[], existingBlocks:
         // so repeated runs reuse them in the same order every time.
         const candidates = s.existingId
           ? existingBlocks
-              .filter((b) => b._parentId === s.existingId && b._id !== g.existingId && (b.title ?? b.displayTitle) === g.title)
+              .filter((b) =>
+                b._parentId === s.existingId &&
+                !explicitlyEmittedGroupIds.has(b._id) &&
+                (b.title ?? b.displayTitle) === g.title
+              )
               .sort((a, b) => (a._sortOrder ?? 0) - (b._sortOrder ?? 0))
           : [];
         let candidateIndex = 0;
