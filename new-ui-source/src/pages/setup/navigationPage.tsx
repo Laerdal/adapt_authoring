@@ -749,7 +749,7 @@ export function NavigationPage({
 
                 {s.navFooter.enabled && (
                   <div className="flex flex-col gap-3">
-                    <NavTextInput label={getSchemaLabel(getSchemaNode(navigationFooterSchema, "_footerText", "text"), "Footer text")} hint={getSchemaHint(getSchemaNode(navigationFooterSchema, "_footerText", "text"))} value={s.navFooter.footerText} onChange={(v) => setNavFooter({ footerText: v })} placeholder="Footer text" />
+                    <NavTextInput label="Footer text" hint={getSchemaHint(getSchemaNode(navigationFooterSchema, "_footerText", "text"))} value={s.navFooter.footerText} onChange={(v) => setNavFooter({ footerText: v })} placeholder="Footer text" />
                     <p className="text-[11px] text-[var(--life-neutral-300)] leading-snug">
                       Navigation Footer settings at the course level; can be overridden at the topic/page level, if required.
                     </p>
