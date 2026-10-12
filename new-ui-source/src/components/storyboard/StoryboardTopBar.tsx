@@ -339,6 +339,15 @@ export default function StoryboardTopBar({
         >
           Generate Course <ArrowRight className="h-3.5 w-3.5" />
         </button>
+        <button
+          type="button"
+          onClick={() => setIsGuideOpen(true)}
+          className="sb-toolbar-btn"
+          aria-haspopup="dialog"
+          aria-expanded={isGuideOpen}
+        >
+          <Lightbulb className="h-3.5 w-3.5" /> How-To Guide
+        </button>
       </div>
 
       <GuideDialog
