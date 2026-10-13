@@ -719,7 +719,7 @@ export default function HomePage() {
                       showPermissionDenied('Delete Course', 'You do not have permission to delete this course.');
                     }
                   }}
-                  viewHref={course.backendId ? `/course/${course.backendId}/preview` : ""}
+                  viewHref={course.backendId ? `/course/${course.backendId}/setup` : ""}
                   onUpdate={(patch) => handleUpdate(course.id, patch)}
                   onCopy={() => handleCopy(course.id)}
                   onCopyId={() => handleCopyId(course.id)}
