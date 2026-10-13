@@ -9,6 +9,7 @@ import ErrorDialog from "@/components/common/ErrorDialog";
 interface CourseCardProps {
   id: number;
   title: string;
+  body?: string;
   description: string;
   savedDate: string;
   authorName?: string | null;
@@ -19,7 +20,7 @@ interface CourseCardProps {
   showAuthor?: boolean;
   canManageCourses?: boolean;
   onPermissionDenied?: (action: "create" | "edit" | "delete") => void;
-  onUpdate: (patch: { title?: string; description?: string; heroAssetId?: string | null; tags?: string[] }) => void;
+  onUpdate: (patch: { title?: string; body?: string; heroAssetId?: string | null; tags?: string[] }) => void;
   onCopy: () => void;
   onCopyId: () => void;
   onDelete: () => void;
@@ -27,14 +28,25 @@ interface CourseCardProps {
 }
 
 export default function CourseCard({
-  id, title, description, savedDate, authorName = null, imageUrl, heroAssetId = null, tags = [],
+  id, title, body, description, savedDate, authorName = null, imageUrl, heroAssetId = null, tags = [],
   view = "grid", showAuthor = false, canManageCourses = true, onPermissionDenied, onUpdate, onCopy, onCopyId, onDelete, viewHref,
 }: CourseCardProps) {
   const [modalOpen, setModalOpen]           = useState(false);
   const [menuOpen, setMenuOpen]             = useState(false);
   const [deleteOpen, setDeleteOpen]         = useState(false);
   const [editTitle, setEditTitle]           = useState(title);
-  const [editDesc, setEditDesc]             = useState(description);
+  const cardDescription = (body && body.trim()) ? body : description;
+  const displayDescription = cardDescription
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+  const [editDesc, setEditDesc]             = useState(displayDescription);
   const [editImage, setEditImage]           = useState<string | null>(imageUrl ?? null);
   const [editHeroAssetId, setEditHeroAssetId] = useState<string | null>(heroAssetId);
   const [editTags, setEditTags]             = useState<string[]>(tags);
@@ -73,7 +85,7 @@ export default function CourseCard({
       return;
     }
     setEditTitle(title);
-    setEditDesc(description);
+    setEditDesc(displayDescription);
     setEditImage(imageUrl ?? null);
     setEditHeroAssetId(heroAssetId);
     setEditTags(tags);
@@ -85,7 +97,7 @@ export default function CourseCard({
 
   function handleSave() {
     if (!trimmedTitle) return; // reject empty / whitespace-only titles
-    onUpdate({ title: trimmedTitle, description: editDesc.trim(), heroAssetId: editHeroAssetId, tags: editTags });
+    onUpdate({ title: trimmedTitle, body: editDesc.trim(), heroAssetId: editHeroAssetId, tags: editTags });
     setModalOpen(false);
   }
 
@@ -241,7 +253,7 @@ export default function CourseCard({
                 {menuOpen && <MoreMenu />}
               </div>
             </div>
-            <p title={description} className="text-xs text-[#6b7280] leading-relaxed line-clamp-2 flex-1">{description}</p>
+            <p title={displayDescription} className="text-xs text-[#6b7280] leading-relaxed line-clamp-2 flex-1">{displayDescription}</p>
             <TagOverflowList tags={tags} />
             <div className="flex items-center gap-1.5 text-xs text-[#9ca3af]">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -277,7 +289,7 @@ export default function CourseCard({
           {/* Main content */}
           <div className="flex-1 min-w-0">
             <h3 title={title} className="font-semibold text-[#111827] text-sm leading-snug truncate">{title}</h3>
-            <p title={description} className="text-xs text-[#6b7280] mt-0.5 line-clamp-1 leading-relaxed">{description}</p>
+            <p title={displayDescription} className="text-xs text-[#6b7280] mt-0.5 line-clamp-1 leading-relaxed">{displayDescription}</p>
             <div className="flex items-center gap-2 mt-1.5 flex-wrap">
               <div className="flex items-center gap-1 text-xs text-[#9ca3af]">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">

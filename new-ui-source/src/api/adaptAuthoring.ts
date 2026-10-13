@@ -271,6 +271,7 @@ export interface DashboardCourse {
   id: number;
   backendId: string;
   title: string;
+  body: string;
   description: string;
   savedDate: string;
   savedDateTs: number;
@@ -285,6 +286,7 @@ interface EngineCourse {
   _id: string;
   title?: string;
   displayTitle?: string;
+  body?: string;
   description?: string;
   heroImage?: string | null;
   updatedAt?: string;
@@ -324,6 +326,26 @@ function courseAuthorName(createdBy: EngineCourse["createdBy"]): string | null {
   return matchedName?.trim() || null;
 }
 
+function stripHtmlToText(value: string): string {
+  return value
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function getCourseSummaryDescription(doc: Pick<EngineCourse, "body" | "description">): string {
+  const bodyText = typeof doc.body === "string" ? stripHtmlToText(doc.body) : "";
+  if (bodyText) return bodyText;
+  const metadataText = typeof doc.description === "string" ? stripHtmlToText(doc.description) : "";
+  return metadataText;
+}
+
 function toDashboardCourse(doc: EngineCourse, index: number): DashboardCourse {
   const ts = doc.updatedAt ? new Date(doc.updatedAt).getTime() : 0;
   const heroAssetId = doc.heroImage && OBJECT_ID.test(doc.heroImage) ? doc.heroImage : null;
@@ -331,7 +353,8 @@ function toDashboardCourse(doc: EngineCourse, index: number): DashboardCourse {
     id: index + 1,
     backendId: doc._id,
     title: doc.displayTitle?.trim() || doc.title?.trim() || "Untitled Course",
-    description: doc.description || "",
+    body: typeof doc.body === "string" ? doc.body : "",
+    description: getCourseSummaryDescription(doc),
     savedDate: ts
       ? new Date(ts).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
       : "",

@@ -15,6 +15,7 @@ interface Course {
   id: number
   backendId?: string
   title: string
+  body?: string
   description: string
   savedDate: string
   savedDateTs: number   // unix ms for sorting
@@ -309,7 +310,7 @@ export default function HomePage() {
     }
   }
 
-  async function handleUpdate(id: number, patch: { title?: string; description?: string; heroAssetId?: string | null; tags?: string[] }) {
+  async function handleUpdate(id: number, patch: { title?: string; body?: string; heroAssetId?: string | null; tags?: string[] }) {
     const target = courses.find((c) => c.id === id)
     if (!target?.backendId) {
       showToast('Could not resolve course ID for update.', 'info')
@@ -318,7 +319,7 @@ export default function HomePage() {
     try {
       await updateCourse(target.backendId, {
         title: patch.title,
-        description: patch.description,
+        body: patch.body,
         heroAssetId: patch.heroAssetId,
         tags: patch.tags,
       })
