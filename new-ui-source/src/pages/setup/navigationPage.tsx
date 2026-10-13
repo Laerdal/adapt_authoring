@@ -384,6 +384,7 @@ export function NavigationPage({
     getSchemaNode(courseSchema, "_extensions", "_navigationFooter"),
     getSchemaNode(configSchema, "_extensions", "_navigationFooter"),
   );
+  const navigationFooterToggleSchema = getSchemaNode(navigationFooterSchema, "_toggleNavigation");
 
   // ── State updaters (settings is deeply nested; keep mutations narrow) ──
   const setStart = (p: Partial<NavigationSettings["start"]>) =>
@@ -749,6 +750,26 @@ export function NavigationPage({
 
                 {s.navFooter.enabled && (
                   <div className="flex flex-col gap-3">
+                    <div className="flex flex-col gap-1">
+                      <InfoFieldLabel
+                        label={getSchemaLabel(navigationFooterToggleSchema, "Toggle Navigation")}
+                        hint={getSchemaHint(navigationFooterToggleSchema)}
+                      />
+                      <div className="ml-2">
+                        <CheckboxRow
+                          checked={s.navFooter.isLogicalBackNavigation}
+                          onChange={(v) => setNavFooter({ isLogicalBackNavigation: v })}
+                          label={getSchemaLabel(getSchemaNode(navigationFooterToggleSchema, "_isLogicalBackNavigation"), "Logical back navigation")}
+                          hint={getSchemaHint(getSchemaNode(navigationFooterToggleSchema, "_isLogicalBackNavigation"))}
+                        />
+                        <CheckboxRow
+                          checked={s.navFooter.includeSubmenuInNavigation}
+                          onChange={(v) => setNavFooter({ includeSubmenuInNavigation: v })}
+                          label={getSchemaLabel(getSchemaNode(navigationFooterToggleSchema, "_includeSubmenuInNavigation"), "Include submenu in sequential navigation")}
+                          hint={getSchemaHint(getSchemaNode(navigationFooterToggleSchema, "_includeSubmenuInNavigation"))}
+                        />
+                      </div>
+                    </div>
                     <NavTextInput label="Footer text" hint={getSchemaHint(getSchemaNode(navigationFooterSchema, "_footerText", "text"))} value={s.navFooter.footerText} onChange={(v) => setNavFooter({ footerText: v })} placeholder="Footer text" />
                     <p className="text-[11px] text-[var(--life-neutral-300)] leading-snug">
                       Navigation Footer settings at the course level; can be overridden at the topic/page level, if required.
