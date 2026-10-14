@@ -282,7 +282,7 @@ function Notice({ tone, title, children }: { tone: "info" | "success" | "warning
 function SummaryItem({ label, value, tone }: { label: string; value: ReactNode; tone?: string }) {
   return (
     <div className="flex items-start justify-between gap-4 rounded-xl bg-[var(--life-color-bg-surface-subtle)] px-4 py-3">
-      <span className="text-sm text-[var(--life-color-text-subtle)]">{label}</span>
+      <span className="text-sm text-[var(--life-color-text-default)]">{label}</span>
       <span className={clsx("text-right text-sm font-semibold text-[var(--life-color-text-default)]", tone)}>{value}</span>
     </div>
   );
