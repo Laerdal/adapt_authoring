@@ -4,6 +4,7 @@
 // keep engine-specific endpoint knowledge here, not in the pages.
 
 import { apiClient } from "./client";
+import { trackStudioWorkflow } from "../utils/studioHotjarAnalytics";
 import type { ImportResult } from "../types/storyboardImport";
 import {
   buildGraphicField,
@@ -5036,17 +5037,25 @@ export interface PublishCourseResult {
 // GET /download/:tenant/:course/:title/download.zip, where `:title` is only
 // used for the downloaded file's display name.
 export async function publishCoursePackage(tenantId: string, courseId: string): Promise<PublishCourseResult> {
-  const result = await apiClient.get<{ success: boolean; zipName?: string; message?: string }>(
-    `/download/${tenantId}/${courseId}`,
-  );
-  if (!result.success || !result.zipName) {
-    return { success: false, message: result.message || "Publish failed." };
+  trackStudioWorkflow('publish', 'started');
+  try {
+    const result = await apiClient.get<{ success: boolean; zipName?: string; message?: string }>(
+      `/download/${tenantId}/${courseId}`,
+    );
+    if (!result.success || !result.zipName) {
+      trackStudioWorkflow('publish', 'failed');
+      return { success: false, message: result.message || "Publish failed." };
+    }
+    trackStudioWorkflow('publish', 'succeeded');
+    return {
+      success: true,
+      zipName: result.zipName,
+      downloadUrl: `/download/${tenantId}/${courseId}/${encodeURIComponent(result.zipName)}/download.zip`,
+    };
+  } catch (error) {
+    trackStudioWorkflow('publish', 'failed');
+    throw error;
   }
-  return {
-    success: true,
-    zipName: result.zipName,
-    downloadUrl: `/download/${tenantId}/${courseId}/${encodeURIComponent(result.zipName)}/download.zip`,
-  };
 }
 
 // Auto-installs the Laerdal Validator Enabler extension when the user turns on

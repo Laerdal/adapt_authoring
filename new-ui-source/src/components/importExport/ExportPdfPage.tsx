@@ -3,6 +3,7 @@ import { UnsavedChangesModal } from "../../pages/setup/unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "../../pages/setup/useUnsavedChangesNavigationGuard";
 import { ensureCoursePreview } from "../../api/adaptAuthoring";
 import { useAuth } from "../../context/AuthContext";
+import { trackStudioWorkflow } from "../../utils/studioHotjarAnalytics";
 import AssetPickerModal from "../common/AssetPickerModal";
 import { CheckboxIndicator } from "../common/Checkbox";
 import {
@@ -511,6 +512,8 @@ export default function ExportPdfPage({
     }
 
     setExporting(true);
+    let handedOff = false;
+    trackStudioWorkflow('export_pdf_handoff', 'started');
     try {
       if (dirty) {
         const saved = await handleSave();
@@ -547,8 +550,10 @@ export default function ExportPdfPage({
         return;
       }
 
+      handedOff = true;
       setToast({ type: "success", message: "PDF export started in Preview" });
     } finally {
+      trackStudioWorkflow('export_pdf_handoff', handedOff ? 'succeeded' : 'failed');
       setExporting(false);
     }
   }

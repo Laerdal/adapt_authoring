@@ -39,6 +39,7 @@ import { AssetManagementWorkspace } from "./AssetManagementPage";
 import { PageTransitionBoundary, usePageTransition } from "../context/PageTransitionContext";
 import { usePageLoader } from "../hooks";
 import type { AssetPickerRequest, AssetPickerResult } from "../types/assetPicker";
+import { trackStudioView } from "../utils/studioHotjarAnalytics";
 
 const ICON_BASE = "/new/assets/icons";
 
@@ -3064,6 +3065,7 @@ function CourseCreationCenterContent() {
   useEffect(() => {
     // Avoid carrying scroll position across panels (e.g. opening Export PDF mid-page).
     contentScrollRef.current?.scrollTo({ top: 0, behavior: "auto" });
+    trackStudioView();
   }, [activeNav]);
 
   return (
@@ -3269,7 +3271,7 @@ function CourseCreationCenterContent() {
         )}
 
         {/* -- Right content panel -- */}
-        <main ref={contentScrollRef} className={`flex-1 min-h-0 min-w-0 bg-[#f7f9fb] ${fullCanvasPanels.has(activeNav) || activeNav === "storyboarding" || activeNav === "translation" ? "flex flex-col overflow-hidden" : "overflow-y-auto px-8 py-8"}`}>
+        <main ref={contentScrollRef} data-studio-settings-view={activeNav} data-cs-scroll-container="" className={`flex-1 min-h-0 min-w-0 bg-[#f7f9fb] ${fullCanvasPanels.has(activeNav) || activeNav === "storyboarding" || activeNav === "translation" ? "flex flex-col overflow-hidden" : "overflow-y-auto px-8 py-8"}`}>
           <PageTransitionBoundary key={activeNav}>
             {renderPanel()}
           </PageTransitionBoundary>

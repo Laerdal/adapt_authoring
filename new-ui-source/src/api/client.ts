@@ -5,6 +5,7 @@
 
 import { API_BASE_URL } from "@/utils/constants";
 import { redirectToLogin } from "@/utils/authRedirect";
+import { getStudioApiOperation, trackStudioWorkflow } from "@/utils/studioHotjarAnalytics";
 
 export interface RequestOptions extends RequestInit {
   headers?: Record<string, string>;
@@ -24,6 +25,8 @@ class ApiClient {
   async request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
     const headers = { ...this.getHeaders(), ...options.headers };
+    const analyticsOperation = getStudioApiOperation(endpoint, options.method || 'GET');
+    if (analyticsOperation) trackStudioWorkflow(analyticsOperation, 'started');
 
     try {
       const response = await fetch(url, {
@@ -53,8 +56,13 @@ class ApiClient {
         throw err;
       }
 
-      return await response.json();
+      const result = await response.json();
+      if (analyticsOperation) {
+        trackStudioWorkflow(analyticsOperation, result?.success === false ? 'failed' : 'succeeded');
+      }
+      return result;
     } catch (error) {
+      if (analyticsOperation) trackStudioWorkflow(analyticsOperation, 'failed');
       console.error("API Error:", error);
       throw error;
     }

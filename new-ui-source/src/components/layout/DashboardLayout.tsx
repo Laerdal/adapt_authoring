@@ -19,7 +19,7 @@ export default function DashboardLayout() {
 
       <div className="flex flex-col flex-1 overflow-hidden min-w-0">
         <Header onMenuToggle={() => setSidebarOpen((o) => !o)} actions={headerActions} />
-        <main className="flex-1 overflow-y-auto">
+        <main data-cs-scroll-container="" className="flex-1 overflow-y-auto">
           <Outlet context={{ setHeaderActions } satisfies LayoutContext} />
         </main>
       </div>

@@ -1,4 +1,5 @@
 import { apiClient } from "../api/client";
+import { trackStudioWorkflow } from "../utils/studioHotjarAnalytics";
 
 export interface ExportSourceResponse {
   success?: boolean;
@@ -59,10 +60,13 @@ export async function runExportSourceAction(options: ExportSourceActionOptions):
 
   setExportingSource(true);
   onProcessingStart?.();
+  trackStudioWorkflow('export', 'started');
   try {
     await exportSourceCourse(tenantId, courseId);
+    trackStudioWorkflow('export', 'succeeded');
     onDownloadStarted?.();
   } catch (error: unknown) {
+    trackStudioWorkflow('export', 'failed');
     const message = error instanceof Error ? error.message : "Export failed";
     onError?.(message);
   } finally {

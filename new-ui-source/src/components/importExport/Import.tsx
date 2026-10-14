@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { trackStudioWorkflow } from '@/utils/studioHotjarAnalytics'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -282,6 +283,7 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
     if (!selectedFile) return
     setStep('checking')
     setErrorMsg(null)
+    trackStudioWorkflow('course_import_check', 'started')
 
     try {
       const formData = new FormData()
@@ -309,7 +311,9 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
       const data: CheckResult = await response.json()
       setCheckResult(data)
       setStep('results')
+      trackStudioWorkflow('course_import_check', 'succeeded')
     } catch (e: unknown) {
+      trackStudioWorkflow('course_import_check', 'failed')
       const msg = e instanceof Error ? e.message : 'An unexpected error occurred.'
       setErrorMsg(msg)
       setStep('form')
@@ -321,6 +325,7 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
   async function handleConfirmImport() {
     setStep('importing')
     setErrorMsg(null)
+    trackStudioWorkflow('course_import', 'started')
 
     try {
       const response = await fetch('/importsource', {
@@ -339,9 +344,11 @@ export default function ImportCourseModal({ isOpen, onClose, onSuccess }: Import
       const result = await response.json().catch(() => ({})) as { body?: string; deprecatedPlugins?: string[] }
       const deprecated = result.deprecatedPlugins ?? []
 
+      trackStudioWorkflow('course_import', 'succeeded')
       resetAndClose()
       onSuccess(deprecated.length > 0 ? deprecated : undefined)
     } catch (e: unknown) {
+      trackStudioWorkflow('course_import', 'failed')
       const msg = e instanceof Error ? e.message : 'Import failed.'
       setErrorMsg(msg)
       setStep('results')

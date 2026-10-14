@@ -64,6 +64,7 @@ export default function ProfileMenu() {
     <div ref={profileRef} className="relative shrink-0">
       <button
         type="button"
+        data-cs-mask=""
         onClick={() => setProfileOpen((open) => !open)}
         aria-label="Profile menu"
         aria-expanded={profileOpen}
@@ -74,7 +75,7 @@ export default function ProfileMenu() {
 
       {profileOpen && (
         <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-[#e5e7eb] rounded-xl shadow-xl z-50 overflow-hidden">
-          <div className="px-4 py-3 border-b border-[#f3f4f6]">
+          <div data-cs-mask="" className="px-4 py-3 border-b border-[#f3f4f6]">
             <p className="text-sm font-semibold text-[#111827]">{displayName}</p>
             {email && <p className="text-xs text-[#6b7280] mt-0.5">{email}</p>}
             {role && <span className="inline-block mt-1.5 px-2 py-0.5 rounded-full bg-[#fef3c7] text-[#92400e] text-[10px] font-semibold">{role}</span>}
