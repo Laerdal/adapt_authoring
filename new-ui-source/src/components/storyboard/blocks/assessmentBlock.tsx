@@ -708,9 +708,6 @@ export const assessmentBlock = createReactBlockSpec(
             </HeaderBtn>
             <HeaderBtn
               onClick={() => {
-                // Comments only ever live at Page/Article level (never
-                // Block/Component) — resolve to the enclosing heading rather
-                // than this question's own block id.
                 const anchor = resolveCommentAnchor(editor.document, block.id);
                 if (!anchor) return;
                 storyboardActions.openComment({ blockId: anchor.id, label: `${anchor.text || 'Untitled'} · ${LABELS[kind].toUpperCase()}` });
@@ -757,11 +754,23 @@ export const assessmentBlock = createReactBlockSpec(
             </div>
           </div>
 
+          <label className="mt-2 block">
+            <span className={labelCls}>Attempts allowed</span>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={model.attempts ?? 1}
+              onKeyDown={stop}
+              onChange={(event) => update({ ...model, attempts: Number(event.target.value) })}
+              className={inputCls}
+            />
+          </label>
+
           <FeedbackGroup fb={fb} set={(f) => update({ ...model, feedback: f })} />
 
           {/* Footer + readiness */}
           <div className="mt-2">
-            <p className="mt-3">{renderInstructionHtml(model, kind)}</p>
             {issues.length > 0 && (
               <div className="mt-2 space-y-1 rounded-md border border-[#fee2e2] bg-[#fef2f2] p-2">
                 {issues.map((issue, i) => (
