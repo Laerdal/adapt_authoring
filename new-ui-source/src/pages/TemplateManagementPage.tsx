@@ -1,8 +1,10 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react'
-import { getTemplates, deleteTemplate, updateTemplate, type TemplateScope } from '@/api/adaptAuthoring'
+import { getTemplates, deleteTemplate, updateTemplate, type TemplateScope, type DashboardTemplate } from '@/api/adaptAuthoring'
+import { Share2 } from 'lucide-react'
 import { usePageLoader } from '@/hooks'
 import AiAssistant from '@/components/common/AiAssistant'
 import ConfirmDialog from '@/components/common/ConfirmDialog'
+import ShareTemplateDialog from '@/components/common/ShareTemplateDialog'
 
 type TemplateType = 'Topic' | 'Section' | 'Content Group' | 'Component'
 
@@ -49,7 +51,7 @@ const TYPE_COLORS: Record<TemplateType, { bg: string; text: string }> = {
 }
 
 export default function TemplateManagementPage() {
-  const [templates, setTemplates] = useState<Template[]>([])
+  const [templates, setTemplates] = useState<DashboardTemplate[]>([])
   const [loading, setLoading] = useState(true)
   const [scope, setScope] = useState<TemplateScope>('mine')
   const templateRequestIdRef = useRef(0)
@@ -85,6 +87,13 @@ export default function TemplateManagementPage() {
 
   // Delete modal
   const [deleteTarget, setDeleteTarget] = useState<Template | null>(null)
+  const [shareTarget, setShareTarget] = useState<DashboardTemplate | null>(null)
+
+  async function saveSharing(isShared: boolean, userIds: string[]) {
+    if (!shareTarget) return
+    await updateTemplate(shareTarget.backendId, { _isShared: isShared, _shareWithUsers: userIds })
+    await loadTemplates()
+  }
 
   function openEdit(t: Template) {
     setEditTarget(t)
@@ -275,6 +284,16 @@ export default function TemplateManagementPage() {
                           <div className="flex items-center justify-end gap-1">
                             <button
                               type="button"
+                              onClick={() => setShareTarget(t)}
+                              disabled={!t.backendId}
+                              title="Share"
+                              aria-label={`Share ${t.name}`}
+                              className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#dbeeff] hover:text-[#2d6fa8] disabled:opacity-40 transition-colors"
+                            >
+                              <Share2 size={15} />
+                            </button>
+                            <button
+                              type="button"
                               onClick={() => openEdit(t)}
                               title="Edit"
                               className="p-1.5 rounded-lg text-[#6b7280] hover:bg-[#dbeeff] hover:text-[#2d6fa8] transition-colors"
@@ -409,6 +428,9 @@ export default function TemplateManagementPage() {
       </div>
 
       {/* Edit Modal */}
+      {shareTarget && (
+        <ShareTemplateDialog template={shareTarget} onSave={saveSharing} onClose={() => setShareTarget(null)} />
+      )}
       {editTarget && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
