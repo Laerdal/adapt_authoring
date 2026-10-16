@@ -39,7 +39,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog';
 import { BasicRichTextEditor } from '@/components/common';
 import { sanitizeEditorHtml } from '@/components/common/BasicRichTextEditor';
 import { CheckboxIndicator } from '@/components/common/Checkbox';
-import { emptyMediaData, safePreviewSrc, toEmbedUrl, type AssetRef, type ImageData, type MediaData, type MediaSourceKey } from '../mediaMapping';
+import { emptyMediaData, h5pEmbedUrl, safePreviewSrc, toEmbedUrl, type AssetRef, type ImageData, type MediaData, type MediaSourceKey } from '../mediaMapping';
 import SamaritanIcon from '../SamaritanIcon';
 import H5pPreview from '../H5pPreview';
 
@@ -303,7 +303,7 @@ const EXTERNAL_ASSET_PLACEHOLDER: Record<AssetKind, string> = {
   image: 'https://… (direct image link)',
   audio: 'https://… (direct audio file link)',
   video: 'https://… (or YouTube / Vimeo link)',
-  h5p: 'https://… (direct .h5p package link)',
+  h5p: 'https://… (H5P embed-page URL)',
   other: 'https://…',
 };
 
@@ -321,11 +321,16 @@ function AssetField({
   const [picking, setPicking] = useState(false);
   const [external, setExternal] = useState(false);
   const [url, setUrl] = useState('');
+  const [urlError, setUrlError] = useState('');
   const has = !!(value && (value.link || value.url));
 
   const applyExternal = () => {
     const trimmed = url.trim();
     if (!trimmed) return;
+    if (assetType === 'h5p' && !h5pEmbedUrl(trimmed)) {
+      setUrlError('Use an HTTP(S) embed-page URL. Upload .h5p packages through the asset library.');
+      return;
+    }
     onChange({ link: trimmed, url: trimmed, external: true });
     setExternal(false);
     setUrl('');
@@ -349,11 +354,12 @@ function AssetField({
           </div>
         </div>
       ) : external ? (
+        <div>
         <div className="flex items-center gap-2">
           <input
             autoFocus
             value={url}
-            onChange={(e) => setUrl(e.target.value)}
+            onChange={(e) => { setUrl(e.target.value); setUrlError(''); }}
             onKeyDown={(e) => {
               e.stopPropagation();
               if (e.key === 'Enter') applyExternal();
@@ -367,6 +373,8 @@ function AssetField({
           <button type="button" onClick={() => setExternal(false)} className="text-xs text-muted-foreground hover:text-foreground">
             Cancel
           </button>
+        </div>
+        {urlError && <p role="alert" className="mt-1 text-xs text-red-600">{urlError}</p>}
         </div>
       ) : (
         <div className="flex flex-wrap gap-2">

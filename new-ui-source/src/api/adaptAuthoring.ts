@@ -3481,8 +3481,6 @@ export async function saveStoryboardToCourse(
         for (const asset of mediaAssetRefs(parsed.media)) {
           tasks.push(linkContentAsset(courseId, "component", id, info.parentId || "", filenameFromLink(asset.link), asset.assetId!));
         }
-        assetLink = parsed.media?.asset?.link;
-        assetId = parsed.media?.asset?.assetId;
         patch.body = parsed.description || "";
         mergeProperties(patch, { instruction: parsed.instruction || "" });
       } else if (kind === "groupedContent" && isGrouped) {

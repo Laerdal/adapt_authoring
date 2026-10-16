@@ -37,8 +37,12 @@ export interface MediaData {
 }
 
 export function mediaAssetRefs(media?: MediaData): AssetRef[] {
-  return [media?.asset, media?.poster, ...MEDIA_SOURCE_KEYS.map((key) => media?.sourceAssets?.[key])]
-    .filter((asset): asset is AssetRef => !!asset?.assetId && !!filenameFromLink(asset.link));
+  const assets = new Map<string, AssetRef>();
+  for (const asset of [media?.asset, media?.poster, ...MEDIA_SOURCE_KEYS.map((key) => media?.sourceAssets?.[key])]) {
+    const filename = filenameFromLink(asset?.link);
+    if (asset?.assetId && filename && !assets.has(filename)) assets.set(filename, asset);
+  }
+  return [...assets.values()];
 }
 
 export function emptyMediaData(): MediaData {
@@ -82,7 +86,18 @@ export function h5pContentRoot(asset?: AssetRef): string | null {
   if (asset?.external || !isCourseAssetLink(link) || !/\.h5p$/i.test(link)) return null;
   const filename = filenameFromLink(link).replace(/\.h5p$/i, '');
   if (!filename || /[/\\]/.test(filename) || filename === '.' || filename === '..') return null;
-  return `/assets/${encodeURIComponent(filename)}`;
+  return `/h5p-preview-assets/packages/${encodeURIComponent(filename)}`;
+}
+
+export function h5pEmbedUrl(raw?: string): string {
+  try {
+    const url = new URL((raw || '').trim());
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return '';
+    if (/\.h5p\/?$/i.test(decodeURIComponent(url.pathname))) return '';
+    return url.href;
+  } catch {
+    return '';
+  }
 }
 
 // The DAM filename (hash.ext) from a `course/assets/<filename>` link — this is
@@ -267,17 +282,31 @@ export function buildMediaField(kind: "video" | "audio", media?: MediaData, orig
   const handledTypes = ['transcript', 'captions', 'descriptions', 'chapters'];
   const tracks = [...existingCc];
   for (const type of handledTypes) {
-    const index = tracks.findIndex((track) => String(track._srcType || '').toLowerCase() === type);
+    const selected = media?.originalTracks?.find((track) => String(track._srcType || '').toLowerCase() === type);
     const next = newTracks.find((track) => track._srcType === type);
-    if (index < 0) {
-      if (next) tracks.push(next);
-      continue;
+    const identity = (track: Record<string, unknown>): string => {
+      const fields = ['_srcAssetTranscript', '_transcriptInline', '_srcTypeCaption', '_srcTypeDescriptions', '_srcTypeChapters'];
+      const settings = fields.map((key) => track[key] as Record<string, unknown> | undefined).find(Boolean) || {};
+      const reference = selected ?? next;
+      const selectedSettings = reference && fields.map((key) => reference[key] as Record<string, unknown> | undefined).find(Boolean);
+      let language = selectedSettings?.srclang ? settings.srclang : selectedSettings?.label ? settings.label : settings.srclang ?? settings.label;
+      if (language === undefined) {
+        const source = settings.src ?? settings.inlineTranscriptBody;
+        const selectedSource = selectedSettings?.src ?? selectedSettings?.inlineTranscriptBody;
+        language = source === selectedSource ? media?.language || 'en' : source;
+      }
+      return JSON.stringify([track._id ?? null, language ?? null]);
+    };
+    let index = tracks.findIndex((track) => String(track._srcType || '').toLowerCase() === type &&
+      (selected ? identity(track) === identity(selected) : media?.originalTracks === undefined));
+    if (index < 0 && next && !selected) {
+      index = tracks.findIndex((track) => String(track._srcType || '').toLowerCase() === type && identity(track) === identity(next));
     }
     if (!next) {
-      tracks.splice(index, 1);
+      if (index >= 0) tracks.splice(index, 1);
       continue;
     }
-    const previous = tracks[index];
+    const previous = index >= 0 ? tracks[index] : selected ?? {};
     const merged = { ...previous, ...next };
     for (const key of ['_srcAssetTranscript', '_transcriptInline', '_srcTypeCaption', '_srcTypeDescriptions', '_srcTypeChapters']) {
       if (!(key in next)) {
@@ -289,7 +318,8 @@ export function buildMediaField(kind: "video" | "audio", media?: MediaData, orig
       merged[key] = { ...edited, ...settings, ...('src' in edited ? { src: edited.src } : {}),
         ...('inlineTranscriptBody' in edited ? { inlineTranscriptBody: edited.inlineTranscriptBody } : {}) };
     }
-    tracks[index] = merged;
+    if (index >= 0) tracks[index] = merged;
+    else tracks.push(merged);
   }
   _media.cc = tracks;
   return { _media };
