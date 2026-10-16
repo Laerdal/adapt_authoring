@@ -5174,10 +5174,14 @@ export interface DashboardTemplate {
   description: string;
   timestamp: Date;
   author: string;
+  isShared: boolean;
+  shareWithUsers: string[];
 }
 
 interface EngineTemplate {
   _id: string;
+  _isShared?: boolean;
+  _shareWithUsers?: string[];
   title?: string;
   displayName?: string;
   name?: string;
@@ -5207,6 +5211,8 @@ export async function getTemplates(
     description: t.description || "",
     timestamp: new Date(t.updatedAt || t.createdAt || 0),
     author: t.author || "",
+    isShared: !!t._isShared,
+    shareWithUsers: t._shareWithUsers || [],
   }));
 }
 
@@ -5214,7 +5220,7 @@ export async function getTemplates(
 // { title, description } to the templating content endpoint.
 export function updateTemplate(
   backendId: string,
-  patch: { title?: string; description?: string }
+  patch: { title?: string; description?: string; _isShared?: boolean; _shareWithUsers?: string[] }
 ): Promise<unknown> {
   return apiClient.put(`/api/content/templating/${backendId}`, patch);
 }
