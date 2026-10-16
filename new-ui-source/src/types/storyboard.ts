@@ -122,10 +122,7 @@ export const INSERT_META: Record<
 };
 
 // ── Assessment authoring model (spec AC5) ───────────────────────────────────
-// Simplified, generation-ready data captured by the assessment block. Advanced
-// settings (feedback, scoring, attempts) are deliberately omitted — they are
-// configured later in the Page Editor. The Phase 4 generator maps this onto the
-// concrete Adapt component `properties`.
+// Generation-ready question data mapped onto Adapt component properties.
 
 export const ASSESSMENT_KINDS = ['mcq', 'gmcq', 'matching', 'reorder', 'textInput', 'slider', 'checklist'] as const;
 export type AssessmentKind = (typeof ASSESSMENT_KINDS)[number];
@@ -180,6 +177,7 @@ export interface AssessmentFeedback {
 
 export interface AssessmentData {
   question: string;
+  attempts?: number;
   showTitle?: boolean;
   instruction?: string;
   options?: McqOption[]; // mcq, gmcq, checklist
@@ -210,7 +208,7 @@ const FOOTER_BY_KIND: Record<AssessmentKind, string> = {
 };
 
 export function defaultAssessmentData(kind: AssessmentKind): AssessmentData {
-  const base = { showTitle: true, instruction: FOOTER_BY_KIND[kind], feedback: emptyFeedback() };
+  const base = { showTitle: true, attempts: 1, instruction: FOOTER_BY_KIND[kind], feedback: emptyFeedback() };
   switch (kind) {
     case 'mcq':
     case 'gmcq':
@@ -271,6 +269,9 @@ export function validateAssessment(kind: AssessmentKind, data: AssessmentData, b
   const hasQuestion = !!(data.question && data.question.trim());
   const hasTitle = !!blockTitle.trim();
   if (!hasQuestion && !hasTitle) issues.push('Question text is required.');
+  if (data.attempts !== undefined && (!Number.isInteger(data.attempts) || data.attempts < 1)) {
+    issues.push('Attempts allowed must be a whole number of at least 1.');
+  }
 
   switch (kind) {
     case 'mcq':
@@ -344,6 +345,7 @@ export function validateAssessment(kind: AssessmentKind, data: AssessmentData, b
 // where the exact Laerdal schema differs (verify against the installed plugin).
 export function buildAssessmentFields(kind: AssessmentKind, data: AssessmentData): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
+  if (data.attempts !== undefined) patch._attempts = data.attempts;
   const fb = data.feedback;
   if (fb) {
     patch._feedback = {
@@ -442,7 +444,7 @@ export function parseAssessmentData(
     partlyCorrectNotFinal: String(part.notFinal ?? ''),
   };
   const items = Array.isArray(p._items) ? (p._items as Array<Record<string, unknown>>) : [];
-  const data: AssessmentData = { question, showTitle: true, instruction, feedback };
+  const data: AssessmentData = { question, showTitle: true, instruction, feedback, attempts: Number(p._attempts ?? 1) };
 
   if (kind === 'mcq' || kind === 'gmcq') {
     data.options = items.map((it) => {

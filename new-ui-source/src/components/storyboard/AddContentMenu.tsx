@@ -54,7 +54,7 @@ const GROUPS: MenuGroup[] = [
     items: [
       { kind: 'video', label: 'Video', Icon: Film },
       { kind: 'audio', label: 'Audio', Icon: Mic },
-      { kind: 'h5p', label: 'H5P', Icon: Puzzle },
+      // { kind: 'h5p', label: 'H5P', Icon: Puzzle },
     ],
   },
   {

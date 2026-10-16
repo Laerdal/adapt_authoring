@@ -19,6 +19,7 @@ import {
   createComponent,
   linkContentAsset,
   seedMissingCourseDefaults,
+  ensureQuestionFeedbackExtensions,
 } from "./adaptAuthoring";
 import {
   buildAssessmentFields,
@@ -33,6 +34,7 @@ import {
   buildImageAsMedia,
   buildMediaField,
   filenameFromLink,
+  mediaAssetRefs,
   mergeProperties,
   type ImageData,
   type MediaData,
@@ -917,6 +919,9 @@ export async function generateStoryboardCourse(
   // actually on the live document instead of building `properties` from
   // scratch (which would wipe every field the storyboard doesn't model).
   const existingComponentProps = new Map(index.components.map((c) => [c._id, c.properties || {}]));
+  if (doc.some((block) => (block as { type?: string }).type === "sbAssessment")) {
+    await ensureQuestionFeedbackExtensions(courseId);
+  }
 
   const typeByKey = new Map(availableTypes.map((t) => [t.component, t]));
   const installed = new Set(availableTypes.map((t) => t.component));
@@ -958,7 +963,7 @@ export async function generateStoryboardCourse(
           alt: "",
         });
       } else {
-        c.mediaPatch = buildMediaField(c.pendingKind, c.pendingMedia);
+        c.mediaPatch = buildMediaField(c.pendingKind, c.pendingMedia, c.existingId ? existingComponentProps.get(c.existingId)?._media as Record<string, unknown> | undefined : undefined);
       }
       return;
     }
@@ -1127,6 +1132,9 @@ export async function generateStoryboardCourse(
             created += 1;
           }
           resolved.add(compId);
+          for (const asset of mediaAssetRefs(c.pendingMedia)) {
+            await linkContentAsset(courseId, "component", compId, grpId, filenameFromLink(asset.link), asset.assetId!);
+          }
           if (c.sourceBlockId) blockToContent[c.sourceBlockId] = compId;
           // Link the chosen DAM asset to this component so publish resolves it.
           if (c.assetId && c.assetLink) {

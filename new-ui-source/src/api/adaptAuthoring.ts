@@ -15,6 +15,7 @@ import {
   imageFromMediaPoster,
   LAERDAL_MEDIA_COMPONENT,
   mediaFromComponent,
+  mediaAssetRefs,
   mergeProperties,
   normalizeLaerdalMedia,
   resolveAssetUrl,
@@ -29,7 +30,7 @@ import {
   storyboardLabel,
 } from "@/components/storyboard/placeholderTitles";
 import { reverseKind, isAssessmentComponentKind } from "./componentMapping";
-import { parseAssessmentData, buildAssessmentFields, emptyFeedback, type AssessmentKind, type AssessmentData } from "@/types/storyboard";
+import { parseAssessmentData, buildAssessmentFields, type AssessmentKind, type AssessmentData } from "@/types/storyboard";
 export {
   TRACKING_ANALYTICS_EXTENSION_NAME_BY_KEY,
   defaultTrackingAnalyticsSettings,
@@ -3347,8 +3348,7 @@ export async function saveStoryboardToCourse(
   let updatedBodies = 0;
   let unmapped = 0;
   const tasks: Promise<unknown>[] = [];
-  let needsTutorExtension = false;
-  let needsAnswerSpecificFeedbackExtension = false;
+  const hasQuestions = (doc as Array<{ type?: string }>).some((block) => block.type === "sbAssessment");
 
   for (const component of components) {
     if (component._component !== LAERDAL_MEDIA_COMPONENT) continue;
@@ -3478,8 +3478,9 @@ export async function saveStoryboardToCourse(
         seedProperties();
         const originalMedia = (info.properties?._media as Record<string, unknown> | undefined) || {};
         mergeProperties(patch, buildMediaField(kind, parsed.media, originalMedia));
-        assetLink = parsed.media?.asset?.link;
-        assetId = parsed.media?.asset?.assetId;
+        for (const asset of mediaAssetRefs(parsed.media)) {
+          tasks.push(linkContentAsset(courseId, "component", id, info.parentId || "", filenameFromLink(asset.link), asset.assetId!));
+        }
         patch.body = parsed.description || "";
         mergeProperties(patch, { instruction: parsed.instruction || "" });
       } else if (kind === "groupedContent" && isGrouped) {
@@ -3667,18 +3668,6 @@ export async function saveStoryboardToCourse(
         const alreadyHtmlQuestion = rawQuestion.startsWith("<");
         patch.body = !rawQuestion ? "" : alreadyHtmlQuestion ? rawQuestion : `<p>${escapeHtml(rawQuestion)}</p>`;
         const assessmentFields = buildAssessmentFields(kind as AssessmentKind, data);
-        const hasTutorFeedback = Object.values(data.feedback ?? emptyFeedback()).some(
-          (value) => typeof value === "string" && value.trim().length > 0
-        );
-        const hasAnswerSpecificFeedback = Array.isArray(data.options) && data.options.some(
-          (option) => typeof option?.feedback === "string" && option.feedback.trim().length > 0
-        );
-        if (hasTutorFeedback) {
-          needsTutorExtension = true;
-        }
-        if (hasAnswerSpecificFeedback) {
-          needsAnswerSpecificFeedbackExtension = true;
-        }
         if (Object.keys(assessmentFields).length || data.instruction !== undefined) {
           // Seed from live properties first — same reasoning as the
           // sbComponent branch above (ADAPT-3760 properties-wipe fix).
@@ -3697,12 +3686,7 @@ export async function saveStoryboardToCourse(
     }
   }
 
-  tasks.push(
-    syncQuestionFeedbackExtensions(courseId, {
-      tutor: needsTutorExtension,
-      answerSpecificFeedback: needsAnswerSpecificFeedbackExtension,
-    })
-  );
+  if (hasQuestions) tasks.push(ensureQuestionFeedbackExtensions(courseId));
 
   await Promise.all(tasks);
   return { updatedTitles, updatedBodies, unmapped };
@@ -3711,23 +3695,11 @@ export async function saveStoryboardToCourse(
 const TUTOR_EXTENSION_NAME = "adapt-contrib-tutor";
 const ANSWER_SPECIFIC_FEEDBACK_EXTENSION_NAME = "adapt-answer-specific-feedback";
 
-async function syncQuestionFeedbackExtensions(
-  courseId: string,
-  requirements: { tutor: boolean; answerSpecificFeedback: boolean }
-): Promise<void> {
+export async function ensureQuestionFeedbackExtensions(courseId: string): Promise<void> {
   await seedMissingCourseDefaults(courseId);
   const config = await apiClient.get<EngineConfigDetails & AnyRecord>(`/api/content/config/${courseId}`);
-  const desiredStates = [
-    { name: TUTOR_EXTENSION_NAME, shouldEnable: requirements.tutor },
-    { name: ANSWER_SPECIFIC_FEEDBACK_EXTENSION_NAME, shouldEnable: requirements.answerSpecificFeedback },
-  ];
-
-  const toEnable = desiredStates
-    .filter((extension) => extension.shouldEnable && !isExtensionInstalledByName(config, extension.name))
-    .map((extension) => extension.name);
-  const toDisable = desiredStates
-    .filter((extension) => !extension.shouldEnable && isExtensionInstalledByName(config, extension.name))
-    .map((extension) => extension.name);
+  const toEnable = [TUTOR_EXTENSION_NAME, ANSWER_SPECIFIC_FEEDBACK_EXTENSION_NAME]
+    .filter((name) => !isExtensionInstalledByName(config, name));
 
   if (toEnable.length) {
     const ids = await resolveExtensionTypeIdsByNames(toEnable);
@@ -3736,12 +3708,6 @@ async function syncQuestionFeedbackExtensions(
     }
   }
 
-  if (toDisable.length) {
-    const ids = await resolveExtensionTypeIdsByNames(toDisable);
-    if (ids.length) {
-      await apiClient.post(`/api/extension/disable/${courseId}`, { extensions: ids });
-    }
-  }
 }
 
 // ── Component types (Add Component drawer) ──────────────────────────────────
