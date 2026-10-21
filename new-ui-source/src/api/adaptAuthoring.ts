@@ -1088,6 +1088,11 @@ export function defaultNavigationSettings(): NavigationSettings {
   };
 }
 
+export function createDefaultStartPageSelection(pages: CoursePageOption[]): NavStartId[] {
+  if (!pages.length) return [];
+  return [{ _id: pages[0].id, _skipIfComplete: false, _className: "" }];
+}
+
 // Pages (page-type contentobjects) for the Start-page picker.
 export interface CoursePageOption {
   id: string;

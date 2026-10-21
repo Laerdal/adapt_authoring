@@ -9,6 +9,7 @@ import {
   saveNavigationSettings,
   getCoursePages,
   defaultNavigationSettings,
+  createDefaultStartPageSelection,
   type NavigationSettings,
   type CoursePageOption,
   type NavFooterButtonKey,
@@ -402,7 +403,7 @@ export function NavigationPage({
       ...prev,
       start: {
         ...prev.start,
-        _startIds: [...prev.start._startIds, { _id: pages[0].id, _skipIfComplete: false, _className: "" }],
+        _startIds: [...prev.start._startIds, ...createDefaultStartPageSelection(pages)],
       },
     }));
   };
@@ -487,6 +488,20 @@ export function NavigationPage({
     ...pages.map((p) => ({ value: p.id, label: p.title })),
   ];
 
+  useEffect(() => {
+    if (!s.start._isEnabled || s.start._startIds.length > 0 || !pages.length) return;
+    setS((prev) => {
+      if (!prev.start._isEnabled || prev.start._startIds.length > 0 || !pages.length) return prev;
+      return {
+        ...prev,
+        start: {
+          ...prev.start,
+          _startIds: createDefaultStartPageSelection(pages),
+        },
+      };
+    });
+  }, [pages, s.start._isEnabled, s.start._startIds.length]);
+
   return (
     <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
       {/* Header */}
@@ -514,7 +529,26 @@ export function NavigationPage({
             <>
               {/* ── Start settings ── */}
               <NavAccordion {...acc("start")} title={getSchemaLabel(startSchema, "Start settings")} subtitle="Choose which page(s) learners land on when they open the course.">
-                <ToggleSwitch checked={s.start._isEnabled} onChange={(v) => setStart({ _isEnabled: v })} label={getSchemaLabel(getSchemaNode(startSchema, "_isEnabled"), "Enabled?")} />
+                <ToggleSwitch
+                  checked={s.start._isEnabled}
+                  onChange={(v) => {
+                    setS((prev) => {
+                      const nextStartIds = v && !prev.start._startIds.length && pages.length
+                        ? createDefaultStartPageSelection(pages)
+                        : prev.start._startIds;
+
+                      return {
+                        ...prev,
+                        start: {
+                          ...prev.start,
+                          _isEnabled: v,
+                          _startIds: nextStartIds,
+                        },
+                      };
+                    });
+                  }}
+                  label={getSchemaLabel(getSchemaNode(startSchema, "_isEnabled"), "Enabled?")}
+                />
 
                 {s.start._isEnabled && (
                   <div className="flex flex-col gap-3">
