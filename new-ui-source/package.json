@@ -18,6 +18,7 @@
     "@mantine/hooks": "^8.3.11",
     "@tiptap/extension-subscript": "^3.30.3",
     "@tiptap/extension-superscript": "^3.30.3",
+    "h5p-standalone": "^3.8.2",
     "lucide-react": "^1.29.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",

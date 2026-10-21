@@ -37,6 +37,7 @@ import {
   updateStoryboard,
   addStoryboardAudit,
   updateCourse,
+  ensureQuestionFeedbackExtensions,
   type ImportFormat,
   type StoryboardStatus,
 } from '@/api/adaptAuthoring';
@@ -193,8 +194,6 @@ export default function StoryboardWorkspace({
   const [summary, setSummary] = useState<StoryboardSummary>(EMPTY_SUMMARY);
   const [activeId, setActiveId] = useState<string>();
   const [activeBlock, setActiveBlock] = useState<ActiveBlockInfo | null>(null);
-  // The Page/Article heading a NEW comment will anchor to (resolved from the
-  // cursor's position — comments never attach to a Block/Component).
   const [commentAnchor, setCommentAnchor] = useState<ActiveBlockInfo | null>(null);
   const [showContents, setShowContents] = useState(true);
   const [showReview, setShowReview] = useState(true);
@@ -304,6 +303,13 @@ export default function StoryboardWorkspace({
     setSummary(editorRef.current?.getSummary() ?? EMPTY_SUMMARY);
     sb.setDocument(doc as unknown[]); // stage into the hook draft (drives dirty/save)
   };
+
+  useEffect(() => {
+    if (!courseId || !summary.hasAssessment) return;
+    void ensureQuestionFeedbackExtensions(courseId).catch(() => {
+      flash('Could not enable question feedback extensions. Save to retry.');
+    });
+  }, [courseId, summary.hasAssessment]);
 
   const handleNavigate = (blockId: string) => {
     setActiveId(blockId);

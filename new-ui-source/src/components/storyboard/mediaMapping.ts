@@ -20,6 +20,9 @@ export interface ImageData extends AssetRef {
   alt: string;
 }
 
+export const MEDIA_SOURCE_KEYS = ['transcriptSource', 'captionsSource', 'descriptionsSource', 'chaptersSource'] as const;
+export type MediaSourceKey = typeof MEDIA_SOURCE_KEYS[number];
+
 export interface MediaData {
   asset?: AssetRef; // main video/audio source
   poster?: AssetRef; // video poster image
@@ -28,7 +31,18 @@ export interface MediaData {
   captionsSource: string;
   descriptionsSource: string;
   chaptersSource: string;
+  sourceAssets?: Partial<Record<MediaSourceKey, AssetRef>>;
+  originalTracks?: Array<Record<string, unknown>>;
   language?: string; // BCP 47 language tag (e.g., 'en', 'es', 'fr') for transcript/caption tracks; defaults to 'en'
+}
+
+export function mediaAssetRefs(media?: MediaData): AssetRef[] {
+  const assets = new Map<string, AssetRef>();
+  for (const asset of [media?.asset, media?.poster, ...MEDIA_SOURCE_KEYS.map((key) => media?.sourceAssets?.[key])]) {
+    const filename = filenameFromLink(asset?.link);
+    if (asset?.assetId && filename && !assets.has(filename)) assets.set(filename, asset);
+  }
+  return [...assets.values()];
 }
 
 export function emptyMediaData(): MediaData {
@@ -65,6 +79,25 @@ export function safePreviewSrc(url?: string, link?: string): string {
   if (url && !isCourseAssetLink(url)) return url;
   if (link && !isCourseAssetLink(link)) return link;
   return "";
+}
+
+export function h5pContentRoot(asset?: AssetRef): string | null {
+  const link = asset?.link || '';
+  if (asset?.external || !isCourseAssetLink(link) || !/\.h5p$/i.test(link)) return null;
+  const filename = filenameFromLink(link).replace(/\.h5p$/i, '');
+  if (!filename || /[/\\]/.test(filename) || filename === '.' || filename === '..') return null;
+  return `/h5p-preview-assets/packages/${encodeURIComponent(filename)}`;
+}
+
+export function h5pEmbedUrl(raw?: string): string {
+  try {
+    const url = new URL((raw || '').trim());
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) return '';
+    if (/\.h5p\/?$/i.test(decodeURIComponent(url.pathname))) return '';
+    return url.href;
+  } catch {
+    return '';
+  }
 }
 
 // The DAM filename (hash.ext) from a `course/assets/<filename>` link — this is
@@ -237,14 +270,7 @@ export function buildMediaField(kind: "video" | "audio", media?: MediaData, orig
   // Preserve existing tracks that aren't being edited, then add edited tracks
   const existingCc = Array.isArray((originalMedia as Record<string, unknown>)?.cc) 
     ? ((originalMedia as Record<string, unknown>).cc as Array<Record<string, unknown>>)
-    : [];
-  
-  // Keep tracks for types we don't handle (preserve multilingual variants)
-  const handledTypes = new Set(['transcript', 'captions', 'descriptions', 'chapters']);
-  const preservedTracks = existingCc.filter((track) => {
-    const type = String(track._srcType || "").toLowerCase();
-    return !handledTypes.has(type);
-  });
+    : media?.originalTracks ?? [];
   
   const newTracks = [
     buildTranscriptTrack(media),
@@ -253,7 +279,49 @@ export function buildMediaField(kind: "video" | "audio", media?: MediaData, orig
     buildNamedTrack("chapters", media?.chaptersSource || "", media?.language),
   ].filter((track): track is Record<string, unknown> => !!track);
   
-  _media.cc = [...preservedTracks, ...newTracks];
+  const handledTypes = ['transcript', 'captions', 'descriptions', 'chapters'];
+  const tracks = [...existingCc];
+  for (const type of handledTypes) {
+    const selected = media?.originalTracks?.find((track) => String(track._srcType || '').toLowerCase() === type);
+    const next = newTracks.find((track) => track._srcType === type);
+    const identity = (track: Record<string, unknown>): string => {
+      const fields = ['_srcAssetTranscript', '_transcriptInline', '_srcTypeCaption', '_srcTypeDescriptions', '_srcTypeChapters'];
+      const settings = fields.map((key) => track[key] as Record<string, unknown> | undefined).find(Boolean) || {};
+      const reference = selected ?? next;
+      const selectedSettings = reference && fields.map((key) => reference[key] as Record<string, unknown> | undefined).find(Boolean);
+      let language = selectedSettings?.srclang ? settings.srclang : selectedSettings?.label ? settings.label : settings.srclang ?? settings.label;
+      if (language === undefined) {
+        const source = settings.src ?? settings.inlineTranscriptBody;
+        const selectedSource = selectedSettings?.src ?? selectedSettings?.inlineTranscriptBody;
+        language = source === selectedSource ? media?.language || 'en' : source;
+      }
+      return JSON.stringify([track._id ?? null, language ?? null]);
+    };
+    let index = tracks.findIndex((track) => String(track._srcType || '').toLowerCase() === type &&
+      (selected ? identity(track) === identity(selected) : media?.originalTracks === undefined));
+    if (index < 0 && next && !selected) {
+      index = tracks.findIndex((track) => String(track._srcType || '').toLowerCase() === type && identity(track) === identity(next));
+    }
+    if (!next) {
+      if (index >= 0) tracks.splice(index, 1);
+      continue;
+    }
+    const previous = index >= 0 ? tracks[index] : selected ?? {};
+    const merged = { ...previous, ...next };
+    for (const key of ['_srcAssetTranscript', '_transcriptInline', '_srcTypeCaption', '_srcTypeDescriptions', '_srcTypeChapters']) {
+      if (!(key in next)) {
+        if (type === 'transcript') delete merged[key];
+        continue;
+      }
+      const settings = previous[key] as Record<string, unknown> | undefined;
+      const edited = next[key] as Record<string, unknown>;
+      merged[key] = { ...edited, ...settings, ...('src' in edited ? { src: edited.src } : {}),
+        ...('inlineTranscriptBody' in edited ? { inlineTranscriptBody: edited.inlineTranscriptBody } : {}) };
+    }
+    if (index >= 0) tracks[index] = merged;
+    else tracks.push(merged);
+  }
+  _media.cc = tracks;
   return { _media };
 }
 
@@ -342,9 +410,13 @@ export function mediaFromComponent(
     };
   }
   const tracks = Array.isArray(m.cc) ? m.cc : [];
+  data.originalTracks = tracks;
+  const seenTypes = new Set<string>();
   for (const rawTrack of tracks) {
     const track = rawTrack && typeof rawTrack === "object" ? (rawTrack as Record<string, unknown>) : {};
     const type = String(track._srcType || "").toLowerCase();
+    if (seenTypes.has(type)) continue;
+    seenTypes.add(type);
     if (type === "transcript") {
       const transcriptAsset =
         track._srcAssetTranscript && typeof track._srcAssetTranscript === "object"
@@ -369,6 +441,17 @@ export function mediaFromComponent(
     if (type === "chapters") {
       data.chaptersSource = trackSrc(track._srcTypeChapters, "src");
     }
+  }
+  data.sourceAssets = {};
+  for (const key of MEDIA_SOURCE_KEYS) {
+    const source = data[key];
+    if (!source) continue;
+    data.sourceAssets[key] = {
+      link: source,
+      url: resolveAssetUrl(source, idByFilename),
+      assetId: idByFilename[filenameFromLink(source)] || undefined,
+      external: !isCourseAssetLink(source),
+    };
   }
   return { kind: isAudio ? "audio" : "video", data };
 }

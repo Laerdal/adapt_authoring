@@ -39,8 +39,9 @@ import ConfirmDialog from '@/components/common/ConfirmDialog';
 import { BasicRichTextEditor } from '@/components/common';
 import { sanitizeEditorHtml } from '@/components/common/BasicRichTextEditor';
 import { CheckboxIndicator } from '@/components/common/Checkbox';
-import { emptyMediaData, safePreviewSrc, toEmbedUrl, type AssetRef, type ImageData, type MediaData } from '../mediaMapping';
+import { emptyMediaData, h5pEmbedUrl, safePreviewSrc, toEmbedUrl, type AssetRef, type ImageData, type MediaData, type MediaSourceKey } from '../mediaMapping';
 import SamaritanIcon from '../SamaritanIcon';
+import H5pPreview from '../H5pPreview';
 
 // YouTube/Vimeo → iframe embed; direct file URLs → <video>. Matches Lovable.
 function VideoView({ src, poster, className }: { src: string; poster?: string; className?: string }) {
@@ -286,18 +287,12 @@ function plainText(value: string): string {
 // Preview a chosen asset by kind. Prefers the resolvable preview `url`, falling
 // back to the persisted `link` (e.g. an external URL).
 function AssetPreview({ assetType, value }: { assetType: AssetKind; value: AssetRef }) {
+  if (assetType === 'h5p') return <H5pPreview asset={value} />;
   const src = safePreviewSrc(value.url, value.link);
   if (!src) return null;
   if (assetType === 'image') return <img src={src} alt="" className="max-h-48 w-full rounded object-contain" />;
   if (assetType === 'audio') return <audio src={src} controls className="w-full" />;
-  if (assetType === 'h5p') {
-    // H5P files (.h5p) can't be played inline in the editor — show a badge.
-    return (
-      <div className="flex items-center gap-2 rounded border border-dashed border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-        <Puzzle className="h-4 w-4" /> H5P package selected
-      </div>
-    );
-  }
+  if (assetType === 'other') return null;
   return <VideoView src={src} className="max-h-64 w-full rounded" />;
 }
 
@@ -308,7 +303,7 @@ const EXTERNAL_ASSET_PLACEHOLDER: Record<AssetKind, string> = {
   image: 'https://… (direct image link)',
   audio: 'https://… (direct audio file link)',
   video: 'https://… (or YouTube / Vimeo link)',
-  h5p: 'https://… (direct .h5p package link)',
+  h5p: 'https://… (H5P embed-page URL)',
   other: 'https://…',
 };
 
@@ -326,11 +321,16 @@ function AssetField({
   const [picking, setPicking] = useState(false);
   const [external, setExternal] = useState(false);
   const [url, setUrl] = useState('');
+  const [urlError, setUrlError] = useState('');
   const has = !!(value && (value.link || value.url));
 
   const applyExternal = () => {
     const trimmed = url.trim();
     if (!trimmed) return;
+    if (assetType === 'h5p' && !h5pEmbedUrl(trimmed)) {
+      setUrlError('Use an HTTP(S) embed-page URL. Upload .h5p packages through the asset library.');
+      return;
+    }
     onChange({ link: trimmed, url: trimmed, external: true });
     setExternal(false);
     setUrl('');
@@ -354,11 +354,12 @@ function AssetField({
           </div>
         </div>
       ) : external ? (
+        <div>
         <div className="flex items-center gap-2">
           <input
             autoFocus
             value={url}
-            onChange={(e) => setUrl(e.target.value)}
+            onChange={(e) => { setUrl(e.target.value); setUrlError(''); }}
             onKeyDown={(e) => {
               e.stopPropagation();
               if (e.key === 'Enter') applyExternal();
@@ -372,6 +373,8 @@ function AssetField({
           <button type="button" onClick={() => setExternal(false)} className="text-xs text-muted-foreground hover:text-foreground">
             Cancel
           </button>
+        </div>
+        {urlError && <p role="alert" className="mt-1 text-xs text-red-600">{urlError}</p>}
         </div>
       ) : (
         <div className="flex flex-wrap gap-2">
@@ -441,11 +444,15 @@ function RichTextField({
 }
 
 function TranscriptFields({ kind, media, set }: { kind: 'video' | 'audio'; media: MediaData; set: (m: MediaData) => void }) {
-  const field = (key: keyof MediaData, label: string, ph: string) => (
-    <label className="block">
+  const field = (key: MediaSourceKey, label: string) => (
+    <div className="block">
       <span className={labelCls}>{label}</span>
-      <input value={(media[key] as string) || ''} placeholder={ph} onKeyDown={stop} onChange={(e) => set({ ...media, [key]: e.target.value })} className={inputCls} />
-    </label>
+      <AssetField
+        assetType="other"
+        value={media.sourceAssets?.[key] ?? (media[key] ? { link: media[key] } : undefined)}
+        onChange={(asset) => set({ ...media, [key]: asset?.link || '', sourceAssets: { ...media.sourceAssets, [key]: asset } })}
+      />
+    </div>
   );
   return (
     <div className="space-y-2">
@@ -461,14 +468,14 @@ function TranscriptFields({ kind, media, set }: { kind: 'video' | 'audio'; media
       )}
       <div className="rounded border border-border p-2">
         <div className={labelCls}>Transcript, captions &amp; chapters</div>
-        {field('transcriptSource', 'Transcript source', 'https://… .vtt / .txt')}
+        {field('transcriptSource', 'Transcript source')}
         <label className="mt-1 block">
           <span className={labelCls}>Transcript text (in the storyboard)</span>
           <textarea value={media.transcriptText} onKeyDown={stop} onChange={(e) => set({ ...media, transcriptText: e.target.value })} rows={2} placeholder="Paste or write the transcript here" className={`${inputCls} resize-y`} />
         </label>
-        {field('captionsSource', 'Captions source', 'https://… .vtt')}
-        {field('descriptionsSource', 'Descriptions source', 'https://… .vtt')}
-        {field('chaptersSource', 'Chapters source', 'https://… .vtt')}
+        {field('captionsSource', 'Captions source')}
+        {field('descriptionsSource', 'Descriptions source')}
+        {field('chaptersSource', 'Chapters source')}
       </div>
     </div>
   );
@@ -854,7 +861,7 @@ const instructionHtml = sanitizeEditorHtml(data.instruction);
     return (
       <div>
         {heading}
-        <MediaPlaceholder Icon={Puzzle} label="H5P interactive content" />
+        <H5pPreview asset={data.media?.asset} />
         {instruction}
       </div>
     );
@@ -998,9 +1005,6 @@ export const componentBlock = createReactBlockSpec(
         });
       };
 
-      // Comment is an ACTION, but comments only ever live at Page/Article
-      // level (never Block/Component) — resolve to the Topic/Section heading
-      // this card sits under rather than the card's own block id.
       const openComment = () => {
         const anchor = resolveCommentAnchor(editor.document, block.id);
         if (!anchor) return;
