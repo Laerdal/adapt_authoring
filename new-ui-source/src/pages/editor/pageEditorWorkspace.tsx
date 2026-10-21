@@ -4671,7 +4671,7 @@ export default function CourseEditor({
         gap: 16px !important;
       }
 
-      .adapt-authoring-editing-active .component__container:has(> .adapt-authoring-swap-positions-row) {
+      .adapt-authoring-selection-active .component__container:has(> .adapt-authoring-swap-positions-row) {
         flex-wrap: wrap !important;
         align-items: flex-start !important;
       }
@@ -4978,13 +4978,17 @@ export default function CourseEditor({
       }
 
       /* Merged swap-positions control (syncSwapPositionsControls) — a single
-         always-visible plain-text affordance (no button chrome) replacing
+         editing-only plain-text affordance (no button chrome) replacing
          the old tool's per-component move-left/move-right arrows. It lives
          in normal flow before the component row, so a selected group's
          header/editor can never overlap it. It must not be sticky: once the
          button is rendered, its hit area must stay at that rendered position
          while the canvas scrolls. */
       .adapt-authoring-swap-positions-row {
+        display: none !important;
+      }
+
+      .adapt-authoring-selection-active .adapt-authoring-swap-positions-row {
         position: static !important;
         flex: 0 0 100% !important;
         width: 100% !important;
@@ -7908,9 +7912,9 @@ export default function CourseEditor({
   // Group with exactly two components can swap which side each one renders
   // on. The old tool exposes this as a move
   // arrow on EACH component's own sidebar; here it's merged into a single
-  // "Swap positions" control injected once per qualifying block, permanently
-  // visible (not hover/selection-gated) — matches old tool's move arrows,
-  // which are equally always-on while editing. Rendered in normal flow
+  // "Swap positions" control injected once per qualifying block, visible
+  // only while a canvas selection is being edited, not on preview hover.
+  // Rendered in normal flow
   // between the Content Group header and its component row so it reserves
   // vertical space instead of overlapping the selected group editor.
   const syncSwapPositionsControls = useCallback(() => {
