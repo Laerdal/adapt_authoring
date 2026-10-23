@@ -5,6 +5,7 @@ import AssetPickerModal from "@/components/common/AssetPickerModal";
 import TagOverflowList from "@/components/common/TagOverflowList";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import ErrorDialog from "@/components/common/ErrorDialog";
+import { stripHtmlToText } from "@/utils/format";
 
 interface CourseCardProps {
   id: number;
@@ -36,16 +37,7 @@ export default function CourseCard({
   const [deleteOpen, setDeleteOpen]         = useState(false);
   const [editTitle, setEditTitle]           = useState(title);
   const cardDescription = (body && body.trim()) ? body : description;
-  const displayDescription = cardDescription
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/\s+/g, " ")
-    .trim();
+  const displayDescription = stripHtmlToText(cardDescription);
   const [editDesc, setEditDesc]             = useState(displayDescription);
   const [editImage, setEditImage]           = useState<string | null>(imageUrl ?? null);
   const [editHeroAssetId, setEditHeroAssetId] = useState<string | null>(heroAssetId);

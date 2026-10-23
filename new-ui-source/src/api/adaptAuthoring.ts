@@ -4,6 +4,7 @@
 // keep engine-specific endpoint knowledge here, not in the pages.
 
 import { apiClient } from "./client";
+import { stripHtmlToText } from "@/utils/format";
 import type { ImportResult } from "../types/storyboardImport";
 import {
   buildGraphicField,
@@ -324,19 +325,6 @@ function courseAuthorName(createdBy: EngineCourse["createdBy"]): string | null {
 
   const matchedName = nameCandidates.find((value): value is string => !!value && value.trim().length > 0);
   return matchedName?.trim() || null;
-}
-
-function stripHtmlToText(value: string): string {
-  return value
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;/gi, "'")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 export function getCourseSummaryDescription(doc: Pick<EngineCourse, "body" | "description">): string {
