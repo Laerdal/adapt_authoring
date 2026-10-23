@@ -3,8 +3,8 @@ const LINKED_PROPERTIES: Record<string, string[]> = {
   '_progress::progress': ['_nav::nav-progress', '_menu::menu-item-progress'],
 };
 
-export function updateCustomThemeSetting(settings: Record<string, string>, key: string, value: string) {
-  const next = { ...settings, [key]: value };
+export function updateCustomThemeSetting(settings: Record<string, string>, key: string, value: string, defaultValue = '') {
+  const next = { ...settings, [key]: value || defaultValue };
   const visited = new Set<string>();
   const queue = [key];
   while (queue.length) {

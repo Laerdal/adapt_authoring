@@ -1583,9 +1583,15 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     });
   }, []);
 
+  const getCustomSettingDefault = useCallback((key: string): string => {
+    const [sectionId, fieldKey] = key.split('::');
+    const schemaDefault = getSchemaField(selectedThemeSchema, sectionId, fieldKey)?.default;
+    return typeof schemaDefault === 'string' ? schemaDefault : CUSTOM_FIELD_DEFAULTS[key] ?? '';
+  }, [selectedThemeSchema]);
+
   const setCustomSettingWithDependencies = useCallback((key: string, value: string) => {
-    setCustomSettings((prev) => updateCustomThemeSetting(prev, key, value));
-  }, []);
+    setCustomSettings((prev) => updateCustomThemeSetting(prev, key, value, getCustomSettingDefault(key)));
+  }, [getCustomSettingDefault]);
 
   const buildUnsavedStateSnapshot = useCallback(() => {
     const normalizeRecord = (record: Record<string, string>) => Object.keys(record)
@@ -1748,7 +1754,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
       section.fields.forEach((field) => {
         const uiKey = `${section.id}::${field.key}`;
-        existingSection[field.key] = customSettings[uiKey] ?? '';
+        existingSection[field.key] = customSettings[uiKey] || getCustomSettingDefault(uiKey);
       });
 
       merged[section.id] = existingSection;
@@ -1802,7 +1808,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     };
 
     return merged;
-  }, [checkHideFeedback, checkHidePartial, checkNotFinal, checkUnanswered, customSettings, lifeBlocksConfig, lifeCourseConfig, onScreenConfig]);
+  }, [checkHideFeedback, checkHidePartial, checkNotFinal, checkUnanswered, customSettings, getCustomSettingDefault, lifeBlocksConfig, lifeCourseConfig, onScreenConfig]);
 
   useEffect(() => {
     setSelected(mapThemeNameToId(initialThemeName));
@@ -2023,7 +2029,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
   const getCustomSetting = (sectionId: string, fieldKey: string): string => {
     const key = `${sectionId}::${fieldKey}`;
-    return customSettings[key] ?? CUSTOM_FIELD_DEFAULTS[key] ?? '';
+    return customSettings[key] || getCustomSettingDefault(key);
   };
 
   // Live Preview Component
@@ -2034,6 +2040,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     const dialogRef = useRef<HTMLDivElement | null>(null);
 
     const primaryColor = getCustomSetting('_global', '_primaryBrandColor') || '#2e7fa1';
+    const secondaryColor = getCustomSetting('_global', '_secondaryBrandColor') || '#25837e';
     const successColor = getCustomSetting('_validation', 'validation-success') || '#065f28';
     const errorColor = getCustomSetting('_validation', 'validation-error') || '#ff0000';
     const paragraphFont = getCustomSetting('_global', 'paragraph-font-family') || 'Lato';
@@ -2076,6 +2083,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     const headingColor = previewDarkMode ? '#ffffff' : headingColorTheme;
     const instructionPreviewColor = previewDarkMode ? '#f3f4f6' : instructionColor;
     const articlePreviewBg = previewDarkMode ? '#232323' : articleBgColor;
+    const pageHeaderPreviewBg = previewDarkMode ? '#232323' : pageHeaderBg;
     const blockPreviewBg = previewDarkMode ? '#2b2b2b' : blockBgColor;
     const componentPreviewBg = previewDarkMode ? '#333333' : componentBgColor;
     const itemPreviewBg = previewDarkMode ? '#3a3a3a' : componentBgColor;
@@ -2166,7 +2174,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
             <div style={{ height: '4px', borderTop: `1px solid ${progressBorder}`, borderBottom: `1px solid ${progressBorder}`, background: `linear-gradient(to right, ${progressFill} 60%, ${progressBackground} 60%)` }} />
             <div style={{ backgroundColor: previewBg, padding: '18px' }}>
               <div style={{ maxWidth: '560px', margin: '0 auto' }}>
-                <div style={{ padding: '6px 0 14px', backgroundColor: pageHeaderBg }}>
+                <div style={{ padding: '6px 0 14px', backgroundColor: pageHeaderPreviewBg }}>
                   <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: titleSize || '3rem', fontWeight: 700, color: previewDarkMode ? '#ffffff' : pageHeaderTitleColor, lineHeight: 1.2, marginBottom: '2rem' }}>
                     New Topic Title
                   </div>
@@ -2205,7 +2213,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                         Choose one option then select Submit.
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {[{ label: 'Correct', color: successColor }, { label: 'Incorrect', color: errorColor }].map((opt) => (
+                        {[{ label: 'Selected', color: secondaryColor }, { label: 'Correct', color: successColor }, { label: 'Incorrect', color: errorColor }].map((opt) => (
                           <div
                             key={opt.label}
                             style={{
@@ -3106,7 +3114,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                           <div className="grid grid-cols-2 gap-x-4 gap-y-4">
                             {acc.fields.map((field) => {
                               const key = `${acc.id}::${field.key}`;
-                              const value = customSettings[key] ?? CUSTOM_FIELD_DEFAULTS[key] ?? '';
+                              const value = customSettings[key] || getCustomSettingDefault(key);
                               const hint = getSchemaNestedFieldText(sectionSchema, field.key, 'help');
                               const fieldLabel = getSchemaText(getSchemaField(selectedThemeSchema, acc.id, field.key), 'title') ?? field.label;
                               if (field.inputType === 'select') {
