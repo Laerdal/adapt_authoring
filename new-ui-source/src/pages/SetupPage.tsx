@@ -2796,7 +2796,7 @@ function CourseCreationCenterContent() {
       try {
         const data = await getCourseBootstrapData(courseId);
         if (cancelled) return;
-        const nextDescription = data.body || data.description || initialDescription;
+        const nextDescription = data.body || initialDescription;
         setTitle(data.displayTitle || data.title || initialTitle);
         setDescription(nextDescription);
         setSavedThemeName(data.themeName || "");
