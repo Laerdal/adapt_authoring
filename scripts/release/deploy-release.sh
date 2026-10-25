@@ -43,7 +43,10 @@ mkdir "$STAGE/app" && tar -xzf "$STAGE/app.tgz" -C "$STAGE/app"
 LOCK=$(node -p "require('$STAGE/manifest.json').lockHash")
 
 # Managed dirs are mirrored with --delete; instance runtime state inside them is protected by the excludes.
-RSYNC_COMMON=(-a --delete --itemize-changes)
+# The tarball is owned by the CI user (runner, uid 1001) with CI perms: never copy owner/group/perms onto the instance
+# (existing files keep theirs, new files get the usual umask), so DEV's 777 EFS dirs and root ownership stay as they are.
+KEEP=(--no-owner --no-group --no-perms)
+RSYNC_COMMON=(-a "${KEEP[@]}" --delete --itemize-changes)
 sync_dir() { # <dir> [extra rsync args...]
   local d="$1"; shift
   rsync "${RSYNC_COMMON[@]}" "$@" "$STAGE/app/$d/" "$APP_DIR/$d/"
@@ -59,11 +62,11 @@ apply_files() {
   sync_dir plugins "${PLUGIN_STATE[@]}" "${flag[@]}"
   sync_dir public --exclude=/assets/ "${flag[@]}"
   # conf: code files only; config.json / migrate.json are instance-owned and never in the artifact
-  rsync -a --itemize-changes "${flag[@]}" "$STAGE/app/conf/" "$APP_DIR/conf/"
+  rsync -a "${KEEP[@]}" --itemize-changes "${flag[@]}" "$STAGE/app/conf/" "$APP_DIR/conf/"
   # top-level files (package.json, server.js, ...); directories handled above
   for f in "$STAGE"/app/*; do
     [ -f "$f" ] || continue
-    rsync -a --itemize-changes "${flag[@]}" "$f" "$APP_DIR/"
+    rsync -a "${KEEP[@]}" --itemize-changes "${flag[@]}" "$f" "$APP_DIR/"
   done
 }
 
