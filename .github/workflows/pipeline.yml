@@ -74,11 +74,12 @@ jobs:
 
           # first ref that exists wins: release branches fall back to master in repos that were not branched
           head_sha() { # <repo> <ref...>
-            local repo=$1; shift
+            local repo=$1 err=""; shift
             for ref in "$@"; do
-              sha=$(gh api "repos/$PLUGINS_OWNER/$repo/commits/$ref" --jq .sha 2>/dev/null) && { echo "$sha"; return; }
+              if sha=$(gh api "repos/$PLUGINS_OWNER/$repo/commits/$ref" --jq .sha 2>"$RUNNER_TEMP/gh.err"); then echo "$sha"; return; fi
+              err=$(cat "$RUNNER_TEMP/gh.err")
             done
-            echo "ERROR: none of [$*] exist in $repo (or the token cannot read it)" >&2; exit 1
+            echo "ERROR: none of [$*] resolved in $PLUGINS_OWNER/$repo. GitHub said: $err" >&2; exit 1
           }
           if [[ "$BRANCH" == release/* ]]; then CANDIDATES=("$BRANCH" master); else CANDIDATES=("$BRANCH"); fi
 
@@ -178,6 +179,8 @@ jobs:
       - run: npm ci
 
       - run: grunt build:prod
+        env:
+          ADAPT_SKIP_COMPONENT_DEFAULTS_VALIDATION: 'true' # needs the framework under temp/<tenant>/, instance-only
 
       - run: npm prune --omit=dev
 
