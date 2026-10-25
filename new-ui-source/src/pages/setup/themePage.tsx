@@ -7,6 +7,7 @@ import { SaveChangesButton } from "./SaveChangesButton";
 import { SaveStatusToast } from "./SaveStatusToast";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
+import { ON_SCREEN_CLASS_OPTIONS } from "../../helpers/onScreenSettings";
 
 // Extracted from SetupPage to keep select-theme feature isolated with no behavior changes.
 
@@ -1118,15 +1119,6 @@ const ON_SCREEN_ROW_DEFS: Array<{ key: OnScreenLevelKey; label: string }> = [
   { key: 'content', label: 'Component' },
 ];
 
-const ON_SCREEN_CLASS_OPTIONS = [
-  '',
-  'fade-in',
-  'fade-in-left',
-  'fade-in-right',
-  'fade-in-top',
-  'fade-in-bottom',
-  'fade-out',
-];
 
 function LifeListField({
   title,
@@ -2909,7 +2901,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           </ThemeAccordion>
         )}
 
-        {/* On Screen Classes - always visible */}
+        {selected !== "vanilla" && (
         <ThemeAccordion
           label="On Screen Classes"
           isOpen={activeAccordion === "On Screen Classes"}
@@ -2919,6 +2911,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
             <p className="text-xs text-[#6b7280] leading-relaxed">
               These settings allow you to attach classes when content is within the browser viewport.
               Supported classes include fade-in, fade-in-left, fade-in-right, fade-in-top, and fade-in-bottom.
+              {" "}A configured local class uses that item's settings; an empty local class uses the course defaults.
+              {" "}Use 1-100 for an explicit viewport percentage; the current framework treats 0 as 33%.
             </p>
 
             <div className="flex items-center gap-3">
@@ -2990,6 +2984,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
             )}
           </div>
         </ThemeAccordion>
+        )}
       </div>
 
       {/* Vanilla Theme Settings - only shown when Vanilla is selected */}
@@ -3444,4 +3439,3 @@ function ThemeAccordion({
     </div>
   );
 }
-
