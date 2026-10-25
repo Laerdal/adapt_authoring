@@ -524,6 +524,13 @@ module.exports = function(grunt) {
     var configPath = path.join('conf', 'config.json');
     var defaultsPath = path.join('conf', 'componentPropertyDefaults.json');
 
+    // This check reads the framework checkout under temp/<masterTenantID>/, which only exists on a running
+    // instance. CI builds (no tenant, no framework) opt out; instance builds are unaffected.
+    if (process.env.ADAPT_SKIP_COMPONENT_DEFAULTS_VALIDATION === 'true') {
+      grunt.log.writeln('Skipping validate-component-defaults (ADAPT_SKIP_COMPONENT_DEFAULTS_VALIDATION=true).');
+      return;
+    }
+
     if (!grunt.file.exists(configPath)) {
        grunt.log.warn('Missing ' + configPath + '; skipping validate-component-defaults.');
        return;

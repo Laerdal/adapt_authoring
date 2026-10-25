@@ -1,0 +1,11 @@
+{
+  "adapt-devtools-environment": { "backend": "plugins/devtools/environment", "dest": "devtools", "frontend": null },
+  "adapt-devtools-webhooks": { "backend": "plugins/devtools/webhooks", "dest": "devtools", "frontend": null },
+  "adapt-services-translation": { "backend": "plugins/services/translation", "dest": "services", "frontend": "frontend/src/plugins/translation" },
+  "adapt-output-preflight": { "backend": "plugins/output/preflight", "dest": "output", "frontend": "frontend/src/plugins/preflight" },
+  "adapt-custom-styles": { "backend": null, "dest": null, "frontend": "frontend/src/plugins/customStyles" },
+  "adapt-output-cdn": { "backend": "plugins/output/cdn", "dest": "output", "frontend": "frontend/src/plugins/cdn" },
+  "adapt-output-storyboard": { "backend": "plugins/output/storyboard", "dest": "output", "frontend": "frontend/src/plugins/storyboard" },
+  "adapt-services-ai-tutor": { "backend": "plugins/services/ai-tutor", "dest": "services", "frontend": "frontend/src/plugins/ai-tutor" },
+  "adapt-content-templating": { "backend": "plugins/content/templating", "dest": "content", "frontend": "frontend/src/plugins/templating" }
+}
