@@ -81,7 +81,11 @@ jobs:
             done
             echo "ERROR: none of [$*] resolved in $PLUGINS_OWNER/$repo. GitHub said: $err" >&2; exit 1
           }
-          if [[ "$BRANCH" == release/* ]]; then CANDIDATES=("$BRANCH" master); else CANDIDATES=("$BRANCH"); fi
+          case "$BRANCH" in
+            develop|master) CANDIDATES=("$BRANCH") ;;
+            release/*)      CANDIDATES=("$BRANCH" master) ;;
+            *)              CANDIDATES=("$BRANCH" develop) ;; # feature branches / manual test builds: plugin repos' develop (env=none, never deploys)
+          esac
 
           AP=$(head_sha adapt-authoring-plugins "${CANDIDATES[@]}")
           FP=$(head_sha adapt-framework-plugins "${CANDIDATES[@]}")
