@@ -57,9 +57,10 @@ DB scripts in `adapt-build/database-helpers` stay manual.
 
 ## Trigger from the plugin repos
 
-GitHub only lets `workflow_dispatch` start a workflow that exists on the **default branch (`master`)**, then `--ref` picks which branch's
-copy runs. So: land a stub `pipeline.yml` on `master` first (same file name, `on: workflow_dispatch` with the same two inputs, one no-op job);
-dispatches with `--ref develop` then run the real file from `develop`. Push-triggered runs on `develop` need no stub.
+`gh workflow run pipeline.yml --ref <branch>` runs the copy of `pipeline.yml` that exists on `<branch>`. Verified on PR #388: once GitHub has
+seen the workflow (any earlier run registers it), a dispatch with `--ref <feature branch>` works without the file being on `master`, so no stub is needed.
+Consequence for ordering: the file must exist on the branch the plugin repos dispatch to. Merge `pipeline.yml` to `develop` before the plugin-repo
+trigger workflows reach `develop`, and release it to `master` before theirs reach `master`.
 
 Add to each of `adapt-framework-plugins`, `adapt-authoring-plugins` (branches `[develop, master]`) and `adapt-cdn-deploy-cli` (branches `[main]`),
 as `.github/workflows/notify-adapt-authoring.yml`:
