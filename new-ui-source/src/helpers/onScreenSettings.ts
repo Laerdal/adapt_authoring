@@ -25,7 +25,7 @@ export function serializeOnScreenSettings(settings?: OnScreenSettings) {
 
 export function supportsGlobalOnScreen(theme: string): boolean {
   const name = theme.toLowerCase();
-  return !/life[- ]?v2/.test(name) && (name.includes("life") || name.includes("custom"));
+  return name.includes("life") || name.includes("custom");
 }
 
 export function getOnScreenClassOptions(theme: string, current = ""): readonly string[] {

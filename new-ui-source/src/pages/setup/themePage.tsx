@@ -1071,7 +1071,7 @@ type LifeBlocksConfig = {
   _paddingBottom: string;
 };
 
-type OnScreenLevelKey = 'page' | 'section' | 'contentGroup' | 'content';
+type OnScreenLevelKey = 'page' | 'article' | 'block' | 'component';
 type OnScreenLevelConfig = {
   _classes: string;
   _percentInviewVertical: number;
@@ -1080,8 +1080,6 @@ type OnScreenLevelsConfig = Record<OnScreenLevelKey, OnScreenLevelConfig>;
 
 type OnScreenConfig = {
   _isEnabled: boolean;
-  _classes: string;
-  _percentInviewVertical: number;
   _levels: OnScreenLevelsConfig;
 };
 
@@ -1102,21 +1100,19 @@ const DEFAULT_LIFE_BLOCKS_CONFIG: LifeBlocksConfig = {
 
 const DEFAULT_ON_SCREEN_CONFIG: OnScreenConfig = {
   _isEnabled: false,
-  _classes: "",
-  _percentInviewVertical: 50,
   _levels: {
     page: { _classes: '', _percentInviewVertical: 50 },
-    section: { _classes: '', _percentInviewVertical: 50 },
-    contentGroup: { _classes: '', _percentInviewVertical: 50 },
-    content: { _classes: '', _percentInviewVertical: 50 },
+    article: { _classes: '', _percentInviewVertical: 50 },
+    block: { _classes: '', _percentInviewVertical: 50 },
+    component: { _classes: '', _percentInviewVertical: 50 },
   },
 };
 
 const ON_SCREEN_ROW_DEFS: Array<{ key: OnScreenLevelKey; label: string }> = [
   { key: 'page', label: 'Topic' },
-  { key: 'section', label: 'Section' },
-  { key: 'contentGroup', label: 'Content Group' },
-  { key: 'content', label: 'Component' },
+  { key: 'article', label: 'Section' },
+  { key: 'block', label: 'Content Group' },
+  { key: 'component', label: 'Component' },
 ];
 
 
@@ -1216,15 +1212,16 @@ function LifeListField({
   );
 }
 
-export default function SelectThemePage({ initialThemeName, initialThemeVariables, initialPresetId, courseId, onNavigationRequest, pendingNavigation, onPendingNavigationHandled, onThemeSaved }: {
+export default function SelectThemePage({ initialThemeName, initialThemeVariables, initialThemeSettings, initialPresetId, courseId, onNavigationRequest, pendingNavigation, onPendingNavigationHandled, onThemeSaved }: {
   initialThemeName?: string;
   initialThemeVariables?: Record<string, unknown>;
+  initialThemeSettings?: Record<string, unknown>;
   initialPresetId?: string;
   courseId?: string;
   onNavigationRequest?: (nav: string) => void;
   pendingNavigation?: string | null;
   onPendingNavigationHandled?: () => void;
-  onThemeSaved?: (payload: { themeName: string; themeVariables: Record<string, unknown>; themePresetId: string }) => void;
+  onThemeSaved?: (payload: { themeName: string; themeVariables: Record<string, unknown>; themeSettings: Record<string, unknown>; themePresetId: string }) => void;
 }) {
   const initialSelectedThemeId = mapThemeNameToId(initialThemeName);
   const [selected, setSelected] = useState<string | null>(initialSelectedThemeId);
@@ -1373,11 +1370,12 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
           _hidePartiallyFeedback: checkHidePartial,
         };
       }
-      await saveThemeVariables(courseId, vars);
+      await saveThemeVariables(courseId, vars, selected === 'life' || selected === 'custom' ? onScreenConfig : undefined);
       setDbThemeVariables(vars);
       onThemeSaved?.({
         themeName: themeLabel,
         themeVariables: vars,
+        themeSettings: { ...initialThemeSettings, _onScreen: onScreenConfig },
         themePresetId: selectedPresetId,
       });
       setLastSavedStateSnapshot(buildUnsavedStateSnapshot());
@@ -1403,6 +1401,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     setSelected(mapThemeNameToId(initialThemeName));
     setSelectedPresetId(initialPresetId ?? '');
     hydrateThemeVariablesIntoEditors(dbThemeVariables);
+    hydrateOnScreenSettings(initialThemeSettings);
     // Re-anchor the snapshot so hasChanges becomes false
     setLastSavedStateSnapshot('');
   }
@@ -1573,10 +1572,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
         ...prev,
         _levels: nextLevels,
       };
-      if (rowKey === 'content') {
-        next._classes = nextRow._classes;
-        next._percentInviewVertical = nextRow._percentInviewVertical;
-      }
       return next;
     });
   }, []);
@@ -1716,22 +1711,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       _paddingTop: lifeBlocksConfig._paddingTop,
       _paddingBottom: lifeBlocksConfig._paddingBottom,
     };
-    merged._onScreen = {
-      ...(merged._onScreen && typeof merged._onScreen === 'object' && !Array.isArray(merged._onScreen)
-        ? merged._onScreen as Record<string, unknown>
-        : {}),
-      _isEnabled: onScreenConfig._isEnabled,
-      _classes: onScreenConfig._classes,
-      _percentInviewVertical: onScreenConfig._percentInviewVertical,
-      _levels: {
-        page: { ...onScreenConfig._levels.page },
-        section: { ...onScreenConfig._levels.section },
-        contentGroup: { ...onScreenConfig._levels.contentGroup },
-        content: { ...onScreenConfig._levels.content },
-      },
-    };
+    delete merged._onScreen;
     return merged;
-  }, [lifeBlocksConfig, lifeCourseConfig, onScreenConfig]);
+  }, [lifeBlocksConfig, lifeCourseConfig]);
 
   const buildMergedVanillaThemeVariables = useCallback((baseVars: Record<string, unknown>) => {
     const merged: Record<string, unknown> = { ...(baseVars ?? {}) };
@@ -1802,23 +1784,10 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       _paddingBottom: lifeBlocksConfig._paddingBottom,
     };
 
-    merged._onScreen = {
-      ...(merged._onScreen && typeof merged._onScreen === 'object' && !Array.isArray(merged._onScreen)
-        ? merged._onScreen as Record<string, unknown>
-        : {}),
-      _isEnabled: onScreenConfig._isEnabled,
-      _classes: onScreenConfig._classes,
-      _percentInviewVertical: onScreenConfig._percentInviewVertical,
-      _levels: {
-        page: { ...onScreenConfig._levels.page },
-        section: { ...onScreenConfig._levels.section },
-        contentGroup: { ...onScreenConfig._levels.contentGroup },
-        content: { ...onScreenConfig._levels.content },
-      },
-    };
+    delete merged._onScreen;
 
     return merged;
-  }, [checkHideFeedback, checkHidePartial, checkNotFinal, checkUnanswered, customSettings, lifeBlocksConfig, lifeCourseConfig, onScreenConfig]);
+  }, [checkHideFeedback, checkHidePartial, checkNotFinal, checkUnanswered, customSettings, lifeBlocksConfig, lifeCourseConfig]);
 
   useEffect(() => {
     setSelected(mapThemeNameToId(initialThemeName));
@@ -1934,39 +1903,6 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       _paddingBottom: blocks && typeof blocks._paddingBottom === 'string' ? blocks._paddingBottom : '',
     });
 
-    const onScreen = v._onScreen as Record<string, unknown> | undefined;
-    const legacyClasses = onScreen && typeof onScreen._classes === 'string' ? onScreen._classes : '';
-    const legacyPercent =
-      onScreen && typeof onScreen._percentInviewVertical === 'number'
-        ? onScreen._percentInviewVertical
-        : DEFAULT_ON_SCREEN_CONFIG._percentInviewVertical;
-    const levelsSource = onScreen && typeof onScreen._levels === 'object' && !Array.isArray(onScreen._levels)
-      ? onScreen._levels as Record<string, unknown>
-      : undefined;
-    const parseOnScreenLevel = (levelKey: OnScreenLevelKey): OnScreenLevelConfig => {
-      const source = levelsSource && typeof levelsSource[levelKey] === 'object' && !Array.isArray(levelsSource[levelKey])
-        ? levelsSource[levelKey] as Record<string, unknown>
-        : undefined;
-      return {
-        _classes: source && typeof source._classes === 'string' ? source._classes : legacyClasses,
-        _percentInviewVertical:
-          source && typeof source._percentInviewVertical === 'number'
-            ? source._percentInviewVertical
-            : legacyPercent,
-      };
-    };
-    setOnScreenConfig({
-      _isEnabled: !!(onScreen && typeof onScreen._isEnabled === 'boolean' && onScreen._isEnabled),
-      _classes: legacyClasses,
-      _percentInviewVertical: legacyPercent,
-      _levels: {
-        page: parseOnScreenLevel('page'),
-        section: parseOnScreenLevel('section'),
-        contentGroup: parseOnScreenLevel('contentGroup'),
-        content: parseOnScreenLevel('content'),
-      },
-    });
-
     // Component configuration checkboxes: custom uses _componentConfig, LIFE uses _components.
     const comp = (v._componentConfig as Record<string, unknown> | undefined) ?? (v._components as Record<string, unknown> | undefined);
     setCheckNotFinal(!!(comp && typeof comp._canShowFinalMarking === 'boolean' && comp._canShowFinalMarking));
@@ -1975,6 +1911,39 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     setCheckHidePartial(!!(comp && typeof comp._hidePartiallyFeedback === 'boolean' && comp._hidePartiallyFeedback));
     setLifeCourseConfigErrors(DEFAULT_LIFE_COURSE_CONFIG_ERRORS);
   }, []);
+
+  const hydrateOnScreenSettings = useCallback((settings?: Record<string, unknown>) => {
+    const onScreen = settings?._onScreen as Record<string, unknown> | undefined;
+    const levelsSource = onScreen && typeof onScreen._levels === 'object' && !Array.isArray(onScreen._levels)
+      ? onScreen._levels as Record<string, unknown>
+      : undefined;
+    const parseOnScreenLevel = (levelKey: OnScreenLevelKey): OnScreenLevelConfig => {
+      const source = levelsSource && typeof levelsSource[levelKey] === 'object' && !Array.isArray(levelsSource[levelKey])
+        ? levelsSource[levelKey] as Record<string, unknown>
+        : undefined;
+      return {
+        _classes: source && typeof source._classes === 'string' ? source._classes : '',
+        _percentInviewVertical:
+          source && typeof source._percentInviewVertical === 'number'
+            ? source._percentInviewVertical
+            : 50,
+      };
+    };
+    setOnScreenConfig({
+      _isEnabled: !!(onScreen && typeof onScreen._isEnabled === 'boolean' && onScreen._isEnabled),
+      _levels: {
+        page: parseOnScreenLevel('page'),
+        article: parseOnScreenLevel('article'),
+        block: parseOnScreenLevel('block'),
+        component: parseOnScreenLevel('component'),
+      },
+    });
+
+  }, []);
+
+  useEffect(() => {
+    hydrateOnScreenSettings(selected === initialSelectedThemeId ? initialThemeSettings : undefined);
+  }, [hydrateOnScreenSettings, initialThemeSettings, initialSelectedThemeId, selected]);
 
   // Load saved themeVariables into customSettings / vanillaColors / checkboxes.
   useEffect(() => {
@@ -2970,7 +2939,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                               const parsed = Number(e.target.value);
                               const safeValue = Number.isFinite(parsed)
                                 ? Math.max(0, Math.min(100, parsed))
-                                : DEFAULT_ON_SCREEN_CONFIG._percentInviewVertical;
+                                : DEFAULT_ON_SCREEN_CONFIG._levels[row.key]._percentInviewVertical;
                               updateOnScreenRow(row.key, { _percentInviewVertical: safeValue });
                             }}
                             className="text-xs w-full border border-[#d1d5db] rounded-md px-2.5 py-1.5 text-[#111827] bg-white focus:border-[var(--life-primary-500)] outline-none"
