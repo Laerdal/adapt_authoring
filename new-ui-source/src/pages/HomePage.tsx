@@ -15,6 +15,7 @@ interface Course {
   id: number
   backendId?: string
   title: string
+  body?: string
   description: string
   savedDate: string
   savedDateTs: number   // unix ms for sorting
@@ -309,7 +310,7 @@ export default function HomePage() {
     }
   }
 
-  async function handleUpdate(id: number, patch: { title?: string; description?: string; heroAssetId?: string | null; tags?: string[] }) {
+  async function handleUpdate(id: number, patch: { title?: string; body?: string; heroAssetId?: string | null; tags?: string[] }) {
     const target = courses.find((c) => c.id === id)
     if (!target?.backendId) {
       showToast('Could not resolve course ID for update.', 'info')
@@ -318,7 +319,7 @@ export default function HomePage() {
     try {
       await updateCourse(target.backendId, {
         title: patch.title,
-        description: patch.description,
+        body: patch.body,
         heroAssetId: patch.heroAssetId,
         tags: patch.tags,
       })
@@ -702,7 +703,7 @@ export default function HomePage() {
           ) : (
             <div className={
               view === 'grid'
-                ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[repeat(auto-fit,minmax(max(280px,calc((100%_-_5rem)/5)),1fr))] gap-4 md:gap-5'
+                ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[repeat(auto-fit,minmax(max(280px,calc((100%_-_5rem)/5)),minmax(280px,1fr)))] gap-4 md:gap-5'
                 : 'flex flex-col gap-2'
             }>
               {displayed.map((course) => (
@@ -718,7 +719,7 @@ export default function HomePage() {
                       showPermissionDenied('Delete Course', 'You do not have permission to delete this course.');
                     }
                   }}
-                  viewHref={course.backendId ? `/course/${course.backendId}/preview` : ""}
+                  viewHref={course.backendId ? `/course/${course.backendId}/setup` : ""}
                   onUpdate={(patch) => handleUpdate(course.id, patch)}
                   onCopy={() => handleCopy(course.id)}
                   onCopyId={() => handleCopyId(course.id)}

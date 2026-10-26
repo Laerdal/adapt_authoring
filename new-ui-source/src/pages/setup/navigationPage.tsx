@@ -9,6 +9,7 @@ import {
   saveNavigationSettings,
   getCoursePages,
   defaultNavigationSettings,
+  createDefaultStartPageSelection,
   type NavigationSettings,
   type CoursePageOption,
   type NavFooterButtonKey,
@@ -384,6 +385,7 @@ export function NavigationPage({
     getSchemaNode(courseSchema, "_extensions", "_navigationFooter"),
     getSchemaNode(configSchema, "_extensions", "_navigationFooter"),
   );
+  const navigationFooterToggleSchema = getSchemaNode(navigationFooterSchema, "_toggleNavigation");
 
   // ── State updaters (settings is deeply nested; keep mutations narrow) ──
   const setStart = (p: Partial<NavigationSettings["start"]>) =>
@@ -401,7 +403,7 @@ export function NavigationPage({
       ...prev,
       start: {
         ...prev.start,
-        _startIds: [...prev.start._startIds, { _id: pages[0].id, _skipIfComplete: false, _className: "" }],
+        _startIds: [...prev.start._startIds, ...createDefaultStartPageSelection(pages)],
       },
     }));
   };
@@ -486,6 +488,20 @@ export function NavigationPage({
     ...pages.map((p) => ({ value: p.id, label: p.title })),
   ];
 
+  useEffect(() => {
+    if (!s.start._isEnabled || s.start._startIds.length > 0 || !pages.length) return;
+    setS((prev) => {
+      if (!prev.start._isEnabled || prev.start._startIds.length > 0 || !pages.length) return prev;
+      return {
+        ...prev,
+        start: {
+          ...prev.start,
+          _startIds: createDefaultStartPageSelection(pages),
+        },
+      };
+    });
+  }, [pages, s.start._isEnabled, s.start._startIds.length]);
+
   return (
     <div className="flex flex-col h-full w-full bg-[#f7f9fb]">
       {/* Header */}
@@ -513,7 +529,26 @@ export function NavigationPage({
             <>
               {/* ── Start settings ── */}
               <NavAccordion {...acc("start")} title={getSchemaLabel(startSchema, "Start settings")} subtitle="Choose which page(s) learners land on when they open the course.">
-                <ToggleSwitch checked={s.start._isEnabled} onChange={(v) => setStart({ _isEnabled: v })} label={getSchemaLabel(getSchemaNode(startSchema, "_isEnabled"), "Enabled?")} />
+                <ToggleSwitch
+                  checked={s.start._isEnabled}
+                  onChange={(v) => {
+                    setS((prev) => {
+                      const nextStartIds = v && !prev.start._startIds.length && pages.length
+                        ? createDefaultStartPageSelection(pages)
+                        : prev.start._startIds;
+
+                      return {
+                        ...prev,
+                        start: {
+                          ...prev.start,
+                          _isEnabled: v,
+                          _startIds: nextStartIds,
+                        },
+                      };
+                    });
+                  }}
+                  label={getSchemaLabel(getSchemaNode(startSchema, "_isEnabled"), "Enabled?")}
+                />
 
                 {s.start._isEnabled && (
                   <div className="flex flex-col gap-3">
@@ -743,13 +778,33 @@ export function NavigationPage({
                 {...acc("navFooter")}
                 title={getSchemaLabel(navigationFooterSchema, "Navigation Footer")}
                 hint={getSchemaHint(navigationFooterSchema)}
-                subtitle="Configure the footer navigation buttons shown on each page."
+                subtitle="Configure the footer navigation buttons shown on each topic; these can be overridden on a specific topic/page, if required."
               >
                 <ToggleSwitch checked={s.navFooter.enabled} onChange={(v) => setNavFooter({ enabled: v })} label={getSchemaLabel(getSchemaNode(navigationFooterSchema, "_isEnabled"), "Enable Navigation Footer")} hint={getSchemaHint(getSchemaNode(navigationFooterSchema, "_isEnabled"))} />
 
                 {s.navFooter.enabled && (
                   <div className="flex flex-col gap-3">
-                    <NavTextInput label={getSchemaLabel(getSchemaNode(navigationFooterSchema, "_footerText", "text"), "Footer text")} hint={getSchemaHint(getSchemaNode(navigationFooterSchema, "_footerText", "text"))} value={s.navFooter.footerText} onChange={(v) => setNavFooter({ footerText: v })} placeholder="Footer text" />
+                    <div className="flex flex-col gap-1">
+                      <InfoFieldLabel
+                        label={getSchemaLabel(navigationFooterToggleSchema, "Toggle Navigation")}
+                        hint={getSchemaHint(navigationFooterToggleSchema)}
+                      />
+                      <div className="ml-2">
+                        <CheckboxRow
+                          checked={s.navFooter.isLogicalBackNavigation}
+                          onChange={(v) => setNavFooter({ isLogicalBackNavigation: v })}
+                          label={getSchemaLabel(getSchemaNode(navigationFooterToggleSchema, "_isLogicalBackNavigation"), "Logical back navigation")}
+                          hint={getSchemaHint(getSchemaNode(navigationFooterToggleSchema, "_isLogicalBackNavigation"))}
+                        />
+                        <CheckboxRow
+                          checked={s.navFooter.includeSubmenuInNavigation}
+                          onChange={(v) => setNavFooter({ includeSubmenuInNavigation: v })}
+                          label={getSchemaLabel(getSchemaNode(navigationFooterToggleSchema, "_includeSubmenuInNavigation"), "Include submenu in sequential navigation")}
+                          hint={getSchemaHint(getSchemaNode(navigationFooterToggleSchema, "_includeSubmenuInNavigation"))}
+                        />
+                      </div>
+                    </div>
+                    <NavTextInput label="Footer text" hint={getSchemaHint(getSchemaNode(navigationFooterSchema, "_footerText", "text"))} value={s.navFooter.footerText} onChange={(v) => setNavFooter({ footerText: v })} placeholder="Footer text" />
                     <p className="text-[11px] text-[var(--life-neutral-300)] leading-snug">
                       Navigation Footer settings at the course level; can be overridden at the topic/page level, if required.
                     </p>
