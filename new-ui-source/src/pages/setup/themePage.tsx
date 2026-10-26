@@ -8,6 +8,7 @@ import { SaveStatusToast } from "./SaveStatusToast";
 import { UnsavedChangesModal } from "./unsavedChangesModal";
 import { useUnsavedChangesNavigationGuard } from "./useUnsavedChangesNavigationGuard";
 import { ON_SCREEN_CLASS_OPTIONS } from "../../helpers/onScreenSettings";
+import { updateCustomThemeSetting } from "./customThemeSettings";
 
 // Extracted from SetupPage to keep select-theme feature isolated with no behavior changes.
 
@@ -829,13 +830,6 @@ const CUSTOM_FIELD_DEFAULTS: Record<string, string> = {
   '_notify::notify-title-color': '',
 };
 
-// Mirrors linkedProperties in custom-theme properties.schema.
-// Format uses UI keys: "sectionId::fieldKey".
-const CUSTOM_LINKED_PROPERTY_MAP: Record<string, string[]> = {
-  '_global::_primaryBrandColor': ['_progress::progress', '_global::link', '_nav::nav', '_pageStructure::page-header-background-color'],
-  '_progress::progress': ['_nav::nav-progress', '_menu::menu-item-progress'],
-};
-
 const VANILLA_ACCORDION_DEFS: { id: string; label: string; fields: { key: string; label: string }[] }[] = [
   {
     id: '_global', label: 'Global',
@@ -1109,9 +1103,9 @@ const DEFAULT_ON_SCREEN_CONFIG: OnScreenConfig = {
 };
 
 const ON_SCREEN_ROW_DEFS: Array<{ key: OnScreenLevelKey; label: string }> = [
-  { key: 'page', label: 'Topic' },
-  { key: 'article', label: 'Section' },
-  { key: 'block', label: 'Content Group' },
+  { key: 'page', label: 'Topic (Page)' },
+  { key: 'article', label: 'Section (Article)' },
+  { key: 'block', label: 'Content Group (Block)' },
   { key: 'component', label: 'Component' },
 ];
 
@@ -1576,27 +1570,15 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     });
   }, []);
 
+  const getCustomSettingDefault = useCallback((key: string): string => {
+    const [sectionId, fieldKey] = key.split('::');
+    const schemaDefault = getSchemaField(selectedThemeSchema, sectionId, fieldKey)?.default;
+    return typeof schemaDefault === 'string' ? schemaDefault : CUSTOM_FIELD_DEFAULTS[key] ?? '';
+  }, [selectedThemeSchema]);
+
   const setCustomSettingWithDependencies = useCallback((key: string, value: string) => {
-    setCustomSettings((prev) => {
-      const next = { ...prev, [key]: value };
-      const visited = new Set<string>();
-      const queue: string[] = [key];
-
-      while (queue.length) {
-        const sourceKey = queue.shift();
-        if (!sourceKey || visited.has(sourceKey)) continue;
-        visited.add(sourceKey);
-
-        const linkedKeys = CUSTOM_LINKED_PROPERTY_MAP[sourceKey] ?? [];
-        linkedKeys.forEach((linkedKey) => {
-          next[linkedKey] = next[sourceKey];
-          queue.push(linkedKey);
-        });
-      }
-
-      return next;
-    });
-  }, []);
+    setCustomSettings((prev) => updateCustomThemeSetting(prev, key, value, getCustomSettingDefault(key)));
+  }, [getCustomSettingDefault]);
 
   const buildUnsavedStateSnapshot = useCallback(() => {
     const normalizeRecord = (record: Record<string, string>) => Object.keys(record)
@@ -1746,7 +1728,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
       section.fields.forEach((field) => {
         const uiKey = `${section.id}::${field.key}`;
-        existingSection[field.key] = customSettings[uiKey] ?? '';
+        existingSection[field.key] = customSettings[uiKey] || getCustomSettingDefault(uiKey);
       });
 
       merged[section.id] = existingSection;
@@ -1787,7 +1769,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     delete merged._onScreen;
 
     return merged;
-  }, [checkHideFeedback, checkHidePartial, checkNotFinal, checkUnanswered, customSettings, lifeBlocksConfig, lifeCourseConfig]);
+  }, [checkHideFeedback, checkHidePartial, checkNotFinal, checkUnanswered, customSettings, getCustomSettingDefault, lifeBlocksConfig, lifeCourseConfig, onScreenConfig]);
 
   useEffect(() => {
     setSelected(mapThemeNameToId(initialThemeName));
@@ -1987,10 +1969,11 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
       <InfoFieldLabel label={label} hint={hint} className="mb-2" />
       <div className="flex gap-2 items-center">
         <label className="w-8 h-8 rounded border border-[#d1d5db] cursor-pointer flex-shrink-0 block overflow-hidden relative">
-          <span className="block w-full h-full" style={{ backgroundColor: value }} />
-          <input type="color" value={value} onChange={e => onChange(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
+          <span className="block w-full h-full" style={{ backgroundColor: value || 'transparent' }} />
+          <input type="color" name={`${label}-picker`} aria-label={`${label} picker`} value={/^#[0-9a-f]{6}$/i.test(value) ? value : '#ffffff'} onChange={e => onChange(e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
         </label>
-        <input type="text" value={value.toUpperCase()} onChange={e => { const v = e.target.value; if (/^#[0-9A-Fa-f]{0,6}$/.test(v)) onChange(v); }} className="text-xs flex-1 border border-[#d1d5db] rounded px-2 py-1 text-[#111827] focus:border-[var(--life-primary-500)] outline-none" />
+        <input type="text" name={`${label}-hex`} aria-label={`${label} hex value`} value={value.toUpperCase()} placeholder="Inherit" onChange={e => { const v = e.target.value; if (v === '' || /^#[0-9A-Fa-f]{0,6}$/.test(v)) onChange(v); }} className="text-xs min-w-0 flex-1 border border-[#d1d5db] rounded px-2 py-1 text-[#111827] focus:border-[var(--life-primary-500)] outline-none" />
+        <button type="button" title={`Reset ${label} to inherited/default colour`} onClick={() => onChange('')} className="text-xs text-[#374151] underline">Reset</button>
       </div>
     </div>
   );
@@ -1999,7 +1982,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
   const FontDropdownField = ({ label, hint, value, onChange }: { label: string; hint?: string; value: string; onChange: (v: string) => void }) => (
     <div>
       <InfoFieldLabel label={label} hint={hint} className="mb-2" />
-      <select value={value} onChange={e => onChange(e.target.value)} className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:border-[var(--life-primary-500)] outline-none">
+      <select name={label} aria-label={label} value={value} onChange={e => onChange(e.target.value)} className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:border-[var(--life-primary-500)] outline-none">
         {FONT_OPTIONS.map(f => <option key={f} value={f}>{f}</option>)}
       </select>
     </div>
@@ -2007,7 +1990,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
   const getCustomSetting = (sectionId: string, fieldKey: string): string => {
     const key = `${sectionId}::${fieldKey}`;
-    return customSettings[key] ?? CUSTOM_FIELD_DEFAULTS[key] ?? '';
+    return customSettings[key] || getCustomSettingDefault(key);
   };
 
   // Live Preview Component
@@ -2019,6 +2002,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
 
     const primaryColor = getCustomSetting('_global', '_primaryBrandColor') || '#2e7fa1';
     const secondaryColor = getCustomSetting('_global', '_secondaryBrandColor') || '#25837e';
+    const successColor = getCustomSetting('_validation', 'validation-success') || '#065f28';
+    const errorColor = getCustomSetting('_validation', 'validation-error') || '#ff0000';
     const paragraphFont = getCustomSetting('_global', 'paragraph-font-family') || 'Lato';
     const headingFont = getCustomSetting('_global', 'heading-font-family') || 'Lato';
     const fontColor = getCustomSetting('_global', 'font-color') || '#1f1f1f';
@@ -2027,24 +2012,24 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     const linkColor = getCustomSetting('_global', 'link') || '#2e7fa1';
     const titleSizeRaw = getCustomSetting('_global', 'page-heading-font-size') || '3rem';
     const pageBgColor = getCustomSetting('_pageStructure', 'page-bg-color') || '#f8f8f8';
-    const articleBgColor = getCustomSetting('_pageStructure', 'article-bg-color') || '#ffffff';
-    const blockBgColor = getCustomSetting('_pageStructure', 'block-bg-color') || '#ffffff';
-    const componentBgColor = getCustomSetting('_pageStructure', 'component-bg-color') || '#ffffff';
-    const pageHeaderBg = getCustomSetting('_pageStructure', 'page-header-background-color') || primaryColor;
-    const pageHeaderTitleColor = getCustomSetting('_pageStructure', 'page-header-title-color') || '#ffffff';
-    const pageHeaderSubtitleColor = getCustomSetting('_pageStructure', 'page-header-subtitle-color') || 'rgba(255,255,255,0.8)';
-    const pageHeaderBodyColor = getCustomSetting('_pageStructure', 'page-header-body-color') || 'rgba(255,255,255,0.85)';
+    const articleBgColor = getCustomSetting('_pageStructure', 'article-bg-color') || 'transparent';
+    const blockBgColor = getCustomSetting('_pageStructure', 'block-bg-color') || 'transparent';
+    const componentBgColor = getCustomSetting('_pageStructure', 'component-bg-color') || 'transparent';
+    const pageHeaderBg = getCustomSetting('_pageStructure', 'page-header-background-color') || 'transparent';
+    const pageHeaderTitleColor = getCustomSetting('_pageStructure', 'page-header-title-color') || headingColorTheme;
+    const pageHeaderSubtitleColor = getCustomSetting('_pageStructure', 'page-header-subtitle-color') || headingColorTheme;
+    const pageHeaderBodyColor = getCustomSetting('_pageStructure', 'page-header-body-color') || fontColor;
     const pageHeaderInstructionColor = getCustomSetting('_pageStructure', 'page-header-instruction-color') || instructionColor;
-    const articleTopPadding = getCustomSetting('_pageStructure', 'article-top-padding') || 'standard';
-    const articleBottomPadding = getCustomSetting('_pageStructure', 'article-bottom-padding') || 'standard';
-    const blockTopPadding = getCustomSetting('_pageStructure', 'block-top-padding') || 'standard';
-    const blockBottomPadding = getCustomSetting('_pageStructure', 'block-bottom-padding') || 'standard';
+    const articleTopPadding = getCustomSetting('_pageStructure', 'article-top-padding');
+    const articleBottomPadding = getCustomSetting('_pageStructure', 'article-bottom-padding');
+    const blockTopPadding = getCustomSetting('_pageStructure', 'block-top-padding');
+    const blockBottomPadding = getCustomSetting('_pageStructure', 'block-bottom-padding');
 
     const progressFill = getCustomSetting('_progress', 'progress') || primaryColor;
     const progressBackground = getCustomSetting('_progress', 'progress-inverted') || '#e5e5e5';
     const progressBorder = getCustomSetting('_progress', 'progress-border') || 'transparent';
 
-    const navBg = getCustomSetting('_nav', 'nav') || pageHeaderBg;
+    const navBg = getCustomSetting('_nav', 'nav') || primaryColor;
 
     const spacingScale: Record<string, number> = {
       remove: 0,
@@ -2059,6 +2044,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     const headingColor = previewDarkMode ? '#ffffff' : headingColorTheme;
     const instructionPreviewColor = previewDarkMode ? '#f3f4f6' : instructionColor;
     const articlePreviewBg = previewDarkMode ? '#232323' : articleBgColor;
+    const pageHeaderPreviewBg = previewDarkMode ? '#232323' : pageHeaderBg;
     const blockPreviewBg = previewDarkMode ? '#2b2b2b' : blockBgColor;
     const componentPreviewBg = previewDarkMode ? '#333333' : componentBgColor;
     const itemPreviewBg = previewDarkMode ? '#3a3a3a' : componentBgColor;
@@ -2066,8 +2052,8 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
     const infoPanelBorder = previewDarkMode ? '#4b5563' : '#FEE685';
     const infoPanelText = previewDarkMode ? '#f9fafb' : '#973C00';
     const infoPanelHeading = previewDarkMode ? '#ffffff' : '#7A3000';
-    const navIconColor = (pageHeaderTitleColor && pageHeaderTitleColor !== 'transparent') ? pageHeaderTitleColor : '#ffffff';
-    const navTextColor = (pageHeaderBodyColor && pageHeaderBodyColor !== 'transparent') ? pageHeaderBodyColor : navIconColor;
+    const navIconColor = '#ffffff';
+    const navTextColor = '#ffffff';
     const titleSize = titleSizeRaw;
     const articleTop = spacingScale[articleTopPadding] ?? spacingScale.standard;
     const articleBottom = spacingScale[articleBottomPadding] ?? spacingScale.standard;
@@ -2149,40 +2135,46 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
             <div style={{ height: '4px', borderTop: `1px solid ${progressBorder}`, borderBottom: `1px solid ${progressBorder}`, background: `linear-gradient(to right, ${progressFill} 60%, ${progressBackground} 60%)` }} />
             <div style={{ backgroundColor: previewBg, padding: '18px' }}>
               <div style={{ maxWidth: '560px', margin: '0 auto' }}>
-                <div style={{ padding: '6px 0 14px' }}>
-                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: titleSize || '3rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '4px' }}>
+                <div style={{ padding: '6px 0 14px', backgroundColor: pageHeaderPreviewBg }}>
+                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: titleSize || '3rem', fontWeight: 700, color: previewDarkMode ? '#ffffff' : pageHeaderTitleColor, lineHeight: 1.2, marginBottom: '2rem' }}>
                     New Topic Title
                   </div>
-                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: textColor, fontSize: '0.88rem', lineHeight: 1.45 }}>
+                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: previewDarkMode ? textColor : pageHeaderSubtitleColor, fontSize: '0.88rem', lineHeight: 1.45 }}>
                     Topic subtitle
+                  </div>
+                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: previewDarkMode ? textColor : pageHeaderBodyColor, fontSize: '0.88rem', marginTop: '1rem' }}>
+                    Topic introduction
+                  </div>
+                  <div style={{ fontFamily: `${paragraphFont}, sans-serif`, color: previewDarkMode ? instructionPreviewColor : pageHeaderInstructionColor, fontSize: '0.82rem', marginTop: '1rem' }}>
+                    Complete the activities below.
                   </div>
                 </div>
 
                 <div style={{ border: `1px solid ${previewDarkMode ? '#4b5563' : '#d1d5db'}`, borderRadius: '10px', background: articlePreviewBg, padding: `${articleTop}px 12px ${articleBottom}px`, marginTop: '10px' }}>
-                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '1rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '10px' }}>
+                  <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '1rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '1rem' }}>
                     New Article Title
                   </div>
 
                   <div style={{ border: `1px solid ${previewDarkMode ? '#4b5563' : '#9fc9dd'}`, borderRadius: '10px', background: blockPreviewBg, padding: `${blockTop}px 12px ${blockBottom}px`, marginTop: '10px' }}>
-                    <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.92rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '10px' }}>
+                    <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.92rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '1rem' }}>
                       New Block Title
                     </div>
 
                     <div style={{ border: `1px solid ${previewDarkMode ? '#6b7280' : '#d1d5db'}`, borderRadius: '10px', background: componentPreviewBg, padding: '12px', marginTop: '10px', boxShadow: previewDarkMode ? 'none' : '0 1px 2px rgba(0, 0, 0, 0.05)' }}>
-                      <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.9rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '8px' }}>
+                      <div style={{ fontFamily: `${headingFont}, sans-serif`, fontSize: '0.9rem', fontWeight: 700, color: headingColor, lineHeight: 1.2, marginBottom: '1rem' }}>
                         New Component Title
                       </div>
-                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: textColor, marginBottom: '6px' }}>
+                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: textColor, marginBottom: '1rem' }}>
                         Body text
                       </div>
-                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.84rem', color: linkColor, textDecoration: 'underline', cursor: 'pointer', marginBottom: '10px' }}>
+                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.84rem', color: linkColor, textDecoration: 'underline', cursor: 'pointer', marginBottom: '1rem' }}>
                         This is a sample link
                       </div>
-                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: instructionPreviewColor, fontStyle: 'italic', marginBottom: '10px' }}>
+                      <div style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.82rem', color: instructionPreviewColor, fontStyle: 'italic', marginBottom: '1rem' }}>
                         Choose one option then select Submit.
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {[{ label: 'Correct', selected: true }, { label: 'Incorrect', selected: false }].map((opt) => (
+                        {[{ label: 'Selected', color: secondaryColor }, { label: 'Correct', color: successColor }, { label: 'Incorrect', color: errorColor }].map((opt) => (
                           <div
                             key={opt.label}
                             style={{
@@ -2192,11 +2184,11 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                               border: `1px solid ${previewDarkMode ? '#9ca3af' : '#e5e7eb'}`,
                               borderRadius: '999px',
                               padding: '8px 12px',
-                              background: opt.selected ? `${secondaryColor}1F` : itemPreviewBg,
+                              background: itemPreviewBg,
                             }}
                           >
-                            <div style={{ width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0, border: `2px solid ${opt.selected ? secondaryColor : (previewDarkMode ? '#d1d5db' : '#cbd5e1')}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: componentPreviewBg }}>
-                              {opt.selected && <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: secondaryColor }} />}
+                            <div style={{ width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0, border: `2px solid ${opt.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', background: componentPreviewBg }}>
+                              <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: opt.color }} />
                             </div>
                             <span style={{ fontFamily: `${paragraphFont}, sans-serif`, fontSize: '0.8rem', fontWeight: 600, color: textColor }}>{opt.label}</span>
                           </div>
@@ -3086,10 +3078,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                           <div className="grid grid-cols-2 gap-x-4 gap-y-4">
                             {acc.fields.map((field) => {
                               const key = `${acc.id}::${field.key}`;
-                              const value = customSettings[key] ?? CUSTOM_FIELD_DEFAULTS[key] ?? '';
+                              const value = customSettings[key] || getCustomSettingDefault(key);
                               const hint = getSchemaNestedFieldText(sectionSchema, field.key, 'help');
                               const fieldLabel = getSchemaText(getSchemaField(selectedThemeSchema, acc.id, field.key), 'title') ?? field.label;
-
                               if (field.inputType === 'select') {
                                 return (
                                   <div
@@ -3098,6 +3089,9 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                                   >
                                     <InfoFieldLabel label={fieldLabel} hint={hint} className="mb-2" />
                                     <select
+                                      id={`custom-theme-${acc.id}-${field.key}`}
+                                      name={key}
+                                      aria-label={fieldLabel}
                                       value={value}
                                       onChange={(e) => setCustomSettingWithDependencies(key, e.target.value)}
                                       className="text-xs w-full border border-[#d1d5db] rounded px-2 py-1 text-[#111827] bg-white cursor-pointer focus:border-[var(--life-primary-500)] outline-none"
@@ -3116,7 +3110,7 @@ export default function SelectThemePage({ initialThemeName, initialThemeVariable
                                   key={field.key}
                                   label={fieldLabel}
                                   hint={hint}
-                                  value={value || '#ffffff'}
+                                  value={value}
                                   onChange={(nextValue) => setCustomSettingWithDependencies(key, nextValue)}
                                 />
                               );
