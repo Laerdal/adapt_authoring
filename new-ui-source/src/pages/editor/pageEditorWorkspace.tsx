@@ -102,6 +102,7 @@ import {
 } from "../../constants/structureDefaults";
 import { useAuth } from "../../context/AuthContext";
 import { getSchemaHint, getSchemaLabel, getSchemaNode } from "../../helpers/setupInfoSchema";
+import { getOnScreenClassOptions, serializeOnScreenSettings, type OnScreenSettings } from "../../helpers/onScreenSettings";
 
 interface PreviewBuildResponse {
   success?: boolean;
@@ -178,11 +179,7 @@ type TopicTextAlignment = {
   _instruction?: string;
 };
 
-type TopicOnScreenSettings = {
-  _isEnabled?: boolean;
-  _classes?: string;
-  _percentInviewVertical?: number | "";
-};
+type TopicOnScreenSettings = OnScreenSettings;
 
 type TopicThemeSettings = {
   _htmlClasses?: string;
@@ -289,20 +286,6 @@ const BG_POSITION_OPTIONS = [
 const BG_REPEAT_LABEL = "Set if/how the background image repeats";
 const BG_SIZE_LABEL = "Set the size of the background image";
 const BG_POSITION_LABEL = "Set the position of the background image";
-const ONSCREEN_CLASS_OPTIONS = [
-  "",
-  "fade-in",
-  "fade-out",
-  "slide-in-left",
-  "slide-in-right",
-  "slide-in-up",
-  "slide-in-down",
-  "zoom-in",
-  "zoom-out",
-  "bounce",
-  "flip",
-  "rotate-in",
-] as const;
 const TEXT_ALIGN_OPTIONS = ["", "left", "center", "right"] as const;
 const LOCK_TYPE_OPTIONS = ["", "custom", "lockLast", "sequential", "unlockFirst"] as const;
 const RESET_ON_REVISIT_OPTIONS = ["false", "soft", "hard"] as const;
@@ -2941,11 +2924,7 @@ function mapStructureToPages(
       isAvailable?: boolean;
       isHidden?: boolean;
       isVisible?: boolean;
-      onScreen?: {
-        _isEnabled?: boolean;
-        _classes?: string;
-        _percentInviewVertical?: number;
-      };
+      onScreen?: TopicOnScreenSettings;
       ariaLevel?: string;
       isA11yCompletionDescriptionEnabled?: boolean;
       extensions?: Record<string, unknown>;
@@ -2963,11 +2942,7 @@ function mapStructureToPages(
         isAvailable?: boolean;
         isHidden?: boolean;
         isVisible?: boolean;
-        onScreen?: {
-          _isEnabled?: boolean;
-          _classes?: string;
-          _percentInviewVertical?: number;
-        };
+        onScreen?: TopicOnScreenSettings;
         ariaLevel?: string;
         isA11yCompletionDescriptionEnabled?: boolean;
         extensions?: Record<string, unknown>;
@@ -2992,11 +2967,7 @@ function mapStructureToPages(
             ariaLevel?: string;
             isA11yCompletionDescriptionEnabled?: boolean;
             showDisplayTitleInPreview?: boolean;
-            onScreen?: {
-              _isEnabled?: boolean;
-              _classes?: string;
-              _percentInviewVertical?: number;
-            };
+            onScreen?: TopicOnScreenSettings;
             extensions?: Record<string, unknown>;
           }>;
       }>;
@@ -11822,14 +11793,7 @@ export default function CourseEditor({
             _isAvailable: page.isAvailable,
             _isHidden: page.isHidden,
             _isVisible: page.isVisible,
-            _onScreen: {
-              _isEnabled: !!page.onScreen?._isEnabled,
-              _classes: page.onScreen?._classes || "",
-              _percentInviewVertical:
-                typeof page.onScreen?._percentInviewVertical === "number"
-                  ? page.onScreen._percentInviewVertical
-                  : 50,
-            },
+            _onScreen: serializeOnScreenSettings(page.onScreen),
             _ariaLevel: isNaN(Number(page.ariaLevel)) ? 0 : Number(page.ariaLevel),
             _isA11yCompletionDescriptionEnabled: page.isA11yCompletionDescriptionEnabled,
             _colorLabel: page.colorLabel,
@@ -11869,14 +11833,7 @@ export default function CourseEditor({
             _requireCompletionOf: isNaN(Number(article.requireCompletionOf)) ? -1 : Number(article.requireCompletionOf),
             _classes: article.classes,
             _colorLabel: article.colorLabel,
-            _onScreen: {
-              _isEnabled: !!article.onScreen?._isEnabled,
-              _classes: article.onScreen?._classes || "",
-              _percentInviewVertical:
-                typeof article.onScreen?._percentInviewVertical === "number"
-                  ? article.onScreen._percentInviewVertical
-                  : 50,
-            },
+            _onScreen: serializeOnScreenSettings(article.onScreen),
             _ariaLevel: isNaN(Number(article.ariaLevel)) ? 0 : Number(article.ariaLevel),
             _isA11yCompletionDescriptionEnabled: article.isA11yCompletionDescriptionEnabled,
             _extensions: article.extensions ?? {},
@@ -11902,14 +11859,7 @@ export default function CourseEditor({
             _requireCompletionOf: isNaN(Number(block.requireCompletionOf)) ? -1 : Number(block.requireCompletionOf),
             _classes: block.classes,
             _colorLabel: block.colorLabel,
-            _onScreen: {
-              _isEnabled: !!block.onScreen?._isEnabled,
-              _classes: block.onScreen?._classes || "",
-              _percentInviewVertical:
-                typeof block.onScreen?._percentInviewVertical === "number"
-                  ? block.onScreen._percentInviewVertical
-                  : 50,
-            },
+            _onScreen: serializeOnScreenSettings(block.onScreen),
             _ariaLevel: isNaN(Number(block.ariaLevel)) ? 0 : Number(block.ariaLevel),
             _isA11yCompletionDescriptionEnabled: block.isA11yCompletionDescriptionEnabled,
             _extensions: block.extensions ?? {},
@@ -11963,14 +11913,7 @@ export default function CourseEditor({
             _isResetOnRevisit: component.isResetOnRevisit || "false",
             _ariaLevel: isNaN(Number(component.ariaLevel)) ? 0 : Number(component.ariaLevel),
             _isA11yCompletionDescriptionEnabled: component.isA11yCompletionDescriptionEnabled,
-            _onScreen: {
-              _isEnabled: !!component.onScreen?._isEnabled,
-              _classes: component.onScreen?._classes || "",
-              _percentInviewVertical:
-                typeof component.onScreen?._percentInviewVertical === "number"
-                  ? component.onScreen._percentInviewVertical
-                  : 50,
-            },
+            _onScreen: serializeOnScreenSettings(component.onScreen),
             _extensions: component.extensions ?? {},
           });
         }
@@ -13129,38 +13072,35 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                 label={getSchemaLabel(getContentFieldSchema("contentobject", "_onScreen", "_isEnabled"), "Enabled?")}
                                 hint={getSchemaHint(getContentFieldSchema("contentobject", "_onScreen", "_isEnabled"))}
                                 checked={asBoolean(page.onScreen?._isEnabled)}
-                                onChange={(checked) => updatePageData(page.id, {
-                                  onScreen: {
-                                    ...(page.onScreen ?? {}),
-                                    _isEnabled: checked,
-                                  },
-                                })}
+                                onChange={(checked) => updatePageData(page.id, { onScreen: { ...page.onScreen, _isEnabled: checked } })}
                               />
-                              <TopicSelect
-                                label={getSchemaLabel(getContentFieldSchema("contentobject", "_onScreen", "_classes"), "Classes")}
-                                hint={getSchemaHint(getContentFieldSchema("contentobject", "_onScreen", "_classes"))}
-                                value={asString(page.onScreen?._classes)}
-                                onChange={(value) => updatePageData(page.id, {
-                                  onScreen: {
-                                    ...(page.onScreen ?? {}),
-                                    _classes: value,
-                                  },
-                                })}
-                                options={ONSCREEN_CLASS_OPTIONS}
-                                emptyOptionLabel=""
-                              />
-                              <TopicTextInput
-                                label={getSchemaLabel(getContentFieldSchema("contentobject", "_onScreen", "_percentInviewVertical"), "Percent in view")}
-                                hint={getSchemaHint(getContentFieldSchema("contentobject", "_onScreen", "_percentInviewVertical"))}
-                                type="number"
-                                value={String(asNumberOrEmpty(page.onScreen?._percentInviewVertical))}
-                                onChange={(value) => updatePageData(page.id, {
-                                  onScreen: {
-                                    ...(page.onScreen ?? {}),
-                                    _percentInviewVertical: parseNumberishInput(value),
-                                  },
-                                })}
-                              />
+                              <div className="space-y-3">
+                                <TopicSelect
+                                  label={getSchemaLabel(getContentFieldSchema("contentobject", "_onScreen", "_classes"), "Classes")}
+                                  hint={getSchemaHint(getContentFieldSchema("contentobject", "_onScreen", "_classes"))}
+                                  value={asString(page.onScreen?._classes)}
+                                  onChange={(value) => updatePageData(page.id, {
+                                    onScreen: {
+                                      ...(page.onScreen ?? {}),
+                                      _classes: value,
+                                    },
+                                  })}
+                                  options={getOnScreenClassOptions(courseTheme, page.onScreen?._classes)}
+                                  emptyOptionLabel=""
+                                />
+                                <TopicTextInput
+                                  label={getSchemaLabel(getContentFieldSchema("contentobject", "_onScreen", "_percentInviewVertical"), "Percent in view")}
+                                  hint={getSchemaHint(getContentFieldSchema("contentobject", "_onScreen", "_percentInviewVertical"))}
+                                  type="number"
+                                  value={String(asNumberOrEmpty(page.onScreen?._percentInviewVertical))}
+                                  onChange={(value) => updatePageData(page.id, {
+                                    onScreen: {
+                                      ...(page.onScreen ?? {}),
+                                      _percentInviewVertical: parseNumberishInput(value),
+                                    },
+                                  })}
+                                />
+                              </div>
                             </TopicNestedAccordion>
                           </TopicAccordion>
 
@@ -13386,23 +13326,25 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                     label={getSchemaLabel(getContentFieldSchema("article", "_onScreen", "_isEnabled"), "Enabled?")}
                                     hint={getSchemaHint(getContentFieldSchema("article", "_onScreen", "_isEnabled"))}
                                     checked={asBoolean(article.onScreen?._isEnabled)}
-                                    onChange={(checked) => updateArticle(page!.id, article.id, { onScreen: { ...(article.onScreen ?? {}), _isEnabled: checked } })}
+                                    onChange={(checked) => updateArticle(page!.id, article.id, { onScreen: { ...article.onScreen, _isEnabled: checked } })}
                                   />
-                                  <TopicSelect
-                                    label={getSchemaLabel(getContentFieldSchema("article", "_onScreen", "_classes"), "Classes")}
-                                    hint={getSchemaHint(getContentFieldSchema("article", "_onScreen", "_classes"))}
-                                    value={asString(article.onScreen?._classes)}
-                                    onChange={(value) => updateArticle(page!.id, article.id, { onScreen: { ...(article.onScreen ?? {}), _classes: value } })}
-                                    options={ONSCREEN_CLASS_OPTIONS}
-                                    emptyOptionLabel=""
-                                  />
-                                  <TopicTextInput
-                                    label={getSchemaLabel(getContentFieldSchema("article", "_onScreen", "_percentInviewVertical"), "Percent in view")}
-                                    hint={getSchemaHint(getContentFieldSchema("article", "_onScreen", "_percentInviewVertical"))}
-                                    type="number"
-                                    value={String(asNumberOrEmpty(article.onScreen?._percentInviewVertical))}
-                                    onChange={(value) => updateArticle(page!.id, article.id, { onScreen: { ...(article.onScreen ?? {}), _percentInviewVertical: parseNumberishInput(value) } })}
-                                  />
+                                  <div className="space-y-3">
+                                    <TopicSelect
+                                      label={getSchemaLabel(getContentFieldSchema("article", "_onScreen", "_classes"), "Classes")}
+                                      hint={getSchemaHint(getContentFieldSchema("article", "_onScreen", "_classes"))}
+                                      value={asString(article.onScreen?._classes)}
+                                      onChange={(value) => updateArticle(page!.id, article.id, { onScreen: { ...(article.onScreen ?? {}), _classes: value } })}
+                                      options={getOnScreenClassOptions(courseTheme, article.onScreen?._classes)}
+                                      emptyOptionLabel=""
+                                    />
+                                    <TopicTextInput
+                                      label={getSchemaLabel(getContentFieldSchema("article", "_onScreen", "_percentInviewVertical"), "Percent in view")}
+                                      hint={getSchemaHint(getContentFieldSchema("article", "_onScreen", "_percentInviewVertical"))}
+                                      type="number"
+                                      value={String(asNumberOrEmpty(article.onScreen?._percentInviewVertical))}
+                                      onChange={(value) => updateArticle(page!.id, article.id, { onScreen: { ...(article.onScreen ?? {}), _percentInviewVertical: parseNumberishInput(value) } })}
+                                    />
+                                  </div>
                                 </TopicNestedAccordion>
                               </TopicAccordion>
 
@@ -13623,23 +13565,25 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                     label={getSchemaLabel(getContentFieldSchema("block", "_onScreen", "_isEnabled"), "Enabled?")}
                                     hint={getSchemaHint(getContentFieldSchema("block", "_onScreen", "_isEnabled"))}
                                     checked={asBoolean(block.onScreen?._isEnabled)}
-                                    onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { onScreen: { ...(block.onScreen ?? {}), _isEnabled: checked } })}
+                                    onChange={(checked) => updateBlock(page!.id, article!.id, block.id, { onScreen: { ...block.onScreen, _isEnabled: checked } })}
                                   />
-                                  <TopicSelect
-                                    label={getSchemaLabel(getContentFieldSchema("block", "_onScreen", "_classes"), "Classes")}
-                                    hint={getSchemaHint(getContentFieldSchema("block", "_onScreen", "_classes"))}
-                                    value={asString(block.onScreen?._classes)}
-                                    onChange={(value) => updateBlock(page!.id, article!.id, block.id, { onScreen: { ...(block.onScreen ?? {}), _classes: value } })}
-                                    options={ONSCREEN_CLASS_OPTIONS}
-                                    emptyOptionLabel=""
-                                  />
-                                  <TopicTextInput
-                                    label={getSchemaLabel(getContentFieldSchema("block", "_onScreen", "_percentInviewVertical"), "Percent in view")}
-                                    hint={getSchemaHint(getContentFieldSchema("block", "_onScreen", "_percentInviewVertical"))}
-                                    type="number"
-                                    value={String(asNumberOrEmpty(block.onScreen?._percentInviewVertical))}
-                                    onChange={(value) => updateBlock(page!.id, article!.id, block.id, { onScreen: { ...(block.onScreen ?? {}), _percentInviewVertical: parseNumberishInput(value) } })}
-                                  />
+                                  <div className="space-y-3">
+                                    <TopicSelect
+                                      label={getSchemaLabel(getContentFieldSchema("block", "_onScreen", "_classes"), "Classes")}
+                                      hint={getSchemaHint(getContentFieldSchema("block", "_onScreen", "_classes"))}
+                                      value={asString(block.onScreen?._classes)}
+                                      onChange={(value) => updateBlock(page!.id, article!.id, block.id, { onScreen: { ...(block.onScreen ?? {}), _classes: value } })}
+                                      options={getOnScreenClassOptions(courseTheme, block.onScreen?._classes)}
+                                      emptyOptionLabel=""
+                                    />
+                                    <TopicTextInput
+                                      label={getSchemaLabel(getContentFieldSchema("block", "_onScreen", "_percentInviewVertical"), "Percent in view")}
+                                      hint={getSchemaHint(getContentFieldSchema("block", "_onScreen", "_percentInviewVertical"))}
+                                      type="number"
+                                      value={String(asNumberOrEmpty(block.onScreen?._percentInviewVertical))}
+                                      onChange={(value) => updateBlock(page!.id, article!.id, block.id, { onScreen: { ...(block.onScreen ?? {}), _percentInviewVertical: parseNumberishInput(value) } })}
+                                    />
+                                  </div>
                                 </TopicNestedAccordion>
                               </TopicAccordion>
 
@@ -13846,23 +13790,25 @@ aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
                                     label={getSchemaLabel(getContentFieldSchema("component", "_onScreen", "_isEnabled"), "Enabled?")}
                                     hint={getSchemaHint(getContentFieldSchema("component", "_onScreen", "_isEnabled"))}
                                     checked={asBoolean(component.onScreen?._isEnabled)}
-                                    onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { onScreen: { ...(component.onScreen ?? {}), _isEnabled: checked } })}
+                                    onChange={(checked) => updateComponent(page.id, article.id, block.id, component.id, { onScreen: { ...component.onScreen, _isEnabled: checked } })}
                                   />
-                                  <TopicSelect
-                                    label={getSchemaLabel(getContentFieldSchema("component", "_onScreen", "_classes"), "Classes")}
-                                    hint={getSchemaHint(getContentFieldSchema("component", "_onScreen", "_classes"))}
-                                    value={asString(component.onScreen?._classes)}
-                                    onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { onScreen: { ...(component.onScreen ?? {}), _classes: value } })}
-                                    options={ONSCREEN_CLASS_OPTIONS}
-                                    emptyOptionLabel=""
-                                  />
-                                  <TopicTextInput
-                                    label={getSchemaLabel(getContentFieldSchema("component", "_onScreen", "_percentInviewVertical"), "Percent in view")}
-                                    hint={getSchemaHint(getContentFieldSchema("component", "_onScreen", "_percentInviewVertical"))}
-                                    type="number"
-                                    value={String(asNumberOrEmpty(component.onScreen?._percentInviewVertical))}
-                                    onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { onScreen: { ...(component.onScreen ?? {}), _percentInviewVertical: parseNumberishInput(value) } })}
-                                  />
+                                  <div className="space-y-3">
+                                    <TopicSelect
+                                      label={getSchemaLabel(getContentFieldSchema("component", "_onScreen", "_classes"), "Classes")}
+                                      hint={getSchemaHint(getContentFieldSchema("component", "_onScreen", "_classes"))}
+                                      value={asString(component.onScreen?._classes)}
+                                      onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { onScreen: { ...(component.onScreen ?? {}), _classes: value } })}
+                                      options={getOnScreenClassOptions(courseTheme, component.onScreen?._classes)}
+                                      emptyOptionLabel=""
+                                    />
+                                    <TopicTextInput
+                                      label={getSchemaLabel(getContentFieldSchema("component", "_onScreen", "_percentInviewVertical"), "Percent in view")}
+                                      hint={getSchemaHint(getContentFieldSchema("component", "_onScreen", "_percentInviewVertical"))}
+                                      type="number"
+                                      value={String(asNumberOrEmpty(component.onScreen?._percentInviewVertical))}
+                                      onChange={(value) => updateComponent(page.id, article.id, block.id, component.id, { onScreen: { ...(component.onScreen ?? {}), _percentInviewVertical: parseNumberishInput(value) } })}
+                                    />
+                                  </div>
                                 </TopicNestedAccordion>
                               </TopicAccordion>
 

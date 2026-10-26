@@ -599,6 +599,7 @@ interface EngineCourseDetails {
   _isShared?: boolean;
   _shareWithUsers?: string[];
   themeVariables?: Record<string, unknown>;
+  themeSettings?: Record<string, Record<string, unknown>>;
   _themePreset?: string;
   menuSettings?: CourseMenuSettings;
 }
@@ -633,6 +634,7 @@ export interface CourseBootstrapData {
   themeName: string;
   menuName: string;
   themeVariables: Record<string, unknown>;
+  themeSettings: Record<string, unknown>;
   themePresetId: string;
   language: string;
 }
@@ -797,9 +799,28 @@ export async function getThemePresetParentTheme(themeLabel: string): Promise<str
 
 export async function saveThemeVariables(
   courseId: string,
-  themeVariables: Record<string, unknown>
+  themeVariables: Record<string, unknown>,
+  onScreen?: Record<string, unknown>
 ): Promise<void> {
-  await apiClient.put(`/api/content/course/${courseId}`, { themeVariables });
+  const variables = { ...themeVariables };
+  delete variables._onScreen;
+  const patch: Record<string, unknown> = { themeVariables: variables };
+  if (onScreen) {
+    const [course, config, schemas] = await Promise.all([
+      apiClient.get<EngineCourseDetails>(`/api/content/course/${courseId}`),
+      apiClient.get<EngineConfigDetails>(`/api/content/config/${courseId}`),
+      getThemeSettingsSchemaByLevel(),
+    ]);
+    const key = findAppliedPluginSchemaKey(schemas.course, config._theme ?? "");
+    if (!key || !schemas.course[key].properties?._onScreen) {
+      throw new Error("The selected theme does not support global On Screen Classes.");
+    }
+    patch.themeSettings = {
+      ...course.themeSettings,
+      [key]: { ...course.themeSettings?.[key], _onScreen: onScreen },
+    };
+  }
+  await apiClient.put(`/api/content/course/${courseId}`, patch);
 }
 
 export async function getThemePresets(parentTheme?: string): Promise<ThemePreset[]> {
@@ -904,9 +925,10 @@ export function getCourseBodyValue(course: Pick<EngineCourseDetails, "body"> | n
 }
 
 export async function getCourseBootstrapData(courseId: string): Promise<CourseBootstrapData> {
-  const [course, config] = await Promise.all([
+  const [course, config, schemas] = await Promise.all([
       apiClient.get<EngineCourseDetails>(`/api/content/course/${courseId}`),
       apiClient.get<EngineConfigDetails>(`/api/content/config/${courseId}`),
+      getThemeSettingsSchemaByLevel(),
   ]);
 
   const rawHero = course.heroImage ?? null;
@@ -918,6 +940,7 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
     : [];
   const body = getCourseBodyValue(course);
   const description = (course.description ?? "").trim();
+  const themeSettingsKey = findAppliedPluginSchemaKey(schemas.course, config._theme ?? "");
 
   return {
     courseId,
@@ -936,6 +959,7 @@ export async function getCourseBootstrapData(courseId: string): Promise<CourseBo
     themeName: config._theme || "",
     menuName: config._menu || "",
     themeVariables: (course.themeVariables as Record<string, unknown>) || {},
+    themeSettings: themeSettingsKey ? course.themeSettings?.[themeSettingsKey] ?? {} : {},
     themePresetId: config._themePreset || "",
     language: config._defaultLanguage || "",
   };

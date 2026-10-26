@@ -2741,6 +2741,7 @@ function CourseCreationCenterContent() {
   const [savedThemeName, setSavedThemeName] = useState("");
   const [savedMenuName, setSavedMenuName] = useState("");
   const [savedThemeVariables, setSavedThemeVariables] = useState<Record<string, unknown>>({});
+  const [savedThemeSettings, setSavedThemeSettings] = useState<Record<string, unknown>>({});
   const [savedPresetId, setSavedPresetId] = useState("");
 
   // canExportCourse depends on `user`, which AuthContext fetches asynchronously
@@ -2787,6 +2788,7 @@ function CourseCreationCenterContent() {
       setSavedThemeName("");
       setSavedMenuName("");
       setSavedThemeVariables({});
+      setSavedThemeSettings({});
       setSavedPresetId("");
       return;
     }
@@ -2802,6 +2804,7 @@ function CourseCreationCenterContent() {
         setSavedThemeName(data.themeName || "");
         setSavedMenuName(data.menuName || "");
         setSavedThemeVariables(data.themeVariables || {});
+        setSavedThemeSettings(data.themeSettings || {});
         setSavedPresetId(data.themePresetId || "");
       } catch {
         if (cancelled) return;
@@ -2810,6 +2813,7 @@ function CourseCreationCenterContent() {
         setSavedThemeName("");
         setSavedMenuName("");
         setSavedThemeVariables({});
+        setSavedThemeSettings({});
         setSavedPresetId("");
       }
     })();
@@ -2952,7 +2956,7 @@ function CourseCreationCenterContent() {
           />
         );
       case "theme":
-        return <SelectThemePage initialThemeName={savedThemeName} initialThemeVariables={savedThemeVariables} initialPresetId={savedPresetId} courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} onThemeSaved={({ themeName, themeVariables, themePresetId }) => { setSavedThemeName(themeName); setSavedThemeVariables(themeVariables); setSavedPresetId(themePresetId); }} />;
+        return <SelectThemePage initialThemeName={savedThemeName} initialThemeVariables={savedThemeVariables} initialThemeSettings={savedThemeSettings} initialPresetId={savedPresetId} courseId={courseId} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} onThemeSaved={({ themeName, themeVariables, themeSettings, themePresetId }) => { setSavedThemeName(themeName); setSavedThemeVariables(themeVariables); setSavedThemeSettings(themeSettings); setSavedPresetId(themePresetId); }} />;
       case "menu":
         return <MenuPage courseId={courseId} initialMenuName={savedMenuName} onNavigationRequest={performNavigation} pendingNavigation={pendingNavigation} onPendingNavigationHandled={() => setPendingNavigation(null)} />;
       case "navigation":
