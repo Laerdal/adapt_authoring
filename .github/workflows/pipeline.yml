@@ -18,6 +18,10 @@ on:
         description: 'Deploy after build (still needs repo variable AWS_DEPLOY_ENABLED=true)'
         type: boolean
         default: true
+      dry_run:
+        description: 'Dry run: upload to S3 and run deploy-release.sh --dry-run on the instance (nothing on the instance changes, no E2E)'
+        type: boolean
+        default: false
       trigger:
         description: 'Who triggered this (shown in the Teams card), e.g. adapt-framework-plugins@abc1234'
         type: string
@@ -243,13 +247,15 @@ jobs:
           aws s3 cp deploy-release.sh "$P/" --only-show-errors
 
       - name: Deploy to instances tagged app=adapt,env=dev (SSM)
+        env:
+          DRY_FLAG: ${{ inputs.dry_run && ' --dry-run' || '' }}
         run: |
           set -euo pipefail
           # deploy-release.sh loads root's nvm itself (SSM shells skip it); only HOME needs setting here
-          PARAMS=$(jq -nc --arg b "$BUCKET" --arg id "$RELEASE_ID" '{commands: [
+          PARAMS=$(jq -nc --arg b "$BUCKET" --arg id "$RELEASE_ID" --arg flag "$DRY_FLAG" '{commands: [
             "export HOME=/root",
             "aws s3 cp s3://\($b)/dev/deploy-release.sh /tmp/deploy-release.sh --only-show-errors",
-            "BUCKET=\($b) ENV_NAME=dev bash /tmp/deploy-release.sh \($id)"]}')
+            "BUCKET=\($b) ENV_NAME=dev bash /tmp/deploy-release.sh \($id)\($flag)"]}')
           CMD_ID=$(aws ssm send-command --document-name AWS-RunShellScript \
             --targets Key=tag:app,Values=adapt Key=tag:env,Values=dev \
             --parameters "$PARAMS" --timeout-seconds 1800 --comment "adapt $RELEASE_ID" \
@@ -262,8 +268,12 @@ jobs:
             case "$st" in ""|*Pending*|*InProgress*|*Delayed*) sleep 15 ;; *) break ;; esac
           done
 
-          aws ssm list-command-invocations --command-id "$CMD_ID" --details \
-            --query 'CommandInvocations[].[InstanceId,Status,CommandPlugins[0].Output]' --output text
+          # full script output per instance (list-command-invocations truncates to 2500 chars; this keeps up to 24000)
+          for iid in $(aws ssm list-command-invocations --command-id "$CMD_ID" --query 'CommandInvocations[].InstanceId' --output text); do
+            echo "===== $iid ====="
+            aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$iid" \
+              --query '[Status,StandardOutputContent,StandardErrorContent]' --output text || true
+          done
           for s in $st; do [ "$s" = Success ] || { echo "Deploy failed: $st"; exit 1; }; done
 
   # Runs after a successful deploy and NEVER fails the pipeline: every path exits 0 and reports through `result`
@@ -271,7 +281,7 @@ jobs:
   # Needs secret STUDIO_E2E_TOKEN (dispatch + read on the E2E repo); without it the job reports "skipped".
   e2e:
     needs: [resolve, deploy]
-    if: needs.deploy.result == 'success'
+    if: needs.deploy.result == 'success' && !inputs.dry_run
     runs-on: ubuntu-22.04
     timeout-minutes: 90
     outputs:
@@ -322,6 +332,7 @@ jobs:
           BUILD: ${{ needs.build.result }}
           TESTS: ${{ needs.test-backend.result }}/${{ needs.test-new-ui.result }}
           DEPLOY: ${{ needs.deploy.result }}
+          DRY: ${{ inputs.dry_run }}
           E2E: ${{ needs.e2e.outputs.result || 'not run' }}
           E2E_URL: ${{ needs.e2e.outputs.url }}
           R: ${{ toJson(needs.resolve.outputs) }}
@@ -330,6 +341,7 @@ jobs:
         run: |
           [ -n "${URL:-}" ] || { echo "TEAMS_WEBHOOK_URL not set, skipping"; exit 0; }
           if [ "$BUILD" != success ] || [ "$TESTS" != success/success ] || [ "$DEPLOY" = failure ]; then T="❌ FAILED"
+          elif [ "$DEPLOY" = success ] && [ "${DRY:-}" = true ]; then T="🧪 Dry-run OK (instance unchanged)"
           elif [ "$DEPLOY" = success ]; then T="✅ Deployed"
           else T="📦 Built (deploy not run)"; fi
           jq -nc --arg t "$T" --arg run "$RUN_URL" --arg trig "$TRIGGER" --arg tests "$TESTS" --arg e2e "$E2E" --arg e2eurl "$E2E_URL" \

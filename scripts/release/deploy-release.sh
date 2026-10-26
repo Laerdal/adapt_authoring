@@ -71,8 +71,10 @@ apply_files() {
 }
 
 if [ "$DRY" = 1 ]; then
-  log "DRY RUN: changes that would be applied (lines starting with *deleting are removals — review them):"
-  apply_files --dry-run | grep -v '^\.' | head -400 || true
+  CHANGES=$(apply_files --dry-run | grep -v '^\.' || true)
+  log "DRY RUN: $(echo "$CHANGES" | grep -c '^>' || true) files differ, $(echo "$CHANGES" | grep -c '^\*deleting' || true) would be deleted (nothing was changed)"
+  echo "$CHANGES" | grep '^\*deleting' || true # removals first: review these
+  echo "$CHANGES" | grep -v '^\*deleting' | head -30 || true # then a sample of the rest
   log "deps: installed lock=$(cat "$STATE/lockhash" 2>/dev/null || echo none) release lock=$LOCK"
   node -e '
     const m = require(process.argv[1]); for (const [r, s] of Object.entries(m.repos)) console.log("pin", r, s)' "$STAGE/manifest.json"
