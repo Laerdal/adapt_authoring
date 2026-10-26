@@ -78,7 +78,10 @@ if [ "$DRY" = 1 ]; then
   echo "what changed (rsync flags: c=content, s=size, t=time; new files show +++++):"
   echo "$CHANGES" | grep '^>' | cut -c1-11 | sort | uniq -c | sort -rn | head -6 || true
   echo "$CHANGES" | grep '^\*deleting' || true # removals first: review these
-  echo "$CHANGES" | grep -v '^\*deleting' | head -30 || true # then a sample of the rest
+  echo "existing files that would be overwritten (content/size differs):"
+  echo "$CHANGES" | grep '^>f' | grep -v '^>f+++' | head -40 || true
+  echo "directories that do not exist on the instance yet (top two levels):"
+  echo "$CHANGES" | grep '^cd+++' | awk '{print $2}' | cut -d/ -f1-2 | sort -u | head -40 || true
   log "deps: installed lock=$(cat "$STATE/lockhash" 2>/dev/null || echo none) release lock=$LOCK"
   node -e '
     const m = require(process.argv[1]); for (const [r, s] of Object.entries(m.repos)) console.log("pin", r, s)' "$STAGE/manifest.json"
