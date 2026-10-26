@@ -45,7 +45,9 @@ LOCK=$(node -p "require('$STAGE/manifest.json').lockHash")
 # Managed dirs are mirrored with --delete; instance runtime state inside them is protected by the excludes.
 # The tarball is owned by the CI user (runner, uid 1001) with CI perms: never copy owner/group/perms onto the instance
 # (existing files keep theirs, new files get the usual umask), so DEV's 777 EFS dirs and root ownership stay as they are.
-KEEP=(--no-owner --no-group --no-perms)
+# --checksum: every CI build re-stamps every file, so size+mtime would rewrite ~19k files on EFS each deploy; compare content.
+# --exclude='.nfs*': EFS/NFS leaves .nfsXXXX files for deleted-but-still-open files (the running app); they cannot be removed.
+KEEP=(--no-owner --no-group --no-perms --checksum --exclude='.nfs*')
 RSYNC_COMMON=(-a "${KEEP[@]}" --delete --itemize-changes)
 sync_dir() { # <dir> [extra rsync args...]
   local d="$1"; shift
@@ -73,6 +75,8 @@ apply_files() {
 if [ "$DRY" = 1 ]; then
   CHANGES=$(apply_files --dry-run | grep -v '^\.' || true)
   log "DRY RUN: $(echo "$CHANGES" | grep -c '^>' || true) files differ, $(echo "$CHANGES" | grep -c '^\*deleting' || true) would be deleted (nothing was changed)"
+  echo "what changed (rsync flags: c=content, s=size, t=time; new files show +++++):"
+  echo "$CHANGES" | grep '^>' | cut -c1-11 | sort | uniq -c | sort -rn | head -6 || true
   echo "$CHANGES" | grep '^\*deleting' || true # removals first: review these
   echo "$CHANGES" | grep -v '^\*deleting' | head -30 || true # then a sample of the rest
   log "deps: installed lock=$(cat "$STATE/lockhash" 2>/dev/null || echo none) release lock=$LOCK"
