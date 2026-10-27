@@ -262,7 +262,7 @@ export default function CourseCard({
               to={viewHref}
               className="mt-1 w-full py-2.5 rounded-lg bg-[#2d6fa8] hover:bg-[#245c8f] text-white text-sm font-medium transition-colors text-center"
             >
-              View Course
+              Open Course
             </Link>
           </div>
         </div>
